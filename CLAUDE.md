@@ -1,4 +1,4 @@
-# pliny-code
+# PlinyCode
 
 A Cursor/VS Code coding-agent extension (Cline-like) using **only** our internal
 Pliny model gateway. No legacy providers, no user accounts, no non-VS Code surfaces.

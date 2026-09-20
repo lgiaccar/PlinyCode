@@ -1,4 +1,4 @@
-# pliny-code — Research Findings (carried over from prior session)
+# PlinyCode — Research Findings (carried over from prior session)
 
 > Source session: `2a2c4bdf-f0fd-449d-82c6-dd71366a2b86` (project `d--dev0-GPUSurfer`), 2026-09-20.
 > Every claim below was **verified live** against the Pliny gateway, not read from docs.
