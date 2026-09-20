@@ -135,6 +135,7 @@
 			"!!**/generated",
 			"!!**/proto",
 			"!!**/tests/specs",
+			"!!**/.kilo",
 			"!!assets/icons/*.svg"
 		]
 	},

@@ -64,8 +64,11 @@ export async function getStateToPostToWebview(controller: {
 	const vscodeTerminalExecutionMode = stateManager.getGlobalStateKey("vscodeTerminalExecutionMode")
 	const defaultTerminalProfile = stateManager.getGlobalSettingsKey("defaultTerminalProfile")
 	const isNewUser = stateManager.getGlobalStateKey("isNewUser")
-	const welcomeViewCompleted = !!stateManager.getGlobalStateKey("welcomeViewCompleted")
-
+	// PlinyCode: no Cline account/onboarding — always treat welcome as completed.
+	const welcomeViewCompleted = true
+	if (!stateManager.getGlobalStateKey("welcomeViewCompleted")) {
+		stateManager.setGlobalState("welcomeViewCompleted", true)
+	}
 	const mcpResponsesCollapsed = stateManager.getGlobalStateKey("mcpResponsesCollapsed")
 	const favoritedModelIds = stateManager.getGlobalStateKey("favoritedModelIds")
 	const lastDismissedInfoBannerVersion = stateManager.getGlobalStateKey("lastDismissedInfoBannerVersion") || 0

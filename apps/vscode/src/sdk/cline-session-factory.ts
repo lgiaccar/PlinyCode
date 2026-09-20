@@ -422,7 +422,7 @@ const PROVIDER_MODEL_ID_MAP: Record<string, { plan: keyof ApiConfiguration; act:
 // Provider/model defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PROVIDER_ID = "cline"
+const DEFAULT_PROVIDER_ID = "pliny"
 
 /**
  * Providers whose model list comes from a live local endpoint (Ollama's

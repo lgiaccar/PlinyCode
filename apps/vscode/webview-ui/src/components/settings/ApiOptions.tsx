@@ -5,10 +5,8 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { PLATFORM_CONFIG, PlatformType } from "@/config/platform.config"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useProviderListings } from "@/hooks/useProviderListings"
-import { ClinePassHint } from "./ClinePassHint"
 import { OPENROUTER_MODEL_PICKER_Z_INDEX } from "./OpenRouterModelPicker"
 import { AIhubmixProvider } from "./providers/AihubmixProvider"
 import { AnthropicProvider } from "./providers/AnthropicProvider"
@@ -94,7 +92,7 @@ const ApiOptions = ({
 	const { apiConfiguration, remoteConfigSettings } = useExtensionState()
 
 	const selectedProvider =
-		(currentMode === "plan" ? apiConfiguration?.planModeApiProvider : apiConfiguration?.actModeApiProvider) || "anthropic"
+		(currentMode === "plan" ? apiConfiguration?.planModeApiProvider : apiConfiguration?.actModeApiProvider) || "pliny"
 	const { providers: catalogProviderListings } = useProviderListings()
 	const catalogProviderListing = useMemo(
 		() => catalogProviderListings.find((provider) => provider.id === selectedProvider),
@@ -122,17 +120,16 @@ const ApiOptions = ({
 	const dropdownListRef = useRef<HTMLDivElement>(null)
 
 	const providerOptions = useMemo(() => {
-		// Source the list from the live SDK provider catalog (same data the
-		// hub client uses) so user-configured/custom providers appear too,
-		// instead of a static hand-maintained list.
-		let providers = catalogProviderListings.map((provider) => ({
-			value: provider.id,
-			label: provider.name,
-		}))
-		// Filter by platform
-		if (PLATFORM_CONFIG.type !== PlatformType.VSCODE) {
-			// Don't include VS Code LM API for non-VSCode platforms
-			providers = providers.filter((option) => option.value !== "vscode-lm")
+		// PlinyCode: only expose the Pliny gateway. Other builtins remain in the
+		// SDK registry for tests but must not appear in the product picker.
+		let providers = catalogProviderListings
+			.filter((provider) => provider.id === "pliny")
+			.map((provider) => ({
+				value: provider.id,
+				label: provider.name,
+			}))
+		if (providers.length === 0) {
+			providers = [{ value: "pliny", label: "Pliny" }]
 		}
 
 		// Filter by remote config if remoteConfiguredProviders is set
@@ -348,8 +345,6 @@ const ApiOptions = ({
 					)}
 				</ProviderDropdownWrapper>
 			</DropdownContainer>
-
-			{!isPopup && <ClinePassHint currentMode={currentMode} selectedProvider={selectedProvider} />}
 
 			{apiConfiguration && selectedProvider === "hicap" && (
 				<HicapProvider currentMode={currentMode} isPopup={isPopup} showModelOptions={showModelOptions} />

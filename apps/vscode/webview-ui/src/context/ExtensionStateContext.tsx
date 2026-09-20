@@ -480,14 +480,9 @@ export const ExtensionStateContextProvider: React.FC<{
 									: prevState.autoApprovalSettings,
 							}
 
-							// Update welcome screen state based on API configuration if welcome view not in progress
-							if (!newState.welcomeViewCompleted && !showWelcome) {
-								setShowWelcome(true)
-								setOnboardingModels(newState.onboardingModels)
-							} else if (newState.welcomeViewCompleted) {
-								setShowWelcome(false)
-								setOnboardingModels(undefined)
-							}
+							// PlinyCode skips Cline account onboarding entirely.
+							setShowWelcome(false)
+							setOnboardingModels(undefined)
 
 							setDidHydrateState(true)
 

@@ -46,6 +46,13 @@ import {
 	BUILTIN_TRANSCRIPTION_TRANSPORTS,
 } from "./model-operations";
 import { filterOpenAICodexModels } from "./openai-codex-models";
+import {
+	buildPlinyModels,
+	PLINY_BASE_URL,
+	PLINY_DEFAULT_HEADERS,
+	PLINY_DEFAULT_MODEL_ID,
+	PLINY_TIMEOUT_MS,
+} from "./pliny-models";
 import { resolveProviderModelCatalogKeys } from "./provider-keys";
 import { GENERATED_PROVIDER_SPECS } from "./providers.generated";
 import {
@@ -764,6 +771,24 @@ const clinePass = createClineLikeSpec({
  * be duplicated here.
  */
 const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
+	{
+		id: BUILT_IN_PROVIDER.PLINY,
+		name: "Pliny",
+		description:
+			"Synopsys internal OpenAI-compatible gateway (self-hosted + hosted models)",
+		family: "openai-compatible",
+		popular: 1,
+		capabilities: ["tools", "prompt-cache", "reasoning"],
+		defaultModelId: PLINY_DEFAULT_MODEL_ID,
+		apiKeyEnv: ["PLINY_API_KEY"],
+		modelsFactory: buildPlinyModels,
+		defaults: {
+			baseUrl: PLINY_BASE_URL,
+			headers: { ...PLINY_DEFAULT_HEADERS },
+			timeoutMs: PLINY_TIMEOUT_MS,
+		},
+		metadata: ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA,
+	},
 	{
 		// Keep the persisted provider ID and credentials compatible while the
 		// upstream catalog adopts the CoreWeave display name.

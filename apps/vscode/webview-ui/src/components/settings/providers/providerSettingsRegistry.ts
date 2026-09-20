@@ -108,6 +108,11 @@ const GENERIC_PROVIDER_PRESENTATION_OVERRIDES: Record<string, GenericProviderPre
 		signupUrl: "https://chutes.ai/app/api",
 	},
 	"zai-coding-plan": {},
+	pliny: {
+		// Base URL is fixed on the builtin; leave the field hidden so users
+		// don't point the picker at a wrong endpoint. Auth falls through to
+		// PLINY_API_KEY when the UI key is empty.
+	},
 }
 
 const GENERIC_PROVIDER_PROTOCOLS = new Set(["anthropic", "gemini", "openai-chat", "openai-responses"])
@@ -170,6 +175,7 @@ const FALLBACK_GENERIC_PROVIDER_NAMES = {
 	"tencent-tokenhub": "Tencent TokenHub",
 	chutes: "Chutes",
 	"zai-coding-plan": "Z.AI Coding Plan",
+	pliny: "Pliny",
 } as const
 
 export function getFallbackGenericProviderSettings(providerId: string): GenericProviderSettingsConfig | undefined {

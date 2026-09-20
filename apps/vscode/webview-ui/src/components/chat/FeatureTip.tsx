@@ -32,7 +32,7 @@ const FEATURE_TIPS: FeatureTipItem[] = [
 		text: "Use the quote button to select text from Cline's response and reference it in your reply.",
 	},
 	{
-		text: "You can drag and drop images into the chat to share screenshots with Cline.",
+		text: "You can drag and drop images into the chat to share screenshots with PlinyCode.",
 	},
 	{
 		text: 'You can disable these tips in Settings → Features → "Feature Tips".',

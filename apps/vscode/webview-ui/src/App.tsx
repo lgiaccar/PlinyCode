@@ -1,15 +1,11 @@
 import type { Boolean, EmptyRequest } from "@shared/proto/cline/common"
 import { useCallback, useEffect } from "react"
-import AccountView from "./components/account/AccountView"
 import ChatView from "./components/chat/ChatView"
 import HistoryView from "./components/history/HistoryView"
 import MarketplaceView from "./components/marketplace/MarketplaceView"
 import McpView from "./components/mcp/configuration/McpConfigurationView"
-import { openClinePassSubscriptionIfPending } from "./components/onboarding/clinePassSubscribe"
-import OnboardingView from "./components/onboarding/OnboardingView"
 import SettingsView from "./components/settings/SettingsView"
 import WorktreesView from "./components/worktrees/WorktreesView"
-import { useClineAuth } from "./context/ClineAuthContext"
 import { useExtensionState } from "./context/ExtensionStateContext"
 import { Providers } from "./Providers"
 import { UiServiceClient } from "./services/grpc-client"
@@ -17,7 +13,6 @@ import { UiServiceClient } from "./services/grpc-client"
 const AppContent = () => {
 	const {
 		didHydrateState,
-		showWelcome,
 		shouldShowAnnouncement,
 		showMarketplace,
 		showMcp,
@@ -25,7 +20,6 @@ const AppContent = () => {
 		showSettings,
 		settingsTargetSection,
 		showHistory,
-		showAccount,
 		showWorktrees,
 		showAnnouncement,
 		setShowAnnouncement,
@@ -34,13 +28,10 @@ const AppContent = () => {
 		navigateToHistory,
 		hideSettings,
 		hideHistory,
-		hideAccount,
 		hideWorktrees,
 		closeMarketplaceView,
 		hideAnnouncement,
 	} = useExtensionState()
-
-	const { clineUser, organizations, activeOrganization } = useClineAuth()
 
 	const showUpdateAnnouncementModal = useCallback(() => {
 		setShowAnnouncement(true)
@@ -54,26 +45,14 @@ const AppContent = () => {
 	}, [setShouldShowAnnouncement, setShowAnnouncement])
 
 	useEffect(() => {
-		if (!didHydrateState || showWelcome || !shouldShowAnnouncement || showAnnouncement) {
+		if (!didHydrateState || !shouldShowAnnouncement || showAnnouncement) {
 			return
 		}
 		showUpdateAnnouncementModal()
-	}, [didHydrateState, showWelcome, shouldShowAnnouncement, showAnnouncement, showUpdateAnnouncementModal])
-
-	// Open the ClinePass subscription page once auth completes. Lives here (not in OnboardingView)
-	// because handleAuthCallback unmounts onboarding before the clineUser update arrives.
-	useEffect(() => {
-		if (clineUser?.uid) {
-			openClinePassSubscriptionIfPending(clineUser.appBaseUrl)
-		}
-	}, [clineUser?.uid, clineUser?.appBaseUrl])
+	}, [didHydrateState, shouldShowAnnouncement, showAnnouncement, showUpdateAnnouncementModal])
 
 	if (!didHydrateState) {
 		return null
-	}
-
-	if (showWelcome) {
-		return <OnboardingView />
 	}
 
 	return (
@@ -82,19 +61,11 @@ const AppContent = () => {
 			{showHistory && <HistoryView onDone={hideHistory} />}
 			{showMarketplace && <MarketplaceView initialType={mcpTab ? "mcp" : undefined} onDone={closeMarketplaceView} />}
 			{showMcp && <McpView initialTab={mcpTab} onDone={closeMcpView} />}
-			{showAccount && (
-				<AccountView
-					activeOrganization={activeOrganization}
-					clineUser={clineUser}
-					onDone={hideAccount}
-					organizations={organizations}
-				/>
-			)}
 			{showWorktrees && <WorktreesView onDone={hideWorktrees} />}
 			{/* Do not conditionally load ChatView, it's expensive and there's state we don't want to lose (user input, disableInput, askResponse promise, etc.) */}
 			<ChatView
 				hideAnnouncement={hideAnnouncement}
-				isHidden={showSettings || showHistory || showMarketplace || showMcp || showAccount || showWorktrees}
+				isHidden={showSettings || showHistory || showMarketplace || showMcp || showWorktrees}
 				showAnnouncement={showAnnouncement}
 				showHistoryView={navigateToHistory}
 			/>
