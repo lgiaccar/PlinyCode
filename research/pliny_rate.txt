@@ -1,0 +1,359 @@
+ 
+Rate limiting | Pliny 
+Skip to main content 
+ ⚠ Frontier Model Access Changes — Effective July 22, 2026: approval required for high-cost models & $200/month budget limits. View details → 
+Documentation Contact 
+Overview 
+ Model Catalog 
+ Inference best practises 
+ Prompt caching 
+ Rate limiting 
+ Metadata tagging 
+TextGPT on Pliny 
+ Fine-Tuning 
+ Contact and FAQ 
+Inference best practises 
+ Rate limiting 
+ On this page 
+ Rate Limiting on the Pliny Gateway
+Pliny enforces rate limits and budget limits to protect GPU capacity, control
+costs, and ensure fair access across users and teams. The Pliny gateway
+evaluates every request against a set of rules and rejects
+requests that exceed configured limits.
+This guide explains how rate limiting works, what happens when you hit a
+limit, and how to handle it gracefully in your applications.
+Why Pliny Enforces Rate Limits ​ 
+Rate limits are a standard practice for LLM platforms and serve several
+important purposes:
+Ensuring fair usage. Rate limits ensure that resources are distributed
+fairly across all users. Without them, a single user could consume a large
+share of capacity, negatively impacting the experience for everyone else.
+Maintaining stability and reliability. By controlling the volume of
+requests sent to the LLM, rate limits protect the platform from being
+overwhelmed. This keeps the service stable, responsive, and consistently
+available.
+Preventing abuse and misuse. Rate limits act as a safeguard against
+unintended traffic spikes, whether caused by misconfigured applications,
+runaway scripts, or malicious activity.
+Managing resources efficiently. LLM inference workloads consume
+significant computational resources. Rate limits help ensure these resources
+are used sustainably and predictably.
+How Rate Limiting Works ​ 
+Pliny uses a sliding window algorithm to enforce rate limits. The gateway
+maintains a 60-second rolling window divided into 10-second buckets. Each
+request (or token consumed) is counted in the current bucket. To check the
+limit, the gateway sums the last six buckets. Older buckets are discarded as
+they slide out of the window.
+Limits are evaluated against three dimensions that can be combined:
+Dimension Scope Example 
+ Per user 
+ Individual developer or service identity
+ 1M tokens/day per user
+Per model 
+ Specific model endpoint
+ 20K tokens/min for a self-hosted model
+Per API token 
+ Virtual account or API key
+ 1000 requests/day per key
+When multiple rules match a request, only the first matching rule is
+applied — subsequent rules are ignored. This means specific rules (e.g., a
+per-user override) should be placed above general rules (e.g., a global
+default).
+Limit Types ​ 
+Limit unit What it measures Typical use case 
+ requests_per_minute 
+ HTTP requests
+ Prevent burst traffic to self-hosted GPUs
+requests_per_hour 
+ HTTP requests
+ Cap dev-environment usage
+requests_per_day 
+ HTTP requests
+ Per-developer daily quota
+tokens_per_minute 
+ Input + output tokens
+ Protect GPU capacity from token-heavy workloads
+tokens_per_hour 
+ Tokens
+ Sustained usage caps
+tokens_per_day 
+ Tokens
+ Daily token budget enforcement
+Token-based limits are more precise for cost control — a single
+long-context request can consume more tokens than a hundred short ones.
+ Request-based limits are simpler for capacity protection, especially for
+self-hosted models on limited GPU hardware.
+Rate Limits vs Budget Limits ​ 
+Pliny enforces two complementary types of limits. Understanding the difference
+helps you diagnose which one you're hitting.
+Feature Rate Limits Budget Limits 
+ Unit 
+ Requests or tokens
+ Dollars
+Reset 
+ Rolling window (minute/hour/day)
+ Calendar period (UTC midnight / Monday / 1st of month)
+Best for 
+ Protecting capacity, preventing bursts
+ Controlling spend, preventing runaway costs
+Alerting 
+ Rejection at limit
+ 75%, 90%, 95%, 100% milestone alerts (email/Slack)
+Audit mode 
+ Not available
+ Track spend without blocking requests
+Budget limits are especially useful as a safety net against agent loops or
+code bugs that send runaway requests. A $50/day per-user budget will stop a
+stuck agent after $50 regardless of how many tokens or requests it consumes.
+What Happens When You Hit a Limit ​ 
+When a request exceeds a rate limit or budget limit, the gateway rejects it.
+The response includes:
+HTTP 429 for rate-limited requests, or a budget-exceeded error for budget
+limits
+The rule ID that triggered the rejection (visible in response headers and
+gateway metrics)
+No Retry-After header — the Pliny gateway does not send one, so your
+application must implement its own backoff strategy
+You can identify which limit was hit by checking the
+ x-tfy-applied-configurations response header, which includes the applied
+rate-limiting and budget rules.
+Handling Rate Limit Errors — Retry & Backoff ​ 
+When your application receives a 429, it should back off and retry. The
+recommended pattern is exponential backoff with jitter — each retry waits
+longer than the last, with a small random component to avoid thundering-herd
+effects when multiple clients are rate-limited simultaneously.
+import time 
+ import random 
+ import json 
+ import os 
+ import urllib . request 
+MAX_RETRIES = 5 
+ BASE_DELAY = 1 # seconds 
+def call_pliny_with_retry ( payload ) : 
+ url = f" { os . environ [ 'SNPS_PLINY_API_BASE' ] . rstrip ( '/' ) } /chat/completions" 
+ headers = { 
+ "Authorization" : f"Bearer { os . environ [ 'SNPS_PLINY_API_KEY' ] } " , 
+ "Content-Type" : "application/json" , 
+ } 
+for attempt in range ( MAX_RETRIES ) : 
+ request = urllib . request . Request ( 
+ url , 
+ data = json . dumps ( payload ) . encode ( ) , 
+ headers = headers , 
+ method = "POST" , 
+ ) 
+ try : 
+ with urllib . request . urlopen ( request ) as response : 
+ return json . loads ( response . read ( ) ) 
+ except urllib . error . HTTPError as e : 
+ if e . code == 429 : 
+ delay = BASE_DELAY * ( 2 ** attempt ) + random . uniform ( 0 , 1 ) 
+ print ( 
+ f"Rate limited. Retrying in { delay : .1f } s " 
+ f"(attempt { attempt + 1 } / { MAX_RETRIES } )" 
+ ) 
+ time . sleep ( delay ) 
+ continue 
+ raise 
+ raise Exception ( f"Max retries ( { MAX_RETRIES } ) exceeded" ) 
+Retry best practices: 
+Use exponential backoff with jitter — not a fixed delay. Fixed delays
+cause synchronized retry storms when multiple clients are limited at once.
+Set a max retry count — 5 is reasonable for most cases. Don't retry
+infinitely; an agent stuck in a retry loop wastes resources and masks the
+underlying problem.
+Differentiate error codes — back off on 429 (rate limit), but retry
+immediately or with a short delay on 500 / 502 / 503 (transient provider
+errors).
+Monitor 429 rates — a rising 429 rate in your application metrics means
+you need higher limits or better request distribution.
+Rate Limiting with the Synopsys Agent Toolkit (SAT) ​ 
+If you build agents using the Synopsys Agent Toolkit (SAT) ,
+your agent's LLM calls go through the same Pliny gateway and are subject to
+the same rate limits. SAT is built on the NeMo Agent Toolkit (NAT), which
+provides built-in retry and backoff for LLM calls — but the behavior differs
+by framework.
+How SAT connects to Pliny ​ 
+SAT declares LLM endpoints in config.yml . The standard Pliny configuration
+uses the OpenAI-compatible client:
+llms : 
+ pliny_llm : 
+ _type : openai 
+ model_name : $ { SNPS_PLINY_LLM_MODEL } 
+ base_url : $ { SNPS_PLINY_API_BASE : - "https://snps-inference.internal.synopsys.com/api/llm" } 
+ api_key : $ { SNPS_PLINY_API_KEY } 
+ temperature : 0.0 
+For Google ADK-based agents, the litellm type is required instead:
+llms : 
+ pliny_llm : 
+ _type : litellm 
+ model_name : $ { SNPS_PLINY_LLM_MODEL } 
+ api_base : $ { SNPS_PLINY_API_BASE : - "https://snps-inference.internal.synopsys.com/api/llm" } 
+ api_key : $ { SNPS_PLINY_API_KEY } 
+ custom_llm_provider : openai 
+Built-in retry behavior ​ 
+NAT provides a custom retry layer that wraps every LLM client method. When a
+Pliny request returns 429 (or 500 , 502 , 503 , 504 ), NAT automatically
+retries with exponential backoff — starting at 0.25s, doubling after each
+failure.
+The retry behavior is controlled by four config fields (inherited from
+ RetryMixin ):
+Config field Default Description 
+ do_auto_retry 
+ true 
+ Enable/disable automatic retries
+num_retries 
+ 5 
+ Max retry attempts per LLM call
+retry_on_status_codes 
+ [429, 500, 502, 503, 504] 
+ HTTP status codes that trigger retry
+retry_on_errors 
+ ["Too Many Requests", "429"] 
+ Error message substrings that trigger retry
+You can override these in your config.yml :
+llms : 
+ pliny_llm : 
+ _type : openai 
+ model_name : $ { SNPS_PLINY_LLM_MODEL } 
+ base_url : $ { SNPS_PLINY_API_BASE } 
+ api_key : $ { SNPS_PLINY_API_KEY } 
+ do_auto_retry : true 
+ num_retries : 5 
+To retry only on rate limits (not on server errors):
+llms : 
+ pliny_llm : 
+ _type : openai 
+ model_name : $ { SNPS_PLINY_LLM_MODEL } 
+ base_url : $ { SNPS_PLINY_API_BASE } 
+ api_key : $ { SNPS_PLINY_API_KEY } 
+ retry_on_status_codes : [ 429 ] 
+Framework coverage ​ 
+The retry layer is applied by most framework wrappers, but not all:
+Framework Retry applied by NAT? Notes 
+ LangChain 
+ Yes
+ Wraps ChatOpenAI client
+AutoGen 
+ Yes
+ Wraps OpenAIChatCompletionClient 
+LlamaIndex 
+ Yes
+ Wraps OpenAI client
+Semantic Kernel 
+ Yes
+ Wraps AsyncOpenAI client
+Strands 
+ Yes
+ Wraps OpenAIModel client
+Google ADK 
+ No 
+ Uses litellm — relies on litellm's own retry, not NAT's
+If you use Google ADK with Pliny, the NAT retry layer is not applied . You'll
+need to rely on litellm's built-in retry behavior or implement your own retry
+wrapper.
+Common SAT rate-limit errors ​ 
+Error Cause Fix 
+ 429 Too Many Requests 
+ Rate limit hit on Pliny
+ NAT auto-retries by default; if it persists, reduce concurrency or request a limit increase
+401 Unauthorized 
+ Bad or expired API key
+ Check SNPS_PLINY_API_KEY ; re-run pliny inference login 
+Connection refused 
+ Pliny gateway unreachable
+ Verify SNPS_PLINY_API_BASE and network connectivity
+litellm.exceptions.BadRequestError (ADK)
+ Wrong model name format
+ Verify model name with pliny inference gateway list-models 
+Timeout Configuration ​ 
+Two request headers control how long the gateway waits before timing out:
+Header Purpose Default 
+ x-tfy-request-timeout 
+ Max time (ms) for a single model request, applied per attempt including fallbacks
+ Provider default
+x-tfy-ttft-timeout-ms 
+ Max time (ms) to first token in streaming — returns 408 if exceeded, triggers fallback
+ Provider default
+headers = { 
+ "Authorization" : f"Bearer { os . environ [ 'SNPS_PLINY_API_KEY' ] } " , 
+ "x-tfy-request-timeout" : "60000" , # 60s per attempt 
+ "x-tfy-ttft-timeout-ms" : "30000" , # 30s to first token (streaming) 
+ } 
+When x-tfy-ttft-timeout-ms is set and no first token arrives in time, the
+gateway returns 408 and automatically falls back to the next model — even if
+ 408 is not in the configured fallback_status_codes list.
+Anti-Patterns That Make Rate Limiting Worse ​ 
+Anti-pattern Why it breaks Fix 
+ Retry immediately on 429 
+ Hammers the gateway, gets more 429s
+ Use exponential backoff with jitter
+No max retry limit 
+ Agent stuck in infinite retry loop, burns tokens
+ Set MAX_RETRIES (5 is reasonable)
+Polling in a tight loop 
+ Each poll consumes a request against your limit
+ Use streaming instead of polling
+Parallel fan-out without semaphore 
+ N concurrent requests = N× rate-limit consumption
+ Use a client-side concurrency limiter
+Ignoring metadata tags 
+ Can't trace which app/environment hit the limit
+ Always tag with X-TFY-METADATA 
+Treating 429 and 500 the same 
+ 429 needs backoff; 500 may just need a retry
+ Differentiate retry strategy by status code
+Warning sign: A high 429 rate that doesn't decrease after backoff
+usually means your configured limits are too low for your workload. Contact
+ pliny-support@synopsys.com to request a
+limit increase.
+Best Practices ​ 
+Use token-based limits for cost control, request-based for capacity
+protection. Token limits catch expensive requests; request limits catch
+volume.
+Implement client-side backoff — don't rely on the gateway to handle
+your retries. Your application should back off when it receives a 429.
+Tag requests with metadata ( X-TFY-METADATA ) so limits and observability
+work per-application, per-environment, and per-project.
+Use streaming to reduce concurrent connections and avoid TTFT-related
+timeouts on slow providers.
+Monitor 429 rates in your application metrics — a rising 429 rate means
+you need higher limits or better distribution across models.
+Set x-tfy-ttft-timeout-ms for streaming requests to fail fast on slow
+or overloaded providers.
+Use budget limits as a safety net alongside rate limits. A per-user
+daily budget catches runaway agents that rate limits alone might not stop
+if the limits are high.
+Requesting Limit Increases ​ 
+The default rate limit on Pliny is 30 RPM (requests per minute). We
+recognize that some applications have higher throughput requirements — based
+on review of your use case, limits can be increased up to 50 RPM .
+If your workload consistently hits rate limits, contact the Pliny team at
+ pliny-support@synopsys.com with the
+following details:
+Expected tokens per minute (TPM) or requests per minute (RPM)
+Number of concurrent users or services
+Models you need higher limits for
+Use case (e.g., production agent, batch processing, development)
+The team will review the request and adjust limits based on available
+capacity and platform guidelines.
+Previous
+ Prompt caching
+ Next
+ Metadata tagging
+Why Pliny Enforces Rate Limits 
+ How Rate Limiting Works 
+ Limit Types 
+ Rate Limits vs Budget Limits 
+ What Happens When You Hit a Limit 
+ Handling Rate Limit Errors — Retry & Backoff 
+ Rate Limiting with the Synopsys Agent Toolkit (SAT) How SAT connects to Pliny 
+ Built-in retry behavior 
+ Framework coverage 
+ Common SAT rate-limit errors 
+Timeout Configuration 
+ Anti-Patterns That Make Rate Limiting Worse 
+ Best Practices 
+ Requesting Limit Increases 
+Copyright © 2026 Synopsys, Inc. All Rights Reserved.
+
