@@ -11,6 +11,7 @@ interface InputSectionProps {
 	placeholderText: string
 	shouldDisableFilesAndImages: boolean
 	selectFilesAndImages: () => Promise<void>
+	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number) => void
 }
 
 /**
@@ -23,6 +24,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 	placeholderText,
 	shouldDisableFilesAndImages,
 	selectFilesAndImages,
+	onSchedulePrompt,
 }) => {
 	const {
 		activeQuote,
@@ -69,8 +71,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
 						scrollToBottomAuto()
 					}
 				}}
+				onSchedulePrompt={onSchedulePrompt}
 				onSelectFilesAndImages={selectFilesAndImages}
-				onSend={() => messageHandlers.handleSendMessage(inputValue, selectedImages, selectedFiles)}
+				onSend={(delivery) => messageHandlers.handleSendMessage(inputValue, selectedImages, selectedFiles, delivery)}
 				placeholderText={placeholderText}
 				ref={textAreaRef}
 				selectedFiles={selectedFiles}

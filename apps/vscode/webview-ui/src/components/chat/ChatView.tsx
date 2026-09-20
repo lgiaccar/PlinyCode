@@ -3,7 +3,7 @@ import { combineCommandSequences } from "@shared/combineCommandSequences"
 import { combineHookSequences } from "@shared/combineHookSequences"
 import { getApiMetrics, getLastApiReqTotalTokens } from "@shared/getApiMetrics"
 import { BooleanRequest, StringRequest } from "@shared/proto/cline/common"
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMount } from "react-use"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useShowNavbar } from "@/context/PlatformContext"
@@ -29,6 +29,7 @@ import {
 	useScrollBehavior,
 	WelcomeSection,
 } from "./chat-view"
+import { type ScheduledPrompt, ScheduledPrompts } from "./chat-view/components/layout/ScheduledPrompts"
 import {
 	hasPendingMessageConfirmation,
 	isPendingResponseUnconfirmed,
@@ -81,6 +82,12 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 		setPendingResponse,
 		textAreaRef,
 	} = chatState
+
+	const [scheduledPrompts, setScheduledPrompts] = useState<ScheduledPrompt[]>([])
+
+	const handleSchedulePrompt = useCallback((text: string, images: string[], files: string[], scheduledAt: number) => {
+		setScheduledPrompts((prev) => [...prev, { id: crypto.randomUUID(), text, images, files, scheduledAt }])
+	}, [])
 
 	const displayMessages = useMemo(() => withPendingUserMessage(messages, pendingUserMessage), [messages, pendingUserMessage])
 
@@ -216,6 +223,25 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 
 	// Use message handlers hook
 	const messageHandlers = useMessageHandlers(messages, chatState)
+
+	// Keep a ref to the latest message handlers so the scheduled-prompt timer
+	// (mounted once) always dispatches due prompts through the current handler.
+	const messageHandlersRef = useRef(messageHandlers)
+	messageHandlersRef.current = messageHandlers
+
+	useEffect(() => {
+		const interval = setInterval(() => {
+			const now = Date.now()
+			setScheduledPrompts((prev) => {
+				const due = prev.filter((p) => p.scheduledAt <= now)
+				for (const p of due) {
+					messageHandlersRef.current.handleSendMessage(p.text, p.images, p.files)
+				}
+				return prev.filter((p) => p.scheduledAt > now)
+			})
+		}, 5000)
+		return () => clearInterval(interval)
+	}, [])
 
 	const { selectedModelInfo } = useNormalizedApiConfiguration(mode)
 
@@ -421,10 +447,15 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 					mode={mode}
 					task={task}
 				/>
+				<ScheduledPrompts
+					items={scheduledPrompts}
+					onCancel={(id) => setScheduledPrompts((prev) => prev.filter((p) => p.id !== id))}
+				/>
 				<QueuedPrompts items={queuedPrompts} />
 				<InputSection
 					chatState={chatState}
 					messageHandlers={messageHandlers}
+					onSchedulePrompt={handleSchedulePrompt}
 					placeholderText={placeholderText}
 					scrollBehavior={scrollBehavior}
 					selectFilesAndImages={selectFilesAndImages}

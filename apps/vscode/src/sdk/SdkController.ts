@@ -597,7 +597,7 @@ export class Controller {
 			setTask: (task) => {
 				this.task = task
 			},
-			onAskResponse: (text, images, files) => this.askResponse(text, images, files),
+			onAskResponse: (text, images, files, delivery) => this.askResponse(text, images, files, delivery),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			// Bump the epoch synchronously before abort so straggler events from the cancelled
 			// turn carry the old epoch and are dropped by the webview. The resumable phase is set
@@ -625,7 +625,7 @@ export class Controller {
 			setTask: (task) => {
 				this.task = task
 			},
-			onAskResponse: (text, images, files) => this.askResponse(text, images, files),
+			onAskResponse: (text, images, files, delivery) => this.askResponse(text, images, files, delivery),
 			onCancelTask: () => this.cancelTask(),
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
 			createTempSessionHost: () => this.createRemoteConfigAwareSessionHost(),
@@ -1491,7 +1491,7 @@ export class Controller {
 	 * subscription. We do NOT await the send — the gRPC handler needs to
 	 * return immediately so the webview stays responsive.
 	 */
-	async askResponse(prompt?: string, images?: string[], files?: string[]): Promise<void> {
+	async askResponse(prompt?: string, images?: string[], files?: string[], delivery?: string): Promise<void> {
 		if (this.pendingClineAuthRetryPrompt !== undefined && this.task?.taskState?.askResponse === "yesButtonClicked") {
 			const retryPrompt = this.pendingClineAuthRetryPrompt
 			this.pendingClineAuthRetryPrompt = undefined
@@ -1516,7 +1516,14 @@ export class Controller {
 		this.postStateToWebview().catch((error) => {
 			Logger.error("[SdkController] Failed to post state after askResponse phase change:", error)
 		})
-		await this.followups.askResponse(prompt, images, files, this.task?.taskState?.askResponse, turnStateBefore.phase)
+		await this.followups.askResponse(
+			prompt,
+			images,
+			files,
+			this.task?.taskState?.askResponse,
+			turnStateBefore.phase,
+			delivery as "queue" | "steer" | undefined,
+		)
 	}
 
 	async editMessageAndRegenerate(input: {
