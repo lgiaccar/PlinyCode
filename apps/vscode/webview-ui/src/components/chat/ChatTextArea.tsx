@@ -79,7 +79,8 @@ interface ChatTextAreaProps {
 	selectedImages: string[]
 	setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>
 	setSelectedFiles: React.Dispatch<React.SetStateAction<string[]>>
-	onSend: () => void
+	onSend: (delivery?: "queue" | "steer") => void
+	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number) => void
 	onSelectFilesAndImages: () => void
 	shouldDisableFilesAndImages: boolean
 	onHeightChange?: (height: number) => void
@@ -207,6 +208,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			setSelectedImages,
 			setSelectedFiles,
 			onSend,
+			onSchedulePrompt,
 			onSelectFilesAndImages,
 			shouldDisableFilesAndImages,
 			onHeightChange,
@@ -255,6 +257,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [showUnsupportedFileError, setShowUnsupportedFileError] = useState(false)
 		const unsupportedFileTimerRef = useRef<NodeJS.Timeout | null>(null)
 		const [showDimensionError, setShowDimensionError] = useState(false)
+		const [showSchedulePicker, setShowSchedulePicker] = useState(false)
+		const [scheduleTime, setScheduleTime] = useState("")
 		const dimensionErrorTimerRef = useRef<NodeJS.Timeout | null>(null)
 
 		const [fileSearchResults, setFileSearchResults] = useState<SearchResult[]>([])
@@ -1584,7 +1588,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<div
 						className="absolute flex items-end bottom-4.5 right-5 z-10 h-8 text-xs"
 						style={{ height: textAreaBaseHeight }}>
-						<div className="flex flex-row items-center">
+						<div className="flex flex-row items-center gap-1">
 							<div
 								className={cn("input-icon-button", { disabled: sendingDisabled }, "codicon codicon-send text-sm")}
 								data-testid="send-button"
@@ -1594,6 +1598,65 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									}
 								}}
 							/>
+							{!showSchedulePicker && (
+								<select
+									className="h-5 w-5 appearance-none border-0 bg-transparent text-center text-[10px] text-description cursor-pointer hover:text-foreground focus:outline-none"
+									defaultValue="default"
+									disabled={sendingDisabled && !showSchedulePicker}
+									onChange={(e) => {
+										const value = e.target.value
+										if (value === "steer") {
+											if (!sendingDisabled) onSend("steer")
+										} else if (value === "queue") {
+											if (!sendingDisabled) onSend("queue")
+										} else if (value === "schedule") {
+											setShowSchedulePicker(true)
+										}
+										e.target.value = "default"
+									}}
+									title="Send options">
+									<option value="default">▼</option>
+									<option value="steer">Send now (interrupt)</option>
+									<option value="queue">Queue for later</option>
+									<option value="schedule">Schedule for later...</option>
+								</select>
+							)}
+							{showSchedulePicker && (
+								<div className="flex items-center gap-1">
+									<input
+										className="h-5 w-36 rounded-[3px] border border-editor-group-border bg-input-background px-1 text-[10px] text-foreground focus:outline-none"
+										onChange={(e) => setScheduleTime(e.target.value)}
+										type="datetime-local"
+										value={scheduleTime}
+									/>
+									<button
+										className="flex h-5 items-center rounded-[3px] bg-primary px-1.5 text-[10px] text-primary-foreground disabled:opacity-50"
+										disabled={!scheduleTime || sendingDisabled}
+										onClick={() => {
+											if (!scheduleTime) return
+											const scheduledAt = new Date(scheduleTime).getTime()
+											if (isNaN(scheduledAt) || scheduledAt <= Date.now()) return
+											onSchedulePrompt?.(inputValue, selectedImages, selectedFiles, scheduledAt)
+											setShowSchedulePicker(false)
+											setScheduleTime("")
+											setInputValue("")
+											setSelectedImages([])
+											setSelectedFiles([])
+										}}
+										type="button">
+										Schedule
+									</button>
+									<button
+										className="flex h-5 items-center rounded-[3px] border border-editor-group-border px-1 text-[10px] text-description hover:text-foreground"
+										onClick={() => {
+											setShowSchedulePicker(false)
+											setScheduleTime("")
+										}}
+										type="button">
+										Cancel
+									</button>
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
