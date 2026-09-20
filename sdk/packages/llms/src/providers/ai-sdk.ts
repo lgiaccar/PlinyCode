@@ -1981,14 +1981,6 @@ async function createProviderModule(
 	context: GatewayProviderContext,
 ): Promise<ProviderFactoryResult> {
 	switch (kind) {
-		case "cline": {
-			const { createClineProviderModule } = await import("./vendors/cline");
-			return createClineProviderModule(config, context);
-		}
-		case "openai": {
-			const { createOpenAIProviderModule } = await import("./vendors/openai");
-			return createOpenAIProviderModule(config, context);
-		}
 		case "openai-compatible": {
 			const { createOpenAICompatibleProviderModule } = await import(
 				"./vendors/openai-compatible"
@@ -2001,54 +1993,25 @@ async function createProviderModule(
 			);
 			return createAnthropicProviderModule(config, context);
 		}
-		case "google": {
-			const { createGoogleProviderModule } = await import("./vendors/google");
-			return createGoogleProviderModule(config, context);
-		}
-		case "vertex": {
-			const { createVertexProviderModule } = await import("./vendors/vertex");
-			return createVertexProviderModule(config, context);
-		}
-		case "bedrock": {
-			const { createBedrockProviderModule } = await import("./vendors/bedrock");
-			return createBedrockProviderModule(config);
-		}
-		case "mistral": {
-			const { createMistralProviderModule } = await import("./vendors/mistral");
-			return createMistralProviderModule(config);
-		}
-		case "claude-code": {
-			const { createClaudeCodeProviderModule } = await import(
-				"./vendors/community"
+		// PlinyCode is Pliny-only: only the openai-compatible and anthropic vendor
+		// adapters were kept when this fork was stripped (see FINDINGS.md). All other
+		// upstream Cline vendors (cline, openai, google, vertex, bedrock, mistral,
+		// claude-code, openai-codex, opencode, dify, ollama, sapaicore) are unsupported.
+		case "cline":
+		case "openai":
+		case "google":
+		case "vertex":
+		case "bedrock":
+		case "mistral":
+		case "claude-code":
+		case "openai-codex":
+		case "opencode":
+		case "dify":
+		case "ollama":
+		case "sapaicore":
+			throw new Error(
+				`Provider "${kind}" is not supported in PlinyCode; only "openai-compatible" and "anthropic" are wired to the Pliny gateway.`,
 			);
-			return createClaudeCodeProviderModule(config);
-		}
-		case "openai-codex": {
-			const { createOpenAICodexProviderModule } = await import(
-				"./vendors/community"
-			);
-			return createOpenAICodexProviderModule(config);
-		}
-		case "opencode": {
-			const { createOpenCodeProviderModule } = await import(
-				"./vendors/community"
-			);
-			return createOpenCodeProviderModule(config);
-		}
-		case "dify": {
-			const { createDifyProviderModule } = await import("./vendors/community");
-			return createDifyProviderModule(config);
-		}
-		case "ollama": {
-			const { createOllamaProviderModule } = await import("./vendors/ollama");
-			return createOllamaProviderModule(config, context);
-		}
-		case "sapaicore": {
-			const { createSapAiCoreProviderModule } = await import(
-				"./vendors/community"
-			);
-			return createSapAiCoreProviderModule(config);
-		}
 	}
 }
 

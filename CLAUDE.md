@@ -24,8 +24,11 @@ per-user authz).
 
 ## Approach
 Fork Cline (https://github.com/cline/cline). Pliny is OpenAI-compatible, so Cline's
-OpenAI-compatible provider is ~90% of the integration. ~202k of Cline's ~370k LOC is
-the 62-provider layer that gets deleted.
+OpenAI-compatible provider is ~90% of the integration. Forked and stripped already
+(see the `fork:` commit) — the provider layer at fork time was a thin Vercel-AI-SDK
+adapter with 12 vendor files under `sdk/packages/llms/src/providers/vendors/`, not 62
+standalone providers as originally estimated; only `openai-compatible.ts` and
+`anthropic.ts` were kept. See `FINDINGS.md`'s 2026-09-20 correction note for detail.
 
 ## Pliny
 - Base URL: `https://snps-inference.internal.synopsys.com/api/llm`
@@ -47,3 +50,6 @@ suffices. Port its pool grouping and long timeouts; do NOT port its context limi
 - Some self-hosted models 503 (`no healthy upstream`) or reject `tool_choice:"auto"`. Handle both.
 - Verify probes still pass before trusting any provider change: `research/probes/`.
   Regenerate context limits with `node --use-system-ca research/probes/ctxprobe.js <list.txt>`.
+- **Build toolchain:** Bun workspaces monorepo (`bun@1.3.13` pinned, `node >=22`).
+  `apps/vscode` needs a protobuf/gRPC codegen step (`buf`) before it compiles, and pulls
+  in `better-sqlite3` as a native dependency.

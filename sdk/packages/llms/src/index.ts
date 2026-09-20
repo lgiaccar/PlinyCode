@@ -134,14 +134,6 @@ export {
 	type ResolveProviderRequestHeadersInput,
 	resolveProviderRequestHeaders,
 } from "./providers/request-headers";
-export {
-	type ClineProvider,
-	type ClineProviderOptions,
-	type ClineWebSearchInput,
-	type ClineWebSearchOptions,
-	type ClineWebSearchResult,
-	createCline,
-} from "./providers/vendors/cline";
 export { LangfuseAttributesSpanProcessor } from "./services/LangfuseAttributesSpanProcessor";
 export {
 	disposeLangfuseTelemetry,

@@ -106,6 +106,20 @@ history, model picker).
 **Caveat:** Cline HEAD is a monorepo mid-refactor. Budget for rebase pain, or pin a
 release tag and cherry-pick.
 
+**Correction (2026-09-20, post-fork-import):** the "62 providers" framing above is now
+stale. At the same commit (`9a2512bb9835869d74774da99708a7f9d80b0fe8`, forked into this
+repo — see the `fork:` commit), the provider layer is a thin adapter over **Vercel AI
+SDK** (`@ai-sdk/openai-compatible`, `@ai-sdk/anthropic`, etc.), and the per-vendor split
+lives in `sdk/packages/llms/src/providers/vendors/` as **12 files**, not 62 standalone
+providers. The repo is also **Bun workspaces** (`bun@1.3.13` pinned, `node >=22`), not
+plain npm, and `apps/vscode` requires a protobuf/gRPC codegen step (`buf`) before it
+compiles. The import kept only `vendors/openai-compatible.ts` and `vendors/anthropic.ts`
+and dropped `bedrock.ts`, `cline.ts`, `community.ts`, `google.ts`, `minimax-thinking.ts`,
+`mistral.ts`, `ollama.ts`, `openai.ts`, `vertex.ts` plus their tests. Registry/factory
+wiring in `sdk/packages/llms/src/index.ts`, `providers/ai-sdk.ts`, and `providers/
+builtins.ts` that referenced the dropped vendors is being fixed against real build
+errors, not guessed — do not assume it's already clean.
+
 ## Model catalog (verified 2026-09-20)
 Full machine-readable table: **`research/pliny-models.json`**.
 Swept all 102 catalog entries plus the ids found in the Kilo config.
