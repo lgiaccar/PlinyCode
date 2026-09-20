@@ -58,12 +58,22 @@ Anthropic requires explicit `cache_control: {type:"ephemeral"}` blocks; Azure au
 Against the **$200/month per-user budget cap**, an agent replaying long conversations
 without this burns budget ~10x faster. Treat cache-block placement as a core feature.
 
-### 3. `/models` is not a capability list
+### 3. `/models` is not a capability list — and it is also INCOMPLETE
 Returns 102 entries with only `id`/`object`/`created`/`owned_by` — no context window,
-no pricing, no tool-support flag. It also **ignores per-user authorization**:
-`azure-openai/gpt-5.5` is listed but returns **403** for this user.
-Self-hosted models can return **503 "no healthy upstream"** (hit twice during testing).
-=> Hand-maintain a capability table; degrade gracefully on 403/503.
+no pricing, no tool-support flag. It **ignores per-user authorization**
+(`azure-openai/gpt-5.5` is listed but 403s for this user), and — discovered via the
+Kilo config — it **omits models that actually work**: `snps-provider/kimi-k2.6`,
+`snps-provider/GLM-5.2`, `snps-provider-internal-tests/glm-5-2`,
+`snps-provider-vmodels/glm-5.2` and `snps-aws-bedrock/global.anthropic.claude-sonnet-5`
+all return 200 with tool calls but are absent from or differ from the published list.
+
+=> **Never derive the picker from `/models` alone.** Use the verified catalog in
+`research/pliny-models.json` (measured, not guessed) and degrade gracefully on 403/503.
+
+**Good news:** the gateway reports the *true* context window in its error text when you
+over-request `max_tokens`, e.g. `max_model_len=max_total_tokens=512000`. That is how
+the catalog limits were measured, and it means the table can be regenerated automatically
+rather than hand-maintained (`research/probes/ctxprobe.js`).
 
 ### 4. Retry is yours to build
 Docs are explicit: 429s carry **no `Retry-After` header**. Need exponential backoff
@@ -96,16 +106,53 @@ history, model picker).
 **Caveat:** Cline HEAD is a monorepo mid-refactor. Budget for rebase pain, or pin a
 release tag and cherry-pick.
 
-## Known-good model ids (verified working for this user)
-- `snps-aws-bedrock/aws-claude-sonnet-4.6`  <- best default
-- `snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0`  <- cheap/fast
-- `azure-openai/gpt-5.2`
-- `snps-provider/qwen3-coder-480b-a35b-inst-fp8`  <- self-hosted, no cost field
-- `snps-google-gcp/gemini-3.1-pro-preview`  <- needs shim
-- `azure-openai/Kimi-K2.6`
+## Model catalog (verified 2026-09-20)
+Full machine-readable table: **`research/pliny-models.json`**.
+Swept all 102 catalog entries plus the ids found in the Kilo config.
 
-403 for this user: `azure-openai/gpt-5.5`, `snps-aws-bedrock/aws-claude-opus-4.8`,
-`snps-provider-exception/glm-5-1-fp8`
+- **47 models return working tool calls** (22 self-hosted, 17 hosted, plus pools)
+- 13 respond but never emit a tool call -> unusable for an agent
+- 19 unavailable (503 no-healthy-upstream, or 400 "auto tool choice requires --enable")
+
+Best self-hosted, by measured context:
+
+| Model | Context | Note |
+|---|---:|---|
+| `snps-provider/GLM-5.2` | 512,000 | largest self-hosted |
+| `snps-provider-vmodels/glm-5.2` | 512,000 | load-balanced pool |
+| `snps-provider/kimi-k2.6` | 256,000 | |
+| `snps-provider/nvidia-nemotron-3-super-120b-a12` | 256,000 | |
+| `snps-provider/qwen3.5-397b-fp8` | 220,000 | Kilo's current default |
+| `snps-provider/nemotron-3-ultra-550b-a55` | 200,000 | |
+| `snps-provider/qwen3-coder-480b-a35b-inst-fp8` | 128,000 | coding-specialised |
+
+Strongest overall (hosted, supports `cache_control`):
+`snps-aws-bedrock/global.anthropic.claude-sonnet-5`
+
+**Kilo's hand-entered context limits are wrong** — it declares 262,144 for GLM-5.2
+(actually 512,000) and 131,072 for qwen3.5-397b (actually 220,000). Under-declaring wastes context;
+over-declaring causes hard request failures. Use the measured values.
+
+## Prior art: Pliny already works in Kilo Code
+`D:\dev0\GPUSurfer\.kilo\kilo.jsonc` (project) + `~/.config/kilo/kilo.jsonc` (global)
+already run Pliny in production via **`@ai-sdk/openai-compatible`**. This is the single
+strongest evidence for the fork-Cline plan: a generic OpenAI-compatible adapter is enough.
+
+What to port:
+- **Provider grouping by pool** — `pliny` (self-hosted), `pliny-internal-tests`,
+  `pliny-vmodels`, `pliny-paid` (multi-cloud). Same baseURL, different model sets.
+  Worth keeping: it makes the free/paid split obvious in the picker, which matters
+  under the $200/month cap.
+- **Timeouts** — `timeout: 300000`, `headerTimeout: 120000`, `chunkTimeout: 120000`.
+  Self-hosted models are slow to first token; default HTTP timeouts will cut them off.
+- **Per-model `X-TFY-*` headers** — carried on every request.
+- **`tool_call` / `attachment` flags per model** — the shape of the capability table.
+
+What NOT to port:
+- The hand-entered `limit.context` values (measurably wrong — see above).
+- The API key lives in the *global* config, in plaintext. For PlinyCode, read
+  `PLINY_API_KEY` from env / VS Code SecretStorage instead of writing it to disk.
+- Kilo exposes only 12 models; 47 work.
 
 ## Re-running the proof
 ```bash
