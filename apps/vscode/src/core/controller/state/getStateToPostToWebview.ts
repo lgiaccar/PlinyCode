@@ -13,6 +13,7 @@ import { BannerService } from "@/services/banner/BannerService"
 import { featureFlagsService } from "@/services/feature-flags"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { getExtensionVariant } from "@/services/telemetry/rollout-metadata"
+import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { getLatestAnnouncementId } from "@/utils/announcements"
 import { getClineOnboardingModels } from "../models/getClineOnboardingModels"
 
@@ -36,7 +37,21 @@ export async function getStateToPostToWebview(controller: {
 
 	// Get API configuration from cache for immediate access
 	const onboardingModels = getClineOnboardingModels()
-	const apiConfiguration = stateManager.getApiConfiguration()
+	const rawApiConfiguration = stateManager.getApiConfiguration()
+	const apiConfiguration = {
+		...rawApiConfiguration,
+		planModeApiProvider: PLINY_PROVIDER_ID,
+		actModeApiProvider: PLINY_PROVIDER_ID,
+		planModeApiModelId: rawApiConfiguration.planModeApiModelId || PLINY_DEFAULT_MODEL_ID,
+		actModeApiModelId: rawApiConfiguration.actModeApiModelId || PLINY_DEFAULT_MODEL_ID,
+	}
+	// Persist the pin so legacy Cline/OpenRouter selections cannot resurface.
+	if (
+		rawApiConfiguration.planModeApiProvider !== PLINY_PROVIDER_ID ||
+		rawApiConfiguration.actModeApiProvider !== PLINY_PROVIDER_ID
+	) {
+		stateManager.setApiConfiguration(apiConfiguration)
+	}
 	const lastShownAnnouncementId = stateManager.getGlobalStateKey("lastShownAnnouncementId")
 	const taskHistory = stateManager.getGlobalStateKey("taskHistory")
 	const autoApprovalSettings = stateManager.getGlobalSettingsKey("autoApprovalSettings")

@@ -191,9 +191,10 @@ function toProviderListing(provider: ProviderListItem): ProviderListing {
 async function listSdkProviderListings(): Promise<ReadonlyArray<ProviderListing>> {
 	const manager = getProviderSettingsManager()
 	const { providers } = await listLocalProviders(manager, {
-		isClinePassEnabled: true,
+		isClinePassEnabled: false,
 	})
-	return providers.map(toProviderListing)
+	// PlinyCode: only expose the Pliny gateway in the product catalog.
+	return providers.map(toProviderListing).filter((provider) => provider.id === "pliny")
 }
 
 async function resolveSdkModels(

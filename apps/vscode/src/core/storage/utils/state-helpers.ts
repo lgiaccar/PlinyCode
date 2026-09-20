@@ -1,4 +1,3 @@
-import { ApiProvider } from "@shared/api"
 import type { ClineFileStorage } from "@shared/storage/ClineFileStorage"
 import {
 	applyTransform,
@@ -12,6 +11,7 @@ import {
 	SecretKeys,
 	Secrets,
 } from "@shared/storage/state-keys"
+import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { Logger } from "@/shared/services/Logger"
 import { ClineMemento } from "@/shared/storage"
 import { StateManager } from "../StateManager"
@@ -89,10 +89,12 @@ export async function readGlobalStateFromStorage(store: ClineMemento): Promise<G
  * Handle properties that require computed logic
  */
 async function handleComputedProperties(result: any, stateValues: Map<string, any>): Promise<void> {
-	// 1. API Provider logic - set defaults based on existing values
-	const defaultApiProvider: ApiProvider = "pliny"
-	result.planModeApiProvider = result.planModeApiProvider || defaultApiProvider
-	result.actModeApiProvider = result.actModeApiProvider || defaultApiProvider
+	// PlinyCode: always pin both modes to the Pliny provider (ignore legacy
+	// Cline/OpenRouter/Anthropic selections left in global state).
+	result.planModeApiProvider = PLINY_PROVIDER_ID
+	result.actModeApiProvider = PLINY_PROVIDER_ID
+	result.planModeApiModelId = result.planModeApiModelId || PLINY_DEFAULT_MODEL_ID
+	result.actModeApiModelId = result.actModeApiModelId || PLINY_DEFAULT_MODEL_ID
 
 	// 2. Plan/Act separate models setting with special logic
 	const planActSeparateModelsSettingRaw = stateValues.get("planActSeparateModelsSetting")

@@ -91,25 +91,29 @@ const ApiOptions = ({
 	// Use full context state for immediate save payload
 	const { apiConfiguration, remoteConfigSettings } = useExtensionState()
 
-	const selectedProvider =
-		(currentMode === "plan" ? apiConfiguration?.planModeApiProvider : apiConfiguration?.actModeApiProvider) || "pliny"
+	const selectedProvider = "pliny"
 	const { providers: catalogProviderListings } = useProviderListings()
 	const catalogProviderListing = useMemo(
 		() => catalogProviderListings.find((provider) => provider.id === selectedProvider),
 		[catalogProviderListings, selectedProvider],
 	)
-	// A provider is custom/unknown when we ship neither a dedicated settings
-	// component nor a curated generic form for it. These are edited through the
-	// OpenAI-compatible form so they always get Base URL, Custom Headers, Model
-	// Configuration and Reasoning Effort sections — regardless of whether the id
-	// happens to appear in providers.json.
+
+	const { handleModeFieldChange } = useApiConfigurationHandlers()
+
+	// Hard-pin settings UI onto Pliny if legacy state still points elsewhere.
+	useEffect(() => {
+		const plan = apiConfiguration?.planModeApiProvider
+		const act = apiConfiguration?.actModeApiProvider
+		if (plan !== "pliny" || act !== "pliny") {
+			void handleModeFieldChange({ plan: "planModeApiProvider", act: "actModeApiProvider" }, "pliny", currentMode)
+		}
+	}, [apiConfiguration?.planModeApiProvider, apiConfiguration?.actModeApiProvider, currentMode, handleModeFieldChange])
+
 	const isCustomProvider = !hasCustomProviderSettings(selectedProvider) && !isKnownGenericProvider(selectedProvider)
 	const genericProviderSettings = isCustomProvider
 		? undefined
 		: (getGenericProviderSettings(selectedProvider, catalogProviderListing) ??
 			getFallbackGenericProviderSettings(selectedProvider))
-
-	const { handleModeFieldChange } = useApiConfigurationHandlers()
 
 	// Provider search state
 	const [searchTerm, setSearchTerm] = useState("")
