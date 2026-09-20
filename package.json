@@ -1,0 +1,84 @@
+{
+    "name": "@cline/packages",
+    "private": true,
+    "workspaces": [
+        "sdk/packages/*",
+        "apps/*",
+        "apps/vscode/webview-ui",
+        "apps/vscode/testing-platform"
+    ],
+    "scripts": {
+        "prepare": "husky",
+        "build": "bun run clean && bun install && bun run build:sdk && bun -F claude-dev build",
+        "build:sdk": "bun --production -F './sdk/packages/*' build",
+        "build:apps": "bun -F claude-dev --production build",
+        "build:models": "bun -F @cline/llms generate:models && bun format --write",
+        "clean": "bun run sdk/scripts/clean.ts",
+        "types": "bun --parallel -F '*' typecheck",
+        "test": "bun --parallel -F './sdk/packages/**' -F claude-dev test",
+        "test:unit": "bash -lc 'set -euo pipefail; bun -F @cline/agents test & p1=$!; bun -F @cline/llms test & p2=$!; bun -F @cline/core test:unit & p3=$!; bun -F claude-dev test & p4=$!; wait $p1; wait $p2; wait $p3; wait $p4'",
+        "test:e2e": "bun -F @cline/core test:e2e",
+        "biome": "bunx --bun @biomejs/biome",
+        "format": "bun biome format sdk/ apps/vscode/",
+        "lint": "bun biome lint sdk/ apps/vscode/",
+        "fix": "bun biome check --write --unsafe --diagnostic-level=error sdk/ apps/vscode/",
+        "check": "bun biome check --diagnostic-level=error sdk/ apps/vscode/ && bun run build:sdk && bun -F claude-dev build && bun --parallel -F './sdk/packages/**' -F claude-dev typecheck",
+        "version": "bun run types && bun sdk/scripts/version.ts"
+    },
+    "lint-staged": {
+        "sdk/**": [
+            "sh -c 'bun run types'",
+            "bun biome check --no-errors-on-unmatched --files-ignore-unknown=true"
+        ],
+        "apps/vscode/**": [
+            "sh -c 'bun run types'",
+            "bun biome check --no-errors-on-unmatched --files-ignore-unknown=true"
+        ]
+    },
+    "module": "index.ts",
+    "type": "module",
+    "engines": {
+        "bun": "1.3.13",
+        "node": ">=22"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "2.4.5",
+        "@types/bun": "^1.3.13",
+        "@types/node": "^25.3.5",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.3.2",
+        "vitest": "^4.0.18"
+    },
+    "peerDependencies": {
+        "nanoid": "^5.1.7",
+        "typescript": "^5.9.3"
+    },
+    "overrides": {
+        "axios": "1.18.0",
+        "fast-uri": ">=3.1.4",
+        "undici": ">=7.29.0 <8",
+        "@opentui/core": "0.4.3",
+        "@opentui/react": "0.4.3",
+        "tar-fs": ">=3.1.1",
+        "tar": "^7.5.2",
+        "js-yaml": "^4.1.1",
+        "serialize-javascript": ">=7.0.3",
+        "protobufjs": "7.6.5",
+        "mermaid": "11.16.1",
+        "diff": "8.0.4",
+        "@sap-cloud-sdk/connectivity": "4.9.1",
+        "@sap-cloud-sdk/http-client": "4.9.1",
+        "@sap-cloud-sdk/openapi": "4.9.1",
+        "@sap-cloud-sdk/resilience": "4.9.1",
+        "@sap-cloud-sdk/util": "4.9.1"
+    },
+    "trustedDependencies": [
+        "better-sqlite3",
+        "grpc-tools"
+    ],
+    "packageManager": "bun@1.3.13",
+    "patchedDependencies": {
+        "@opentui-ui/dialog@0.1.2": "patches/@opentui-ui%2Fdialog@0.1.2.patch",
+        "ollama-ai-provider-v2@4.0.1": "patches/ollama-ai-provider-v2@4.0.1.patch"
+    }
+}
