@@ -3,7 +3,8 @@ import { combineCommandSequences } from "@shared/combineCommandSequences"
 import { combineHookSequences } from "@shared/combineHookSequences"
 import { getApiMetrics, getLastApiReqTotalTokens } from "@shared/getApiMetrics"
 import { BooleanRequest, StringRequest } from "@shared/proto/cline/common"
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { PanelLeftOpen } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMount } from "react-use"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useShowNavbar } from "@/context/PlatformContext"
@@ -29,6 +30,7 @@ import {
 	useScrollBehavior,
 	WelcomeSection,
 } from "./chat-view"
+import { ConversationSidebar } from "./chat-view/components/sidebar"
 import {
 	hasPendingMessageConfirmation,
 	isPendingResponseUnconfirmed,
@@ -375,40 +377,87 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 		return text
 	}, [task])
 
+	// Conversation sidebar state
+	const [sidebarVisible, setSidebarVisible] = useState(() => {
+		try {
+			return localStorage.getItem("pliny-conversation-sidebar-visible") === "true"
+		} catch {
+			return false
+		}
+	})
+
+	const toggleSidebar = useCallback(() => {
+		setSidebarVisible((prev) => {
+			const next = !prev
+			try {
+				localStorage.setItem("pliny-conversation-sidebar-visible", String(next))
+			} catch {
+				/* ignore */
+			}
+			return next
+		})
+	}, [])
+
+	const { scrollToMessage } = scrollBehavior
+	const handleSidebarItemClick = useCallback(
+		(groupIndex: number) => {
+			scrollToMessage?.(groupIndex)
+		},
+		[scrollToMessage],
+	)
+
 	return (
 		<ChatLayout isHidden={isHidden}>
-			<div className="flex flex-col flex-1 overflow-hidden">
-				{showNavbar && <Navbar />}
-				{task ? (
-					<TaskSection
-						apiMetrics={apiMetrics}
-						lastApiReqTotalTokens={lastApiReqTotalTokens}
-						messageHandlers={messageHandlers}
-						selectedModelInfo={{
-							supportsPromptCache: selectedModelInfo.supportsPromptCache,
-							supportsImages: selectedModelInfo.supportsImages || false,
-						}}
-						task={task}
-					/>
-				) : (
-					<WelcomeSection
-						hideAnnouncement={hideAnnouncement}
-						shouldShowQuickWins={shouldShowQuickWins}
-						showAnnouncement={showAnnouncement}
-						showHistoryView={showHistoryView}
-						taskHistory={taskHistory}
-						telemetrySetting={telemetrySetting}
-						version={version}
-					/>
-				)}
-				{task && (
-					<MessagesArea
-						chatState={chatState}
+			<div className="flex overflow-hidden h-full">
+				<div className="flex flex-col flex-1 overflow-hidden relative">
+					{task && (
+						<button
+							className="absolute top-3 right-3 z-20 p-1.5 rounded bg-[var(--vscode-editorWidget-background)] border border-[var(--vscode-widget-border)] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+							onClick={toggleSidebar}
+							title="Toggle conversation outline"
+							type="button">
+							<PanelLeftOpen className="w-4 h-4" />
+						</button>
+					)}
+					{showNavbar && <Navbar />}
+					{task ? (
+						<TaskSection
+							apiMetrics={apiMetrics}
+							lastApiReqTotalTokens={lastApiReqTotalTokens}
+							messageHandlers={messageHandlers}
+							selectedModelInfo={{
+								supportsPromptCache: selectedModelInfo.supportsPromptCache,
+								supportsImages: selectedModelInfo.supportsImages || false,
+							}}
+							task={task}
+						/>
+					) : (
+						<WelcomeSection
+							hideAnnouncement={hideAnnouncement}
+							shouldShowQuickWins={shouldShowQuickWins}
+							showAnnouncement={showAnnouncement}
+							showHistoryView={showHistoryView}
+							taskHistory={taskHistory}
+							telemetrySetting={telemetrySetting}
+							version={version}
+						/>
+					)}
+					{task && (
+						<MessagesArea
+							chatState={chatState}
+							groupedMessages={groupedMessages}
+							messageHandlers={messageHandlers}
+							modifiedMessages={modifiedMessages}
+							scrollBehavior={scrollBehavior}
+							task={task}
+						/>
+					)}
+				</div>
+				{sidebarVisible && task && (
+					<ConversationSidebar
 						groupedMessages={groupedMessages}
-						messageHandlers={messageHandlers}
-						modifiedMessages={modifiedMessages}
-						scrollBehavior={scrollBehavior}
-						task={task}
+						onClose={() => setSidebarVisible(false)}
+						onItemClick={handleSidebarItemClick}
 					/>
 				)}
 			</div>
