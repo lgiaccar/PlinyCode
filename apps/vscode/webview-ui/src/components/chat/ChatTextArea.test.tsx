@@ -19,6 +19,11 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 		remoteConfigSettings: undefined,
 		navigateToSettingsModelPicker: mocks.navigateToSettingsModelPicker,
 		mcpServers: [],
+		// useProviderModels() refreshes on mount; without these the request
+		// rejects asynchronously and vitest reports an unhandled error.
+		startProviderModelsRequest: vi.fn(),
+		applyProviderModelsResponse: vi.fn(),
+		providerModelsByProvider: {},
 	}),
 }))
 

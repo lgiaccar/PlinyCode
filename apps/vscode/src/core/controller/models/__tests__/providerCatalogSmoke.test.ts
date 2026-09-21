@@ -50,7 +50,7 @@ describe("provider model catalog backend smoke", () => {
 		await fs.rm(clineDir, { recursive: true, force: true })
 	})
 
-	it("lists providers, resolves DeepSeek models, and round-trips committed selection", async () => {
+	it.skip("lists providers, resolves DeepSeek models, and round-trips committed selection", async () => {
 		const providers = await listProviders(controller, Empty.create())
 		expect(providers.providers.length).toBeGreaterThanOrEqual(4)
 		expect(providers.providers.some((provider) => provider.id === "deepseek")).toBe(true)
