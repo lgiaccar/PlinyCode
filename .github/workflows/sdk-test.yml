@@ -82,19 +82,12 @@ jobs:
               id: build_sdk_step
               run: bun run build:sdk
 
-            # `bun run test` includes claude-dev, whose sources import
-            # apps/vscode/src/generated/** (gitignored protobuf output). Nothing
-            # else in this job builds it, so generate it before the tests run.
-            - name: Generate protobuf sources
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
-              run: bun -F claude-dev protos
-
+            # This workflow only triggers on sdk/** changes, so it tests the SDK
+            # packages on both runners. The extension (claude-dev) is covered by
+            # ext-vscode-test.yml, which provides the xvfb display its
+            # vscode-test integration suite needs on Linux.
             - name: Run Tests
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
-              run: bun run test
-
-            - name: Run SDK Tests (Windows)
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os == 'windows-latest' }}
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' }}
               run: bun -F './sdk/packages/**' test
 
             - name: Smoke test SQLite under Node
