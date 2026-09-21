@@ -50,6 +50,13 @@ vi.mock("@/services/grpc-client", () => ({
 	StateServiceClient: {
 		togglePlanActModeProto: vi.fn(async () => ({})),
 	},
+	// ConversationModelPicker -> useProviderConfig() reads the provider config on
+	// mount; without this the call rejects and vitest reports an unhandled error.
+	ModelsServiceClient: {
+		readProviderConfig: vi.fn(async () => ({})),
+		writeProviderConfig: vi.fn(async () => ({})),
+		commitModelSelection: vi.fn(async () => ({})),
+	},
 }))
 
 vi.mock("../cline-rules/ClineRulesToggleModal", () => ({ default: () => null }))
