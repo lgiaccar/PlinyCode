@@ -102,7 +102,7 @@ const OPENROUTER_STICKY_SESSION_METADATA: GatewayProviderMetadata = {
  * Context window requested from Ollama when neither the resolved model nor
  * the user's configuration supplies one. Matches the pre-SDK-migration
  * handler default; deliberately larger than Ollama's 4096 server default,
- * which cannot fit Cline's agentic prompts. Single source of truth — the
+ * which cannot fit PlinyCode's agentic prompts. Single source of truth — the
  * vendor, the VS Code session factory, and the settings UI all import this.
  */
 export const OLLAMA_DEFAULT_CONTEXT_WINDOW = 32768;
@@ -478,8 +478,8 @@ export function getGeneratedModelsForRuntimeProvider(
 		: models;
 }
 
-// Vercel-only model ids surfaced for the Cline provider while the OpenRouter
-// catalog lacks them (Cline's backend routes these to Vercel AI Gateway).
+// Vercel-only model ids surfaced for the PlinyCode provider while the OpenRouter
+// catalog lacks them (PlinyCode's backend routes these to Vercel AI Gateway).
 // Remove an id once the OpenRouter catalog lists it.
 const VERCEL_ONLY_CLINE_MODEL_IDS: readonly string[] = [
 	"meta/muse-spark-1.2-contributor",
@@ -504,7 +504,7 @@ function buildElevenLabsModels(): Record<string, ModelInfo> {
 }
 
 function buildClineModels(): Record<string, ModelInfo> {
-	// Cline is OpenRouter-backed generally, but its recommended-model endpoint
+	// PlinyCode is OpenRouter-backed generally, but its recommended-model endpoint
 	// can return Vercel-style ids. Include those exact ids so runtime metadata
 	// resolves without adding duplicate OpenRouter aliases to the picker.
 	const vercelAliasModels = Object.fromEntries(
@@ -524,7 +524,7 @@ function buildClineModels(): Record<string, ModelInfo> {
 		VERCEL_OPENROUTER_MODEL_ID_ALIAS_RULES,
 	);
 
-	// Cline's inference backend currently rejects image-output models. Keep
+	// PlinyCode's inference backend currently rejects image-output models. Keep
 	// those models in their native OpenRouter and Vercel catalogs. This filter
 	// is also applied to the merged runtime catalog in mergeKnownModels; remove
 	// both call sites together when the backend gains image-output support.
@@ -676,7 +676,7 @@ function createClineLikeSpec(
 	return {
 		id: input.id,
 		name: input.name,
-		description: input.description ?? "Cline API endpoint",
+		description: input.description ?? "PlinyCode API endpoint",
 		family: input.family ?? "openai-compatible",
 		popular: input.popular,
 		modelToolCapabilities: NATIVE_WEB_SEARCH_MODEL_TOOL_CAPABILITIES,
@@ -734,7 +734,7 @@ async function handleClineResponseError(
 const cline = createClineLikeSpec({
 	id: "cline",
 	family: "cline",
-	name: "Cline Usage-Billing",
+	name: "PlinyCode Usage-Billing",
 	popular: 1,
 	modelsFactory: buildClineModels,
 	defaultModelId: CLINE_DEFAULT_MODEL_ID,
@@ -752,7 +752,7 @@ const clinePass = createClineLikeSpec({
 	family: "cline",
 	name: "ClinePass",
 	popular: 2,
-	description: "Cline API endpoint with ClinePass models",
+	description: "PlinyCode API endpoint with ClinePass models",
 	modelsProviderId: CLINE_PASS_PROVIDER_ID,
 	defaultModelId: firstGeneratedModelId(CLINE_PASS_PROVIDER_ID),
 	metadata: { usageCostDisplay: "subscription" },
@@ -766,7 +766,7 @@ const clinePass = createClineLikeSpec({
 });
 
 /**
- * Handwritten providers plus generated providers that require Cline-specific
+ * Handwritten providers plus generated providers that require PlinyCode-specific
  * runtime or product policy. Providers fully described by models.dev must not
  * be duplicated here.
  */
@@ -800,7 +800,7 @@ const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 	{
 		id: "opencode-go",
 		docsUrl: "https://opencode.ai/docs/go/",
-		defaults: { headers: { "User-Agent": "Cline/SDK" } },
+		defaults: { headers: { "User-Agent": "PlinyCode/SDK" } },
 		metadata: {
 			routing: { modelApiProtocol: true },
 			stickySession: {
@@ -999,7 +999,7 @@ const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 	},
 	{
 		// Fully described by models.dev except for the regional endpoint
-		// routing policy (`apiLineBaseUrls`), which is Cline-specific.
+		// routing policy (`apiLineBaseUrls`), which is PlinyCode-specific.
 		id: "moonshot",
 		apiLineBaseUrls: {
 			china: "https://api.moonshot.cn/v1",
@@ -1137,7 +1137,7 @@ const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 
 /**
  * Non-OpenAI-compatible runtime/product overrides. Keep generated catalog facts
- * in providers.generated.ts and only retain Cline-owned behavior here.
+ * in providers.generated.ts and only retain PlinyCode-owned behavior here.
  */
 const BUILTIN_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 	{
@@ -1220,7 +1220,7 @@ const BUILTIN_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 		// provider-tools: the Claude Code CLI executes its own native tools
 		// (Read/Write/Bash/...) inside the spawned agent session and cannot
 		// bridge externally-executed AI SDK tools. Without this capability the
-		// gateway sends Cline's tool definitions (which the provider drops)
+		// gateway sends PlinyCode's tool definitions (which the provider drops)
 		// while the CLI's own tools stay enabled with no approval plumbing —
 		// every write is refused and no prompt can appear (#13146).
 		// local-auth: the spawned CLI authenticates from its own credential
@@ -1316,7 +1316,7 @@ const BUILTIN_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 		description: "OpenCode SDK multi-provider runtime",
 		family: "opencode",
 		// local-auth: the spawned `opencode` server authenticates from the
-		// credentials `opencode auth login` stores on this machine. Cline has
+		// credentials `opencode auth login` stores on this machine. PlinyCode has
 		// no OAuth flow or API key for it.
 		capabilities: ["reasoning", "local-auth"],
 		defaultModelId: "openai/gpt-5.6-sol",

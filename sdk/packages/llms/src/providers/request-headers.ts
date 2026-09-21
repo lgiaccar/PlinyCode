@@ -34,7 +34,7 @@ export interface ResolveProviderRequestHeadersInput {
 
 export const DEFAULT_CLINE_REQUEST_HEADERS: Record<string, string> = {
 	"HTTP-Referer": "https://cline.bot",
-	"X-Title": "Cline",
+	"X-Title": "PlinyCode",
 	"X-IS-MULTIROOT": "false",
 	"X-CLIENT-TYPE": "cline-sdk",
 };
@@ -79,7 +79,7 @@ function buildClineRequestHeaders(
 		trimNonEmpty(input.client?.platformVersion) ?? clientVersion;
 	return {
 		...DEFAULT_CLINE_REQUEST_HEADERS,
-		"User-Agent": `Cline/${clientVersion}`,
+		"User-Agent": `PlinyCode/${clientVersion}`,
 		"X-IS-MULTIROOT": input.client?.isMultiRoot === true ? "true" : "false",
 		"X-CLIENT-TYPE": clientType,
 		"X-CLIENT-VERSION": clientVersion,
@@ -128,7 +128,7 @@ function buildOpenAICodexRequestHeaders(
 	return {
 		originator: "cline",
 		session_id: input.sessionId,
-		"User-Agent": `Cline/${trimNonEmpty(input.openAiCodex?.userAgentVersion) ?? "1.0.0"}`,
+		"User-Agent": `PlinyCode/${trimNonEmpty(input.openAiCodex?.userAgentVersion) ?? "1.0.0"}`,
 		...(accountId ? { "ChatGPT-Account-Id": accountId } : {}),
 	};
 }
@@ -139,7 +139,7 @@ function resolveRequiredProviderHeaders(
 	if (input.providerId === "opencode-go") {
 		return {
 			"x-opencode-session": input.sessionId,
-			"User-Agent": `Cline/${trimNonEmpty(input.client?.version) ?? input.coreVersion}`,
+			"User-Agent": `PlinyCode/${trimNonEmpty(input.client?.version) ?? input.coreVersion}`,
 		};
 	}
 	return (

@@ -26,7 +26,7 @@ import { getLatestAnnouncementId } from "./utils/announcements"
 import { arePathsEqual } from "./utils/path"
 
 /**
- * Performs intialization for Cline that is common to all platforms.
+ * Performs intialization for PlinyCode that is common to all platforms.
  *
  * @param context
  * @returns The webview provider
@@ -38,8 +38,8 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	Logger.subscribe((msg: string) => HostProvider.env.debugLog({ value: msg })) // Host debug logging
 
 	// Register the SDK early logger so diagnostic events from
-	// ProviderSettingsManager, RuntimeOAuthTokenManager, and Cline auth
-	// flow through Logger.debug → Cline output channel.
+	// ProviderSettingsManager, RuntimeOAuthTokenManager, and PlinyCode auth
+	// flow through Logger.debug → PlinyCode output channel.
 	// These components operate before/outside of ClineCore sessions, so the
 	// session-scoped logger can't reach them.
 	setSdkLogger({
@@ -57,7 +57,7 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	try {
 		await StateManager.initialize(storageContext)
 	} catch (error) {
-		Logger.error("[Cline] CRITICAL: Failed to initialize StateManager:", error)
+		Logger.error("[PlinyCode] CRITICAL: Failed to initialize StateManager:", error)
 		HostProvider.window.showMessage({
 			type: ShowMessageType.ERROR,
 			message: "Failed to initialize storage. Please check logs for details or try restarting the client.",
@@ -106,7 +106,7 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 	// Perform post-update actions if necessary
 	try {
 		if (!previousVersion || currentVersion !== previousVersion) {
-			Logger.log(`Cline version changed: ${previousVersion} -> ${currentVersion}. First run or update detected.`)
+			Logger.log(`PlinyCode version changed: ${previousVersion} -> ${currentVersion}. First run or update detected.`)
 
 			// Check if there's a new announcement to show
 			const lastShownAnnouncementId = stateManager.getGlobalStateKey("lastShownAnnouncementId")
@@ -115,8 +115,8 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 			if (lastShownAnnouncementId !== latestAnnouncementId) {
 				// Show notification when there's a new announcement (major/minor updates or fresh installs)
 				const message = previousVersion
-					? `Cline has been updated to v${currentVersion}`
-					: `Welcome to Cline v${currentVersion}`
+					? `PlinyCode has been updated to v${currentVersion}`
+					: `Welcome to PlinyCode v${currentVersion}`
 				HostProvider.window.showMessage({
 					type: ShowMessageType.INFORMATION,
 					message,
@@ -133,7 +133,7 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 
 /**
  * Checks if this workspace was opened from the worktree quick launch button.
- * If so, opens the Cline sidebar and clears the state.
+ * If so, opens the PlinyCode sidebar and clears the state.
  */
 async function checkWorktreeAutoOpen(stateManager: StateManager): Promise<void> {
 	try {
@@ -156,7 +156,7 @@ async function checkWorktreeAutoOpen(stateManager: StateManager): Promise<void> 
 		if (arePathsEqual(currentPath, worktreeAutoOpenPath)) {
 			// Clear the state first to prevent re-triggering
 			stateManager.setGlobalState("worktreeAutoOpenPath", undefined)
-			// Open the Cline sidebar
+			// Open the PlinyCode sidebar
 			await HostProvider.workspace.openClineSidebarPanel({})
 		}
 	} catch (error) {
@@ -165,7 +165,7 @@ async function checkWorktreeAutoOpen(stateManager: StateManager): Promise<void> 
 }
 
 /**
- * Performs cleanup when Cline is deactivated that is common to all platforms.
+ * Performs cleanup when PlinyCode is deactivated that is common to all platforms.
  */
 export async function tearDown(): Promise<void> {
 	try {
@@ -189,7 +189,7 @@ export async function tearDown(): Promise<void> {
 		try {
 			await StateManager.get().flushPendingState()
 		} catch (error) {
-			Logger.error("[Cline] Failed to flush pending state during teardown:", error)
+			Logger.error("[PlinyCode] Failed to flush pending state during teardown:", error)
 		}
 	}
 }
