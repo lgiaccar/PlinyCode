@@ -77,6 +77,10 @@ export const GenericProviderSettings = ({
 	return (
 		<div>
 			<ApiKeyField
+				disabled={providerId === "pliny"}
+				helpText={
+					providerId === "pliny" ? "This API key will be taken from the PLINY_API_KEY environment variable." : undefined
+				}
 				initialValue={savedApiKeyMask}
 				onChange={handleApiKeyChange}
 				placeholder="Enter API Key..."

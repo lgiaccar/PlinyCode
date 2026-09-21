@@ -17,6 +17,14 @@ export const E2E_REGISTERED_MOCK_ENDPOINTS = {
 		POST: ["/chat/completions", "/auth/token", "/auth/register", "/users/me/budget/request"],
 		PUT: ["/users/active-account"],
 	},
+	// Pliny gateway path: OpenAI-compatible chat completions at /api/llm/chat/completions.
+	// The e2e harness redirects the extension's PLINY_BASE_URL to http://localhost:7777/api/llm
+	// (via providers.json pre-seeding), so the extension POSTs here instead of the real gateway.
+	"/api/llm": {
+		GET: ["/models"],
+		POST: ["/chat/completions"],
+		PUT: [],
+	},
 	"/.test": {
 		GET: [],
 		POST: ["/auth", "/setUserBalance", "/setUserHasOrganization", "/setOrgBalance", "/setSpendLimitExceeded"],

@@ -54,7 +54,17 @@ function seedSessionRecord(
 	writeFileSync(path.join(sessionDir, `${id}.messages.json`), "[]")
 }
 
-e2e("History - hides cost estimates for subscription-billed tasks", async ({ app, page, helper, server: _server }) => {
+// DISABLED (Pliny-only refactor): this suite asserts that the HistoryView hides
+// cost estimates for `openai-codex` ("subscription" billing) while showing them
+// for `anthropic` ("usage" billing). That cost-display suppression is keyed on
+// per-provider `usageCostDisplay` metadata for non-Pliny providers, which the
+// Pliny-only product is phasing out — the only live provider is `pliny`, so the
+// subscription/usage distinction no longer applies to anything users see. The
+// seed also writes SDK `sessions/<id>/<id>.json` records; re-enabling requires
+// confirming the SDK session-history reader path and that the Pliny provider's
+// cost rendering matches whatever the HistoryView expects. Re-enable only if
+// Pliny ever surfaces per-call cost estimates in the history list again.
+e2e.skip("History - hides cost estimates for subscription-billed tasks", async ({ app, page, helper, server: _server }) => {
 	// Seed history BEFORE the webview loads so its first state fetch sees the
 	// records (the extension caches history metadata for ~10s).
 	const clineDir = await app.evaluate(() => process.env.CLINE_DIR)
@@ -81,7 +91,7 @@ e2e("History - hides cost estimates for subscription-billed tasks", async ({ app
 
 	await E2ETestHelper.openClineSidebar(page)
 	const sidebar = await helper.getSidebar(page)
-	await helper.signin(sidebar)
+	await helper.ensureReady(sidebar)
 
 	// Recent-task chips in the empty chat view (HistoryPreview)
 	await expect(sidebar.getByText("Recent")).toBeVisible()

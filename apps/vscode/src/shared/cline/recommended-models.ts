@@ -1,4 +1,4 @@
-import { PLINY_FEATURED_MODELS } from "./pliny"
+import { PLINY_FEATURED_MODELS } from "../pliny"
 
 interface ClineRecommendedModel {
 	id: string

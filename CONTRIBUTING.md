@@ -161,9 +161,9 @@ Anyone can contribute code to Cline, but we ask that you follow these guidelines
     
     - **Writing E2E tests:**
       - Tests are located in `src/test/e2e/`
-      - Use the `e2e` fixture for single-root workspace tests
-      - Use `e2eMultiRoot` fixture for multi-root workspace tests
-      - Follow existing patterns in `auth.test.ts`, `chat.test.ts`, `diff.test.ts`, and `editor.test.ts`
+      - Use the `e2e` fixture for single-root workspace tests; use `E2E_WORKSPACE_TYPES` + `e2e.extend({ workspaceType })` for multi-root
+      - The Pliny-only refactor removed the onboarding/sign-in flow; most suites are currently `e2e.skip` pending a Pliny e2e harness rebuild — see `src/test/e2e/README.md`
+      - Follow existing patterns in `chat.test.ts`, `editor.test.ts`, `file-edit.test.ts`, and `history.test.ts`
       - See `src/test/e2e/README.md` for detailed documentation
     
     - **Debug mode features:**
