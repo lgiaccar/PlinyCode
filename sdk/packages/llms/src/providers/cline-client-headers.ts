@@ -18,7 +18,7 @@ export function buildClineClientHeaders(
 	const clientVersion = trimNonEmpty(identity?.version) ?? "unknown";
 	return {
 		...DEFAULT_CLINE_REQUEST_HEADERS,
-		"User-Agent": `Cline/${clientVersion}`,
+		"User-Agent": `PlinyCode/${clientVersion}`,
 		"X-CLIENT-TYPE": clientType,
 		"X-CLIENT-VERSION": clientVersion,
 		"X-PLATFORM": trimNonEmpty(identity?.platform) ?? clientType,

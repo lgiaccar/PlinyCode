@@ -146,8 +146,8 @@ describe("HubRuntimeHost", () => {
 				enableAgentTeams: true,
 				headers: expect.objectContaining({
 					"HTTP-Referer": "https://cline.bot",
-					"X-Title": "Cline",
-					"User-Agent": "Cline/3.0.38",
+					"X-Title": "PlinyCode",
+					"User-Agent": "PlinyCode/3.0.38",
 					"X-IS-MULTIROOT": "false",
 					"X-CLIENT-TYPE": "cline-cli",
 					"X-CLIENT-VERSION": "3.0.38",
