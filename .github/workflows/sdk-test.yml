@@ -82,6 +82,13 @@ jobs:
               id: build_sdk_step
               run: bun run build:sdk
 
+            # `bun run test` includes claude-dev, whose sources import
+            # apps/vscode/src/generated/** (gitignored protobuf output). Nothing
+            # else in this job builds it, so generate it before the tests run.
+            - name: Generate protobuf sources
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
+              run: bun -F claude-dev protos
+
             - name: Run Tests
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               run: bun run test
