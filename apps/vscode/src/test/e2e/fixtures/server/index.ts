@@ -173,8 +173,14 @@ export class ClineApiServerMock {
 
 			// Authentication middleware
 			const authHeader = req.headers.authorization
+			// The /api/llm path is the Pliny gateway surface: it is OpenAI-compatible
+			// and has NO Cline account — do not gate it behind the Cline-user token
+			// lookup (which would 401 the dummy `e2e-mock-pliny-key` bearer the
+			// openVSCode fixture seeds in providers.json). The /api/v1 paths below
+			// still require a real Cline account token.
 			const isAuthRequired =
 				!path.startsWith("/.test/") &&
+				!path.startsWith("/api/llm") &&
 				path !== "/health" &&
 				path !== "/api/v1/auth/token" &&
 				path !== "/api/v1/auth/register"
@@ -661,6 +667,175 @@ export class ClineApiServerMock {
 						}
 
 						return sendJson(generation)
+					}
+				}
+
+				// Pliny gateway path (/api/llm) — OpenAI-compatible, no Cline account auth.
+				// The e2e harness redirects the extension to http://localhost:7777/api/llm via
+				// providers.json pre-seeding in the openVSCode fixture, so requests that would
+				// normally hit https://snps-inference.internal.synopsys.com/api/llm land here.
+				if (baseRoute === "/api/llm") {
+					if (endpoint === "/models" && method === "GET") {
+						// Return a minimal OpenAI-compatible model list so the extension can
+						// validate the configured model ID without hitting the real gateway.
+						return sendJson({
+							object: "list",
+							data: [
+								{
+									id: "snps-aws-bedrock/aws-claude-sonnet-4.6",
+									object: "model",
+									created: 0,
+									owned_by: "pliny",
+								},
+							],
+						})
+					}
+
+					if (endpoint === "/chat/completions" && method === "POST") {
+						const body = await readBody()
+						const parsed = JSON.parse(body)
+						const { messages, model = "snps-aws-bedrock/aws-claude-sonnet-4.6", stream = true } = parsed
+
+						let responseText = E2E_MOCK_API_RESPONSES.DEFAULT
+						let toolCall: typeof E2E_MOCK_EDITOR_TOOL_CALL | typeof E2E_MOCK_POWERSHELL_TOOL_CALL | null = null
+
+						const hasToolResult =
+							(body.includes("edit_request") || body.includes("powershell_background_request")) &&
+							Array.isArray(messages) &&
+							messages.some((m: { role?: string }) => m?.role === "tool")
+
+						if (hasToolResult) {
+							responseText = body.includes("powershell_background_request")
+								? E2E_MOCK_API_RESPONSES.POWERSHELL_REQUEST_COMPLETE
+								: E2E_MOCK_API_RESPONSES.EDIT_REQUEST_COMPLETE
+						} else if (body.includes("edit_request")) {
+							responseText = E2E_MOCK_API_RESPONSES.EDIT_REQUEST_LEAD_IN
+							toolCall = E2E_MOCK_EDITOR_TOOL_CALL
+						} else if (body.includes("powershell_background_request")) {
+							responseText = E2E_MOCK_API_RESPONSES.POWERSHELL_REQUEST_LEAD_IN
+							toolCall = E2E_MOCK_POWERSHELL_TOOL_CALL
+						}
+
+						const generationId = `gen_pliny_${++controller.generationCounter}_${Date.now()}`
+
+						if (stream) {
+							res.writeHead(200, {
+								"Content-Type": "text/plain",
+								"Cache-Control": "no-cache",
+								Connection: "keep-alive",
+							})
+
+							const chunks = responseText.split(" ")
+							let chunkIndex = 0
+
+							const argumentsJson = toolCall ? JSON.stringify(toolCall.arguments) : ""
+							const argsSplitAt = Math.floor(argumentsJson.length / 2)
+							const toolCallDeltas = toolCall
+								? [
+										[
+											{
+												index: 0,
+												id: toolCall.id,
+												type: "function",
+												function: { name: toolCall.name, arguments: "" },
+											},
+										],
+										[
+											{
+												index: 0,
+												function: { arguments: argumentsJson.slice(0, argsSplitAt) },
+											},
+										],
+										[
+											{
+												index: 0,
+												function: { arguments: argumentsJson.slice(argsSplitAt) },
+											},
+										],
+									]
+								: []
+							let toolCallDeltaIndex = 0
+
+							const sendChunk = () => {
+								if (chunkIndex < chunks.length) {
+									const chunk = {
+										id: generationId,
+										object: "chat.completion.chunk",
+										created: Math.floor(Date.now() / 1000),
+										model,
+										choices: [
+											{
+												index: 0,
+												delta: {
+													content: chunks[chunkIndex] + (chunkIndex < chunks.length - 1 ? " " : ""),
+												},
+												finish_reason: null,
+											},
+										],
+									}
+									res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+									chunkIndex++
+									setTimeout(sendChunk, 10)
+								} else if (toolCallDeltaIndex < toolCallDeltas.length) {
+									const chunk = {
+										id: generationId,
+										object: "chat.completion.chunk",
+										created: Math.floor(Date.now() / 1000),
+										model,
+										choices: [
+											{
+												index: 0,
+												delta: {
+													tool_calls: toolCallDeltas[toolCallDeltaIndex],
+												},
+												finish_reason: null,
+											},
+										],
+									}
+									res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+									toolCallDeltaIndex++
+									setTimeout(sendChunk, 10)
+								} else {
+									const finishReason = toolCall ? "tool_calls" : "stop"
+									const finalChunk = {
+										id: generationId,
+										object: "chat.completion.chunk",
+										created: Math.floor(Date.now() / 1000),
+										model,
+										choices: [
+											{
+												index: 0,
+												delta: {},
+												finish_reason: finishReason,
+											},
+										],
+									}
+									res.write(`data: ${JSON.stringify(finalChunk)}\n\n`)
+									res.write("data: [DONE]\n\n")
+									res.end()
+								}
+							}
+							sendChunk()
+						} else {
+							// Non-streaming response
+							return sendJson({
+								id: generationId,
+								object: "chat.completion",
+								created: Math.floor(Date.now() / 1000),
+								model,
+								choices: [
+									{
+										index: 0,
+										message: {
+											role: "assistant",
+											content: responseText,
+										},
+										finish_reason: "stop",
+									},
+								],
+							})
+						}
+						return
 					}
 				}
 

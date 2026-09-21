@@ -2,8 +2,8 @@ import { expect } from "@playwright/test"
 import { e2e } from "./utils/helpers"
 
 e2e("Chat - can send messages and switch between modes", async ({ helper, sidebar }) => {
-	// Sign in
-	await helper.signin(sidebar)
+	// Wait for the extension to be ready (no sign-in needed in Pliny-only mode)
+	await helper.ensureReady(sidebar)
 
 	// Submit a message
 	const inputbox = sidebar.getByTestId("chat-input")
@@ -16,7 +16,8 @@ e2e("Chat - can send messages and switch between modes", async ({ helper, sideba
 	// Wait for the (mock) agent turn to finish before navigating away — the task
 	// is persisted to SDK session history when the turn completes, so clicking
 	// "New Task" mid-turn races the history write and "Recent" may not show.
-	await expect(sidebar.getByText("mock Cline API response")).toBeVisible()
+	// Generous timeout: the mock streams word-by-word and CI runners can be slow.
+	await expect(sidebar.getByText("mock Cline API response")).toBeVisible({ timeout: 30_000 })
 
 	// Starting a new task should clear the current chat view and show the recent tasks
 	await sidebar.getByRole("button", { name: "New Task", exact: true }).first().click()

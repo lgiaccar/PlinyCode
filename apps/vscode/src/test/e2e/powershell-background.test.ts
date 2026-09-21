@@ -40,7 +40,7 @@ for (const profile of profiles) {
 			e2e.skip(!hasStoreAlias || hasPreferredInstall, "Requires a Store-only PowerShell 7 installation")
 		}
 
-		await helper.signin(sidebar)
+		await helper.ensureReady(sidebar)
 
 		await page.getByRole("button", { name: "Settings", exact: true }).click()
 		await sidebar.getByTestId("tab-terminal").click()

@@ -1,7 +1,7 @@
 import type { ModelCapability, ModelInfo } from "../catalog/types";
 import catalog from "./data/pliny-models.json";
 
-export const PLINY_BASE_URL = catalog.baseURL;
+export const PLINY_BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL;
 export const PLINY_DEFAULT_MODEL_ID = "snps-aws-bedrock/aws-claude-sonnet-4.6";
 export const PLINY_DEFAULT_HEADERS = catalog.headers as Readonly<
 	Record<string, string>

@@ -34,7 +34,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 
 	// Handle sending a message
 	const handleSendMessage = useCallback(
-		async (text: string, images: string[], files: string[]) => {
+		async (text: string, images: string[], files: string[], delivery?: "queue" | "steer") => {
 			let messageToSend = text.trim()
 			const hasContent = messageToSend || images.length > 0 || files.length > 0
 
@@ -197,6 +197,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 							text: messageToSend,
 							images,
 							files,
+							delivery,
 						}),
 					)
 					messageSent = true
@@ -214,6 +215,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 								text: messageToSend,
 								images,
 								files,
+								delivery,
 							}),
 							{ showPendingMessage: turnState?.phase !== "streaming" },
 						)
@@ -250,6 +252,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 										text: messageToSend,
 										images,
 										files,
+										delivery,
 									}),
 									{ showPendingMessage },
 								)
@@ -286,6 +289,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 								text: messageToSend,
 								images,
 								files,
+								delivery,
 							}),
 							{
 								showPendingMessage: turnState?.phase === "completed" || turnState?.phase === "awaiting_followup",
