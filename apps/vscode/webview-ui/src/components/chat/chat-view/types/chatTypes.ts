@@ -98,6 +98,8 @@ export interface ScrollBehavior {
 	setPendingScrollToMessage: React.Dispatch<React.SetStateAction<number | null>>
 	scrolledPastUserMessage: ClineMessage | null
 	handleRangeChanged: (range: ListRange) => void
+	goToPreviousUserMessage: () => void
+	goToNextUserMessage: () => void
 }
 
 /**

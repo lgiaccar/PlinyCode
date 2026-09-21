@@ -1,4 +1,5 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
+import { ArrowDown, ChevronDown, ChevronUp } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { Virtuoso } from "react-virtuoso"
@@ -61,6 +62,9 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		scrollToBottomSmooth,
 		scrollToBottomAuto,
 		handleLastRowContentChange,
+		goToPreviousUserMessage,
+		goToNextUserMessage,
+		isAtBottom,
 	} = scrollBehavior
 
 	// Find the index of the scrolled past user message for scrolling
@@ -80,6 +84,20 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 
 	const { expandedRows, inputValue, setActiveQuote } = chatState
 	const lastVisibleRow = useMemo(() => groupedMessages.at(-1), [groupedMessages])
+
+	// Determine if there are multiple user messages to enable navigation buttons
+	const hasMultipleUserMessages = useMemo(() => {
+		let count = 0
+		for (const item of groupedMessages) {
+			if (!Array.isArray(item) && (item.say === "user_feedback" || item.say === "task")) {
+				count++
+				if (count >= 2) {
+					return true
+				}
+			}
+		}
+		return false
+	}, [groupedMessages])
 	const lastVisibleMessage = useMemo(() => {
 		const lastRow = lastVisibleRow
 		if (!lastRow) {
@@ -259,11 +277,67 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 					rangeChanged={handleRangeChanged}
 					ref={virtuosoRef} // anything lower causes issues with followOutput
 					style={{
-						scrollbarWidth: "none", // Firefox
-						msOverflowStyle: "none", // IE/Edge
 						overflowAnchor: "none", // prevent scroll jump when content expands
 					}}
 				/>
+				{/* Floating scroll navigation buttons */}
+				{hasMultipleUserMessages && (
+					<div className="absolute right-3 bottom-4 flex flex-col gap-1.5 z-20">
+						<button
+							className={cn(
+								"flex items-center justify-center w-7 h-7 rounded-full",
+								"cursor-pointer select-none backdrop-blur-sm",
+								"hover:brightness-110 transition-transform hover:scale-110",
+								"shadow-md",
+								"opacity-70 hover:opacity-100",
+							)}
+							onClick={goToPreviousUserMessage}
+							style={{
+								backgroundColor: "var(--vscode-badge-background)",
+								color: "var(--vscode-badge-foreground)",
+							}}
+							title="Previous user message"
+							type="button">
+							<ChevronUp size={16} />
+						</button>
+						{!isAtBottom && (
+							<button
+								className={cn(
+									"flex items-center justify-center w-7 h-7 rounded-full",
+									"cursor-pointer select-none backdrop-blur-sm",
+									"hover:brightness-110 transition-transform hover:scale-110",
+									"shadow-md",
+									"opacity-70 hover:opacity-100",
+								)}
+								onClick={scrollToBottomSmooth}
+								style={{
+									backgroundColor: "var(--vscode-badge-background)",
+									color: "var(--vscode-badge-foreground)",
+								}}
+								title="Scroll to bottom"
+								type="button">
+								<ArrowDown size={16} />
+							</button>
+						)}
+						<button
+							className={cn(
+								"flex items-center justify-center w-7 h-7 rounded-full",
+								"cursor-pointer select-none backdrop-blur-sm",
+								"hover:brightness-110 transition-transform hover:scale-110",
+								"shadow-md",
+								"opacity-70 hover:opacity-100",
+							)}
+							onClick={goToNextUserMessage}
+							style={{
+								backgroundColor: "var(--vscode-badge-background)",
+								color: "var(--vscode-badge-foreground)",
+							}}
+							title="Next user message"
+							type="button">
+							<ChevronDown size={16} />
+						</button>
+					</div>
+				)}
 			</div>
 		</div>
 	)

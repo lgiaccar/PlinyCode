@@ -107,4 +107,116 @@ describe("useScrollBehavior", () => {
 
 		expect(result.current.disableAutoScrollRef.current).toBe(false)
 	})
+
+	it("navigates to the previous user message", () => {
+		const groupedMessages = [
+			{ ts: 1, type: "say", say: "task", text: "hello" },
+			{ ts: 2, type: "say", say: "text", text: "response" },
+			{ ts: 3, type: "say", say: "user_feedback", text: "follow up" },
+		]
+		const { result } = renderHook(() => useScrollBehavior([], [], groupedMessages as any, {}, vi.fn()))
+
+		const scrollToIndex = vi.fn()
+		act(() => {
+			;(result.current.virtuosoRef as MutableRefObject<{ scrollToIndex: typeof scrollToIndex } | null>).current = {
+				scrollToIndex,
+			}
+		})
+
+		// Simulate viewport showing the middle of the conversation
+		act(() => {
+			result.current.handleRangeChanged({ startIndex: 2, endIndex: 2 })
+		})
+
+		act(() => {
+			result.current.goToPreviousUserMessage()
+		})
+
+		expect(scrollToIndex).toHaveBeenCalledWith({
+			index: 0,
+			behavior: "smooth",
+			align: "center",
+		})
+	})
+
+	it("navigates to the next user message", () => {
+		const groupedMessages = [
+			{ ts: 1, type: "say", say: "task", text: "hello" },
+			{ ts: 2, type: "say", say: "text", text: "response" },
+			{ ts: 3, type: "say", say: "user_feedback", text: "follow up" },
+		]
+		const { result } = renderHook(() => useScrollBehavior([], [], groupedMessages as any, {}, vi.fn()))
+
+		const scrollToIndex = vi.fn()
+		act(() => {
+			;(result.current.virtuosoRef as MutableRefObject<{ scrollToIndex: typeof scrollToIndex } | null>).current = {
+				scrollToIndex,
+			}
+		})
+
+		// Simulate viewport showing the start of the conversation
+		act(() => {
+			result.current.handleRangeChanged({ startIndex: 0, endIndex: 0 })
+		})
+
+		act(() => {
+			result.current.goToNextUserMessage()
+		})
+
+		expect(scrollToIndex).toHaveBeenCalledWith({
+			index: 2,
+			behavior: "smooth",
+			align: "center",
+		})
+	})
+
+	it("does nothing when there is no previous user message to navigate to", () => {
+		const groupedMessages = [
+			{ ts: 1, type: "say", say: "task", text: "hello" },
+			{ ts: 2, type: "say", say: "text", text: "response" },
+		]
+		const { result } = renderHook(() => useScrollBehavior([], [], groupedMessages as any, {}, vi.fn()))
+
+		const scrollToIndex = vi.fn()
+		act(() => {
+			;(result.current.virtuosoRef as MutableRefObject<{ scrollToIndex: typeof scrollToIndex } | null>).current = {
+				scrollToIndex,
+			}
+		})
+
+		act(() => {
+			result.current.handleRangeChanged({ startIndex: 0, endIndex: 0 })
+		})
+
+		act(() => {
+			result.current.goToPreviousUserMessage()
+		})
+
+		expect(scrollToIndex).not.toHaveBeenCalled()
+	})
+
+	it("does nothing when there is no next user message to navigate to", () => {
+		const groupedMessages = [
+			{ ts: 1, type: "say", say: "task", text: "hello" },
+			{ ts: 2, type: "say", say: "text", text: "response" },
+		]
+		const { result } = renderHook(() => useScrollBehavior([], [], groupedMessages as any, {}, vi.fn()))
+
+		const scrollToIndex = vi.fn()
+		act(() => {
+			;(result.current.virtuosoRef as MutableRefObject<{ scrollToIndex: typeof scrollToIndex } | null>).current = {
+				scrollToIndex,
+			}
+		})
+
+		act(() => {
+			result.current.handleRangeChanged({ startIndex: 1, endIndex: 1 })
+		})
+
+		act(() => {
+			result.current.goToNextUserMessage()
+		})
+
+		expect(scrollToIndex).not.toHaveBeenCalled()
+	})
 })

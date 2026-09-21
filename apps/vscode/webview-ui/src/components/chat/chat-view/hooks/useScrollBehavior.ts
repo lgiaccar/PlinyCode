@@ -31,6 +31,7 @@ export function useScrollBehavior(
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
 	const disableAutoScrollRef = useRef(false)
 	const layoutSettleScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const visibleRangeRef = useRef<ListRange>({ startIndex: 0, endIndex: 0 })
 
 	// State
 	const [isAtBottom, setIsAtBottom] = useState(false)
@@ -41,6 +42,50 @@ export function useScrollBehavior(
 	const userFeedbackMessages = useMemo(() => {
 		return visibleMessages.filter((msg) => msg.say === "user_feedback")
 	}, [visibleMessages])
+
+	// Build indices of user messages (task + user_feedback) inside groupedMessages for navigation
+	const userMessageIndices = useMemo(() => {
+		const indices: number[] = []
+		for (let i = 0; i < groupedMessages.length; i++) {
+			const item = groupedMessages[i]
+			if (!Array.isArray(item) && (item.say === "user_feedback" || item.say === "task")) {
+				indices.push(i)
+			}
+		}
+		return indices
+	}, [groupedMessages])
+
+	// Navigate to the previous user message (going up in the conversation)
+	const goToPreviousUserMessage = useCallback(() => {
+		const startIndex = visibleRangeRef.current.startIndex
+		// Find the closest user message that is above the current viewport
+		for (let i = userMessageIndices.length - 1; i >= 0; i--) {
+			if (userMessageIndices[i] < startIndex) {
+				virtuosoRef.current?.scrollToIndex({
+					index: userMessageIndices[i],
+					behavior: "smooth",
+					align: "center",
+				})
+				return
+			}
+		}
+	}, [userMessageIndices])
+
+	// Navigate to the next user message (going down in the conversation)
+	const goToNextUserMessage = useCallback(() => {
+		const startIndex = visibleRangeRef.current.startIndex
+		// Find the closest user message that is below the current viewport
+		for (const idx of userMessageIndices) {
+			if (idx > startIndex) {
+				virtuosoRef.current?.scrollToIndex({
+					index: idx,
+					behavior: "smooth",
+					align: "center",
+				})
+				return
+			}
+		}
+	}, [userMessageIndices])
 
 	// Track scroll position to detect which user message has been scrolled past
 	// Shows the most recent user message that's above the current viewport
@@ -126,10 +171,9 @@ export function useScrollBehavior(
 		}
 	}, [checkScrolledPastUserMessage])
 
-	// Handler for when visible range changes in Virtuoso (kept for compatibility but not used for sticky)
-	const handleRangeChanged = useCallback((_range: ListRange) => {
-		// Range changed callback - we now use scroll position instead
-		// but keep this for potential future use
+	// Handler for when visible range changes in Virtuoso
+	const handleRangeChanged = useCallback((range: ListRange) => {
+		visibleRangeRef.current = range
 	}, [])
 	const scrollToBottomSmooth = useMemo(
 		() =>
@@ -346,5 +390,7 @@ export function useScrollBehavior(
 		setPendingScrollToMessage,
 		scrolledPastUserMessage,
 		handleRangeChanged,
+		goToPreviousUserMessage,
+		goToNextUserMessage,
 	}
 }
