@@ -311,8 +311,22 @@ jobs:
                   fi
                   echo "Found better-sqlite3 native binary: $NODE_FILE"
 
+            # Pulls five archives from GitHub releases; a transient network error on
+            # any one of them fails the job, so retry the whole step a few times.
             - name: Download ripgrep binaries
-              run: bun run download-ripgrep
+              shell: bash
+              run: |
+                  for attempt in 1 2 3; do
+                    if bun run download-ripgrep; then
+                      exit 0
+                    fi
+                    if [ "$attempt" -eq 3 ]; then
+                      echo "ripgrep download failed after 3 attempts"
+                      exit 1
+                    fi
+                    echo "ripgrep download failed; retrying after short delay"
+                    sleep 10
+                  done
 
             - name: Compile Standalone
               run: bun run compile-standalone
