@@ -887,12 +887,13 @@ class DebugHarness {
 	async uiOpenSidebar(): Promise<any> {
 		if (!this.page) throw new Error("VSCode not running")
 		try {
-			await this.page.getByRole("tab", { name: /Cline/ }).locator("a").click()
+			// Activity bar view container is titled "PlinyCode" (see package.json viewsContainers).
+			await this.page.getByRole("tab", { name: /Pliny/ }).locator("a").click()
 		} catch {
 			// Activity bar might need a different approach
 			await this.page.keyboard.press("Meta+Shift+p")
 			await sleep(300)
-			await this.page.keyboard.type("Cline: Focus on Cline View")
+			await this.page.keyboard.type("PlinyCode: Focus on PlinyCode View")
 			await sleep(200)
 			await this.page.keyboard.press("Enter")
 		}

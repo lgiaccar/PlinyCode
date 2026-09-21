@@ -299,7 +299,8 @@ export class E2ETestHelper {
 	}
 
 	public static async openClineSidebar(page: Page): Promise<void> {
-		await page.getByRole("tab", { name: /Cline/ }).locator("a").click()
+		// Activity bar view container is titled "PlinyCode" (see package.json viewsContainers).
+		await page.getByRole("tab", { name: /Pliny/ }).locator("a").click()
 	}
 
 	public static async runCommandPalette(page: Page, command: string): Promise<void> {
