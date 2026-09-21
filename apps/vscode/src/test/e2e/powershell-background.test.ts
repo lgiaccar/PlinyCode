@@ -21,14 +21,8 @@ const profiles = [
 	},
 ] as const
 
-// SKIPPED (Pliny-only refactor): the Cline-account onboarding/sign-in flow this suite
-// relied on was removed (welcomeViewCompleted is now hardcoded true) and the e2e mock
-// server speaks the Cline/OpenRouter API, not the Pliny gateway (Anthropic-style,
-// CI-unreachable, no PLINY_API_KEY). Re-enable after the Pliny e2e harness is rebuilt
-// (replace helper.signin; retarget/replace the mock server for the Pliny provider).
-// See src/test/e2e/README.md.
 for (const profile of profiles) {
-	e2e.skip(`Terminal - background execution uses ${profile.name}`, async ({ helper, page, sidebar }, testInfo) => {
+	e2e(`Terminal - background execution uses ${profile.name}`, async ({ helper, page, sidebar }, testInfo) => {
 		e2e.skip(process.platform !== "win32", "PowerShell background execution is Windows-specific")
 		if ("storeOnly" in profile) {
 			const programFiles = process.env.ProgramW6432 || process.env.ProgramFiles || "C:\\Program Files"
@@ -46,7 +40,7 @@ for (const profile of profiles) {
 			e2e.skip(!hasStoreAlias || hasPreferredInstall, "Requires a Store-only PowerShell 7 installation")
 		}
 
-		await helper.signin(sidebar)
+		await helper.ensureReady(sidebar)
 
 		await page.getByRole("button", { name: "Settings", exact: true }).click()
 		await sidebar.getByTestId("tab-terminal").click()

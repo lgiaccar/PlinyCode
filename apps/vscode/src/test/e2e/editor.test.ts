@@ -2,18 +2,12 @@ import { expect } from "@playwright/test"
 import { addSelectedCodeToClineWebview, openTab, toggleNotifications } from "./utils/common"
 import { E2E_WORKSPACE_TYPES, e2e } from "./utils/helpers"
 
-// SKIPPED (Pliny-only refactor): the Cline-account onboarding/sign-in flow this suite
-// relied on was removed (welcomeViewCompleted is now hardcoded true) and the e2e mock
-// server speaks the Cline/OpenRouter API, not the Pliny gateway (Anthropic-style,
-// CI-unreachable, no PLINY_API_KEY). Re-enable after the Pliny e2e harness is rebuilt
-// (replace helper.signin; retarget/replace the mock server for the Pliny provider).
-// See src/test/e2e/README.md.
-e2e.describe.skip("Code Actions and Editor Panel", () => {
+e2e.describe("Code Actions and Editor Panel", () => {
 	E2E_WORKSPACE_TYPES.forEach(({ title, workspaceType }) => {
 		e2e.extend({
 			workspaceType,
 		})(title, async ({ helper, page, sidebar }) => {
-			await helper.signin(sidebar)
+			await helper.ensureReady(sidebar)
 			// Sidebar - input should start empty
 			const sidebarInput = sidebar.getByTestId("chat-input")
 			await sidebarInput.click()

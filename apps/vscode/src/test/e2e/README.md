@@ -2,7 +2,10 @@
 
 This directory contains the end-to-end tests for the PlinyCode VS Code extension using Playwright. These tests simulate user interactions with the extension in a real VS Code environment.
 
-> **Status (Pliny-only refactor):** This suite was written for the multi-provider, Cline-account product. The Pliny-only refactor removed the onboarding/sign-in flow (`welcomeViewCompleted` is now hardcoded `true`) and pinned the provider to Pliny (`PLINY_PROVIDER_ID`), whose gateway (`https://snps-inference.internal.synopsys.com/api/llm`, Anthropic-style, `PLINY_API_KEY`) is **not** what the e2e mock server (`http://localhost:7777`, Cline/OpenRouter API) imitates. As a result the live-feature suites below are **skipped** pending a Pliny e2e harness rebuild, and the two suites that tested removed features (Codex OAuth, onboarding/multi-provider picker) were deleted. See each `*.test.ts` skip comment for the re-enable checklist.
+> **Pliny harness status:** All suites are **active** (no longer skipped). The harness was rebuilt after the Pliny-only refactor:
+> - `welcomeViewCompleted` is hardcoded `true` — the extension goes straight to the chat view, so `helper.signin()` was replaced by `helper.ensureReady()` (just waits for `chat-input`).
+> - The mock server (`http://localhost:7777`) now also handles `/api/llm/chat/completions` (the Pliny OpenAI-compatible path).
+> - The `openVSCode` fixture pre-seeds `providers.json` with `baseUrl: http://localhost:7777/api/llm` so the extension never tries to reach the real Pliny gateway.
 
 ## Test Structure
 
@@ -10,14 +13,14 @@ The E2E test suite consists of several key components:
 
 ### Test Files
 
-> `auth.test.ts` (onboarding/multi-provider picker) and `codex-oauth.test.ts` (OpenAI Codex OAuth) were **removed** — they tested features dropped in the Pliny-only refactor. The suites below are **skipped** pending the Pliny e2e harness rebuild (see the skip comment at the top of each file).
+> `auth.test.ts` (onboarding/multi-provider picker) and `codex-oauth.test.ts` (OpenAI Codex OAuth) were **removed** — they tested features dropped in the Pliny-only refactor.
 
-- **`chat.test.ts`** - (skipped) chat message sending, mode switching (Plan/Act), slash commands, @ mentions
-- **`editor.test.ts`** - (skipped) code actions, editor panel integration, code selection
-- **`file-edit.test.ts`** - (skipped) file-edit auto-approval via the SDK `editor` tool
-- **`history.test.ts`** - (skipped) history cost-display suppression for subscription-billed tasks
-- **`hooks.test.ts`** - (skipped) workspace hook execution from the window's workspace root
-- **`powershell-background.test.ts`** - (skipped, Windows-only) background terminal execution profile
+- **`chat.test.ts`** - chat message sending, mode switching (Plan/Act), slash commands, @ mentions
+- **`editor.test.ts`** - code actions, editor panel integration, code selection
+- **`file-edit.test.ts`** - file-edit auto-approval via the SDK `editor` tool
+- **`history.test.ts`** - history cost-display suppression for subscription-billed tasks
+- **`hooks.test.ts`** - workspace hook execution from the window's workspace root
+- **`powershell-background.test.ts`** - (Windows-only) background terminal execution profile
 
 ### Test Infrastructure
 
