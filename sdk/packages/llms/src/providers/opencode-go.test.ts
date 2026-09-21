@@ -244,7 +244,7 @@ describe("OpenCode Go HTTP integration", () => {
 			expect(String(url)).toBe(`https://opencode.ai/zen/go/v1/${endpoint}`);
 			const headers = new Headers(init?.headers);
 			expect(headers.get("x-opencode-session")).toBe(sessionId);
-			expect(headers.get("user-agent")).toContain("Cline/");
+			expect(headers.get("user-agent")).toContain("PlinyCode/");
 			expect(
 				headers.get(endpoint === "messages" ? "x-api-key" : "authorization"),
 			).toBe(endpoint === "messages" ? "test-key" : "Bearer test-key");

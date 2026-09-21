@@ -119,7 +119,9 @@ export class E2ETestHelper {
 
 				try {
 					const title = await frame.title()
-					if (title.startsWith("Cline")) {
+					// The webview <title> was rebranded from "Cline" to "PlinyCode"; accept
+					// either so the finder survives a partial rebrand in either direction.
+					if (title.startsWith("PlinyCode") || title.startsWith("Cline")) {
 						this.cachedFrame = frame
 						return frame
 					}

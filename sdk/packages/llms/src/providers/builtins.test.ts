@@ -395,7 +395,7 @@ describe("built-in provider metadata", () => {
 
 	it("marks popular providers with a provider capability and rank", async () => {
 		await expect(getProvider("cline")).resolves.toMatchObject({
-			name: "Cline Usage-Billing",
+			name: "PlinyCode Usage-Billing",
 			capabilities: expect.arrayContaining(["popular"]),
 			metadata: { popularRank: 1 },
 		});
