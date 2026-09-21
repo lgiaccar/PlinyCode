@@ -164,9 +164,9 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 	}, [isOpen])
 
 	const modelEntries = useMemo(() => {
-		return Object.entries(plinyModels).map(([id]) => ({
+		return Object.entries(plinyModels).map(([id, info]) => ({
 			id,
-			name: id,
+			name: info.name || id,
 		}))
 	}, [plinyModels])
 

@@ -7,6 +7,7 @@ import { StateServiceClient } from "@/services/grpc-client"
 import { TabButton } from "../../mcp/configuration/McpConfigurationView"
 import ApiOptions from "../ApiOptions"
 import Section from "../Section"
+import { usePlinyUnlockPaidModels } from "../utils/plinyModelFilter"
 import { syncModeConfigurations } from "../utils/providerUtils"
 import { useApiConfigurationHandlers } from "../utils/useApiConfigurationHandlers"
 
@@ -19,6 +20,7 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 	const { planActSeparateModelsSetting, mode, apiConfiguration } = useExtensionState()
 	const [currentTab, setCurrentTab] = useState<Mode>(mode)
 	const { handleFieldsChange } = useApiConfigurationHandlers()
+	const [unlockPlinyPaid, setUnlockPlinyPaid] = usePlinyUnlockPaidModels()
 	return (
 		<div>
 			{renderSectionHeader?.("api-config")}
@@ -57,6 +59,20 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 				) : (
 					<ApiOptions currentMode={mode} initialModelTab={initialModelTab} showModelOptions={true} />
 				)}
+
+			<div className="mb-[5px]">
+				<VSCodeCheckbox
+					checked={unlockPlinyPaid}
+					className="mb-[5px]"
+					onChange={(e: any) => setUnlockPlinyPaid(e.target.checked === true)}>
+					Unlock Pliny paid models
+				</VSCodeCheckbox>
+				<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
+					Self-hosted models (<code>snps-provider</code>) are free and always shown. Enable this to also
+					list paid hosted models (Bedrock, Azure, GCP, Vertex) in the model picker.
+				</p>
+			</div>
+
 
 				<div className="mb-[5px]">
 					<VSCodeCheckbox
