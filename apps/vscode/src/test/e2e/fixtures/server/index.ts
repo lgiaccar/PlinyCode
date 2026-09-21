@@ -173,8 +173,14 @@ export class ClineApiServerMock {
 
 			// Authentication middleware
 			const authHeader = req.headers.authorization
+			// The /api/llm path is the Pliny gateway surface: it is OpenAI-compatible
+			// and has NO Cline account — do not gate it behind the Cline-user token
+			// lookup (which would 401 the dummy `e2e-mock-pliny-key` bearer the
+			// openVSCode fixture seeds in providers.json). The /api/v1 paths below
+			// still require a real Cline account token.
 			const isAuthRequired =
 				!path.startsWith("/.test/") &&
+				!path.startsWith("/api/llm") &&
 				path !== "/health" &&
 				path !== "/api/v1/auth/token" &&
 				path !== "/api/v1/auth/register"

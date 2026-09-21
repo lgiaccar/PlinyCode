@@ -18,7 +18,7 @@ The E2E test suite consists of several key components:
 - **`chat.test.ts`** - chat message sending, mode switching (Plan/Act), slash commands, @ mentions
 - **`editor.test.ts`** - code actions, editor panel integration, code selection
 - **`file-edit.test.ts`** - file-edit auto-approval via the SDK `editor` tool
-- **`history.test.ts`** - history cost-display suppression for subscription-billed tasks
+- **`history.test.ts`** - (disabled) history cost-display suppression for `openai-codex` subscription billing — a removed-feature-adjacent assertion; see the disable comment at the top of the file
 - **`hooks.test.ts`** - workspace hook execution from the window's workspace root
 - **`powershell-background.test.ts`** - (Windows-only) background terminal execution profile
 

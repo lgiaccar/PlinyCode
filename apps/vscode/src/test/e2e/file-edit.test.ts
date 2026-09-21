@@ -35,8 +35,10 @@ e2e.describe("File Edit Auto-Approval", () => {
 
 				// File edits are auto-approved by default. The ask row appears with
 				// the file path, but no manual approval buttons are shown.
-				await sidebar.waitForSelector('span:has-text("Cline wants to edit this file:")')
-				await expect(sidebar.getByText("test.ts").first()).toBeVisible()
+				// Generous timeout: the mock streams a tool call then the SDK renders the
+				// ask row; CI runners can be slow.
+				await sidebar.waitForSelector('span:has-text("Cline wants to edit this file:")', { timeout: 30_000 })
+				await expect(sidebar.getByText("test.ts").first()).toBeVisible({ timeout: 30_000 })
 				await expect(sidebar.getByRole("button", { name: "Reject" })).not.toBeVisible()
 				await expect(sidebar.getByRole("button", { name: "Save", exact: true })).not.toBeVisible()
 

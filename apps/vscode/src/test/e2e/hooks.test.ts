@@ -34,7 +34,8 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 
 		// The hook runs during beforeRun, ahead of the model call, so the
 		// marker exists by the time the mock response renders.
-		await expect(sidebar.getByText("mock Cline API response")).toBeVisible()
+		// Generous timeout: the mock streams word-by-word and CI runners can be slow.
+		await expect(sidebar.getByText("mock Cline API response")).toBeVisible({ timeout: 30_000 })
 
 		let markerRaw: string | undefined
 		await expect
