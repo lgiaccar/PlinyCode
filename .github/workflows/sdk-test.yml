@@ -3,16 +3,14 @@ name: sdk-test
 on:
     push:
         branches:
-            - main
+            - master
         paths:
             - "sdk/**"
-            - "apps/examples/desktop-app/**"
             - ".github/workflows/sdk-test.yml"
     workflow_dispatch:
     pull_request:
         paths:
             - "sdk/**"
-            - "apps/examples/desktop-app/**"
             - ".github/workflows/sdk-test.yml"
     workflow_call:
 
@@ -44,7 +42,6 @@ jobs:
             - name: Typecheck
               run: |
                   bun run build:sdk
-                  bun run -F @cline/cli build
                   bun run types
 
             - name: Lint & Format
@@ -85,38 +82,19 @@ jobs:
               id: build_sdk_step
               run: bun run build:sdk
 
-            - name: Build CLI
-              id: build_cli_step
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' }}
-              run: bun -F @cline/cli build
-
             - name: Run Tests
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os != 'windows-latest' }}
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               run: bun run test
 
             - name: Run SDK Tests (Windows)
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'windows-latest' }}
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os == 'windows-latest' }}
               run: bun -F './sdk/packages/**' test
-
-            - name: Run Desktop Sidecar Tests
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os == 'ubuntu-latest' }}
-              run: |
-                  bun -F @cline/code test:sidecar
-                  bun -F @cline/code test:sidecar-startup
-
-            - name: Run Desktop Settings UI Tests
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' }}
-              run: bun -F @cline/code test:settings-ui
 
             - name: Smoke test SQLite under Node
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               timeout-minutes: 10
               run: bun sdk/scripts/ci-node-smoke.ts
 
-            - name: Run TUI e2e tests
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x' }}
-              run: bun -F @cline/cli test:e2e:cli:tui
-
             - name: Verify packages are publishable
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x' }}
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x' }}
               run: bun sdk/scripts/check-publish.ts
