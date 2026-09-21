@@ -460,6 +460,11 @@ export const e2e = test
 						CLINE_CAPTURE_BROWSER: "true",
 						CLINE_DIR: clineTestDir, // Isolate test data from user's ~/.cline
 						CLINE_DATA_DIR: clineDataDir, // Keep SDK/shared storage off the user's real Cline data dir
+						// Redirect the Pliny provider to the local mock server. Read by:
+						// 1. sdk/packages/llms/src/providers/pliny-models.ts (PLINY_BASE_URL constant)
+						// 2. apps/vscode/src/sdk/cline-session-factory.ts (resolveBaseUrl short-circuit)
+						// Belt-and-suspenders with the providers.json pre-seeding above.
+						PLINY_BASE_URL: `${MOCK_CLINE_API_SERVER_URL}/api/llm`,
 						GRPC_RECORDER_FILE_NAME: E2ETestHelper.generateTestFileName(testInfo.title, testInfo.project.name),
 						// GRPC_RECORDER_ENABLED: "true",
 						// GRPC_RECORDER_TESTS_FILTERS_ENABLED: "true"

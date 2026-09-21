@@ -32,7 +32,7 @@ import { mkdtempSync } from "fs"
 import os from "os"
 import path from "path"
 import { _electron } from "playwright"
-import { ClineApiServerMock } from "../src/test/e2e/fixtures/server"
+import { ClineApiServerMock, MOCK_CLINE_API_SERVER_URL } from "../src/test/e2e/fixtures/server"
 import { E2ETestHelper } from "../src/test/e2e/utils/helpers"
 
 async function main() {
@@ -51,6 +51,10 @@ async function main() {
 			CLINE_ENVIRONMENT: "local",
 			GRPC_RECORDER_ENABLED: "true",
 			GRPC_RECORDER_TESTS_FILTERS_ENABLED: "true",
+			GRPC_RECORDER_TESTS_FILTERS_ENABLED: "true",
+			// Redirect the Pliny provider to the local mock server (same as the e2e
+			// harness in helpers.ts). Remove this line to test against the real gateway.
+			PLINY_BASE_URL: MOCK_CLINE_API_SERVER_URL + "/api/llm",
 		},
 		args: [
 			"--no-sandbox",
