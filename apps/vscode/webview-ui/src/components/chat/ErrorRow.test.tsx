@@ -113,7 +113,7 @@ describe("ErrorRow", () => {
 		const clineignoreMessage = { ...mockMessage, text: "/path/to/file.txt" }
 		render(<ErrorRow errorType="clineignore_error" message={clineignoreMessage} />)
 
-		expect(screen.getByText(/Cline tried to access/)).toBeInTheDocument()
+		expect(screen.getByText(/PlinyCode tried to access/)).toBeInTheDocument()
 		expect(screen.getByText("/path/to/file.txt")).toBeInTheDocument()
 	})
 
@@ -142,7 +142,7 @@ describe("ErrorRow", () => {
 			expect(screen.getByText("You have run out of credits.")).toBeInTheDocument()
 		})
 
-		it("does not show Cline credits CTA for non-Cline balance errors without a provider URL", async () => {
+		it("does not show PlinyCode credits CTA for non-PlinyCode balance errors without a provider URL", async () => {
 			const mockClineError = {
 				message: "Not enough credits available",
 				providerId: "zai",
@@ -286,7 +286,7 @@ describe("ErrorRow", () => {
 			expect(screen.queryByText(formattedMessage)).not.toBeInTheDocument()
 		})
 
-		it("renders ClinePass limit error and switches to Cline usage-based billing", async () => {
+		it("renders ClinePass limit error and switches to PlinyCode usage-based billing", async () => {
 			const limitMessage = "You have reached your weekly Clinepass limit. The limit resets in 7d, please try again later."
 			const mockClineError = {
 				message: limitMessage,
@@ -378,7 +378,7 @@ describe("ErrorRow", () => {
 
 			expect(screen.queryByText("Authentication failed")).not.toBeInTheDocument()
 			expect(screen.getByText(/Whoops looks like you're logged out/)).toBeInTheDocument()
-			expect(screen.getByText("Sign in to Cline")).toBeInTheDocument()
+			expect(screen.getByText("Sign in to PlinyCode")).toBeInTheDocument()
 		})
 
 		it("renders PowerShell troubleshooting link when error mentions PowerShell", async () => {
@@ -428,7 +428,7 @@ describe("ErrorRow", () => {
 
 			render(<ErrorRow apiRequestFailedMessage="Some API error" errorType="error" message={mockMessage} />)
 
-			// When ClineError.parse returns null, we display the raw error message for non-Cline providers
+			// When ClineError.parse returns null, we display the raw error message for non-PlinyCode providers
 			// Since clineError is undefined, isClineUsageBillingProvider is false, so we show the raw apiRequestFailedMessage
 			expect(screen.getByText("Some API error")).toBeInTheDocument()
 		})

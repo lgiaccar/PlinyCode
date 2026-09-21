@@ -628,7 +628,7 @@ export const OpenAICompatibleProvider = ({
 					color: "var(--vscode-descriptionForeground)",
 				}}>
 				<span style={{ color: "var(--vscode-errorForeground)" }}>
-					(<span style={{ fontWeight: 500 }}>Note:</span> Cline uses complex prompts, so behavior can vary across
+					(<span style={{ fontWeight: 500 }}>Note:</span> PlinyCode uses complex prompts, so behavior can vary across
 					models. Less capable models may not work as expected.)
 				</span>
 			</p>

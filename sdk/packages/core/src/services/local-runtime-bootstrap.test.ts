@@ -753,8 +753,8 @@ describe("prepareLocalRuntimeBootstrap", () => {
 
 		expect(bootstrap.providerConfig.headers).toMatchObject({
 			"HTTP-Referer": "https://cline.bot",
-			"X-Title": "Cline",
-			"User-Agent": "Cline/3.0.38",
+			"X-Title": "PlinyCode",
+			"User-Agent": "PlinyCode/3.0.38",
 			"X-IS-MULTIROOT": "false",
 			"X-CLIENT-TYPE": "cline-cli",
 			"X-CLIENT-VERSION": "3.0.38",
@@ -801,7 +801,7 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			version: "3.0.38",
 		});
 		expect(bootstrap.providerConfig.headers).toMatchObject({
-			"User-Agent": "Cline/3.0.38",
+			"User-Agent": "PlinyCode/3.0.38",
 			"X-CLIENT-TYPE": "cline-cli",
 			"X-CLIENT-VERSION": "3.0.38",
 		});
@@ -845,7 +845,7 @@ describe("prepareLocalRuntimeBootstrap", () => {
 		});
 	});
 
-	it("uses host request headers for Cline providers on core sessions", async () => {
+	it("uses host request headers for PlinyCode providers on core sessions", async () => {
 		const { prepareLocalRuntimeBootstrap } = await import(
 			"./local-runtime-bootstrap"
 		);
@@ -891,8 +891,8 @@ describe("prepareLocalRuntimeBootstrap", () => {
 
 		expect(bootstrap.providerConfig.headers).toMatchObject({
 			"HTTP-Referer": "https://cline.bot",
-			"X-Title": "Cline",
-			"User-Agent": "Cline/9.9.9",
+			"X-Title": "PlinyCode",
+			"User-Agent": "PlinyCode/9.9.9",
 			"X-IS-MULTIROOT": "true",
 			"X-CLIENT-TYPE": "VSCode Extension",
 			"X-CLIENT-VERSION": "9.9.9",
@@ -1004,7 +1004,7 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			"x-shared": "config-wins",
 		});
 		expect(bootstrap.providerConfig.headers?.["User-Agent"]).toMatch(
-			/^Cline\//,
+			/^PlinyCode\//,
 		);
 	});
 

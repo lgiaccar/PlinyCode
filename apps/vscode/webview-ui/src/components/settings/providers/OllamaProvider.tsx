@@ -191,7 +191,9 @@ export const OllamaProvider = ({ showModelOptions, isPopup, currentMode }: Ollam
 			{showModelOptions && (
 				<>
 					<DebouncedTextField
-						initialValue={apiConfiguration?.requestTimeoutMs ? apiConfiguration.requestTimeoutMs.toString() : "300000"}
+						initialValue={
+							apiConfiguration?.requestTimeoutMs ? apiConfiguration.requestTimeoutMs.toString() : "300000"
+						}
 						onChange={(value) => {
 							// Convert to number, with validation
 							const numValue = Number.parseInt(value, 10)
@@ -222,7 +224,7 @@ export const OllamaProvider = ({ showModelOptions, isPopup, currentMode }: Ollam
 					quickstart guide.
 				</VSCodeLink>{" "}
 				<span style={{ color: "var(--vscode-errorForeground)" }}>
-					(<span style={{ fontWeight: 500 }}>Note:</span> Cline uses complex prompts, so behavior can vary across
+					(<span style={{ fontWeight: 500 }}>Note:</span> PlinyCode uses complex prompts, so behavior can vary across
 					models. Less capable models may not work as expected.)
 				</span>
 			</p>

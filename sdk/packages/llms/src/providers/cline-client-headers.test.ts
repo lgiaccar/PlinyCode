@@ -11,9 +11,9 @@ describe("buildClineClientHeaders", () => {
 		expect(getClineClientIdentity()).toBeUndefined();
 		expect(buildClineClientHeaders()).toEqual({
 			"HTTP-Referer": "https://cline.bot",
-			"X-Title": "Cline",
+			"X-Title": "PlinyCode",
 			"X-IS-MULTIROOT": "false",
-			"User-Agent": "Cline/unknown",
+			"User-Agent": "PlinyCode/unknown",
 			"X-CLIENT-TYPE": "cline-sdk",
 			"X-CLIENT-VERSION": "unknown",
 			"X-PLATFORM": "cline-sdk",
@@ -30,7 +30,7 @@ describe("buildClineClientHeaders", () => {
 		});
 
 		expect(buildClineClientHeaders()).toMatchObject({
-			"User-Agent": "Cline/3.40.0",
+			"User-Agent": "PlinyCode/3.40.0",
 			"X-CLIENT-TYPE": "VSCode Extension",
 			"X-CLIENT-VERSION": "3.40.0",
 			"X-PLATFORM": "Visual Studio Code",

@@ -1,15 +1,21 @@
 import type { ApiProvider } from "@shared/api"
 
 export const PLINY_PROVIDER_ID = "pliny" as const satisfies ApiProvider
-export const PLINY_DEFAULT_MODEL_ID = "snps-aws-bedrock/aws-claude-sonnet-4.6"
+export const PLINY_DEFAULT_MODEL_ID = "snps-provider/kimi-k2.6"
 
 /** Featured Pliny models for any remaining "recommended" UI surfaces. */
 export const PLINY_FEATURED_MODELS = [
 	{
+		id: "snps-provider/kimi-k2.6",
+		name: "Kimi K2.6",
+		description: "Default self-hosted MoE via Pliny",
+		tags: ["DEFAULT", "SELF-HOSTED"],
+	},
+	{
 		id: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 		name: "Claude Sonnet 4.6",
-		description: "Default hosted coder via Pliny (Bedrock)",
-		tags: ["DEFAULT"],
+		description: "Hosted coder via Pliny (Bedrock)",
+		tags: ["HOSTED"],
 	},
 	{
 		id: "snps-aws-bedrock/global.anthropic.claude-sonnet-5",
@@ -27,12 +33,6 @@ export const PLINY_FEATURED_MODELS = [
 		id: "snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 		name: "Qwen3 Coder 480B",
 		description: "Coding-specialised self-hosted model",
-		tags: ["SELF-HOSTED"],
-	},
-	{
-		id: "snps-provider/kimi-k2.6",
-		name: "Kimi K2.6",
-		description: "Large self-hosted MoE via Pliny",
 		tags: ["SELF-HOSTED"],
 	},
 	{

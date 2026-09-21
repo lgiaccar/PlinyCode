@@ -463,7 +463,7 @@ export class McpHub {
 			// Each MCP server requires its own transport connection and has unique capabilities, configurations, and error handling. Having separate clients also allows proper scoping of resources/tools and independent server management like reconnection.
 			const client = new Client(
 				{
-					name: "Cline",
+					name: "PlinyCode",
 					version: this.clientVersion,
 				},
 				{
@@ -1266,7 +1266,7 @@ export class McpHub {
 					Logger.error(`Failed to reconnect MCP server ${name}:`, error)
 				}
 			} else {
-				// Only Cline-specific settings changed - update in-memory state without restart
+				// Only PlinyCode-specific settings changed - update in-memory state without restart
 				const autoApprove = config.autoApprove || []
 				if (currentConnection.server.tools) {
 					currentConnection.server.tools = currentConnection.server.tools.map((tool) => ({
@@ -1274,7 +1274,7 @@ export class McpHub {
 						autoApprove: autoApprove.includes(tool.name),
 					}))
 				}
-				// Also update Cline-specific settings in the stored config.
+				// Also update PlinyCode-specific settings in the stored config.
 				// This handles the case where someone manually edits the MCP settings file -
 				// the file watcher triggers this code path, and we need to sync the in-memory
 				// config with the file without restarting the server.
@@ -1298,7 +1298,7 @@ export class McpHub {
 		const currentNames = new Set(this.connections.map((conn) => conn.server.name))
 		const newNames = new Set(Object.keys(newServers))
 
-		// Track if any connection-level changes occurred (excludes Cline-specific settings)
+		// Track if any connection-level changes occurred (excludes PlinyCode-specific settings)
 		let connectionChangesOccurred = false
 
 		// Delete removed servers
@@ -1356,7 +1356,7 @@ export class McpHub {
 					connectionChangesOccurred = true
 				}
 			} else {
-				// Only Cline-specific settings changed - update in-memory state without restart
+				// Only PlinyCode-specific settings changed - update in-memory state without restart
 				// Don't set connectionChangesOccurred since the RPC already returned the updated state
 				const autoApprove = config.autoApprove || []
 				if (currentConnection.server.tools) {
@@ -1365,7 +1365,7 @@ export class McpHub {
 						autoApprove: autoApprove.includes(tool.name),
 					}))
 				}
-				// Also update Cline-specific settings in the stored config
+				// Also update PlinyCode-specific settings in the stored config
 				const currentConfig = JSON.parse(currentConnection.server.config)
 				currentConfig.autoApprove = config.autoApprove
 				currentConfig.timeout = config.timeout
@@ -1374,7 +1374,7 @@ export class McpHub {
 		}
 
 		// Only notify webview if actual connection changes occurred.
-		// For Cline-specific settings changes, the RPC response already updated the webview,
+		// For PlinyCode-specific settings changes, the RPC response already updated the webview,
 		// so we skip notification to avoid race conditions.
 		if (connectionChangesOccurred) {
 			await this.notifyWebviewOfServerChanges()
@@ -1384,15 +1384,15 @@ export class McpHub {
 
 	/**
 	 * Compares two MCP server configs to determine if a restart is required.
-	 * Excludes Cline-specific settings that don't affect the MCP client.
+	 * Excludes PlinyCode-specific settings that don't affect the MCP client.
 	 *
-	 * ## Cline-specific settings (don't require restart):
+	 * ## PlinyCode-specific settings (don't require restart):
 	 * - `autoApprove`: tool approval list (UI setting)
 	 *
 	 * ## MCP client settings (require restart):
 	 * - `type`, `command`, `args`, `cwd`, `env`, `url`, `headers`, `disabled`, `timeout`
 	 *
-	 * ## Adding new Cline-specific settings:
+	 * ## Adding new PlinyCode-specific settings:
 	 * When adding a new setting that doesn't require server restart:
 	 * 1. Add it to the destructuring below to exclude from comparison
 	 * 2. Add it to computeConnectionFingerprint() if a change to it should (or
@@ -1401,7 +1401,7 @@ export class McpHub {
 	 * 4. Update the schema in `src/services/mcp/schemas.ts` if needed
 	 */
 	private configsRequireRestart(oldConfig: McpServerConfig, newConfig: McpServerConfig): boolean {
-		// Exclude Cline-specific settings from comparison (add new ones here).
+		// Exclude PlinyCode-specific settings from comparison (add new ones here).
 		// `oauth` and `metadata` are also excluded: the server's oauth block is
 		// rewritten on every token save/refresh (by this process, the CLI, or
 		// another window), and restarting on each refresh would churn the
@@ -1467,7 +1467,7 @@ export class McpHub {
 	private setupFileWatcher(name: string, config: Extract<McpServerConfig, { type: "stdio" }>) {
 		const filePath = config.args?.find((arg: string) => arg.includes("build/index.js"))
 		if (filePath) {
-			// we use chokidar instead of onDidSaveTextDocument because it doesn't require the file to be open in the editor. The settings config is better suited for onDidSave since that will be manually updated by the user or Cline (and we want to detect save events, not every file change)
+			// we use chokidar instead of onDidSaveTextDocument because it doesn't require the file to be open in the editor. The settings config is better suited for onDidSave since that will be manually updated by the user or PlinyCode (and we want to detect save events, not every file change)
 			const watcher = chokidar.watch(filePath, {
 				// persistent: true,
 				// ignoreInitial: true,

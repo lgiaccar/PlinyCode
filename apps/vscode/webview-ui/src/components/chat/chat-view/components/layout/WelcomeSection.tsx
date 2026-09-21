@@ -123,7 +123,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 	 * For now, using EXAMPLE_BANNER_DATA with version-based filtering
 	 */
 	const bannerConfig = useMemo((): BannerCardData[] => {
-		// Filter banners based on version tracking. Cline-account-only banners are dropped.
+		// Filter banners based on version tracking. PlinyCode-account-only banners are dropped.
 		return BANNER_DATA.filter((banner) => {
 			if (isBannerDismissed(banner.id)) {
 				return false
@@ -277,7 +277,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 									</TooltipTrigger>
 									<TooltipContent side="top">
 										Create a new git worktree and open it in a separate window. Great for running parallel
-										Cline tasks.
+										PlinyCode tasks.
 									</TooltipContent>
 								</Tooltip>
 								*/}
@@ -301,7 +301,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 											</button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											View and manage git worktrees. Great for running parallel Cline tasks.
+											View and manage git worktrees. Great for running parallel PlinyCode tasks.
 										</TooltipContent>
 									</Tooltip>
 								)}
