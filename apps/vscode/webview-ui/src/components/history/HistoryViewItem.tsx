@@ -109,6 +109,21 @@ const HistoryViewItem = ({
 					)}
 					<div className="flex gap-2 flex-shrink-0">
 						<Button
+							aria-label="Export as Markdown"
+							className="p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+							onClick={(e) => {
+								e.stopPropagation()
+								TaskServiceClient.exportTaskToMarkdown(ExportTaskRequest.create({ taskId: item.id })).catch(
+									(err) => console.error("Failed to export task as markdown:", err),
+								)
+							}}
+							title="Export as Markdown"
+							variant="ghost">
+							<span className="flex items-center gap-1 text-xs">
+								<FileTextIcon className="stroke-1" />
+							</span>
+						</Button>
+						<Button
 							aria-label="Delete"
 							className="p-0 opacity-0 group-hover:opacity-100 transition-opacity"
 							disabled={isFavoritedItem}
@@ -212,19 +227,6 @@ const HistoryViewItem = ({
 										<span className="font-medium text-description">Size:</span>
 										<span className="items-center gap-2 flex text-description">
 											{formatSize(item.size)}
-											<Button
-												aria-label="Export as Markdown"
-												className="m-0 p-0"
-												onClick={(e) => {
-													e.stopPropagation()
-													TaskServiceClient.exportTaskToMarkdown(
-														ExportTaskRequest.create({ taskId: item.id }),
-													).catch((err) => console.error("Failed to export task as markdown:", err))
-												}}
-												title="Export as Markdown"
-												variant="ghost">
-												<FileTextIcon />
-											</Button>
 											<Button
 												aria-label="Open Conversation Folder"
 												className="m-0 p-0"
