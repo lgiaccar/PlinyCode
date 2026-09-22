@@ -21,6 +21,8 @@ export function useScrollBehavior(
 ): ScrollBehavior & {
 	isAtBottom: boolean
 	setIsAtBottom: React.Dispatch<React.SetStateAction<boolean>>
+	isAtTop: boolean
+	setIsAtTop: React.Dispatch<React.SetStateAction<boolean>>
 	pendingScrollToMessage: number | null
 	setPendingScrollToMessage: React.Dispatch<React.SetStateAction<number | null>>
 	scrolledPastUserMessage: ClineMessage | null
@@ -35,6 +37,7 @@ export function useScrollBehavior(
 
 	// State
 	const [isAtBottom, setIsAtBottom] = useState(false)
+	const [isAtTop, setIsAtTop] = useState(false)
 	const [pendingScrollToMessage, setPendingScrollToMessage] = useState<number | null>(null)
 	const [scrolledPastUserMessage, setScrolledPastUserMessage] = useState<ClineMessage | null>(null)
 
@@ -195,6 +198,17 @@ export function useScrollBehavior(
 		virtuosoRef.current?.scrollTo({
 			top: Number.MAX_SAFE_INTEGER,
 			behavior: "auto", // instant causes crash
+		})
+	}, [])
+
+	// Scroll to the very top of the conversation. Disables auto-scroll so streaming
+	// output doesn't yank the view back down, mirroring goToPreviousUserMessage.
+	const scrollToTopSmooth = useCallback(() => {
+		disableAutoScrollRef.current = true
+		virtuosoRef.current?.scrollToIndex({
+			index: 0,
+			align: "start",
+			behavior: "smooth",
 		})
 	}, [])
 
@@ -380,17 +394,21 @@ export function useScrollBehavior(
 		disableAutoScrollRef,
 		scrollToBottomSmooth,
 		scrollToBottomAuto,
+		scrollToTopSmooth,
 		scrollToMessage,
 		toggleRowExpansion,
 		handleRowHeightChange,
 		handleLastRowContentChange,
 		isAtBottom,
 		setIsAtBottom,
+		isAtTop,
+		setIsAtTop,
 		pendingScrollToMessage,
 		setPendingScrollToMessage,
 		scrolledPastUserMessage,
 		handleRangeChanged,
 		goToPreviousUserMessage,
 		goToNextUserMessage,
+		userMessageIndices,
 	}
 }
