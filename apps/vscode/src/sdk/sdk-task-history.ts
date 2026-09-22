@@ -196,6 +196,29 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 	}
 }
 
+/**
+ * Fields shared by every `TaskItem` (proto) built from a session history
+ * record: the getTaskHistory RPC handler in SdkController.ts spreads this
+ * into each list row (plus its own `id`/`ts`, which depend on sort order
+ * context) so the wire shape and sessionHistoryRecordToHistoryItem never
+ * drift apart on what a task's workspace root is.
+ */
+export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord): {
+	modelId: string
+	apiProvider: string
+	workspaceRoot: string
+	isLegacy: boolean
+} {
+	const metadata = item.metadata
+	return {
+		modelId: item.model || metadataString(metadata, "modelId") || "",
+		apiProvider: item.provider ?? "",
+		workspaceRoot: item.cwd || item.workspaceRoot || "",
+		isLegacy:
+			metadataBoolean(metadata, "legacyTask") === true || metadataBoolean(metadata, "migratedFromLegacyTask") === true,
+	}
+}
+
 export class SdkTaskHistory {
 	private cachedHistoryHost?: VscodeSessionHost
 	private cachedHistoryHostPromise?: Promise<VscodeSessionHost>

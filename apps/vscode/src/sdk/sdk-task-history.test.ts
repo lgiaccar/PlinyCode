@@ -7,7 +7,7 @@ import type { TelemetryService } from "@/services/telemetry/TelemetryService"
 import { deleteLegacyTask, readApiConversationHistory, readTaskHistory, readUiMessages } from "./legacy-state-reader"
 import { sdkMessagesToClineMessages } from "./message-translator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
-import { SdkTaskHistory, sessionHistoryRecordToHistoryItem } from "./sdk-task-history"
+import { SdkTaskHistory, sessionHistoryRecordToHistoryItem, sessionHistoryRecordToTaskItemFields } from "./sdk-task-history"
 import type { VscodeSessionHost } from "./vscode-session-host"
 
 vi.mock("@/core/storage/disk", () => ({
@@ -120,6 +120,43 @@ describe("SdkTaskHistory", () => {
 			cwdOnTaskInitialization: "/repo",
 		})
 		expect(result.ts).toBeGreaterThan(0)
+	})
+
+	it("survives the workspace root through the record -> HistoryItem -> TaskItem round trip", () => {
+		const record = makeSessionRecord("task-workspace", {
+			cwd: "/repo/apps/web",
+			workspaceRoot: "/repo",
+			metadata: { title: "Fix the build" },
+		})
+
+		const historyItem = sessionHistoryRecordToHistoryItem(record)
+		expect(historyItem.cwdOnTaskInitialization).toBe("/repo/apps/web")
+
+		// The getTaskHistory RPC handler in SdkController.ts spreads these
+		// fields onto each TaskItem row alongside id/ts/task; workspaceRoot must
+		// carry the same value HistoryItem exposes as cwdOnTaskInitialization so
+		// the "Workspace Only" filter (which compares against this same value)
+		// and the History list display never disagree.
+		const taskItemFields = sessionHistoryRecordToTaskItemFields(record)
+		expect(taskItemFields.workspaceRoot).toBe(historyItem.cwdOnTaskInitialization)
+	})
+
+	it("falls back to workspaceRoot for the TaskItem workspace field when cwd is unset", () => {
+		const record = makeSessionRecord("task-workspace-fallback", {
+			cwd: "",
+			workspaceRoot: "/repo",
+		})
+
+		expect(sessionHistoryRecordToTaskItemFields(record).workspaceRoot).toBe("/repo")
+	})
+
+	it("reports an empty TaskItem workspace root for legacy records with neither cwd nor workspaceRoot", () => {
+		const record = makeSessionRecord("task-workspace-legacy", {
+			cwd: "",
+			workspaceRoot: "",
+		})
+
+		expect(sessionHistoryRecordToTaskItemFields(record).workspaceRoot).toBe("")
 	})
 
 	it("converts SDK persisted conversation messages to Cline messages", () => {
