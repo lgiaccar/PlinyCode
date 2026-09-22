@@ -53,6 +53,18 @@ const mocks = vi.hoisted(() => {
 	}
 })
 
+// The ESM namespace object for `@plinycode/llms` has non-configurable
+// properties, so `vi.spyOn(LlmsModels, ...)` throws "Cannot redefine
+// property". Re-export the real module with `getModelsForProvider` wrapped in
+// a vi.fn that delegates to the original, so tests can spy on it.
+vi.mock("@plinycode/llms", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@plinycode/llms")>()
+	return {
+		...actual,
+		getModelsForProvider: vi.fn(actual.getModelsForProvider),
+	}
+})
+
 vi.mock("@/core/storage/StateManager", () => ({
 	StateManager: {
 		get: () => mocks.stateManager,
