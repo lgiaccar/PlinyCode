@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
-import { getGeneratedModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@cline/llms"
-import type { CoreSpawnReason } from "@cline/shared"
+import { getGeneratedModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@plinycode/llms"
+import type { CoreSpawnReason } from "@plinycode/shared"
 import { createFileReadExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/file-read"
 
 export interface OAuthCredentials {
@@ -60,7 +60,7 @@ export function ensureCustomProvidersLoadedSync(): void {}
 export { isPrivateModelCatalogProvider } from "../../../../sdk/packages/core/src/services/llms/provider-defaults"
 // Real implementation re-exported from the sdk source (same pattern as the
 // apply-patch executors below) so store writes are reflected in the live
-// @cline/llms registry exactly as in production. Tests that touch it must
+// @plinycode/llms registry exactly as in production. Tests that touch it must
 // reset the registry (LlmsModels.resetRegistry()) between tests.
 export {
 	StoredModelEntrySchema,
@@ -145,7 +145,7 @@ export type { EditFileInput } from "../../../../sdk/packages/core/src/extensions
 export type { ApplyPatchExecutor, EditorExecutor, ToolExecutors } from "../../../../sdk/packages/core/src/extensions/tools/types"
 export { projectSessionMessagesForDisplay } from "../../../../sdk/packages/core/src/session/display-messages"
 
-// Real file-read executor (dependency-light: node:fs/node:path + @cline/shared/storage)
+// Real file-read executor (dependency-light: node:fs/node:path + @plinycode/shared/storage)
 // so the workspace read override and its tests exercise the actual read semantics.
 // Only the readFile executor is provided; the heavy executors are not needed in tests.
 export function createDefaultExecutors() {
@@ -213,7 +213,7 @@ export interface CheckpointWorkspaceCompareResult {
 }
 
 export async function compareCheckpointToWorkspace(): Promise<CheckpointWorkspaceCompareResult> {
-	throw new Error("compareCheckpointToWorkspace is not implemented in the Vitest @cline/core stub")
+	throw new Error("compareCheckpointToWorkspace is not implemented in the Vitest @plinycode/core stub")
 }
 
 export type CoreSessionEvent = { type: string; payload?: unknown }

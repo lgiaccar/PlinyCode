@@ -12,12 +12,12 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { BasicLogger } from "@cline/shared";
+import type { BasicLogger } from "@plinycode/shared";
 import {
 	isMcpTimeoutConfigured,
 	resolveMcpTimeoutSeconds,
-} from "@cline/shared";
-import { resolveMcpSettingsPath } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { resolveMcpSettingsPath } from "@plinycode/shared/storage";
 import { z } from "zod";
 import { resolveNativeMcpTransport } from "./remote-proxy";
 import type {

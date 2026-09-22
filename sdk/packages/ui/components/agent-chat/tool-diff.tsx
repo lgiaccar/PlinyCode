@@ -144,7 +144,7 @@ export function ToolFileDiff({
 						// browser's preferred scheme — not the host app's
 						// class-based theme — leaving e.g. near-black light-palette
 						// text on a dark app surface. Inheriting the app's
-						// color-scheme (flipped by `.dark` in the @cline/ui theme)
+						// color-scheme (flipped by `.dark` in the @plinycode/ui theme)
 						// keeps the syntax palette in lockstep with the app theme.
 						// Skipped when a caller pins an explicit themeType, which
 						// pierre implements as its own :host color-scheme rule.

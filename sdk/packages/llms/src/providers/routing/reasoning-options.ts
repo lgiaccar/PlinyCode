@@ -4,7 +4,7 @@ import {
 	isClineProvider,
 	type ModelReasoningOption,
 	resolveReasoningBudgetFromRatio,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	getModelReasoningControls,
 	isClaudeFableModelId,

@@ -1,10 +1,10 @@
 /**
- * @cline/core
+ * @plinycode/core
  *
  * Core contracts, shared state utilities, and Node runtime services.
  */
 
-export * as Llms from "@cline/llms";
+export * as Llms from "@plinycode/llms";
 export {
 	buildClineClientHeaders,
 	ClineFreeModelLimitError,
@@ -25,7 +25,7 @@ export {
 	isClineOrgIndividualInferenceSubscriptionMessage,
 	isClinePassLimitError,
 	isClinePassLimitMessage,
-} from "@cline/llms";
+} from "@plinycode/llms";
 // Shared contracts and path helpers re-exported for app consumers.
 export type {
 	AddProviderActionRequest,
@@ -97,7 +97,7 @@ export type {
 	WorkspaceInfoSchema,
 	WorkspaceManifest,
 	WorkspaceManifestSchema,
-} from "@cline/shared";
+} from "@plinycode/shared";
 export {
 	buildClineSystemPrompt as getClineDefaultSystemPrompt,
 	buildSdkErrorProperties,
@@ -119,8 +119,8 @@ export {
 	registerDisposable,
 	SDK_ERROR_TELEMETRY_EVENT,
 	stripUtf8Bom,
-} from "@cline/shared";
-export * from "@cline/shared/storage";
+} from "@plinycode/shared";
+export * from "@plinycode/shared/storage";
 export {
 	type ClineAccountBalance,
 	type ClineAccountOperations,
@@ -928,7 +928,7 @@ export { CORE_BUILD_VERSION } from "./version";
 export async function loadOpenTelemetryAdapter() {
 	return import("./services/telemetry/index.js");
 }
-export { Agent, createAgentRuntime } from "@cline/agents";
+export { Agent, createAgentRuntime } from "@plinycode/agents";
 export { resolveComposioToolsStatePath } from "./extensions/composio/composio-tools-extension";
 export {
 	createCompactionStateAwarePrepareTurn,

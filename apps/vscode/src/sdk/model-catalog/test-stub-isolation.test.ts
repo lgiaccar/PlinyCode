@@ -1,4 +1,4 @@
-import { readModelsFileSync, writeModelsFileSync } from "@cline/core"
+import { readModelsFileSync, writeModelsFileSync } from "@plinycode/core"
 import { describe, expect, it } from "vitest"
 
 type StoredModelsFile = ReturnType<typeof readModelsFileSync>

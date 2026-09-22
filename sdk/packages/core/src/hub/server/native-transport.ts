@@ -2,7 +2,7 @@ import type {
 	HubCommandEnvelope,
 	HubEventEnvelope,
 	HubReplyEnvelope,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	HubCommandTransport,
 	HubConnectionAuthority,

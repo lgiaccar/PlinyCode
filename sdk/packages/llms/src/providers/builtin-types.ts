@@ -5,7 +5,7 @@ import type {
 	GatewayProviderSettings,
 	ProviderCapability,
 	ProviderConfigField,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	ModelInfo,
 	ProviderClient,

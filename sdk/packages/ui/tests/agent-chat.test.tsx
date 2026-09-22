@@ -46,7 +46,7 @@ async function render(element: React.ReactNode) {
 	await act(async () => root.render(element));
 }
 
-describe("@cline/ui agent chat primitives", () => {
+describe("@plinycode/ui agent chat primitives", () => {
 	it("uses the inert prop form supported by each React major", () => {
 		expect(getInertAttributeValue(false, "18.3.1")).toBe("");
 		expect(getInertAttributeValue(false, "19.2.4")).toBe(true);

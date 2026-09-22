@@ -7,7 +7,7 @@ import type {
 	HubCommandEnvelope,
 	HubCommandName,
 	HubReplyEnvelope,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { AgendaTaskManagerApi } from "../../tasks/agenda-task-api";
 import type { HubConnectionAuthority } from "./command-transport";
 import { errorReply, okReply } from "./handlers/context";

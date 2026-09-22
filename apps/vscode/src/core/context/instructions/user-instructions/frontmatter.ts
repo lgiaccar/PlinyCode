@@ -1,4 +1,4 @@
-import { stripUtf8Bom } from "@cline/shared"
+import { stripUtf8Bom } from "@plinycode/shared"
 import * as yaml from "js-yaml"
 
 export type FrontmatterParseResult = {

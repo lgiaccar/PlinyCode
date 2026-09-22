@@ -1,4 +1,4 @@
-import { markOtlpTraceRelayProvider, OTLP_TRACE_RELAY_MARKER } from "@cline/shared"
+import { markOtlpTraceRelayProvider, OTLP_TRACE_RELAY_MARKER } from "@plinycode/shared"
 import { metrics, trace } from "@opentelemetry/api"
 import { logs } from "@opentelemetry/api-logs"
 import { Resource } from "@opentelemetry/resources"

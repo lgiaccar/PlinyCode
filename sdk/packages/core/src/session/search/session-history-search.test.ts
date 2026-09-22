@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
 	SESSION_SEARCH_PREVIEW_MAX_LENGTH,
 	SESSION_SEARCH_TITLE_MAX_LENGTH,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionRecord } from "../../types/sessions";
 import { SessionHistorySearchService } from "./session-history-search";

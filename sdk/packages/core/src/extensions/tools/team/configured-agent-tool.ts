@@ -6,7 +6,7 @@ import {
 	createTool,
 	type HookErrorMode,
 	zodToJsonSchema,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { z } from "zod";
 import type { ConfiguredAgentConfig } from "./configured-agent-config";
 import {

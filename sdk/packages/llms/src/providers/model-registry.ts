@@ -1,4 +1,4 @@
-import { isChatCompatibleModel } from "@cline/shared";
+import { isChatCompatibleModel } from "@plinycode/shared";
 import type {
 	ModelCollection,
 	ModelInfo,

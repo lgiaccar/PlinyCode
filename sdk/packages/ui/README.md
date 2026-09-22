@@ -1,4 +1,4 @@
-# `@cline/ui`
+# `@plinycode/ui`
 
 Shared visual foundations and reusable React presentation primitives for Cline
 web products. The package lets teams adopt the same semantic theme and agent
@@ -7,7 +7,7 @@ chat language without adopting another product's routes, state, or runtime.
 The package is configured for public npm releases on its own version and
 release cycle. Its API is still pre-stable, so consumers should pin an exact
 version and review compatibility notes when updating. Check availability with
-`npm view @cline/ui version`; an `E404` means the first release is still pending.
+`npm view @plinycode/ui version`; an `E404` means the first release is still pending.
 
 See the [adoption primer](./ADOPTION.md) for complete setup instructions,
 component examples, boundaries, and release status.
@@ -17,27 +17,27 @@ component examples, boundaries, and release status.
 After the initial release is available:
 
 ```bash
-bun add --exact @cline/ui
+bun add --exact @plinycode/ui
 ```
 
-Use `@cline/ui@next` only for deliberate previews. Monorepo consumers use
-`"@cline/ui": "workspace:*"` instead.
+Use `@plinycode/ui@next` only for deliberate previews. Monorepo consumers use
+`"@plinycode/ui": "workspace:*"` instead.
 
 ## Entry points
 
 | Import | Contents | Runtime requirement |
 | --- | --- | --- |
-| `@cline/ui` | Reusable React primitives exported from [`components/index.ts`](./components/index.ts) | React 18.3 or 19 and Tailwind v4 |
-| `@cline/ui/components.css` | Styles, namespaced Tailwind mappings, and source registration for the root React primitives | Tailwind v4 and theme tokens |
-| `@cline/ui/theme/palette.css` | Cline-owned light/dark solid and alpha color scales | CSS |
-| `@cline/ui/theme/tokens.css` | Light/dark custom properties only | CSS |
-| `@cline/ui/theme/scoped-tokens.css` | Light/dark custom properties scoped to `.cline-ui-theme` | CSS |
-| `@cline/ui/theme/theme.css` | Tailwind v4 semantic mapping and dark variant | Tailwind v4 |
-| `@cline/ui/components/markdown.css` | Optional framework-neutral Markdown and Streamdown treatment | Theme tokens |
-| `@cline/ui/theme/base.css` | Optional document, Markdown, scrollbar, selection, and cursor styles | Tailwind v4 |
-| `@cline/ui/theme/index.css` | Complete theme: tokens, Tailwind mapping, and base styles | Tailwind v4 |
-| `@cline/ui/components/agent-chat` | Conversation, message, reasoning, action, and tool-activity React primitives | React 18.3 or 19 |
-| `@cline/ui/components/agent-chat.css` | Framework-neutral styles for the agent-chat primitives | Theme tokens |
+| `@plinycode/ui` | Reusable React primitives exported from [`components/index.ts`](./components/index.ts) | React 18.3 or 19 and Tailwind v4 |
+| `@plinycode/ui/components.css` | Styles, namespaced Tailwind mappings, and source registration for the root React primitives | Tailwind v4 and theme tokens |
+| `@plinycode/ui/theme/palette.css` | Cline-owned light/dark solid and alpha color scales | CSS |
+| `@plinycode/ui/theme/tokens.css` | Light/dark custom properties only | CSS |
+| `@plinycode/ui/theme/scoped-tokens.css` | Light/dark custom properties scoped to `.cline-ui-theme` | CSS |
+| `@plinycode/ui/theme/theme.css` | Tailwind v4 semantic mapping and dark variant | Tailwind v4 |
+| `@plinycode/ui/components/markdown.css` | Optional framework-neutral Markdown and Streamdown treatment | Theme tokens |
+| `@plinycode/ui/theme/base.css` | Optional document, Markdown, scrollbar, selection, and cursor styles | Tailwind v4 |
+| `@plinycode/ui/theme/index.css` | Complete theme: tokens, Tailwind mapping, and base styles | Tailwind v4 |
+| `@plinycode/ui/components/agent-chat` | Conversation, message, reasoning, action, and tool-activity React primitives | React 18.3 or 19 |
+| `@plinycode/ui/components/agent-chat.css` | Framework-neutral styles for the agent-chat primitives | Theme tokens |
 
 `SessionStatus` uses semantic tone colors by default. Set
 `--cline-ui-session-status-color` on the component to override its dot color
@@ -58,7 +58,7 @@ are safe inside forms. `IconButton` requires an accessible `aria-label`, and
 both components support Radix-style composition through `asChild`.
 
 ```tsx
-import { Button, IconButton } from "@cline/ui";
+import { Button, IconButton } from "@plinycode/ui";
 
 <Button size="sm" tone="accent" variant="fill">
 	Continue
@@ -114,21 +114,21 @@ For a Tailwind v4 app, import framework and consumer dependencies first:
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 @import "tailwindcss";
-@import "@cline/ui/theme/index.css";
+@import "@plinycode/ui/theme/index.css";
 ```
 
 An app that only needs framework-neutral values can import:
 
 ```css
-@import "@cline/ui/theme/tokens.css";
+@import "@plinycode/ui/theme/tokens.css";
 ```
 
 For an embedded surface, import scoped tokens and optional Markdown styles:
 
 ```css
-@import "@cline/ui/theme/scoped-tokens.css";
-@import "@cline/ui/components.css";
-@import "@cline/ui/components/markdown.css";
+@import "@plinycode/ui/theme/scoped-tokens.css";
+@import "@plinycode/ui/components.css";
+@import "@plinycode/ui/components/markdown.css";
 ```
 
 ```tsx
@@ -139,7 +139,7 @@ For an embedded surface, import scoped tokens and optional Markdown styles:
 
 Dark values activate when `.dark` is on the wrapper or an ancestor.
 
-Embedded hosts should not import `@cline/ui/theme/theme.css`; it intentionally
+Embedded hosts should not import `@plinycode/ui/theme/theme.css`; it intentionally
 maps generic Tailwind names such as `bg-background` for Cline-owned surfaces.
 
 The theme follows the standard shadcn semantic contract (`--background`,
@@ -163,7 +163,7 @@ register every raw palette step. Brand artwork may use the separate
 `--brand-*` colors.
 
 The palette values are derived from Radix Colors 3.0.0 under the included MIT
-license; `@cline/ui` does not depend on Radix Colors at runtime.
+license; `@plinycode/ui` does not depend on Radix Colors at runtime.
 
 ## Agent-chat usage
 
@@ -180,8 +180,8 @@ In the application's global CSS, import the component styles after at least the
 theme tokens:
 
 ```css
-@import "@cline/ui/theme/tokens.css";
-@import "@cline/ui/components/agent-chat.css";
+@import "@plinycode/ui/theme/tokens.css";
+@import "@plinycode/ui/components/agent-chat.css";
 ```
 
 Then import the React components:
@@ -208,7 +208,7 @@ import {
 	WorkActivity,
 	WorkActivityContent,
 	WorkActivityTrigger,
-} from "@cline/ui/components/agent-chat";
+} from "@plinycode/ui/components/agent-chat";
 ```
 
 `Conversation` owns sticky scrolling, `Message` owns role presentation,
@@ -219,10 +219,10 @@ rows behind a "Worked for 4m 12s and made 14 tool calls" summary, and the
 smaller action, empty-state, detail, and code primitives fill out common
 transcript states.
 
-For assistant Markdown, `@cline/ui/components/markdown` exports the shared
+For assistant Markdown, `@plinycode/ui/components/markdown` exports the shared
 Streamdown configuration — `markdownCodeHighlighter` (lazy Shiki with GitHub
 light/dark themes) and `agentMarkdownControls` — and
-`@cline/ui/components/markdown.css` carries the matching chat styling (quiet
+`@plinycode/ui/components/markdown.css` carries the matching chat styling (quiet
 single-box code blocks with a hover copy control, chat-scale headings, table
 cards). Import the CSS unlayered so it wins over Streamdown's Tailwind
 utilities, and keep `streamdown`, `shiki`, `@shikijs/langs`, and
@@ -239,19 +239,19 @@ transport, approvals, persistence, and product actions.
 Run the interactive component catalog from the repository root:
 
 ```bash
-bun -F @cline/ui storybook
+bun -F @plinycode/ui storybook
 ```
 
 Then open `http://localhost:6006`. Build the static catalog with:
 
 ```bash
-bun -F @cline/ui build-storybook
+bun -F @plinycode/ui build-storybook
 ```
 
 In the repository's agent sandbox, bind to a forwarded host and unused port:
 
 ```bash
-bun -F @cline/ui storybook -- --host 0.0.0.0 --port 3490 --exact-port
+bun -F @plinycode/ui storybook -- --host 0.0.0.0 --port 3490 --exact-port
 ```
 
 The catalog includes the theme foundations and representative agent-chat
@@ -328,11 +328,11 @@ an external consumer and verify its build, styles, keyboard interaction, and
 disabled states:
 
 ```sh
-bun add --exact '@cline/ui@<prepared-version>'
+bun add --exact '@plinycode/ui@<prepared-version>'
 ```
 
 Commit the consumer's manifest and lockfile. Monorepo consumers retain
-`workspace:*`; rebuild with `bun -F @cline/ui build` and restart the consuming
+`workspace:*`; rebuild with `bun -F @plinycode/ui build` and restart the consuming
 app. If a preview regresses, pin the previous version and publish a corrected
 prerelease instead of replacing an existing version.
 

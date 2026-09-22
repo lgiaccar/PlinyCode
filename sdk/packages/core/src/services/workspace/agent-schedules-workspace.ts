@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { resolveAgentSchedulesDir } from "@cline/shared/storage";
+import { resolveAgentSchedulesDir } from "@plinycode/shared/storage";
 
 /**
  * Ensure the home workspace for agent-created schedules exists and return its

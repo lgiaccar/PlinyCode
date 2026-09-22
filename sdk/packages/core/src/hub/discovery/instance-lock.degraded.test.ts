@@ -11,7 +11,7 @@ const { loadSqliteDb } = vi.hoisted(() => ({
 
 // Simulates runtimes with a broken or missing SQLite backend (e.g.
 // node:sqlite unavailable) without touching a real database.
-vi.mock("@cline/shared/db", () => ({ loadSqliteDb }));
+vi.mock("@plinycode/shared/db", () => ({ loadSqliteDb }));
 
 import {
 	HubInstanceLock,

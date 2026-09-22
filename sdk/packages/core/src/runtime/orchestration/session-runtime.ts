@@ -10,7 +10,7 @@ import type {
 	RuntimeConfigExtensionKind,
 	ToolApprovalRequest,
 	ToolApprovalResult,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	AgentPluginPackageMcpServer,
 	AgentPluginPackageSkill,
@@ -34,7 +34,7 @@ import type { CoreSessionConfig } from "../../types/config";
  * Internal structural alias for the lead-agent handle that
  * {@link BuiltRuntime.registerLeadAgent} hands off to
  * `runtime-builder.ts`. Narrowed to only the `.addTools()` surface the
- * callback exercises; avoids depending on `@cline/agents`' `Agent`
+ * callback exercises; avoids depending on `@plinycode/agents`' `Agent`
  * class during the PLAN.md §3.6 Step 5 type-only migration. When
  * SessionRuntime is rebuilt in Step 6, this field is expected to be
  * dropped entirely per §3.5 row #2.

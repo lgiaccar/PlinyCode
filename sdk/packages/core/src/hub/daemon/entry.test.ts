@@ -72,8 +72,8 @@ const {
 	};
 });
 
-vi.mock("@cline/shared", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("@cline/shared")>();
+vi.mock("@plinycode/shared", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@plinycode/shared")>();
 	return {
 		...actual,
 		initVcr: mockInitVcr,
@@ -81,7 +81,7 @@ vi.mock("@cline/shared", async (importOriginal) => {
 	};
 });
 
-vi.mock("@cline/agents", () => ({
+vi.mock("@plinycode/agents", () => ({
 	AgentRuntimeAbortError: class AgentRuntimeAbortError extends Error {},
 }));
 
@@ -318,7 +318,7 @@ describe("hub daemon entry", () => {
 		// Cancelling a turn can leave provider fetches rejecting on floating
 		// promises after the run settled. None of these may kill the daemon —
 		// it hosts every resident session.
-		const { AgentRuntimeAbortError } = await import("@cline/agents");
+		const { AgentRuntimeAbortError } = await import("@plinycode/agents");
 		onUnhandledRejection?.(new AgentRuntimeAbortError("run aborted"));
 		const domAbort = new Error("This operation was aborted");
 		domAbort.name = "AbortError";

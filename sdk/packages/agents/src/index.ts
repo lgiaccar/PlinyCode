@@ -1,5 +1,5 @@
 /**
- * @cline/agents
+ * @plinycode/agents
  *
  * Browser-safe agent runtime for the next-generation Cline SDK.
  *
@@ -11,10 +11,10 @@
  *   - `AgentRuntimeConfig` and its two variants (`AgentRuntimeConfigWithModel`,
  *     `AgentRuntimeConfigWithProvider`) — the discriminated config union.
  *   - `AgentRunInput` / `AgentEventListener` — convenience type aliases.
- *   - `createTool` — re-exported from `@cline/shared` for authoring tools.
+ *   - `createTool` — re-exported from `@plinycode/shared` for authoring tools.
  *
  * Shared types (`AgentMessage`, `AgentRunResult`, etc.) should be imported
- * directly from `@cline/shared`.
+ * directly from `@plinycode/shared`.
  */
 
 export type {
@@ -39,8 +39,8 @@ export type {
 	AgentUsage,
 	ToolApprovalResult,
 	ToolPolicy,
-} from "@cline/shared";
-export { createTool } from "@cline/shared";
+} from "@plinycode/shared";
+export { createTool } from "@plinycode/shared";
 export type {
 	AgentEventListener,
 	AgentRunInput,

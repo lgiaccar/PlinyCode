@@ -5,7 +5,7 @@ import type {
 	HubUINotifyPayload,
 	HubUIShowWindowPayload,
 	SessionRecord,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	CoreSettingsMutationResult,
 	CoreSettingsToggleInput,

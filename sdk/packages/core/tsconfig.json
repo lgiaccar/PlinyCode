@@ -4,17 +4,17 @@
 		"rootDir": "..",
 		"noEmit": true,
 		"paths": {
-			"@cline/agents": ["../agents/src/index.ts"],
-			"@cline/agents/*": ["../agents/src/*", "../agents/src/*/index.ts"],
-			"@cline/llms": ["../llms/src/index.ts"],
-			"@cline/llms/browser": ["../llms/src/index.browser.ts"],
-			"@cline/shared": ["../shared/src/index.ts"],
-			"@cline/shared/automation": ["../shared/src/automation/index.ts"],
-			"@cline/shared/browser": ["../shared/src/index.browser.ts"],
-			"@cline/shared/db": ["../shared/src/db/index.ts"],
-			"@cline/shared/storage": ["../shared/src/storage/index.ts"],
-			"@cline/shared/types": ["../shared/src/types/index.ts"],
-			"@cline/shared/*": ["../shared/src/*", "../shared/src/*/index.ts"]
+			"@plinycode/agents": ["../agents/src/index.ts"],
+			"@plinycode/agents/*": ["../agents/src/*", "../agents/src/*/index.ts"],
+			"@plinycode/llms": ["../llms/src/index.ts"],
+			"@plinycode/llms/browser": ["../llms/src/index.browser.ts"],
+			"@plinycode/shared": ["../shared/src/index.ts"],
+			"@plinycode/shared/automation": ["../shared/src/automation/index.ts"],
+			"@plinycode/shared/browser": ["../shared/src/index.browser.ts"],
+			"@plinycode/shared/db": ["../shared/src/db/index.ts"],
+			"@plinycode/shared/storage": ["../shared/src/storage/index.ts"],
+			"@plinycode/shared/types": ["../shared/src/types/index.ts"],
+			"@plinycode/shared/*": ["../shared/src/*", "../shared/src/*/index.ts"]
 		}
 	},
 	"include": ["src/**/*"],

@@ -180,7 +180,7 @@ interface ModelInfoViewProps {
 	 * pricing in Advanced, and tiered pricing). Set this for providers whose
 	 * billing is subscription-based or otherwise not per-token — any
 	 * `ProviderInfo.metadata.usageCostDisplay` other than `"show"` (see
-	 * `resolveProviderUsageCostDisplay` in `@cline/llms`).
+	 * `resolveProviderUsageCostDisplay` in `@plinycode/llms`).
 	 */
 	hideUsageCost?: boolean
 }

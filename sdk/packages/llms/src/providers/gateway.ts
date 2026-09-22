@@ -11,11 +11,11 @@ import type {
 	GatewayStreamRequest,
 	ITelemetryService,
 	ReasoningEffort,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	estimateRequestInputTokens,
 	ReasoningEffortSchema,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { toAsyncIterable } from "./async";
 import { BUILTIN_PROVIDER_REGISTRATIONS } from "./builtins-runtime";
 import { providerManifestSupportsModelOperation } from "./model-operations";
@@ -23,7 +23,7 @@ import { providerManifestSupportsModelTool } from "./model-tools";
 import { GatewayRegistry } from "./registry";
 import { isPositiveFiniteNumber } from "./utils";
 
-export type * from "@cline/shared";
+export type * from "@plinycode/shared";
 
 export const DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS = 32_000;
 const GATEWAY_OUTPUT_RESERVE_TOKENS = 1_024;

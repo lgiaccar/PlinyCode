@@ -8,7 +8,7 @@ import {
 	isHubProtocolCompatible,
 	resolveClineBuildEnv,
 	resolveHubCommandTimeoutMs,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import NodeWebSocket from "ws";
 import {
 	SESSION_NOT_FOUND_ERROR_CODE,

@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import * as LlmsModels from "@cline/llms";
-import { CLINE_DEFAULT_MODEL_ID } from "@cline/shared";
+import * as LlmsModels from "@plinycode/llms";
+import { CLINE_DEFAULT_MODEL_ID } from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	getCachedClineRecommendedModels,

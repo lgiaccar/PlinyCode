@@ -5,7 +5,7 @@ import type {
 	ConnectorPlatformDef,
 	HubCommandEnvelope,
 	HubReplyEnvelope,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	buildConnectorConnectArgs,
 	CONNECTOR_PLATFORMS,
@@ -13,8 +13,8 @@ import {
 	listConnectorCatalog,
 	mergeConnectorConnectArgs,
 	shouldIncludeConnectorField,
-} from "@cline/shared";
-import { withConnectorStore } from "@cline/shared/db";
+} from "@plinycode/shared";
+import { withConnectorStore } from "@plinycode/shared/db";
 import { listActiveConnectors } from "../../../services/connectors/active-connectors";
 import { getActiveConnectorSupervisor } from "../../../services/connectors/connector-supervisor";
 import { captureToolUsage } from "../../../services/telemetry/core-events";

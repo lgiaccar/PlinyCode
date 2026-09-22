@@ -9,7 +9,7 @@ import type {
 	BasicLogger,
 	ExtensionContext,
 	ReasoningEffort,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { ModelInfo, ProviderClient } from "../catalog/types";
 import {
 	BUILT_IN_PROVIDER,

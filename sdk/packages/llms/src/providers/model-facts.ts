@@ -6,8 +6,8 @@ import type {
 	ModelOperation,
 	ModelReasoningOption,
 	ReasoningEffort,
-} from "@cline/shared";
-import { REASONING_LEVELS } from "@cline/shared";
+} from "@plinycode/shared";
+import { REASONING_LEVELS } from "@plinycode/shared";
 
 const ACTIVE_REASONING_EFFORTS = REASONING_LEVELS.filter(
 	(level): level is ReasoningEffort => level !== "none",
@@ -336,7 +336,7 @@ export function modelRouteMatches(
 		family?: string;
 		capabilities?: readonly string[];
 		operation?: ModelOperation;
-		modalities?: import("@cline/shared").ModelModalities;
+		modalities?: import("@plinycode/shared").ModelModalities;
 	},
 ): boolean {
 	if (

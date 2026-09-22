@@ -1,9 +1,9 @@
-import type * as LlmsProviders from "@cline/llms";
+import type * as LlmsProviders from "@plinycode/llms";
 import type {
 	AgentMode,
 	AgentResult,
 	RuntimeConfigExtensionKind,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { HookEventPayload } from "../../hooks";
 import type { CheckpointEntry } from "../../hooks/checkpoint-hooks";
 import type { ProviderSettings } from "../../services/llms/provider-settings";
@@ -168,7 +168,7 @@ export interface StartSessionInput {
 	 */
 	localRuntime?: LocalRuntimeStartOptions;
 	capabilities?: RuntimeCapabilities;
-	toolPolicies?: import("@cline/shared").AgentConfig["toolPolicies"];
+	toolPolicies?: import("@plinycode/shared").AgentConfig["toolPolicies"];
 }
 
 /** Session input after the execution host has resolved a concrete workspace. */

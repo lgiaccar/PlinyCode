@@ -1,4 +1,4 @@
-// PlinyCode SDK `ApiHandler` (from `@cline/llms`) backed by the VS Code Language
+// PlinyCode SDK `ApiHandler` (from `@plinycode/llms`) backed by the VS Code Language
 // Model API (`vscode.lm`). Registered via `registerHandler("vscode-lm", ...)`
 // (see ./register-vscode-lm.ts) so the SDK routes "vscode-lm" inference here.
 //
@@ -8,7 +8,7 @@
 // uses) and is parsed back into a `LanguageModelChatSelector` here. See
 // parseVsCodeLmSelector / apps/vscode/src/shared/vsCodeSelectorUtils.ts.
 
-import type { ApiHandler, ApiStreamChunk, HandlerModelInfo, Message, ProviderConfig, ToolDefinition } from "@cline/llms"
+import type { ApiHandler, ApiStreamChunk, HandlerModelInfo, Message, ProviderConfig, ToolDefinition } from "@plinycode/llms"
 import { nanoid } from "nanoid"
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"

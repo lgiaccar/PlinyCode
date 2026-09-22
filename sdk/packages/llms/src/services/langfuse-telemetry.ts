@@ -167,7 +167,7 @@ async function isTelemetryOptedOutGlobally(): Promise<boolean> {
 	let raw: string;
 	try {
 		const [{ readFileSync }, { resolveGlobalSettingsPath }] = await Promise.all(
-			[import("node:fs"), import("@cline/shared/storage")],
+			[import("node:fs"), import("@plinycode/shared/storage")],
 		);
 		raw = readFileSync(resolveGlobalSettingsPath(), "utf8");
 	} catch (error) {
@@ -195,7 +195,7 @@ async function isTelemetryOptedOutGlobally(): Promise<boolean> {
 async function getHostOtlpTracer(): Promise<Tracer | undefined> {
 	const [{ trace }, { isOtlpTraceRelayProvider }] = await Promise.all([
 		import("@opentelemetry/api"),
-		import("@cline/shared"),
+		import("@plinycode/shared"),
 	]);
 	const provider = trace.getTracerProvider() as { getDelegate?: () => unknown };
 	if (
@@ -242,7 +242,7 @@ async function ensureDirectLangfuseIntegration(
 
 async function registerDirectLangfuseDisposable(): Promise<void> {
 	if (!directLangfuseDisposableRegistration) {
-		directLangfuseDisposableRegistration = import("@cline/shared").then(
+		directLangfuseDisposableRegistration = import("@plinycode/shared").then(
 			({ registerDisposable }) => {
 				registerDisposable(disposeLangfuseTelemetry);
 			},

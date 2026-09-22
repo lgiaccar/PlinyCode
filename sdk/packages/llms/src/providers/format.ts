@@ -1,4 +1,4 @@
-import { safeJsonParse, safeJsonStringify } from "@cline/shared";
+import { safeJsonParse, safeJsonStringify } from "@plinycode/shared";
 
 export function extractErrorMessage(error: unknown): string {
 	// Generic SDK wrappers carry no signal of their own — when present we prefer

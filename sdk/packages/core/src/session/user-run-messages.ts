@@ -1,4 +1,4 @@
-import { formatDisplayUserInput } from "@cline/shared";
+import { formatDisplayUserInput } from "@plinycode/shared";
 
 export type MessageDisplayRole =
 	| "user"

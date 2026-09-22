@@ -8,8 +8,8 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { TeamTeammateSpec } from "@cline/shared";
-import { resolveTeamDataDir } from "@cline/shared/storage";
+import type { TeamTeammateSpec } from "@plinycode/shared";
+import { resolveTeamDataDir } from "@plinycode/shared/storage";
 import type { AgentTeamsRuntime, TeamEvent } from "../../extensions/tools/team";
 import {
 	type PersistedTeamEnvelope,

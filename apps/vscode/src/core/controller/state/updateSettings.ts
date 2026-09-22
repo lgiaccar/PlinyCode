@@ -1,4 +1,4 @@
-import { setCompactionStrategyGlobally, setModelToolEnabledGlobally } from "@cline/core"
+import { setCompactionStrategyGlobally, setModelToolEnabledGlobally } from "@plinycode/core"
 import { Empty } from "@shared/proto/cline/common"
 import { PlanActMode, McpDisplayMode as ProtoMcpDisplayMode, UpdateSettingsRequest } from "@shared/proto/cline/state"
 import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-configuration-conversion"

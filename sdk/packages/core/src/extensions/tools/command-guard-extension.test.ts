@@ -3,7 +3,7 @@ import type {
 	AgentRuntimeStateSnapshot,
 	AgentTool,
 	ITelemetryService,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	createPlanModeCommandGuardExtension,

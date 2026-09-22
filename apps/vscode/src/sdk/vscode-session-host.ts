@@ -31,14 +31,14 @@ import {
 	type StartSessionInput,
 	type StartSessionResult,
 	type ToolExecutors,
-} from "@cline/core"
+} from "@plinycode/core"
 import {
 	type AgentToolContext,
 	RUNTIME_CONFIG_EXTENSION_KINDS,
 	type ToolApprovalRequest,
 	type ToolApprovalResult,
 	type ToolPolicy,
-} from "@cline/shared"
+} from "@plinycode/shared"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { getDistinctId } from "@/services/logging/distinctId"

@@ -6,7 +6,7 @@
  * Generate the scoped entry point with `bun run generate:theme` after changes.
  */
 
-@import "@cline/ui/theme/palette.css";
+@import "@plinycode/ui/theme/palette.css";
 
 :root {
 	/* Brand extensions for artwork; components should prefer semantic tokens. */

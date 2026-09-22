@@ -9,11 +9,11 @@ export type {
 	IFeatureFlagsProvider,
 	WorkspaceInfo,
 	WorkspaceManifest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 export {
 	FEATURE_FLAGS,
 	FeatureFlagDefaultValue,
-} from "@cline/shared";
+} from "@plinycode/shared";
 export { ClineCore } from "./ClineCore";
 export type {
 	ClineCoreListHistoryOptions,

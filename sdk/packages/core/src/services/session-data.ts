@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type * as LlmsProviders from "@cline/llms";
-import type { AgentConfig, AgentEvent, AgentResult } from "@cline/shared";
-import { normalizeUserInput, stripModeNotices } from "@cline/shared";
+import type * as LlmsProviders from "@plinycode/llms";
+import type { AgentConfig, AgentEvent, AgentResult } from "@plinycode/shared";
+import { normalizeUserInput, stripModeNotices } from "@plinycode/shared";
 import { nanoid } from "nanoid";
 import { readSessionHistoryOriginMetadata } from "../session/history-origin";
 import {

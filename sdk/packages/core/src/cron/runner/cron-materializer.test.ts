@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
 	ONE_TIME_SCHEDULE_CRON_PATTERN,
 	ONE_TIME_SCHEDULE_RUN_AT_METADATA_KEY,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SqliteCronStore } from "../store/sqlite-cron-store";
 import { CronMaterializer } from "./cron-materializer";

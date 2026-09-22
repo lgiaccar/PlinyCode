@@ -1,4 +1,4 @@
-import type { CoreSessionConfig } from "@cline/core"
+import type { CoreSessionConfig } from "@plinycode/core"
 import type { StateManager } from "@/core/storage/StateManager"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"

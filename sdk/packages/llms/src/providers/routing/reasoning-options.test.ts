@@ -2,7 +2,7 @@ import type {
 	GatewayProviderContext,
 	GatewayStreamRequest,
 	ModelReasoningOption,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { normalizeReasoningRequest } from "./reasoning-options";
 

@@ -1,4 +1,4 @@
-import { buildClineSystemPrompt } from "@cline/shared";
+import { buildClineSystemPrompt } from "@plinycode/shared";
 import type { DelegatedAgentRuntimeConfig } from "./delegated-agent";
 
 export function buildTeammateSystemPrompt(

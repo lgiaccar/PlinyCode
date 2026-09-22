@@ -7,12 +7,12 @@ import type {
 	FeatureFlagsContext,
 	IFeatureFlagsProvider,
 	ITelemetryService,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	FEATURE_FLAGS,
 	type FeatureFlag,
 	FeatureFlagDefaultValue,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { CORE_TELEMETRY_EVENTS } from "../telemetry/core-events";
 
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000;

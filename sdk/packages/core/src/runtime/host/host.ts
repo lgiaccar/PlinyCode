@@ -1,4 +1,4 @@
-import { captureSdkError } from "@cline/shared";
+import { captureSdkError } from "@plinycode/shared";
 import type { ClineCoreOptions } from "../../cline-core/types";
 import {
 	ensureCompatibleLocalHubUrl,

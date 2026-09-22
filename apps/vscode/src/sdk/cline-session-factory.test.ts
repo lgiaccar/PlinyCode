@@ -1,8 +1,8 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import type { CoreSessionConfig } from "@cline/core"
-import * as LlmsModels from "@cline/llms"
+import type { CoreSessionConfig } from "@plinycode/core"
+import * as LlmsModels from "@plinycode/llms"
 import { ApiFormat } from "@shared/proto/cline/models"
 import { Logger } from "@shared/services/Logger"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -616,11 +616,11 @@ describe("buildSessionConfig", () => {
 		// The mocked-manager tests above cannot catch a mirror payload that the
 		// real ProviderSettingsSchema.parse would reject (the resolver swallows
 		// save failures), so exercise the real manager against a temp file.
-		// Import the built package by file path: the bare "@cline/core"
+		// Import the built package by file path: the bare "@plinycode/core"
 		// specifier is aliased to an in-memory stub in vitest.config.ts (which
 		// validates nothing), and importing SDK *source* would pull it into
 		// this project's tsc program (TS6059: outside rootDir).
-		const { ProviderSettingsManager } = await import("../../node_modules/@cline/core/dist/index.js")
+		const { ProviderSettingsManager } = await import("../../node_modules/@plinycode/core/dist/index.js")
 		const realManager = new ProviderSettingsManager({
 			filePath: path.join(tempDir, "settings", "providers.json"),
 		})

@@ -22,7 +22,7 @@ describe("SDK runtime build identity", () => {
 			mkdirSync(join(packageRoot, "src"), { recursive: true });
 			writeFileSync(
 				join(packageRoot, "package.json"),
-				`${JSON.stringify({ name: `@cline/${packageName}`, version: "0.0.1" })}\n`,
+				`${JSON.stringify({ name: `@plinycode/${packageName}`, version: "0.0.1" })}\n`,
 			);
 			writeFileSync(
 				join(packageRoot, "src", "index.ts"),

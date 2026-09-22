@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import type * as LlmsProviders from "@cline/llms";
+import type * as LlmsProviders from "@plinycode/llms";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -12,8 +12,8 @@ import {
 	type ITelemetryService,
 	isLikelyAuthError,
 	normalizeUserInput,
-} from "@cline/shared";
-import { setHomeDirIfUnset } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { setHomeDirIfUnset } from "@plinycode/shared/storage";
 import { isOAuthProvider } from "../../auth/provider-auth-registry";
 import {
 	createCompactionStateAwarePrepareTurn,

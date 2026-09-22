@@ -13,7 +13,7 @@ import {
 	isHubDaemonProcess,
 	resolveClineBuildEnv,
 	withResolvedClineBuildEnv,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	queryHubSessionActivity,
 	rememberRecoverableLocalHubUrl,

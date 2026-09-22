@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type * as LlmsProviders from "@cline/llms";
+import type * as LlmsProviders from "@plinycode/llms";
 import { nanoid } from "nanoid";
 import { codexHomeDir } from "./paths";
 import {

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CronEventSpec } from "@cline/shared";
+import type { CronEventSpec } from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SqliteCronStore } from "../store/sqlite-cron-store";
 import {

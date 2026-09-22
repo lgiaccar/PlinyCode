@@ -1,6 +1,6 @@
-export { augmentMcpTimeoutError } from "@cline/core"
+export { augmentMcpTimeoutError } from "@plinycode/core"
 
-import { resolveMcpTimeoutSeconds } from "@cline/shared"
+import { resolveMcpTimeoutSeconds } from "@plinycode/shared"
 import { secondsToMs } from "@utils/time"
 
 /**

@@ -1,4 +1,4 @@
-import type { GatewayProviderManifest } from "@cline/shared";
+import type { GatewayProviderManifest } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import {
 	BUILTIN_MODEL_OPERATION_CAPABILITIES,

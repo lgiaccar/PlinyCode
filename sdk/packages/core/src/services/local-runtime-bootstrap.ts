@@ -1,4 +1,4 @@
-import { resolveProviderRequestHeaders } from "@cline/llms";
+import { resolveProviderRequestHeaders } from "@plinycode/llms";
 import type {
 	AgentConfig,
 	AgentEvent,
@@ -12,11 +12,11 @@ import type {
 	ToolApprovalRequest,
 	ToolApprovalResult,
 	WorkspaceInfo,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	buildClineSystemPrompt,
 	hasRuntimeConfigExtension,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { version as corePackageVersion } from "../../package.json";
 import {
 	type AgentPluginPackageDiagnostic,

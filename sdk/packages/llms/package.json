@@ -1,5 +1,5 @@
 {
-	"name": "@cline/llms",
+	"name": "@plinycode/llms",
 	"version": "0.0.83",
 	"description": "Config-driven SDK for selecting, extending, and instantiating LLM providers and models",
 	"repository": {
@@ -62,7 +62,7 @@
 		"@ai-sdk/provider": "^4.0.7",
 		"@ai-sdk/provider-utils": "^5",
 		"@aws-sdk/credential-providers": "^3.922.0",
-		"@cline/shared": "workspace:*",
+		"@plinycode/shared": "workspace:*",
 		"@jerome-benoit/sap-ai-provider": "4.8.0",
 		"@langfuse/core": "5.10.1",
 		"@langfuse/otel": "5.10.1",

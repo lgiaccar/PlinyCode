@@ -1,4 +1,4 @@
-import type { AgentModelEvent, AgentToolDefinition } from "@cline/shared";
+import type { AgentModelEvent, AgentToolDefinition } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import { createGateway } from "./gateway";
 

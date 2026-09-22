@@ -1,4 +1,4 @@
-import * as LlmsModels from "@cline/llms";
+import * as LlmsModels from "@plinycode/llms";
 import { isOAuthProvider } from "../../auth/provider-auth-registry";
 
 export type ProviderConfigFieldKey =
@@ -227,7 +227,7 @@ function shouldExposeBaseUrlField(
  * or an OAuth flow.
  *
  * Read from the provider registry's `local-auth` capability rather than a
- * hardcoded id list, so tagging a provider in `@cline/llms` is all it takes
+ * hardcoded id list, so tagging a provider in `@plinycode/llms` is all it takes
  * for configure UIs to route it to their local-readiness flow. Mirrors
  * `isOAuthProvider` for the OAuth side.
  */

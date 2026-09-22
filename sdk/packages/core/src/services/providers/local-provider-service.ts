@@ -1,4 +1,4 @@
-import * as LlmsModels from "@cline/llms";
+import * as LlmsModels from "@plinycode/llms";
 import type {
 	AddProviderActionRequest,
 	ITelemetryService,
@@ -9,7 +9,7 @@ import type {
 	ProviderModel,
 	SaveProviderSettingsActionRequest,
 	VoiceInputSelection,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { createOAuthClientCallbacks } from "../../auth/client";
 import {
 	getProviderAuthHandler,

@@ -8,7 +8,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HubEventEnvelope } from "@cline/shared";
+import type { HubEventEnvelope } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@ai-sdk/provider-utils", () => ({

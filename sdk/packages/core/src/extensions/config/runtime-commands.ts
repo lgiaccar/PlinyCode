@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { truncateSplit } from "@cline/shared";
+import { truncateSplit } from "@plinycode/shared";
 import type {
 	SkillConfig,
 	UserInstructionConfigWatcher,

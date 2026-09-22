@@ -1,4 +1,4 @@
-import { type ContentBlock, formatDisplayUserInput, type MessageWithMetadata } from "@cline/shared"
+import { type ContentBlock, formatDisplayUserInput, type MessageWithMetadata } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { sanitizeInitialMessagesForSessionStart } from "./initial-message-sanitizer"

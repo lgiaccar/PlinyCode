@@ -1,4 +1,4 @@
-import type { AgentToolContext } from "@cline/shared";
+import type { AgentToolContext } from "@plinycode/shared";
 
 export interface McpToolDescriptor {
 	name: string;

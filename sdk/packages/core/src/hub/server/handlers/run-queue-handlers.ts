@@ -8,7 +8,7 @@
  * execution that never depends on the requesting socket staying alive.
  */
 
-import type { HubCommandEnvelope, HubReplyEnvelope } from "@cline/shared";
+import type { HubCommandEnvelope, HubReplyEnvelope } from "@plinycode/shared";
 import {
 	HubRunAdmissionRejectedError,
 	type HubRunQueue,

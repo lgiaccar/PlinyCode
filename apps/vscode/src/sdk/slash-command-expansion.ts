@@ -1,4 +1,4 @@
-import type { AvailableRuntimeCommand } from "@cline/core"
+import type { AvailableRuntimeCommand } from "@plinycode/core"
 
 /**
  * Matches a slash-command token that is either at the start of the message or
@@ -10,7 +10,7 @@ const SLASH_COMMAND_TOKEN_REGEX = /(^|\s)(\/[a-zA-Z0-9_.:@-]+)(?=\s|$)/g
 
 /**
  * File extensions the SDK's workflow discovery accepts (`MARKDOWN_EXTENSIONS`
- * in @cline/core's user-instruction-config-loader). The SDK strips the
+ * in @plinycode/core's user-instruction-config-loader). The SDK strips the
  * extension when naming the command; the webview autocomplete and legacy
  * toggle state keep it.
  */
@@ -27,7 +27,7 @@ function canonicalWorkflowName(value: string): string {
 }
 
 /**
- * Verbatim port of @cline/shared's private `sanitizeSegment`
+ * Verbatim port of @plinycode/shared's private `sanitizeSegment`
  * (src/remote-config/materializer.ts), which names the files that remote
  * workflows materialize to — lower-cased, disallowed character runs collapsed
  * to `-`, capped at 80 characters. Keep in sync with the original.

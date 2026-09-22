@@ -9,11 +9,11 @@ import {
 	type SupervisedConnectorOrigin,
 	type SupervisedConnectorRecord,
 	type SupervisedConnectorState,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	ensureParentDir,
 	resolveConnectorLogPath,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import { listActiveConnectors } from "./active-connectors";
 import {
 	disableConnectorAutostart,

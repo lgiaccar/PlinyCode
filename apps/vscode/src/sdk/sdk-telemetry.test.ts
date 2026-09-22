@@ -1,4 +1,4 @@
-import type { ConfiguredTelemetryHandle, ITelemetryService } from "@cline/core"
+import type { ConfiguredTelemetryHandle, ITelemetryService } from "@plinycode/core"
 import type { Mock } from "vitest"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Setting } from "@/shared/proto/index.host"
@@ -8,7 +8,7 @@ const coreTelemetryMocks = vi.hoisted(() => ({
 	createHandle: vi.fn(),
 }))
 
-vi.mock("@cline/core", () => ({
+vi.mock("@plinycode/core", () => ({
 	createClineTelemetryServiceConfig: coreTelemetryMocks.createConfig,
 	createConfiguredTelemetryHandle: coreTelemetryMocks.createHandle,
 }))

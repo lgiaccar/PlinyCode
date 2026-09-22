@@ -1,6 +1,6 @@
-import { listLocalProviders, type ModelCatalogConfig, resolveProviderConfig } from "@cline/core"
-import { type ProviderConfig, resolveProviderUsageCostDisplay } from "@cline/llms"
-import { type ProviderListItem } from "@cline/shared"
+import { listLocalProviders, type ModelCatalogConfig, resolveProviderConfig } from "@plinycode/core"
+import { type ProviderConfig, resolveProviderUsageCostDisplay } from "@plinycode/llms"
+import { type ProviderListItem } from "@plinycode/shared"
 import { getProviderSettingsManager } from "../provider-migration"
 import type {
 	CatalogError,

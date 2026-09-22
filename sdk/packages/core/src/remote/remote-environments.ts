@@ -15,7 +15,7 @@ import {
 import { createConnection, createServer } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { resolveClineDataDir } from "@cline/shared/storage";
+import { resolveClineDataDir } from "@plinycode/shared/storage";
 import { requestHubShutdown } from "../hub/client";
 
 export interface RemoteEnvironmentProfile {

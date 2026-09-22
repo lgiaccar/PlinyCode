@@ -1,6 +1,6 @@
-import type { MessageWithMetadata } from "@cline/llms";
-import type { AgentResult } from "@cline/shared";
-import { formatModeSwitchNotice, formatUserInputBlock } from "@cline/shared";
+import type { MessageWithMetadata } from "@plinycode/llms";
+import type { AgentResult } from "@plinycode/shared";
+import { formatModeSwitchNotice, formatUserInputBlock } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { withSessionHistoryOriginMetadata } from "../session/history-origin";
 import { makeSubSessionId } from "../session/models/session-graph";

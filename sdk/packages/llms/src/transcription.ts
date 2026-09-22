@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import type { GatewayProviderMetadata } from "@cline/shared";
+import type { GatewayProviderMetadata } from "@plinycode/shared";
 import { experimental_transcribe as transcribe } from "ai";
 import { BUILTIN_PROVIDER_MANIFESTS_BY_ID } from "./providers/builtins";
 import {

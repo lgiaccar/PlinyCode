@@ -1,4 +1,4 @@
-import { GeneratedMediaContent } from "@cline/ui"
+import { GeneratedMediaContent } from "@plinycode/ui"
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import {
 	ClineApiReqInfo,

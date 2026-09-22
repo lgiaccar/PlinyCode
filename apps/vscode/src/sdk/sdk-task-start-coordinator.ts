@@ -1,5 +1,5 @@
-import { getProviderAuthStorageId } from "@cline/core"
-import { createSessionId } from "@cline/shared"
+import { getProviderAuthStorageId } from "@plinycode/core"
+import { createSessionId } from "@plinycode/shared"
 import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"

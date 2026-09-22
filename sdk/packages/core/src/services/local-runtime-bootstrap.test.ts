@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setHomeDir } from "@cline/shared/storage";
+import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { version as corePackageVersion } from "../../package.json";
 import type { ProviderSettings } from "../types/provider-settings";

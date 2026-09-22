@@ -3,9 +3,9 @@ import { join } from "node:path";
 import {
 	formatSessionSearchPreview,
 	formatSessionSearchTitle,
-} from "@cline/shared";
-import { loadSqliteDb, nowIso, type SqliteDb } from "@cline/shared/db";
-import { resolveDbDataDir } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { loadSqliteDb, nowIso, type SqliteDb } from "@plinycode/shared/db";
+import { resolveDbDataDir } from "@plinycode/shared/storage";
 import type { RuntimeHost } from "../../runtime/host/runtime-host";
 import type { SessionRecord } from "../../types/sessions";
 

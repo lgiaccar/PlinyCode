@@ -1,7 +1,7 @@
 import type {
 	ClineAccountActionRequest,
 	ProviderActionRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	ClineAccountBalance,
 	ClineAccountOrganization,

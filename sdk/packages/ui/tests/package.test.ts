@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const manifestPath = fileURLToPath(new URL("../package.json", import.meta.url));
 
-describe("@cline/ui package", () => {
+describe("@plinycode/ui package", () => {
 	it("is configured for standalone public npm releases", () => {
 		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
 			internal?: boolean;

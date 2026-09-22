@@ -22,8 +22,8 @@ const {
 	captureRemoteConfigRefresh: vi.fn(),
 }))
 
-vi.mock("@cline/core", () => ({ prepareRemoteConfigCoreIntegration }))
-vi.mock("@cline/shared", () => ({ clearMaterializedRemoteConfigRuntime }))
+vi.mock("@plinycode/core", () => ({ prepareRemoteConfigCoreIntegration }))
+vi.mock("@plinycode/shared", () => ({ clearMaterializedRemoteConfigRuntime }))
 vi.mock("@/services/telemetry", () => ({ telemetryService: { captureRemoteConfigRefresh } }))
 vi.mock("./utils", () => ({ applyRemoteConfig, clearRemoteConfig }))
 vi.mock("./sdk-control-plane", () => ({

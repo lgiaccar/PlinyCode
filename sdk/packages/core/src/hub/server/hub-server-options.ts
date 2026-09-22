@@ -1,4 +1,4 @@
-import type { BasicLogger, ITelemetryService } from "@cline/shared";
+import type { BasicLogger, ITelemetryService } from "@plinycode/shared";
 import type { CronServiceOptions } from "../../cron/service/cron-service";
 import type {
 	HubScheduleRuntimeHandlers,

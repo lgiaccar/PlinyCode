@@ -3,7 +3,7 @@ import type {
 	AgendaAutomationPolicy,
 	AgendaTaskRecord,
 	HubCommandEnvelope,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { AgendaTaskManagerApi } from "../../tasks/agenda-task-api";
 import { HubAgendaTaskCommandService } from "./task-command-service";

@@ -1,4 +1,4 @@
-import type { AgentToolContext, ITelemetryService } from "@cline/shared";
+import type { AgentToolContext, ITelemetryService } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildRunCommandsDescription,

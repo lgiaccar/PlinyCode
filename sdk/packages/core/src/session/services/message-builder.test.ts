@@ -3,7 +3,7 @@ import {
 	formatMessagesForAiSdk,
 	type Message,
 	type ToolResultContent,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import {
 	agentMessagesToMessages,

@@ -1,4 +1,4 @@
-import type { AgentExtension, AgentHooks } from "@cline/shared";
+import type { AgentExtension, AgentHooks } from "@plinycode/shared";
 
 export function createAgentHooksExtension(
 	name: string,

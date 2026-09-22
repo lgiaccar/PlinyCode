@@ -47,7 +47,7 @@ describe("remote helper entrypoint", () => {
 			[
 				"--input-type=module",
 				"-e",
-				`const before = process.exitCode; const helper = await import('@cline/core/remote/helper'); if (process.exitCode !== before || typeof helper.runRemoteHelperEntrypoint !== 'function') throw new Error('Import side effect'); console.log('imported');`,
+				`const before = process.exitCode; const helper = await import('@plinycode/core/remote/helper'); if (process.exitCode !== before || typeof helper.runRemoteHelperEntrypoint !== 'function') throw new Error('Import side effect'); console.log('imported');`,
 			],
 			{
 				cwd: fileURLToPath(new URL("../../", import.meta.url)),

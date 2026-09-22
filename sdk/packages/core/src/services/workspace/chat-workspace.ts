@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
 	AGENTS_RULES_FILE_NAME,
 	resolveChatWorkspacePath,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import type {
 	RuntimeSessionConfig,
 	StartSessionConfig,

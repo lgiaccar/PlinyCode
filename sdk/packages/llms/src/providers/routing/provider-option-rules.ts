@@ -1,4 +1,4 @@
-import { isClineProvider } from "@cline/shared";
+import { isClineProvider } from "@plinycode/shared";
 import { OLLAMA_DEFAULT_CONTEXT_WINDOW } from "../builtins";
 import {
 	getModelReasoningControls,

@@ -5,7 +5,7 @@ import {
 	isClineNotSubscribedMessage,
 	isClineOrgIndividualInferenceSubscriptionMessage,
 	isClinePassLimitMessage,
-} from "@cline/llms"
+} from "@plinycode/llms"
 import { serializeError } from "serialize-error"
 import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "../../shared/ClineAccount"
 

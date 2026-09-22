@@ -5,7 +5,7 @@ import {
 	type AgentToolContext,
 	formatMcpTimeoutErrorMessage,
 	isMcpTimeoutConfigured,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
@@ -247,7 +247,7 @@ class StdioMcpClient implements McpServerClient {
 		const initializeParams = {
 			protocolVersion: MCP_PROTOCOL_VERSION,
 			capabilities: {},
-			clientInfo: { name: "@cline/core", version: "0.0.0" },
+			clientInfo: { name: "@plinycode/core", version: "0.0.0" },
 		};
 		await this.ensureAgentPluginDataDirectory();
 		this.spawnProcess("newline");
@@ -715,7 +715,7 @@ class SdkUrlMcpClient implements McpServerClient {
 		let client: Client | undefined;
 		try {
 			client = new Client({
-				name: this.options.clientName?.trim() || "@cline/core",
+				name: this.options.clientName?.trim() || "@plinycode/core",
 				version: this.options.clientVersion?.trim() || "0.0.0",
 			});
 			const transport = createMcpSdkTransport({

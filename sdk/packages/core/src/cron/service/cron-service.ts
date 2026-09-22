@@ -2,8 +2,8 @@ import type {
 	AutomationEventEnvelope,
 	BasicLogger,
 	ITelemetryService,
-} from "@cline/shared";
-import type { ResolveCronSpecsDirOptions } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import type { ResolveCronSpecsDirOptions } from "@plinycode/shared/storage";
 import {
 	CronEventIngress,
 	type CronEventIngressResult,

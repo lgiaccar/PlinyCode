@@ -23,7 +23,7 @@
 
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
+import { loadSqliteDb, type SqliteDb } from "@plinycode/shared/db";
 
 /** Exit code for a daemon that lost the singleton race: diagnose, never replace. */
 export const HUB_LOCK_HELD_EXIT_CODE = 3;

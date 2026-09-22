@@ -5,7 +5,7 @@
  */
 
 // Zod Utilities
-export { validateWithZod, zodToJsonSchema } from "@cline/shared";
+export { validateWithZod, zodToJsonSchema } from "@plinycode/shared";
 export {
 	createPlanModeCommandGuardExtension,
 	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
@@ -134,7 +134,7 @@ export type {
 // Convenience: Create Tools with Built-in Executors
 // =============================================================================
 
-import { type AgentTool, getDefaultShell } from "@cline/shared";
+import { type AgentTool, getDefaultShell } from "@plinycode/shared";
 import { createDefaultTools } from "./definitions";
 import {
 	createDefaultExecutors,
@@ -170,7 +170,7 @@ export interface CreateBuiltinToolsOptions
  *
  * @example
  * ```typescript
- * import { Agent, createBuiltinTools } from "@cline/core"
+ * import { Agent, createBuiltinTools } from "@plinycode/core"
  *
  * const tools = createBuiltinTools({
  *   cwd: "/path/to/project",

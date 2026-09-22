@@ -98,12 +98,12 @@ describe("plugin-loader", () => {
 			"utf8",
 		);
 
-		const sdkDir = join(dir, "node_modules", "@cline", "shared");
+		const sdkDir = join(dir, "node_modules", "@plinycode", "shared");
 		await mkdir(sdkDir, { recursive: true });
 		await writeFile(
 			join(sdkDir, "package.json"),
 			JSON.stringify({
-				name: "@cline/shared",
+				name: "@plinycode/shared",
 				type: "module",
 				exports: "./index.js",
 			}),
@@ -117,7 +117,7 @@ describe("plugin-loader", () => {
 		await writeFile(
 			join(dir, "plugin-with-sdk-dep.ts"),
 			[
-				"import { sdkMarker } from '@cline/shared';",
+				"import { sdkMarker } from '@plinycode/shared';",
 				"export default {",
 				"  name: sdkMarker,",
 				"  manifest: { capabilities: ['tools'] },",
@@ -129,8 +129,8 @@ describe("plugin-loader", () => {
 		await writeFile(
 			join(copyDir, "portable-subagents.ts"),
 			[
-				"import { safeJsonStringify } from '@cline/shared';",
-				"import { resolveClineDataDir } from '@cline/shared/storage';",
+				"import { safeJsonStringify } from '@plinycode/shared';",
+				"import { resolveClineDataDir } from '@plinycode/shared/storage';",
 				"import YAML from 'yaml';",
 				"export default {",
 				"  name: typeof safeJsonStringify === 'function' ? YAML.stringify({ ok: !!resolveClineDataDir() }) : 'invalid',",
@@ -181,7 +181,7 @@ describe("plugin-loader", () => {
 		await writeFile(
 			join(packagedSdkSubpathDir, "index.ts"),
 			[
-				"import { createConfiguredTelemetryHandle } from '@cline/core/telemetry';",
+				"import { createConfiguredTelemetryHandle } from '@plinycode/core/telemetry';",
 				"export default {",
 				"  name: typeof createConfiguredTelemetryHandle === 'function' ? 'sdk-subpath-ok' : 'invalid',",
 				"  manifest: { capabilities: ['tools'] },",
@@ -379,7 +379,7 @@ describe("plugin-loader", () => {
 	});
 
 	// Depends on 'yaml' being unresolvable from the plugin. It is a declared
-	// dependency of @cline/core itself, so whether the plugin resolves it through
+	// dependency of @plinycode/core itself, so whether the plugin resolves it through
 	// the parent varies with the installed node_modules layout.
 	it.skip("requires package-based plugins to provide their own non-SDK dependencies", async () => {
 		await expect(

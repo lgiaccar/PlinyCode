@@ -1,12 +1,12 @@
-import { LangfuseAttributesSpanProcessor } from "@cline/llms";
+import { LangfuseAttributesSpanProcessor } from "@plinycode/llms";
 import type {
 	BasicLogger,
 	ITelemetryService,
 	OpenTelemetryClientConfig,
 	TelemetryMetadata,
 	TelemetryProperties,
-} from "@cline/shared";
-import { markOtlpTraceRelayProvider } from "@cline/shared";
+} from "@plinycode/shared";
+import { markOtlpTraceRelayProvider } from "@plinycode/shared";
 import { metrics, type Tracer, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { OTLPLogExporter as OTLPLogExporterHttp } from "@opentelemetry/exporter-logs-otlp-http";

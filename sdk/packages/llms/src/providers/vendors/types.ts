@@ -4,7 +4,7 @@ import type {
 	GeneratedMedia,
 	ModelTool,
 	ModelToolName,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { CallSettings, ToolSet } from "ai";
 import type { RetryEmptyResponseOptions } from "../middleware/retry-empty-response";
 

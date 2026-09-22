@@ -22,7 +22,7 @@ import {
 	type AgentToolContext,
 	getDefaultShell,
 	getShellInvocation,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	type ProcessStartTokenProbeResult,
 	probeProcessStartTokenAsync,

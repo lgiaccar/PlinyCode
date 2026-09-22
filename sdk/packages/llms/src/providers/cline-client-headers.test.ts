@@ -1,4 +1,4 @@
-import { getClineClientIdentity, setClineClientIdentity } from "@cline/shared";
+import { getClineClientIdentity, setClineClientIdentity } from "@plinycode/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildClineClientHeaders } from "./cline-client-headers";
 

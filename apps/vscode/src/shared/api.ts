@@ -1,4 +1,4 @@
-import type { ModelModalities, ModelOperation, ModelOperationMode } from "@cline/shared"
+import type { ModelModalities, ModelOperation, ModelOperationMode } from "@plinycode/shared"
 import { ApiFormat } from "./proto/cline/models"
 import type { ApiHandlerSettings } from "./storage/state-keys"
 
@@ -208,7 +208,7 @@ export const openAiModelInfoSafeDefaults: OpenAiCompatibleModelInfo = {
 // Uses OAuth authentication via ChatGPT, routes to chatgpt.com/backend-api/codex/responses
 // Subscription-based pricing (all costs are $0).
 //
-// The Codex catalog and default model id are sourced from the `@cline/llms`
+// The Codex catalog and default model id are sourced from the `@plinycode/llms`
 // SDK.
 // Azure OpenAI
 // https://learn.microsoft.com/en-us/azure/ai-services/openai/api-version-deprecation

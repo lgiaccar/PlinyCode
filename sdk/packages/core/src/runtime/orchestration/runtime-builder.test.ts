@@ -13,8 +13,8 @@ import {
 	type AgentTool,
 	createContributionRegistry,
 	type Message,
-} from "@cline/shared";
-import { setHomeDir } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, describe, expect, it } from "vitest";
 import { createUserInstructionConfigService } from "../../extensions/config";
 import { PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME } from "../../extensions/tools/command-guard-extension";

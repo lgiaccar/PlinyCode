@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@cline/shared"
+import type { AgentEvent } from "@plinycode/shared"
 import { describe, expect, it, vi } from "vitest"
 import { MessageTranslatorState, translateSessionEvent } from "./message-translator"
 import { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"

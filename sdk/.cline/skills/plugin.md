@@ -5,7 +5,7 @@ description: Self-contained guide to designing, building, packaging, and distrib
 
 # Authoring a Cline Agent Plugin
 
-A **Cline plugin** is a TypeScript module that extends any agent built on the Cline Core SDK. The same plugin runs in the Cline CLI, the VS Code and JetBrains extensions, the Kanban host, and any custom app built on `@cline/core` — write it once, every host gets the new behavior.
+A **Cline plugin** is a TypeScript module that extends any agent built on the Cline Core SDK. The same plugin runs in the Cline CLI, the VS Code and JetBrains extensions, the Kanban host, and any custom app built on `@plinycode/core` — write it once, every host gets the new behavior.
 
 A plugin can:
 
@@ -46,8 +46,8 @@ After validation, registration is one-shot — there's no dynamic register/unreg
 ## 2. The smallest working plugin
 
 ```ts
-import type { AgentPlugin } from "@cline/core";
-import { createTool } from "@cline/core";
+import type { AgentPlugin } from "@plinycode/core";
+import { createTool } from "@plinycode/core";
 
 const plugin: AgentPlugin = {
   name: "hello-plugin",                     // required, unique within a session
@@ -191,10 +191,10 @@ setup(api, ctx) {
 
 ## 5. Tools — `api.registerTool`
 
-Tools are how plugins give the agent new capabilities. Use the `createTool()` helper from `@cline/core`:
+Tools are how plugins give the agent new capabilities. Use the `createTool()` helper from `@plinycode/core`:
 
 ```ts
-import { createTool } from "@cline/core";
+import { createTool } from "@plinycode/core";
 
 api.registerTool(
   createTool({
@@ -380,7 +380,7 @@ When you build your own host with `ClineCore`, pass the plugin object directly:
 
 ```ts
 import plugin from "./my-plugin";
-import { ClineCore } from "@cline/core";
+import { ClineCore } from "@plinycode/core";
 
 const host = await ClineCore.create({ backendMode: "local" });
 await host.start({
@@ -442,7 +442,7 @@ This is the full shape for a single-file plugin. Save as `my-plugin.ts`, drop in
  *   ANTHROPIC_API_KEY=sk-... bun run my-plugin.ts
  */
 
-import { type AgentPlugin, ClineCore, createTool } from "@cline/core";
+import { type AgentPlugin, ClineCore, createTool } from "@plinycode/core";
 
 let sessionRoot: string | undefined;
 
@@ -591,10 +591,10 @@ my-cline-plugin/
     ]
   },
   "peerDependencies": {
-    "@cline/core": "*"
+    "@plinycode/core": "*"
   },
   "peerDependenciesMeta": {
-    "@cline/core": { "optional": true }
+    "@plinycode/core": { "optional": true }
   },
   "dependencies": {
     "zod": "^4.1.5"
@@ -609,7 +609,7 @@ Field-by-field:
 - **`cline.plugins`** — the discovery contract. An array of entries, each with:
   - `paths` — entry files relative to the package root. For multiple plugin objects from one package, list all entries.
   - `capabilities` — pre-declared capabilities, validated by the loader before importing the entry.
-- **`peerDependencies` for `@cline/core`** — the host already provides `@cline/core`. Marking it a peer dep avoids version drift; marking it optional lets users typecheck the plugin in isolation without forcing a `@cline/core` install.
+- **`peerDependencies` for `@plinycode/core`** — the host already provides `@plinycode/core`. Marking it a peer dep avoids version drift; marking it optional lets users typecheck the plugin in isolation without forcing a `@plinycode/core` install.
 - **`dependencies`** — your own deps (parsers, schema libraries, SDKs you wrap).
 
 ### 11.3 `tsconfig.json` (optional)
@@ -644,7 +644,7 @@ If your plugin lives outside a monorepo, a minimal standalone `tsconfig.json` wo
 The same plugin shape as the single-file version, just inside a package:
 
 ```ts
-import { type AgentPlugin, createTool } from "@cline/core";
+import { type AgentPlugin, createTool } from "@plinycode/core";
 import { z } from "zod";
 
 const InputSchema = z.object({
@@ -848,7 +848,7 @@ If the plugin fails validation or setup, the CLI prints a clear error and contin
 - **State leaking across sessions** — module-level variables are shared across sessions in the same process. Key by `ctx.session?.sessionId` if your host runs multiple sessions concurrently.
 - **`afterRun` firing on aborts** — guard with `if (result.status !== "completed") return;`.
 - **Heavy work in `setup()`** — `setup()` blocks session start. Defer expensive work into the first tool call or `beforeRun`.
-- **Importing host internals** — only import from `@cline/core`. Reaching into host-specific packages (e.g. CLI internals) will break in non-CLI hosts.
+- **Importing host internals** — only import from `@plinycode/core`. Reaching into host-specific packages (e.g. CLI internals) will break in non-CLI hosts.
 - **Emitting telemetry** — feature-detect `ctx.telemetry` (`ctx.telemetry?.capture(...)`); it is undefined when the host has no telemetry service. In-process plugins get the host service directly. Sandboxed plugins get a bridge: `capture` / `captureRequired` / `recordCounter|Histogram|Gauge` are forwarded to the host over JSON IPC, so properties must be plain JSON data (strings, numbers, booleans) — never live objects. The host namespaces every plugin event and metric under `plugin.`, stamps `plugin_name`, and drops events when the user opted out of telemetry.
 - **`ctx.telemetry.isEnabled()` in the sandbox always returns `true`** — the bridge is stateless and the host is the arbiter: opted-out events are dropped host-side. Do not use `isEnabled()` to gate expensive property computation in a sandboxed plugin; keep telemetry properties cheap to build. Identity/common-property setters (`setDistinctId`, `setCommonProperties`, …) are host concerns and are no-ops in the sandbox.
 - **Resolving bundled assets** — use `import.meta.url` + `fileURLToPath` to find files inside your package; never `process.cwd()`. For workspace paths, do the opposite: use `ctx.workspaceInfo?.rootPath`, never `import.meta.url`.
@@ -887,7 +887,7 @@ If the plugin fails validation or setup, the CLI prints a clear error and contin
 - [ ] Tool inputs have JSON Schema with `required` set.
 - [ ] `afterRun` handlers gate on `result.status === "completed"` if they only want successes.
 - [ ] State that must not leak between concurrent sessions is keyed by `ctx.session?.sessionId`.
-- [ ] (Package) `package.json` has `type: "module"`, `cline.plugins`, and `@cline/core` as an optional peer dep.
+- [ ] (Package) `package.json` has `type: "module"`, `cline.plugins`, and `@plinycode/core` as an optional peer dep.
 - [ ] (Package) Bundled assets resolved via `import.meta.url`, not `process.cwd()`.
 - [ ] Smoke test: drop the plugin into `.cline/plugins/` (or `cline plugin install`), run `cline -i "..."`, watch it work.
 

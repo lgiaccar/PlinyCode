@@ -264,7 +264,7 @@ export const Streaming = () => (
 			<ToolActivity expandable={false}>
 				<ToolActivityTrigger
 					icon={<TerminalIcon />}
-					label="Running bun -F @cline/ui test"
+					label="Running bun -F @plinycode/ui test"
 					status="running"
 				/>
 			</ToolActivity>
@@ -380,7 +380,7 @@ export const ToolStates = () => (
 					<ToolActivityCode>
 						{status === "error"
 							? "Error: expected --background token"
-							: "@cline/ui theme contract is valid"}
+							: "@plinycode/ui theme contract is valid"}
 					</ToolActivityCode>
 				</ToolActivityContent>
 			</ToolActivity>
@@ -439,7 +439,7 @@ export const CollapsedWork = () => (
 				<ToolActivity expandable={false}>
 					<ToolActivityTrigger
 						icon={<TerminalIcon />}
-						label="Ran bun -F @cline/ui test"
+						label="Ran bun -F @plinycode/ui test"
 						status="success"
 					/>
 				</ToolActivity>
@@ -558,7 +558,7 @@ function SummaryToolRow({ summary }: { summary: ToolSummary }) {
 
 /**
  * Rows driven end-to-end by `buildToolSummary` from
- * `@cline/ui/components/agent-chat/tool-summary` — the same payloads the
+ * `@plinycode/ui/components/agent-chat/tool-summary` — the same payloads the
  * desktop app and cloud dashboard feed it.
  */
 export const ToolSummaries = () => (

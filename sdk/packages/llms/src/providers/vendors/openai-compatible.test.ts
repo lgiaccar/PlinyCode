@@ -2,7 +2,7 @@ import type { LanguageModelV4 } from "@ai-sdk/provider";
 import type {
 	GatewayProviderContext,
 	GatewayResolvedProviderConfig,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import { isOpenAIReasoningEraModelId } from "../model-facts";
 import {

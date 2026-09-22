@@ -16,7 +16,7 @@ import type { CodeHighlighterPlugin, ControlsConfig } from "streamdown";
  *     plugins={{ code: markdownCodeHighlighter }}
  *   >
  *
- * Pair with `@cline/ui/components/markdown.css` for the matching visual
+ * Pair with `@plinycode/ui/components/markdown.css` for the matching visual
  * treatment (single quiet code blocks with a hover copy control, chat-scale
  * headings, table cards).
  *

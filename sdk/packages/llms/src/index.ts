@@ -1,4 +1,4 @@
-export { CLINE_DEFAULT_MODEL_ID } from "@cline/shared";
+export { CLINE_DEFAULT_MODEL_ID } from "@plinycode/shared";
 export type {
 	GetModelsForProviderOptions,
 	ModelCollection,

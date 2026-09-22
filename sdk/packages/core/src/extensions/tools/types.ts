@@ -9,7 +9,7 @@ import type {
 	ImageContent,
 	ITelemetryService,
 	TextContent,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	ApplyPatchInput,
 	EditFileInput,

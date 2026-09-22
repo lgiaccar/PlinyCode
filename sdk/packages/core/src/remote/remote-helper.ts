@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
-import { claimHubDaemonProcess } from "@cline/shared";
-import { setHomeDirIfUnset } from "@cline/shared/storage";
+import { claimHubDaemonProcess } from "@plinycode/shared";
+import { setHomeDirIfUnset } from "@plinycode/shared/storage";
 import { requestHubShutdown } from "../hub/client";
 import { ensureDetachedHubServer } from "../hub/daemon";
 import { clearHubDiscoveryIfOwned, readHubDiscovery } from "../hub/discovery";
@@ -31,7 +31,7 @@ const defaultDependencies: RemoteHelperDependencies = {
 	requestHubShutdown,
 	ensureDetachedHubServer,
 	claimHubDaemonProcess,
-	loadHubDaemon: () => import("@cline/core/hub/daemon-entry"),
+	loadHubDaemon: () => import("@plinycode/core/hub/daemon-entry"),
 	ensureLoginShellPath,
 	setHomeDirIfUnset,
 	homeDir: homedir,

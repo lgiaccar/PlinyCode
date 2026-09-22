@@ -2,7 +2,7 @@
 //
 // The SDK-backed Controller. It provides the same interface as the classic
 // Controller but delegates session lifecycle (initTask, askResponse,
-// cancelTask, …) to the Cline SDK (@cline/core) and bridges SDK events to
+// cancelTask, …) to the Cline SDK (@plinycode/core) and bridges SDK events to
 // the webview's gRPC streams.
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
@@ -18,8 +18,8 @@ import {
 	type SessionHistoryRecord,
 	setTelemetryOptOutGlobally,
 	type UserInstructionConfigService,
-} from "@cline/core"
-import { formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@cline/shared"
+} from "@plinycode/core"
+import { formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import type { ChatContent } from "@shared/ChatContent"
 import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"

@@ -1,7 +1,7 @@
 import { WebviewProvider } from "./core/webview"
 import "./utils/path" // necessary to have access to String.prototype.toPosix
 
-import { setSdkLogger } from "@cline/core"
+import { setSdkLogger } from "@plinycode/core"
 import { HostProvider } from "@/hosts/host-provider"
 import { Logger } from "@/shared/services/Logger"
 import type { StorageContext } from "@/shared/storage/storage-context"

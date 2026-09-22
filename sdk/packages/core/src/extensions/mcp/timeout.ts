@@ -1,7 +1,7 @@
 import {
 	formatMcpTimeoutErrorMessage,
 	resolveMcpTimeoutSeconds,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 
 export function resolveMcpRequestTimeoutMs(timeoutSeconds: unknown): number {

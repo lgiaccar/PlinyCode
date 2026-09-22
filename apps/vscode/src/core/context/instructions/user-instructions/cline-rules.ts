@@ -1,4 +1,4 @@
-import { resolveGlobalRulesConfigPaths, resolveWorkspaceRulesConfigPaths } from "@cline/shared/storage"
+import { resolveGlobalRulesConfigPaths, resolveWorkspaceRulesConfigPaths } from "@plinycode/shared/storage"
 import { combineRuleToggles, synchronizeRuleToggles } from "@core/context/instructions/user-instructions/rule-helpers"
 import { ensureRulesDirectoryExists } from "@core/storage/disk"
 import { ClineRulesToggles } from "@shared/cline-rules"

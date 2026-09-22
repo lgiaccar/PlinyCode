@@ -20,7 +20,7 @@ import type {
 	AgentBeforeToolResult,
 	AgentExtension,
 	ITelemetryService,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { capturePlanModeCommandBlocked } from "../../services/telemetry/core-events";
 import {
 	findFileEditingCommand,

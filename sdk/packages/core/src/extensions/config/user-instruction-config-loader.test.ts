@@ -11,7 +11,7 @@ import { join } from "node:path";
 import {
 	resolveGlobalAgentsRulesPath,
 	setHomeDir,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	createRulesConfigDefinition,

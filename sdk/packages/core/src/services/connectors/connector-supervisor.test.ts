@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { ConnectorCliLaunchSpec } from "@cline/shared";
+import type { ConnectorCliLaunchSpec } from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	ConnectorSupervisor,

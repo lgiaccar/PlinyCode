@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { AgendaTaskActor, AgendaTaskCreateInput } from "@cline/shared";
+import type { AgendaTaskActor, AgendaTaskCreateInput } from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	AgendaTaskRevisionConflictError,

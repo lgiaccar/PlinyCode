@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentToolContext, HubEventEnvelope } from "@cline/shared";
+import type { AgentToolContext, HubEventEnvelope } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	SessionNotFoundError,

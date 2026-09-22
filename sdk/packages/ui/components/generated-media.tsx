@@ -6,7 +6,7 @@ import {
 	type GeneratedMediaModality,
 	isCanonicalBase64,
 	SUPPORTED_IMAGE_MEDIA_TYPES,
-} from "@cline/shared/browser";
+} from "@plinycode/shared/browser";
 import { useEffect, useState } from "react";
 
 export interface GeneratedMediaClassNames

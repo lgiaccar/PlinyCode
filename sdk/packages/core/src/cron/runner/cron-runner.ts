@@ -4,10 +4,10 @@ import type {
 	ChatRunTurnRequest,
 	ChatStartSessionRequest,
 	ITelemetryService,
-} from "@cline/shared";
-import { buildClineSystemPrompt } from "@cline/shared";
-import { nowIso } from "@cline/shared/db";
-import type { ResolveCronSpecsDirOptions } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { buildClineSystemPrompt } from "@plinycode/shared";
+import { nowIso } from "@plinycode/shared/db";
+import type { ResolveCronSpecsDirOptions } from "@plinycode/shared/storage";
 import { DefaultToolNames } from "../../extensions/tools/constants";
 import { mergeRulesForSystemPrompt } from "../../runtime/safety/rules";
 import { captureScheduleRun } from "../../services/telemetry/core-events";

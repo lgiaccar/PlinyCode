@@ -1,5 +1,5 @@
 import { Anthropic } from "@anthropic-ai/sdk"
-import { TOOL_REJECTION_SUFFIX, USER_REJECTED_TOOL_REASON } from "@cline/shared"
+import { TOOL_REJECTION_SUFFIX, USER_REJECTED_TOOL_REASON } from "@plinycode/shared"
 import * as diff from "diff"
 import * as path from "path"
 import { Mode } from "@/shared/storage/types"

@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentToolContext } from "@cline/shared";
+import type { AgentToolContext } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { createShellExecutor } from "./bash";
 

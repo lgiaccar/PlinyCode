@@ -2,8 +2,8 @@
 export {};
 
 // Externalize third-party runtime deps plus the provider/runtime layer that
-// the Agent facade loads dynamically. `@cline/shared` stays bundled.
-const external = ["@cline/llms", "nanoid"];
+// the Agent facade loads dynamically. `@plinycode/shared` stays bundled.
+const external = ["@plinycode/llms", "nanoid"];
 const sourcemap = Bun.env.CLINE_SOURCEMAPS === "1" ? "linked" : "none";
 // minify: true keeps identifier mangling active even when sourcemaps are enabled.
 const minify = Bun.env.CLINE_SOURCEMAPS !== "1";

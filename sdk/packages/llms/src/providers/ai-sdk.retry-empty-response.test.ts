@@ -8,7 +8,7 @@ import type {
 	AgentToolDefinition,
 	GatewayProviderContext,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	createAnthropicProvider,

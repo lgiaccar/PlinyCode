@@ -3,7 +3,7 @@ import type {
 	HubCommandEnvelope,
 	HubEventEnvelope,
 	HubReplyEnvelope,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrowserWebSocketHubAdapter } from "./browser-websocket";
 import type { HubConnectionAuthority } from "./command-transport";

@@ -5,11 +5,11 @@ import type {
 	HubScheduleCreateInput,
 	HubScheduleUpdateInput,
 	ScheduleRecord,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	ONE_TIME_SCHEDULE_CRON_PATTERN,
 	ONE_TIME_SCHEDULE_RUN_AT_METADATA_KEY,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	type AgentScheduleServiceApi,

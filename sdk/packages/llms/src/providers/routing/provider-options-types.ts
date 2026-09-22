@@ -1,7 +1,7 @@
 import type {
 	GatewayProviderContext,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { ProviderOptionsPatch } from "./utils";
 
 export type AiSdkProviderOptionsTarget =

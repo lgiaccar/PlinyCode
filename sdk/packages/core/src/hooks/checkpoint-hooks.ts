@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { AgentHooks, BasicLogger, ITelemetryService } from "@cline/shared";
-import { resolveClineDataDir } from "@cline/shared/storage";
+import type { AgentHooks, BasicLogger, ITelemetryService } from "@plinycode/shared";
+import { resolveClineDataDir } from "@plinycode/shared/storage";
 import { countUserRunMessages } from "../session/user-run-messages";
 
 const execFile = promisify(execFileCallback);

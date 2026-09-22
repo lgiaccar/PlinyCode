@@ -1,7 +1,7 @@
 import type {
 	GatewayProviderFactory,
 	GatewayProviderRegistration,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	BUILTIN_PROVIDER_MANIFESTS_BY_ID,
 	BUILTIN_SPECS,

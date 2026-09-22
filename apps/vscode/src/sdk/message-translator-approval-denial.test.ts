@@ -1,5 +1,5 @@
-import type { CoreSessionEvent } from "@cline/core"
-import type { AgentEvent } from "@cline/shared"
+import type { CoreSessionEvent } from "@plinycode/core"
+import type { AgentEvent } from "@plinycode/shared"
 import { describe, expect, it } from "vitest"
 import { MessageTranslatorState, translateSessionEvent } from "./message-translator"
 import { DEFAULT_TOOL_APPROVAL_DENIAL_REASON, USER_MESSAGE_TOOL_APPROVAL_DENIAL_REASON } from "./tool-approval-denial"

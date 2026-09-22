@@ -1,7 +1,7 @@
 import type {
 	AgentExtensionMcpEnvValue,
 	AgentExtensionMcpServer,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { McpServerRegistration } from "./types";
 
 export interface PluginMcpServerResolution<TOwner> {

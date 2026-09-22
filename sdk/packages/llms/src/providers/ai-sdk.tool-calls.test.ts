@@ -3,7 +3,7 @@ import type {
 	AgentToolDefinition,
 	GatewayProviderContext,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { NoSuchToolError } from "ai";
 import { describe, expect, it } from "vitest";
 import {

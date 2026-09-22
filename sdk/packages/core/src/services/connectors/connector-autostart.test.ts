@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteConnectorStore } from "@cline/shared/db";
+import { SqliteConnectorStore } from "@plinycode/shared/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	disableConnectorAutostart,

@@ -11,15 +11,15 @@ import type {
 	AgendaTaskStatus,
 	AgendaTaskUpdateInput,
 	GatewayModelSelection,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	asOptionalString,
 	asString,
 	loadSqliteDb,
 	nowIso,
 	type SqliteDb,
-} from "@cline/shared/db";
-import { resolveTasksDbPath } from "@cline/shared/storage";
+} from "@plinycode/shared/db";
+import { resolveTasksDbPath } from "@plinycode/shared/storage";
 import { normalizeAgendaTaskLocation } from "../task-location";
 import { ensureAgendaTaskSchema } from "./task-schema";
 
