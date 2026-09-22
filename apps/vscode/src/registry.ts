@@ -1,13 +1,17 @@
 import { name, publisher, version } from "../package.json"
 import { HostProvider } from "./hosts/host-provider"
 
-const prefix = name === "claude-dev" ? "cline" : name
+// Command IDs always use the legacy "cline" prefix, which is what package.json
+// contributes verbatim. This prefix intentionally did NOT follow the
+// `claude-dev` -> `plinycode-dev` package rename: deriving it from `name`
+// desynchronises the registered commands from the `contributes.commands` /
+// `contributes.menus` entries, so title-bar buttons (Settings, History, ...)
+// end up wired to command IDs that are never registered.
+const prefix = "cline"
 
 /**
  * List of commands with the name of the extension they are registered under.
- * These should match the command IDs defined in package.json.
- * For Nightly build, the publish script has updated all the commands to use the extension name as prefix.
- * In production, all commands are registered under "cline" for consistency.
+ * These match the `cline.*` command IDs declared in package.json.
  */
 const ClineCommands = {
 	PlusButton: prefix + ".plusButtonClicked",

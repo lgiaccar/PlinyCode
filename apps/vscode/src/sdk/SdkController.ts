@@ -89,7 +89,7 @@ import { SdkSessionHistoryLoader } from "./sdk-session-history-loader"
 import { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
 import { SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
-import { SdkTaskHistory, sessionHistoryRecordToHistoryItem } from "./sdk-task-history"
+import { SdkTaskHistory, sessionHistoryRecordToHistoryItem, sessionHistoryRecordToTaskItemFields } from "./sdk-task-history"
 import { SdkTaskStartCoordinator } from "./sdk-task-start-coordinator"
 import { createVscodeSdkTelemetryHandle, type VscodeSdkTelemetryHandle } from "./sdk-telemetry"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
@@ -2091,11 +2091,7 @@ export class Controller {
 				tokensOut: metadataNumber(metadata, "tokensOut") ?? 0,
 				cacheWrites: metadataNumber(metadata, "cacheWrites") ?? 0,
 				cacheReads: metadataNumber(metadata, "cacheReads") ?? 0,
-				modelId: item.model || metadataString(metadata, "modelId") || "",
-				apiProvider: item.provider ?? "",
-				isLegacy:
-					metadataBoolean(metadata, "legacyTask") === true ||
-					metadataBoolean(metadata, "migratedFromLegacyTask") === true,
+				...sessionHistoryRecordToTaskItemFields(item),
 			}
 		})
 
@@ -2118,6 +2114,7 @@ export class Controller {
 					cacheReads: 0,
 					modelId: this.task.api?.getModel?.().id ?? "",
 					apiProvider: "",
+					workspaceRoot: await this.getWorkspaceRoot(),
 					isLegacy: false,
 				})
 			}
