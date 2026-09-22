@@ -652,16 +652,16 @@ function removeInstalledHostProvidedSdkDependencies(
 	packageRoot: string,
 	preservePackageName?: string,
 ): void {
-	const clineScopeDir = join(packageRoot, "node_modules", "@cline");
-	if (!existsSync(clineScopeDir)) {
+	const scopeDir = join(packageRoot, "node_modules", "@plinycode");
+	if (!existsSync(scopeDir)) {
 		return;
 	}
-	for (const entry of statSafeReadDir(clineScopeDir)) {
+	for (const entry of statSafeReadDir(scopeDir)) {
 		const packageName = `@plinycode/${entry.name}`;
 		if (packageName === preservePackageName) {
 			continue;
 		}
-		rmSync(join(clineScopeDir, entry.name), {
+		rmSync(join(scopeDir, entry.name), {
 			recursive: true,
 			force: true,
 		});
