@@ -862,7 +862,9 @@ describe("createShellExecutor", () => {
 		}
 	});
 
-	it("finishes abort cleanup before a descendant can outlive the command", async () => {
+	// Killing the whole process tree on abort relies on POSIX process groups.
+	// Windows has no equivalent, so a detached grandchild outlives the parent there.
+	it.skipIf(process.platform === "win32")("finishes abort cleanup before a descendant can outlive the command", async () => {
 		const tempDir = await mkdtemp(join(tmpdir(), "shell-abort-tree-"));
 		const readyPath = join(tempDir, "ready");
 		const descendantPath = join(tempDir, "descendant-survived");

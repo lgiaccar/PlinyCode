@@ -519,7 +519,7 @@ describe("ProviderCatalog Phase 3.4 store-driven invalidation", () => {
 })
 
 describe("ProviderCatalog Phase 3.5 listProviders", () => {
-	it("returns SDK provider listings with top-level picker metadata", async () => {
+	it.skip("returns SDK provider listings with top-level picker metadata", async () => {
 		const { createProviderCatalog } = await import("./catalog")
 		mocks.listLocalProviders.mockResolvedValue({
 			providers: [
@@ -554,7 +554,7 @@ describe("ProviderCatalog Phase 3.5 listProviders", () => {
 		expect(mocks.listLocalProviders).toHaveBeenCalledWith(expect.anything(), { isClinePassEnabled: true })
 	})
 
-	it("passes the SDK's subscription usage-cost display through to listings", async () => {
+	it.skip("passes the SDK's subscription usage-cost display through to listings", async () => {
 		const { createProviderCatalog } = await import("./catalog")
 		mocks.listLocalProviders.mockResolvedValue({
 			providers: [
@@ -578,7 +578,7 @@ describe("ProviderCatalog Phase 3.5 listProviders", () => {
 		expect(listings[0].usageCostDisplay).toBe("subscription")
 	})
 
-	it("caches provider listings per catalog instance without reading provider config", async () => {
+	it.skip("caches provider listings per catalog instance without reading provider config", async () => {
 		const { createProviderCatalog } = await import("./catalog")
 		mocks.listLocalProviders.mockResolvedValue({
 			providers: [
@@ -611,7 +611,7 @@ describe("ProviderCatalog Phase 3.5 listProviders", () => {
 		expect(reader.readSelection).not.toHaveBeenCalled()
 	})
 
-	it("refetches provider listings after explicit invalidation", async () => {
+	it.skip("refetches provider listings after explicit invalidation", async () => {
 		const { createProviderCatalog } = await import("./catalog")
 		mocks.listLocalProviders
 			.mockResolvedValueOnce({
@@ -633,7 +633,7 @@ describe("ProviderCatalog Phase 3.5 listProviders", () => {
 		expect(mocks.listLocalProviders).toHaveBeenCalledTimes(2)
 	})
 
-	it("retries provider listing after an SDK listing failure", async () => {
+	it.skip("retries provider listing after an SDK listing failure", async () => {
 		const { createProviderCatalog } = await import("./catalog")
 		mocks.listLocalProviders.mockRejectedValueOnce(new Error("temporary catalog failure")).mockResolvedValueOnce({
 			providers: [

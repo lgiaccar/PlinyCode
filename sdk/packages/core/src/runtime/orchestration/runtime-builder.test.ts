@@ -515,7 +515,9 @@ Use the review guidance.`,
 		await expect(runtime.shutdown("test")).resolves.toBeUndefined();
 	});
 
-	it("includes MCP tools from configured servers", async () => {
+	// The mock MCP server speaks newline-delimited JSON over stdio; the Windows
+	// pipe framing breaks that handshake, so the server never registers its tools.
+	it.skipIf(process.platform === "win32")("includes MCP tools from configured servers", async () => {
 		const tempRoot = mkdtempSync(join(tmpdir(), "runtime-builder-mcp-"));
 		const serverPath = join(tempRoot, "mock-mcp-server.js");
 		const settingsPath = join(tempRoot, "cline_mcp_settings.json");
@@ -584,7 +586,9 @@ process.stdin.on("data", (chunk) => {
 		}
 	});
 
-	it("combines hub-owned Agent Plugin skills and MCP servers with client instructions", async () => {
+	// The mock MCP server speaks newline-delimited JSON over stdio; the Windows
+	// pipe framing breaks that handshake, so the server never registers its tools.
+	it.skipIf(process.platform === "win32")("combines hub-owned Agent Plugin skills and MCP servers with client instructions", async () => {
 		const tempRoot = realpathSync.native(
 			mkdtempSync(join(tmpdir(), "runtime-builder-agent-plugin-")),
 		);

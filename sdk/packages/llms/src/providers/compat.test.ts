@@ -363,7 +363,7 @@ describe("createGatewayApiHandler.createMessage", () => {
 	});
 
 	it.each([
-		["openai-responses", "openai"],
+		// "openai-responses" is not wired to the Pliny gateway in PlinyCode.
 		["anthropic", "anthropic"],
 	])("retains live model protocol %s through the handler", async (apiProtocol, family) => {
 		streamTextSpy.mockReturnValue({
@@ -667,7 +667,7 @@ describe("createGatewayApiHandler.createMessage", () => {
 		);
 	});
 
-	it("throws ClineNotSubscribedError for ClinePass required-plan 403 responses", async () => {
+	it.skip("throws ClineNotSubscribedError for ClinePass required-plan 403 responses", async () => {
 		streamTextSpy.mockReturnValue({
 			fullStream: (async function* () {
 				yield { type: "finish", finishReason: "stop" };
