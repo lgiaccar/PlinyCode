@@ -31,6 +31,9 @@ service TaskService {
   rpc showTaskWithId(StringRequest) returns (TaskResponse);
   // Opens the on-disk session directory (messages json, logs) for the task with the given ID
   rpc exportTaskWithId(StringRequest) returns (Empty);
+  // Renders the task with the given ID as a Markdown document and writes it to a
+  // user-chosen path. Returns an empty path when the save dialog was cancelled.
+  rpc exportTaskToMarkdown(ExportTaskRequest) returns (ExportTaskResult);
   // Toggles the favorite status of a task
   rpc toggleTaskFavorite(TaskFavoriteRequest) returns (Empty);
   // Gets filtered task history
@@ -54,6 +57,24 @@ message NewTaskRequest {
   repeated string images = 3;
   repeated string files = 4;
   optional Settings task_settings = 5;
+}
+
+// Request message for exporting a task as a Markdown document
+message ExportTaskRequest {
+  Metadata metadata = 1;
+  // Task id to export. Empty falls back to the currently active task.
+  string task_id = 2;
+  // Include tool call output / file contents in fenced blocks. Default true.
+  optional bool include_tool_output = 3;
+  // Include assistant reasoning in collapsed <details> blocks. Default false.
+  optional bool include_reasoning = 4;
+}
+
+// Result of a Markdown export
+message ExportTaskResult {
+  // Absolute path of the written file, or empty when the user cancelled the
+  // save dialog (in which case nothing was written).
+  string path = 1;
 }
 
 // Request message for toggling task favorite status

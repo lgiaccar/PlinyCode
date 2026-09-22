@@ -26,6 +26,7 @@ const ClineCommands = {
 	Walkthrough: prefix + ".openWalkthrough",
 	GenerateCommit: prefix + ".generateGitCommitMessage",
 	OpenFreeAutoRules: prefix + ".openFreeAutoRules",
+	ExportTaskToMarkdown: prefix + ".exportTaskToMarkdown",
 	AbortCommit: prefix + ".abortGitCommitMessage",
 	// Jupyter Notebook commands
 	JupyterGenerateCell: prefix + ".jupyterGenerateCell",

@@ -1,5 +1,6 @@
 import { HistoryItem } from "@shared/HistoryItem"
 import { StringRequest } from "@shared/proto/cline/common"
+import { ExportTaskRequest } from "@shared/proto/cline/task"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import {
 	ArrowDownIcon,
@@ -9,6 +10,7 @@ import {
 	ChevronsDownUpIcon,
 	ChevronsUpDownIcon,
 	DownloadIcon,
+	FileTextIcon,
 	StarIcon,
 	TrashIcon,
 } from "lucide-react"
@@ -211,14 +213,28 @@ const HistoryViewItem = ({
 										<span className="items-center gap-2 flex text-description">
 											{formatSize(item.size)}
 											<Button
-												aria-label="Export"
+												aria-label="Export as Markdown"
+												className="m-0 p-0"
+												onClick={(e) => {
+													e.stopPropagation()
+													TaskServiceClient.exportTaskToMarkdown(
+														ExportTaskRequest.create({ taskId: item.id }),
+													).catch((err) => console.error("Failed to export task as markdown:", err))
+												}}
+												title="Export as Markdown"
+												variant="ghost">
+												<FileTextIcon />
+											</Button>
+											<Button
+												aria-label="Open Conversation Folder"
 												className="m-0 p-0"
 												onClick={(e) => {
 													e.stopPropagation()
 													TaskServiceClient.exportTaskWithId(
 														StringRequest.create({ value: item.id }),
-													).catch((err) => console.error("Failed to export task:", err))
+													).catch((err) => console.error("Failed to open task folder:", err))
 												}}
+												title="Open Conversation Folder"
 												variant="ghost">
 												<DownloadIcon />
 											</Button>

@@ -498,6 +498,24 @@ ${ctx.cellJson || "{}"}
 		}),
 	)
 
+	// Palette entry for the Markdown export. With no argument it exports the
+	// active task; the webview buttons pass the id of the task they render.
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.ExportTaskToMarkdown, async (taskId?: string) => {
+			const controller = (WebviewProvider.getVisibleInstance() ?? WebviewProvider.getInstance())?.controller
+			if (!controller) {
+				return
+			}
+			try {
+				await controller.exportTaskToMarkdown(taskId ?? "")
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`Could not export the conversation: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+		}),
+	)
+
 	// Register the generateGitCommitMessage command handler
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commands.GenerateCommit, async (scm) => {
