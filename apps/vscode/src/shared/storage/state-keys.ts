@@ -258,6 +258,12 @@ const API_HANDLER_SETTINGS_FIELDS = {
 
 const USER_SETTINGS_FIELDS = {
 	// Settings that are NOT part of ApiHandlerOptions
+	/**
+	 * Set once the stored Pliny model selection has been migrated to the
+	 * FreeAuto router. Guards a one-shot rewrite so a user who deliberately
+	 * picks a specific model afterwards is never pushed back to the router.
+	 */
+	plinyFreeAutoMigratedV1: { default: false as boolean },
 	plinycodeContextFoldersEnabled: { default: true as boolean },
 	plinycodeContextFolders: { default: [".github", ".vscode", ".devcontainer", ".cursor"] as string[] },
 	autoApprovalSettings: {

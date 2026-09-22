@@ -25,6 +25,8 @@ export type DelegatedAgentConnectionConfig = Pick<
 	| "baseUrl"
 	| "headers"
 	| "onAuthError"
+	| "agentModelFactory"
+	| "onRunError"
 	| "providerConfig"
 	| "knownModels"
 	| "thinking"
@@ -100,6 +102,8 @@ export function createDelegatedAgentConfigProvider(
 			baseUrl: runtimeConfig.baseUrl,
 			headers: runtimeConfig.headers,
 			onAuthError: runtimeConfig.onAuthError,
+			agentModelFactory: runtimeConfig.agentModelFactory,
+			onRunError: runtimeConfig.onRunError,
 			providerConfig: runtimeConfig.providerConfig,
 			knownModels: runtimeConfig.knownModels,
 			thinking: runtimeConfig.thinking,

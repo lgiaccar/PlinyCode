@@ -7,7 +7,7 @@
 // returned here. Both share the same provider/model/key/baseUrl resolution so
 // there is no second source of truth.
 
-import { type ApiHandler, createHandler, type ProviderConfig } from "@plinycode/llms"
+import { type ApiHandler, createHandler, type ProviderConfig, resolvePlinyConcreteModelId } from "@plinycode/llms"
 import type { ApiConfiguration } from "@shared/api"
 import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
@@ -57,7 +57,10 @@ export function buildSdkProviderConfig(
 	const providerId = (mode === "plan" ? configuration.planModeApiProvider : configuration.actModeApiProvider) ?? "pliny"
 
 	const apiKey = resolveApiKey(providerId, configuration)
-	const modelId = resolveModelId(providerId, mode, configuration)
+	// Standalone callers (commit message generation) talk to the gateway
+	// directly, so the virtual FreeAuto id — which only the agent loop knows how
+	// to route — must be mapped to a concrete model here.
+	const modelId = resolvePlinyConcreteModelId(resolveModelId(providerId, mode, configuration))
 	const baseUrl = resolveBaseUrl(providerId, configuration)
 
 	const reasoningEffort = mode === "plan" ? configuration.planModeReasoningEffort : configuration.actModeReasoningEffort

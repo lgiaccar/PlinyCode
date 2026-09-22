@@ -12,6 +12,7 @@
 
 import { z } from "zod";
 import type {
+	AgentModel,
 	AgentRuntimeHooks,
 	AgentTool,
 	ProviderErrorClass,
@@ -690,6 +691,51 @@ export const AgentResultSchema = z.object({
 /**
  * Configuration for creating an Agent
  */
+/**
+ * Builds the `AgentModel` for a run. Hosts use this to wrap or replace the
+ * model the runtime would otherwise construct from the connection fields —
+ * for example to route each call to a different concrete model and fail over
+ * between them. `createDefault` builds the model the runtime would have used,
+ * optionally overriding the connection's model or provider.
+ */
+export type AgentModelFactory = (context: {
+	config: AgentConfig;
+	createDefault: (overrides?: {
+		modelId?: string;
+		providerId?: string;
+	}) => AgentModel;
+}) => AgentModel;
+
+/** What a host decided to do about a failed run. */
+export type AgentRunErrorDecision =
+	| false
+	| {
+			retry: true;
+			/**
+			 * Hidden user message appended before the retry, e.g. telling the
+			 * next model to continue a reply that was cut off. Not shown in
+			 * user-facing transcripts.
+			 */
+			continuationPrompt?: string;
+	  };
+
+/**
+ * Called when a run ends in failure, before the failure is reported as
+ * terminal. Returning `{ retry: true }` re-runs the turn in place (continuing
+ * from the persisted partial trail rather than replaying it). Hosts use this to
+ * swap in a healthy model after an output-token cutoff, a stalled stream, or a
+ * transport death. Bounded by the runtime; `attempt` counts recovery attempts
+ * already made for this run and starts at 1.
+ */
+export type AgentRunErrorHandler = (context: {
+	error: string;
+	errorClass?: ProviderErrorClass;
+	attempt: number;
+	modelId: string;
+	/** Whether the failed attempt left assistant content in the transcript. */
+	hadAssistantContent: boolean;
+}) => Promise<AgentRunErrorDecision>;
+
 export interface AgentConfig {
 	/** Stable end-user identity used for provider and observability metadata. */
 	distinctId?: string;
@@ -724,6 +770,16 @@ export interface AgentConfig {
 	 * connection.
 	 */
 	onAuthError?: () => Promise<boolean>;
+	/**
+	 * Builds the `AgentModel` for each run. When omitted the runtime builds one
+	 * from the connection fields above.
+	 */
+	agentModelFactory?: AgentModelFactory;
+	/**
+	 * Consulted when a run fails, to recover it in place with a different model
+	 * instead of surfacing a terminal error.
+	 */
+	onRunError?: AgentRunErrorHandler;
 	/** Optional provider model catalog overrides */
 	knownModels?: Record<string, ModelInfo>;
 	/** Optional pre-resolved provider configuration (includes provider-specific fields like aws/gcp). */

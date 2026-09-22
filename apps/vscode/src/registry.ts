@@ -25,6 +25,7 @@ const ClineCommands = {
 	FocusChatInput: prefix + ".focusChatInput",
 	Walkthrough: prefix + ".openWalkthrough",
 	GenerateCommit: prefix + ".generateGitCommitMessage",
+	OpenFreeAutoRules: prefix + ".openFreeAutoRules",
 	AbortCommit: prefix + ".abortGitCommitMessage",
 	// Jupyter Notebook commands
 	JupyterGenerateCell: prefix + ".jupyterGenerateCell",

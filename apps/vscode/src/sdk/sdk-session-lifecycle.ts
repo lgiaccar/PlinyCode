@@ -12,6 +12,7 @@ import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTermin
 import { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import type { ActiveSession } from "./cline-session-factory"
+import { forgetSession } from "./router/router-health"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { buildToolPolicies } from "./sdk-tool-policies"
 import type { SdkSessionHost } from "./session-host"
@@ -105,6 +106,9 @@ export class SdkSessionLifecycle {
 		}
 
 		this.safeUnsubscribe(activeSession, reason)
+		// Drop the router's per-session state (call log, sticky model, failover
+		// budget). Model health is process-wide and deliberately survives.
+		forgetSession(activeSession.sessionId)
 		const stopPromise = this.trackSessionStop(activeSession.sdkHost, activeSession.sessionId, reason)
 		if (options.awaitStop) {
 			const timeoutMs = options.timeoutMs ?? 3000

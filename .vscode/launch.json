@@ -13,7 +13,7 @@
 				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
 				"--disable-workspace-trust",
 				"--disable-extension",
-				"saoudrizwan.claude-dev", // Avoid conflicts with installed Cline
+				"saoudrizwan.plinycode-dev", // Avoid conflicts with installed Cline
 				"--disable-extension",
 				"saoudrizwan.cline-nightly", // Avoid conflicts with installed Cline Nightly
 				"${workspaceFolder}/apps/vscode",
@@ -38,7 +38,7 @@
 				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
 				"--disable-workspace-trust",
 				"--disable-extension",
-				"saoudrizwan.claude-dev", // Avoid conflicts with installed Cline
+				"saoudrizwan.plinycode-dev", // Avoid conflicts with installed Cline
 				"--disable-extension",
 				"saoudrizwan.cline-nightly", // Avoid conflicts with installed Cline Nightly
 				"${workspaceFolder}/apps/vscode"
@@ -63,7 +63,7 @@
 				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
 				"--disable-workspace-trust",
 				"--disable-extension",
-				"saoudrizwan.claude-dev", // Avoid conflicts with installed Cline
+				"saoudrizwan.plinycode-dev", // Avoid conflicts with installed Cline
 				"--disable-extension",
 				"saoudrizwan.cline-nightly", // Avoid conflicts with installed Cline Nightly
 				"${workspaceFolder}/apps/vscode"
@@ -90,7 +90,7 @@
 				"--profile-temp",
 				"--sync=off",
 				"--disable-extension",
-				"saoudrizwan.claude-dev", // Avoid conflicts with installed Cline
+				"saoudrizwan.plinycode-dev", // Avoid conflicts with installed Cline
 				"--disable-extension",
 				"saoudrizwan.cline-nightly", // Avoid conflicts with installed Cline Nightly
 				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",

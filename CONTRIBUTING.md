@@ -49,7 +49,7 @@ Running processes do **not** hot-reload engine source changes — rebuild with `
 
 | Path                  | Contents                                                        |
 | --------------------- | --------------------------------------------------------------- |
-| `apps/vscode`         | The VS Code extension (`claude-dev`) and its webview UI         |
+| `apps/vscode`         | The VS Code extension (`plinycode-dev`) and its webview UI     |
 | `sdk/packages/core`   | Agent engine — tasks, sessions, auth, providers, hooks, runtime |
 | `sdk/packages/shared` | Shared types and utilities                                      |
 | `sdk/packages/llms`   | Model catalog and provider gateway                              |
@@ -62,14 +62,14 @@ Running processes do **not** hot-reload engine source changes — rebuild with `
 bun run types                  # typecheck every package
 bun run lint                   # biome lint
 bun run format                 # biome format
-bun -F claude-dev test:unit    # unit tests, no VS Code host required
+bun -F plinycode-dev test:unit    # unit tests, no VS Code host required
 ```
 
 Heavier suites that drive a real extension host:
 
 ```bash
-bun -F claude-dev test:integration   # @vscode/test-electron
-bun -F claude-dev test:e2e           # Playwright
+bun -F plinycode-dev test:integration   # @vscode/test-electron
+bun -F plinycode-dev test:e2e           # Playwright
 ```
 
 ## Pull requests

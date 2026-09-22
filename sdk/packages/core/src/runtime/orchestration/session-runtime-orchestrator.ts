@@ -48,6 +48,7 @@ import {
 	mergeModelOptions,
 	modelSupportsImageInput,
 	modelSupportsToolCalling,
+	type ProviderErrorClass,
 	type ToolCallRecord,
 	usesImageGenerationOperation,
 } from "@plinycode/shared";
@@ -302,6 +303,13 @@ export type ConnectionOverrides = ConnectionUpdate;
  * `run` / `continue` repeatedly. The class matches the subset of
  * runtime-facing session surface.
  */
+/**
+ * How many times a failed run may be recovered in place (auth refresh or a
+ * host-chosen model swap) before the failure is surfaced. Each attempt is a
+ * full additional run, so this is deliberately small.
+ */
+const MAX_RUN_RECOVERY_ATTEMPTS = 3;
+
 export class SessionRuntime {
 	private config: AgentConfig;
 	private readonly agentId: string;
@@ -354,6 +362,17 @@ export class SessionRuntime {
 	private activeRuntime: AgentRuntime | null = null;
 	/** Promise returned from the current run so shutdown can await its drain. */
 	private activeRunPromise: Promise<AgentResult> | null = null;
+	/**
+	 * Error class of the most recent `run-failed` runtime event, captured while
+	 * the classification is still structured (`AgentResult.text` is flattened).
+	 */
+	private lastRunFailureClass: ProviderErrorClass | undefined;
+	/**
+	 * A `run-failed` event held back from listeners while a recovery decision is
+	 * pending. Replayed verbatim when the run is not recovered, so a genuinely
+	 * terminal failure reaches the host exactly as it does without recovery.
+	 */
+	private deferredRunFailure: AgentRuntimeEvent | undefined;
 	/** Per-run `Agent → AgentEvent` adapter; `reset()` each run. */
 	private readonly eventAdapter = new RuntimeEventAdapter();
 	/** Session-shutdown gate — rejects late runs. */
@@ -734,7 +753,7 @@ export class SessionRuntime {
 		isContinue: boolean;
 	}): Promise<AgentResult> {
 		let activePromise!: Promise<AgentResult>;
-		activePromise = this.executeRunWithAuthRetry(input).finally(() => {
+		activePromise = this.executeRunWithRecovery(input).finally(() => {
 			if (this.activeRunPromise === activePromise) {
 				this.activeRunPromise = null;
 			}
@@ -744,34 +763,142 @@ export class SessionRuntime {
 	}
 
 	/**
-	 * Retry a run once when it failed with an auth-like error and the host
-	 * refreshed credentials via `config.onAuthError`. The failed attempt's
-	 * trail is already persisted to the conversation store, so the retry
-	 * continues from where the stream died instead of replaying the run.
+	 * Run a turn, recovering failures in place rather than surfacing them.
+	 *
+	 * Two recovery paths, in order of precedence:
+	 *
+	 * 1. `config.onAuthError` — an auth-like failure (e.g. an OAuth token that
+	 *    expired mid-run). The host refreshes credentials and the run is retried
+	 *    once. Unchanged from the original auth-only behavior.
+	 * 2. `config.onRunError` — any other failure the host can recover by
+	 *    changing the connection, typically by routing the next attempt to a
+	 *    different model (an output-token cutoff, a stalled stream, a transport
+	 *    death). The host may supply a hidden continuation prompt.
+	 *
+	 * Both continue from the failed attempt's persisted trail (`isContinue`)
+	 * rather than replaying the run, because the partial assistant message was
+	 * already written to the conversation store — and its deltas were already
+	 * streamed to the UI, where they cannot be retracted.
 	 */
-	private async executeRunWithAuthRetry(input: {
+	private async executeRunWithRecovery(input: {
 		userMessage?: string;
 		userImages?: string[];
 		userFiles?: string[];
 		isContinue: boolean;
 	}): Promise<AgentResult> {
-		const result = await this.executeRunInternal(input);
-		if (
-			result.finishReason !== "error" ||
-			!this.config.onAuthError ||
-			!isLikelyAuthError(result.text)
-		) {
-			return result;
+		let result = await this.executeRunInternal(input);
+
+		for (let attempt = 1; attempt <= MAX_RUN_RECOVERY_ATTEMPTS; attempt += 1) {
+			if (result.finishReason !== "error" || this.shutdownCalled) {
+				break;
+			}
+			// An aborted run is the user's decision, never something to recover.
+			// (`finishReason` is already narrowed to "error" above; a cancelled
+			// run surfaces as an abort request rather than an error finish.)
+			if (this.abortRequested) {
+				break;
+			}
+
+			const errorClass = this.lastRunFailureClass;
+			const recovered = await this.attemptRunRecovery({
+				result,
+				errorClass,
+				attempt,
+			});
+			if (!recovered) {
+				break;
+			}
+
+			this.discardDeferredRunFailure();
+			result = await this.executeRunInternal({ isContinue: true });
+			if (recovered.kind === "auth") {
+				captureAuthRunRetry(this.telemetry, this.config.providerId, {
+					recovered: result.finishReason !== "error",
+				});
+			}
 		}
-		const refreshed = await this.config.onAuthError().catch(() => false);
-		if (!refreshed) {
-			return result;
+
+		// Whatever the outcome, a failure that was never recovered must still be
+		// reported to listeners exactly as it would be without recovery.
+		if (result.finishReason === "error") {
+			this.replayDeferredRunFailure();
+		} else {
+			this.discardDeferredRunFailure();
 		}
-		const retryResult = await this.executeRunInternal({ isContinue: true });
-		captureAuthRunRetry(this.telemetry, this.config.providerId, {
-			recovered: retryResult.finishReason !== "error",
-		});
-		return retryResult;
+		return result;
+	}
+
+	/**
+	 * Ask the host whether a failed run can be recovered, and prepare the
+	 * conversation for the retry. Returns `undefined` when the run must stay
+	 * failed.
+	 */
+	private async attemptRunRecovery(context: {
+		result: AgentResult;
+		errorClass: ProviderErrorClass | undefined;
+		attempt: number;
+	}): Promise<{ kind: "auth" | "run" } | undefined> {
+		const { result, errorClass, attempt } = context;
+
+		if (this.config.onAuthError && isLikelyAuthError(result.text)) {
+			const refreshed = await this.config.onAuthError().catch(() => false);
+			return refreshed ? { kind: "auth" } : undefined;
+		}
+
+		if (!this.config.onRunError) {
+			return undefined;
+		}
+
+		const decision = await this.config
+			.onRunError({
+				error: result.text,
+				errorClass,
+				attempt,
+				modelId: this.config.modelId,
+				hadAssistantContent: this.hasTrailingAssistantContent(),
+			})
+			.catch((error) => {
+				this.logger?.error?.("onRunError hook failed", {
+					agentId: this.agentId,
+					error,
+				});
+				return false as const;
+			});
+
+		if (!decision || decision.retry !== true) {
+			return undefined;
+		}
+
+		const continuationPrompt = decision.continuationPrompt?.trim();
+		if (continuationPrompt) {
+			// `displayRole: "system"` keeps the nudge out of user-facing
+			// transcripts (live and replayed) while the model still sees it —
+			// the same treatment compaction summaries and hook context get.
+			this.conversation.appendMessage({
+				role: "user",
+				content: [{ type: "text", text: continuationPrompt }],
+				metadata: { userRunSpan: 0, displayRole: "system" },
+			});
+		}
+		return { kind: "run" };
+	}
+
+	/**
+	 * Whether the persisted trail ends with assistant content, i.e. the failed
+	 * attempt produced output a retry should continue from rather than repeat.
+	 */
+	private hasTrailingAssistantContent(): boolean {
+		const messages = this.conversation.getMessages();
+		for (let index = messages.length - 1; index >= 0; index -= 1) {
+			const message = messages[index];
+			if (message?.role === "assistant") {
+				return message.content.length > 0;
+			}
+			if (message?.role === "user") {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	private async executeRunInternal(input: {
@@ -830,12 +957,34 @@ export class SessionRuntime {
 			this.conversation.appendMessage({ role: "user", content });
 		}
 
-		// Build the AgentRuntime for this turn.
-		const agentModel = createAgentModelFromConfig(
-			this.config,
-			this.logger,
-			this.telemetry,
-		);
+		// Build the AgentRuntime for this turn. A host-supplied
+		// `agentModelFactory` can wrap or replace the model — e.g. to route each
+		// call to a different concrete model and fail over between them. It
+		// receives `createDefault` so it can build the very model this would
+		// otherwise construct, optionally overriding the connection's model.
+		const createDefaultAgentModel = (overrides?: {
+			modelId?: string;
+			providerId?: string;
+		}) =>
+			createAgentModelFromConfig(
+				overrides?.modelId || overrides?.providerId
+					? {
+							...this.config,
+							...(overrides.modelId ? { modelId: overrides.modelId } : {}),
+							...(overrides.providerId
+								? { providerId: overrides.providerId }
+								: {}),
+						}
+					: this.config,
+				this.logger,
+				this.telemetry,
+			);
+		const agentModel = this.config.agentModelFactory
+			? this.config.agentModelFactory({
+					config: this.config,
+					createDefault: createDefaultAgentModel,
+				})
+			: createDefaultAgentModel();
 		// Merge extension-contributed tools with the config-declared
 		// tools for this turn. Extensions register tools via
 		// `api.registerTool` during `setup()` — parity with legacy
@@ -1261,9 +1410,41 @@ export class SessionRuntime {
 			default:
 				break;
 		}
+		// A failed run may still be recovered in place by `onRunError` (and the
+		// existing auth retry). Reporting the failure now would put the host's UI
+		// into its terminal error state even when the very next attempt succeeds,
+		// so hold the event until the recovery decision is made. It is replayed
+		// by `replayDeferredRunFailure` when the run is not recovered.
+		if (event.type === "run-failed" && this.hasRunRecovery()) {
+			this.lastRunFailureClass = event.errorClass;
+			this.deferredRunFailure = event;
+			return;
+		}
 		for (const legacy of this.eventAdapter.translate(event)) {
 			this.emitLegacyEvent(legacy);
 		}
+	}
+
+	/** Whether any hook could recover a failed run in place. */
+	private hasRunRecovery(): boolean {
+		return Boolean(this.config.onRunError || this.config.onAuthError);
+	}
+
+	/** Emit a held-back `run-failed` event, if any. */
+	private replayDeferredRunFailure(): void {
+		const deferred = this.deferredRunFailure;
+		this.deferredRunFailure = undefined;
+		if (!deferred) {
+			return;
+		}
+		for (const legacy of this.eventAdapter.translate(deferred)) {
+			this.emitLegacyEvent(legacy);
+		}
+	}
+
+	/** Drop a held-back `run-failed` event because the run was recovered. */
+	private discardDeferredRunFailure(): void {
+		this.deferredRunFailure = undefined;
 	}
 
 	private syncConversationFromRuntimeMessage(

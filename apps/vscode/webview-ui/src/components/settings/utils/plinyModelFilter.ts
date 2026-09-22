@@ -21,22 +21,37 @@ import { useEffect, useState } from "react"
 
 const PLINY_UNLOCK_PAID_STORAGE_KEY = "plinyCode.unlockPaidModels"
 
+/** The virtual FreeAuto router id (mirrors `@plinycode/llms`). */
+export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto"
+
 /**
  * Default model to surface in the picker when paid models are locked and no
- * model has been committed yet. `snps-provider/qwen3.5-397b-fp8` is the
- * self-hosted model Kilo Code ships as its default (220k context, verified
- * tool-call-capable) — a safe, cost-free starting point.
+ * model has been committed yet. FreeAuto routes across the free self-hosted
+ * pool and fails over automatically, so it is the safest cost-free start.
  */
-export const PLINY_FREE_DEFAULT_MODEL_ID = "snps-provider/qwen3.5-397b-fp8"
+export const PLINY_FREE_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
 
 /** True for free self-hosted Pliny models (ids starting with `snps-provider`). */
 export function isPlinySelfHostedModelId(modelId: string): boolean {
 	return modelId.startsWith("snps-provider")
 }
 
-/** True for paid/hosted Pliny models (everything that is not self-hosted). */
+/** True for the virtual router id. */
+export function isPlinyFreeAutoModelId(modelId: string): boolean {
+	return modelId === PLINY_FREE_AUTO_MODEL_ID
+}
+
+/**
+ * True for anything that costs nothing to run: the free self-hosted models and
+ * the router, which only ever delegates to them.
+ */
+export function isPlinyFreeModelId(modelId: string): boolean {
+	return isPlinyFreeAutoModelId(modelId) || isPlinySelfHostedModelId(modelId)
+}
+
+/** True for paid/hosted Pliny models (everything that is not free). */
 export function isPlinyPaidModel(modelId: string): boolean {
-	return !isPlinySelfHostedModelId(modelId)
+	return !isPlinyFreeModelId(modelId)
 }
 
 // --- persisted toggle store (module-level pub/sub) ------------------------
@@ -147,17 +162,14 @@ export function filterPlinyModels(
 
 	const filtered: Record<string, ModelInfo> = {}
 	for (const [id, info] of Object.entries(models)) {
-		if (isPlinySelfHostedModelId(id)) {
+		if (isPlinyFreeModelId(id)) {
 			filtered[id] = info
 		}
 	}
 
 	let nextDefault = defaultModelId
 	if (!nextDefault || isPlinyPaidModel(nextDefault) || !(nextDefault in filtered)) {
-		nextDefault =
-			PLINY_FREE_DEFAULT_MODEL_ID in filtered
-				? PLINY_FREE_DEFAULT_MODEL_ID
-				: (Object.keys(filtered)[0] ?? "")
+		nextDefault = PLINY_FREE_DEFAULT_MODEL_ID in filtered ? PLINY_FREE_DEFAULT_MODEL_ID : (Object.keys(filtered)[0] ?? "")
 	}
 
 	return { models: filtered, defaultModelId: nextDefault }

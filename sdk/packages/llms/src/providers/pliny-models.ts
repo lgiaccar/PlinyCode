@@ -2,7 +2,23 @@ import type { ModelCapability, ModelInfo } from "../catalog/types";
 import catalog from "./data/pliny-models.json";
 
 export const PLINY_BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL;
-export const PLINY_DEFAULT_MODEL_ID = "snps-provider/kimi-k2.6";
+
+/**
+ * Virtual "FreeAuto" router model. It is never sent to the gateway: the host
+ * intercepts it (see the extension's `agentModelFactory`) and delegates each
+ * call to a concrete free model chosen from the user's rules file. It exists in
+ * the catalog so the picker can show it and so context/compaction budgets have
+ * a `ModelInfo` to read.
+ */
+export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto";
+
+/**
+ * Concrete model used whenever the virtual router id reaches a code path that
+ * must talk to the gateway directly (commit messages, compaction summaries).
+ */
+export const PLINY_FREE_AUTO_FALLBACK_MODEL_ID = "snps-provider/kimi-k2.6";
+
+export const PLINY_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID;
 export const PLINY_DEFAULT_HEADERS = catalog.headers as Readonly<
 	Record<string, string>
 >;
@@ -73,12 +89,87 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 	};
 }
 
+/** Prefix shared by every free, self-hosted Pliny pool. */
+const PLINY_SELF_HOSTED_PREFIX = "snps-provider";
+
+/** True for free self-hosted Pliny model ids (all `snps-provider*` pools). */
+export function isPlinySelfHostedModelId(modelId: string): boolean {
+	return modelId.startsWith(PLINY_SELF_HOSTED_PREFIX);
+}
+
+/** True for the virtual router id. */
+export function isPlinyFreeAutoModelId(modelId: string): boolean {
+	return modelId === PLINY_FREE_AUTO_MODEL_ID;
+}
+
+/**
+ * True for anything that costs nothing to run: the free self-hosted models and
+ * the router, which only ever delegates to them.
+ */
+export function isPlinyFreeModelId(modelId: string): boolean {
+	return isPlinyFreeAutoModelId(modelId) || isPlinySelfHostedModelId(modelId);
+}
+
+/**
+ * Map a model id onto one the gateway can actually resolve. Only the virtual
+ * router id is rewritten; every other id is returned unchanged.
+ */
+export function resolvePlinyConcreteModelId(
+	modelId: string | undefined,
+	fallbackModelId: string = PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
+): string {
+	return modelId && isPlinyFreeAutoModelId(modelId)
+		? fallbackModelId
+		: (modelId ?? fallbackModelId);
+}
+
+/**
+ * The free pool, ordered as the catalog lists it (largest context first within
+ * each tier). Only tool-call-capable self-hosted entries are eligible; the
+ * catalog's `noToolCall` / `knownBroken` ids never appear here because they are
+ * not listed under `selfHosted`.
+ */
+export function plinyFreePoolIds(): string[] {
+	return (catalog.selfHosted as PlinyCatalogEntry[])
+		.filter((entry) => entry.tool_call)
+		.map((entry) => entry.id);
+}
+
+/**
+ * `ModelInfo` for the virtual router. The context window is deliberately the
+ * 256k tier rather than GLM-5.2's 512k: it is the window a majority of the pool
+ * can honor, so compaction budgets stay valid whichever model a call lands on,
+ * while the policy can still route a genuinely huge request to GLM-5.2.
+ */
+function buildFreeAutoModelInfo(): ModelInfo {
+	return {
+		id: PLINY_FREE_AUTO_MODEL_ID,
+		name: "FreeAuto (router)",
+		description:
+			"Routes each call to the best free self-hosted Pliny model and fails over automatically",
+		contextWindow: 256_000,
+		maxInputTokens: 256_000,
+		maxTokens: 32_768,
+		capabilities: ["streaming", "tools"],
+		family: "pliny-router",
+		metadata: {
+			provider: "pliny",
+			pool: null,
+			selfHosted: true,
+			router: true,
+		},
+	};
+}
+
 /**
  * Static Pliny catalog from live probes (`research/pliny-models.json`).
  * Never derive the picker from the gateway `/models` endpoint.
  */
 export function buildPlinyModels(): Record<string, ModelInfo> {
 	const models: Record<string, ModelInfo> = {};
+
+	// First so the router heads the picker list.
+	models[PLINY_FREE_AUTO_MODEL_ID] = buildFreeAutoModelInfo();
 
 	for (const entry of catalog.selfHosted as PlinyCatalogEntry[]) {
 		if (!entry.tool_call) {

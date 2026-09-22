@@ -1,9 +1,11 @@
+import { PLINY_FREE_AUTO_RULES_URI } from "@shared/pliny"
+import { StringRequest } from "@shared/proto/cline/common"
 import { UpdateSettingsRequest } from "@shared/proto/cline/state"
 import { Mode } from "@shared/storage/types"
-import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
+import { VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import { useState } from "react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
-import { StateServiceClient } from "@/services/grpc-client"
+import { FileServiceClient, StateServiceClient } from "@/services/grpc-client"
 import { TabButton } from "../../mcp/configuration/McpConfigurationView"
 import ApiOptions from "../ApiOptions"
 import Section from "../Section"
@@ -60,19 +62,37 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 					<ApiOptions currentMode={mode} initialModelTab={initialModelTab} showModelOptions={true} />
 				)}
 
-			<div className="mb-[5px]">
-				<VSCodeCheckbox
-					checked={unlockPlinyPaid}
-					className="mb-[5px]"
-					onChange={(e: any) => setUnlockPlinyPaid(e.target.checked === true)}>
-					Unlock Pliny paid models
-				</VSCodeCheckbox>
-				<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
-					Self-hosted models (<code>snps-provider</code>) are free and always shown. Enable this to also
-					list paid hosted models (Bedrock, Azure, GCP, Vertex) in the model picker.
-				</p>
-			</div>
+				<div className="mb-[5px]">
+					<VSCodeCheckbox
+						checked={unlockPlinyPaid}
+						className="mb-[5px]"
+						onChange={(e: any) => setUnlockPlinyPaid(e.target.checked === true)}>
+						Unlock Pliny paid models
+					</VSCodeCheckbox>
+					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
+						Self-hosted models (<code>snps-provider</code>) are free and always shown. Enable this to also list paid
+						hosted models (Bedrock, Azure, GCP, Vertex) in the model picker.
+					</p>
+				</div>
 
+				<div className="mb-[5px]">
+					<label className="block font-medium mb-[5px]">FreeAuto routing rules</label>
+					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
+						<code>FreeAuto</code> picks a free model for each request and switches to a backup when one fails. Edit
+						the rules file to change which model is used when; it takes effect on the next request, with no restart.{" "}
+						<VSCodeLink
+							className="inline text-inherit"
+							href="#"
+							onClick={(e: React.MouseEvent) => {
+								e.preventDefault()
+								FileServiceClient.openFile(StringRequest.create({ value: PLINY_FREE_AUTO_RULES_URI })).catch(
+									(err) => console.error("Failed to open FreeAuto rules file:", err),
+								)
+							}}>
+							Open rules file
+						</VSCodeLink>
+					</p>
+				</div>
 
 				<div className="mb-[5px]">
 					<VSCodeCheckbox

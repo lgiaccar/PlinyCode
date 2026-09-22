@@ -51,6 +51,7 @@ import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { ExtensionRegistryInfo } from "./registry"
 import { AuthService, LogoutReason } from "./sdk/auth-service"
+import { globalRulesPath, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { telemetryService } from "./services/telemetry"
 import type { RolloutBundleActivation } from "./services/telemetry/rollout-metadata"
 import { LG_TASK_URI_PATH, SharedUriHandler, TASK_URI_PATH } from "./services/uri/SharedUriHandler"
@@ -145,6 +146,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand(commands.HistoryButton, () => sendHistoryButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.AccountButton, () => sendAccountButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.WorktreesButton, () => sendWorktreesButtonClickedEvent()))
+
+	// FreeAuto: make sure the routing rules file exists so the command below
+	// always has something to open, then let the user edit it.
+	void initialiseDefaultRulesFile().catch(() => undefined)
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.OpenFreeAutoRules, async () => {
+			const rulesPath = (await initialiseDefaultRulesFile()) ?? globalRulesPath()
+			try {
+				const document = await vscode.workspace.openTextDocument(rulesPath)
+				await vscode.window.showTextDocument(document)
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`Could not open the FreeAuto rules file at ${rulesPath}: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+		}),
+	)
 
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
 

@@ -9,7 +9,13 @@
 
 param(
     [string]$Workspace = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$Environment = $(if ($env:CLINE_ENVIRONMENT) { $env:CLINE_ENVIRONMENT } else { "production" })
+    [string]$Environment = $(if ($env:CLINE_ENVIRONMENT) { $env:CLINE_ENVIRONMENT } else { "production" }),
+    # Editor CLI to launch the Extension Development Host with. "code" for VS
+    # Code, "cursor" for Cursor; both accept the same flags.
+    [string]$Editor = "code",
+    # Folder to open in the dev host. Defaults to the repo root so the extension
+    # has a real project to work in.
+    [string]$OpenFolder = (Resolve-Path "$PSScriptRoot......").Path
 )
 
 $ErrorActionPreference = "Stop"
@@ -73,12 +79,18 @@ while (-not (Test-Path $extensionJs)) {
     Start-Sleep -Milliseconds 500
 }
 
-Write-Host "Launching Extension Host..."
-code --extensionDevelopmentPath="$Workspace" `
+Write-Host "Launching Extension Host with '$Editor' on $OpenFolder ..."
+# Any installed build of this extension would double-activate against the dev
+# one, so disable the published ids as well as the upstream Cline ones.
+& $Editor --extensionDevelopmentPath="$Workspace" `
     --disable-workspace-trust `
     --disable-extension saoudrizwan.claude-dev `
     --disable-extension saoudrizwan.cline-nightly `
-    "$Workspace"
+    --disable-extension synopsys-plinycode.plinycode-dev `
+    "$OpenFolder"
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "'$Editor' exited with code $LASTEXITCODE. Is its CLI on PATH? (VS Code: 'code', Cursor: 'cursor')"
+}
 Write-Host "Extension Host launched."
 
 Write-Host ""
