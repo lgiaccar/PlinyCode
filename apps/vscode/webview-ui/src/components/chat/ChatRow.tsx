@@ -34,7 +34,7 @@ import {
 } from "lucide-react"
 import { MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSize } from "react-use"
-import { canRestoreWorkspaceFromMessage } from "@/components/chat/chat-view/utils/messageUtils"
+import { canRestoreWorkspaceFromMessage, getRestoreWorkspaceDisabledReason } from "@/components/chat/chat-view/utils/messageUtils"
 import { OptionsButtons } from "@/components/chat/OptionsButtons"
 import { WithCopyButton } from "@/components/common/CopyButton"
 import Thumbnails from "@/components/common/Thumbnails"
@@ -909,6 +909,7 @@ export const ChatRowContent = memo(
 								files={message.files}
 								images={message.images}
 								messageTs={message.ts}
+								restoreWorkspaceDisabledReason={getRestoreWorkspaceDisabledReason(clineMessages, message.ts)}
 								sendMessageFromChatRow={sendMessageFromChatRow}
 								text={message.text}
 							/>

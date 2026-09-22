@@ -231,6 +231,7 @@ export class Controller {
 	private backgroundCommandTaskId?: string
 	private pendingClineAuthRetryPrompt?: string
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
+	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
 
 	private latestCheckpointComparisonCache?: {
 		sessionId: string
@@ -1601,6 +1602,9 @@ export class Controller {
 			.filter((message) => message.type === "say" && (message.say === "task" || message.say === "user_feedback")).length
 		const canRestoreWorkspace = getCheckpointRunCountForMessage(clineMessages, targetIndex) !== undefined
 		const sourceSessionId = activeSession?.sessionId ?? currentTask.taskId
+		if (activeSession?.isRunning) {
+			await this.cancelTask()
+		}
 		let sdkMessages: SdkUserMessage[]
 		let tempHost: VscodeSessionHost | undefined
 		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createRemoteConfigAwareSessionHost())
@@ -1653,22 +1657,26 @@ export class Controller {
 			}
 
 			if (input.restoreWorkspace) {
-				if (activeSession?.isRunning) {
-					throw new Error("Wait for the current run to finish before restoring workspace changes")
-				}
 				if (!canRestoreWorkspace || checkpointRunCount === undefined) {
-					throw new Error("Workspace restore is only available for messages that started an agent run")
+					throw new Error(
+						"PlinyCode could not restore files for this message. Use a git workspace and edit a message that started an agent run with a checkpoint.",
+					)
 				}
-				await sessionHost.restore({
-					sessionId: sourceSessionId,
-					checkpointRunCount,
-					cwd,
-					restore: {
-						messages: false,
-						workspace: true,
-						omitCheckpointMessageFromSession: true,
-					},
-				})
+				try {
+					await sessionHost.restore({
+						sessionId: sourceSessionId,
+						checkpointRunCount,
+						cwd,
+						restore: {
+							messages: false,
+							workspace: true,
+							omitCheckpointMessageFromSession: true,
+						},
+					})
+				} catch (error) {
+					const detail = error instanceof Error ? error.message : String(error)
+					throw new Error(`PlinyCode could not restore workspace files: ${detail}`)
+				}
 			}
 
 			// The edit supersedes the old session — settle any pending tool
@@ -1691,15 +1699,23 @@ export class Controller {
 			this.task = task
 
 			const newHistoryItem = createHistoryItemFromSession(startResult.sessionId, historyTitle, config.modelId, cwd)
+			if (sourceSessionId !== startResult.sessionId) {
+				try {
+					await this.taskHistory.deleteTaskFromState(sourceSessionId)
+				} catch (error) {
+					Logger.warn(`[SdkController] Failed to remove superseded session ${sourceSessionId} from history`, error)
+				}
+			}
 			await this.taskHistory.updateTaskHistoryItem(newHistoryItem)
 
 			const visibleMessages = clineMessages.slice(0, targetIndex)
 			if (visibleMessages.length > 0) {
 				task.messageStateHandler.addMessages(visibleMessages)
 			}
+			const editedMessageTs = Date.now()
 			task.messageStateHandler.addMessages([
 				{
-					ts: Date.now(),
+					ts: editedMessageTs,
 					type: "say",
 					say: userOrdinal === 1 ? "task" : "user_feedback",
 					text: editedText,
@@ -1708,7 +1724,16 @@ export class Controller {
 					partial: false,
 				},
 			])
+			this.editMessageRestartFocus = {
+				messageTs: editedMessageTs,
+				sessionId: startResult.sessionId,
+			}
 			await this.postStateToWebview()
+
+			const taskUlid = task.ulid ?? currentTask.ulid
+			if (taskUlid) {
+				telemetryService.captureEditMessageRestart(taskUlid, input.restoreWorkspace ? "chat_and_workspace" : "chat_only")
+			}
 
 			this.sessions.fireAndForgetSend(sdkHost, startResult.sessionId, resolvedPrompt, input.images, input.files)
 		} finally {
@@ -1815,7 +1840,22 @@ export class Controller {
 	 * no checkpoint exists (e.g. the workspace is not a git repository).
 	 * Throws when there is no task at all.
 	 */
-	private async loadLatestCheckpointComparison(): Promise<
+	private resolveCheckpointRunCountForSummary(input?: { checkpointRunCount?: number; messageTs?: number }): number | undefined {
+		if (input?.checkpointRunCount !== undefined && input.checkpointRunCount > 0) {
+			return input.checkpointRunCount
+		}
+		if (input?.messageTs !== undefined && input.messageTs > 0) {
+			const clineMessages = this.task?.messageStateHandler.getClineMessages() ?? []
+			const targetIndex = clineMessages.findIndex((message) => message.ts === input.messageTs)
+			if (targetIndex === -1) {
+				return undefined
+			}
+			return getCheckpointRunCountForMessage(clineMessages, targetIndex)
+		}
+		return undefined
+	}
+
+	private async loadCheckpointComparison(checkpointRunCount?: number): Promise<
 		| {
 				sessionId: string
 				checkpointRunCount: number
@@ -1840,28 +1880,32 @@ export class Controller {
 			}
 
 			const sessionRecord = await sessionHost.get(sessionId)
-			const latestCheckpoint = readSessionCheckpointHistory(sessionRecord).reduce(
-				(latest, entry) => (!latest || entry.runCount > latest.runCount ? entry : latest),
-				undefined as ReturnType<typeof readSessionCheckpointHistory>[number] | undefined,
-			)
-			if (!latestCheckpoint) {
-				return undefined
+			let resolvedRunCount = checkpointRunCount
+			if (resolvedRunCount === undefined) {
+				const latestCheckpoint = readSessionCheckpointHistory(sessionRecord).reduce(
+					(latest, entry) => (!latest || entry.runCount > latest.runCount ? entry : latest),
+					undefined as ReturnType<typeof readSessionCheckpointHistory>[number] | undefined,
+				)
+				if (!latestCheckpoint) {
+					return undefined
+				}
+				resolvedRunCount = latestCheckpoint.runCount
 			}
 
 			const cached = this.latestCheckpointComparisonCache
-			if (cached?.sessionId === sessionId && cached.checkpointRunCount === latestCheckpoint.runCount) {
+			if (cached?.sessionId === sessionId && cached.checkpointRunCount === resolvedRunCount) {
 				return cached
 			}
 
 			const cwd = sessionRecord?.cwd?.trim() || sessionRecord?.workspaceRoot?.trim() || (await this.getWorkspaceRoot())
 			const { diffs } = await sessionHost.compareCheckpoint({
 				sessionId,
-				checkpointRunCount: latestCheckpoint.runCount,
+				checkpointRunCount: resolvedRunCount,
 				cwd,
 			})
 			const result = {
 				sessionId,
-				checkpointRunCount: latestCheckpoint.runCount,
+				checkpointRunCount: resolvedRunCount,
 				cwd,
 				diffs,
 			}
@@ -1872,34 +1916,75 @@ export class Controller {
 		}
 	}
 
+	private async loadLatestCheckpointComparison(): Promise<
+		| {
+				sessionId: string
+				checkpointRunCount: number
+				cwd: string
+				diffs: CompareCheckpointResult["diffs"]
+		  }
+		| undefined
+	> {
+		return this.loadCheckpointComparison()
+	}
+
+	private buildCheckpointChangesSummary(
+		comparison:
+			| {
+					checkpointRunCount: number
+					cwd: string
+					diffs: CompareCheckpointResult["diffs"]
+			  }
+			| undefined,
+	): LatestChangesSummary {
+		if (!comparison || comparison.diffs.length === 0) {
+			return LatestChangesSummary.create({
+				files: [],
+				totalAdded: 0,
+				totalRemoved: 0,
+				checkpointRunCount: comparison?.checkpointRunCount ?? 0,
+			})
+		}
+		const built = buildChangedFileSummaries(comparison.diffs, comparison.cwd)
+		const totalAdded = built.reduce((sum, file) => sum + file.addedLines, 0)
+		const totalRemoved = built.reduce((sum, file) => sum + file.removedLines, 0)
+		return LatestChangesSummary.create({
+			files: built.map((file) =>
+				ChangedFileSummary.create({
+					filePath: file.filePath,
+					relativePath: file.relativePath,
+					addedLines: file.addedLines,
+					removedLines: file.removedLines,
+					status: file.status,
+				}),
+			),
+			totalAdded,
+			totalRemoved,
+			checkpointRunCount: comparison.checkpointRunCount,
+		})
+	}
+
+	async getCheckpointChangesSummary(input?: {
+		checkpointRunCount?: number
+		messageTs?: number
+	}): Promise<LatestChangesSummary> {
+		try {
+			const resolvedRunCount = this.resolveCheckpointRunCountForSummary(input)
+			if (input?.messageTs !== undefined && input.messageTs > 0 && resolvedRunCount === undefined) {
+				return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })
+			}
+			const comparison = await this.loadCheckpointComparison(resolvedRunCount)
+			return this.buildCheckpointChangesSummary(comparison)
+		} catch (error) {
+			Logger.debug(`[SdkController] Failed to summarize checkpoint changes: ${error}`)
+			return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })
+		}
+	}
+
 	async getLatestCheckpointChangesSummary(): Promise<LatestChangesSummary> {
 		try {
 			const comparison = await this.loadLatestCheckpointComparison()
-			if (!comparison || comparison.diffs.length === 0) {
-				return LatestChangesSummary.create({
-					files: [],
-					totalAdded: 0,
-					totalRemoved: 0,
-					checkpointRunCount: comparison?.checkpointRunCount ?? 0,
-				})
-			}
-			const built = buildChangedFileSummaries(comparison.diffs, comparison.cwd)
-			const totalAdded = built.reduce((sum, file) => sum + file.addedLines, 0)
-			const totalRemoved = built.reduce((sum, file) => sum + file.removedLines, 0)
-			return LatestChangesSummary.create({
-				files: built.map((file) =>
-					ChangedFileSummary.create({
-						filePath: file.filePath,
-						relativePath: file.relativePath,
-						addedLines: file.addedLines,
-						removedLines: file.removedLines,
-						status: file.status,
-					}),
-				),
-				totalAdded,
-				totalRemoved,
-				checkpointRunCount: comparison.checkpointRunCount,
-			})
+			return this.buildCheckpointChangesSummary(comparison)
 		} catch (error) {
 			Logger.debug(`[SdkController] Failed to summarize latest checkpoint changes: ${error}`)
 			return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })

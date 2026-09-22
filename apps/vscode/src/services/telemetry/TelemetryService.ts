@@ -278,6 +278,7 @@ export class TelemetryService {
 			OPTIONS_IGNORED: "task.options_ignored",
 			// Tracks checkpoint lifecycle actions.
 			CHECKPOINT_USED: "task.checkpoint_used",
+			EDIT_MESSAGE_RESTART: "task.edit_message_restart",
 			// Tracks when MCP tools are used
 			MCP_TOOL_CALLED: "task.mcp_tool_called",
 			// Tracks legacy VS Code task history migration into SDK sessions
@@ -804,6 +805,20 @@ export class TelemetryService {
 				ulid,
 				action,
 				durationMs,
+			},
+		})
+	}
+
+	public captureEditMessageRestart(ulid: string, variant: "chat_only" | "chat_and_workspace") {
+		if (!this.isCategoryEnabled("checkpoints")) {
+			return
+		}
+
+		this.capture({
+			event: TelemetryService.EVENTS.TASK.EDIT_MESSAGE_RESTART,
+			properties: {
+				ulid,
+				variant,
 			},
 		})
 	}

@@ -53,6 +53,11 @@ export interface ExtensionState {
 		files?: string[]
 		sessionId: string
 	}
+	/** Scroll/focus the chat after edit-and-restart supersedes the active session. */
+	editMessageRestartFocus?: {
+		messageTs: number
+		sessionId: string
+	}
 	/**
 	 * The single authoritative UI mode for the current turn, owned by the extension. The webview
 	 * renders the footer/buttons/thinking indicator from this, NOT from the tail of clineMessages.
