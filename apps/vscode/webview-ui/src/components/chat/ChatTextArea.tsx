@@ -1601,7 +1601,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							/>
 							{!showSchedulePicker && (
 								<select
-									className="h-5 w-5 appearance-none border-0 bg-transparent text-center text-[10px] text-description cursor-pointer hover:text-foreground focus:outline-none"
+									className="h-5 w-5 appearance-none border-0 bg-input-background rounded-[3px] text-center text-[10px] text-foreground cursor-pointer hover:text-foreground focus:outline-none"
 									defaultValue="default"
 									disabled={sendingDisabled && !showSchedulePicker}
 									onChange={(e) => {
@@ -1617,9 +1617,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									}}
 									title="Send options">
 									<option value="default">▼</option>
-									<option value="steer">Send now (interrupt)</option>
-									<option value="queue">Queue for later</option>
-									<option value="schedule">Schedule for later...</option>
+									<option value="steer">Send Now (steer)</option>
+									<option value="queue">Queue (wait until end)</option>
+									<option value="schedule">Schedule (choose a time)</option>
 								</select>
 							)}
 							{showSchedulePicker && (
