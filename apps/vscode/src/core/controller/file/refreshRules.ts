@@ -1,4 +1,5 @@
 import { refreshClineRulesToggles } from "@core/context/instructions/user-instructions/cline-rules"
+import { refreshContextFolderRules } from "@core/context/instructions/user-instructions/context-folders"
 import { refreshExternalRulesToggles } from "@core/context/instructions/user-instructions/external-rules"
 import { refreshWorkflowToggles } from "@core/context/instructions/user-instructions/workflows"
 import { EmptyRequest } from "@shared/proto/cline/common"
@@ -16,6 +17,11 @@ import type { Controller } from "../index"
 export async function refreshRules(controller: Controller, _request: EmptyRequest): Promise<RefreshedRules> {
 	try {
 		const cwd = await getCwd(getDesktopDir())
+
+		// Refresh context-folder auto-generated rules first so they exist
+		// in `.cline/rules/` before the cline-rules scanner runs.
+		await refreshContextFolderRules(controller, cwd)
+
 		const { globalToggles, localToggles } = await refreshClineRulesToggles(controller, cwd)
 		const { cursorLocalToggles, windsurfLocalToggles, agentsLocalToggles } = await refreshExternalRulesToggles(
 			controller,
