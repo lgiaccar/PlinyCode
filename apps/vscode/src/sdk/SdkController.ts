@@ -32,6 +32,8 @@ import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import type { TelemetrySetting } from "@shared/TelemetrySetting"
 import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
+import { renderConversationMarkdown } from "@/core/export/markdown"
+import { defaultMarkdownExportFilename, saveMarkdownExport } from "@/core/export/save-markdown"
 import { parseMentions } from "@/core/mentions"
 import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { clearSdkRemoteConfig, refreshSdkRemoteConfig } from "@/core/storage/remote-config/sdk-refresh"
@@ -2213,6 +2215,61 @@ export class Controller {
 		Logger.log(`[EXPORT] Opening task directory: ${taskDirPath}`)
 		const open = (await import("open")).default
 		await open(taskDirPath)
+	}
+
+	/**
+	 * Render a task's conversation as Markdown and write it where the user picks.
+	 *
+	 * Works for the active task and for history tasks with no live session
+	 * (legacy imports included): messages come from the in-memory message state
+	 * when the id is the running task, and from the history loader otherwise.
+	 *
+	 * @returns the written path, or undefined when the save dialog was cancelled.
+	 */
+	async exportTaskToMarkdown(
+		taskId: string,
+		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
+	): Promise<string | undefined> {
+		const id = taskId?.trim() || this.task?.taskId
+		if (!id) {
+			throw new Error("No task to export")
+		}
+
+		const isActiveTask = this.task?.taskId === id
+		const messages = isActiveTask
+			? (this.task?.messageStateHandler.getClineMessages() ?? [])
+			: await this.taskHistory.getClineMessages(id)
+
+		let historyItem = await this.taskHistory.findHistoryItem(id)
+		if (!historyItem) {
+			if (!isActiveTask) {
+				throw new Error(`Task not found in history: ${id}`)
+			}
+			// A just-started task may not be in persisted history yet; synthesize
+			// the header from the live session so the export still works.
+			const taskMessage = messages.find((message) => message.type === "say" && message.say === "task")
+			historyItem = {
+				id,
+				ts: taskMessage?.ts ?? Date.now(),
+				task: taskMessage?.text ?? "",
+				tokensIn: 0,
+				tokensOut: 0,
+				totalCost: 0,
+				modelId: this.task?.api?.getModel?.().id,
+				cwdOnTaskInitialization: await this.getWorkspaceRoot(),
+			}
+		}
+
+		const markdown = renderConversationMarkdown(historyItem, messages, {
+			includeToolOutput: options.includeToolOutput ?? true,
+			includeReasoning: options.includeReasoning ?? false,
+			plinyCodeVersion: ExtensionRegistryInfo.version,
+		})
+
+		return saveMarkdownExport(markdown, {
+			defaultDirectory: historyItem.cwdOnTaskInitialization || (await this.getWorkspaceRoot()),
+			defaultFilename: defaultMarkdownExportFilename(historyItem.ts),
+		})
 	}
 
 	async deleteTaskFromState(id: string): Promise<HistoryItem[]> {

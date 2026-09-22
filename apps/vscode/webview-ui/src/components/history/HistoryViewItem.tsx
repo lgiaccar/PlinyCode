@@ -1,6 +1,6 @@
 import type { Platform } from "@shared/ExtensionMessage"
 import { StringRequest } from "@shared/proto/cline/common"
-import type { TaskItem } from "@shared/proto/cline/task"
+import { ExportTaskRequest, type TaskItem } from "@shared/proto/cline/task"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import {
 	ArrowDownIcon,
@@ -10,6 +10,7 @@ import {
 	ChevronsDownUpIcon,
 	ChevronsUpDownIcon,
 	DownloadIcon,
+	FileTextIcon,
 	FolderIcon,
 	StarIcon,
 	TrashIcon,
@@ -125,6 +126,21 @@ const HistoryViewItem = ({
 						</span>
 					)}
 					<div className="flex gap-2 flex-shrink-0">
+						<Button
+							aria-label="Export as Markdown"
+							className="p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+							onClick={(e) => {
+								e.stopPropagation()
+								TaskServiceClient.exportTaskToMarkdown(ExportTaskRequest.create({ taskId: item.id })).catch(
+									(err) => console.error("Failed to export task as markdown:", err),
+								)
+							}}
+							title="Export as Markdown"
+							variant="ghost">
+							<span className="flex items-center gap-1 text-xs">
+								<FileTextIcon className="stroke-1" />
+							</span>
+						</Button>
 						<Button
 							aria-label="Delete"
 							className="p-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -244,14 +260,15 @@ const HistoryViewItem = ({
 										<span className="items-center gap-2 flex text-description">
 											{formatSize(item.size)}
 											<Button
-												aria-label="Export"
+												aria-label="Open Conversation Folder"
 												className="m-0 p-0"
 												onClick={(e) => {
 													e.stopPropagation()
 													TaskServiceClient.exportTaskWithId(
 														StringRequest.create({ value: item.id }),
-													).catch((err) => console.error("Failed to export task:", err))
+													).catch((err) => console.error("Failed to open task folder:", err))
 												}}
+												title="Open Conversation Folder"
 												variant="ghost">
 												<DownloadIcon />
 											</Button>

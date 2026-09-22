@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { getEnvironmentColor } from "@/utils/environmentColors"
 import CopyTaskButton from "./buttons/CopyTaskButton"
 import DeleteTaskButton from "./buttons/DeleteTaskButton"
+import ExportMarkdownButton from "./buttons/ExportMarkdownButton"
 import NewTaskButton from "./buttons/NewTaskButton"
 import OpenDiskConversationHistoryButton from "./buttons/OpenDiskConversationHistoryButton"
 import ContextWindow from "./ContextWindow"
@@ -156,6 +157,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 									taskId={currentTaskItem?.id}
 									taskSize={currentTaskItem?.size}
 								/>
+								<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
 								{/* Only visible in development mode */}
 								{IS_DEV && (
 									<OpenDiskConversationHistoryButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
