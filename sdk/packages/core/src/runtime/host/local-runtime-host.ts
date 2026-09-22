@@ -672,6 +672,9 @@ export class LocalRuntimeHost implements RuntimeHost {
 		};
 		runtime.delegatedAgentConfigProvider?.updateConnectionDefaults({
 			onAuthError,
+			// Subagents inherit the lead's routing and recovery behavior.
+			agentModelFactory: configWithProvider.agentModelFactory,
+			onRunError: configWithProvider.onRunError,
 		});
 
 		const tools = [...runtime.tools, ...(configWithProvider.extraTools ?? [])];
@@ -767,6 +770,10 @@ export class LocalRuntimeHost implements RuntimeHost {
 			baseUrl: providerConfig.baseUrl,
 			headers: providerConfig.headers,
 			onAuthError,
+			// Host-supplied model routing / run recovery. Threaded explicitly so
+			// a host can route each call across models and fail over in place.
+			agentModelFactory: configWithProvider.agentModelFactory,
+			onRunError: configWithProvider.onRunError,
 			knownModels: providerConfig.knownModels,
 			providerConfig,
 			thinking: configWithProvider.thinking,

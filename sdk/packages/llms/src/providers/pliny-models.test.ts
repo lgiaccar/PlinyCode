@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildPlinyModels,
+	isPlinyFreeAutoModelId,
+	isPlinyFreeModelId,
+	isPlinySelfHostedModelId,
 	PLINY_BASE_URL,
 	PLINY_DEFAULT_MODEL_ID,
+	PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
+	PLINY_FREE_AUTO_MODEL_ID,
+	plinyFreePoolIds,
+	resolvePlinyConcreteModelId,
 } from "./pliny-models";
 
 describe("buildPlinyModels", () => {
@@ -62,5 +69,80 @@ describe("buildPlinyModels", () => {
 		expect(models["azure-openai/gpt-5.2"]?.pricing).toBeUndefined();
 		expect(models["azure-openai/Kimi-K2.6"]?.pricing).toBeUndefined();
 		expect(models["google-vertex/glm-5.2"]?.pricing).toBeUndefined();
+	});
+});
+
+describe("FreeAuto router model", () => {
+	it("is the default model", () => {
+		expect(PLINY_DEFAULT_MODEL_ID).toBe(PLINY_FREE_AUTO_MODEL_ID);
+	});
+
+	it("is present in the catalog and can call tools", () => {
+		const models = buildPlinyModels();
+		const router = models[PLINY_FREE_AUTO_MODEL_ID];
+		expect(router).toBeDefined();
+		// Without the tools capability the runtime disables tool calling for the
+		// whole session, which would make the router useless.
+		expect(router?.capabilities).toEqual(
+			expect.arrayContaining(["streaming", "tools"]),
+		);
+		expect(router?.metadata).toMatchObject({ provider: "pliny", router: true });
+	});
+
+	it("declares a context window at least as large as most of the pool", () => {
+		const models = buildPlinyModels();
+		const routerWindow = models[PLINY_FREE_AUTO_MODEL_ID]?.contextWindow ?? 0;
+		expect(routerWindow).toBeGreaterThanOrEqual(200_000);
+		// At least one pool model must be able to hold a request the router
+		// advertises it can take, or every large request would be unroutable.
+		const poolWindows = plinyFreePoolIds().map(
+			(id) => models[id]?.contextWindow ?? 0,
+		);
+		expect(Math.max(...poolWindows)).toBeGreaterThanOrEqual(routerWindow);
+	});
+
+	it("is not offered as a paid hosted model", () => {
+		expect(isPlinyFreeModelId(PLINY_FREE_AUTO_MODEL_ID)).toBe(true);
+		expect(isPlinyFreeAutoModelId(PLINY_FREE_AUTO_MODEL_ID)).toBe(true);
+		// It is free, but it is not itself a self-hosted endpoint.
+		expect(isPlinySelfHostedModelId(PLINY_FREE_AUTO_MODEL_ID)).toBe(false);
+	});
+});
+
+describe("free pool", () => {
+	it("contains only tool-call-capable self-hosted models", () => {
+		const pool = plinyFreePoolIds();
+		expect(pool.length).toBeGreaterThan(5);
+		expect(pool.every((id) => isPlinySelfHostedModelId(id))).toBe(true);
+		const models = buildPlinyModels();
+		expect(pool.every((id) => models[id] !== undefined)).toBe(true);
+	});
+
+	it("excludes known-broken and tool-less models", () => {
+		const pool = plinyFreePoolIds();
+		expect(pool).not.toContain("snps-provider/gpt-oss-120b-3bed4");
+		expect(pool).not.toContain("snps-provider/qwen3-235b-a22b-fp8-acca3");
+	});
+});
+
+describe("resolvePlinyConcreteModelId", () => {
+	it("maps the virtual router id onto a real model", () => {
+		expect(resolvePlinyConcreteModelId(PLINY_FREE_AUTO_MODEL_ID)).toBe(
+			PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
+		);
+		// The fallback must be something the gateway can actually resolve.
+		expect(buildPlinyModels()[PLINY_FREE_AUTO_FALLBACK_MODEL_ID]).toBeDefined();
+	});
+
+	it("leaves concrete ids untouched", () => {
+		expect(resolvePlinyConcreteModelId("snps-provider/GLM-5.2")).toBe(
+			"snps-provider/GLM-5.2",
+		);
+	});
+
+	it("falls back when no id is supplied", () => {
+		expect(resolvePlinyConcreteModelId(undefined)).toBe(
+			PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
+		);
 	});
 });

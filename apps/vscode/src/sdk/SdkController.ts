@@ -66,6 +66,7 @@ import {
 	ProviderFailureTelemetryTurnGate,
 } from "./provider-failure-telemetry"
 import { RemoteConfigRefreshCoordinator } from "./remote-config-refresh-coordinator"
+import { emitTurnSummary } from "./router/router-integration"
 import {
 	findVisibleCheckpointUserMessageByRun,
 	getCheckpointRunCountForMessage,
@@ -351,6 +352,12 @@ export class Controller {
 			stateManager: this.stateManager,
 			emitHookMessage: (msg) => this.messages.emitHookMessage(msg),
 			onConsecutiveMistakeLimitReached: (context) => this.interactions.handleConsecutiveMistakeLimitReached(context),
+			// FreeAuto routing rows. They are ordinary persisted chat rows, minted
+			// from the shared id authority so they never collide with
+			// translator-minted ids.
+			getSessionId: () => this.sessions.getActiveSession()?.sessionId ?? "",
+			emitRow: (msg) => this.messages.emitHookMessage(msg),
+			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
@@ -420,9 +427,10 @@ export class Controller {
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
 			consumeModeSwitchNotice: (sessionId) => this.mode.consumeModeSwitchNotice(sessionId),
-			onSendComplete: async () => {
+			onSendComplete: async (sessionId) => {
 				// Normal flows close their diff sessions inline; anything left here is orphaned.
 				void this.diffEdits.discardAllPreviews("turn complete")
+				this.emitRouterTurnSummary(sessionId)
 
 				this.postStateToWebview().catch((err) => {
 					Logger.error("[SdkController] Failed to post state after turn:", err)
@@ -431,6 +439,7 @@ export class Controller {
 			onSendError: async (error, sessionId) => {
 				// A turn failed — the UI shows error recovery (Retry / Sign In / Add Credits).
 				void this.diffEdits.discardAllPreviews("turn error")
+				this.emitRouterTurnSummary(sessionId)
 				this.turnStateTracker.set("error")
 				const errorMessage = error instanceof Error ? error.message : String(error)
 				const providerId = this.getSessionProviderId(sessionId) ?? this.getActiveProviderId()
@@ -1195,6 +1204,30 @@ export class Controller {
 		}
 		const modelId = activeSession?.startResult?.manifest?.model?.trim() || activeSession?.startConfig?.modelId?.trim()
 		return modelId && modelId !== "unknown" ? modelId : undefined
+	}
+
+	/**
+	 * Emit FreeAuto's end-of-turn summary (how many calls, which models, how
+	 * long). No-op unless the turn ran on the router.
+	 */
+	private emitRouterTurnSummary(sessionId?: string): void {
+		try {
+			const modelId = this.getTaskModelId() ?? this.getSessionModelId(sessionId)
+			if (!modelId) {
+				return
+			}
+			emitTurnSummary(
+				{
+					sessionId: sessionId ?? this.sessions.getActiveSession()?.sessionId ?? "",
+					getMode: () => (this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"),
+					emitRow: (msg) => this.messages.emitHookMessage(msg),
+					nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
+				},
+				modelId,
+			)
+		} catch (error) {
+			Logger.warn("[SdkController] Failed to emit FreeAuto turn summary:" + String(error))
+		}
 	}
 
 	private beginProviderFailureTelemetryTurn(): void {

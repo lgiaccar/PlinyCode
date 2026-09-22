@@ -1,12 +1,14 @@
 import { parseYamlFrontmatter } from "@core/context/instructions/user-instructions/frontmatter"
 import { StateManager } from "@core/storage/StateManager"
 import { openFile as openFileIntegration } from "@integrations/misc/open-file"
+import { PLINY_FREE_AUTO_RULES_URI } from "@shared/pliny"
 import { Empty, StringRequest } from "@shared/proto/cline/common"
 import { REMOTE_URI_SCHEME } from "@shared/remote-config/constants"
 import type { GlobalInstructionsFile } from "@shared/remote-config/schema"
 import { writeFile } from "@utils/fs"
 import * as os from "os"
 import * as path from "path"
+import { globalRulesPath, initialiseDefaultRulesFile } from "@/sdk/router/router-rules-store"
 import { Controller } from ".."
 
 /**
@@ -17,18 +19,33 @@ import { Controller } from ".."
  *                - remote://rule/{ruleName}
  *                - remote://workflow/{workflowName}
  *                - remote://skill/{skillName}
+ *                and for the FreeAuto routing rules, whose path depends on the
+ *                data directory the host resolved:
+ *                - pliny://free-auto-rules
  * @returns Empty response
  */
 export async function openFile(_controller: Controller, request: StringRequest): Promise<Empty> {
 	if (request.value) {
 		// Check for remote:// prefix for remote rules/workflows
-		if (request.value.startsWith(REMOTE_URI_SCHEME)) {
+		if (request.value === PLINY_FREE_AUTO_RULES_URI) {
+			await openFreeAutoRulesFile()
+		} else if (request.value.startsWith(REMOTE_URI_SCHEME)) {
 			await openRemoteFile(request.value)
 		} else {
 			await openFileIntegration(request.value)
 		}
 	}
 	return Empty.create()
+}
+
+/**
+ * Open the FreeAuto routing rules file, creating it from the documented
+ * defaults when it does not exist yet. The path lives in the host's data
+ * directory, so resolving it here keeps the webview free of that knowledge.
+ */
+async function openFreeAutoRulesFile(): Promise<void> {
+	const rulesPath = (await initialiseDefaultRulesFile()) ?? globalRulesPath()
+	await openFileIntegration(rulesPath)
 }
 
 /**

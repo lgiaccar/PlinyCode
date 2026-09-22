@@ -1,5 +1,5 @@
 {
-	"name": "claude-dev",
+	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"version": "0.1.0",
@@ -106,17 +106,17 @@
 		"viewsContainers": {
 			"activitybar": [
 				{
-					"id": "claude-dev-ActivityBar",
+					"id": "plinycode-dev-ActivityBar",
 					"title": "PlinyCode",
 					"icon": "assets/icons/icon.svg"
 				}
 			]
 		},
 		"views": {
-			"claude-dev-ActivityBar": [
+			"plinycode-dev-ActivityBar": [
 				{
 					"type": "webview",
-					"id": "claude-dev.SidebarProvider",
+					"id": "plinycode-dev.SidebarProvider",
 					"name": "",
 					"icon": "assets/icons/icon.svg"
 				}
@@ -180,6 +180,11 @@
 				"title": "Generate Commit Message with PlinyCode",
 				"category": "PlinyCode",
 				"icon": "$(cline-icon)"
+			},
+			{
+				"command": "cline.openFreeAutoRules",
+				"title": "Open FreeAuto Routing Rules",
+				"category": "PlinyCode"
 			},
 			{
 				"command": "cline.abortGitCommitMessage",
@@ -248,22 +253,22 @@
 				{
 					"command": "cline.plusButtonClicked",
 					"group": "navigation@1",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == plinycode-dev.SidebarProvider"
 				},
 				{
 					"command": "cline.marketplaceButtonClicked",
 					"group": "navigation@2",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == plinycode-dev.SidebarProvider"
 				},
 				{
 					"command": "cline.historyButtonClicked",
 					"group": "navigation@3",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == plinycode-dev.SidebarProvider"
 				},
 				{
 					"command": "cline.settingsButtonClicked",
 					"group": "navigation@6",
-					"when": "view == claude-dev.SidebarProvider"
+					"when": "view == plinycode-dev.SidebarProvider"
 				}
 			],
 			"editor/context": [

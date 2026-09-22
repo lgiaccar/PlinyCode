@@ -2845,3 +2845,258 @@ describe("SessionRuntime auth retry", () => {
 		expect(result.finishReason).toBe("error");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Host-supplied model factory and run recovery (FreeAuto routing)
+// ---------------------------------------------------------------------------
+
+describe("SessionRuntime agentModelFactory", () => {
+	function withCapturedConfigs(scripts: FakeAgentRuntimeScript[]): {
+		deps: SessionRuntimeOrchestratorDeps;
+		configs: Array<{ model?: unknown }>;
+		createdCount: () => number;
+	} {
+		let created = 0;
+		const configs: Array<{ model?: unknown }> = [];
+		const deps: SessionRuntimeOrchestratorDeps = {
+			createAgentRuntimeImpl: (config) => {
+				configs.push(config as { model?: unknown });
+				const script = scripts[Math.min(created, scripts.length - 1)];
+				created += 1;
+				return makeFakeAgentRuntime(script).runtime;
+			},
+		};
+		return { deps, configs, createdCount: () => created };
+	}
+
+	it("uses the model the factory returns", async () => {
+		const routed = {
+			stream: async function* () {},
+		} as unknown as NonNullable<AgentConfig["agentModelFactory"]> extends never
+			? never
+			: ReturnType<NonNullable<AgentConfig["agentModelFactory"]>>;
+		const factory = vi.fn(() => routed);
+		const { deps, configs } = withCapturedConfigs([{}]);
+		const session = new SessionRuntime(
+			makeAgentConfig({ agentModelFactory: factory }),
+			deps,
+		);
+
+		await session.run("go");
+
+		expect(factory).toHaveBeenCalledTimes(1);
+		expect(configs[0]?.model).toBe(routed);
+	});
+
+	it("hands the factory a createDefault that can override the model id", async () => {
+		let overrideUsed: string | undefined;
+		const factory = vi.fn(({ createDefault }) => {
+			// This is how the router builds one delegate per concrete model.
+			overrideUsed = "snps-provider/GLM-5.2";
+			return createDefault({ modelId: overrideUsed });
+		});
+		const { deps } = withCapturedConfigs([{}]);
+		const config = makeAgentConfig({ agentModelFactory: factory });
+		const session = new SessionRuntime(config, deps);
+
+		await session.run("go");
+
+		expect(overrideUsed).toBe("snps-provider/GLM-5.2");
+		// Overriding a delegate must not mutate the session's own model.
+		expect(config.modelId).toBe("claude-3-5-sonnet");
+	});
+
+	it("builds the default model when no factory is supplied", async () => {
+		const { deps, configs } = withCapturedConfigs([{}]);
+		const session = new SessionRuntime(makeAgentConfig(), deps);
+
+		await session.run("go");
+
+		expect(configs[0]?.model).toBeDefined();
+	});
+
+	it("is consulted again for each run", async () => {
+		const factory = vi.fn(({ createDefault }) => createDefault());
+		const { deps } = withCapturedConfigs([{}, {}]);
+		const session = new SessionRuntime(
+			makeAgentConfig({ agentModelFactory: factory }),
+			deps,
+		);
+
+		await session.run("first");
+		await session.continue("second");
+
+		expect(factory).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("SessionRuntime onRunError recovery", () => {
+	const streamFailure: Partial<AgentRunResult> = {
+		status: "failed",
+		error: new Error(
+			"Model reached the maximum output token limit before completing the turn",
+		),
+	};
+
+	function withRecoveryRuntimes(scripts: FakeAgentRuntimeScript[]): {
+		deps: SessionRuntimeOrchestratorDeps;
+		createdCount: () => number;
+	} {
+		let created = 0;
+		const deps: SessionRuntimeOrchestratorDeps = {
+			createAgentRuntimeImpl: () => {
+				const script = scripts[Math.min(created, scripts.length - 1)];
+				created += 1;
+				return makeFakeAgentRuntime(script).runtime;
+			},
+		};
+		return { deps, createdCount: () => created };
+	}
+
+	it("retries the run when the host asks for it", async () => {
+		const onRunError = vi.fn(async () => ({ retry: true as const }));
+		const { deps, createdCount } = withRecoveryRuntimes([
+			{ result: streamFailure },
+			{ result: { outputText: "recovered" } },
+		]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		const result = await session.run("go");
+
+		expect(onRunError).toHaveBeenCalledTimes(1);
+		expect(createdCount()).toBe(2);
+		expect(result.finishReason).toBe("completed");
+		expect(result.text).toBe("recovered");
+	});
+
+	it("passes the failure details to the host", async () => {
+		const onRunError = vi.fn(async () => false as const);
+		const { deps } = withRecoveryRuntimes([{ result: streamFailure }]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		await session.run("go");
+
+		expect(onRunError).toHaveBeenCalledWith(
+			expect.objectContaining({
+				attempt: 1,
+				modelId: "claude-3-5-sonnet",
+				error: expect.stringContaining("maximum output token limit"),
+			}),
+		);
+	});
+
+	it("surfaces the failure when the host declines", async () => {
+		const onRunError = vi.fn(async () => false as const);
+		const { deps, createdCount } = withRecoveryRuntimes([
+			{ result: streamFailure },
+		]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		const result = await session.run("go");
+
+		expect(createdCount()).toBe(1);
+		expect(result.finishReason).toBe("error");
+	});
+
+	it("appends the continuation prompt as a hidden message before retrying", async () => {
+		const onRunError = vi.fn(async () => ({
+			retry: true as const,
+			continuationPrompt: "Continue where you stopped.",
+		}));
+		const { deps } = withRecoveryRuntimes([
+			{ result: streamFailure },
+			{ result: { outputText: "ok" } },
+		]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		await session.run("go");
+
+		// Message content is either a plain string or content blocks.
+		const containsPrompt = (content: unknown): boolean => {
+			if (typeof content === "string") {
+				return content === "Continue where you stopped.";
+			}
+			return (
+				Array.isArray(content) &&
+				content.some(
+					(part) =>
+						(part as { type?: string; text?: string }).type === "text" &&
+						(part as { text?: string }).text === "Continue where you stopped.",
+				)
+			);
+		};
+		const injected = session
+			.getMessages()
+			.find(
+				(message) => message.role === "user" && containsPrompt(message.content),
+			);
+		expect(injected).toBeDefined();
+		// Hidden from user-facing transcripts, but still sent to the model.
+		expect(injected?.metadata).toMatchObject({ displayRole: "system" });
+	});
+
+	it("stops retrying after the attempt cap", async () => {
+		const onRunError = vi.fn(async () => ({ retry: true as const }));
+		const { deps, createdCount } = withRecoveryRuntimes([
+			{ result: streamFailure },
+		]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		const result = await session.run("go");
+
+		// The initial attempt plus a bounded number of recoveries.
+		expect(createdCount()).toBeLessThanOrEqual(4);
+		expect(onRunError.mock.calls.length).toBeLessThanOrEqual(3);
+		expect(result.finishReason).toBe("error");
+	});
+
+	it("is not consulted for a successful run", async () => {
+		const onRunError = vi.fn(async () => ({ retry: true as const }));
+		const { deps } = withRecoveryRuntimes([{ result: { outputText: "fine" } }]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		await session.run("go");
+
+		expect(onRunError).not.toHaveBeenCalled();
+	});
+
+	it("keeps the run failed when the hook itself throws", async () => {
+		const onRunError = vi.fn(async () => {
+			throw new Error("hook exploded");
+		});
+		const { deps, createdCount } = withRecoveryRuntimes([
+			{ result: streamFailure },
+		]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+
+		const result = await session.run("go");
+
+		expect(createdCount()).toBe(1);
+		expect(result.finishReason).toBe("error");
+	});
+
+	it("prefers the auth hook over the generic one for auth failures", async () => {
+		const onAuthError = vi.fn(async () => true);
+		const onRunError = vi.fn(async () => ({ retry: true as const }));
+		const { deps } = withRecoveryRuntimes([
+			{
+				result: {
+					status: "failed",
+					error: new Error(
+						"Unauthorized: Please make sure you're using the latest version of Cline and re-authenticate your Cline account.",
+					),
+				},
+			},
+			{ result: { outputText: "recovered" } },
+		]);
+		const session = new SessionRuntime(
+			makeAgentConfig({ onAuthError, onRunError }),
+			deps,
+		);
+
+		await session.run("go");
+
+		expect(onAuthError).toHaveBeenCalledTimes(1);
+		expect(onRunError).not.toHaveBeenCalled();
+	});
+});

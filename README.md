@@ -53,7 +53,7 @@ The toolchain is **Bun** (package manager + task runner). Do not use npm/yarn/pn
 ```sh
 bun install
 bun run build:sdk        # build the @plinycode/* engine packages first
-bun -F claude-dev build  # build the extension
+bun -F plinycode-dev build  # build the extension
 ```
 
 The extension consumes the engine packages through their compiled `dist/`, so `build:sdk` must run after any
@@ -68,7 +68,7 @@ code --extensionDevelopmentPath=./apps/vscode <some-folder>
 ### Test
 
 ```sh
-bun -F claude-dev test:unit   # bun-based unit tests, no VS Code host needed
+bun -F plinycode-dev test:unit   # bun-based unit tests, no VS Code host needed
 bun run types                 # typecheck all packages
 ```
 
@@ -76,7 +76,7 @@ bun run types                 # typecheck all packages
 
 | Path                    | Contents                                                          |
 | ----------------------- | ----------------------------------------------------------------- |
-| `apps/vscode`           | The VS Code extension (`claude-dev`) and its webview UI           |
+| `apps/vscode`           | The VS Code extension (`plinycode-dev`) and its webview UI       |
 | `sdk/packages/core`     | Agent engine — tasks, sessions, auth, providers, hooks, runtime   |
 | `sdk/packages/shared`   | Shared types and utilities                                        |
 | `sdk/packages/llms`     | Model catalog and provider gateway                                |

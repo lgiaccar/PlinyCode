@@ -176,6 +176,8 @@ export function createSessionSpawnTool(
 					apiKey: config.apiKey,
 					baseUrl: config.baseUrl,
 					headers: config.headers,
+					agentModelFactory: config.agentModelFactory,
+					onRunError: config.onRunError,
 					providerConfig: config.providerConfig,
 					knownModels: config.knownModels,
 					thinking: config.thinking,

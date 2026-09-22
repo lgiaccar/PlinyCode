@@ -134,7 +134,7 @@ local MCP OAuth test server (`bun run dev:mcp-oauth-test-server`, see
 # 1. Trigger MCP OAuth (e.g., click "Authenticate" button for a server)
 # 2. Check captured URLs for the authorization URL
 curl localhost:19229/api -d '{"method":"oauth.captured_urls"}'
-#    The authorize URL contains redirect_uri=vscode://saoudrizwan.claude-dev/mcp-auth/callback/HASH
+#    The authorize URL contains redirect_uri=vscode://saoudrizwan.plinycode-dev/mcp-auth/callback/HASH
 
 # 3. Get a real authorization code from the auth server, e.g. by following the
 #    captured authorize URL (the test server auto-approves and 302s to the
@@ -149,7 +149,7 @@ curl localhost:19229/api -d '{
   "method": "ext.evaluate",
   "params": {
     "awaitPromise": true,
-    "expression": "globalThis.__clineHandleUri(\"vscode://saoudrizwan.claude-dev/mcp-auth/callback/HASH?code=REAL_CODE&state=SAVED_STATE\")"
+    "expression": "globalThis.__clineHandleUri(\"vscode://saoudrizwan.plinycode-dev/mcp-auth/callback/HASH?code=REAL_CODE&state=SAVED_STATE\")"
   }
 }'
 
@@ -336,7 +336,7 @@ Call `connect_webview` first after the sidebar is open (only needed for breakpoi
 
 To actually **deliver** a `vscode://` callback to the extension, call the
 debug-only hook via `ext.evaluate` (with `awaitPromise: true`):
-`globalThis.__clineHandleUri("vscode://saoudrizwan.claude-dev/...?code=...&state=...")`.
+`globalThis.__clineHandleUri("vscode://saoudrizwan.plinycode-dev/...?code=...&state=...")`.
 It invokes the same `SharedUriHandler.handleUri` as VSCode's real URI handler
 and is registered only when `CLINE_CAPTURE_BROWSER` is set (never in prod). See
 "Testing MCP OAuth" above.

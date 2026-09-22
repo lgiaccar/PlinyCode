@@ -30,6 +30,16 @@ export interface CoreModelConfig {
 	providerConfig?: ProviderConfig;
 	knownModels?: Record<string, ModelInfo>;
 	/**
+	 * Builds the `AgentModel` for each run. Threaded through to the agent
+	 * runtime so hosts can route calls across models and fail over.
+	 */
+	agentModelFactory?: AgentConfig["agentModelFactory"];
+	/**
+	 * Consulted when a run fails, so the host can recover it in place with a
+	 * different model instead of surfacing a terminal error.
+	 */
+	onRunError?: AgentConfig["onRunError"];
+	/**
 	 * Request model-side thinking/reasoning when supported.
 	 */
 	thinking?: boolean;

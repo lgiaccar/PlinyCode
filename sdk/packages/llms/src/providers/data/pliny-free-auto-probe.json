@@ -1,0 +1,418 @@
+{
+  "probedAt": "2026-09-22T09:19:59.572Z",
+  "baseURL": "https://snps-inference.internal.synopsys.com/api/llm",
+  "runs": 1,
+  "reports": [
+    {
+      "id": "snps-provider/GLM-5.2",
+      "contextWindow": 512000,
+      "note": "largest self-hosted context",
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 1279,
+          "totalMs": 1936,
+          "outputTokens": 5,
+          "tokensPerSecond": 7.6,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 1279,
+      "medianTokensPerSecond": 7.6,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider-internal-tests/glm-5-2",
+      "contextWindow": 512000,
+      "note": "internal-tests pool",
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 855,
+          "totalMs": 1047,
+          "outputTokens": 5,
+          "tokensPerSecond": 26,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 855,
+      "medianTokensPerSecond": 26,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider-vmodels/glm-5.2",
+      "contextWindow": 512000,
+      "note": "vmodels pool (load-balanced)",
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 1058,
+          "totalMs": 1234,
+          "outputTokens": 5,
+          "tokensPerSecond": 28.4,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 1058,
+      "medianTokensPerSecond": 28.4,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/kimi-k2.6",
+      "contextWindow": 256000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 791,
+          "totalMs": 1657,
+          "outputTokens": 75,
+          "tokensPerSecond": 86.6,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 791,
+      "medianTokensPerSecond": 86.6,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/nvidia-nemotron-3-super-120b-a12",
+      "contextWindow": 256000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 553,
+          "totalMs": 672,
+          "outputTokens": 5,
+          "tokensPerSecond": 42,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 553,
+      "medianTokensPerSecond": 42,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3-8-27b",
+      "contextWindow": 256000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 975,
+          "totalMs": 1279,
+          "outputTokens": 5,
+          "tokensPerSecond": 16.4,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 975,
+      "medianTokensPerSecond": 16.4,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3-6-27b",
+      "contextWindow": 256000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 1750,
+          "totalMs": 2010,
+          "outputTokens": 5,
+          "tokensPerSecond": 19.2,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 1750,
+      "medianTokensPerSecond": 19.2,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider-sia/qwen3-8-27b-sia",
+      "contextWindow": 256000,
+      "samples": [
+        {
+          "ok": false,
+          "status": 0,
+          "error": "The operation was aborted."
+        }
+      ],
+      "successRate": 0,
+      "toolCallRate": 0
+    },
+    {
+      "id": "snps-provider/gemma-4-31b-it-1-reasoning",
+      "contextWindow": 255500,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 783,
+          "totalMs": 949,
+          "outputTokens": 4,
+          "tokensPerSecond": 24.1,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 783,
+      "medianTokensPerSecond": 24.1,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3.5-397b-fp8",
+      "contextWindow": 220000,
+      "note": "Kilo's current default",
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 635,
+          "totalMs": 853,
+          "outputTokens": 5,
+          "tokensPerSecond": 22.9,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 635,
+      "medianTokensPerSecond": 22.9,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider-sia/qwen3-5-397b-a17b-sia",
+      "contextWindow": 220000,
+      "samples": [
+        {
+          "ok": false,
+          "status": 500,
+          "error": "{\"status\":\"failure\",\"message\":\"self-hosted-model error: Message: fetch failed Cause: Error: connect ECONNREFUSED 10.61.24.35:32169 Name: TypeError\",\"error\":{\"message\":\"self-hosted-model error: Message"
+        }
+      ],
+      "successRate": 0,
+      "toolCallRate": 0
+    },
+    {
+      "id": "snps-provider/nemotron-3-ultra-550b-a55",
+      "contextWindow": 200000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 358,
+          "totalMs": 962,
+          "outputTokens": 39,
+          "tokensPerSecond": 64.6,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 358,
+      "medianTokensPerSecond": 64.6,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/nim-llama-3-3-70b-instruct-a7786",
+      "contextWindow": 131072,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 457,
+          "totalMs": 636,
+          "outputTokens": 5,
+          "tokensPerSecond": 27.9,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 457,
+      "medianTokensPerSecond": 27.9,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+      "contextWindow": 128000,
+      "note": "coding-specialised",
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 356,
+          "totalMs": 578,
+          "outputTokens": 4,
+          "tokensPerSecond": 18,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 356,
+      "medianTokensPerSecond": 18,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3-6-27b-ft",
+      "contextWindow": 128000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 1990,
+          "totalMs": 2402,
+          "outputTokens": 5,
+          "tokensPerSecond": 12.1,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 1990,
+      "medianTokensPerSecond": 12.1,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3-6-35b-a3b-1-28dd3",
+      "contextWindow": 128000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 284,
+          "totalMs": 1816,
+          "outputTokens": 256,
+          "tokensPerSecond": 167.1,
+          "toolCalled": false
+        }
+      ],
+      "medianTtftMs": 284,
+      "medianTokensPerSecond": 167.1,
+      "successRate": 1,
+      "toolCallRate": 0
+    },
+    {
+      "id": "snps-provider/gemma-4-31b-it-29cea",
+      "contextWindow": 128000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 408,
+          "totalMs": 599,
+          "outputTokens": 4,
+          "tokensPerSecond": 20.9,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 408,
+      "medianTokensPerSecond": 20.9,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/llama-3-3-70b-instruct-128k",
+      "contextWindow": 128000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 408,
+          "totalMs": 597,
+          "outputTokens": 5,
+          "tokensPerSecond": 26.5,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 408,
+      "medianTokensPerSecond": 26.5,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/llama-3-3-70b-instruct-74k-ae1a8",
+      "contextWindow": 74000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 454,
+          "totalMs": 710,
+          "outputTokens": 5,
+          "tokensPerSecond": 19.5,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 454,
+      "medianTokensPerSecond": 19.5,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen2-5-32b-instruct-fe66b",
+      "contextWindow": 64000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 599,
+          "totalMs": 758,
+          "outputTokens": 6,
+          "tokensPerSecond": 37.7,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 599,
+      "medianTokensPerSecond": 37.7,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/qwen3-next-80b-a3b-instruct-d79b4",
+      "contextWindow": 32000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 382,
+          "totalMs": 511,
+          "outputTokens": 5,
+          "tokensPerSecond": 38.8,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 382,
+      "medianTokensPerSecond": 38.8,
+      "successRate": 1,
+      "toolCallRate": 1
+    },
+    {
+      "id": "snps-provider/llama-3-1-70b-instruct-20ad2",
+      "contextWindow": 32000,
+      "samples": [
+        {
+          "ok": true,
+          "status": 200,
+          "ttftMs": 460,
+          "totalMs": 787,
+          "outputTokens": 5,
+          "tokensPerSecond": 15.3,
+          "toolCalled": true
+        }
+      ],
+      "medianTtftMs": 460,
+      "medianTokensPerSecond": 15.3,
+      "successRate": 1,
+      "toolCallRate": 1
+    }
+  ]
+}

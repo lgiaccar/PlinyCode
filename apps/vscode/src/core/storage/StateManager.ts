@@ -18,6 +18,7 @@ import {
 import type { StorageContext } from "@shared/storage/storage-context"
 import { FSWatcher } from "chokidar"
 import { initializeDistinctId } from "@/services/logging/distinctId"
+import { isPlinySelfHostedModelId, PLINY_FREE_AUTO_MODEL_ID } from "@/shared/pliny"
 import { Logger } from "@/shared/services/Logger"
 import { AgentConfigLoader } from "../task/tools/subagent/AgentConfigLoader"
 import { readTaskSettingsFromStorage, writeTaskSettingsToStorage } from "./disk"
@@ -111,6 +112,8 @@ export class StateManager {
 
 			StateManager.instance.isInitialized = true
 
+			StateManager.instance.migratePlinyFreeAutoSelection()
+
 			await AgentConfigLoader.getInstance().ready()
 		} catch (error) {
 			Logger.error("[StateManager] Failed to initialize:", error)
@@ -118,6 +121,38 @@ export class StateManager {
 		}
 
 		return StateManager.instance
+	}
+
+	/**
+	 * One-shot: move an existing FREE model selection onto the FreeAuto router,
+	 * which supersedes picking a single free model by hand.
+	 *
+	 * Paid selections are left alone — that choice was deliberate and costs
+	 * money. The persisted flag means a model the user picks *after* the
+	 * migration is never overridden, so this can only ever run once.
+	 */
+	private migratePlinyFreeAutoSelection(): void {
+		try {
+			if (this.getGlobalSettingsKey("plinyFreeAutoMigratedV1") === true) {
+				return
+			}
+			const updates: Partial<GlobalStateAndSettings> = { plinyFreeAutoMigratedV1: true }
+			const planModeApiModelId = this.getGlobalSettingsKey("planModeApiModelId")
+			const actModeApiModelId = this.getGlobalSettingsKey("actModeApiModelId")
+			if (isPlinySelfHostedModelId(planModeApiModelId)) {
+				updates.planModeApiModelId = PLINY_FREE_AUTO_MODEL_ID
+			}
+			if (isPlinySelfHostedModelId(actModeApiModelId)) {
+				updates.actModeApiModelId = PLINY_FREE_AUTO_MODEL_ID
+			}
+			this.setGlobalStateBatch(updates)
+			if (updates.planModeApiModelId || updates.actModeApiModelId) {
+				Logger.log("[StateManager] Migrated free Pliny model selection to the FreeAuto router")
+			}
+		} catch (error) {
+			// A failed migration must never block activation.
+			Logger.warn("[StateManager] FreeAuto migration failed: " + String(error))
+		}
 	}
 
 	public static get(): StateManager {

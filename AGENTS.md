@@ -6,7 +6,7 @@ PlinyCode is a VS Code / Cursor extension that talks only to Synopsys internal m
 
 | Path                  | Contents                                                        |
 | --------------------- | --------------------------------------------------------------- |
-| `apps/vscode`         | The VS Code extension (`claude-dev`) and its webview UI         |
+| `apps/vscode`         | The VS Code extension (`plinycode-dev`) and its webview UI     |
 | `sdk/packages/core`   | Agent engine — tasks, sessions, auth, providers, hooks, runtime |
 | `sdk/packages/shared` | Shared types and utilities                                      |
 | `sdk/packages/llms`   | Model catalog and provider gateway                              |
@@ -19,10 +19,10 @@ Despite living under `sdk/`, these packages are **not** a distributable SDK — 
 
 - Engine packages (`@plinycode/shared|llms|agents|core`) resolve each other through compiled `dist/` (their `exports` point only at `dist/`, with no `development` source condition). You **must** run `bun run build:sdk` after changing engine source before running the extension or its tests, otherwise imports fail with missing `@plinycode/*` / missing `dist/` errors. Running processes do **not** hot-reload engine source changes — rebuild and restart.
 - `bun run types` typechecks every package; `bun run lint` and `bun run format` run Biome.
-- `bun -F claude-dev test:unit` runs the bun-based extension unit suite (no VS Code host needed). `bun run test` runs the engine + extension suites.
+- `bun -F plinycode-dev test:unit` runs the bun-based extension unit suite (no VS Code host needed). `bun run test` runs the engine + extension suites.
 - Some engine tests need `bash`, `bun` and network access on PATH; they fail in environments lacking those, which is an environment artifact rather than a code bug.
 
-## VS Code extension (`apps/vscode`, package `claude-dev`)
+## VS Code extension (`apps/vscode`, package `plinycode-dev`)
 
 - **Codegen prerequisite:** `bun run protos` (from `apps/vscode`) regenerates `src/generated/*` and the webview grpc client. The `dev`, `build:webview`, and `check-types` scripts already run it, so proto changes are picked up by those commands; run it manually only if you edit `.proto` files without a full build. `src/generated/` is gitignored, so a stale local copy can produce type errors that CI does not see.
 - **Build:** `bun run build:webview` (webview UI) then `bun esbuild.mjs` (extension bundle). `bun run package` does the full production build.
