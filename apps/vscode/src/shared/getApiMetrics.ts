@@ -1,4 +1,4 @@
-import { ClineMessage } from "./ExtensionMessage"
+import { ClineContextBreakdown, ClineMessage } from "./ExtensionMessage"
 
 interface ApiMetrics {
 	totalTokensIn: number
@@ -6,6 +6,8 @@ interface ApiMetrics {
 	totalCacheWrites?: number
 	totalCacheReads?: number
 	totalCost: number
+	/** True when any summed request's tokens are a char-based estimate rather than provider-reported. */
+	hasEstimatedUsage?: boolean
 }
 
 /**
@@ -45,7 +47,7 @@ export function getApiMetrics(messages: ClineMessage[]): ApiMetrics {
 		) {
 			try {
 				const parsedData = JSON.parse(message.text)
-				const { tokensIn, tokensOut, cacheWrites, cacheReads, cost } = parsedData
+				const { tokensIn, tokensOut, cacheWrites, cacheReads, cost, estimated } = parsedData
 
 				if (typeof tokensIn === "number") {
 					result.totalTokensIn += tokensIn
@@ -61,6 +63,9 @@ export function getApiMetrics(messages: ClineMessage[]): ApiMetrics {
 				}
 				if (typeof cost === "number") {
 					result.totalCost += cost
+				}
+				if (estimated === true) {
+					result.hasEstimatedUsage = true
 				}
 			} catch {
 				// Ignore JSON parse errors
@@ -130,4 +135,31 @@ export function getLastApiReqTotalTokens(messages: ClineMessage[]): number {
 		}
 	}
 	return 0
+}
+
+/**
+ * The context source breakdown attached to the most recent api_req_started
+ * message that carries one. Mirrors getLastApiReqTotalTokens's "most recent
+ * request wins" semantics, but is not rescaled by compaction: the breakdown
+ * is replaced wholesale by the next request rather than shrunk in place.
+ *
+ * @param messages - An array of ClineMessage objects to process.
+ * @returns The last reported contextBreakdown, or undefined if none found.
+ */
+export function getLastContextBreakdown(messages: ClineMessage[]): ClineContextBreakdown | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]
+		if (msg.type !== "say" || msg.say !== "api_req_started" || !msg.text) {
+			continue
+		}
+		try {
+			const { contextBreakdown } = JSON.parse(msg.text)
+			if (contextBreakdown && typeof contextBreakdown === "object") {
+				return contextBreakdown as ClineContextBreakdown
+			}
+		} catch {
+			// Ignore JSON parse errors, continue searching
+		}
+	}
+	return undefined
 }

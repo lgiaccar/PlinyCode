@@ -1,4 +1,4 @@
-import { ClineMessage } from "@shared/ExtensionMessage"
+import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
 import React from "react"
 import TaskHeader from "@/components/chat/task-header/TaskHeader"
 import { MessageHandlers } from "../../types/chatTypes"
@@ -11,8 +11,10 @@ interface TaskSectionProps {
 		totalCacheWrites?: number
 		totalCacheReads?: number
 		totalCost: number
+		hasEstimatedUsage?: boolean
 	}
 	lastApiReqTotalTokens?: number
+	lastContextBreakdown?: ClineContextBreakdown
 	selectedModelInfo: {
 		supportsPromptCache: boolean
 		supportsImages: boolean
@@ -28,6 +30,7 @@ export const TaskSection: React.FC<TaskSectionProps> = ({
 	task,
 	apiMetrics,
 	lastApiReqTotalTokens,
+	lastContextBreakdown,
 	selectedModelInfo,
 	messageHandlers,
 }) => {
@@ -35,7 +38,9 @@ export const TaskSection: React.FC<TaskSectionProps> = ({
 		<TaskHeader
 			cacheReads={apiMetrics.totalCacheReads}
 			cacheWrites={apiMetrics.totalCacheWrites}
+			contextBreakdown={lastContextBreakdown}
 			doesModelSupportPromptCache={selectedModelInfo.supportsPromptCache}
+			hasEstimatedUsage={apiMetrics.hasEstimatedUsage}
 			lastApiReqTotalTokens={lastApiReqTotalTokens}
 			onClose={messageHandlers.handleTaskCloseButtonClick}
 			onSendMessage={messageHandlers.handleSendMessage}

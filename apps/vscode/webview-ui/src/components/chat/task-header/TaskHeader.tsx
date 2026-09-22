@@ -1,4 +1,4 @@
-import { ClineMessage } from "@shared/ExtensionMessage"
+import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { useCallback, useLayoutEffect, useMemo, useState } from "react"
 import Thumbnails from "@/components/common/Thumbnails"
@@ -26,6 +26,9 @@ interface TaskHeaderProps {
 	cacheReads?: number
 	totalCost: number
 	lastApiReqTotalTokens?: number
+	/** True when any request contributing to the totals above used a char-based estimate rather than provider-reported usage. */
+	hasEstimatedUsage?: boolean
+	contextBreakdown?: ClineContextBreakdown
 	onClose: () => void
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
 }
@@ -40,6 +43,8 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 	cacheReads,
 	totalCost,
 	lastApiReqTotalTokens,
+	hasEstimatedUsage,
+	contextBreakdown,
 	onClose,
 	onSendMessage,
 }) => {
@@ -174,8 +179,13 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						{isCostAvailable && (
 							<div
 								className="mx-1 px-1 py-0.25 rounded-full inline-flex shrink-0 text-badge-background bg-badge-foreground/80 items-center"
-								id="price-tag">
-								<span className="text-xs sm:text-sm">${totalCost?.toFixed(4)}</span>
+								id="price-tag"
+								title={
+									hasEstimatedUsage ? "Based on an estimated token count; the real cost may differ" : undefined
+								}>
+								<span className="text-xs sm:text-sm">
+									{hasEstimatedUsage ? "~" : ""}${totalCost?.toFixed(4)}
+								</span>
 							</div>
 						)}
 						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
@@ -214,7 +224,9 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						<ContextWindow
 							cacheReads={cacheReads}
 							cacheWrites={cacheWrites}
+							contextBreakdown={contextBreakdown}
 							contextWindow={selectedModelInfo?.contextWindow}
+							hasEstimatedUsage={hasEstimatedUsage}
 							lastApiReqTotalTokens={lastApiReqTotalTokens}
 							onSendMessage={onSendMessage}
 							tokensIn={tokensIn}

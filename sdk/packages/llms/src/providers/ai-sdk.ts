@@ -18,8 +18,12 @@ import type {
 import {
 	type AiSdkFormatterMessage,
 	type AiSdkFormatterPart,
+	type ContextBreakdownTokens,
 	captureSdkError,
 	createMediaBudgetState,
+	estimateContextBreakdown,
+	estimateRequestInputTokens,
+	estimateTokens,
 	formatMessagesForAiSdk,
 	GeneratedMediaSchema,
 	generatedMediaModalityFromMediaType,
@@ -90,6 +94,10 @@ interface GatewayNormalizedUsage {
 	cacheWriteTokens: number;
 	reasoningTokenCount?: number;
 	totalCost?: number;
+	/** True when the provider reported no usable usage and the numbers above are a char-based estimate. */
+	estimated?: boolean;
+	/** Where this request's input tokens came from (system prompt, rules, conversation, ...). */
+	contextBreakdown?: ContextBreakdownTokens;
 }
 type ProviderModuleKind = AiSdkProviderOptionsTarget;
 type ImageGenerationInput = string | Uint8Array | ArrayBuffer;
@@ -1343,6 +1351,36 @@ export function normalizeUsage(
 }
 
 /**
+ * Some Pliny models (and other OpenAI-compatible backends) omit `usage`
+ * entirely, or return an all-zero object, on otherwise successful
+ * completions. Fill in a char-based estimate so the UI still shows non-zero
+ * tokens/context usage instead of nothing, flagged `estimated: true` so
+ * callers can render a "~" prefix rather than presenting it as exact.
+ * Cost is deliberately left unset here: an estimated token count times a
+ * real price would look like a precise dollar figure it is not.
+ */
+export function applyUsageEstimateFallback(
+	usage: GatewayNormalizedUsage,
+	request: Pick<GatewayStreamRequest, "systemPrompt" | "messages" | "tools">,
+	outputText: string | undefined,
+): GatewayNormalizedUsage {
+	const hasRealUsage =
+		usage.inputTokens > 0 ||
+		usage.outputTokens > 0 ||
+		usage.cacheReadTokens > 0 ||
+		usage.cacheWriteTokens > 0;
+	if (hasRealUsage) {
+		return usage;
+	}
+	return {
+		...usage,
+		inputTokens: estimateRequestInputTokens(request),
+		outputTokens: outputText ? estimateTokens(outputText.length) : 0,
+		estimated: true,
+	};
+}
+
+/**
  * Suppress unhandled rejections from AI SDK stream promises (usage, finishReason, etc.)
  * that reject with NoOutputGeneratedError when the stream encounters an error.
  *
@@ -1959,9 +1997,45 @@ async function* emitAiSdkEvents(
 	}
 
 	if (usageToEmit) {
+		const normalizedUsage = normalizeUsage(
+			usageToEmit,
+			metadataToUse,
+			pricingValue,
+			request,
+		);
+		let outputTextForEstimate: string | undefined;
+		if (normalizedUsage.inputTokens === 0 && normalizedUsage.outputTokens === 0) {
+			try {
+				outputTextForEstimate = await stream.text;
+			} catch {
+				// stream.text rejects alongside the same stream errors
+				// suppressDanglingStreamPromises already guards against;
+				// fall back to an input-only estimate.
+			}
+		}
+		const estimatedUsage = applyUsageEstimateFallback(
+			normalizedUsage,
+			request,
+			outputTextForEstimate,
+		);
+		const contextSources = request.metadata?.contextSources as
+			| { rulesText?: string; skillsText?: string; workflowsText?: string }
+			| undefined;
 		yield {
 			type: "usage",
-			usage: normalizeUsage(usageToEmit, metadataToUse, pricingValue, request),
+			usage: {
+				...estimatedUsage,
+				contextBreakdown: estimateContextBreakdown(
+					{
+						systemPrompt: request.systemPrompt,
+						rulesText: contextSources?.rulesText,
+						skillsText: contextSources?.skillsText,
+						workflowsText: contextSources?.workflowsText,
+						messages: request.messages,
+					},
+					estimatedUsage.inputTokens > 0 ? estimatedUsage.inputTokens : undefined,
+				),
+			},
 		};
 	}
 

@@ -5,6 +5,7 @@
  *
  */
 
+import type { ContextBreakdownTokens } from "./llms/context-breakdown";
 import type { GeneratedMedia } from "./llms/media";
 import type { ModelInfo } from "./llms/model-info";
 import type {
@@ -106,6 +107,20 @@ export interface AgentTokenUsage {
 	cacheWriteTokens: number;
 	/** Provider-reported hidden reasoning tokens, when available. */
 	reasoningTokenCount?: number;
+	/**
+	 * True when the provider reported no usable token counts for this request
+	 * and the numbers above are a char-based estimate (see
+	 * `estimateRequestInputTokens`/`estimateTokens` in `@plinycode/shared`)
+	 * rather than gateway-reported figures. Not summed across requests —
+	 * reflects only the most recent one.
+	 */
+	estimated?: boolean;
+	/**
+	 * Where this request's input tokens came from (system prompt, rules,
+	 * skills, workflows, conversation, other). Not summed across requests —
+	 * reflects only the most recent one, same as `estimated`.
+	 */
+	contextBreakdown?: ContextBreakdownTokens;
 }
 
 /**

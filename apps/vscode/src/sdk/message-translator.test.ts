@@ -2399,6 +2399,59 @@ describe("translateSessionEvent — agent_event usage", () => {
 			totalCost: 0.0112674,
 		})
 	})
+
+	it("carries the estimated flag onto api_req_started when the gateway reported no usable usage", () => {
+		const state = new MessageTranslatorState()
+		const event: CoreSessionEvent = {
+			type: "agent_event",
+			payload: {
+				sessionId: "session-1",
+				event: {
+					type: "usage",
+					inputTokens: 1200,
+					outputTokens: 80,
+					cacheReadTokens: 0,
+					cacheWriteTokens: 0,
+					estimated: true,
+					totalInputTokens: 1200,
+					totalOutputTokens: 80,
+				} as AgentEvent,
+			},
+		}
+
+		const result = translateSessionEvent(event, state)
+		expect(result.messages).toHaveLength(1)
+		expect(JSON.parse(result.messages[0].text ?? "{}")).toMatchObject({
+			tokensIn: 1200,
+			tokensOut: 80,
+			estimated: true,
+		})
+		expect(result.usage?.estimated).toBe(true)
+	})
+
+	it("omits the estimated flag when the gateway reported real usage", () => {
+		const state = new MessageTranslatorState()
+		const event: CoreSessionEvent = {
+			type: "agent_event",
+			payload: {
+				sessionId: "session-1",
+				event: {
+					type: "usage",
+					inputTokens: 1200,
+					outputTokens: 80,
+					cacheReadTokens: 0,
+					cacheWriteTokens: 0,
+					totalInputTokens: 1200,
+					totalOutputTokens: 80,
+				} as AgentEvent,
+			},
+		}
+
+		const result = translateSessionEvent(event, state)
+		const parsed = JSON.parse(result.messages[0].text ?? "{}")
+		expect(parsed.estimated).toBeUndefined()
+		expect(result.usage?.estimated).toBeUndefined()
+	})
 })
 
 // ---------------------------------------------------------------------------

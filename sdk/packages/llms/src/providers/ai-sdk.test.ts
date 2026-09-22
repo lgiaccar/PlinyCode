@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixtures from "../../fixtures/usage.json";
-import { normalizeUsage } from "./ai-sdk";
+import { applyUsageEstimateFallback, normalizeUsage } from "./ai-sdk";
 
 /**
  * These tests validate usage normalization across different AI SDK stream result shapes.
@@ -463,6 +463,180 @@ describe("ai-sdk usage normalization", () => {
 			).raw;
 			expect(geminiRaw).toHaveProperty("promptTokenCount");
 			expect(geminiRaw).toHaveProperty("candidatesTokenCount");
+		});
+	});
+
+	describe("Pliny gateway usage", () => {
+		// Pliny is registered as an openai-compatible provider (family:
+		// "openai-compatible"), so the AI SDK's @ai-sdk/openai-compatible
+		// package produces this exact shape from the gateway's OpenAI-style
+		// chat completions response: convertOpenAICompatibleChatUsage() maps
+		// usage.prompt_tokens/completion_tokens into nested inputTokens/
+		// outputTokens objects and stashes the raw wire JSON on `raw`.
+		function plinyStreamUsage(rawUsage: Record<string, unknown>) {
+			const promptTokens = Number(rawUsage.prompt_tokens ?? 0);
+			const completionTokens = Number(rawUsage.completion_tokens ?? 0);
+			const cacheReadTokens = Number(
+				(rawUsage.prompt_tokens_details as Record<string, unknown> | undefined)
+					?.cached_tokens ?? 0,
+			);
+			return {
+				inputTokens: {
+					total: promptTokens,
+					noCache: promptTokens - cacheReadTokens,
+					cacheRead: cacheReadTokens,
+					cacheWrite: undefined,
+				},
+				outputTokens: {
+					total: completionTokens,
+					text: completionTokens,
+					reasoning: 0,
+				},
+				raw: rawUsage,
+			} as Record<string, unknown>;
+		}
+
+		it("normalizes a self-hosted model's usage with zero pricing to zero cost", () => {
+			const usage = plinyStreamUsage({
+				prompt_tokens: 5000,
+				completion_tokens: 250,
+			});
+			const normalized = normalizeUsage(usage, undefined, {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			});
+
+			expect(normalized.inputTokens).toBe(5000);
+			expect(normalized.outputTokens).toBe(250);
+			expect(normalized.totalCost).toBe(0);
+		});
+
+		it("normalizes a hosted model's usage and computes cost from catalog pricing", () => {
+			const usage = plinyStreamUsage({
+				prompt_tokens: 10000,
+				completion_tokens: 500,
+			});
+			const normalized = normalizeUsage(usage, undefined, {
+				input: 3,
+				output: 15,
+				cacheRead: 0.3,
+				cacheWrite: 3.75,
+			});
+
+			expect(normalized.inputTokens).toBe(10000);
+			expect(normalized.outputTokens).toBe(500);
+			expect(normalized.cacheReadTokens).toBe(0);
+			expect(normalized.cacheWriteTokens).toBe(0);
+			// (10000/1e6)*3 + (500/1e6)*15 = 0.03 + 0.0075
+			expect(normalized.totalCost).toBeCloseTo(0.0375, 6);
+		});
+
+		it("extracts cache reads from prompt_tokens_details.cached_tokens (OpenAI-compatible shape)", () => {
+			const usage = plinyStreamUsage({
+				prompt_tokens: 8000,
+				completion_tokens: 120,
+				prompt_tokens_details: { cached_tokens: 3000 },
+			});
+			const normalized = normalizeUsage(usage, undefined, {
+				input: 3,
+				output: 15,
+				cacheRead: 0.3,
+				cacheWrite: 3.75,
+			});
+
+			expect(normalized.inputTokens).toBe(8000);
+			expect(normalized.cacheReadTokens).toBe(3000);
+			// Billable input excludes the cache read: (8000-3000)/1e6*3 = 0.015
+			// plus cache read at cacheRead price: 3000/1e6*0.3 = 0.0009
+			// plus output: 120/1e6*15 = 0.0018
+			expect(normalized.totalCost).toBeCloseTo(0.015 + 0.0009 + 0.0018, 6);
+		});
+
+		it("falls back to Anthropic-style cache_creation_input_tokens for Bedrock cache writes on the raw payload", () => {
+			// cache_control models (e.g. Claude Sonnet via Bedrock) route through
+			// anthropic-compatible cache-control handling; the gateway's raw
+			// response can carry the Anthropic-native cache write field even
+			// though the outer envelope is OpenAI-chat shaped.
+			const usage = plinyStreamUsage({
+				prompt_tokens: 20000,
+				completion_tokens: 300,
+			});
+			(usage.raw as Record<string, unknown>).cache_creation_input_tokens = 15000;
+
+			const normalized = normalizeUsage(usage, undefined, {
+				input: 3,
+				output: 15,
+				cacheRead: 0.3,
+				cacheWrite: 3.75,
+			});
+
+			expect(normalized.cacheWriteTokens).toBe(15000);
+		});
+
+		it("leaves cost undefined when the model has no pricing entry (unpriced hosted model)", () => {
+			const usage = plinyStreamUsage({
+				prompt_tokens: 1000,
+				completion_tokens: 100,
+			});
+			const normalized = normalizeUsage(usage, undefined, undefined);
+
+			expect(normalized.inputTokens).toBe(1000);
+			expect(normalized.outputTokens).toBe(100);
+			expect(normalized.totalCost).toBeUndefined();
+		});
+	});
+
+	describe("applyUsageEstimateFallback", () => {
+		it("leaves real provider usage untouched", () => {
+			const usage = { inputTokens: 500, outputTokens: 40, cacheReadTokens: 0, cacheWriteTokens: 0 };
+			const result = applyUsageEstimateFallback(
+				usage,
+				{ systemPrompt: "sys", messages: [], tools: [] },
+				"some output",
+			);
+			expect(result).toEqual(usage);
+			expect(result.estimated).toBeUndefined();
+		});
+
+		it("estimates input and output tokens when the gateway reports all zeros", () => {
+			const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+			const result = applyUsageEstimateFallback(
+				usage,
+				{
+					systemPrompt: "You are a helpful assistant.",
+					messages: [{ role: "user", content: "hello there, how are you?" }],
+					tools: [],
+				},
+				"I'm doing well, thanks for asking!",
+			);
+			expect(result.estimated).toBe(true);
+			expect(result.inputTokens).toBeGreaterThan(0);
+			expect(result.outputTokens).toBeGreaterThan(0);
+			expect(result.totalCost).toBeUndefined();
+		});
+
+		it("estimates zero output tokens when no output text is available", () => {
+			const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+			const result = applyUsageEstimateFallback(
+				usage,
+				{ systemPrompt: "sys", messages: [], tools: [] },
+				undefined,
+			);
+			expect(result.estimated).toBe(true);
+			expect(result.outputTokens).toBe(0);
+		});
+
+		it("does not treat cache-only usage as missing", () => {
+			const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 500, cacheWriteTokens: 0 };
+			const result = applyUsageEstimateFallback(
+				usage,
+				{ systemPrompt: "sys", messages: [], tools: [] },
+				"output",
+			);
+			expect(result.estimated).toBeUndefined();
+			expect(result).toEqual(usage);
 		});
 	});
 });

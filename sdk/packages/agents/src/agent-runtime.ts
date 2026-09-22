@@ -1867,6 +1867,10 @@ export class AgentRuntime {
 				(this.state.usage.reasoningTokenCount ?? 0) +
 				(usage.reasoningTokenCount ?? 0),
 			totalCost: (this.state.usage.totalCost ?? 0) + (usage.totalCost ?? 0),
+			// Not cumulative: reflects only the most recent request, for the
+			// per-turn delta event below (see translateUsage in core).
+			estimated: usage.estimated,
+			contextBreakdown: usage.contextBreakdown,
 		};
 		await this.emit({
 			type: "usage-updated",

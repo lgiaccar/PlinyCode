@@ -261,6 +261,11 @@ export {
 } from "./llms/reasoning-options";
 export { serializeAbortReason } from "./llms/requests";
 export {
+	type ContextBreakdownInput,
+	type ContextBreakdownTokens,
+	estimateContextBreakdown,
+} from "./llms/context-breakdown";
+export {
 	CHARS_PER_TOKEN,
 	estimateRequestInputTokens,
 	estimateTokens,

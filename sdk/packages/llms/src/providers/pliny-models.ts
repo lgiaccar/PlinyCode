@@ -1,4 +1,4 @@
-import type { ModelCapability, ModelInfo } from "../catalog/types";
+import type { ModelCapability, ModelInfo, ModelPricing } from "../catalog/types";
 import catalog from "./data/pliny-models.json";
 
 export const PLINY_BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL;
@@ -8,6 +8,14 @@ export const PLINY_DEFAULT_HEADERS = catalog.headers as Readonly<
 >;
 export const PLINY_TIMEOUT_MS = catalog.timeouts.timeout;
 
+/** selfHosted pools run on internal capacity with no per-token charge. */
+const SELF_HOSTED_PRICING: ModelPricing = {
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+};
+
 type PlinyCatalogEntry = {
 	id: string;
 	context?: number;
@@ -16,6 +24,10 @@ type PlinyCatalogEntry = {
 	cache_control?: boolean;
 	auto_cache?: boolean;
 	note?: string;
+	/** USD per 1M tokens. Absent when no confirmed price is known — never guess a number here. */
+	pricing?: ModelPricing;
+	/** Provenance for `pricing`, e.g. flags a public-list-price stand-in vs a confirmed internal figure. */
+	priceSource?: string;
 };
 
 const HOSTED_DEFAULT_CONTEXT = 200_000;
@@ -52,6 +64,8 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 		entry.note,
 	].filter(Boolean);
 
+	const pricing = selfHosted ? SELF_HOSTED_PRICING : entry.pricing;
+
 	return {
 		id: entry.id,
 		name: displayName(entry.id),
@@ -63,12 +77,16 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 			: HOSTED_DEFAULT_MAX_OUTPUT,
 		capabilities: [...capabilities],
 		family: selfHosted ? "pliny-self-hosted" : "pliny-hosted",
+		...(pricing ? { pricing } : {}),
 		metadata: {
 			provider: "pliny",
 			pool: pool ?? null,
 			selfHosted,
 			...(entry.cache_control ? { cacheControl: true } : {}),
 			...(entry.auto_cache ? { autoCache: true } : {}),
+			...(!selfHosted && entry.priceSource
+				? { priceSource: entry.priceSource }
+				: {}),
 		},
 	};
 }

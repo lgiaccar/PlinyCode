@@ -1,3 +1,4 @@
+import type { ClineContextBreakdown } from "@shared/ExtensionMessage"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { memo, useCallback, useMemo, useState } from "react"
 import { formatLargeNumber as formatTokenNumber } from "@/utils/format"
@@ -22,7 +23,49 @@ interface TaskContextWindowButtonsProps extends TokenUsageInfoProps {
 	autoCompactThreshold?: number
 	isThresholdChanged?: boolean
 	isThresholdFadingOut?: boolean
+	hasEstimatedUsage?: boolean
+	contextBreakdown?: ClineContextBreakdown
 }
+
+const CONTEXT_BREAKDOWN_LABELS: Record<keyof ClineContextBreakdown, string> = {
+	systemPrompt: "System Prompt",
+	rules: "Rules",
+	skills: "Skills",
+	workflows: "Workflows",
+	conversation: "Conversation",
+	other: "Other",
+}
+
+const ContextBreakdownDetails = memo<{ breakdown: ClineContextBreakdown }>(({ breakdown }) => {
+	const rows = useMemo(() => {
+		const total = Object.values(breakdown).reduce((sum, value) => sum + (value ?? 0), 0)
+		return (Object.keys(CONTEXT_BREAKDOWN_LABELS) as Array<keyof ClineContextBreakdown>)
+			.map((key) => ({ key, label: CONTEXT_BREAKDOWN_LABELS[key], value: breakdown[key] }))
+			.filter((row) => (row.value ?? 0) > 0)
+			.map((row) => ({
+				...row,
+				percentage: total > 0 ? ((row.value ?? 0) / total) * 100 : 0,
+			}))
+	}, [breakdown])
+
+	if (rows.length === 0) {
+		return <div>No context breakdown available</div>
+	}
+
+	return (
+		<div className="space-y-1">
+			{rows.map((row) => (
+				<div className="flex justify-between" key={row.key}>
+					<span>{row.label}</span>
+					<span className="font-mono">
+						{formatTokenNumber(row.value ?? 0)} ({row.percentage.toFixed(0)}%)
+					</span>
+				</div>
+			))}
+		</div>
+	)
+})
+ContextBreakdownDetails.displayName = "ContextBreakdownDetails"
 
 // New accordion item component
 const AccordionItem = memo<{
@@ -98,6 +141,8 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 	cacheReads,
 	percentage,
 	autoCompactThreshold = 0,
+	hasEstimatedUsage,
+	contextBreakdown,
 }) => {
 	// Accordion state
 	const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -143,11 +188,16 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 				isExpanded={expandedSections.has("context")}
 				onToggle={(event) => toggleSection("context", event)}
 				title="Context Window"
-				value={percentage ? `${percentage.toFixed(1)}%` : formatTokenNumber(contextWindow)}>
+				value={
+					percentage ? `${hasEstimatedUsage ? "~" : ""}${percentage.toFixed(1)}%` : formatTokenNumber(contextWindow)
+				}>
 				<div className="space-y-1">
 					<div className="flex justify-between">
 						<span>Used:</span>
-						<span className="font-mono">{formatTokenNumber(tokenUsed)}</span>
+						<span className="font-mono">
+							{hasEstimatedUsage ? "~" : ""}
+							{formatTokenNumber(tokenUsed)}
+						</span>
 					</div>
 					<div className="flex justify-between">
 						<span>Total:</span>
@@ -165,13 +215,23 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 					isExpanded={expandedSections.has("tokens")}
 					onToggle={(event) => toggleSection("tokens", event)}
 					title="Token Usage"
-					value={`${formatTokenNumber(totalTokens)}`}>
+					value={`${hasEstimatedUsage ? "~" : ""}${formatTokenNumber(totalTokens)}`}>
 					<TokenUsageDetails
 						cacheReads={cacheReads}
 						cacheWrites={cacheWrites}
 						tokensIn={tokensIn}
 						tokensOut={tokensOut}
 					/>
+				</AccordionItem>
+			)}
+
+			{contextBreakdown && Object.values(contextBreakdown).some((value) => (value ?? 0) > 0) && (
+				<AccordionItem
+					isExpanded={expandedSections.has("breakdown")}
+					onToggle={(event) => toggleSection("breakdown", event)}
+					title="Context Breakdown"
+					value="">
+					<ContextBreakdownDetails breakdown={contextBreakdown} />
 				</AccordionItem>
 			)}
 		</div>
