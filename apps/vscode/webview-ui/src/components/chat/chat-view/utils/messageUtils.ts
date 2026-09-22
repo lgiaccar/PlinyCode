@@ -110,6 +110,24 @@ export function canRestoreWorkspaceFromMessage(messages: ClineMessage[], message
 	return isVisibleCheckpointUserMessage(messages[index]) && !isCheckpointAnswerMessage(messages, index)
 }
 
+export function getRestoreWorkspaceDisabledReason(messages: ClineMessage[], messageTs: number | undefined): string {
+	if (messageTs === undefined) {
+		return "PlinyCode cannot revert files for this message."
+	}
+	const index = messages.findIndex((message) => message.ts === messageTs)
+	if (index === -1) {
+		return "PlinyCode cannot revert files for this message."
+	}
+	const message = messages[index]
+	if (!isVisibleCheckpointUserMessage(message)) {
+		return "PlinyCode can only revert files from your own prompts, not system messages."
+	}
+	if (isCheckpointAnswerMessage(messages, index)) {
+		return "PlinyCode cannot revert files for a follow-up answer to a question — edit the original prompt instead."
+	}
+	return "PlinyCode needs a git workspace and a checkpoint from when this message started an agent run to revert files."
+}
+
 /**
  * Filter messages that should be visible in the chat
  */

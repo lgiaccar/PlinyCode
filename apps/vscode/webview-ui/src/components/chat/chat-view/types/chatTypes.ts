@@ -88,18 +88,22 @@ export interface ScrollBehavior {
 	disableAutoScrollRef: React.MutableRefObject<boolean>
 	scrollToBottomSmooth: () => void
 	scrollToBottomAuto: () => void
+	scrollToTopSmooth: () => void
 	scrollToMessage: (messageIndex: number) => void
 	toggleRowExpansion: (ts: number, options?: { preserveAutoScroll?: boolean }) => void
 	handleRowHeightChange: (isTaller: boolean) => void
 	handleLastRowContentChange: () => void
 	isAtBottom: boolean
 	setIsAtBottom: React.Dispatch<React.SetStateAction<boolean>>
+	isAtTop: boolean
+	setIsAtTop: React.Dispatch<React.SetStateAction<boolean>>
 	pendingScrollToMessage: number | null
 	setPendingScrollToMessage: React.Dispatch<React.SetStateAction<number | null>>
 	scrolledPastUserMessage: ClineMessage | null
 	handleRangeChanged: (range: ListRange) => void
 	goToPreviousUserMessage: () => void
 	goToNextUserMessage: () => void
+	userMessageIndices: number[]
 }
 
 /**

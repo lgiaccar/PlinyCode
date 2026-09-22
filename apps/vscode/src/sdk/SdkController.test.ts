@@ -26,6 +26,7 @@ describe("resolveWorkspaceRootPath", () => {
 vi.mock("@/services/telemetry", () => ({
 	telemetryService: {
 		captureRemoteConfigSessionGate: vi.fn(),
+		captureEditMessageRestart: vi.fn(),
 	},
 }))
 
@@ -325,6 +326,28 @@ describe("latest checkpoint changes summary", () => {
 				title: "src/a.ts (PlinyCode changes)",
 			}),
 		)
+	})
+
+	it("summarizes changes for a specific message checkpoint run", async () => {
+		const compareCheckpoint = vi.fn().mockResolvedValue({
+			diffs: [{ filePath: "/proj/readme.md", leftContent: "a\n", rightContent: "a\nb\n" }],
+		})
+		const controller = createCheckpointController(compareCheckpoint)
+		controller.task = {
+			messageStateHandler: {
+				getClineMessages: () => [
+					{ ts: 10, type: "say", say: "task", text: "Start" },
+					{ ts: 11, type: "say", say: "checkpoint_created", text: "1" },
+				],
+			},
+		}
+
+		const summary = await SdkController.prototype.getCheckpointChangesSummary.call(controller as never, {
+			messageTs: 10,
+		})
+		expect(summary.files).toHaveLength(1)
+		expect(summary.checkpointRunCount).toBe(1)
+		expect(compareCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-1", checkpointRunCount: 1 }))
 	})
 })
 

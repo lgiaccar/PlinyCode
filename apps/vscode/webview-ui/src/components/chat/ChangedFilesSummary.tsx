@@ -1,5 +1,5 @@
 import type { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
-import { OpenFileDiffRequest } from "@shared/proto/cline/checkpoints"
+import { CheckpointChangesSummaryRequest, OpenFileDiffRequest } from "@shared/proto/cline/checkpoints"
 import { EmptyRequest } from "@shared/proto/cline/common"
 import { ChevronDownIcon, ChevronRightIcon, GitCompareIcon } from "lucide-react"
 import { memo, useCallback, useEffect, useState } from "react"
@@ -40,7 +40,7 @@ export const ChangedFilesSummary = memo(({ checkpointRunCount: checkpointRunCoun
 		setLoadState("loading")
 		setSummary(undefined)
 		let cancelled = false
-		CheckpointsServiceClient.checkpointLatestChangesSummary(EmptyRequest.create({}))
+		CheckpointsServiceClient.checkpointLatestChangesSummary(CheckpointChangesSummaryRequest.create({}))
 			.then((result) => {
 				if (!cancelled) {
 					setSummary(result)
@@ -74,7 +74,19 @@ export const ChangedFilesSummary = memo(({ checkpointRunCount: checkpointRunCoun
 		[effectiveRunCount],
 	)
 
-	if (loadState === "loading" || loadState === "error" || !hasChanges || !summary) {
+	if (loadState === "loading") {
+		return null
+	}
+
+	if (loadState === "error") {
+		return (
+			<p className="text-xs text-description px-1">
+				Could not load file changes. Check that this workspace is a git repository and checkpoints are enabled.
+			</p>
+		)
+	}
+
+	if (!hasChanges || !summary) {
 		return null
 	}
 

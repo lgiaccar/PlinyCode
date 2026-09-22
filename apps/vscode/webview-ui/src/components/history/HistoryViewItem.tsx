@@ -10,8 +10,8 @@ import {
 	ChevronsDownUpIcon,
 	ChevronsUpDownIcon,
 	DownloadIcon,
-	FileTextIcon,
 	FolderIcon,
+	FolderOpenIcon,
 	StarIcon,
 	TrashIcon,
 } from "lucide-react"
@@ -125,34 +125,34 @@ const HistoryViewItem = ({
 							Legacy
 						</span>
 					)}
-					<div className="flex gap-2 flex-shrink-0">
-						<Button
-							aria-label="Export as Markdown"
-							className="p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-							onClick={(e) => {
-								e.stopPropagation()
-								TaskServiceClient.exportTaskToMarkdown(ExportTaskRequest.create({ taskId: item.id })).catch(
-									(err) => console.error("Failed to export task as markdown:", err),
-								)
-							}}
-							title="Export as Markdown"
-							variant="ghost">
-							<span className="flex items-center gap-1 text-xs">
-								<FileTextIcon className="stroke-1" />
-							</span>
-						</Button>
+					<div className="flex gap-1 flex-shrink-0 items-center">
+						<Tooltip>
+							<TooltipContent>Export conversation as Markdown</TooltipContent>
+							<TooltipTrigger asChild>
+								<Button
+									aria-label="Export conversation as Markdown"
+									className="p-0"
+									onClick={(e) => {
+										e.stopPropagation()
+										TaskServiceClient.exportTaskToMarkdown(
+											ExportTaskRequest.create({ taskId: item.id }),
+										).catch((err) => console.error("Failed to export task as markdown:", err))
+									}}
+									variant="icon">
+									<DownloadIcon className="opacity-70" />
+								</Button>
+							</TooltipTrigger>
+						</Tooltip>
 						<Button
 							aria-label="Delete"
-							className="p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+							className="p-0"
 							disabled={isFavoritedItem}
 							onClick={(e) => {
 								e.stopPropagation()
 								handleDeleteHistoryItem(item.id)
 							}}
-							variant="ghost">
-							<span className="flex items-center gap-1 text-xs">
-								<TrashIcon className="stroke-1" />
-							</span>
+							variant="icon">
+							<TrashIcon className="opacity-70" />
 						</Button>
 						<Button
 							aria-label={isFavoritedItem ? "Remove from favorites" : "Add to favorites"}
@@ -259,19 +259,23 @@ const HistoryViewItem = ({
 										<span className="font-medium text-description">Size:</span>
 										<span className="items-center gap-2 flex text-description">
 											{formatSize(item.size)}
-											<Button
-												aria-label="Open Conversation Folder"
-												className="m-0 p-0"
-												onClick={(e) => {
-													e.stopPropagation()
-													TaskServiceClient.exportTaskWithId(
-														StringRequest.create({ value: item.id }),
-													).catch((err) => console.error("Failed to open task folder:", err))
-												}}
-												title="Open Conversation Folder"
-												variant="ghost">
-												<DownloadIcon />
-											</Button>
+											<Tooltip>
+												<TooltipContent>Open conversation folder</TooltipContent>
+												<TooltipTrigger asChild>
+													<Button
+														aria-label="Open conversation folder"
+														className="m-0 p-0"
+														onClick={(e) => {
+															e.stopPropagation()
+															TaskServiceClient.exportTaskWithId(
+																StringRequest.create({ value: item.id }),
+															).catch((err) => console.error("Failed to open task folder:", err))
+														}}
+														variant="icon">
+														<FolderOpenIcon className="opacity-70" />
+													</Button>
+												</TooltipTrigger>
+											</Tooltip>
 										</span>
 									</div>
 								</div>

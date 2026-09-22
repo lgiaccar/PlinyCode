@@ -58,6 +58,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 		userInfo,
 		hooksEnabled,
 		checkpointRestoreInput,
+		editMessageRestartFocus,
 		queuedPrompts,
 		turnState,
 	} = useExtensionState()
@@ -118,6 +119,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 	const lastApiReqTotalTokens = useMemo(() => getLastApiReqTotalTokens(modifiedMessages) || undefined, [modifiedMessages])
 	const lastContextBreakdown = useMemo(() => getLastContextBreakdown(modifiedMessages), [modifiedMessages])
 	const lastAppliedCheckpointRestoreSessionId = useRef<string | undefined>(checkpointRestoreInput?.sessionId)
+	const lastAppliedEditMessageRestartSessionId = useRef<string | undefined>(editMessageRestartFocus?.sessionId)
 
 	useEffect(() => {
 		if (!checkpointRestoreInput || checkpointRestoreInput.sessionId === lastAppliedCheckpointRestoreSessionId.current) {
@@ -366,7 +368,21 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 
 	// Use scroll behavior hook
 	const scrollBehavior = useScrollBehavior(displayMessages, visibleMessages, groupedMessages, expandedRows, setExpandedRows)
-	const { scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef } = scrollBehavior
+	const { scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef, scrollToMessage } = scrollBehavior
+
+	useEffect(() => {
+		if (!editMessageRestartFocus || editMessageRestartFocus.sessionId === lastAppliedEditMessageRestartSessionId.current) {
+			return
+		}
+		lastAppliedEditMessageRestartSessionId.current = editMessageRestartFocus.sessionId
+		const messageIndex = displayMessages.findIndex((message) => message.ts === editMessageRestartFocus.messageTs)
+		if (messageIndex >= 0) {
+			scrollToMessage(messageIndex)
+		}
+		setTimeout(() => {
+			textAreaRef.current?.focus()
+		}, 0)
+	}, [displayMessages, editMessageRestartFocus, scrollToMessage, textAreaRef])
 
 	// When a prompt gets queued, the queue banner mounts (or grows) in the footer, which
 	// shrinks the messages area and visually covers the bottom of the conversation. No new

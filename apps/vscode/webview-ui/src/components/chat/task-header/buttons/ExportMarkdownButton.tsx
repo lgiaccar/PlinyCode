@@ -1,5 +1,5 @@
 import { ExportTaskRequest } from "@shared/proto/cline/task"
-import { FileTextIcon } from "lucide-react"
+import { DownloadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -25,10 +25,10 @@ const ExportMarkdownButton: React.FC<{
 
 	return (
 		<Tooltip>
-			<TooltipContent>Export as Markdown</TooltipContent>
+			<TooltipContent>Export conversation as Markdown</TooltipContent>
 			<TooltipTrigger className={cn("flex items-center", className)}>
 				<Button
-					aria-label="Export as Markdown"
+					aria-label="Export conversation as Markdown"
 					onClick={(e) => {
 						e.preventDefault()
 						e.stopPropagation()
@@ -36,7 +36,7 @@ const ExportMarkdownButton: React.FC<{
 					}}
 					size="icon"
 					variant="icon">
-					<FileTextIcon />
+					<DownloadIcon />
 				</Button>
 			</TooltipTrigger>
 		</Tooltip>

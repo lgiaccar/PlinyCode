@@ -1,11 +1,25 @@
-import { LatestChangesSummary } from "@shared/proto/cline/checkpoints"
-import { EmptyRequest } from "@shared/proto/cline/common"
+import { CheckpointChangesSummaryRequest, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { Controller } from ".."
 
 export async function checkpointLatestChangesSummary(
 	controller: Controller,
-	_request: EmptyRequest,
+	request: CheckpointChangesSummaryRequest,
 ): Promise<LatestChangesSummary> {
+	const sdkGetCheckpointChangesSummary = (
+		controller as Controller & {
+			getCheckpointChangesSummary?: (input?: {
+				checkpointRunCount?: number
+				messageTs?: number
+			}) => Promise<LatestChangesSummary>
+			getLatestCheckpointChangesSummary?: () => Promise<LatestChangesSummary>
+		}
+	).getCheckpointChangesSummary
+	if (sdkGetCheckpointChangesSummary) {
+		return await sdkGetCheckpointChangesSummary.call(controller, {
+			checkpointRunCount: request.checkpointRunCount,
+			messageTs: request.messageTs,
+		})
+	}
 	const sdkGetLatestCheckpointChangesSummary = (
 		controller as Controller & {
 			getLatestCheckpointChangesSummary?: () => Promise<LatestChangesSummary>

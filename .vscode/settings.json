@@ -13,6 +13,9 @@
 	},
 	// Turn off tsc task auto detection since we have the necessary tasks as npm scripts
 	"typescript.tsc.autoDetect": "off",
+	// This repo uses Bun, not npm. VS Code's npm script detector fails to parse
+	// apps/vscode/package.json ("Npm task detection: failed to parse the file").
+	"npm.autoDetect": "off",
 	"typescript.preferences.quoteStyle": "double",
 	// Protobuf settings
 	"protoc": {
