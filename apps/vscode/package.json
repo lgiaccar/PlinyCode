@@ -323,7 +323,26 @@
 		},
 		"configuration": {
 			"title": "PlinyCode",
-			"properties": {}
+			"properties": {
+				"plinycode.contextFolders.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable automatic scanning of context folders (.github, .vscode, .devcontainer, .cursor) for rule generation. Rules are generated in .cline/rules/ and must be manually enabled."
+				},
+				"plinycode.contextFolders.folders": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [
+						".github",
+						".vscode",
+						".devcontainer",
+						".cursor"
+					],
+					"description": "List of context folders to scan for automatic rule generation. These folders will be scanned and rules generated in .cline/rules/."
+				}
+			}
 		}
 	},
 	"scripts": {
