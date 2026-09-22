@@ -1,5 +1,6 @@
-import { HistoryItem } from "@shared/HistoryItem"
+import type { Platform } from "@shared/ExtensionMessage"
 import { StringRequest } from "@shared/proto/cline/common"
+import type { TaskItem } from "@shared/proto/cline/task"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import {
 	ArrowDownIcon,
@@ -9,18 +10,32 @@ import {
 	ChevronsDownUpIcon,
 	ChevronsUpDownIcon,
 	DownloadIcon,
+	FolderIcon,
 	StarIcon,
 	TrashIcon,
 } from "lucide-react"
 import { memo, useCallback, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { formatLargeNumber, formatSize } from "@/utils/format"
 
+/**
+ * Basename of a workspace path for the compact history row, matching the
+ * platform-aware separator handling in TaskWorkingDirectoryBadge so Windows
+ * paths (backslash-separated) don't render as one long unsplit segment.
+ */
+function workspaceBasename(p: string, platform: Platform): string {
+	let cleaned = platform === "win32" ? p.replace(/\\/g, "/") : p
+	cleaned = cleaned.replace(/\/+$/, "")
+	return cleaned.split("/").pop() || p
+}
+
 type HistoryViewItemProps = {
-	item: HistoryItem
+	item: TaskItem
 	index: number
 	selectedItems: string[]
 	pendingFavoriteToggles: Record<string, boolean>
@@ -39,6 +54,10 @@ const HistoryViewItem = ({
 }: HistoryViewItemProps) => {
 	const [expanded, setExpanded] = useState(false)
 	const isCostVisible = useUsageCostVisibility()
+	const { platform } = useExtensionState()
+
+	const workspaceRoot = item.workspaceRoot?.trim()
+	const workspaceLabel = workspaceRoot ? workspaceBasename(workspaceRoot, platform) : undefined
 
 	const isFavoritedItem = useMemo(
 		() => pendingFavoriteToggles[item.id] ?? item.isFavorited,
@@ -136,6 +155,20 @@ const HistoryViewItem = ({
 						</Button>
 					</div>
 				</div>
+
+				<Tooltip>
+					<TooltipContent className="max-w-xs" side="bottom">
+						{workspaceRoot || "Unknown workspace"}
+					</TooltipContent>
+					<TooltipTrigger asChild>
+						<div className="flex items-center gap-1 text-xs text-description min-w-0 w-fit max-w-full">
+							<FolderIcon className="shrink-0 opacity-70" size={11} />
+							<span className="whitespace-nowrap overflow-hidden text-ellipsis min-w-0 opacity-70">
+								{workspaceLabel ?? "Unknown workspace"}
+							</span>
+						</div>
+					</TooltipTrigger>
+				</Tooltip>
 
 				<Button
 					className="p-0"

@@ -113,6 +113,10 @@ message TaskItem {
   // Provider id the task ran on. Empty for tasks recorded before this
   // field existed and for legacy imports; consumers show cost in that case.
   string api_provider = 13;
+  // Absolute path of the workspace/working directory the task ran in. Empty
+  // for legacy tasks recorded before this field existed; consumers show an
+  // "Unknown workspace" fallback in that case.
+  string workspace_root = 14;
 }
 
 // Request for ask response operation
