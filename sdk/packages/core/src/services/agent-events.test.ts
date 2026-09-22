@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@cline/shared";
+import type { AgentEvent } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { CoreSessionConfig } from "../types/config";
 import type { ActiveSession } from "../types/session";

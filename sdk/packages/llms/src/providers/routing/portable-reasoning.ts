@@ -1,4 +1,4 @@
-import type { GatewayStreamRequest } from "@cline/shared";
+import type { GatewayStreamRequest } from "@plinycode/shared";
 import type { CallSettings } from "ai";
 
 export type AiSdkReasoning = NonNullable<CallSettings["reasoning"]>;

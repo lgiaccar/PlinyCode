@@ -1,4 +1,4 @@
-import { type ChatModelModalities, isChatCompatibleModel, type ModelOperation } from "@cline/shared"
+import { type ChatModelModalities, isChatCompatibleModel, type ModelOperation } from "@plinycode/shared"
 
 type ChatCatalogModel = {
 	readonly operation?: ModelOperation

@@ -4,7 +4,7 @@ import type {
 	AgentModelEvent,
 	AgentModelRequest,
 	AgentRuntimeEvent,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentRuntime, AgentRuntimeAbortError } from "./agent-runtime";
 import { Agent, createAgent } from "./index";
@@ -17,7 +17,7 @@ const { createAgentModel, createGateway } = vi.hoisted(() => {
 	return { createAgentModel, createGateway };
 });
 
-vi.mock("@cline/llms", () => ({
+vi.mock("@plinycode/llms", () => ({
 	createGateway,
 }));
 

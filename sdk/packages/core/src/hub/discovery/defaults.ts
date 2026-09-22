@@ -2,7 +2,7 @@ import {
 	CLINE_HUB_DEV_PORT,
 	CLINE_HUB_PORT,
 	resolveClineBuildEnv,
-} from "@cline/shared";
+} from "@plinycode/shared";
 
 const HUB_HOST_ENV = "CLINE_HUB_HOST";
 const HUB_PORT_ENV = "CLINE_HUB_PORT";

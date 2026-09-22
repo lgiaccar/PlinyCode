@@ -4,7 +4,7 @@ import type {
 	TelemetryMetadata,
 	TelemetryProperties,
 	UserContext,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { resolveClientSessionSource } from "../../session/history-origin";
 
 /**

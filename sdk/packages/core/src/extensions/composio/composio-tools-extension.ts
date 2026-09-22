@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentExtension, BasicLogger } from "@cline/shared";
+import type { AgentExtension, BasicLogger } from "@plinycode/shared";
 import {
 	createTool,
 	FeatureFlag,
 	getClineEnvironmentConfig,
-} from "@cline/shared";
-import { resolveClineDataDir } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { resolveClineDataDir } from "@plinycode/shared/storage";
 import {
 	OAuthReauthRequiredError,
 	RuntimeOAuthTokenManager,

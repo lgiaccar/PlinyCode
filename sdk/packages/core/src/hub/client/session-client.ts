@@ -1,4 +1,4 @@
-import type * as LlmsProviders from "@cline/llms";
+import type * as LlmsProviders from "@plinycode/llms";
 import type {
 	AgendaAutomationPolicy,
 	AgendaTaskListInput,
@@ -16,7 +16,7 @@ import type {
 	HubTaskUpdateInput,
 	HubTypedCommandName,
 	TeamProgressProjectionEvent,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { CheckpointEntry } from "../../hooks/checkpoint-hooks";
 import { isSessionNotFoundError } from "../../runtime/host/runtime-host";
 import { NodeHubClient } from "../client";

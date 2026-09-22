@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentEvent, AgentResult } from "@cline/shared";
+import type { AgentConfig, AgentEvent, AgentResult } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	AgentTeamsRuntime,

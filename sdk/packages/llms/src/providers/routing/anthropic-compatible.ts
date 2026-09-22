@@ -6,7 +6,7 @@ import {
 	type GatewayProviderMetadata,
 	type GatewayStreamRequest,
 	resolveReasoningBudgetFromRatio,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	getModelReasoningControls,
 	isAnthropicCompatibleModel,

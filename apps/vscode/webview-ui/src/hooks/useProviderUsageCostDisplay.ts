@@ -11,7 +11,7 @@ function isUsageCostDisplay(value: string | undefined): value is UsageCostDispla
 
 /**
  * Surfaces the SDK's `usageCostDisplay` decision for a single provider
- * id. The decision originates in the `@cline/llms` SDK (see
+ * id. The decision originates in the `@plinycode/llms` SDK (see
  * `resolveProviderUsageCostDisplay` in
  * `apps/vscode/src/sdk/model-catalog/catalog.ts`) and is propagated
  * through the `ProviderListing.usage_cost_display` gRPC field.

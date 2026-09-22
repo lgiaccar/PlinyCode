@@ -1,12 +1,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HubCommandEnvelope } from "@cline/shared";
+import type { HubCommandEnvelope } from "@plinycode/shared";
 import {
 	type ConnectorConfigRecord,
 	type ConnectorConnectionRecord,
 	withConnectorStore,
-} from "@cline/shared/db";
+} from "@plinycode/shared/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	type ConnectorSupervisor,

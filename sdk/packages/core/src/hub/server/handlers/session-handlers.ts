@@ -6,12 +6,12 @@ import type {
 	JsonValue,
 	ToolApprovalRequest,
 	UserContext,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	createSessionId,
 	parseRuntimeConfigExtensions,
 	ReasoningEffortSchema,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	isCoreBuiltinToolAvailable,
 	resolveToolClientType,

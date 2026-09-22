@@ -5,7 +5,7 @@ import type {
 	HubEventEnvelope,
 	ToolApprovalRequest,
 	ToolApprovalResult,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 vi.mock("@ai-sdk/provider-utils", () => ({

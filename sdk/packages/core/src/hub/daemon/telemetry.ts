@@ -2,7 +2,7 @@ import { release } from "node:os";
 import {
 	createClineTelemetryServiceConfig,
 	type ITelemetryService,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { AuthSettings } from "../../services/llms/provider-settings";
 import { ProviderSettingsManager } from "../../services/storage/provider-settings-manager";
 import {

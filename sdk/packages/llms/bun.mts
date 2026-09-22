@@ -17,7 +17,7 @@ const minify = Bun.env.CLINE_SOURCEMAPS !== "1";
 const external = Object.keys({
 	...(packageJson.dependencies ?? {}),
 	...(packageJson.peerDependencies ?? {}),
-}).filter((name) => !name.startsWith("@cline/"));
+}).filter((name) => !name.startsWith("@plinycode/"));
 
 const builds: Parameters<typeof Bun.build>[0][] = [
 	{

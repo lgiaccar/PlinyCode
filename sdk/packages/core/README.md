@@ -1,6 +1,6 @@
-# [experimental] @cline/core
+# [experimental] @plinycode/core
 
-`@cline/core` is the stateful orchestration layer of the Cline SDK. It
+`@plinycode/core` is the stateful orchestration layer of the Cline SDK. It
 connects the agent runtime, provider settings, storage, default tools, and
 session lifecycle into a host-ready runtime.
 
@@ -10,24 +10,24 @@ session lifecycle into a host-ready runtime.
 - provider settings and account services
 - default runtime tools and MCP integration
 - storage-backed session and team state helpers
-- host-facing Node helpers through `@cline/core`
+- host-facing Node helpers through `@plinycode/core`
 
 ## Installation
 
 ```bash
-npm install @cline/core
+npm install @plinycode/core
 ```
 
 ## Entry Points
 
-- `@cline/core`: core contracts, shared utilities, and Node/server helpers for building hosts and runtimes
+- `@plinycode/core`: core contracts, shared utilities, and Node/server helpers for building hosts and runtimes
 
 ## Typical Usage
 
-Most host apps should start with `@cline/core`.
+Most host apps should start with `@plinycode/core`.
 
 ```ts
-import { ClineCore } from "@cline/core";
+import { ClineCore } from "@plinycode/core";
 
 const cline = await ClineCore.create({});
 
@@ -76,7 +76,7 @@ pathless starts expose neither `cwd` nor `workspaceRoot` to `prepare(input)`.
 
 ### Runtime and Sessions
 
-Use `@cline/core` for host-facing runtime assembly:
+Use `@plinycode/core` for host-facing runtime assembly:
 
 - `ClineCore.create(...)`
 - `createRuntimeHost(...)`
@@ -94,7 +94,7 @@ primitive vocabulary.
 
 ### Default Tools
 
-`@cline/core` owns the built-in host tools and executors:
+`@plinycode/core` owns the built-in host tools and executors:
 
 - `createBuiltinTools(...)`
 - `createDefaultTools(...)`
@@ -108,12 +108,12 @@ The package also exports storage and settings helpers such as:
 - `CoreSettingsService` and `createCoreSettingsService`
 - MCP settings helpers such as `setMcpServerDisabled`
 - `SqliteTeamStore`
-- SQLite-backed local session stores and artifacts through `@cline/core`
+- SQLite-backed local session stores and artifacts through `@plinycode/core`
 
 ## Related Packages
 
-- `@cline/agents`: stateless agent loop and tool primitives
-- `@cline/llms`: provider/model configuration and handlers
+- `@plinycode/agents`: stateless agent loop and tool primitives
+- `@plinycode/llms`: provider/model configuration and handlers
 
 ## More Examples
 

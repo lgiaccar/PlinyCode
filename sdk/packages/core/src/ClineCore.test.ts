@@ -17,7 +17,7 @@ vi.mock("./runtime/host/host", () => ({
 	createRuntimeHost: createRuntimeHostMock,
 }));
 
-import type { AgentResult } from "@cline/shared";
+import type { AgentResult } from "@plinycode/shared";
 import { ClineCore } from "./ClineCore";
 import { NoOpFeatureFlagsProvider } from "./services/feature-flags";
 

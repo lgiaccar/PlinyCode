@@ -8,7 +8,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { basename, dirname } from "node:path";
-import { resolveProviderSettingsPath } from "@cline/shared/storage";
+import { resolveProviderSettingsPath } from "@plinycode/shared/storage";
 import { getProviderAuthHandler } from "../../auth/provider-auth-registry";
 import { hashSecret, sdkDebug } from "../../logging/early-logger";
 import {

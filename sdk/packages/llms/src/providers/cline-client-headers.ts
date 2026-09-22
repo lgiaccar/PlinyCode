@@ -1,7 +1,7 @@
 import {
 	type ClineClientIdentity,
 	getClineClientIdentity,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { DEFAULT_CLINE_REQUEST_HEADERS } from "./request-headers";
 
 function trimNonEmpty(value: string | undefined): string | undefined {

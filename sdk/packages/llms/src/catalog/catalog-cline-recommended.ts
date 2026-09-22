@@ -1,4 +1,4 @@
-import { getClineEnvironmentConfig } from "@cline/shared";
+import { getClineEnvironmentConfig } from "@plinycode/shared";
 import { buildClineClientHeaders } from "../providers/cline-client-headers";
 import type { ModelInfo } from "./types";
 

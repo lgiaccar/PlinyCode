@@ -3,7 +3,7 @@ import type {
 	GatewayProviderContext,
 	GatewayProviderMetadata,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { modelRouteMatches, resolveModelFamily } from "../model-facts";
 
 /**

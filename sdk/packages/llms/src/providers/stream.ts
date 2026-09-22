@@ -4,7 +4,7 @@
  * Unified streaming response types that all providers yield.
  * This provides a consistent interface regardless of the underlying provider.
  */
-import type { GeneratedMedia } from "@cline/shared";
+import type { GeneratedMedia } from "@plinycode/shared";
 
 /**
  * The main stream type - an async generator that yields chunks

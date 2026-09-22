@@ -1,4 +1,4 @@
-import { isClineProvider } from "@cline/shared";
+import { isClineProvider } from "@plinycode/shared";
 
 export type ProviderOptionsPatch = Record<string, Record<string, unknown>>;
 

@@ -1,5 +1,5 @@
-import { getProviderAuthStorageId } from "@cline/core"
-import { createModeSwitchNoticeTracker, type ModeSwitchNotice, type ModeSwitchNoticeTracker } from "@cline/shared"
+import { getProviderAuthStorageId } from "@plinycode/core"
+import { createModeSwitchNoticeTracker, type ModeSwitchNotice, type ModeSwitchNoticeTracker } from "@plinycode/shared"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, TurnPhase } from "@shared/ExtensionMessage"
 import type { Mode } from "@shared/storage/types"
@@ -71,7 +71,7 @@ export class SdkModeCoordinator {
 	/**
 	 * Pending user-initiated mode switch, stamped as a <mode_notice> onto the
 	 * next outbound message by SdkSessionLifecycle.fireAndForgetSend. Shares the
-	 * CLI's round-trip-cancelling tracker (@cline/shared), scoped to the session
+	 * CLI's round-trip-cancelling tracker (@plinycode/shared), scoped to the session
 	 * it was recorded for: unlike the CLI, the extension hops between tasks, and
 	 * a notice recorded while looking at task A must not leak onto a message
 	 * sent to task B (whose transcript never saw the "from" mode).

@@ -3,7 +3,7 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import type { MessageWithMetadata } from "@cline/shared";
+import type { MessageWithMetadata } from "@plinycode/shared";
 import { createContextCompactionPrepareTurn } from "../src/extensions/context/compaction";
 import {
 	DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS,
@@ -26,7 +26,7 @@ const PROVIDER_API_KEY_ENV: Record<string, string> = {
 
 function usage(): never {
 	console.error(`Usage:
-	  bun -F @cline/core test:compaction -- <session-directory> [options]
+	  bun -F @plinycode/core test:compaction -- <session-directory> [options]
 
 Options:
 	  --strategy <strategy>       basic, agentic, or both (default: both)

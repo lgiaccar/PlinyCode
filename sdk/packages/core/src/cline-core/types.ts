@@ -1,10 +1,10 @@
-import type { MessageWithMetadata } from "@cline/llms";
+import type { MessageWithMetadata } from "@plinycode/llms";
 import type {
 	AgentConfig,
 	AutomationEventEnvelope,
 	BasicLogger,
 	ITelemetryService,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { CronEventSuppression } from "../cron/events/cron-event-ingress";
 import type {
 	CronEventLogRecord,
@@ -257,9 +257,9 @@ export interface ClineCoreOptions {
 	 * to-local auto mode). For hub and remote runtimes the HTTP call happens
 	 * inside the process that owns the gateway, so configure `fetch` there:
 	 *   - `startHubServer({ fetch })` / `ensureHubServer({ fetch })` from
-	 *     `@cline/hub`
+	 *     `@plinycode/hub`
 	 *   - `createLocalHubScheduleRuntimeHandlers({ fetch })` from
-	 *     `@cline/core/hub` for the scheduler
+	 *     `@plinycode/core/hub` for the scheduler
 	 */
 	fetch?: typeof fetch;
 	/**

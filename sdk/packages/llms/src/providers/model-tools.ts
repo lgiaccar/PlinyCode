@@ -2,7 +2,7 @@ import type {
 	GatewayProviderManifest,
 	ModelOperation,
 	ModelToolName,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { BUILTIN_PROVIDER_MANIFESTS_BY_ID } from "./builtins";
 import { normalizeProviderId } from "./ids";
 import { modelRouteMatches } from "./model-facts";
@@ -20,7 +20,7 @@ function resolveModelRouteContext(
 	family?: string;
 	capabilities?: readonly string[];
 	operation?: ModelOperation;
-	modalities?: import("@cline/shared").ModelModalities;
+	modalities?: import("@plinycode/shared").ModelModalities;
 } {
 	const resolvedModelId = modelId?.trim() || manifest.defaultModelId;
 	const model = manifest.models.find((entry) => entry.id === resolvedModelId);

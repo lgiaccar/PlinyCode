@@ -1,5 +1,5 @@
-import { AgentRuntimeAbortError } from "@cline/agents";
-import { initVcr, resolveClineBuildEnv } from "@cline/shared";
+import { AgentRuntimeAbortError } from "@plinycode/agents";
+import { initVcr, resolveClineBuildEnv } from "@plinycode/shared";
 import { cleanupConnectorInstanceViaCli } from "../../services/connectors/connector-cleanup";
 import {
 	ConnectorSupervisor,

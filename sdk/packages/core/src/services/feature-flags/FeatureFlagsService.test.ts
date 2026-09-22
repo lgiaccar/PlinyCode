@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FEATURE_FLAGS, type IFeatureFlagsProvider } from "@cline/shared";
+import { FEATURE_FLAGS, type IFeatureFlagsProvider } from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FeatureFlagsService } from "./FeatureFlagsService";
 

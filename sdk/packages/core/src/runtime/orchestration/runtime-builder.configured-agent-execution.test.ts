@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentRuntime } from "@cline/agents";
+import { AgentRuntime } from "@plinycode/agents";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -10,8 +10,8 @@ import {
 	type AgentTool,
 	createContributionRegistry,
 	type Message,
-} from "@cline/shared";
-import { setHomeDir } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserInstructionConfigService } from "../../extensions/config";
 import type { CoreSessionConfig } from "../../types/config";

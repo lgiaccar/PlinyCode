@@ -1,7 +1,7 @@
 import {
 	CLINE_CONNECTOR_STARTING_INSTANCE_ENV,
 	CLINE_RUN_AS_HUB_DAEMON_ENV,
-} from "@cline/shared";
+} from "@plinycode/shared";
 
 /**
  * Env markers a connector sets on its own detached child: the shared

@@ -23,7 +23,7 @@ import {
 	type TextContent,
 	type ToolResultContent,
 	validateAndReserveImageMedia,
-} from "@cline/shared";
+} from "@plinycode/shared";
 
 export const DEFAULT_MAX_TOOL_RESULT_CHARS = 8_000;
 export const DEFAULT_MAX_FILE_CONTENT_CHARS = 50_000;

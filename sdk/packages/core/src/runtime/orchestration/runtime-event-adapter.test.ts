@@ -2,7 +2,7 @@
  * Unit tests for `RuntimeEventAdapter` and `toLegacyAgentEvent`.
  *
  * Covers the `AgentRuntimeEvent` variants enumerated
- * in `@cline/shared/src/agent.ts:390-468`. For each variant the
+ * in `@plinycode/shared/src/agent.ts:390-468`. For each variant the
  * test asserts the mapping described in PLAN.md §3.3.2 (with the
  * text/reasoning-delta correction documented at the top of
  * `runtime-event-adapter.ts`).
@@ -20,7 +20,7 @@ import type {
 	AgentRuntimeStateSnapshot,
 	AgentToolCallPart,
 	AgentUsage,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	RuntimeEventAdapter,

@@ -14,9 +14,9 @@
  */
 
 import { join } from "node:path";
-import type { HubEventEnvelope } from "@cline/shared";
-import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
-import { resolveDbDataDir } from "@cline/shared/storage";
+import type { HubEventEnvelope } from "@plinycode/shared";
+import { loadSqliteDb, type SqliteDb } from "@plinycode/shared/db";
+import { resolveDbDataDir } from "@plinycode/shared/storage";
 
 const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_ROWS = 200_000;

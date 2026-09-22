@@ -1,4 +1,4 @@
-import { USER_REJECTED_TOOL_REASON } from "@cline/shared"
+import { USER_REJECTED_TOOL_REASON } from "@plinycode/shared"
 import { isEditTool } from "./sdk-tool-policies"
 
 export const DEFAULT_TOOL_APPROVAL_DENIAL_REASON = USER_REJECTED_TOOL_REASON

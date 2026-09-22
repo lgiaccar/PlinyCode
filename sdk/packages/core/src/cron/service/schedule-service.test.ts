@@ -6,7 +6,7 @@ import {
 	type CronScheduleSpec,
 	ONE_TIME_SCHEDULE_CRON_PATTERN,
 	ONE_TIME_SCHEDULE_RUN_AT_METADATA_KEY,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SqliteCronStore } from "../store/sqlite-cron-store";
 import { HubScheduleCommandService } from "./schedule-command-service";

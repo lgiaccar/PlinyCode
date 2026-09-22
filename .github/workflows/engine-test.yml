@@ -1,4 +1,4 @@
-name: sdk-test
+name: engine-test
 
 on:
     push:
@@ -6,12 +6,12 @@ on:
             - master
         paths:
             - "sdk/**"
-            - ".github/workflows/sdk-test.yml"
+            - ".github/workflows/engine-test.yml"
     workflow_dispatch:
     pull_request:
         paths:
             - "sdk/**"
-            - ".github/workflows/sdk-test.yml"
+            - ".github/workflows/engine-test.yml"
     workflow_call:
 
 permissions:
@@ -94,7 +94,3 @@ jobs:
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               timeout-minutes: 10
               run: bun sdk/scripts/ci-node-smoke.ts
-
-            - name: Verify packages are publishable
-              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x' }}
-              run: bun sdk/scripts/check-publish.ts

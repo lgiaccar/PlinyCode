@@ -3,7 +3,7 @@ import { basename } from "node:path";
 import {
 	augmentNodeCommandForDebug,
 	withResolvedClineBuildEnv,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	MAX_NODE_TIMER_DELAY_MS,
 	normalizeIdleTimeoutMs,

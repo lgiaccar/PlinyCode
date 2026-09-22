@@ -11,9 +11,9 @@ import type {
 	HookControl,
 	HookSessionContext,
 	WorkspaceInfo,
-} from "@cline/shared";
-import { augmentNodeCommandForDebug } from "@cline/shared";
-import { ensureHookLogDir } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { augmentNodeCommandForDebug } from "@plinycode/shared";
+import { ensureHookLogDir } from "@plinycode/shared/storage";
 import { createAgentHooksExtension } from "./hook-extension";
 import { listHookConfigFiles } from "./hook-file-config";
 import {

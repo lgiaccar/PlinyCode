@@ -1,8 +1,8 @@
 import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HubEventEnvelope } from "@cline/shared";
-import { loadSqliteDb } from "@cline/shared/db";
+import type { HubEventEnvelope } from "@plinycode/shared";
+import { loadSqliteDb } from "@plinycode/shared/db";
 import { describe, expect, it } from "vitest";
 import { HubEventLogStore } from "./hub-event-log";
 

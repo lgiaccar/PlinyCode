@@ -1,4 +1,4 @@
-import { decodeJwtPayload } from "@cline/shared";
+import { decodeJwtPayload } from "@plinycode/shared";
 
 export interface ProviderRequestHeaderClientContext {
 	name?: string;

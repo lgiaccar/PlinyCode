@@ -19,8 +19,8 @@ import type {
 	SessionRecord,
 	StartSessionInput,
 	StartSessionResult,
-} from "@cline/core"
-import type { AgentResult } from "@cline/shared"
+} from "@plinycode/core"
+import type { AgentResult } from "@plinycode/shared"
 
 export interface SdkSessionHost {
 	readonly runtimeAddress: string | undefined

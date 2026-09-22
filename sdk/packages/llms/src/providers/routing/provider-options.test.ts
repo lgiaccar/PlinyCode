@@ -2,7 +2,7 @@ import type {
 	GatewayProviderContext,
 	GatewayStreamRequest,
 	ModelReasoningOption,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { BEDROCK_ROUTING_METADATA } from "./bedrock-cache-point";
 import { GLM_THINKING_ROUTING_METADATA } from "./glm-thinking";

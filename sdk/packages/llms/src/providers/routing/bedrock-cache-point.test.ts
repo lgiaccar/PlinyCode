@@ -2,7 +2,7 @@ import type {
 	GatewayProviderContext,
 	GatewayProviderManifest,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import {
 	applyBedrockCachePointToLastUserMessage,

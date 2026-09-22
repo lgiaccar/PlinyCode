@@ -3,12 +3,12 @@ import {
 	GENERATED_CLINE_RECOMMENDED_MODELS,
 	getGeneratedProviderModels,
 	VERCEL_OPENROUTER_MODEL_ID_ALIAS_RULES,
-} from "@cline/llms";
+} from "@plinycode/llms";
 import {
 	getClineEnvironmentConfig,
 	type ProviderModel,
 	type ProviderModelFeaturedTier,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { ProviderSettingsManager } from "../storage/provider-settings-manager";
 import { getLiveModelsCatalog } from "./provider-defaults";
 import type { ModelInfo } from "./provider-settings";

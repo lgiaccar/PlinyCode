@@ -31,7 +31,7 @@ export default defineConfig({
 		setupFiles: ["./src/test/vitest-setup.ts"],
 		// Several suites lazily `await import()` their subject inside the first test
 		// (needed so vi.mock factories apply first). That import pulls in heavy
-		// workspace packages (@cline/core/@cline/llms/@cline/shared), and on loaded
+		// workspace packages (@plinycode/core/@plinycode/llms/@plinycode/shared), and on loaded
 		// CI runners the first test in a file can blow past the 5s default and flake
 		// (seen in catalog.test.ts and resolveModelInfo.test.ts). Raise the per-test
 		// timeout so import cost attributed to the first test doesn't cause flakes.
@@ -43,16 +43,16 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
-			"@cline/core": path.resolve(__dirname, "src/test/cline-core-vitest-stub.ts"),
-			"@cline/llms": path.resolve(__dirname, "node_modules/@cline/llms/dist/index.js"),
-			// Map @cline/shared subpath exports explicitly. The bare "@cline/shared"
-			// alias below does not cover subpaths (e.g. "@cline/shared/storage"), and
+			"@plinycode/core": path.resolve(__dirname, "src/test/cline-core-vitest-stub.ts"),
+			"@plinycode/llms": path.resolve(__dirname, "node_modules/@plinycode/llms/dist/index.js"),
+			// Map @plinycode/shared subpath exports explicitly. The bare "@plinycode/shared"
+			// alias below does not cover subpaths (e.g. "@plinycode/shared/storage"), and
 			// Vite's fallback Node resolution does not read the package `exports` map
 			// here, so subpath imports fail with "Cannot find package". Keep the more
 			// specific subpath alias(es) before the bare package alias.
-			"@cline/shared/storage": path.resolve(__dirname, "node_modules/@cline/shared/dist/storage/index.js"),
-			"@cline/shared/db": path.resolve(__dirname, "node_modules/@cline/shared/dist/db/index.js"),
-			"@cline/shared": path.resolve(__dirname, "node_modules/@cline/shared/dist/index.js"),
+			"@plinycode/shared/storage": path.resolve(__dirname, "node_modules/@plinycode/shared/dist/storage/index.js"),
+			"@plinycode/shared/db": path.resolve(__dirname, "node_modules/@plinycode/shared/dist/db/index.js"),
+			"@plinycode/shared": path.resolve(__dirname, "node_modules/@plinycode/shared/dist/index.js"),
 			vscode: path.resolve(__dirname, "src/test/vscode-vitest-stub.ts"),
 			"@": path.resolve(__dirname, "src"),
 			"@api": path.resolve(__dirname, "src/core/api"),

@@ -1,9 +1,9 @@
-import type { ModelInfo, ToolResultContent } from "@cline/llms";
+import type { ModelInfo, ToolResultContent } from "@plinycode/llms";
 import {
 	CHARS_PER_TOKEN,
 	estimateTokens,
 	type MessageWithMetadata,
-} from "@cline/shared";
+} from "@plinycode/shared";
 
 export { CHARS_PER_TOKEN, estimateTokens };
 

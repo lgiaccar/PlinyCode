@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { stripUtf8Bom } from "@cline/shared";
+import { stripUtf8Bom } from "@plinycode/shared";
 import YAML from "yaml";
 
 export interface ToggleSkillFrontmatterOptions {

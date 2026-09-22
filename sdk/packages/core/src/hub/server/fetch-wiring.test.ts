@@ -1,4 +1,4 @@
-import { CLINE_DEFAULT_MODEL_ID } from "@cline/shared";
+import { CLINE_DEFAULT_MODEL_ID } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeCapabilities } from "../../runtime/capabilities/runtime-capabilities";
 

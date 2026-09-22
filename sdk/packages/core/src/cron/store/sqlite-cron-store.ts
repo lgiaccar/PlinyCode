@@ -8,21 +8,21 @@ import {
 	type HubScheduleUpdateInput,
 	ONE_TIME_SCHEDULE_CRON_PATTERN,
 	ONE_TIME_SCHEDULE_RUN_AT_METADATA_KEY,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	asOptionalString,
 	asString,
 	loadSqliteDb,
 	nowIso,
 	type SqliteDb,
-} from "@cline/shared/db";
-import { resolveCronDbPath } from "@cline/shared/storage";
+} from "@plinycode/shared/db";
+import { resolveCronDbPath } from "@plinycode/shared/storage";
 import { getNextCronTime } from "../schedule/scheduler";
 import { ensureCronSchema } from "./cron-schema";
 
 /**
  * Generalized cron/automation store backed by `cron.db`. Sessions stay in
- * their own database (see @cline/shared `ensureSessionSchema`). cron_runs
+ * their own database (see @plinycode/shared `ensureSessionSchema`). cron_runs
  * here absorb one-off, recurring, and event-driven work under one queue.
  */
 

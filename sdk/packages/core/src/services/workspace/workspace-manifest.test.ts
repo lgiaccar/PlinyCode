@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, parse } from "node:path";
-import { emptyWorkspaceManifest, upsertWorkspaceInfo } from "@cline/shared";
+import { emptyWorkspaceManifest, upsertWorkspaceInfo } from "@plinycode/shared";
 import simpleGit from "simple-git";
 import { afterEach, describe, expect, test } from "vitest";
 import {

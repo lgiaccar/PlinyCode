@@ -3,7 +3,7 @@
  *
  * These are deliberately state-driven rather than example-driven. The three
  * producers of gateway model definitions (builtin providers, the
- * OpenAI-compatible path, and configured models in `@cline/core`) each used to
+ * OpenAI-compatible path, and configured models in `@plinycode/core`) each used to
  * carry their own hand-written `switch`, and they drifted: the pass-through
  * capabilities were handled three different ways, one producer mapped an
  * `audio` capability the catalog schema does not define, and one emitted
@@ -23,7 +23,7 @@ import {
 	type ModelCapability,
 	ModelCapabilitySchema,
 	modelSupportsToolCalling,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import {
 	BUILTIN_PROVIDER_COLLECTIONS_BY_ID,

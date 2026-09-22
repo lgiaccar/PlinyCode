@@ -1,28 +1,28 @@
 {
 	"compilerOptions": {
 		"paths": {
-			"@cline/agents": ["../sdk/packages/agents/src/index.ts"],
-			"@cline/agents/*": [
+			"@plinycode/agents": ["../sdk/packages/agents/src/index.ts"],
+			"@plinycode/agents/*": [
 				"../sdk/packages/agents/src/*",
 				"../sdk/packages/agents/src/*/index.ts"
 			],
-			"@cline/cline-hub": ["./cline-hub/src/server.ts"],
-			"@cline/core": ["../sdk/packages/core/src/index.ts"],
-			"@cline/core/hub/daemon-entry": [
+			"@plinycode/cline-hub": ["./cline-hub/src/server.ts"],
+			"@plinycode/core": ["../sdk/packages/core/src/index.ts"],
+			"@plinycode/core/hub/daemon-entry": [
 				"../sdk/packages/core/src/hub/daemon/entry.ts"
 			],
-			"@cline/core/*": [
+			"@plinycode/core/*": [
 				"../sdk/packages/core/src/*",
 				"../sdk/packages/core/src/*/index.ts"
 			],
-			"@cline/core/telemetry": [
+			"@plinycode/core/telemetry": [
 				"../sdk/packages/core/src/services/telemetry/index.ts"
 			],
-			"@cline/llms": ["../sdk/packages/llms/src/index.ts"],
-			"@cline/shared": ["../sdk/packages/shared/src/index.ts"],
-			"@cline/shared/storage": ["../sdk/packages/shared/src/storage/index.ts"],
-			"@cline/shared/db": ["../sdk/packages/shared/src/db/index.ts"],
-			"@cline/shared/*": [
+			"@plinycode/llms": ["../sdk/packages/llms/src/index.ts"],
+			"@plinycode/shared": ["../sdk/packages/shared/src/index.ts"],
+			"@plinycode/shared/storage": ["../sdk/packages/shared/src/storage/index.ts"],
+			"@plinycode/shared/db": ["../sdk/packages/shared/src/db/index.ts"],
+			"@plinycode/shared/*": [
 				"../sdk/packages/shared/src/*",
 				"../sdk/packages/shared/src/*/index.ts"
 			]

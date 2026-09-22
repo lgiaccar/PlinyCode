@@ -10,7 +10,7 @@ import {
 	type JsonValue,
 	type ProviderCapability,
 	type ProviderConfigField,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { getGeneratedModelsForProvider } from "../catalog/catalog.generated-access";
 import { filterImageOutputModels } from "../catalog/model-filters";
 import {

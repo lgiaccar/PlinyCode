@@ -18,7 +18,7 @@ import {
 	type AgentRuntime,
 	type AgentRuntimeConfig,
 	createAgentRuntime,
-} from "@cline/agents";
+} from "@plinycode/agents";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -31,7 +31,7 @@ import {
 	type AgentTool,
 	type AgentToolContext,
 	EMPTY_CONTENT_TEXT,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import { MESSAGE_BUILDER_LIMIT_ENV } from "../../session/services/message-builder";
 import {

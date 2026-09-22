@@ -1,4 +1,4 @@
-import type { SqliteDb } from "@cline/shared/db";
+import type { SqliteDb } from "@plinycode/shared/db";
 
 const TASK_SCHEMA_STATEMENTS: readonly string[] = [
 	`CREATE TABLE IF NOT EXISTS agenda_tasks (

@@ -1,10 +1,10 @@
 ---
-description: Development guidance for the @cline/llms package.
+description: Development guidance for the @plinycode/llms package.
 globs: "src/**/*.ts,src/**/*.tsx,*.md"
 alwaysApply: true
 ---
 
-# @cline/llms Development Guidance
+# @plinycode/llms Development Guidance
 
 ## Provider Option Routing
 

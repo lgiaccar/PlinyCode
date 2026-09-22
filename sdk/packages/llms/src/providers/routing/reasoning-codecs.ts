@@ -1,7 +1,7 @@
 import type {
 	GatewayProviderContext,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS } from "../gateway";
 import { isPositiveFiniteNumber } from "../utils";
 

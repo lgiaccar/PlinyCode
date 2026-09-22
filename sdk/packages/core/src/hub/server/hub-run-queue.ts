@@ -15,9 +15,9 @@
  */
 
 import { join } from "node:path";
-import { createSessionId } from "@cline/shared";
-import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
-import { resolveDbDataDir } from "@cline/shared/storage";
+import { createSessionId } from "@plinycode/shared";
+import { loadSqliteDb, type SqliteDb } from "@plinycode/shared/db";
+import { resolveDbDataDir } from "@plinycode/shared/storage";
 
 const DEFAULT_MAX_PENDING_PER_SESSION = 32;
 const TERMINAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;

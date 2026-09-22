@@ -16,7 +16,7 @@ import {
 	resolveAgentPluginSearchPaths,
 	resolveClineDataDir,
 	SKILLS_CONFIG_DIRECTORY_NAME,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import type { McpServerRegistration, McpServerTransportConfig } from "../mcp";
 import { parseAgentSkillMarkdown } from "./agent-skill";
 import type {

@@ -4,7 +4,7 @@
 // This allows the SdkController to reuse the classic state-building logic
 // without inheriting the entire classic Controller implementation.
 
-import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@cline/core"
+import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@plinycode/core"
 import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
 import type { ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"

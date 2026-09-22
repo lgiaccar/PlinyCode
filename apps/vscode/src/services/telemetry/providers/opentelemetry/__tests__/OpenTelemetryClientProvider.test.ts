@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test"
-import { isOtlpTraceRelayProvider } from "@cline/shared"
+import { isOtlpTraceRelayProvider } from "@plinycode/shared"
 import { context, propagation, trace } from "@opentelemetry/api"
 import { InMemorySpanExporter, NodeTracerProvider, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-node"
 import * as exporterFactory from "../OpenTelemetryExporterFactory"

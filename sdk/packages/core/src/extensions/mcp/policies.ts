@@ -1,4 +1,4 @@
-import type { ToolPolicy } from "@cline/shared";
+import type { ToolPolicy } from "@plinycode/shared";
 import { defaultMcpToolNameTransform } from "./name-transform";
 import type { McpToolNameTransform } from "./types";
 

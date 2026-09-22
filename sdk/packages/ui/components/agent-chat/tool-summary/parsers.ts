@@ -1,4 +1,4 @@
-import { validateImageMedia } from "@cline/shared/browser";
+import { validateImageMedia } from "@plinycode/shared/browser";
 import { FRAGMENT_HUNK_HEADER, hunkHeader } from "./diff.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

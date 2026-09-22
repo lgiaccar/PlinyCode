@@ -1,4 +1,4 @@
-import { FeatureFlag } from "@cline/shared";
+import { FeatureFlag } from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -14,7 +14,7 @@ vi.mock("../storage/provider-settings-manager", () => ({
 		}
 	},
 }));
-vi.mock("@cline/core/services/feature-flags/posthog", () => ({
+vi.mock("@plinycode/core/services/feature-flags/posthog", () => ({
 	buildClinePostHogClient: vi.fn(() => ({})),
 	PostHogFeatureFlagsProvider: class {
 		getAllFlagsAndPayloads = mocks.getAllFlagsAndPayloads;

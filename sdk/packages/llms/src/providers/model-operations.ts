@@ -6,7 +6,7 @@ import type {
 	ModelModalities,
 	ModelOperation,
 	ModelOperationMode,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { modelRouteMatches } from "./model-facts";
 
 const IMAGE_LANGUAGE_OPERATION: GatewayModelOperationCapability = {

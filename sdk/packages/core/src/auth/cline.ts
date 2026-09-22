@@ -2,7 +2,7 @@ import {
 	decodeJwtPayload,
 	getClineEnvironmentConfig,
 	type ITelemetryService,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { hashSecret, sdkDebug } from "../logging/early-logger";
 import {
 	captureAuthFailed,

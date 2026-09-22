@@ -1,8 +1,8 @@
-import type { SqliteDb } from "@cline/shared/db";
+import type { SqliteDb } from "@plinycode/shared/db";
 
 /**
- * Bootstrap the dedicated cron.db schema. Unlike @cline/shared's
- * `ensureSessionSchema`, this schema is fully owned by @cline/core
+ * Bootstrap the dedicated cron.db schema. Unlike @plinycode/shared's
+ * `ensureSessionSchema`, this schema is fully owned by @plinycode/core
  * because cron lifecycle (specs, runs, reports) is a core concern and
  * should not be coupled to session storage.
  */

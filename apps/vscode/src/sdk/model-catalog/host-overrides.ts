@@ -10,7 +10,7 @@
  * flags upstream, the override and this file can be removed together.
  */
 
-import { OLLAMA_DEFAULT_CONTEXT_WINDOW } from "@cline/llms"
+import { OLLAMA_DEFAULT_CONTEXT_WINDOW } from "@plinycode/llms"
 import type { ModelInfo } from "@shared/api"
 import { StateManager } from "@/core/storage/StateManager"
 import { getProviderSettingsManager } from "../provider-migration"

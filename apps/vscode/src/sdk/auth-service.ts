@@ -1,6 +1,6 @@
 // Replaces classic src/services/auth/AuthService.ts (see origin/main)
 //
-// SDK-backed authentication service. Uses @cline/core OAuth functions
+// SDK-backed authentication service. Uses @plinycode/core OAuth functions
 // for login flows and ProviderSettingsManager (providers.json) as the
 // single source of truth for credentials.
 //
@@ -8,7 +8,7 @@
 // disk — it's fetched from the Cline API on startup and cached in memory.
 // This matches the CLI's pattern (see apps/cli/src/runtime/interactive-welcome.ts).
 
-import type { ITelemetryService, OAuthCredentials, ProviderSettings } from "@cline/core"
+import type { ITelemetryService, OAuthCredentials, ProviderSettings } from "@plinycode/core"
 import {
 	createOAuthClientCallbacks,
 	getProviderAuthStorageId,
@@ -18,7 +18,7 @@ import {
 	loginOcaOAuth,
 	loginOpenAICodex,
 	sdkDebug,
-} from "@cline/core"
+} from "@plinycode/core"
 import type { ApiProvider } from "@shared/api"
 import { AuthState, UserInfo } from "@shared/proto/cline/account"
 import type { EmptyRequest, String } from "@shared/proto/cline/common"

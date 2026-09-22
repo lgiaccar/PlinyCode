@@ -6,8 +6,8 @@ import {
 	type HubCompatibilityResult,
 	type HubProtocolMetadata,
 	isHubProtocolCompatible,
-} from "@cline/shared";
-import { resolveClineDataDir, resolveClineDir } from "@cline/shared/storage";
+} from "@plinycode/shared";
+import { resolveClineDataDir, resolveClineDir } from "@plinycode/shared/storage";
 import corePackage from "../../../package.json";
 
 declare const __CLINE_CORE_RUNTIME_BUILD_ID__: string | undefined;

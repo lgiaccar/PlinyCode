@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import {
 	type ConnectorCliLaunchSpec,
 	readConnectorCliLaunchSpec,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { buildConnectorChildEnv } from "./connector-child-env";
 
 const CLEANUP_TIMEOUT_MS = 15_000;

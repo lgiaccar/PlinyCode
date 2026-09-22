@@ -16,7 +16,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { BasicLogger } from "@cline/shared";
+import type { BasicLogger } from "@plinycode/shared";
 
 let earlyLogger: BasicLogger | undefined;
 

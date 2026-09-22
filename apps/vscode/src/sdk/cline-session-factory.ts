@@ -17,16 +17,16 @@ import {
 	readCompactionStrategyGlobally,
 	resolveProviderApiKeyFromSettings,
 	type StartSessionResult,
-} from "@cline/core"
-import type { ProviderApiLine, ModelInfo as SdkModelInfo } from "@cline/llms"
+} from "@plinycode/core"
+import type { ProviderApiLine, ModelInfo as SdkModelInfo } from "@plinycode/llms"
 import {
 	getGeneratedModelsForProvider,
 	getModelsForProvider,
 	isProviderApiLine,
 	MODEL_COLLECTIONS_BY_PROVIDER_ID,
 	OLLAMA_DEFAULT_CONTEXT_WINDOW,
-} from "@cline/llms"
-import { buildClineSystemPrompt, isClineProvider } from "@cline/shared"
+} from "@plinycode/llms"
+import { buildClineSystemPrompt, isClineProvider } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import { ClineClient } from "@shared/cline"
 import type { HistoryItem } from "@shared/HistoryItem"
@@ -1030,7 +1030,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	let knownModels: Awaited<ReturnType<typeof getModelsForProvider>> | undefined
 	try {
 		// Constructing the settings manager loads providers.json and models.json into
-		// the @cline/llms registry. Reading models from that registry ensures custom
+		// the @plinycode/llms registry. Reading models from that registry ensures custom
 		// model overrides are included in the inference provider config, not just in
 		// the webview/display path.
 		getProviderSettingsManager(resolveDataDir())

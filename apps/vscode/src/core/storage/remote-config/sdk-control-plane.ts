@@ -1,4 +1,4 @@
-import type { RemoteConfigBundle, RemoteConfigManagedInstructionFile } from "@cline/shared"
+import type { RemoteConfigBundle, RemoteConfigManagedInstructionFile } from "@plinycode/shared"
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios"
 import { ClineEnv } from "@/config"
 import { AuthService } from "@/services/auth/AuthService"

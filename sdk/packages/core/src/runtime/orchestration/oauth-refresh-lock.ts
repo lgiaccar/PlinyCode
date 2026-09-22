@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
-import { loadSqliteDb } from "@cline/shared/db";
+import { loadSqliteDb } from "@plinycode/shared/db";
 
 /**
  * Serialize refresh/read/save across managers and processes sharing credentials.

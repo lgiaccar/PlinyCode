@@ -8,7 +8,7 @@ import type {
 	AgentTool,
 	AgentToolContext,
 	Message,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	afterAll,
 	beforeAll,
@@ -286,12 +286,12 @@ describe("plugin-sandbox", () => {
 			"utf8",
 		);
 
-		const sdkDepDir = join(dir, "node_modules", "@cline", "shared");
+		const sdkDepDir = join(dir, "node_modules", "@plinycode", "shared");
 		await mkdir(sdkDepDir, { recursive: true });
 		await writeFile(
 			join(sdkDepDir, "package.json"),
 			JSON.stringify({
-				name: "@cline/shared",
+				name: "@plinycode/shared",
 				type: "module",
 				exports: "./index.js",
 			}),
@@ -305,7 +305,7 @@ describe("plugin-sandbox", () => {
 		await writeFile(
 			join(dir, "plugin-sdk.ts"),
 			[
-				"import { sdkMarker } from '@cline/shared';",
+				"import { sdkMarker } from '@plinycode/shared';",
 				"export default {",
 				"  name: sdkMarker,",
 				"  manifest: { capabilities: ['tools'] },",
@@ -317,7 +317,7 @@ describe("plugin-sandbox", () => {
 		await writeFile(
 			join(dir, "plugin-host-dep.ts"),
 			[
-				"import { resolveClineDataDir } from '@cline/shared/storage';",
+				"import { resolveClineDataDir } from '@plinycode/shared/storage';",
 				"import YAML from 'yaml';",
 				"export default {",
 				"  name: YAML.stringify({ host: !!resolveClineDataDir() }).trim(),",
@@ -330,7 +330,7 @@ describe("plugin-sandbox", () => {
 		await writeFile(
 			join(dir, "plugin-create-tool.ts"),
 			[
-				"import { createTool } from '@cline/agents';",
+				"import { createTool } from '@plinycode/agents';",
 				"export default {",
 				"  name: 'sandbox-create-tool',",
 				"  manifest: { capabilities: ['tools'] },",
@@ -782,7 +782,7 @@ describe("plugin-sandbox", () => {
 		const packageRoot = join(
 			wrapperRoot,
 			"node_modules",
-			"@cline",
+			"@plinycode",
 			`cli-${platform}-${process.arch}`,
 		);
 		const wrapperBinDir = join(wrapperRoot, "bin");
@@ -801,7 +801,7 @@ describe("plugin-sandbox", () => {
 			await writeFile(
 				join(packageRoot, "package.json"),
 				JSON.stringify({
-					name: `@cline/cli-${platform}-${process.arch}`,
+					name: `@plinycode/cli-${platform}-${process.arch}`,
 					version: "0.0.0-test",
 					type: "module",
 				}),

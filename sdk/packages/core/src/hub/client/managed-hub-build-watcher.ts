@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { isHubDaemonProcess, resolveClineBuildEnv } from "@cline/shared";
+import { isHubDaemonProcess, resolveClineBuildEnv } from "@plinycode/shared";
 import {
 	compareHubBuilds,
 	getManagedHubCompatibility,

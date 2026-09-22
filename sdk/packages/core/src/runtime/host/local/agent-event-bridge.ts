@@ -3,7 +3,7 @@ import type {
 	AutomationEventEnvelope,
 	BasicLogger,
 	BasicLogMetadata,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type { TeamEvent } from "../../../extensions/tools/team";
 import {
 	type AgentEventContext,

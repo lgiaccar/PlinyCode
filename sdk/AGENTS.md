@@ -18,16 +18,16 @@ Run SDK commands from `sdk/`, not from the legacy repository root. Do not run di
 
 ### Published SDK Packages
 
-- `@cline/shared`: shared contracts, schemas, path helpers, hook engine, extension registry, low-level utilities
-- `@cline/llms`: provider settings/config, model catalogs, provider manifests, gateway contracts, handler creation
-- `@cline/agents`: stateless agent loop, tool orchestration, hook/extension runtime, event streaming
-- `@cline/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools, telemetry. Exposes `@cline/core/hub` for discovery, the detached daemon entry, WebSocket clients, and session/UI client adapters, plus `@cline/core/hub/daemon-entry` for launching the shared daemon
+- `@plinycode/shared`: shared contracts, schemas, path helpers, hook engine, extension registry, low-level utilities
+- `@plinycode/llms`: provider settings/config, model catalogs, provider manifests, gateway contracts, handler creation
+- `@plinycode/agents`: stateless agent loop, tool orchestration, hook/extension runtime, event streaming
+- `@plinycode/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools, telemetry. Exposes `@plinycode/core/hub` for discovery, the detached daemon entry, WebSocket clients, and session/UI client adapters, plus `@plinycode/core/hub/daemon-entry` for launching the shared daemon
 
 ### Dependency Direction
 
 ```mermaid
 flowchart TD
-  shared["@cline/shared"] --> llms["@cline/llms"] & agents["@cline/agents"] & core["@cline/core"]
+  shared["@plinycode/shared"] --> llms["@plinycode/llms"] & agents["@plinycode/agents"] & core["@plinycode/core"]
   llms --> agents & core
   agents --> core
   core --> apps["CLI / VS Code / Desktop App"]
@@ -42,10 +42,10 @@ Rules:
 
 Route changes to the package that owns the concern:
 
-- model/provider schemas or handler behavior: `@cline/llms`
-- stateless loop, tool orchestration, streaming, hook/extension runtime: `@cline/agents`
-- session lifecycle, storage, config watching, default tools, plugin loading, telemetry, hub runtime services, hub discovery, hub daemon spawn, and session-oriented client helpers (`HubSessionClient`, `HubUIClient`, `connectToHub`): `@cline/core` (hub pieces live under `src/hub/`)
-- remote-config schemas, managed instruction materialization, blob upload metadata, and OpenTelemetry config normalization: `@cline/shared/src/remote-config`
+- model/provider schemas or handler behavior: `@plinycode/llms`
+- stateless loop, tool orchestration, streaming, hook/extension runtime: `@plinycode/agents`
+- session lifecycle, storage, config watching, default tools, plugin loading, telemetry, hub runtime services, hub discovery, hub daemon spawn, and session-oriented client helpers (`HubSessionClient`, `HubUIClient`, `connectToHub`): `@plinycode/core` (hub pieces live under `src/hub/`)
+- remote-config schemas, managed instruction materialization, blob upload metadata, and OpenTelemetry config normalization: `@plinycode/shared/src/remote-config`
 - host-specific UX or shell behavior: app package
 
 ## Verifying Changes
@@ -74,14 +74,14 @@ bun run check       # lint + build + typecheck + check-publish
 For focused verification, prefer workspace package scripts from the SDK root:
 
 ```sh
-bun -F @cline/shared test
-bun -F @cline/llms test
-bun -F @cline/agents test
-bun -F @cline/core test:unit
-bun -F @cline/cli test:unit
+bun -F @plinycode/shared test
+bun -F @plinycode/llms test
+bun -F @plinycode/agents test
+bun -F @plinycode/core test:unit
+bun -F @plinycode/cli test:unit
 ```
 
-If a focused test command fails with a missing `@cline/*` export or missing `dist/` file, build the relevant dependency package or run `bun run build:sdk`, then rerun the same test command. Treat that as a workspace setup issue, not as evidence of a source-code bug.
+If a focused test command fails with a missing `@plinycode/*` export or missing `dist/` file, build the relevant dependency package or run `bun run build:sdk`, then rerun the same test command. Treat that as a workspace setup issue, not as evidence of a source-code bug.
 
 If you touch hub/bootstrap/session flows, please update `ARCHITECTURE.md`.
 
@@ -90,7 +90,7 @@ If you touch hub/bootstrap/session flows, please update `ARCHITECTURE.md`.
 ### Keep Boundaries Clean
 
 - Don't move stateful logic down into `agents`
-- For `@cline/llms` provider/model routing rules, follow [packages/llms/AGENTS.md](./packages/llms/AGENTS.md).
+- For `@plinycode/llms` provider/model routing rules, follow [packages/llms/AGENTS.md](./packages/llms/AGENTS.md).
 - Don't put app-specific behavior into `core` unless it is truly shared host behavior
 - Keep remote-config primitives generic in `shared`; host-facing session integration belongs in `core`
 

@@ -1,4 +1,4 @@
-import type { ITelemetryService } from "@cline/shared";
+import type { ITelemetryService } from "@plinycode/shared";
 import {
 	getProviderAuthHandler,
 	getProviderOAuthCredentialsFromSettings,

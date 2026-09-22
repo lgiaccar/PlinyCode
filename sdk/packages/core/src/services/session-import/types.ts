@@ -1,4 +1,4 @@
-import type * as LlmsProviders from "@cline/llms";
+import type * as LlmsProviders from "@plinycode/llms";
 
 /** External tools whose session history Cline can import. */
 export const SESSION_IMPORT_TOOLS = [

@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSqliteDb } from "@cline/shared/db";
+import { loadSqliteDb } from "@plinycode/shared/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoreSessionService } from "../../session/services/session-service";
 import { SqliteSessionStore } from "../storage/sqlite-session-store";

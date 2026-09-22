@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
 	isChatWorkspacePath,
 	resolveChatWorkspacePath,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { StartSessionConfig } from "../../runtime/host/runtime-host";
 import {

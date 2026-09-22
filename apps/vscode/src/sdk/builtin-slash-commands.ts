@@ -13,7 +13,7 @@
  * user confirmation.
  */
 
-import type { AvailableRuntimeCommand } from "@cline/core"
+import type { AvailableRuntimeCommand } from "@plinycode/core"
 
 const DEEP_PLANNING_INSTRUCTIONS = `<explicit_instructions type="deep-planning">
 Your task is to create a comprehensive implementation plan before writing any code. This process has four distinct steps that must be completed in order.

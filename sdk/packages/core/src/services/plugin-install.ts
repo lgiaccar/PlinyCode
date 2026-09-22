@@ -25,7 +25,7 @@ import {
 	isPluginModulePath,
 	resolveClineDir,
 	resolvePluginModuleEntries,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import {
 	type McpServerRegistration,
 	resolveDefaultMcpSettingsPath,
@@ -106,7 +106,7 @@ const PACKAGE_DIRECTORY_NAME = "package";
 const OFFICIAL_PLUGINS_REPO = "https://github.com/cline/plugins.git";
 const REMOTE_PLUGIN_FETCH_TIMEOUT_MS = 30_000;
 const REMOTE_PLUGIN_MAX_BYTES = 10 * 1024 * 1024;
-const HOST_PROVIDED_SDK_PREFIX = "@cline/";
+const HOST_PROVIDED_SDK_PREFIX = "@plinycode/";
 const DEPENDENCY_FIELDS = [
 	"dependencies",
 	"devDependencies",
@@ -652,16 +652,16 @@ function removeInstalledHostProvidedSdkDependencies(
 	packageRoot: string,
 	preservePackageName?: string,
 ): void {
-	const clineScopeDir = join(packageRoot, "node_modules", "@cline");
-	if (!existsSync(clineScopeDir)) {
+	const scopeDir = join(packageRoot, "node_modules", "@plinycode");
+	if (!existsSync(scopeDir)) {
 		return;
 	}
-	for (const entry of statSafeReadDir(clineScopeDir)) {
-		const packageName = `@cline/${entry.name}`;
+	for (const entry of statSafeReadDir(scopeDir)) {
+		const packageName = `@plinycode/${entry.name}`;
 		if (packageName === preservePackageName) {
 			continue;
 		}
-		rmSync(join(clineScopeDir, entry.name), {
+		rmSync(join(scopeDir, entry.name), {
 			recursive: true,
 			force: true,
 		});

@@ -15,8 +15,8 @@ import {
 	createContextCompactionPrepareTurn,
 	createSessionCompactionState,
 	type SessionCompactionState,
-} from "@cline/core"
-import type { Message as SdkMessage, ModelInfo as SdkModelInfo } from "@cline/llms"
+} from "@plinycode/core"
+import type { Message as SdkMessage, ModelInfo as SdkModelInfo } from "@plinycode/llms"
 import { Logger } from "@/shared/services/Logger"
 
 // When the active model does not declare a context window, fall back to a

@@ -72,9 +72,9 @@ Module.prototype.require = function (id) {
 
 	// The SDK packages are ESM-only and expose only an `import` condition.
 	// Integration tests run the tsc-built `out/` tree as CommonJS in VS Code's
-	// extension host, so `require("@cline/core")` fails before tests start.
+	// extension host, so `require("@plinycode/core")` fails before tests start.
 	// Mock the small surface needed by legacy VS Code integration tests.
-	if (id === "@cline/core") {
+	if (id === "@plinycode/core") {
 		const createNoopTelemetry = () => ({
 			setDistinctId() {},
 			setMetadata() {},
@@ -236,7 +236,7 @@ Module.prototype.require = function (id) {
 		}
 	}
 
-	if (id === "@cline/shared") {
+	if (id === "@plinycode/shared") {
 		// Mirrors USER_REJECTED_TOOL_REASON / TOOL_REJECTION_SUFFIX in
 		// sdk/packages/shared/src/llms/tools.ts (the ESM-only real package
 		// cannot be required from this CommonJS test host).
@@ -249,13 +249,13 @@ Module.prototype.require = function (id) {
 		}
 	}
 
-	if (id === "@cline/shared/storage") {
+	if (id === "@plinycode/shared/storage") {
 		return {
 			resolveGlobalSettingsPath: () => path.join(baseUrl, ".vscode-test", "shared-global-settings.json"),
 		}
 	}
 
-	if (id === "@cline/llms") {
+	if (id === "@plinycode/llms") {
 		return {
 			getAllProviders: async () => [],
 			getGeneratedModelsForProvider: () => ({}),

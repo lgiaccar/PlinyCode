@@ -22,10 +22,10 @@ const runtimeBuildId = resolveSdkRuntimeBuildId(
 // Keep declared runtime packages external so they are not duplicated inside each
 // bundled entrypoint and installed again from package.json.
 const external = [
-	"@cline/core/hub/daemon-entry",
+	"@plinycode/core/hub/daemon-entry",
 	// Preserve the optional provider boundary; bundling it hoists posthog-node
 	// into every runtime entrypoint even when the local import is dynamic.
-	"@cline/core/services/feature-flags/posthog",
+	"@plinycode/core/services/feature-flags/posthog",
 	...Object.keys({
 		...(packageJson.dependencies ?? {}),
 		...(packageJson.peerDependencies ?? {}),

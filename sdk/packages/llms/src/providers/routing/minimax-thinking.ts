@@ -1,7 +1,7 @@
 import type {
 	GatewayProviderMetadata,
 	GatewayStreamRequest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { buildProviderAndAliasPatch, type ProviderOptionsPatch } from "./utils";
 
 export const MINIMAX_THINKING_ROUTING_METADATA: GatewayProviderMetadata = {

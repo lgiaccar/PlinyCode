@@ -1,4 +1,4 @@
-import { supportsModelTool } from "@cline/llms";
+import { supportsModelTool } from "@plinycode/llms";
 import type { CoreAgentMode } from "../../types/config";
 import {
 	DEFAULT_MODEL_TOOL_ROUTING_RULES,

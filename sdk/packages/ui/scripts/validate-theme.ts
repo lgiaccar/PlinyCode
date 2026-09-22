@@ -80,7 +80,7 @@ if (
 ) {
 	throw new Error("palette.css and tokens.css must remain framework-neutral");
 }
-if (!tokensWithoutComments.includes('@import "@cline/ui/theme/palette.css";')) {
+if (!tokensWithoutComments.includes('@import "@plinycode/ui/theme/palette.css";')) {
 	throw new Error("tokens.css must import the owned palette");
 }
 if (
@@ -112,9 +112,9 @@ if (base.includes("#__next") || base.includes("@source")) {
 	throw new Error("base.css must not contain consumer-specific shell policy");
 }
 if (
-	!index.includes('@import "@cline/ui/theme/tokens.css";') ||
-	!index.includes('@import "@cline/ui/theme/theme.css";') ||
-	!index.includes('@import "@cline/ui/theme/base.css";')
+	!index.includes('@import "@plinycode/ui/theme/tokens.css";') ||
+	!index.includes('@import "@plinycode/ui/theme/theme.css";') ||
+	!index.includes('@import "@plinycode/ui/theme/base.css";')
 ) {
 	throw new Error("theme entry point must compose tokens, theme, and base CSS");
 }
@@ -134,4 +134,4 @@ for (const subpath of [
 	}
 }
 
-console.log("@cline/ui theme contract is valid");
+console.log("@plinycode/ui theme contract is valid");

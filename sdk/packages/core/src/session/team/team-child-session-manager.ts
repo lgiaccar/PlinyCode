@@ -1,9 +1,9 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import type * as LlmsProviders from "@cline/llms";
-import type { AgentResult } from "@cline/shared";
-import { resolveRootSessionId } from "@cline/shared";
-import { ensureHookLogDir } from "@cline/shared/storage";
+import type * as LlmsProviders from "@plinycode/llms";
+import type { AgentResult } from "@plinycode/shared";
+import { resolveRootSessionId } from "@plinycode/shared";
+import { ensureHookLogDir } from "@plinycode/shared/storage";
 import { z } from "zod";
 import type {
 	SubAgentEndContext,

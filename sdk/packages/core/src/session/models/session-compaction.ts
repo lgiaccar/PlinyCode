@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import {
 	formatDisplayUserInput,
 	type MessageWithMetadata,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { z } from "zod";
 
 function isMessageWithMetadata(value: unknown): value is MessageWithMetadata {

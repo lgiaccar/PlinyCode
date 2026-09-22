@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTool } from "@cline/shared";
+import type { AgentEvent, AgentTool } from "@plinycode/shared";
 import {
 	createBuiltinTools,
 	resolveToolPresetName,

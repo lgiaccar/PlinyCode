@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { MessageWithMetadata } from "@cline/llms";
+import type { MessageWithMetadata } from "@plinycode/llms";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -19,12 +19,12 @@ import {
 	isChatWorkspacePath,
 	TeamMessageType,
 	type TeamRunRecord,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	resolveChatWorkspacePath,
 	setClineDir,
 	setHomeDir,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import simpleGit from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TeamEvent } from "../../extensions/tools/team";

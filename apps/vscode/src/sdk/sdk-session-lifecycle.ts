@@ -5,8 +5,8 @@ import type {
 	RestoreInput,
 	RestoreResult,
 	StartSessionResult,
-} from "@cline/core"
-import { formatModeSwitchNotice, type ModeSwitchNotice } from "@cline/shared"
+} from "@plinycode/core"
+import { formatModeSwitchNotice, type ModeSwitchNotice } from "@plinycode/shared"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { McpHub } from "@/services/mcp/McpHub"

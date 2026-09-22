@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { markOtlpTraceRelayProvider } from "@cline/shared";
+import { markOtlpTraceRelayProvider } from "@plinycode/shared";
 import { context, trace } from "@opentelemetry/api";
 import {
 	InMemorySpanExporter,
@@ -21,7 +21,7 @@ const { settingsPath, directExporters } = vi.hoisted(() => ({
 	settingsPath: { current: "" },
 	directExporters: [] as InMemorySpanExporter[],
 }));
-vi.mock("@cline/shared/storage", () => ({
+vi.mock("@plinycode/shared/storage", () => ({
 	resolveGlobalSettingsPath: () => settingsPath.current,
 }));
 // Keep the real AI SDK, Langfuse integration and OTel runtime. Replace only

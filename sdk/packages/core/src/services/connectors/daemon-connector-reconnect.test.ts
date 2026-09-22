@@ -1,4 +1,4 @@
-import { CLINE_CONNECTOR_STARTING_INSTANCE_ENV } from "@cline/shared";
+import { CLINE_CONNECTOR_STARTING_INSTANCE_ENV } from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConnectorSupervisor } from "./connector-supervisor";
 import { reconnectDaemonConnectors } from "./daemon-connector-reconnect";

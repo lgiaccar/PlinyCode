@@ -9,8 +9,8 @@ import type {
 	ITelemetryService,
 	JsonValue,
 	SessionParticipant,
-} from "@cline/shared";
-import { createSessionId } from "@cline/shared";
+} from "@plinycode/shared";
+import { createSessionId } from "@plinycode/shared";
 import type {
 	CommandExecutionRuntimeService,
 	PendingPromptsRuntimeService,

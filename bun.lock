@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@cline/packages",
+      "name": "@plinycode/packages",
       "devDependencies": {
         "@biomejs/biome": "2.4.5",
         "@types/bun": "^1.3.13",
@@ -23,10 +23,10 @@
       "dependencies": {
         "@anthropic-ai/sdk": "^0.37.0",
         "@bufbuild/protobuf": "^2.2.5",
-        "@cline/agents": "workspace:*",
-        "@cline/core": "workspace:*",
-        "@cline/llms": "workspace:*",
-        "@cline/shared": "workspace:*",
+        "@plinycode/agents": "workspace:*",
+        "@plinycode/core": "workspace:*",
+        "@plinycode/llms": "workspace:*",
+        "@plinycode/shared": "workspace:*",
         "@google/genai": "^1.30.0",
         "@grpc/grpc-js": "^1.9.15",
         "@grpc/proto-loader": "^0.7.13",
@@ -173,8 +173,8 @@
       "name": "webview-ui",
       "version": "0.3.0",
       "dependencies": {
-        "@cline/shared": "workspace:*",
-        "@cline/ui": "workspace:*",
+        "@plinycode/shared": "workspace:*",
+        "@plinycode/ui": "workspace:*",
         "@floating-ui/react": "^0.27.4",
         "@fontsource-variable/geist-mono": "^5.2.8",
         "@heroui/react": "^2.8.0-beta.2",
@@ -261,21 +261,21 @@
       },
     },
     "sdk/packages/agents": {
-      "name": "@cline/agents",
+      "name": "@plinycode/agents",
       "version": "0.0.83",
       "dependencies": {
-        "@cline/llms": "workspace:*",
-        "@cline/shared": "workspace:*",
+        "@plinycode/llms": "workspace:*",
+        "@plinycode/shared": "workspace:*",
         "nanoid": "^5.1.7",
       },
     },
     "sdk/packages/core": {
-      "name": "@cline/core",
+      "name": "@plinycode/core",
       "version": "0.0.83",
       "dependencies": {
-        "@cline/agents": "workspace:*",
-        "@cline/llms": "workspace:*",
-        "@cline/shared": "workspace:*",
+        "@plinycode/agents": "workspace:*",
+        "@plinycode/llms": "workspace:*",
+        "@plinycode/shared": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@opentelemetry/api": "^1.9.0",
         "@opentelemetry/api-logs": "^0.214.0",
@@ -308,7 +308,7 @@
       ],
     },
     "sdk/packages/llms": {
-      "name": "@cline/llms",
+      "name": "@plinycode/llms",
       "version": "0.0.83",
       "dependencies": {
         "@ai-sdk/amazon-bedrock": "^5.0.50",
@@ -323,7 +323,7 @@
         "@ai-sdk/provider": "^4.0.7",
         "@ai-sdk/provider-utils": "^5",
         "@aws-sdk/credential-providers": "^3.922.0",
-        "@cline/shared": "workspace:*",
+        "@plinycode/shared": "workspace:*",
         "@jerome-benoit/sap-ai-provider": "4.8.0",
         "@langfuse/core": "5.10.1",
         "@langfuse/otel": "5.10.1",
@@ -356,15 +356,8 @@
         "ai-sdk-provider-codex-cli",
       ],
     },
-    "sdk/packages/sdk": {
-      "name": "@cline/sdk",
-      "version": "0.0.83",
-      "dependencies": {
-        "@cline/core": "workspace:*",
-      },
-    },
     "sdk/packages/shared": {
-      "name": "@cline/shared",
+      "name": "@plinycode/shared",
       "version": "0.0.83",
       "dependencies": {
         "aws4fetch": "^1.0.20",
@@ -374,10 +367,10 @@
       },
     },
     "sdk/packages/ui": {
-      "name": "@cline/ui",
+      "name": "@plinycode/ui",
       "version": "0.2.0-next.10",
       "dependencies": {
-        "@cline/shared": "workspace:*",
+        "@plinycode/shared": "workspace:*",
         "@radix-ui/react-slot": "1.2.4",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -648,17 +641,15 @@
 
     "@chevrotain/types": ["@chevrotain/types@11.1.2", "", {}, "sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw=="],
 
-    "@cline/agents": ["@cline/agents@workspace:sdk/packages/agents"],
+    "@plinycode/agents": ["@plinycode/agents@workspace:sdk/packages/agents"],
 
-    "@cline/core": ["@cline/core@workspace:sdk/packages/core"],
+    "@plinycode/core": ["@plinycode/core@workspace:sdk/packages/core"],
 
-    "@cline/llms": ["@cline/llms@workspace:sdk/packages/llms"],
+    "@plinycode/llms": ["@plinycode/llms@workspace:sdk/packages/llms"],
 
-    "@cline/sdk": ["@cline/sdk@workspace:sdk/packages/sdk"],
+    "@plinycode/shared": ["@plinycode/shared@workspace:sdk/packages/shared"],
 
-    "@cline/shared": ["@cline/shared@workspace:sdk/packages/shared"],
-
-    "@cline/ui": ["@cline/ui@workspace:sdk/packages/ui"],
+    "@plinycode/ui": ["@plinycode/ui@workspace:sdk/packages/ui"],
 
     "@colors/colors": ["@colors/colors@1.6.0", "", {}, "sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA=="],
 

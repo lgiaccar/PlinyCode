@@ -3,7 +3,7 @@ import type {
 	MessageWithMetadata,
 	ModelToolExecution,
 	ToolUseContent,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { toPersistedToolResultContent } from "./persisted-tool-result-content";
 
 const MODEL_TOOL_ACTIVITIES_METADATA_KEY = "modelToolActivities";

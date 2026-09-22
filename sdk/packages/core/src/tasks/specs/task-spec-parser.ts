@@ -6,7 +6,7 @@ import type {
 	AgendaTaskScope,
 	AgendaTaskType,
 	GatewayModelSelection,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import YAML from "yaml";
 import { normalizeAgendaTaskLocation } from "../task-location";
 

@@ -24,7 +24,7 @@
 // which the SDK does not treat as a runtime command, so the model improvised a
 // fake "Conversation Summary" instead of compacting (CLINE-2503).
 
-import type { Message as SdkMessage } from "@cline/llms"
+import type { Message as SdkMessage } from "@plinycode/llms"
 import type { ClineCompactionInfo, ClineMessage } from "@shared/ExtensionMessage"
 import type { Mode } from "@shared/storage/types"
 import type { StateManager } from "@/core/storage/StateManager"

@@ -1,4 +1,4 @@
-import type { PluginManifest } from "@cline/shared";
+import type { PluginManifest } from "@plinycode/shared";
 
 export interface PluginTargeting {
 	providerId?: string;

@@ -20,7 +20,7 @@ import {
 	syncPluginMcpServersToSettings,
 	uninstallMarketplaceEntry as uninstallCoreMarketplaceEntry,
 	uninstallPlugin,
-} from "@cline/core"
+} from "@plinycode/core"
 import { deleteSkillFile } from "@core/controller/file/deleteSkillFile"
 import { refreshSkills } from "@core/controller/file/refreshSkills"
 import { toggleSkill } from "@core/controller/file/toggleSkill"

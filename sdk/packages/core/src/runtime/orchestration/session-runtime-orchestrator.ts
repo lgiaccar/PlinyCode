@@ -19,8 +19,8 @@
  * OAuth-retry and run replay feasible.
  */
 
-import type { AgentRuntime } from "@cline/agents";
-import { createAgentRuntime } from "@cline/agents";
+import type { AgentRuntime } from "@plinycode/agents";
+import { createAgentRuntime } from "@plinycode/agents";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -50,7 +50,7 @@ import {
 	modelSupportsToolCalling,
 	type ToolCallRecord,
 	usesImageGenerationOperation,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { filterDisabledTools } from "../../services/global-settings";
 import {
 	createAgentModelFromConfig,

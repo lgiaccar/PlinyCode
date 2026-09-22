@@ -10,8 +10,8 @@ import type {
 	AgendaTaskRunRecord,
 	AgendaTaskUpdateInput,
 	BasicLogger,
-} from "@cline/shared";
-import { createSessionId, noopBasicLogger } from "@cline/shared";
+} from "@plinycode/shared";
+import { createSessionId, noopBasicLogger } from "@plinycode/shared";
 import type { AgendaTaskManagerApi } from "./agenda-task-api";
 import { AgendaTaskSpecFileStore } from "./specs/task-spec-file-store";
 import {

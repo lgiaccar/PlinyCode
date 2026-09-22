@@ -25,23 +25,23 @@ import {
 	SearchCombobox,
 	SessionStatus,
 	Switch,
-} from "@cline/ui";
-import { Conversation, Message } from "@cline/ui/components/agent-chat";
-import { ToolFileDiff } from "@cline/ui/components/agent-chat/tool-diff";
-import { buildToolSummary } from "@cline/ui/components/agent-chat/tool-summary";
+} from "@plinycode/ui";
+import { Conversation, Message } from "@plinycode/ui/components/agent-chat";
+import { ToolFileDiff } from "@plinycode/ui/components/agent-chat/tool-diff";
+import { buildToolSummary } from "@plinycode/ui/components/agent-chat/tool-summary";
 
 for (const specifier of [
-	"@cline/ui/components.css",
-	"@cline/ui/components/markdown.css",
-	"@cline/ui/theme/palette.css",
-	"@cline/ui/theme/scoped-tokens.css",
+	"@plinycode/ui/components.css",
+	"@plinycode/ui/components/markdown.css",
+	"@plinycode/ui/theme/palette.css",
+	"@plinycode/ui/theme/scoped-tokens.css",
 ]) {
 	if (!existsSync(fileURLToPath(import.meta.resolve(specifier)))) {
 		throw new Error("packed CSS export does not exist: " + specifier);
 	}
 }
 
-const packageJsonUrl = import.meta.resolve("@cline/ui/package.json");
+const packageJsonUrl = import.meta.resolve("@plinycode/ui/package.json");
 const heroCss = readFileSync(
 	fileURLToPath(new URL("./components/agent-welcome-hero.css", packageJsonUrl)),
 	"utf8",
@@ -52,8 +52,8 @@ if (inlineHeroMaskCount !== 4) {
 	throw new Error("packed hero CSS does not contain four inline SVG masks");
 }
 
-const css = import.meta.resolve("@cline/ui/components/agent-chat.css");
-const tokens = import.meta.resolve("@cline/ui/theme/tokens.css");
+const css = import.meta.resolve("@plinycode/ui/components/agent-chat.css");
+const tokens = import.meta.resolve("@plinycode/ui/theme/tokens.css");
 const summary = buildToolSummary({
 	toolName: "read_files",
 	input: { files: [{ path: "src/app.tsx", start_line: 10, end_line: 80 }] },
@@ -109,7 +109,7 @@ async function verifyDiffDeclarations(root: string): Promise<void> {
 	const consumer = join(root, "tool-diff-consumer.ts");
 	writeFileSync(
 		consumer,
-		`import { ToolFileDiff } from "@cline/ui/components/agent-chat/tool-diff";
+		`import { ToolFileDiff } from "@plinycode/ui/components/agent-chat/tool-diff";
 import type { ComponentProps } from "react";
 const options: NonNullable<ComponentProps<typeof ToolFileDiff>["options"]> = {
 	diffStyle: "split",
@@ -182,8 +182,8 @@ async function verifyTailwindContract(
 		"tailwind",
 		[
 			'@import "tailwindcss";',
-			'@import "@cline/ui/theme/scoped-tokens.css";',
-			'@import "@cline/ui/components.css";',
+			'@import "@plinycode/ui/theme/scoped-tokens.css";',
+			'@import "@plinycode/ui/components.css";',
 			"@theme inline {",
 			"\t--color-background: var(--host-background);",
 			"\t--radius-lg: var(--host-radius-lg);",
@@ -226,8 +226,8 @@ async function verifyTailwindContract(
 		[
 			"@layer theme, base, components, utilities;",
 			'@import "tailwindcss/theme.css" layer(theme);',
-			'@import "@cline/ui/theme/scoped-tokens.css";',
-			'@import "@cline/ui/components.css";',
+			'@import "@plinycode/ui/theme/scoped-tokens.css";',
+			'@import "@plinycode/ui/components.css";',
 			'@import "tailwindcss/utilities.css" layer(utilities);',
 		],
 		runner,

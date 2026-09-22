@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HUB_DEFAULT_COMMAND_TIMEOUT_MS } from "@cline/shared";
+import { HUB_DEFAULT_COMMAND_TIMEOUT_MS } from "@plinycode/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	createDefaultMcpServerClientFactory,

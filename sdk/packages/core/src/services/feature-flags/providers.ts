@@ -2,7 +2,7 @@ import type {
 	FeatureFlagsAndPayloads,
 	FeatureFlagsSettings,
 	IFeatureFlagsProvider,
-} from "@cline/shared";
+} from "@plinycode/shared";
 
 export class NoOpFeatureFlagsProvider implements IFeatureFlagsProvider {
 	async getAllFlagsAndPayloads(): Promise<FeatureFlagsAndPayloads> {

@@ -4,20 +4,20 @@ import type {
 	AgentConfig,
 	PluginSetupContext,
 	WorkspaceInfo,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import {
 	discoverPluginModulePaths as discoverPluginModulePathsFromShared,
 	resolveConfiguredPluginModulePaths,
 	resolvePluginConfigSearchPaths as resolvePluginConfigSearchPathsFromShared,
 	SKILLS_CONFIG_DIRECTORY_NAME,
-} from "@cline/shared/storage";
+} from "@plinycode/shared/storage";
 import { filterDisabledPluginPaths } from "../../services/global-settings";
 import type { PluginLoadDiagnostics } from "./plugin-load-report";
 import { loadAgentPluginsFromPathsWithDiagnostics } from "./plugin-loader";
 import { loadSandboxedPlugins } from "./plugin-sandbox";
 import type { PluginTargeting } from "./plugin-targeting";
 
-export { getPluginDisplayName } from "@cline/shared/storage";
+export { getPluginDisplayName } from "@plinycode/shared/storage";
 
 type AgentPlugin = NonNullable<AgentConfig["extensions"]>[number];
 

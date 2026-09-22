@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSqliteDb } from "@cline/shared/db";
+import { loadSqliteDb } from "@plinycode/shared/db";
 import { describe, expect, it } from "vitest";
 import { HubRunAdmissionRejectedError, HubRunQueue } from "./hub-run-queue";
 

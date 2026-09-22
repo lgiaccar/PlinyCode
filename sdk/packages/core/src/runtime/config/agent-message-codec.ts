@@ -13,8 +13,8 @@ import type {
 	ThinkingContent,
 	ToolResultContent,
 	ToolUseContent,
-} from "@cline/shared";
-import { EMPTY_CONTENT_TEXT } from "@cline/shared";
+} from "@plinycode/shared";
+import { EMPTY_CONTENT_TEXT } from "@plinycode/shared";
 import { toPersistedToolResultContent } from "../../session/persisted-tool-result-content";
 
 export function messageToAgentMessages(

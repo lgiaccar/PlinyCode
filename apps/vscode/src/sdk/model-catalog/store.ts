@@ -5,9 +5,9 @@ import {
 	type StoredModelEntry,
 	syncStoredProviderRegistration,
 	writeModelsFileSync,
-} from "@cline/core"
-import { getGeneratedModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@cline/llms"
-import { ModelCapabilitySchema } from "@cline/shared"
+} from "@plinycode/core"
+import { getGeneratedModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@plinycode/llms"
+import { ModelCapabilitySchema } from "@plinycode/shared"
 import { type ApiConfiguration, type ApiProvider, type ModelInfo, openAiModelInfoSafeDefaults } from "@shared/api"
 import { Logger } from "@shared/services/Logger"
 import { getProviderModelIdKey } from "@shared/storage/provider-keys"

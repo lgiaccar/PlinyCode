@@ -9,7 +9,7 @@
  * crash-restarted three times and a user with three project windows both look
  * like three `user.extension_activated` events.
  */
-import { CORE_SPAWN_REASONS, type CoreSpawnReason } from "@cline/shared"
+import { CORE_SPAWN_REASONS, type CoreSpawnReason } from "@plinycode/shared"
 
 export const CORE_SPAWN_ORDINAL_ENV = "CLINE_CORE_SPAWN_ORDINAL"
 export const CORE_SPAWN_REASON_ENV = "CLINE_CORE_SPAWN_REASON"

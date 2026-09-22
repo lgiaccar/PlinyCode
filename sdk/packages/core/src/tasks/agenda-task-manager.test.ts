@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgendaTaskRecord } from "@cline/shared";
+import type { AgendaTaskRecord } from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	AgendaTaskManager,

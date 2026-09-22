@@ -1,4 +1,4 @@
-# `@cline/ui` adoption primer
+# `@plinycode/ui` adoption primer
 
 This guide is for Cline engineering teams that want a web application to share
 the Cline visual language and agent-chat presentation without copying desktop
@@ -6,7 +6,7 @@ styles or adopting desktop product structure.
 
 ## The short version
 
-`@cline/ui` has two opt-in layers:
+`@plinycode/ui` has two opt-in layers:
 
 1. A shared CSS theme built around standard shadcn/Tailwind semantic names.
 2. Reusable React presentation primitives for common agent-chat interfaces.
@@ -44,21 +44,21 @@ Each application continues to own:
 - Product-specific animation and deliberate visual overrides
 
 This boundary gives Cline products a shared visual and interaction language
-without turning `@cline/ui` into a second agent runtime.
+without turning `@plinycode/ui` into a second agent runtime.
 
 The boundary is about runtime coupling, not about keeping the package small.
 When more than one product needs the same presentation behavior, the goal is
 to extract it here as a shared module rather than let each app grow its own
-copy — that is the direction `@cline/ui` is headed, and more shared modules
+copy — that is the direction `@plinycode/ui` is headed, and more shared modules
 are expected over time. Two exist today:
 
-- `@cline/ui/components/agent-chat/tool-summary` — pure, framework-free
+- `@plinycode/ui/components/agent-chat/tool-summary` — pure, framework-free
   functions (`buildToolSummary`, `buildGroupedToolLabel`, and the underlying
   parsers) that turn a raw `{ toolName, input, result }` payload into the
   labels, per-item details, diff counts, and before/after texts every surface
   should show. `unknown` in, data out — no React, no icons, no dependency on
-  `@cline/core` or transport events.
-- `@cline/ui/components/agent-chat/tool-diff` — `ToolFileDiff`, a thin
+  `@plinycode/core` or transport events.
+- `@plinycode/ui/components/agent-chat/tool-diff` — `ToolFileDiff`, a thin
   wrapper over [`@pierre/diffs`](https://github.com/pierrecomputer/pierre)
   (optional peer dependency) that renders a tool-summary file item as a
   syntax-highlighted, theme-aware diff with consistent defaults.
@@ -70,8 +70,8 @@ whether it belongs here instead.
 
 ## Current status
 
-`@cline/ui` is configured for public npm publication with its own version and
-manual release workflow. Check availability with `npm view @cline/ui version`;
+`@plinycode/ui` is configured for public npm publication with its own version and
+manual release workflow. Check availability with `npm view @plinycode/ui version`;
 an `E404` means the first release is still pending. The API is pre-stable, so
 production consumers should pin exact versions and review compatibility notes
 when updating.
@@ -85,16 +85,16 @@ pass once their runtime and Markdown adapters are mapped explicitly.
 
 | Goal | Import | Tailwind required | React required |
 | --- | --- | --- | --- |
-| Use only light/dark CSS variables | `@cline/ui/theme/tokens.css` | No | No |
-| Render shared root React primitives without host resets | `scoped-tokens.css`, `components.css`, and `@cline/ui` | Tailwind v4 | React 18.3 or 19 |
+| Use only light/dark CSS variables | `@plinycode/ui/theme/tokens.css` | No | No |
+| Render shared root React primitives without host resets | `scoped-tokens.css`, `components.css`, and `@plinycode/ui` | Tailwind v4 | React 18.3 or 19 |
 | Use tokens through Tailwind utilities | `tokens.css` then `theme.css` | Tailwind v4 | No |
-| Use the complete theme and shared base behavior | `@cline/ui/theme/index.css` | Tailwind v4 | No |
-| Compose shared agent-chat presentation | `@cline/ui/components/agent-chat` plus its CSS | No, if tokens are mapped in plain CSS | React 18.3 or 19 |
+| Use the complete theme and shared base behavior | `@plinycode/ui/theme/index.css` | Tailwind v4 | No |
+| Compose shared agent-chat presentation | `@plinycode/ui/components/agent-chat` plus its CSS | No, if tokens are mapped in plain CSS | React 18.3 or 19 |
 
 The package exports `base.css` separately for consumers that want its global,
 Markdown, scrollbar, selection, cursor, and native `color-scheme` behavior.
 
-There is no `@cline/ui/theme` shorthand. Use the explicit paths documented here
+There is no `@plinycode/ui/theme` shorthand. Use the explicit paths documented here
 so dependencies remain visible.
 
 ## Install inside the Cline monorepo
@@ -104,7 +104,7 @@ Add the workspace dependency:
 ```json
 {
   "dependencies": {
-    "@cline/ui": "workspace:*"
+    "@plinycode/ui": "workspace:*"
   }
 }
 ```
@@ -118,7 +118,7 @@ After the initial release is available, install the latest production UI
 release. The `--exact` flag records the resolved version instead of a range:
 
 ```bash
-bun add --exact @cline/ui
+bun add --exact @plinycode/ui
 ```
 
 The package is ESM. Its React entry point targets browser applications. Install
@@ -141,13 +141,13 @@ resolved version. Use the package manager's update command when the team
 intentionally wants to move to a newer release:
 
 ```bash
-bun update @cline/ui
+bun update @plinycode/ui
 ```
 
 For deliberate previews, UI releases can publish an unstable `next` npm tag:
 
 ```bash
-bun add --exact @cline/ui@next
+bun add --exact @plinycode/ui@next
 ```
 
 Do not use `next` for production applications. UI versions move independently
@@ -161,7 +161,7 @@ Import fonts and Tailwind before the complete theme:
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 @import "tailwindcss";
-@import "@cline/ui/theme/index.css";
+@import "@plinycode/ui/theme/index.css";
 ```
 
 This supplies:
@@ -185,16 +185,16 @@ owns document, Markdown, scrollbar, or cursor behavior:
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 @import "tailwindcss";
-@import "@cline/ui/theme/tokens.css";
-@import "@cline/ui/theme/theme.css";
+@import "@plinycode/ui/theme/tokens.css";
+@import "@plinycode/ui/theme/theme.css";
 ```
 
 For an existing Tailwind v4 surface that must preserve its host shell, keep
 Tailwind setup host-owned and add the scoped Cline imports:
 
 ```css
-@import "@cline/ui/theme/scoped-tokens.css";
-@import "@cline/ui/components.css";
+@import "@plinycode/ui/theme/scoped-tokens.css";
+@import "@plinycode/ui/components.css";
 ```
 
 Render shared components inside `.cline-ui-theme`. Dark values activate when
@@ -220,7 +220,7 @@ behavior, switch to the complete theme setup in Option 1.
 Applications without Tailwind can import only the variables:
 
 ```css
-@import "@cline/ui/theme/tokens.css";
+@import "@plinycode/ui/theme/tokens.css";
 ```
 
 Token-only consumers must provide:
@@ -245,11 +245,11 @@ For native controls that should follow the selected theme:
 
 ## Switch
 
-Import `Switch` from `@cline/ui` after setting up the theme and
-`@cline/ui/components.css`.
+Import `Switch` from `@plinycode/ui` after setting up the theme and
+`@plinycode/ui/components.css`.
 
 ```tsx
-import { Switch } from "@cline/ui";
+import { Switch } from "@plinycode/ui";
 
 <div className="flex items-center gap-2">
   <Switch id="notifications" name="notifications" defaultChecked />
@@ -306,8 +306,8 @@ checkbox behavior.
 With the complete Tailwind theme, import the component styles afterward:
 
 ```css
-@import "@cline/ui/theme/index.css";
-@import "@cline/ui/components/agent-chat.css";
+@import "@plinycode/ui/theme/index.css";
+@import "@plinycode/ui/components/agent-chat.css";
 ```
 
 Without Tailwind, import the framework-neutral tokens and component styles,
@@ -315,8 +315,8 @@ then apply the shared font family at an app or chat root (tokens define font
 values but do not apply document typography):
 
 ```css
-@import "@cline/ui/theme/tokens.css";
-@import "@cline/ui/components/agent-chat.css";
+@import "@plinycode/ui/theme/tokens.css";
+@import "@plinycode/ui/components/agent-chat.css";
 
 .agent-chat-root {
   font-family: var(--font-sans);
@@ -343,7 +343,7 @@ import {
   ToolActivity,
   ToolActivityContent,
   ToolActivityTrigger,
-} from "@cline/ui/components/agent-chat";
+} from "@plinycode/ui/components/agent-chat";
 
 type ProductMessage = {
   id: string;
@@ -434,7 +434,7 @@ standardizes the surrounding presentation without silently changing those
 security and product decisions.
 
 Map runtime roles and tool states at the consumer boundary. Do not make the UI
-package depend on `@cline/core`, the Vercel AI SDK, desktop schemas, or transport
+package depend on `@plinycode/core`, the Vercel AI SDK, desktop schemas, or transport
 events.
 
 ## Explore components in Storybook
@@ -442,7 +442,7 @@ events.
 From the Cline repository root:
 
 ```bash
-bun -F @cline/ui storybook
+bun -F @plinycode/ui storybook
 ```
 
 Open `http://localhost:6006`. The toolbar switches light/dark mode and offers
@@ -458,13 +458,13 @@ representative chat and mobile viewports. Stories cover:
 In the repository's agent sandbox, bind to a forwarded host and unused port:
 
 ```bash
-bun -F @cline/ui storybook -- --host 0.0.0.0 --port 3490 --exact-port
+bun -F @plinycode/ui storybook -- --host 0.0.0.0 --port 3490 --exact-port
 ```
 
 Build the production Storybook bundle with:
 
 ```bash
-bun -F @cline/ui build-storybook
+bun -F @plinycode/ui build-storybook
 ```
 
 Storybook is the isolated component reference. Real application builds remain
@@ -512,7 +512,7 @@ work across light, dark, and future theme layers.
 Import the package first, then override standard semantic values:
 
 ```css
-@import "@cline/ui/theme/index.css";
+@import "@plinycode/ui/theme/index.css";
 
 :root {
   --primary: /* product-specific value */;
@@ -529,7 +529,7 @@ package upgrades.
 
 ## Consumer-owned behavior
 
-Keep the following outside `@cline/ui`:
+Keep the following outside `@plinycode/ui`:
 
 - Next, Tauri, VS Code, and runtime-specific behavior
 - `#__next`, viewport locking, and shell layout

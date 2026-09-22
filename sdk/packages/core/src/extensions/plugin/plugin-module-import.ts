@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { builtinModules, createRequire } from "node:module";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PLUGIN_FILE_EXTENSIONS } from "@cline/shared";
+import { PLUGIN_FILE_EXTENSIONS } from "@plinycode/shared";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const HOST_REQUIRE = createRequire(import.meta.url);
@@ -11,20 +11,19 @@ const HOST_REQUIRE = createRequire(import.meta.url);
 const WORKSPACE_ROOT = resolve(MODULE_DIR, "..", "..", "..", "..", "..");
 const WORKSPACE_ALIASES = collectWorkspaceAliases(WORKSPACE_ROOT);
 const HOST_PROVIDED_SDK_SPECIFIERS = [
-	"@cline/sdk",
-	"@cline/agents",
-	"@cline/core",
-	"@cline/core/hub",
-	"@cline/core/hub/daemon-entry",
-	"@cline/core/telemetry",
-	"@cline/llms",
-	"@cline/llms/browser",
-	"@cline/shared",
-	"@cline/shared/automation",
-	"@cline/shared/browser",
-	"@cline/shared/storage",
-	"@cline/shared/db",
-	"@cline/shared/types",
+	"@plinycode/agents",
+	"@plinycode/core",
+	"@plinycode/core/hub",
+	"@plinycode/core/hub/daemon-entry",
+	"@plinycode/core/telemetry",
+	"@plinycode/llms",
+	"@plinycode/llms/browser",
+	"@plinycode/shared",
+	"@plinycode/shared/automation",
+	"@plinycode/shared/browser",
+	"@plinycode/shared/storage",
+	"@plinycode/shared/db",
+	"@plinycode/shared/types",
 ];
 const BUILTIN_MODULES = new Set(
 	builtinModules.flatMap((id) => [id, id.replace(/^node:/, "")]),
@@ -45,16 +44,15 @@ export interface ImportPluginModuleOptions {
 function collectWorkspaceAliases(root: string): Record<string, string> {
 	const aliases: Record<string, string> = {};
 	const candidates: Record<string, string> = {
-		"@cline/sdk": resolve(root, "packages/sdk/src/index.ts"),
-		"@cline/agents": resolve(root, "packages/agents/src/index.ts"),
-		"@cline/core": resolve(root, "packages/core/src/index.ts"),
-		"@cline/llms": resolve(root, "packages/llms/src/index.ts"),
-		"@cline/shared": resolve(root, "packages/shared/src/index.ts"),
-		"@cline/shared/storage": resolve(
+		"@plinycode/agents": resolve(root, "packages/agents/src/index.ts"),
+		"@plinycode/core": resolve(root, "packages/core/src/index.ts"),
+		"@plinycode/llms": resolve(root, "packages/llms/src/index.ts"),
+		"@plinycode/shared": resolve(root, "packages/shared/src/index.ts"),
+		"@plinycode/shared/storage": resolve(
 			root,
 			"packages/shared/src/storage/index.ts",
 		),
-		"@cline/shared/db": resolve(root, "packages/shared/src/db/index.ts"),
+		"@plinycode/shared/db": resolve(root, "packages/shared/src/db/index.ts"),
 	};
 	for (const [key, value] of Object.entries(candidates)) {
 		if (existsSync(value)) {
@@ -207,7 +205,7 @@ function getPackageExportPath(specifier: string): string {
 }
 
 function isClineSdkSpecifier(specifier: string): boolean {
-	return getPackageName(specifier).startsWith("@cline/");
+	return getPackageName(specifier).startsWith("@plinycode/");
 }
 
 function hasInstalledDependency(
@@ -672,7 +670,7 @@ export async function importPluginModule(
 		transformModules,
 		// On Bun (the packaged binary), tryNative defaults to true, which makes
 		// jiti hand the plugin path straight to Bun's `import()`. Bun then owns
-		// every nested import in the plugin, sees `import "@cline/core"` with no
+		// every nested import in the plugin, sees `import "@plinycode/core"` with no
 		// node_modules adjacent to the drop-in plugin. Forcing tryNative off keeps
 		// jiti in charge so bare specifiers can be rewritten through aliases first.
 		tryNative: false,

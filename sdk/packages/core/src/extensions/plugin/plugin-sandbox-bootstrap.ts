@@ -15,7 +15,7 @@ import {
 	type AutomationEventEnvelope,
 	normalizePluginManifest,
 	type PluginManifest,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { installParentDisconnectGuard } from "../../runtime/tools/subprocess-sandbox-lifecycle";
 import { importPluginModule } from "./plugin-module-import";
 import {
@@ -44,7 +44,7 @@ interface PluginCommand {
 	) => Promise<PluginCommandResult> | PluginCommandResult;
 }
 
-// Keep this local mirror in sync with AgentExtensionCommandResult from @cline/shared.
+// Keep this local mirror in sync with AgentExtensionCommandResult from @plinycode/shared.
 // The sandbox bootstrap runs in an isolated process and avoids host package imports.
 type PluginCommandResult =
 	| string

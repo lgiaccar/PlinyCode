@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import type { AgendaTaskScope } from "@cline/shared";
+import type { AgendaTaskScope } from "@plinycode/shared";
 
 export interface AgendaTaskLocationInput {
 	scope: AgendaTaskScope;

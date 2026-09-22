@@ -2,7 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 
 import assert from "node:assert"
-import { disableCurrentDirectoryExecutableSearch } from "@cline/shared"
+import { disableCurrentDirectoryExecutableSearch } from "@plinycode/shared"
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
 import { sendAccountButtonClickedEvent } from "./core/controller/ui/subscribeToAccountButtonClicked"

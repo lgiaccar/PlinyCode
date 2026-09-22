@@ -7,9 +7,9 @@ import {
 } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type * as LlmsProviders from "@cline/llms";
-import type { BasicLogger } from "@cline/shared";
-import { ensureHookLogDir } from "@cline/shared/storage";
+import type * as LlmsProviders from "@plinycode/llms";
+import type { BasicLogger } from "@plinycode/shared";
+import { ensureHookLogDir } from "@plinycode/shared/storage";
 import { nowIso, SessionArtifacts } from "../../services/session-artifacts";
 import {
 	buildMessagesFilePayload,

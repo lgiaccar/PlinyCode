@@ -8,8 +8,7 @@ export default defineConfig({
 			"sdk/packages/llms/vitest.config.ts",
 			"sdk/packages/shared/vitest.config.ts",
 			"sdk/packages/ui/vitest.config.ts",
-			"apps/cli/vitest.config.ts",
-			"apps/examples/vscode/vitest.config.ts",
+			"apps/vscode/vitest.config.ts",
 		],
 	},
 });

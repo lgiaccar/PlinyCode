@@ -3,7 +3,7 @@ import {
 	CLINE_ENVIRONMENT_ENV,
 	CLINE_ENVIRONMENTS,
 	type GatewayProviderContext,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	BUILTIN_PROVIDER_MANIFESTS_BY_ID,

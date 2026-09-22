@@ -1,4 +1,4 @@
-import type { ChatStartSessionRequest } from "@cline/shared";
+import type { ChatStartSessionRequest } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeHost } from "../runtime/host/runtime-host";
 import { createClineCoreAutomationRuntimeHandlers } from "./automation";

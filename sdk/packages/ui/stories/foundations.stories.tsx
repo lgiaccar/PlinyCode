@@ -84,7 +84,7 @@ const TokenCard = ({ label, token }: { label: string; token: string }) => (
 export const Overview = () => (
 	<main className="mx-auto grid max-w-6xl gap-10 p-8">
 		<header className="space-y-3">
-			<p className="text-sm font-medium text-primary">@cline/ui</p>
+			<p className="text-sm font-medium text-primary">@plinycode/ui</p>
 			<h1 className="text-4xl font-semibold tracking-tight">
 				Cline visual foundations
 			</h1>

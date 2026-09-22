@@ -1,4 +1,4 @@
-import type { FeatureFlag, FeatureFlagsContext } from "@cline/shared";
+import type { FeatureFlag, FeatureFlagsContext } from "@plinycode/shared";
 import { ProviderSettingsManager } from "../storage/provider-settings-manager";
 import { FeatureFlagsService } from "./FeatureFlagsService";
 
@@ -53,7 +53,7 @@ export async function isClineAccountFeatureEnabled(
 						// idle runtimes do not leave background client handles behind.
 						// Keep the optional PostHog peer out of the SDK import path.
 						const { buildClinePostHogClient, PostHogFeatureFlagsProvider } =
-							await import("@cline/core/services/feature-flags/posthog");
+							await import("@plinycode/core/services/feature-flags/posthog");
 						const provider = new PostHogFeatureFlagsProvider({
 							client: buildClinePostHogClient(apiKey),
 							config: {},

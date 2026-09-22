@@ -1,4 +1,4 @@
-import type { ToolResultContent } from "@cline/shared";
+import type { ToolResultContent } from "@plinycode/shared";
 
 /**
  * Preserve the runtime tool-output serialization used by canonical session

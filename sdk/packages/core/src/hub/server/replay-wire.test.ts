@@ -8,7 +8,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HubEventEnvelope, HubTransportFrame } from "@cline/shared";
+import type { HubEventEnvelope, HubTransportFrame } from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 

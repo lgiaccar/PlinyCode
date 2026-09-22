@@ -1,4 +1,4 @@
-import { stripUtf8Bom } from "@cline/shared";
+import { stripUtf8Bom } from "@plinycode/shared";
 import YAML from "yaml";
 
 const AGENT_SKILL_FIELDS = new Set([

@@ -1,7 +1,7 @@
 import {
 	isMcpTimeoutConfigured,
 	resolveMcpTimeoutSeconds,
-} from "@cline/shared";
+} from "@plinycode/shared";
 import type {
 	McpConnectionStatus,
 	McpManager,

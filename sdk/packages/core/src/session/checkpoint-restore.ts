@@ -1,7 +1,7 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
-import type * as LlmsProviders from "@cline/llms";
+import type * as LlmsProviders from "@plinycode/llms";
 import type {
 	CheckpointEntry,
 	CheckpointMetadata,

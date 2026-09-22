@@ -1,4 +1,4 @@
-import type { AgentToolContext } from "@cline/core"
+import type { AgentToolContext } from "@plinycode/core"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"
