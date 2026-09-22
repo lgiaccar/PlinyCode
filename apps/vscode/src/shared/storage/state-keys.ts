@@ -258,6 +258,8 @@ const API_HANDLER_SETTINGS_FIELDS = {
 
 const USER_SETTINGS_FIELDS = {
 	// Settings that are NOT part of ApiHandlerOptions
+	plinycodeContextFoldersEnabled: { default: true as boolean },
+	plinycodeContextFolders: { default: [".github", ".vscode", ".devcontainer", ".cursor"] as string[] },
 	autoApprovalSettings: {
 		default: DEFAULT_AUTO_APPROVAL_SETTINGS as AutoApprovalSettings,
 	},
