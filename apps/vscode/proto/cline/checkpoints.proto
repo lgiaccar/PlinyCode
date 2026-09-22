@@ -14,9 +14,10 @@ service CheckpointsService {
   // checkpoint (snapshotted when the user's last message started a run) and
   // the current working tree.
   rpc checkpointViewLatestChanges(EmptyRequest) returns (Empty);
-  // Summary of files/lines changed between the latest checkpoint and the
-  // current working tree (empty when no checkpoint exists).
-  rpc checkpointLatestChangesSummary(EmptyRequest) returns (LatestChangesSummary);
+  // Summary of files/lines changed between a checkpoint and the current working
+  // tree (empty when no checkpoint exists). Omit both selectors for the latest
+  // checkpoint; pass message_ts to target the checkpoint for that user message.
+  rpc checkpointLatestChangesSummary(CheckpointChangesSummaryRequest) returns (LatestChangesSummary);
   // Opens a single-file diff for one file from the latest checkpoint comparison.
   rpc checkpointOpenFileDiff(OpenFileDiffRequest) returns (Empty);
 }
@@ -26,6 +27,12 @@ message CheckpointRestoreRequest {
   int64 number = 2;
   string restore_type = 3;
   optional int64 offset = 4;
+}
+
+message CheckpointChangesSummaryRequest {
+  Metadata metadata = 1;
+  optional int64 checkpoint_run_count = 2;
+  optional int64 message_ts = 3;
 }
 
 message ChangedFileSummary {

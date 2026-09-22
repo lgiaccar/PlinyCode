@@ -4,8 +4,8 @@
 // This allows the SdkController to reuse the classic state-building logic
 // without inheriting the entire classic Controller implementation.
 
-import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@plinycode/core"
 import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
+import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@plinycode/core"
 import type { ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -30,6 +30,7 @@ export async function getStateToPostToWebview(controller: {
 	foregroundCommandRunning?: boolean
 	workspaceManager?: any
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
+	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
 	isRemoteConfigAvailable?: boolean
 	currentRemoteConfigRevision?: number
 }): Promise<ExtensionState> {
@@ -103,6 +104,7 @@ export async function getStateToPostToWebview(controller: {
 		: undefined
 	const clineMessages = [...(controller.task?.messageStateHandler?.getClineMessages?.() || [])]
 	const checkpointRestoreInput = controller.checkpointRestoreInput
+	const editMessageRestartFocus = controller.editMessageRestartFocus
 
 	const processedTaskHistory = (taskHistory || [])
 		.filter((item: any) => item.ts && item.task)
@@ -135,6 +137,7 @@ export async function getStateToPostToWebview(controller: {
 		currentTaskItem,
 		clineMessages,
 		checkpointRestoreInput,
+		editMessageRestartFocus,
 		autoApprovalSettings,
 		browserSettings,
 		preferredLanguage,

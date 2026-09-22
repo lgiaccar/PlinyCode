@@ -21,9 +21,12 @@ vi.mock("@/services/grpc-client", () => ({
 	TaskServiceClient: {
 		editMessageAndRegenerate: vi.fn(),
 	},
+	CheckpointsServiceClient: {
+		checkpointLatestChangesSummary: vi.fn(),
+	},
 }))
 
-import { TaskServiceClient } from "@/services/grpc-client"
+import { CheckpointsServiceClient, TaskServiceClient } from "@/services/grpc-client"
 import UserMessage from "../UserMessage"
 
 describe("UserMessage – IME composition handling", () => {
@@ -38,6 +41,12 @@ describe("UserMessage – IME composition handling", () => {
 			},
 		)
 		vi.mocked(TaskServiceClient.editMessageAndRegenerate).mockResolvedValue({})
+		vi.mocked(CheckpointsServiceClient.checkpointLatestChangesSummary).mockResolvedValue({
+			files: [],
+			totalAdded: 0,
+			totalRemoved: 0,
+			checkpointRunCount: 1,
+		})
 	})
 
 	it("does NOT send when IME composition Enter is pressed while editing", () => {
@@ -84,16 +93,18 @@ describe("UserMessage – IME composition handling", () => {
 		}
 	})
 
-	it("labels reset actions and preserves their restore behavior", async () => {
+	it("shows the pencil control and restart actions with expected behavior", async () => {
 		const user = userEvent.setup()
 		render(<UserMessage files={["src/app.ts"]} images={["image.png"]} messageTs={123} text="Update this" />)
 
+		expect(screen.getByLabelText("Edit and restart from this message")).toBeInTheDocument()
+
 		await user.click(screen.getByText("Update this"))
 
-		expect(screen.getByRole("button", { name: "Reset Chat" })).toBeInTheDocument()
-		expect(screen.getByRole("button", { name: "Reset Code" })).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "Restart from here" })).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "Restart and revert files" })).toBeInTheDocument()
 
-		await user.click(screen.getByRole("button", { name: "Reset Chat" }))
+		await user.click(screen.getByRole("button", { name: "Restart from here" }))
 		await waitFor(() => expect(TaskServiceClient.editMessageAndRegenerate).toHaveBeenCalledTimes(1))
 		expect(TaskServiceClient.editMessageAndRegenerate).toHaveBeenLastCalledWith(
 			expect.objectContaining({
@@ -106,17 +117,31 @@ describe("UserMessage – IME composition handling", () => {
 		)
 
 		await user.click(screen.getByText("Update this"))
-		await user.click(screen.getByRole("button", { name: "Reset Code" }))
+		await user.click(screen.getByRole("button", { name: "Restart and revert files" }))
+		await waitFor(() => expect(CheckpointsServiceClient.checkpointLatestChangesSummary).toHaveBeenCalled())
+		await user.click(screen.getByRole("button", { name: "Revert files and restart" }))
 		await waitFor(() => expect(TaskServiceClient.editMessageAndRegenerate).toHaveBeenCalledTimes(2))
 		expect(TaskServiceClient.editMessageAndRegenerate).toHaveBeenLastCalledWith(
 			expect.objectContaining({
 				messageTs: 123,
-				text: "Update this",
-				images: ["image.png"],
-				files: ["src/app.ts"],
 				restoreWorkspace: true,
 			}),
 		)
+	})
+
+	it("disables revert files when workspace restore is unavailable", async () => {
+		const user = userEvent.setup()
+		render(
+			<UserMessage
+				canRestoreWorkspace={false}
+				messageTs={123}
+				restoreWorkspaceDisabledReason="No git checkpoint"
+				text="Hi"
+			/>,
+		)
+
+		await user.click(screen.getByText("Hi"))
+		expect(screen.getByRole("button", { name: "Restart and revert files" })).toBeDisabled()
 	})
 
 	it("removes an image before regenerating an edited message", async () => {
@@ -131,7 +156,7 @@ describe("UserMessage – IME composition handling", () => {
 		await user.click(removeButton as HTMLElement)
 
 		expect(screen.queryByAltText("Thumbnail image-1")).not.toBeInTheDocument()
-		await user.click(screen.getByRole("button", { name: "Reset Chat" }))
+		await user.click(screen.getByRole("button", { name: "Restart from here" }))
 		await waitFor(() => expect(TaskServiceClient.editMessageAndRegenerate).toHaveBeenCalledTimes(1))
 		expect(TaskServiceClient.editMessageAndRegenerate).toHaveBeenCalledWith(expect.objectContaining({ images: [] }))
 	})
