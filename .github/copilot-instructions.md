@@ -51,6 +51,9 @@ Adding a key requires updating the typed storage definitions in `src/shared/stor
 - `src/core/prompts/commands.ts` — system prompt integration.
 - `webview-ui/src/utils/slash-commands.ts` — webview autocomplete.
 
+## AI-Generated Temporary Files
+When generating intermediate temporary files, test outputs, analysis results, scratch notes, or any ephemeral artifacts that are not permanent project sources, write them to `./ai_output/` rather than the project root or source directories. The `./ai_output/` directory is git-ignored. Clean up or overwrite files in this directory between tasks as needed.
+
 ## Conventions
 - **Paths**: Always use `src/utils/path` helpers (`toPosixString`) for cross-platform compatibility.
 - **Logging**: `src/shared/services/Logger.ts`.

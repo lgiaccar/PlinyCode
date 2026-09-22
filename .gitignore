@@ -97,3 +97,6 @@ apps/examples/desktop-app/.cursor/settings.json
 
 # Kilo Code extension worktrees (local scratch checkouts)
 .kilo/
+
+# AI-generated temporary files and intermediate outputs
+ai_output/
