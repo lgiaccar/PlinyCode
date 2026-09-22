@@ -36,6 +36,7 @@ import type {
 	ClineAskUseMcpServer,
 	ClineAskUseSubagents,
 	ClineCompactionInfo,
+	ClineContextBreakdown,
 	ClineMessage,
 	ClineSay,
 	ClineSaySubagentStatus,
@@ -79,6 +80,8 @@ export interface TranslationResult {
 		cacheWrites?: number
 		cacheReads?: number
 		totalCost?: number
+		estimated?: boolean
+		contextBreakdown?: ClineContextBreakdown
 	}
 }
 
@@ -91,6 +94,8 @@ function normalizeUsageEvent(usageEvent: {
 	cacheWriteTokens?: number
 	cost?: number
 	totalCost?: number
+	estimated?: boolean
+	contextBreakdown?: ClineContextBreakdown
 }): NormalizedUsage {
 	const inputTokens = usageEvent.inputTokens ?? 0
 	const cacheReads = usageEvent.cacheReadTokens ?? 0
@@ -107,6 +112,8 @@ function normalizeUsageEvent(usageEvent: {
 		cacheWrites,
 		cacheReads,
 		totalCost: usageEvent.cost ?? usageEvent.totalCost ?? 0,
+		...(usageEvent.estimated ? { estimated: true } : {}),
+		...(usageEvent.contextBreakdown ? { contextBreakdown: usageEvent.contextBreakdown } : {}),
 	}
 }
 
@@ -1899,6 +1906,8 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 				cacheWrites: usageEvent.cacheWrites,
 				cacheReads: usageEvent.cacheReads,
 				cost: usageEvent.totalCost,
+				...(usageEvent.estimated ? { estimated: true } : {}),
+				...(usageEvent.contextBreakdown ? { contextBreakdown: usageEvent.contextBreakdown } : {}),
 			}
 			messages.push({
 				ts: state.nextTs(),

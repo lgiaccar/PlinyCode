@@ -380,6 +380,8 @@ export class RuntimeEventAdapter {
 				cacheWriteTokens:
 					deltaCacheWrite === 0 ? undefined : Math.max(0, deltaCacheWrite),
 				cost: deltaCost === 0 ? undefined : deltaCost,
+				estimated: next.estimated,
+				contextBreakdown: next.contextBreakdown,
 				totalInputTokens: next.inputTokens,
 				totalOutputTokens: next.outputTokens,
 				totalCacheReadTokens:

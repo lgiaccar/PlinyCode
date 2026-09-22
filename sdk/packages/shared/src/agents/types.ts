@@ -17,6 +17,7 @@ import type {
 	ProviderErrorClass,
 } from "../agent";
 import type { ExtensionContext } from "../extensions/context";
+import type { ContextBreakdownTokens } from "../llms/context-breakdown";
 import type {
 	AgentExtensionApi,
 	AgentExtensionHooks,
@@ -167,6 +168,14 @@ export interface AgentUsageEvent extends AgentEventMetadata {
 	cacheWriteTokens?: number;
 	/** Cost for this turn */
 	cost?: number;
+	/**
+	 * True when this turn's token counts are a char-based estimate rather
+	 * than provider-reported figures (the gateway returned no usable usage
+	 * for the request). Reflects only this turn, not the cumulative totals.
+	 */
+	estimated?: boolean;
+	/** Where this turn's input tokens came from (system prompt, rules, conversation, ...). */
+	contextBreakdown?: ContextBreakdownTokens;
 
 	/** Accumulated totals */
 	totalInputTokens: number;

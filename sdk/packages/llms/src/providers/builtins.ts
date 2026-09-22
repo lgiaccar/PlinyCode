@@ -787,7 +787,13 @@ const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 			headers: { ...PLINY_DEFAULT_HEADERS },
 			timeoutMs: PLINY_TIMEOUT_MS,
 		},
-		metadata: ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA,
+		metadata: {
+			...ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA,
+			// Hosted Pliny models now carry real `pricing`; self-hosted models
+			// carry explicit zero pricing. Neither is a flat-rate subscription
+			// like ClinePass, so the per-task cost badge should render.
+			usageCostDisplay: "show",
+		},
 	},
 	{
 		// Keep the persisted provider ID and credentials compatible while the

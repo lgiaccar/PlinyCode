@@ -54,6 +54,43 @@ describe("getApiMetrics", () => {
 		assert.ok(Math.abs(metrics.totalCost - 0.2) < 1e-9)
 	})
 
+	it("flags hasEstimatedUsage when any summed request was a char-based estimate", () => {
+		const messages: ClineMessage[] = [
+			{
+				ts: 1,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 10, tokensOut: 20, cost: 0 }),
+			},
+			{
+				ts: 2,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 500, tokensOut: 50, estimated: true }),
+			},
+		]
+
+		const metrics = getApiMetrics(messages)
+
+		assert.equal(metrics.totalTokensIn, 510)
+		assert.equal(metrics.totalTokensOut, 70)
+		assert.equal(metrics.hasEstimatedUsage, true)
+	})
+
+	it("leaves hasEstimatedUsage unset when every request reported real usage", () => {
+		const messages: ClineMessage[] = [
+			{
+				ts: 1,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 10, tokensOut: 20, cost: 0.01 }),
+			},
+		]
+
+		const metrics = getApiMetrics(messages)
+		assert.equal(metrics.hasEstimatedUsage, undefined)
+	})
+
 	it("ignores malformed usage payloads", () => {
 		const messages: ClineMessage[] = [
 			{

@@ -1,3 +1,4 @@
+import type { ClineContextBreakdown } from "@shared/ExtensionMessage"
 import { StringRequest } from "@shared/proto/cline/common"
 import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
 import debounce from "debounce"
@@ -22,6 +23,8 @@ interface ContextWindowProgressProps extends ContextWindowInfoProps {
 	useAutoCondense: boolean
 	lastApiReqTotalTokens?: number
 	contextWindow?: number
+	hasEstimatedUsage?: boolean
+	contextBreakdown?: ClineContextBreakdown
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
 }
 
@@ -66,6 +69,8 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 	tokensOut,
 	cacheWrites,
 	cacheReads,
+	hasEstimatedUsage,
+	contextBreakdown,
 }) => {
 	const [isOpened, setIsOpened] = useState(false)
 	const [confirmationNeeded, setConfirmationNeeded] = useState(false)
@@ -151,6 +156,7 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 			<div className="flex gap-1 flex-row @max-xs:flex-col @max-xs:items-start items-center text-sm">
 				<div className="flex items-center gap-1.5 flex-1 whitespace-nowrap">
 					<span className="cursor-pointer text-sm" title="Current tokens used in this request">
+						{hasEstimatedUsage ? "~" : ""}
 						{formatTokenNumber(tokenData.used)}
 					</span>
 					<div className="flex relative items-center gap-1 flex-1 w-full h-full" onMouseEnter={() => setIsOpened(true)}>
@@ -159,7 +165,9 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 								<ContextWindowSummary
 									cacheReads={cacheReads}
 									cacheWrites={cacheWrites}
+									contextBreakdown={contextBreakdown}
 									contextWindow={tokenData.max}
+									hasEstimatedUsage={hasEstimatedUsage}
 									percentage={tokenData.percentage}
 									tokensIn={tokensIn}
 									tokensOut={tokensOut}

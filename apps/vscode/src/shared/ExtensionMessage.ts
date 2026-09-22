@@ -366,6 +366,21 @@ export interface ClineAskQuestion {
 	selected?: string
 }
 
+/**
+ * Where the current request's context tokens came from. Each field is a
+ * token-estimate count (same estimator as the rest of the context-window
+ * bar), scaled so the sum matches the provider-reported prompt size when one
+ * is available. Absent/zero sections are omitted rather than sent as 0.
+ */
+export interface ClineContextBreakdown {
+	systemPrompt?: number
+	rules?: number
+	skills?: number
+	workflows?: number
+	conversation?: number
+	other?: number
+}
+
 export interface ClineApiReqInfo {
 	request?: string
 	tokensIn?: number
@@ -375,6 +390,10 @@ export interface ClineApiReqInfo {
 	cost?: number
 	cancelReason?: ClineApiReqCancelReason
 	streamingFailedMessage?: string
+	/** True when tokensIn/tokensOut are a char-based estimate, not provider-reported figures. */
+	estimated?: boolean
+	/** Breakdown of this request's context tokens by source; see ContextWindowSummary. */
+	contextBreakdown?: ClineContextBreakdown
 }
 
 /**

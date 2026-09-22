@@ -29,6 +29,11 @@ describe("provider usage cost display", () => {
 		expect(shouldShowProviderUsageCost("anthropic")).toBe(true);
 	});
 
+	it("shows usage cost for Pliny (hosted models are priced, self-hosted are explicit $0)", () => {
+		expect(resolveProviderUsageCostDisplay("pliny")).toBe("show");
+		expect(shouldShowProviderUsageCost("pliny")).toBe(true);
+	});
+
 	it("stores the display policy on provider metadata", () => {
 		expect(
 			getProviderCollectionSync("openai-codex")?.provider.metadata,
