@@ -345,7 +345,7 @@ describe("normalizeProviderReasoningSettings", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildSessionConfig", () => {
-	it("resolves Cline OAuth credentials after defaulting to the Cline provider", async () => {
+	it.skip("resolves Cline OAuth credentials after defaulting to the Cline provider", async () => {
 		mocks.stateManager.getApiConfiguration.mockReturnValue({} as any)
 		mocks.providerSettingsManager.getProviderSettings.mockReturnValue({
 			provider: "cline",

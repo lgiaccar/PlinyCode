@@ -13,6 +13,7 @@ interface ApiKeyFieldProps {
 	placeholder?: string
 	helpText?: string
 	label?: string
+	disabled?: boolean
 }
 
 /**
@@ -26,6 +27,7 @@ export const ApiKeyField = ({
 	placeholder = "Enter API Key...",
 	helpText,
 	label = `${providerName} API Key`,
+	disabled,
 }: ApiKeyFieldProps) => {
 	const [localValue, setLocalValue] = useState(initialValue)
 	const isFocusedRef = useRef(false)
@@ -64,6 +66,7 @@ export const ApiKeyField = ({
 	return (
 		<div>
 			<VSCodeTextField
+				disabled={disabled}
 				onBlur={() => {
 					isFocusedRef.current = false
 				}}

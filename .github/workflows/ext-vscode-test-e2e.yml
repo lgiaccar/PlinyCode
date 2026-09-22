@@ -3,7 +3,7 @@ name: ext-vscode-test-e2e
 on:
     push:
         branches:
-            - main
+            - master
     pull_request:
         types: [opened, reopened, synchronize, ready_for_review]
     workflow_dispatch:

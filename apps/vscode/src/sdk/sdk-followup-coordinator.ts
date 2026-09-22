@@ -70,6 +70,7 @@ export class SdkFollowupCoordinator {
 		files?: string[],
 		askResponse?: ClineAskResponse,
 		turnPhaseAtSubmit?: TurnPhase,
+		delivery?: "queue" | "steer",
 	): Promise<void> {
 		if (this.options.interactions.resolvePendingToolApproval(prompt, askResponse, images, files)) {
 			return
@@ -83,7 +84,7 @@ export class SdkFollowupCoordinator {
 		const task = this.options.getTask()
 		const submittedDuringActiveTurn = turnPhaseAtSubmit === "streaming" || turnPhaseAtSubmit === "awaiting_approval"
 		if (activeSession && (activeSession.isRunning || submittedDuringActiveTurn)) {
-			await this.queueToActiveSession(activeSession, prompt, images, files)
+			await this.queueToActiveSession(activeSession, prompt, images, files, delivery)
 			return
 		}
 
@@ -105,7 +106,7 @@ export class SdkFollowupCoordinator {
 
 			const currentSession = this.options.sessions.getActiveSession()
 			if (currentSession && (currentSession.isRunning || submittedDuringActiveTurn)) {
-				await this.queueToActiveSession(currentSession, prompt, images, files)
+				await this.queueToActiveSession(currentSession, prompt, images, files, delivery)
 				return
 			}
 
@@ -136,13 +137,14 @@ export class SdkFollowupCoordinator {
 		prompt?: string,
 		images?: string[],
 		files?: string[],
+		delivery?: "queue" | "steer",
 	): Promise<void> {
 		const { sdkHost, sessionId } = activeSession
 		Logger.log(`[SdkController] Session is running - queuing follow-up message for session: ${sessionId}`)
 
 		this.options.sessions.setRunning(true)
 		const resolvedPrompt = prompt ? await this.options.resolveContextMentions(prompt) : ""
-		this.options.sessions.fireAndForgetSend(sdkHost, sessionId, resolvedPrompt, images, files, "queue")
+		this.options.sessions.fireAndForgetSend(sdkHost, sessionId, resolvedPrompt, images, files, delivery ?? "queue")
 	}
 
 	/**

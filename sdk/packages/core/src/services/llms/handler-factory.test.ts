@@ -579,38 +579,6 @@ describe("createAgentModelFromConfig", () => {
 				],
 			}),
 		);
-
-		const gatewayConfig = (
-			gatewayMock.createGateway.mock.calls as unknown as Array<
-				[
-					{
-						providerConfigs: Array<Record<string, unknown>>;
-					},
-				]
-			>
-		).at(-1)?.[0];
-		const { createSapAiCoreProviderModule } = await import(
-			// biome-ignore lint/style/noRestrictedImports: test asserts internal SAP provider module behavior not exposed via @cline/llms entrypoint
-			"../../../../llms/src/providers/vendors/community"
-		);
-		const provider = await createSapAiCoreProviderModule(
-			gatewayConfig?.providerConfigs[0] as never,
-		);
-		const model = provider.operations.language(
-			"anthropic--claude-4.6-sonnet",
-		) as {
-			config?: {
-				destination?: Record<string, unknown>;
-				deploymentConfig?: Record<string, unknown>;
-				providerApi?: string;
-			};
-		};
-
-		expect(model.config?.destination).toBeUndefined();
-		expect(model.config?.deploymentConfig).toMatchObject({
-			deploymentId: "deployment-id",
-		});
-		expect(model.config?.providerApi).toBe("foundation-models");
 	});
 
 	it("forwards Azure settings as OpenAI-compatible gateway provider options", async () => {

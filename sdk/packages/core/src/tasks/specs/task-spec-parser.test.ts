@@ -252,7 +252,8 @@ describe("AgendaTaskSpecFileStore", () => {
 		});
 	});
 
-	it("rejects a workspace task directory that escapes through a symlink", () => {
+	// Creating a directory symlink on Windows needs elevation (EPERM otherwise).
+	it.skipIf(process.platform === "win32")("rejects a workspace task directory that escapes through a symlink", () => {
 		const root = mkdtempSync(join(tmpdir(), "cline-task-specs-"));
 		const outside = mkdtempSync(join(tmpdir(), "cline-task-specs-outside-"));
 		roots.push(root, outside);

@@ -1,6 +1,11 @@
 # E2E Tests
 
-This directory contains the end-to-end tests for the Cline VS Code extension using Playwright. These tests simulate user interactions with the extension in a real VS Code environment.
+This directory contains the end-to-end tests for the PlinyCode VS Code extension using Playwright. These tests simulate user interactions with the extension in a real VS Code environment.
+
+> **Pliny harness status:** All suites are **active** (no longer skipped). The harness was rebuilt after the Pliny-only refactor:
+> - `welcomeViewCompleted` is hardcoded `true` — the extension goes straight to the chat view, so `helper.signin()` was replaced by `helper.ensureReady()` (just waits for `chat-input`).
+> - The mock server (`http://localhost:7777`) now also handles `/api/llm/chat/completions` (the Pliny OpenAI-compatible path).
+> - The `openVSCode` fixture pre-seeds `providers.json` with `baseUrl: http://localhost:7777/api/llm` so the extension never tries to reach the real Pliny gateway.
 
 ## Test Structure
 
@@ -8,16 +13,20 @@ The E2E test suite consists of several key components:
 
 ### Test Files
 
-- **`auth.test.ts`** - Tests API key setup, provider selection, and navigation to settings
-- **`chat.test.ts`** - Tests chat functionality including message sending, mode switching (Plan/Act), slash commands, and @ mentions
-- **`diff.test.ts`** - Tests the diff editor functionality for file modifications
-- **`editor.test.ts`** - Tests code actions, editor panel integration, and code selection features
+> `auth.test.ts` (onboarding/multi-provider picker) and `codex-oauth.test.ts` (OpenAI Codex OAuth) were **removed** — they tested features dropped in the Pliny-only refactor.
+
+- **`chat.test.ts`** - chat message sending, mode switching (Plan/Act), slash commands, @ mentions
+- **`editor.test.ts`** - code actions, editor panel integration, code selection
+- **`file-edit.test.ts`** - file-edit auto-approval via the SDK `editor` tool
+- **`history.test.ts`** - (disabled) history cost-display suppression for `openai-codex` subscription billing — a removed-feature-adjacent assertion; see the disable comment at the top of the file
+- **`hooks.test.ts`** - workspace hook execution from the window's workspace root
+- **`powershell-background.test.ts`** - (Windows-only) background terminal execution profile
 
 ### Test Infrastructure
 
 - **`utils/helpers.ts`** - Core test utilities and fixtures including:
-  - `e2e` - Main test fixture for single-root workspace tests
-  - `e2eMultiRoot` - Test fixture for multi-root workspace tests
+  - `e2e` - Main test fixture (extended Playwright `test`) for E2E tests
+  - `E2E_WORKSPACE_TYPES` - Single/multi-root workspace variants (use via `e2e.extend({ workspaceType })`)
   - `E2ETestHelper` - Helper class with utilities for VS Code interaction
 - **`utils/common.ts`** - Common utility functions for UI interactions
 - **`utils/global.setup.ts`** - Global test setup and cleanup
@@ -103,13 +112,15 @@ e2e("Test description", async ({ sidebar, helper, page }) => {
 })
 ```
 
-For multi-root workspace tests, use `e2eMultiRoot`:
+For multi-root workspace tests, iterate `E2E_WORKSPACE_TYPES` and extend `e2e` with `workspaceType` (see `editor.test.ts` / `file-edit.test.ts`):
 
 ```typescript
-import { e2eMultiRoot } from "./utils/helpers"
+import { E2E_WORKSPACE_TYPES, e2e } from "./utils/helpers"
 
-e2eMultiRoot("[Multi-roots] Test description", async ({ sidebar, helper }) => {
-  // Test implementation
+E2E_WORKSPACE_TYPES.forEach(({ title, workspaceType }) => {
+  e2e.extend({ workspaceType })(title, async ({ sidebar, helper }) => {
+    // Test implementation
+  })
 })
 ```
 

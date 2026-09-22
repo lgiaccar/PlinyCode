@@ -1,7 +1,8 @@
 import { ResolveProviderModelsRequest } from "@shared/proto/cline/models"
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { type ProviderId, useExtensionState } from "@/context/ExtensionStateContext"
 import { ModelsServiceClient } from "@/services/grpc-client"
+import { filterPlinyModels, usePlinyUnlockPaidModels } from "@/components/settings/utils/plinyModelFilter"
 
 let providerModelRequestCounter = 0
 
@@ -48,9 +49,26 @@ export function useProviderModels(providerId: ProviderId) {
 		void refresh()
 	}, [refresh])
 
+	// PlinyCode: paid (hosted) Pliny models are screened behind the
+	// "Unlock Pliny paid models" setting. Only the free self-hosted
+	// (snps-provider*) models are surfaced unless the user opts in. This is a
+	// display-only policy — a committed paid selection is preserved and shown
+	// via the picker's "not in current list" affordance, and the running
+	// task's model is never changed by this filter.
+	const [unlockPlinyPaid] = usePlinyUnlockPaidModels()
+	const catalogModels = state?.models ?? {}
+	const catalogDefaultModelId = state?.defaultModelId ?? ""
+	const { models, defaultModelId } = useMemo(
+		() =>
+			providerId === "pliny"
+				? filterPlinyModels(catalogModels, catalogDefaultModelId, unlockPlinyPaid)
+				: { models: catalogModels, defaultModelId: catalogDefaultModelId },
+		[providerId, catalogModels, catalogDefaultModelId, unlockPlinyPaid],
+	)
+
 	return {
-		models: state?.models ?? {},
-		defaultModelId: state?.defaultModelId ?? "",
+		models,
+		defaultModelId,
 		isLoading: state?.isLoading ?? false,
 		isStale: state?.isStale ?? false,
 		error: state?.error,

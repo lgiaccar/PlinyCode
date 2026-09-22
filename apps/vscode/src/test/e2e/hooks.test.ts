@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test"
 import fs from "fs/promises"
 import path from "path"
-import { e2e, E2ETestHelper } from "./utils/helpers"
+import { E2ETestHelper, e2e } from "./utils/helpers"
 
 // This spec runs against its own fixture workspace: hooks execute on every
 // prompt once discovered (hooksEnabled defaults to true), so keeping the hook
@@ -25,7 +25,7 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 	await fs.rm(markerPath, { force: true })
 
 	try {
-		await helper.signin(sidebar)
+		await helper.ensureReady(sidebar)
 
 		const inputbox = sidebar.getByTestId("chat-input")
 		await expect(inputbox).toBeVisible()
@@ -34,7 +34,8 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 
 		// The hook runs during beforeRun, ahead of the model call, so the
 		// marker exists by the time the mock response renders.
-		await expect(sidebar.getByText("mock Cline API response")).toBeVisible()
+		// Generous timeout: the mock streams word-by-word and CI runners can be slow.
+		await expect(sidebar.getByText("mock Cline API response")).toBeVisible({ timeout: 30_000 })
 
 		let markerRaw: string | undefined
 		await expect

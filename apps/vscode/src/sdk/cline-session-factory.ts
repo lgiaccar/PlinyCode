@@ -699,6 +699,15 @@ export function resolveOllamaProviderConfig(config: ApiConfiguration, modelId: s
 }
 
 export function resolveBaseUrl(providerId: string, config: ApiConfiguration): string | undefined {
+	// E2E test override: when PLINY_BASE_URL is set (by the e2e harness via the
+	// openVSCode fixture env), short-circuit all resolution so the Pliny provider
+	// talks to the local mock server instead of the real gateway. This is the
+	// most reliable injection point because it runs before the SDK gateway's own
+	// base URL resolution (which may use the hardcoded PLINY_BASE_URL from the
+	// provider spec).
+	if (providerId === "pliny" && process.env.PLINY_BASE_URL) {
+		return process.env.PLINY_BASE_URL
+	}
 	const baseUrlMap: Record<string, keyof ApiConfiguration> = {
 		anthropic: "anthropicBaseUrl",
 		openai: "openAiBaseUrl",

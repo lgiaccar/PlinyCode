@@ -19,6 +19,11 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 		remoteConfigSettings: undefined,
 		navigateToSettingsModelPicker: mocks.navigateToSettingsModelPicker,
 		mcpServers: [],
+		// useProviderModels() refreshes on mount; without these the request
+		// rejects asynchronously and vitest reports an unhandled error.
+		startProviderModelsRequest: vi.fn(),
+		applyProviderModelsResponse: vi.fn(),
+		providerModelsByProvider: {},
 	}),
 }))
 
@@ -44,6 +49,13 @@ vi.mock("@/services/grpc-client", () => ({
 	},
 	StateServiceClient: {
 		togglePlanActModeProto: vi.fn(async () => ({})),
+	},
+	// ConversationModelPicker -> useProviderConfig() reads the provider config on
+	// mount; without this the call rejects and vitest reports an unhandled error.
+	ModelsServiceClient: {
+		readProviderConfig: vi.fn(async () => ({})),
+		writeProviderConfig: vi.fn(async () => ({})),
+		commitModelSelection: vi.fn(async () => ({})),
 	},
 }))
 

@@ -66,6 +66,12 @@ describe("Shell Detection Tests", () => {
 		// Clear environment variables for a clean test
 		delete process.env.SHELL
 		delete process.env.COMSPEC
+		// Windows hosts define WINDIR, and getEnvironmentVariable() looks
+		// ${env:windir} up case-insensitively on win32. Without this the real
+		// "C:\WINDOWS" wins over the "C:\Windows" the tests below set, so the
+		// expansion assertions fail on a Windows machine but pass on Linux.
+		delete process.env.WINDIR
+		delete process.env.windir
 
 		// Default userInfo() mock
 		userInfoImpl = (() => ({ shell: null })) as any

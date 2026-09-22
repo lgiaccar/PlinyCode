@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest"
+import { openAiModelInfoSafeDefaults } from "@shared/api"
+import {
+	filterPlinyModels,
+	isPlinyPaidModel,
+	isPlinySelfHostedModelId,
+	PLINY_FREE_DEFAULT_MODEL_ID,
+} from "./plinyModelFilter"
+
+function info(id: string) {
+	return { ...openAiModelInfoSafeDefaults, id, name: id }
+}
+
+const SAMPLE = {
+	"snps-provider/GLM-5.2": info("snps-provider/GLM-5.2"),
+	"snps-provider/qwen3.5-397b-fp8": info("snps-provider/qwen3.5-397b-fp8"),
+	"snps-provider-vmodels/glm-5.2": info("snps-provider-vmodels/glm-5.2"),
+	"snps-provider-sia/qwen3-8-27b-sia": info("snps-provider-sia/qwen3-8-27b-sia"),
+	"snps-aws-bedrock/aws-claude-sonnet-4.6": info("snps-aws-bedrock/aws-claude-sonnet-4.6"),
+	"azure-openai/gpt-5.2": info("azure-openai/gpt-5.2"),
+	"snps-google-gcp/gemini-3.7-flash": info("snps-google-gcp/gemini-3.7-flash"),
+	"google-vertex/glm-5.2": info("google-vertex/glm-5.2"),
+}
+
+describe("isPlinySelfHostedModelId / isPlinyPaidModel", () => {
+	it("treats snps-provider* ids as free self-hosted", () => {
+		expect(isPlinySelfHostedModelId("snps-provider/GLM-5.2")).toBe(true)
+		expect(isPlinySelfHostedModelId("snps-provider-vmodels/glm-5.2")).toBe(true)
+		expect(isPlinySelfHostedModelId("snps-provider-sia/qwen3-8-27b-sia")).toBe(true)
+		expect(isPlinySelfHostedModelId("snps-provider-internal-tests/glm-5-2")).toBe(true)
+	})
+
+	it("treats hosted pools as paid (not snps-provider)", () => {
+		expect(isPlinyPaidModel("snps-aws-bedrock/aws-claude-sonnet-4.6")).toBe(true)
+		expect(isPlinyPaidModel("azure-openai/gpt-5.2")).toBe(true)
+		expect(isPlinyPaidModel("snps-google-gcp/gemini-3.7-flash")).toBe(true)
+		expect(isPlinyPaidModel("google-vertex/glm-5.2")).toBe(true)
+		// snps-aws-bedrock / snps-google-gcp must NOT match the snps-provider prefix
+		expect(isPlinySelfHostedModelId("snps-aws-bedrock/aws-claude-sonnet-4.6")).toBe(false)
+		expect(isPlinySelfHostedModelId("snps-google-gcp/gemini-3.7-flash")).toBe(false)
+	})
+})
+
+describe("filterPlinyModels", () => {
+	it("returns the full catalog unchanged when paid models are unlocked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", true)
+		expect(Object.keys(result.models).length).toBe(8)
+		expect(result.defaultModelId).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
+	})
+
+	it("keeps only self-hosted models and redirects a paid default to the free default when locked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", false)
+		expect(Object.keys(result.models).sort()).toEqual(
+			[
+				"snps-provider-sia/qwen3-8-27b-sia",
+				"snps-provider-vmodels/glm-5.2",
+				"snps-provider/GLM-5.2",
+				"snps-provider/qwen3.5-397b-fp8",
+			].sort(),
+		)
+		expect(result.defaultModelId).toBe(PLINY_FREE_DEFAULT_MODEL_ID)
+	})
+
+	it("preserves a free default as-is when locked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-provider/GLM-5.2", false)
+		expect(result.defaultModelId).toBe("snps-provider/GLM-5.2")
+		expect(result.models["snps-provider/GLM-5.2"]).toBeDefined()
+	})
+
+	it("falls back to the first free model when the curated free default is absent", () => {
+		const onlyOther = {
+			"snps-provider/kimi-k2.6": info("snps-provider/kimi-k2.6"),
+		}
+		const result = filterPlinyModels(onlyOther, "snps-aws-bedrock/aws-claude-sonnet-4.6", false)
+		expect(result.defaultModelId).toBe("snps-provider/kimi-k2.6")
+	})
+
+	it("returns an empty model set with empty default when there are no free models and locked", () => {
+		const paidOnly = { "azure-openai/gpt-5.2": info("azure-openai/gpt-5.2") }
+		const result = filterPlinyModels(paidOnly, "azure-openai/gpt-5.2", false)
+		expect(Object.keys(result.models)).toHaveLength(0)
+		expect(result.defaultModelId).toBe("")
+	})
+})

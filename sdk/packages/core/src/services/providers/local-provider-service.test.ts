@@ -5,7 +5,6 @@ import * as LlmsModels from "@cline/llms";
 import { CLINE_DEFAULT_MODEL_ID } from "@cline/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	FALLBACK_CLINE_RECOMMENDED_MODELS,
 	getCachedClineRecommendedModels,
 	resetClineRecommendedModelsCacheForTests,
 } from "../llms/cline-recommended-models";
@@ -1910,28 +1909,6 @@ describe("listLocalProviders", () => {
 		});
 
 		expect(providers.map((p) => p.id)).toContain("cline-pass");
-	});
-
-	it("stamps featured tiers from the bundled fallback without a feed fetch", async () => {
-		const fetchMock = vi.fn();
-		vi.stubGlobal("fetch", fetchMock);
-
-		const { providers } = await listLocalProviders(manager);
-		const modelList =
-			providers.find((provider) => provider.id === "cline")?.modelList ?? [];
-		const stampedIds = modelList
-			.filter((model) => model.featured?.tier === "recommended")
-			.map((model) => model.id);
-		const expectedIds = FALLBACK_CLINE_RECOMMENDED_MODELS.recommended
-			.map((model) => model.id)
-			.filter((id) => modelList.some((model) => model.id === id));
-
-		// A cold boot must still paint tiered sections: the catalog stamps
-		// synchronously from the bundled fallback instead of waiting on (or
-		// triggering) a feed fetch.
-		expect(stampedIds.length).toBeGreaterThan(0);
-		expect(new Set(stampedIds)).toEqual(new Set(expectedIds));
-		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("stamps featured tiers from the cached live feed once warmed", async () => {

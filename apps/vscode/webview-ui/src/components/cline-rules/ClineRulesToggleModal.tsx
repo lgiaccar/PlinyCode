@@ -250,7 +250,7 @@ const ClineRulesToggleModal: React.FC = () => {
 				}
 			})
 			.catch((error) => {
-				console.error("Error toggling Cline rule:", error)
+				console.error("Error toggling PlinyCode rule:", error)
 			})
 	}
 
@@ -467,8 +467,8 @@ const ClineRulesToggleModal: React.FC = () => {
 						<div className="text-xs text-description mb-4">
 							{currentView === "rules" ? (
 								<p>
-									Rules allow you to provide Cline with system-level guidance. Think of them as a persistent way
-									to include context and preferences for your projects or globally for every conversation.{" "}
+									Rules allow you to provide PlinyCode with system-level guidance. Think of them as a persistent
+									way to include context and preferences for your projects or globally for every conversation.{" "}
 									<VSCodeLink
 										className="text-xs"
 										href="https://docs.cline.bot/features/cline-rules"
@@ -478,7 +478,7 @@ const ClineRulesToggleModal: React.FC = () => {
 								</p>
 							) : currentView === "workflows" ? (
 								<p>
-									Workflows allow you to define a series of steps to guide Cline through a repetitive set of
+									Workflows allow you to define a series of steps to guide PlinyCode through a repetitive set of
 									tasks, such as deploying a service or submitting a PR. To invoke a workflow, type{" "}
 									<span className="text-foreground font-bold">/workflow-name</span> in the chat.{" "}
 									<VSCodeLink
@@ -489,14 +489,14 @@ const ClineRulesToggleModal: React.FC = () => {
 								</p>
 							) : currentView === "skills" ? (
 								<p>
-									Skills are reusable instruction sets that Cline can activate on-demand. When a task matches a
-									skill's description, Cline uses the <span className="font-bold">use_skill</span> tool to load
-									the full instructions.
+									Skills are reusable instruction sets that PlinyCode can activate on-demand. When a task
+									matches a skill's description, PlinyCode uses the <span className="font-bold">use_skill</span>{" "}
+									tool to load the full instructions.
 								</p>
 							) : (
 								<p>
-									Hooks allow you to execute custom scripts at specific points in Cline's execution lifecycle,
-									enabling automation and integration with external tools.
+									Hooks allow you to execute custom scripts at specific points in PlinyCode's execution
+									lifecycle, enabling automation and integration with external tools.
 								</p>
 							)}
 						</div>

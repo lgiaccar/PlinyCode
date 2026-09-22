@@ -5,7 +5,7 @@ import * as path from "node:path"
 import { type ElectronApplication, expect, type Frame, type Page, test } from "@playwright/test"
 import { downloadAndUnzipVSCode, SilentReporter } from "@vscode/test-electron"
 import { _electron } from "playwright"
-import { ClineApiServerMock } from "../fixtures/server"
+import { ClineApiServerMock, MOCK_CLINE_API_SERVER_URL } from "../fixtures/server"
 
 interface E2ETestDirectories {
 	workspaceDir: string
@@ -119,7 +119,9 @@ export class E2ETestHelper {
 
 				try {
 					const title = await frame.title()
-					if (title.startsWith("Cline")) {
+					// The webview <title> was rebranded from "Cline" to "PlinyCode"; accept
+					// either so the finder survives a partial rebrand in either direction.
+					if (title.startsWith("PlinyCode") || title.startsWith("Cline")) {
 						this.cachedFrame = frame
 						return frame
 					}
@@ -279,27 +281,32 @@ export class E2ETestHelper {
 		}
 	}
 
+	/**
+	 * Waits for the extension to be ready for interaction.
+	 *
+	 * PlinyCode skips the Cline account onboarding (`welcomeViewCompleted` is
+	 * hardcoded `true`), so the extension goes straight to the chat view on
+	 * first launch.  There is no login button to click; we only need to confirm
+	 * the chat input is visible before tests start interacting with it.
+	 */
+	public async ensureReady(webview: Frame): Promise<void> {
+		await expect(webview.getByTestId("chat-input")).toBeVisible({ timeout: 30_000 })
+	}
+
+	/**
+	 * @deprecated Use `ensureReady()`.  The Cline account sign-in flow was
+	 * removed during the Pliny-only refactor (`welcomeViewCompleted` is now
+	 * hardcoded `true`).  This stub is kept so Git history is searchable, but
+	 * it delegates to `ensureReady()` to avoid silent no-ops in tests that
+	 * were not yet updated.
+	 */
 	public async signin(webview: Frame): Promise<void> {
-		await webview.getByRole("button", { name: "Login to Cline" }).click({ delay: 100 })
-
-		// Verify start up page is no longer visible
-		await expect(webview.getByRole("button", { name: "Login to Cline" })).not.toBeVisible()
-
-		const closeButton = webview.getByRole("button", { name: "Close" })
-		let shouldCloseModal = false
-		try {
-			await closeButton.waitFor({ state: "visible", timeout: 5_000 })
-			shouldCloseModal = true
-		} catch {
-			// No blocking modal appeared after sign-in.
-		}
-		if (shouldCloseModal) {
-			await closeButton.click({ delay: 50 })
-		}
+		return this.ensureReady(webview)
 	}
 
 	public static async openClineSidebar(page: Page): Promise<void> {
-		await page.getByRole("tab", { name: /Cline/ }).locator("a").click()
+		// Activity bar view container is titled "PlinyCode" (see package.json viewsContainers).
+		await page.getByRole("tab", { name: /Pliny/ }).locator("a").click()
 	}
 
 	public static async runCommandPalette(page: Page, command: string): Promise<void> {
@@ -417,6 +424,33 @@ export const e2e = test
 				const clineTestDir = mkdtempSync(path.join(os.tmpdir(), "cline-e2e-"))
 				const clineDataDir = path.join(clineTestDir, "data")
 
+				// Pre-seed providers.json so the extension's pliny provider points at the
+				// local mock server instead of the real Pliny gateway.  The ProviderSettingsManager
+				// reads this file at startup; writing it before VS Code launches means the
+				// extension never tries to reach snps-inference.internal.synopsys.com.
+				const settingsDir = path.join(clineDataDir, "settings")
+				mkdirSync(settingsDir, { recursive: true })
+				const plinyMockBaseUrl = `${MOCK_CLINE_API_SERVER_URL}/api/llm`
+				writeFileSync(
+					path.join(settingsDir, "providers.json"),
+					JSON.stringify(
+						{
+							providers: {
+								pliny: {
+									provider: "pliny",
+									// A non-empty dummy key; the mock server accepts any Bearer token.
+									apiKey: "e2e-mock-pliny-key",
+									baseUrl: plinyMockBaseUrl,
+									lastUsed: true,
+								},
+							},
+							lastUsedProvider: "pliny",
+						},
+						null,
+						2,
+					),
+				)
+
 				const app = await _electron.launch({
 					executablePath,
 					env: {
@@ -428,6 +462,11 @@ export const e2e = test
 						CLINE_CAPTURE_BROWSER: "true",
 						CLINE_DIR: clineTestDir, // Isolate test data from user's ~/.cline
 						CLINE_DATA_DIR: clineDataDir, // Keep SDK/shared storage off the user's real Cline data dir
+						// Redirect the Pliny provider to the local mock server. Read by:
+						// 1. sdk/packages/llms/src/providers/pliny-models.ts (PLINY_BASE_URL constant)
+						// 2. apps/vscode/src/sdk/cline-session-factory.ts (resolveBaseUrl short-circuit)
+						// Belt-and-suspenders with the providers.json pre-seeding above.
+						PLINY_BASE_URL: `${MOCK_CLINE_API_SERVER_URL}/api/llm`,
 						GRPC_RECORDER_FILE_NAME: E2ETestHelper.generateTestFileName(testInfo.title, testInfo.project.name),
 						// GRPC_RECORDER_ENABLED: "true",
 						// GRPC_RECORDER_TESTS_FILTERS_ENABLED: "true"

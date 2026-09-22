@@ -164,7 +164,9 @@ describe("RemoteEnvironmentService", () => {
 			),
 		).rejects.toThrow("output exceeded 16384 bytes");
 	});
-	it("waits for SIGKILL when a timed-out process ignores SIGTERM", async () => {
+	// SIGTERM/SIGKILL escalation is POSIX-only; Windows has no signal semantics
+	// for a process to ignore, so the escalation path cannot be exercised there.
+	it.skipIf(process.platform === "win32")("waits for SIGKILL when a timed-out process ignores SIGTERM", async () => {
 		const pidFile = join(testDirectory, "process.pid");
 		await expect(
 			runRemoteProcess(
