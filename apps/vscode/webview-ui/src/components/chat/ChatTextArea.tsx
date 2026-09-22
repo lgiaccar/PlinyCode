@@ -1467,7 +1467,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					)}
 					<div
 						className={cn(
-							"absolute bottom-2.5 top-2.5 whitespace-pre-wrap break-words rounded-xs overflow-hidden bg-input-background",
+							"absolute bottom-2.5 top-2.5 whitespace-pre-wrap break-words rounded-xs overflow-hidden",
 							isTextAreaFocused ? "left-3.5 right-3.5" : "left-3.5 right-3.5 border border-input-border",
 						)}
 						ref={highlightLayerRef}
@@ -1487,6 +1487,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							borderTop: isTextAreaFocused ? 0 : undefined,
 							borderBottom: isTextAreaFocused ? 0 : undefined,
 							padding: `9px 28px ${9 + thumbnailsHeight}px 9px`,
+							backgroundColor:
+								"var(--vscode-input-background, var(--vscode-editor-background, var(--vscode-sideBar-background, #1e1e1e)))",
 						}}
 					/>
 					<DynamicTextArea
@@ -1527,8 +1529,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						style={{
 							width: "100%",
 							boxSizing: "border-box",
-							backgroundColor: "transparent",
-							color: "var(--vscode-input-foreground)",
+							backgroundColor:
+								"var(--vscode-input-background, var(--vscode-editor-background, var(--vscode-sideBar-background, #1e1e1e)))",
+							color: "var(--vscode-input-foreground, var(--vscode-foreground, #cccccc))",
 							//border: "1px solid var(--vscode-input-border)",
 							borderRadius: 2,
 							fontFamily: "var(--vscode-font-family)",
@@ -1601,7 +1604,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							/>
 							{!showSchedulePicker && (
 								<select
-									className="h-5 w-5 appearance-none border-0 bg-input-background rounded-[3px] text-center text-[10px] text-foreground cursor-pointer hover:text-foreground focus:outline-none"
+									className="h-5 w-5 appearance-none border-0 rounded-[3px] text-center text-[10px] cursor-pointer focus:outline-none"
 									defaultValue="default"
 									disabled={sendingDisabled && !showSchedulePicker}
 									onChange={(e) => {
@@ -1615,6 +1618,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 										}
 										e.target.value = "default"
 									}}
+									style={{
+										backgroundColor:
+											"var(--vscode-dropdown-background, var(--vscode-input-background, var(--vscode-sideBar-background)))",
+										color: "var(--vscode-dropdown-foreground, var(--vscode-input-foreground, var(--vscode-foreground)))",
+									}}
 									title="Send options">
 									<option value="default">▼</option>
 									<option value="steer">Send Now (steer)</option>
@@ -1625,8 +1633,12 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							{showSchedulePicker && (
 								<div className="flex items-center gap-1">
 									<input
-										className="h-5 w-36 rounded-[3px] border border-editor-group-border bg-input-background px-1 text-[10px] text-foreground focus:outline-none"
+										className="h-5 w-36 rounded-[3px] border border-editor-group-border px-1 text-[10px] focus:outline-none"
 										onChange={(e) => setScheduleTime(e.target.value)}
+										style={{
+											backgroundColor: "var(--vscode-input-background, var(--vscode-sideBar-background))",
+											color: "var(--vscode-input-foreground, var(--vscode-foreground))",
+										}}
 										type="datetime-local"
 										value={scheduleTime}
 									/>

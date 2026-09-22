@@ -30,6 +30,24 @@ body {
 	background-color: var(--vscode-sideBar-background);
 }
 
+/*
+Native <select>/<option> and datetime pickers follow the page color-scheme.
+Without an explicit dark/light scheme they default to a light OS popup
+(white background) while themed text stays light — unreadable on Cursor dark.
+*/
+select,
+select option,
+input[type="datetime-local"] {
+	background-color: var(--vscode-dropdown-background, var(--vscode-input-background, var(--vscode-sideBar-background)));
+	color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground, var(--vscode-foreground)));
+}
+
+select option:checked,
+select option:hover {
+	background-color: var(--vscode-list-activeSelectionBackground, Highlight);
+	color: var(--vscode-list-activeSelectionForeground, HighlightText);
+}
+
 #root {
 	height: 100%;
 	width: 100%;
