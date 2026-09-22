@@ -74,7 +74,19 @@ export const ChangedFilesSummary = memo(({ checkpointRunCount: checkpointRunCoun
 		[effectiveRunCount],
 	)
 
-	if (loadState === "loading" || loadState === "error" || !hasChanges || !summary) {
+	if (loadState === "loading") {
+		return null
+	}
+
+	if (loadState === "error") {
+		return (
+			<p className="text-xs text-description px-1">
+				Could not load file changes. Check that this workspace is a git repository and checkpoints are enabled.
+			</p>
+		)
+	}
+
+	if (!hasChanges || !summary) {
 		return null
 	}
 

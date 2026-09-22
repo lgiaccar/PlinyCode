@@ -157,7 +157,6 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 									taskId={currentTaskItem?.id}
 									taskSize={currentTaskItem?.size}
 								/>
-								<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
 								{/* Only visible in development mode */}
 								{IS_DEV && (
 									<OpenDiskConversationHistoryButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
@@ -190,6 +189,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 								</span>
 							</div>
 						)}
+						<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
 						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
 					</div>
 				</div>

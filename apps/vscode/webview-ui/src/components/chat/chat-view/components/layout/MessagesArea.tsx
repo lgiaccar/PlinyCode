@@ -1,8 +1,8 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
-import { ArrowDown, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from "lucide-react"
 import type React from "react"
-import { useCallback, useEffect, useMemo, useRef } from "react"
-import { Virtuoso } from "react-virtuoso"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ListRange, Virtuoso } from "react-virtuoso"
 import ChatRow from "@/components/chat/ChatRow"
 import { StickyUserMessage } from "@/components/chat/task-header/StickyUserMessage"
 import { useExtensionState } from "@/context/ExtensionStateContext"
@@ -61,10 +61,12 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		scrollToMessage,
 		scrollToBottomSmooth,
 		scrollToBottomAuto,
+		scrollToTopSmooth,
 		handleLastRowContentChange,
 		goToPreviousUserMessage,
 		goToNextUserMessage,
 		isAtBottom,
+		userMessageIndices,
 	} = scrollBehavior
 
 	// Find the index of the scrolled past user message for scrolling
@@ -217,6 +219,68 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		[],
 	)
 
+	// User-input markers on the scrollbar edge. Ticks are positioned by index within
+	// displayedGroupedMessages (index / (total - 1) of the track height), not by pixel
+	// offset: real offsets for unrendered/virtualized rows aren't known, but index-proportional
+	// placement is stable and cheap to compute for arbitrarily long conversations.
+	const showInputMarkers = userMessageIndices.length >= 3
+	const lastRowIndex = displayedGroupedMessages.length - 1
+
+	const inputMarkers = useMemo(() => {
+		if (!showInputMarkers || lastRowIndex <= 0) {
+			return []
+		}
+		return userMessageIndices.map((index) => {
+			const row = displayedGroupedMessages[index]
+			const message = Array.isArray(row) ? row[0] : row
+			const preview = (message?.text ?? "").trim().replace(/\s+/g, " ").slice(0, 60)
+			return {
+				index,
+				preview,
+				position: index / lastRowIndex,
+			}
+		})
+	}, [showInputMarkers, lastRowIndex, userMessageIndices, displayedGroupedMessages])
+
+	const [visibleRange, setVisibleRange] = useState<ListRange>({ startIndex: 0, endIndex: 0 })
+	const handleMarkerRangeChanged = useCallback(
+		(range: ListRange) => {
+			setVisibleRange(range)
+			handleRangeChanged(range)
+		},
+		[handleRangeChanged],
+	)
+
+	const activeMarkerIndex = useMemo(() => {
+		let active = -1
+		for (const marker of inputMarkers) {
+			if (marker.index <= visibleRange.startIndex) {
+				active = marker.index
+			}
+		}
+		return active
+	}, [inputMarkers, visibleRange])
+
+	const prefersReducedMotion = useMemo(
+		() =>
+			typeof window !== "undefined" &&
+			typeof window.matchMedia === "function" &&
+			window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+		[],
+	)
+
+	const handleMarkerClick = useCallback(
+		(index: number) => {
+			disableAutoScrollRef.current = true
+			virtuosoRef.current?.scrollToIndex({
+				index,
+				align: "start",
+				behavior: prefersReducedMotion ? "auto" : "smooth",
+			})
+		},
+		[disableAutoScrollRef, virtuosoRef, prefersReducedMotion],
+	)
+
 	return (
 		<div className="overflow-hidden flex flex-col h-full relative">
 			{/* Sticky User Message - positioned absolutely to avoid layout shifts */}
@@ -274,15 +338,56 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 					initialTopMostItemIndex={displayedGroupedMessages.length - 1} // messages is the raw format returned by extension, modifiedMessages is the manipulated structure that combines certain messages of related type, and visibleMessages is the filtered structure that removes messages that should not be rendered
 					itemContent={itemContent}
 					key={task.ts}
-					rangeChanged={handleRangeChanged}
+					rangeChanged={handleMarkerRangeChanged}
 					ref={virtuosoRef} // anything lower causes issues with followOutput
 					style={{
 						overflowAnchor: "none", // prevent scroll jump when content expands
 					}}
 				/>
+				{/* User-input markers on the scrollbar edge. Positioned index-proportionally
+				    (see inputMarkers above); pointer events are limited to the ticks so the
+				    overlay never intercepts clicks/drags meant for the scrollbar or content. */}
+				{showInputMarkers && (
+					<div className="absolute top-0 right-0 bottom-0 w-1.5 z-20 pointer-events-none">
+						{inputMarkers.map((marker) => (
+							<button
+								className={cn(
+									"absolute right-0 w-1.5 h-0.5 pointer-events-auto cursor-pointer",
+									"opacity-60 hover:opacity-100 transition-opacity",
+									marker.index === activeMarkerIndex && "opacity-100",
+								)}
+								key={marker.index}
+								onClick={() => handleMarkerClick(marker.index)}
+								style={{
+									top: `${marker.position * 100}%`,
+									backgroundColor: "var(--vscode-scrollbarSlider-activeBackground)",
+								}}
+								title={marker.preview}
+								type="button"
+							/>
+						))}
+					</div>
+				)}
 				{/* Floating scroll navigation buttons */}
 				{hasMultipleUserMessages && (
 					<div className="absolute right-3 bottom-4 flex flex-col gap-1.5 z-20">
+						<button
+							className={cn(
+								"flex items-center justify-center w-7 h-7 rounded-full",
+								"cursor-pointer select-none backdrop-blur-sm",
+								"hover:brightness-110 transition-transform hover:scale-110",
+								"shadow-md",
+								"opacity-70 hover:opacity-100",
+							)}
+							onClick={scrollToTopSmooth}
+							style={{
+								backgroundColor: "var(--vscode-badge-background)",
+								color: "var(--vscode-badge-foreground)",
+							}}
+							title="Scroll to top"
+							type="button">
+							<ArrowUp size={16} />
+						</button>
 						<button
 							className={cn(
 								"flex items-center justify-center w-7 h-7 rounded-full",

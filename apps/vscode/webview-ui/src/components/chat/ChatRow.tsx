@@ -947,11 +947,13 @@ export const ChatRowContent = memo(
 							? message.text?.slice(0, -COMPLETION_RESULT_CHANGES_FLAG.length)
 							: message.text
 
+						const showCompletionFooter = isLast && message.partial !== true
 						return (
 							<CompletionOutputRow
 								handleQuoteClick={handleQuoteClick}
 								quoteButtonState={quoteButtonState}
-								showViewChanges={isLast && message.partial !== true && enableCheckpointsSetting}
+								showCheckpointsEnablePrompt={showCompletionFooter && !enableCheckpointsSetting}
+								showViewChanges={showCompletionFooter && enableCheckpointsSetting}
 								text={text || ""}
 							/>
 						)

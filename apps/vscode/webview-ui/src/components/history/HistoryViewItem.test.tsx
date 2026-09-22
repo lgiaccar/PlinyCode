@@ -22,6 +22,7 @@ vi.mock("@/services/grpc-client", () => ({
 	TaskServiceClient: {
 		showTaskWithId: vi.fn().mockResolvedValue(undefined),
 		exportTaskWithId: vi.fn().mockResolvedValue(undefined),
+		exportTaskToMarkdown: vi.fn().mockResolvedValue(undefined),
 	},
 }))
 
@@ -108,5 +109,21 @@ describe("HistoryViewItem", () => {
 		)
 
 		expect(screen.getAllByText("Unknown workspace").length).toBeGreaterThan(0)
+	})
+
+	it("shows the markdown export control without requiring row hover", () => {
+		render(
+			<HistoryViewItem
+				handleDeleteHistoryItem={noop}
+				handleHistorySelect={noop}
+				index={0}
+				item={makeItem()}
+				pendingFavoriteToggles={{}}
+				selectedItems={[]}
+				toggleFavorite={noop}
+			/>,
+		)
+
+		expect(screen.getByRole("button", { name: "Export conversation as Markdown" })).toBeDefined()
 	})
 })

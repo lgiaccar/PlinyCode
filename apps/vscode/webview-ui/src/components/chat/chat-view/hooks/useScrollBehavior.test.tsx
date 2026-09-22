@@ -195,6 +195,40 @@ describe("useScrollBehavior", () => {
 		expect(scrollToIndex).not.toHaveBeenCalled()
 	})
 
+	it("scrolls to the top of the conversation and disables auto-scroll", () => {
+		const { result } = renderHook(() => useScrollBehavior([], [], [], {}, vi.fn()))
+
+		const scrollToIndex = vi.fn()
+		act(() => {
+			;(result.current.virtuosoRef as MutableRefObject<{ scrollToIndex: typeof scrollToIndex } | null>).current = {
+				scrollToIndex,
+			}
+		})
+
+		expect(result.current.isAtTop).toBe(false)
+
+		act(() => {
+			result.current.scrollToTopSmooth()
+		})
+
+		expect(scrollToIndex).toHaveBeenCalledWith({
+			index: 0,
+			align: "start",
+			behavior: "smooth",
+		})
+		expect(result.current.disableAutoScrollRef.current).toBe(true)
+	})
+
+	it("tracks isAtTop via setIsAtTop", () => {
+		const { result } = renderHook(() => useScrollBehavior([], [], [], {}, vi.fn()))
+
+		act(() => {
+			result.current.setIsAtTop(true)
+		})
+
+		expect(result.current.isAtTop).toBe(true)
+	})
+
 	it("does nothing when there is no next user message to navigate to", () => {
 		const groupedMessages = [
 			{ ts: 1, type: "say", say: "task", text: "hello" },
