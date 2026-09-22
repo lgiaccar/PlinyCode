@@ -11,17 +11,18 @@ vi.mock("@/components/common/MarkdownBlock", () => ({
 	default: ({ markdown }: { markdown: string }) => <div>{markdown}</div>,
 }))
 
-const checkpointLatestChangesCount = vi.fn()
+const checkpointLatestChangesSummary = vi.fn()
+const checkpointOpenFileDiff = vi.fn()
+const checkpointViewLatestChanges = vi.fn()
 
 vi.mock("@/services/grpc-client", () => ({
 	CheckpointsServiceClient: {
-		checkpointLatestChangesCount: (...args: unknown[]) => checkpointLatestChangesCount(...args),
-		checkpointViewLatestChanges: vi.fn(() => Promise.resolve({})),
+		checkpointLatestChangesSummary: (...args: unknown[]) => checkpointLatestChangesSummary(...args),
+		checkpointOpenFileDiff: (...args: unknown[]) => checkpointOpenFileDiff(...args),
+		checkpointViewLatestChanges: (...args: unknown[]) => checkpointViewLatestChanges(...args),
 	},
 }))
 
-// Render VSCodeButton (used by SuccessButton) as a native button so it is
-// observable through testing-library roles.
 vi.mock("@vscode/webview-ui-toolkit/react", async (importOriginal) => {
 	const actual = await importOriginal<Record<string, unknown>>()
 	return {
@@ -30,12 +31,13 @@ vi.mock("@vscode/webview-ui-toolkit/react", async (importOriginal) => {
 			children,
 			disabled,
 			onClick,
+			...rest
 		}: {
 			children?: React.ReactNode
 			disabled?: boolean
 			onClick?: () => void
 		}) => (
-			<button disabled={disabled} onClick={onClick} type="button">
+			<button disabled={disabled} onClick={onClick} type="button" {...rest}>
 				{children}
 			</button>
 		),
@@ -43,6 +45,28 @@ vi.mock("@vscode/webview-ui-toolkit/react", async (importOriginal) => {
 })
 
 const hiddenQuoteButton = { visible: false, top: 0, left: 0, selectedText: "" }
+
+const sampleSummary = {
+	files: [
+		{
+			filePath: "/ws/src/a.ts",
+			relativePath: "src/a.ts",
+			addedLines: 3,
+			removedLines: 1,
+			status: "modified",
+		},
+		{
+			filePath: "/ws/readme.md",
+			relativePath: "readme.md",
+			addedLines: 10,
+			removedLines: 0,
+			status: "added",
+		},
+	],
+	totalAdded: 13,
+	totalRemoved: 1,
+	checkpointRunCount: 42,
+}
 
 describe("CompletionOutputRow", () => {
 	const writeText = vi.fn(() => Promise.resolve())
@@ -68,9 +92,13 @@ describe("CompletionOutputRow", () => {
 	})
 })
 
-describe("CompletionOutputRow View Changes", () => {
+describe("CompletionOutputRow changed files summary", () => {
 	beforeEach(() => {
-		checkpointLatestChangesCount.mockReset()
+		checkpointLatestChangesSummary.mockReset()
+		checkpointOpenFileDiff.mockReset()
+		checkpointViewLatestChanges.mockReset()
+		checkpointOpenFileDiff.mockResolvedValue({})
+		checkpointViewLatestChanges.mockResolvedValue({})
 	})
 
 	const renderWithViewChanges = () =>
@@ -83,62 +111,84 @@ describe("CompletionOutputRow View Changes", () => {
 			/>,
 		)
 
-	it("shows the button once the host confirms the latest run changed files", async () => {
-		checkpointLatestChangesCount.mockResolvedValue({ value: 2 })
+	it("shows the summary line once the host returns changed files", async () => {
+		checkpointLatestChangesSummary.mockResolvedValue(sampleSummary)
 
 		renderWithViewChanges()
 
-		const button = await screen.findByRole("button", { name: /View Changes/ })
-		expect(button).not.toBeDisabled()
+		expect(await screen.findByText("2 files edited, +13 / -1 lines")).toBeInTheDocument()
 	})
 
-	it("stays hidden while the count is still being checked", () => {
-		checkpointLatestChangesCount.mockReturnValue(new Promise(() => {}))
+	it("stays hidden while the summary is loading", () => {
+		checkpointLatestChangesSummary.mockReturnValue(new Promise(() => {}))
 
 		renderWithViewChanges()
 
-		expect(screen.queryByRole("button", { name: /View Changes/ })).toBeNull()
+		expect(screen.queryByText(/files edited/)).toBeNull()
 	})
 
-	it("stays hidden when nothing changed since the last message", async () => {
-		checkpointLatestChangesCount.mockResolvedValue({ value: 0 })
+	it("stays hidden when nothing changed", async () => {
+		checkpointLatestChangesSummary.mockResolvedValue({
+			files: [],
+			totalAdded: 0,
+			totalRemoved: 0,
+			checkpointRunCount: 1,
+		})
 
 		renderWithViewChanges()
 
-		await waitFor(() => expect(checkpointLatestChangesCount).toHaveBeenCalled())
-		expect(screen.queryByRole("button", { name: /View Changes/ })).toBeNull()
+		await waitFor(() => expect(checkpointLatestChangesSummary).toHaveBeenCalled())
+		expect(screen.queryByText(/files edited/)).toBeNull()
 	})
 
-	it("stays hidden when the count request fails (e.g. no checkpoint to compare against)", async () => {
-		checkpointLatestChangesCount.mockRejectedValue(new Error("boom"))
+	it("stays hidden when the summary request fails", async () => {
+		checkpointLatestChangesSummary.mockRejectedValue(new Error("boom"))
 
 		renderWithViewChanges()
 
-		await waitFor(() => expect(checkpointLatestChangesCount).toHaveBeenCalled())
-		expect(screen.queryByRole("button", { name: /View Changes/ })).toBeNull()
+		await waitFor(() => expect(checkpointLatestChangesSummary).toHaveBeenCalled())
+		expect(screen.queryByText(/files edited/)).toBeNull()
 	})
 
-	it("never renders the button when showViewChanges is not set", () => {
-		checkpointLatestChangesCount.mockResolvedValue({ value: 2 })
+	it("never loads the summary when showViewChanges is not set", () => {
+		checkpointLatestChangesSummary.mockResolvedValue(sampleSummary)
 
 		render(<CompletionOutputRow handleQuoteClick={vi.fn()} quoteButtonState={hiddenQuoteButton} text="All done!" />)
 
-		expect(checkpointLatestChangesCount).not.toHaveBeenCalled()
-		expect(screen.queryByRole("button", { name: /View Changes/ })).toBeNull()
+		expect(checkpointLatestChangesSummary).not.toHaveBeenCalled()
 	})
 
-	it("re-checks instead of reusing a stale positive answer when showViewChanges toggles", async () => {
-		checkpointLatestChangesCount.mockResolvedValue({ value: 2 })
+	it("expands the per-file list and opens a single-file diff on row click", async () => {
+		checkpointLatestChangesSummary.mockResolvedValue(sampleSummary)
+
+		renderWithViewChanges()
+		await screen.findByText("2 files edited, +13 / -1 lines")
+
+		fireEvent.click(screen.getByRole("button", { name: /2 files edited/ }))
+
+		const fileRow = screen.getByRole("button", { name: /readme\.md/ })
+		fireEvent.click(fileRow)
+
+		await waitFor(() =>
+			expect(checkpointOpenFileDiff).toHaveBeenCalledWith(
+				expect.objectContaining({
+					filePath: "/ws/readme.md",
+					checkpointRunCount: 42,
+				}),
+			),
+		)
+	})
+
+	it("re-checks instead of reusing stale summary when showViewChanges toggles", async () => {
+		checkpointLatestChangesSummary.mockResolvedValue(sampleSummary)
 
 		const { rerender } = renderWithViewChanges()
-		await screen.findByRole("button", { name: /View Changes/ })
+		await screen.findByText("2 files edited, +13 / -1 lines")
 
 		rerender(<CompletionOutputRow handleQuoteClick={vi.fn()} quoteButtonState={hiddenQuoteButton} text="All done!" />)
-		expect(screen.queryByRole("button", { name: /View Changes/ })).toBeNull()
+		expect(screen.queryByText(/files edited/)).toBeNull()
 
-		// Second evaluation never resolves: the earlier `true` must not leak
-		// through and flash the button while the host is still checking.
-		checkpointLatestChangesCount.mockReturnValue(new Promise(() => {}))
+		checkpointLatestChangesSummary.mockReturnValue(new Promise(() => {}))
 		rerender(
 			<CompletionOutputRow
 				handleQuoteClick={vi.fn()}
@@ -147,8 +197,8 @@ describe("CompletionOutputRow View Changes", () => {
 				text="All done!"
 			/>,
 		)
-		expect(checkpointLatestChangesCount).toHaveBeenCalledTimes(2)
-		expect(screen.queryByRole("button", { name: /View Changes/ })).toBeNull()
+		expect(checkpointLatestChangesSummary).toHaveBeenCalledTimes(2)
+		expect(screen.queryByText(/files edited/)).toBeNull()
 	})
 })
 

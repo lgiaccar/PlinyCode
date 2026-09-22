@@ -42,6 +42,10 @@ message OpenDiffRequest {
   optional string path = 2;
   // The new content for the file.
   optional string content = 3;
+  // In-memory left/right sides for a read-only checkpoint diff (vscode.diff).
+  optional string left_content = 4;
+  optional string right_content = 5;
+  optional string title = 6;
 }
 
 message OpenDiffResponse {

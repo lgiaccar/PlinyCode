@@ -261,6 +261,73 @@ describe("SDK remote-config coordination", () => {
 	})
 })
 
+const { openDiffMock, showMessageMock } = vi.hoisted(() => ({
+	openDiffMock: vi.fn(async () => ({})),
+	showMessageMock: vi.fn(async () => ({})),
+}))
+
+vi.mock("@/hosts/host-provider", () => ({
+	HostProvider: {
+		window: { showMessage: showMessageMock },
+		diff: { openDiff: openDiffMock, openMultiFileDiff: vi.fn() },
+	},
+}))
+
+describe("latest checkpoint changes summary", () => {
+	const sessionRecord = {
+		cwd: "/proj",
+		metadata: {
+			checkpoint: {
+				history: [{ ref: "stash-ref", createdAt: 1, runCount: 7, kind: "stash" }],
+			},
+		},
+	}
+
+	function createCheckpointController(compareCheckpoint: ReturnType<typeof vi.fn>) {
+		return Object.assign(Object.create(SdkController.prototype), {
+			sessions: {
+				getActiveSession: () => ({
+					sessionId: "session-1",
+					sdkHost: {
+						compareCheckpoint,
+						get: async () => sessionRecord,
+					},
+				}),
+			},
+			task: { taskId: "session-1" },
+			getWorkspaceRoot: async () => "/proj",
+			latestCheckpointComparisonCache: undefined,
+		})
+	}
+
+	it("builds a summary from compareCheckpoint and reuses the cache for file diff", async () => {
+		openDiffMock.mockClear()
+		const compareCheckpoint = vi.fn().mockResolvedValue({
+			diffs: [{ filePath: "/proj/src/a.ts", leftContent: "a\n", rightContent: "b\nc\n" }],
+		})
+		const controller = createCheckpointController(compareCheckpoint)
+
+		const summary = await SdkController.prototype.getLatestCheckpointChangesSummary.call(controller as never)
+		expect(summary.files).toHaveLength(1)
+		expect(summary.files[0]?.relativePath).toBe("src/a.ts")
+		expect(summary.totalAdded).toBe(2)
+		expect(summary.totalRemoved).toBe(1)
+		expect(summary.checkpointRunCount).toBe(7)
+		expect(compareCheckpoint).toHaveBeenCalledTimes(1)
+
+		await SdkController.prototype.openCheckpointFileDiff.call(controller as never, "/proj/src/a.ts", 7)
+		expect(compareCheckpoint).toHaveBeenCalledTimes(1)
+		expect(openDiffMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				path: "/proj/src/a.ts",
+				leftContent: "a\n",
+				rightContent: "b\nc\n",
+				title: "src/a.ts (PlinyCode changes)",
+			}),
+		)
+	})
+})
+
 describe("resolveWorkspaceManagerPaths", () => {
 	it("returns the host's workspace folder paths, dropping blank entries", () => {
 		expect(resolveWorkspaceManagerPaths(["/workspace", "  ", "/other"], "/Users/tester/Desktop")).toEqual([

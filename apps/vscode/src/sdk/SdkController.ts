@@ -26,6 +26,7 @@ import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import type { ClineApiReqInfo, ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
+import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
@@ -44,6 +45,7 @@ import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { telemetryService } from "@/services/telemetry"
+import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { toLegacyApiProvider } from "@/shared/model-catalog/provider-helpers"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
@@ -229,6 +231,13 @@ export class Controller {
 	private backgroundCommandTaskId?: string
 	private pendingClineAuthRetryPrompt?: string
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
+
+	private latestCheckpointComparisonCache?: {
+		sessionId: string
+		checkpointRunCount: number
+		cwd: string
+		diffs: CompareCheckpointResult["diffs"]
+	}
 
 	// Timer for periodic remote config fetching (enterprise policy enforcement)
 	private remoteConfigTimer?: NodeJS.Timeout
@@ -1806,12 +1815,21 @@ export class Controller {
 	 * no checkpoint exists (e.g. the workspace is not a git repository).
 	 * Throws when there is no task at all.
 	 */
-	private async computeLatestCheckpointChanges(): Promise<CompareCheckpointResult["diffs"] | undefined> {
+	private async loadLatestCheckpointComparison(): Promise<
+		| {
+				sessionId: string
+				checkpointRunCount: number
+				cwd: string
+				diffs: CompareCheckpointResult["diffs"]
+		  }
+		| undefined
+	> {
 		const activeSession = this.sessions.getActiveSession()
 		const sessionId = activeSession?.sessionId ?? this.task?.taskId
 		if (!sessionId) {
 			throw new Error("No active task to show changes for")
 		}
+
 		// After a window reload the latest task is shown from history without a
 		// live session, so fall back to a temporary host for the comparison.
 		let tempHost: VscodeSessionHost | undefined
@@ -1830,30 +1848,93 @@ export class Controller {
 				return undefined
 			}
 
+			const cached = this.latestCheckpointComparisonCache
+			if (cached?.sessionId === sessionId && cached.checkpointRunCount === latestCheckpoint.runCount) {
+				return cached
+			}
+
 			const cwd = sessionRecord?.cwd?.trim() || sessionRecord?.workspaceRoot?.trim() || (await this.getWorkspaceRoot())
 			const { diffs } = await sessionHost.compareCheckpoint({
 				sessionId,
 				checkpointRunCount: latestCheckpoint.runCount,
 				cwd,
 			})
-			return diffs
+			const result = {
+				sessionId,
+				checkpointRunCount: latestCheckpoint.runCount,
+				cwd,
+				diffs,
+			}
+			this.latestCheckpointComparisonCache = result
+			return result
 		} finally {
 			await tempHost?.dispose("viewLatestCheckpointChanges")
 		}
 	}
 
-	/**
-	 * Gates the "View Changes" button on the completion row: the number of
-	 * files changed since the latest checkpoint, or 0 when nothing can be
-	 * compared (no task, no checkpoint, comparison failure).
-	 */
-	async getLatestCheckpointChangesCount(): Promise<number> {
+	async getLatestCheckpointChangesSummary(): Promise<LatestChangesSummary> {
 		try {
-			return (await this.computeLatestCheckpointChanges())?.length ?? 0
+			const comparison = await this.loadLatestCheckpointComparison()
+			if (!comparison || comparison.diffs.length === 0) {
+				return LatestChangesSummary.create({
+					files: [],
+					totalAdded: 0,
+					totalRemoved: 0,
+					checkpointRunCount: comparison?.checkpointRunCount ?? 0,
+				})
+			}
+			const built = buildChangedFileSummaries(comparison.diffs, comparison.cwd)
+			const totalAdded = built.reduce((sum, file) => sum + file.addedLines, 0)
+			const totalRemoved = built.reduce((sum, file) => sum + file.removedLines, 0)
+			return LatestChangesSummary.create({
+				files: built.map((file) =>
+					ChangedFileSummary.create({
+						filePath: file.filePath,
+						relativePath: file.relativePath,
+						addedLines: file.addedLines,
+						removedLines: file.removedLines,
+						status: file.status,
+					}),
+				),
+				totalAdded,
+				totalRemoved,
+				checkpointRunCount: comparison.checkpointRunCount,
+			})
 		} catch (error) {
-			Logger.debug(`[SdkController] Failed to count latest checkpoint changes: ${error}`)
-			return 0
+			Logger.debug(`[SdkController] Failed to summarize latest checkpoint changes: ${error}`)
+			return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })
 		}
+	}
+
+	async openCheckpointFileDiff(filePath: string, checkpointRunCount: number): Promise<void> {
+		const comparison = await this.loadLatestCheckpointComparison()
+		if (!comparison) {
+			HostProvider.window.showMessage({
+				type: ShowMessageType.INFORMATION,
+				message: "No checkpoint was taken for this task. Checkpoints require the workspace to be a git repository.",
+			})
+			return
+		}
+		if (comparison.checkpointRunCount !== checkpointRunCount) {
+			Logger.debug(
+				`[SdkController] Stale checkpoint run count for file diff (${checkpointRunCount} vs ${comparison.checkpointRunCount})`,
+			)
+		}
+		const diff = comparison.diffs.find((entry) => entry.filePath === filePath)
+		if (!diff) {
+			HostProvider.window.showMessage({
+				type: ShowMessageType.INFORMATION,
+				message: "That file is not part of the latest PlinyCode changes.",
+			})
+			return
+		}
+		const relativePath = buildChangedFileSummaries([diff], comparison.cwd)[0]?.relativePath ?? path.basename(filePath)
+		await HostProvider.diff.openDiff({
+			path: diff.filePath,
+			leftContent: diff.leftContent,
+			rightContent: diff.rightContent,
+			title: `${relativePath} (PlinyCode changes)`,
+		})
 	}
 
 	/**
@@ -1862,7 +1943,8 @@ export class Controller {
 	 * the user's last message started this run — and the current working tree.
 	 */
 	async viewLatestCheckpointChanges(): Promise<void> {
-		const diffs = await this.computeLatestCheckpointChanges()
+		const comparison = await this.loadLatestCheckpointComparison()
+		const diffs = comparison?.diffs
 		if (diffs === undefined) {
 			HostProvider.window.showMessage({
 				type: ShowMessageType.INFORMATION,
