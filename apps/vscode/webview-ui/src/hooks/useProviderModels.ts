@@ -1,8 +1,12 @@
 import { ResolveProviderModelsRequest } from "@shared/proto/cline/models"
 import { useCallback, useEffect, useMemo } from "react"
+import {
+	filterPlinyModels,
+	usePlinyUnlockFreeModels,
+	usePlinyUnlockPaidModels,
+} from "@/components/settings/utils/plinyModelFilter"
 import { type ProviderId, useExtensionState } from "@/context/ExtensionStateContext"
 import { ModelsServiceClient } from "@/services/grpc-client"
-import { filterPlinyModels, usePlinyUnlockPaidModels } from "@/components/settings/utils/plinyModelFilter"
 
 let providerModelRequestCounter = 0
 
@@ -49,21 +53,22 @@ export function useProviderModels(providerId: ProviderId) {
 		void refresh()
 	}, [refresh])
 
-	// PlinyCode: paid (hosted) Pliny models are screened behind the
-	// "Unlock Pliny paid models" setting. Only the free self-hosted
-	// (snps-provider*) models are surfaced unless the user opts in. This is a
-	// display-only policy — a committed paid selection is preserved and shown
-	// via the picker's "not in current list" affordance, and the running
-	// task's model is never changed by this filter.
+	// PlinyCode: paid (hosted) and free (self-hosted) Pliny models are each
+	// screened behind their own "Unlock Pliny paid/free models" setting,
+	// defaulting to off. Only the virtual FreeAuto router is always surfaced.
+	// This is a display-only policy — a committed hidden selection is
+	// preserved and shown via the picker's "not in current list" affordance,
+	// and the running task's model is never changed by this filter.
 	const [unlockPlinyPaid] = usePlinyUnlockPaidModels()
+	const [unlockPlinyFree] = usePlinyUnlockFreeModels()
 	const catalogModels = state?.models ?? {}
 	const catalogDefaultModelId = state?.defaultModelId ?? ""
 	const { models, defaultModelId } = useMemo(
 		() =>
 			providerId === "pliny"
-				? filterPlinyModels(catalogModels, catalogDefaultModelId, unlockPlinyPaid)
+				? filterPlinyModels(catalogModels, catalogDefaultModelId, unlockPlinyPaid, unlockPlinyFree)
 				: { models: catalogModels, defaultModelId: catalogDefaultModelId },
-		[providerId, catalogModels, catalogDefaultModelId, unlockPlinyPaid],
+		[providerId, catalogModels, catalogDefaultModelId, unlockPlinyPaid, unlockPlinyFree],
 	)
 
 	return {
