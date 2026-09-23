@@ -12,6 +12,7 @@
  */
 
 import {
+	CommandAbortedError,
 	CommandExitError,
 	createShellExecutor,
 	createShellTool,
@@ -227,6 +228,8 @@ export async function executeForeground(
 	terminalProfileId?: string,
 ): Promise<string> {
 	const terminalCommand = formatCommandForTerminal(command)
+	const abortedError = (output?: string): CommandAbortedError =>
+		new CommandAbortedError({ command: terminalCommand, cwd, reason: abortSignal?.reason, output })
 
 	// "Proceed While Running": register a per-invocation handle so the user can
 	// detach this command. If they do not act, automatically detach after 300
@@ -318,7 +321,7 @@ export async function executeForeground(
 				// reserved terminal after this tool result settles. Consume it so a
 				// pre-start cancellation cannot leave that terminal permanently busy.
 				void acquisition.then(finishAbortedAcquisition)
-				throw new Error("Command execution aborted")
+				throw abortedError()
 			}
 
 			const log = detachedLog
@@ -335,7 +338,7 @@ export async function executeForeground(
 		// the promise continuation was pending.
 		if (state.phase === "aborted") {
 			finishAbortedAcquisition(firstOutcome)
-			throw new Error("Command execution aborted")
+			throw abortedError()
 		}
 		if (state.phase === "detached") {
 			const log = detachedLog
@@ -420,10 +423,6 @@ export async function executeForeground(
 			// Wait for completion (or detach, which also resolves the promise)
 			await process
 
-			if (abortSignal?.aborted) {
-				throw new Error("Command execution aborted")
-			}
-
 			const bufferedOutput =
 				droppedLines > 0
 					? [...outputLines, `\n... (${droppedLines} earlier lines dropped) ...\n`].join("\n")
@@ -431,6 +430,10 @@ export async function executeForeground(
 			const output = truncateCommandOutput(bufferedOutput.trim(), {
 				maxChars: maxOutputChars,
 			})
+
+			if (abortSignal?.aborted) {
+				throw abortedError(output)
+			}
 
 			if (detachedLog !== undefined) {
 				return formatDetachedResult(detachedLog.path, output, detachReason ?? "timeout")

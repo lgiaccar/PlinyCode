@@ -122,6 +122,8 @@ export class CommandExitError extends Error {
 	}
 }
 
+export { CommandAbortedError } from "../../../../sdk/packages/core/src/extensions/tools/executors/command-aborted-error"
+
 export function createShellExecutor() {
 	return async () => ""
 }

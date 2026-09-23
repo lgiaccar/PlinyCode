@@ -46,6 +46,7 @@ import ClineRulesToggleModal from "../cline-rules/ClineRulesToggleModal"
 import { ConversationModelPicker } from "./ConversationModelPicker"
 import { getModeToggleDraftAction } from "./chat-textarea-mode-toggle"
 import ServersToggleModal from "./ServersToggleModal"
+import { deliveryFor, loadSendMode, SEND_MODE_META, SEND_MODES, type SendMode, saveSendMode } from "./sendMode"
 
 const { MAX_IMAGES_AND_FILES_PER_MESSAGE } = CHAT_CONSTANTS
 
@@ -260,6 +261,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [showDimensionError, setShowDimensionError] = useState(false)
 		const [showSchedulePicker, setShowSchedulePicker] = useState(false)
 		const [scheduleTime, setScheduleTime] = useState("")
+		const [sendMode, setSendMode] = useState<SendMode>(loadSendMode)
 		const dimensionErrorTimerRef = useRef<NodeJS.Timeout | null>(null)
 
 		const [fileSearchResults, setFileSearchResults] = useState<SearchResult[]>([])
@@ -467,6 +469,42 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			},
 			[setInputValue, slashCommandsQuery, cursorPosition],
 		)
+
+		const confirmSchedule = useCallback(() => {
+			if (!scheduleTime) return
+			const scheduledAt = new Date(scheduleTime).getTime()
+			if (Number.isNaN(scheduledAt) || scheduledAt <= Date.now()) return
+			onSchedulePrompt?.(inputValue, selectedImages, selectedFiles, scheduledAt)
+			setShowSchedulePicker(false)
+			setScheduleTime("")
+			setInputValue("")
+			setSelectedImages([])
+			setSelectedFiles([])
+		}, [
+			scheduleTime,
+			onSchedulePrompt,
+			inputValue,
+			selectedImages,
+			selectedFiles,
+			setInputValue,
+			setSelectedImages,
+			setSelectedFiles,
+		])
+
+		// Sends with the sticky send mode. Schedule mode opens the time picker
+		// first, and confirms it once a time is chosen.
+		const triggerSend = useCallback(() => {
+			if (sendMode === "schedule") {
+				if (showSchedulePicker && scheduleTime) {
+					confirmSchedule()
+				} else {
+					setShowSchedulePicker(true)
+				}
+				return
+			}
+			onSend(deliveryFor(sendMode))
+		}, [sendMode, showSchedulePicker, scheduleTime, confirmSchedule, onSend])
+
 		const handleKeyDown = useCallback(
 			(event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 				const isSelectAllShortcut =
@@ -601,7 +639,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						// blur desyncs it permanently (programmatic .focus() on an
 						// already-focused element never re-fires onFocus), which hides the
 						// plan/act mode outline until a real blur/refocus cycle.
-						onSend()
+						triggerSend()
 					}
 				}
 
@@ -670,7 +708,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 			},
 			[
-				onSend,
+				triggerSend,
 				showContextMenu,
 				searchQuery,
 				selectedMenuIndex,
@@ -1594,41 +1632,55 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						style={{ height: textAreaBaseHeight }}>
 						<div className="flex flex-row items-center gap-1">
 							<div
-								className={cn("input-icon-button", { disabled: sendingDisabled }, "codicon codicon-send text-sm")}
+								aria-label={SEND_MODE_META[sendMode].label}
+								className={cn(
+									"input-icon-button",
+									{ disabled: sendingDisabled },
+									"codicon",
+									SEND_MODE_META[sendMode].icon,
+									"text-sm",
+								)}
+								data-send-mode={sendMode}
 								data-testid="send-button"
 								onClick={() => {
 									if (!sendingDisabled) {
-										onSend()
+										triggerSend()
 									}
 								}}
+								title={SEND_MODE_META[sendMode].tooltip}
 							/>
 							{!showSchedulePicker && (
-								<select
-									className="h-5 w-5 appearance-none border-0 rounded-[3px] text-center text-[10px] cursor-pointer focus:outline-none"
-									defaultValue="default"
-									disabled={sendingDisabled && !showSchedulePicker}
-									onChange={(e) => {
-										const value = e.target.value
-										if (value === "steer") {
-											if (!sendingDisabled) onSend("steer")
-										} else if (value === "queue") {
-											if (!sendingDisabled) onSend("queue")
-										} else if (value === "schedule") {
-											setShowSchedulePicker(true)
-										}
-										e.target.value = "default"
-									}}
-									style={{
-										backgroundColor:
-											"var(--vscode-dropdown-background, var(--vscode-input-background, var(--vscode-sideBar-background)))",
-										color: "var(--vscode-dropdown-foreground, var(--vscode-input-foreground, var(--vscode-foreground)))",
-									}}
-									title="Send options">
-									<option value="default">▼</option>
-									<option value="steer">Send Now (steer)</option>
-									<option value="queue">Queue (wait until end)</option>
-									<option value="schedule">Schedule (choose a time)</option>
-								</select>
+								<div className="relative flex h-5 w-4 items-center justify-center" title="Choose send mode">
+									<span
+										aria-hidden="true"
+										className="codicon codicon-chevron-down text-[10px] pointer-events-none"
+									/>
+									{/* Invisible native select over the chevron keeps keyboard and
+										    screen-reader support. Choosing an option only changes the
+										    sticky send mode; it never sends. */}
+									<select
+										aria-label="Send mode"
+										className="absolute inset-0 cursor-pointer opacity-0"
+										data-testid="send-mode-select"
+										onChange={(e) => {
+											const mode = e.target.value as SendMode
+											setSendMode(mode)
+											saveSendMode(mode)
+										}}
+										style={{
+											backgroundColor:
+												"var(--vscode-dropdown-background, var(--vscode-input-background, var(--vscode-sideBar-background)))",
+											color: "var(--vscode-dropdown-foreground, var(--vscode-input-foreground, var(--vscode-foreground)))",
+										}}
+										value={sendMode}>
+										{SEND_MODES.map((mode) => (
+											<option key={mode} value={mode}>
+												{mode === sendMode ? "✓ " : " "}
+												{SEND_MODE_META[mode].label}
+											</option>
+										))}
+									</select>
+								</div>
 							)}
 							{showSchedulePicker && (
 								<div className="flex items-center gap-1">
@@ -1645,17 +1697,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									<button
 										className="flex h-5 items-center rounded-[3px] bg-primary px-1.5 text-[10px] text-primary-foreground disabled:opacity-50"
 										disabled={!scheduleTime || sendingDisabled}
-										onClick={() => {
-											if (!scheduleTime) return
-											const scheduledAt = new Date(scheduleTime).getTime()
-											if (isNaN(scheduledAt) || scheduledAt <= Date.now()) return
-											onSchedulePrompt?.(inputValue, selectedImages, selectedFiles, scheduledAt)
-											setShowSchedulePicker(false)
-											setScheduleTime("")
-											setInputValue("")
-											setSelectedImages([])
-											setSelectedFiles([])
-										}}
+										onClick={confirmSchedule}
 										type="button">
 										Schedule
 									</button>

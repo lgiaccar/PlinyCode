@@ -9,9 +9,11 @@ import {
 } from "@/integrations/terminal/types"
 import { Logger } from "@/shared/services/Logger"
 import { mergePromise, VscodeTerminalProcess } from "./VscodeTerminalProcess"
-import { TerminalInfo, TerminalRegistry } from "./VscodeTerminalRegistry"
+import { type OrphanReason, TerminalInfo, TerminalRegistry } from "./VscodeTerminalRegistry"
 
 const CWD_COMMAND_TIMEOUT_MS = 5000
+/** Idle agent terminals kept open for reuse; older idle ones are closed. */
+const MAX_IDLE_TERMINALS = 2
 const CWD_STATE_TIMEOUT_MS = 1000
 
 type CwdChangeResult = "observed" | "unobserved"
@@ -80,6 +82,12 @@ export class VscodeTerminalManager {
 	private shellIntegrationTimeout = 4000
 	private terminalReuseEnabled = true
 	private defaultTerminalProfile = "default"
+	/**
+	 * Shell executions currently running per terminal, from shell integration
+	 * start/end events. A terminal is only closed automatically when this
+	 * proves nothing is running in it.
+	 */
+	private runningExecutions = new Map<vscode.Terminal, number>()
 
 	/**
 	 * Resolve a terminal's stored shellPath to an effective path.
@@ -98,8 +106,20 @@ export class VscodeTerminalManager {
 		const startDisposable = vscode.window.onDidStartTerminalShellExecution((e) => {
 			// Creating a read stream here results in a more consistent output. This is most obvious when running the `date` command.
 			e.execution.read()
+			this.runningExecutions.set(e.terminal, (this.runningExecutions.get(e.terminal) ?? 0) + 1)
 		})
 		this.disposables.push(startDisposable)
+		const endDisposable = vscode.window.onDidEndTerminalShellExecution?.((e) => {
+			const running = (this.runningExecutions.get(e.terminal) ?? 0) - 1
+			if (running > 0) {
+				this.runningExecutions.set(e.terminal, running)
+			} else {
+				this.runningExecutions.delete(e.terminal)
+			}
+		})
+		if (endDisposable) {
+			this.disposables.push(endDisposable)
+		}
 
 		// Add a listener for terminal state changes to detect CWD updates
 		try {
@@ -210,7 +230,7 @@ export class VscodeTerminalManager {
 		Logger.log(`[TerminalManager] Terminal ${vscodeTerminalInfo.id} busy state before: ${vscodeTerminalInfo.busy}`)
 
 		try {
-			vscodeTerminalInfo.terminal.show()
+			vscodeTerminalInfo.terminal.show(true)
 		} catch (error) {
 			vscodeTerminalInfo.busy = false
 			throw error
@@ -223,23 +243,30 @@ export class VscodeTerminalManager {
 		process.once("completed", () => {
 			Logger.log(`[TerminalManager] Terminal ${vscodeTerminalInfo.id} completed, setting busy to false`)
 			vscodeTerminalInfo.busy = false
+			vscodeTerminalInfo.lastActive = Date.now()
+			this.enforceIdlePoolCap()
 		})
 		process.once("error", () => {
 			// A stream/API failure does not prove the launched command stopped.
-			// Evict the terminal from Cline reuse without disposing potentially
-			// active user work.
-			this.evictTerminal(vscodeTerminalInfo)
+			// Evict the terminal from Cline reuse; it is closed later only once
+			// shell integration shows nothing is running in it.
+			this.evictTerminal(vscodeTerminalInfo, "streamError")
 		})
 
 		process.once("unobserved_command", (outcome) => {
 			Logger.log(`unobserved_command (${outcome.source}) received for terminal ${vscodeTerminalInfo.id}`)
-			this.evictTerminal(vscodeTerminalInfo)
 			// Markerless streams (for example, an SSH session) and commands Cline no
 			// longer owns remain open. Ordinary managed sendText fallbacks are
 			// reclaimed at the next acquisition, after this tool result can report
 			// that their completion is indeterminate.
 			if (getUnobservedTerminalCommandDisposition(outcome) === "disposeBeforeNextTerminalAcquisition") {
+				this.evictTerminal(vscodeTerminalInfo)
 				TerminalRegistry.queueTerminalForCleanup(vscodeTerminalInfo)
+			} else {
+				this.evictTerminal(
+					vscodeTerminalInfo,
+					outcome.source === "markerlessShellIntegration" ? "markerless" : "unobservedCommand",
+				)
 			}
 		})
 
@@ -325,6 +352,7 @@ export class VscodeTerminalManager {
 		// outcome is emitted. Dispose the snapshot of eligible terminals before
 		// selecting a terminal for this acquisition.
 		TerminalRegistry.disposeTerminalsPendingCleanup()
+		this.disposeIdleOrphans()
 		const terminals = TerminalRegistry.getAllTerminals()
 		const expectedShellPath = profileId !== "default" ? getShellForProfile(profileId) : undefined
 		// Resolve effective shell for comparison (so "default" and "zsh" match on macOS)
@@ -379,7 +407,7 @@ export class VscodeTerminalManager {
 					})
 					// Showing the reused terminal gives VS Code a chance to initialize shell integration.
 					// runCommand() below waits up to shellIntegrationTimeout for executeCommand before falling back.
-					availableTerminal.terminal.show()
+					availableTerminal.terminal.show(true)
 
 					let cwdChangeResult: CwdChangeResult | undefined
 					try {
@@ -392,7 +420,7 @@ export class VscodeTerminalManager {
 							`[TerminalManager] Failed to prepare terminal ${availableTerminal.id} for "${cwd}"; creating a new terminal`,
 							error,
 						)
-						this.evictTerminal(availableTerminal)
+						this.evictTerminal(availableTerminal, "cwdSetupFailed")
 					}
 
 					// Add a small delay to ensure terminal is ready after cd
@@ -427,7 +455,7 @@ export class VscodeTerminalManager {
 					Logger.warn(
 						`[TerminalManager] Could not confirm terminal ${availableTerminal.id} changed to "${cwd}"; creating a new terminal`,
 					)
-					this.evictTerminal(availableTerminal)
+					this.evictTerminal(availableTerminal, "cwdSetupFailed")
 				} finally {
 					availableTerminal.pendingCwdChange = undefined
 					availableTerminal.cwdResolved = undefined
@@ -466,10 +494,25 @@ export class VscodeTerminalManager {
 		return process ? process.isHot : false
 	}
 
+	/**
+	 * Close every agent terminal that is provably idle, plus idle orphans.
+	 * Called when a task ends. Terminals still running a command, or that the
+	 * user has typed into, are left open.
+	 */
+	releaseIdleTerminals(): void {
+		for (const terminalInfo of [...TerminalRegistry.getAllTerminals()]) {
+			if (this.isSafeToDispose(terminalInfo)) {
+				this.forgetTerminal(terminalInfo.id)
+				TerminalRegistry.disposeTerminal(terminalInfo)
+			}
+		}
+		this.disposeIdleOrphans()
+	}
+
 	disposeAll() {
-		// for (const info of this.terminals) {
-		// 	//info.terminal.dispose() // dont want to dispose terminals when task is aborted
-		// }
+		// Only idle terminals are closed: an aborted task may leave a command
+		// running that the user still wants.
+		this.releaseIdleTerminals()
 		this.terminalIds.clear()
 		this.processes.clear()
 		this.disposables.forEach((disposable) => disposable.dispose())
@@ -493,9 +536,67 @@ export class VscodeTerminalManager {
 		this.defaultTerminalProfile = profileId
 	}
 
-	private evictTerminal(terminalInfo: TerminalInfo): void {
-		this.terminalIds.delete(terminalInfo.id)
-		this.processes.delete(terminalInfo.id)
-		TerminalRegistry.removeTerminal(terminalInfo.id)
+	/**
+	 * Remove a terminal from reuse. With a reason it stays tracked as an
+	 * orphan so it can be closed once it is provably idle, instead of being
+	 * left open forever.
+	 */
+	private evictTerminal(terminalInfo: TerminalInfo, reason?: OrphanReason): void {
+		this.forgetTerminal(terminalInfo.id)
+		if (reason) {
+			TerminalRegistry.addOrphan(terminalInfo, reason)
+		} else {
+			TerminalRegistry.removeTerminal(terminalInfo.id)
+		}
+	}
+
+	private forgetTerminal(id: number): void {
+		this.terminalIds.delete(id)
+		this.processes.delete(id)
+	}
+
+	/**
+	 * True only when closing the terminal cannot kill work: not reserved, no
+	 * shell execution running, and never typed into by the user. Orphans whose
+	 * command may still be running additionally need shell integration, since
+	 * without it "nothing running" cannot be observed.
+	 */
+	private isSafeToDispose(terminalInfo: TerminalInfo, reason?: OrphanReason): boolean {
+		const terminal = terminalInfo.terminal
+		if (terminalInfo.busy || terminal.state?.isInteractedWith) {
+			return false
+		}
+		if ((this.runningExecutions.get(terminal) ?? 0) > 0) {
+			return false
+		}
+		switch (reason) {
+			case undefined:
+			case "cwdSetupFailed":
+				return true
+			case "markerless":
+				// An SSH or nested shell session: never observably finished.
+				return false
+			default:
+				return terminal.shellIntegration !== undefined
+		}
+	}
+
+	private disposeIdleOrphans(): void {
+		for (const { info, reason } of TerminalRegistry.getOrphans()) {
+			if (this.isSafeToDispose(info, reason)) {
+				TerminalRegistry.disposeTerminal(info)
+			}
+		}
+	}
+
+	/** Close the least recently used idle terminals beyond MAX_IDLE_TERMINALS. */
+	private enforceIdlePoolCap(): void {
+		const idle = TerminalRegistry.getAllTerminals()
+			.filter((t) => this.isSafeToDispose(t))
+			.sort((a, b) => b.lastActive - a.lastActive)
+		for (const terminalInfo of idle.slice(MAX_IDLE_TERMINALS)) {
+			this.forgetTerminal(terminalInfo.id)
+			TerminalRegistry.disposeTerminal(terminalInfo)
+		}
 	}
 }

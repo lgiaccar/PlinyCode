@@ -170,6 +170,8 @@ function buildFreeAutoModelInfo(): ModelInfo {
 		maxTokens: 32_768,
 		capabilities: ["streaming", "tools"],
 		family: "pliny-router",
+		// Routes only to free self-hosted models.
+		pricing: SELF_HOSTED_PRICING,
 		metadata: {
 			provider: "pliny",
 			pool: null,

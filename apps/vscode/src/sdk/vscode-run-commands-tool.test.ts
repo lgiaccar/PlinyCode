@@ -1,4 +1,4 @@
-import { CommandExitError } from "@plinycode/core"
+import { CommandAbortedError, CommandExitError } from "@plinycode/core"
 import { EventEmitter } from "events"
 import * as fs from "fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -532,6 +532,30 @@ describe("executeForeground", () => {
 		abortController.abort()
 
 		await expect(resultPromise).rejects.toThrow("Command execution aborted")
+	})
+
+	it("names the command, cwd and cause and keeps partial output when aborted", async () => {
+		const { process, emitLine } = createControllableTerminalProcess()
+		const terminalManager = {
+			getOrCreateTerminal: async () => ({ terminal: { show: () => {} } }) as never,
+			runCommand: () => process,
+			sendInterrupt: vi.fn(),
+		} as unknown as VscodeTerminalManager
+		const abortController = new AbortController()
+
+		const resultPromise = executeForeground("npm test", "/workspace", terminalManager, 1000, abortController.signal)
+		await waitFor(() => process.listenerCount("line") > 0)
+		emitLine("partial line")
+		abortController.abort(new Error("user_cancel"))
+
+		const error = await resultPromise.then(
+			() => undefined,
+			(e: unknown) => e,
+		)
+		expect(error).toBeInstanceOf(CommandAbortedError)
+		const aborted = error as CommandAbortedError
+		expect(aborted.message).toBe("Command execution aborted (cancelled by user): `npm test` in /workspace")
+		expect(aborted.output).toContain("partial line")
 	})
 })
 

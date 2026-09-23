@@ -26,7 +26,7 @@ describe("SdkTaskControlCoordinator", () => {
 		await coordinator.cancelTask()
 
 		expect(options.interactions.clearPending).toHaveBeenCalledWith("Task cancelled")
-		expect(activeSession.sdkHost.abort).toHaveBeenCalledWith("session-123")
+		expect(activeSession.sdkHost.abort).toHaveBeenCalledWith("session-123", "user_cancel")
 		expect(options.sessions.setRunning).toHaveBeenCalledWith(false)
 		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
 			[expect.objectContaining({ type: "ask", ask: "resume_task" })],
@@ -41,7 +41,7 @@ describe("SdkTaskControlCoordinator", () => {
 
 		await coordinator.cancelClineTaskOnSignOut(true)
 
-		expect(activeSession.sdkHost.abort).toHaveBeenCalledWith("session-123")
+		expect(activeSession.sdkHost.abort).toHaveBeenCalledWith("session-123", "user_cancel")
 		expect(options.sessions.setRunning).toHaveBeenCalledWith(false)
 	})
 

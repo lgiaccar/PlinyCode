@@ -26,6 +26,7 @@ import {
 	createGateway,
 	DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS,
 	resolveGatewayRequestMaxTokens,
+	resolveGatewayRequestMaxTokensDetailed,
 } from "./gateway";
 
 const streamTextSpy = vi.fn();
@@ -461,6 +462,51 @@ describe("sdk-gateway", () => {
 		).toBe(8_192);
 	});
 
+	it("reports which cap determined the output token limit", () => {
+		const model = { maxOutputTokens: 16_000, contextWindow: 128_000 };
+		expect(
+			resolveGatewayRequestMaxTokensDetailed({
+				requestedMaxTokens: 8_192,
+				model,
+				estimatedInputTokens: 1_000,
+			}),
+		).toEqual({ maxTokens: 8_192, source: "setting" });
+		expect(
+			resolveGatewayRequestMaxTokensDetailed({
+				model,
+				estimatedInputTokens: 1_000,
+			}),
+		).toEqual({ maxTokens: 16_000, source: "model_limit" });
+		expect(
+			resolveGatewayRequestMaxTokensDetailed({
+				model: { maxOutputTokens: 64_000, contextWindow: 128_000 },
+				estimatedInputTokens: 1_000,
+			}),
+		).toEqual({ maxTokens: DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS, source: "default" });
+		expect(
+			resolveGatewayRequestMaxTokensDetailed({
+				requestedMaxTokens: 64_000,
+				model: { contextWindow: 128_000 },
+				estimatedInputTokens: 124_000,
+				outputReserveTokens: 1_000,
+			}),
+		).toEqual({ maxTokens: 3_000, source: "remaining_context" });
+		// Ties prefer the actionable setting over the model limit.
+		expect(
+			resolveGatewayRequestMaxTokensDetailed({
+				requestedMaxTokens: 16_000,
+				model,
+				estimatedInputTokens: 1_000,
+			}),
+		).toEqual({ maxTokens: 16_000, source: "setting" });
+		expect(
+			resolveGatewayRequestMaxTokensDetailed({
+				model: {},
+				estimatedInputTokens: 1_000,
+			}),
+		).toEqual({ maxTokens: undefined, source: "unknown" });
+	});
+
 	it("resolves explicit request max tokens from model and context caps", () => {
 		expect(
 			resolveGatewayRequestMaxTokens({
@@ -562,6 +608,59 @@ describe("sdk-gateway", () => {
 				messages: baseMessages,
 			}),
 		);
+	});
+
+	it("reports the applied output limit on a max-tokens finish", async () => {
+		const createProvider = vi.fn(() => ({
+			async *stream() {
+				yield { type: "finish", reason: "max-tokens" } satisfies AgentModelEvent;
+			},
+		}));
+
+		const gateway = createGateway({
+			builtins: false,
+			providers: [
+				{
+					manifest: {
+						id: "custom-provider",
+						name: "CustomProvider",
+						defaultModelId: "small-output",
+						models: [
+							{
+								id: "small-output",
+								name: "Small Output",
+								providerId: "custom-provider",
+								contextWindow: 128_000,
+								maxInputTokens: 128_000,
+								maxOutputTokens: 4_096,
+							},
+						],
+					},
+					createProvider,
+				},
+			],
+		});
+
+		const events = await collect(
+			await gateway.stream({
+				providerId: "custom-provider",
+				modelId: "small-output",
+				messages: baseMessages,
+			}),
+		);
+
+		expect(events.at(-1)).toMatchObject({
+			type: "finish",
+			reason: "max-tokens",
+			outputLimit: {
+				providerId: "custom-provider",
+				modelId: "small-output",
+				maxTokens: 4_096,
+				source: "model_limit",
+				modelMaxOutputTokens: 4_096,
+				contextWindow: 128_000,
+			},
+		});
 	});
 
 	it("passes AI SDK 7 telemetry and correlation context to streamText", async () => {

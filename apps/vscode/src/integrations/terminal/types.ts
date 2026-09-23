@@ -152,7 +152,7 @@ export interface ITerminal {
 	/** Send text to the terminal */
 	sendText(text: string, addNewLine?: boolean): void
 	/** Show the terminal */
-	show(): void
+	show(preserveFocus?: boolean): void
 	/** Hide the terminal */
 	hide(): void
 	/** Dispose of the terminal */

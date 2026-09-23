@@ -497,4 +497,108 @@ describe("VscodeTerminalManager", () => {
 			TerminalRegistry.removeTerminal(terminalInfo.id)
 		}
 	})
+	it("creates agent terminals as transient so they are not restored after a reload", () => {
+		const terminalInfo = TerminalRegistry.createTerminal()
+		try {
+			const options = terminalInfo.terminal.creationOptions as vscode.TerminalOptions
+			assert.equal(options.isTransient, true)
+		} finally {
+			terminalInfo.terminal.dispose()
+			TerminalRegistry.removeTerminal(terminalInfo.id)
+		}
+	})
+
+	it("reveals the terminal without taking focus when running a command", () => {
+		const show = sandbox.stub()
+		const terminalInfo: TerminalInfo = {
+			id: 1,
+			busy: true,
+			lastCommand: "",
+			lastActive: Date.now(),
+			terminal: {
+				shellIntegration: { executeCommand: () => ({ read: createNeverEndingStream }) },
+				show,
+			} as unknown as vscode.Terminal,
+		}
+
+		void manager
+			.runCommand(terminalInfo as unknown as Parameters<VscodeTerminalManager["runCommand"]>[0], "echo hi")
+			.catch(() => {})
+
+		assert.equal(show.calledOnceWith(true), true)
+	})
+
+	it("closes a terminal whose cwd setup failed at the next acquisition", async () => {
+		setVscodeHostProviderMock()
+		const orphan = TerminalRegistry.createTerminal("/tmp/cline-original")
+		sandbox.stub(orphan.terminal, "shellIntegration").get(() => ({
+			cwd: vscode.Uri.file("/tmp/cline-original"),
+			executeCommand: () => {
+				throw new Error("cwd command failed")
+			},
+		}))
+		const disposeSpy = sandbox.spy(orphan.terminal, "dispose")
+		let first: TerminalInfo | undefined
+		let second: TerminalInfo | undefined
+
+		try {
+			first = (await manager.getOrCreateTerminal("/tmp/cline-target")) as unknown as TerminalInfo
+			assert.notEqual(first.id, orphan.id)
+			assert.equal(disposeSpy.called, false, "the orphan is closed at the next acquisition, not immediately")
+
+			second = (await manager.getOrCreateTerminal("/tmp/cline-target")) as unknown as TerminalInfo
+			assert.equal(disposeSpy.calledOnce, true)
+		} finally {
+			for (const info of [first, second]) {
+				if (info) {
+					info.terminal.dispose()
+					TerminalRegistry.removeTerminal(info.id)
+				}
+			}
+			if (!disposeSpy.called) {
+				orphan.terminal.dispose()
+			}
+		}
+	})
+
+	it("closes idle terminals but keeps busy ones when a task ends", () => {
+		const idle = TerminalRegistry.createTerminal()
+		const busy = TerminalRegistry.createTerminal()
+		busy.busy = true
+		const idleDispose = sandbox.spy(idle.terminal, "dispose")
+		const busyDispose = sandbox.spy(busy.terminal, "dispose")
+
+		try {
+			manager.releaseIdleTerminals()
+			assert.equal(idleDispose.calledOnce, true)
+			assert.equal(busyDispose.called, false)
+			assert.equal(TerminalRegistry.getTerminal(busy.id), busy)
+		} finally {
+			busy.terminal.dispose()
+			TerminalRegistry.removeTerminal(busy.id)
+		}
+	})
+
+	it("keeps only the most recently used idle terminals", () => {
+		const terminals = [1, 2, 3].map((age) => {
+			const info = TerminalRegistry.createTerminal()
+			info.lastActive = Date.now() - age * 1000
+			return { info, dispose: sandbox.spy(info.terminal, "dispose") }
+		})
+
+		try {
+			;(manager as unknown as { enforceIdlePoolCap: () => void }).enforceIdlePoolCap()
+			assert.deepEqual(
+				terminals.map((t) => t.dispose.called),
+				[false, false, true],
+			)
+		} finally {
+			for (const { info, dispose } of terminals) {
+				if (!dispose.called) {
+					info.terminal.dispose()
+					TerminalRegistry.removeTerminal(info.id)
+				}
+			}
+		}
+	})
 })

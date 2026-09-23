@@ -317,6 +317,11 @@ export async function cleanupStaleDetachedCommandLogs(
 	return removed;
 }
 
+export {
+	CommandAbortedError,
+	describeAbortReason,
+} from "./command-aborted-error";
+
 export class CommandExitError extends Error {
 	constructor(
 		readonly exitCode: number,

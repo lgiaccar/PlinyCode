@@ -9,7 +9,7 @@ import {
 	createShellTool,
 	createSkillsTool,
 } from "./definitions";
-import { CommandExitError } from "./executors/bash";
+import { CommandAbortedError, CommandExitError } from "./executors/bash";
 import { RUN_COMMAND_QUERY_PREVIEW_LIMIT, TimeoutError } from "./helpers";
 import { type EditFileInput, INPUT_ARG_CHAR_LIMIT } from "./schemas";
 import type { SkillsExecutorWithMetadata } from "./types";
@@ -924,6 +924,60 @@ describe("default run_commands tool", () => {
 				success: false,
 			},
 		]);
+	});
+
+	it("keeps partial output and command details for aborted commands", async () => {
+		const execute = vi.fn(async () => {
+			throw new CommandAbortedError({
+				command: "npm test",
+				cwd: "/workspace",
+				reason: new Error("session_stop"),
+				output: "partial output",
+			});
+		});
+		const tool = createShellTool(execute);
+
+		const result = await tool.execute(
+			{ commands: ["npm test"] },
+			{
+				agentId: "agent-1",
+				conversationId: "conv-1",
+				iteration: 1,
+			},
+		);
+
+		expect(result).toEqual([
+			{
+				query: "npm test",
+				result: "partial output",
+				error:
+					"Command failed: Command execution aborted (task stopped or switched): `npm test` in /workspace",
+				success: false,
+			},
+		]);
+	});
+
+	it("adds the command and abort cause when an executor throws a plain error on abort", async () => {
+		const controller = new AbortController();
+		const execute = vi.fn(async () => {
+			controller.abort(new Error("user_cancel"));
+			throw new Error("Command was aborted");
+		});
+		const tool = createShellTool(execute);
+
+		const result = (await tool.execute(
+			{ commands: ["make build"] },
+			{
+				agentId: "agent-1",
+				conversationId: "conv-1",
+				iteration: 1,
+				signal: controller.signal,
+			},
+		)) as Array<{ error?: string }>;
+
+		expect(result[0]?.error).toContain("Command failed: Command was aborted");
+		expect(result[0]?.error).toContain("`make build`");
+		expect(result[0]?.error).toContain("(cancelled by user)");
 	});
 
 	it("coalesces split heredoc command arrays before execution", async () => {

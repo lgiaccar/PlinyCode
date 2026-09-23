@@ -459,6 +459,41 @@ describe("AgentRuntime", () => {
 		);
 	});
 
+	it("names the model, cap and sizes when the output token limit is hit", async () => {
+		const model = new ScriptedModel([
+			() => [
+				{ type: "text-delta", text: "partial" },
+				{ type: "usage", usage: { inputTokens: 95_000, outputTokens: 8_192 } },
+				{
+					type: "finish",
+					reason: "max-tokens",
+					outputLimit: {
+						providerId: "pliny",
+						modelId: "big-model",
+						maxTokens: 8_192,
+						source: "model_limit",
+						modelMaxOutputTokens: 8_192,
+						contextWindow: 128_000,
+					},
+				},
+			],
+		]);
+		const runtime = new AgentRuntime({ model });
+
+		const result = await runtime.run("Hi");
+
+		expect(result.status).toBe("failed");
+		const message = result.error?.message ?? "";
+		expect(message).toContain(
+			"Model reached the maximum output token limit before completing the turn",
+		);
+		expect(message).toContain("model big-model");
+		expect(message).toContain("8,192 output tokens");
+		expect(message).toContain("cap 8,192 [model output limit]");
+		expect(message).toContain("input ≈95,000 / context window 128,000 tokens");
+		expect(message).toContain("switch to a model with a larger output limit");
+	});
+
 	it("does not persist an empty assistant message when the model stream fails", async () => {
 		const model = new ScriptedModel([
 			() => [{ type: "finish", reason: "error", error: "upstream failed" }],
