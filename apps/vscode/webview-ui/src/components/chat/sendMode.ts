@@ -2,29 +2,27 @@
  * Sticky send mode for the chat input's split send button. The main button
  * sends with the selected mode and shows its icon; the dropdown only changes
  * the mode (persisted per webview in localStorage).
+ *
+ * There is no separate "queue" mode: a plain send while a turn is running is
+ * already queued until the turn ends.
  */
 
-export type SendMode = "default" | "steer" | "queue" | "schedule"
+export type SendMode = "default" | "steer" | "schedule"
 
-export const SEND_MODES: readonly SendMode[] = ["default", "steer", "queue", "schedule"]
+export const SEND_MODES: readonly SendMode[] = ["default", "steer", "schedule"]
 
 export const SEND_MODE_STORAGE_KEY = "plinycode.sendMode"
 
 export const SEND_MODE_META: Record<SendMode, { icon: string; label: string; tooltip: string }> = {
 	default: {
 		icon: "codicon-send",
-		label: "Send",
-		tooltip: "Send (queues while a turn is running)",
+		label: "Send (waits for current turn)",
+		tooltip: "Send: if the agent is busy, sends when the current turn ends",
 	},
 	steer: {
 		icon: "codicon-zap",
-		label: "Send now (steer)",
-		tooltip: "Send now: steer the running turn immediately",
-	},
-	queue: {
-		icon: "codicon-list-ordered",
-		label: "Queue (wait until turn ends)",
-		tooltip: "Queue: send after the current turn ends",
+		label: "Send now (interrupts)",
+		tooltip: "Send now: interrupts the agent's current reply (running tools finish first)",
 	},
 	schedule: {
 		icon: "codicon-watch",
@@ -37,6 +35,7 @@ function isSendMode(value: unknown): value is SendMode {
 	return typeof value === "string" && (SEND_MODES as readonly string[]).includes(value)
 }
 
+/** Unknown stored values (including the removed "queue" mode) fall back to Send. */
 export function loadSendMode(): SendMode {
 	try {
 		const stored = globalThis.localStorage?.getItem(SEND_MODE_STORAGE_KEY)
@@ -55,6 +54,6 @@ export function saveSendMode(mode: SendMode): void {
 }
 
 /** The delivery passed to onSend for a direct-send mode. Schedule has none. */
-export function deliveryFor(mode: SendMode): "queue" | "steer" | undefined {
-	return mode === "steer" || mode === "queue" ? mode : undefined
+export function deliveryFor(mode: SendMode): "steer" | undefined {
+	return mode === "steer" ? "steer" : undefined
 }

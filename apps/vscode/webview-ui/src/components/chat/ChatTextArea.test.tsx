@@ -214,9 +214,9 @@ describe("ChatTextArea sticky send mode", () => {
 
 	it("Enter sends with the sticky mode", () => {
 		const { onSend, select } = renderWithSend()
-		fireEvent.change(select, { target: { value: "queue" } })
+		fireEvent.change(select, { target: { value: "steer" } })
 		fireEvent.keyDown(screen.getByPlaceholderText("Type a message"), { key: "Enter" })
-		expect(onSend).toHaveBeenCalledWith("queue")
+		expect(onSend).toHaveBeenCalledWith("steer")
 	})
 
 	it("restores the stored mode and opens the picker in schedule mode", () => {
@@ -226,6 +226,20 @@ describe("ChatTextArea sticky send mode", () => {
 		fireEvent.click(button)
 		expect(onSend).not.toHaveBeenCalled()
 		expect(screen.getByRole("button", { name: "Schedule" })).toBeInTheDocument()
+	})
+
+	it("offers only Send, Send now and Schedule", () => {
+		const { select } = renderWithSend()
+		const values = Array.from(select.querySelectorAll("option")).map((option) => option.getAttribute("value"))
+		expect(values).toEqual(["default", "steer", "schedule"])
+	})
+
+	it("falls back to Send for the removed queue mode", () => {
+		localStorage.setItem("plinycode.sendMode", "queue")
+		const { onSend, button } = renderWithSend()
+		expect(button).toHaveClass("codicon-send")
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenCalledWith(undefined)
 	})
 
 	it("falls back to the default mode for an invalid stored value", () => {
