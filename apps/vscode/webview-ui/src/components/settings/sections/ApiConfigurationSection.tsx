@@ -9,7 +9,7 @@ import { FileServiceClient, StateServiceClient } from "@/services/grpc-client"
 import { TabButton } from "../../mcp/configuration/McpConfigurationView"
 import ApiOptions from "../ApiOptions"
 import Section from "../Section"
-import { usePlinyUnlockPaidModels } from "../utils/plinyModelFilter"
+import { usePlinyUnlockFreeModels, usePlinyUnlockPaidModels } from "../utils/plinyModelFilter"
 import { syncModeConfigurations } from "../utils/providerUtils"
 import { useApiConfigurationHandlers } from "../utils/useApiConfigurationHandlers"
 
@@ -23,6 +23,7 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 	const [currentTab, setCurrentTab] = useState<Mode>(mode)
 	const { handleFieldsChange } = useApiConfigurationHandlers()
 	const [unlockPlinyPaid, setUnlockPlinyPaid] = usePlinyUnlockPaidModels()
+	const [unlockPlinyFree, setUnlockPlinyFree] = usePlinyUnlockFreeModels()
 	return (
 		<div>
 			{renderSectionHeader?.("api-config")}
@@ -64,14 +65,26 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 
 				<div className="mb-[5px]">
 					<VSCodeCheckbox
+						checked={unlockPlinyFree}
+						className="mb-[5px]"
+						onChange={(e: any) => setUnlockPlinyFree(e.target.checked === true)}>
+						Unlock Pliny free models
+					</VSCodeCheckbox>
+					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
+						<code>FreeAuto</code> (the automatic free router) is always shown and is the recommended default. Enable
+						this to also list the individual free self-hosted models (<code>snps-provider</code>) in the model picker.
+					</p>
+				</div>
+
+				<div className="mb-[5px]">
+					<VSCodeCheckbox
 						checked={unlockPlinyPaid}
 						className="mb-[5px]"
 						onChange={(e: any) => setUnlockPlinyPaid(e.target.checked === true)}>
 						Unlock Pliny paid models
 					</VSCodeCheckbox>
 					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
-						Self-hosted models (<code>snps-provider</code>) are free and always shown. Enable this to also list paid
-						hosted models (Bedrock, Azure, GCP, Vertex) in the model picker.
+						Enable this to list paid hosted models (Bedrock, Azure, GCP, Vertex) in the model picker.
 					</p>
 				</div>
 

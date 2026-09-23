@@ -45,14 +45,20 @@ describe("isPlinySelfHostedModelId / isPlinyPaidModel", () => {
 })
 
 describe("filterPlinyModels", () => {
-	it("returns the full catalog unchanged when paid models are unlocked", () => {
-		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", true)
+	it("returns the full catalog unchanged when both paid and free models are unlocked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", true, true)
 		expect(Object.keys(result.models).length).toBe(9)
 		expect(result.defaultModelId).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
 	})
 
-	it("keeps only self-hosted models and redirects a paid default to the free default when locked", () => {
-		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", false)
+	it("keeps only the FreeAuto router by default when both toggles are locked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", false, false)
+		expect(Object.keys(result.models)).toEqual([PLINY_FREE_AUTO_MODEL_ID])
+		expect(result.defaultModelId).toBe(PLINY_FREE_DEFAULT_MODEL_ID)
+	})
+
+	it("keeps free self-hosted models plus FreeAuto when only free is unlocked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-aws-bedrock/aws-claude-sonnet-4.6", false, true)
 		expect(Object.keys(result.models).sort()).toEqual(
 			[
 				PLINY_FREE_AUTO_MODEL_ID,
@@ -65,33 +71,52 @@ describe("filterPlinyModels", () => {
 		expect(result.defaultModelId).toBe(PLINY_FREE_DEFAULT_MODEL_ID)
 	})
 
-	it("preserves a free default as-is when locked", () => {
-		const result = filterPlinyModels(SAMPLE, "snps-provider/GLM-5.2", false)
+	it("keeps paid models plus FreeAuto when only paid is unlocked", () => {
+		const result = filterPlinyModels(SAMPLE, PLINY_FREE_AUTO_MODEL_ID, true, false)
+		expect(Object.keys(result.models).sort()).toEqual(
+			[
+				PLINY_FREE_AUTO_MODEL_ID,
+				"snps-aws-bedrock/aws-claude-sonnet-4.6",
+				"azure-openai/gpt-5.2",
+				"snps-google-gcp/gemini-3.7-flash",
+				"google-vertex/glm-5.2",
+			].sort(),
+		)
+		expect(result.defaultModelId).toBe(PLINY_FREE_AUTO_MODEL_ID)
+	})
+
+	it("preserves a free default as-is when its class is unlocked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-provider/GLM-5.2", false, true)
 		expect(result.defaultModelId).toBe("snps-provider/GLM-5.2")
 		expect(result.models["snps-provider/GLM-5.2"]).toBeDefined()
 	})
 
-	it("falls back to the first free model when the curated free default is absent", () => {
+	it("redirects the default to FreeAuto when the committed default's class is locked", () => {
+		const result = filterPlinyModels(SAMPLE, "snps-provider/GLM-5.2", false, false)
+		expect(result.defaultModelId).toBe(PLINY_FREE_DEFAULT_MODEL_ID)
+	})
+
+	it("falls back to the first visible model when FreeAuto itself is absent", () => {
 		const onlyOther = {
 			"snps-provider/kimi-k2.6": info("snps-provider/kimi-k2.6"),
 		}
-		const result = filterPlinyModels(onlyOther, "snps-aws-bedrock/aws-claude-sonnet-4.6", false)
+		const result = filterPlinyModels(onlyOther, "snps-aws-bedrock/aws-claude-sonnet-4.6", false, true)
 		expect(result.defaultModelId).toBe("snps-provider/kimi-k2.6")
 	})
 
-	it("returns an empty model set with empty default when there are no free models and locked", () => {
+	it("returns an empty model set with empty default when nothing is visible", () => {
 		const paidOnly = { "azure-openai/gpt-5.2": info("azure-openai/gpt-5.2") }
-		const result = filterPlinyModels(paidOnly, "azure-openai/gpt-5.2", false)
+		const result = filterPlinyModels(paidOnly, "azure-openai/gpt-5.2", false, false)
 		expect(Object.keys(result.models)).toHaveLength(0)
 		expect(result.defaultModelId).toBe("")
 	})
 })
 
 describe("FreeAuto router in the picker", () => {
-	it("is treated as free, so it stays visible when paid models are locked", () => {
+	it("is treated as free, so it stays visible when both paid and free classes are locked", () => {
 		expect(isPlinyFreeModelId(PLINY_FREE_AUTO_MODEL_ID)).toBe(true)
 		expect(isPlinyPaidModel(PLINY_FREE_AUTO_MODEL_ID)).toBe(false)
-		const result = filterPlinyModels(SAMPLE, PLINY_FREE_AUTO_MODEL_ID, false)
+		const result = filterPlinyModels(SAMPLE, PLINY_FREE_AUTO_MODEL_ID, false, false)
 		expect(Object.keys(result.models)).toContain(PLINY_FREE_AUTO_MODEL_ID)
 	})
 
@@ -100,7 +125,7 @@ describe("FreeAuto router in the picker", () => {
 	})
 
 	it("is kept as the committed selection when locked", () => {
-		const result = filterPlinyModels(SAMPLE, PLINY_FREE_AUTO_MODEL_ID, false)
+		const result = filterPlinyModels(SAMPLE, PLINY_FREE_AUTO_MODEL_ID, false, false)
 		expect(result.defaultModelId).toBe(PLINY_FREE_AUTO_MODEL_ID)
 	})
 
