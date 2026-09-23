@@ -532,4 +532,87 @@ describe("SdkInteractionCoordinator", () => {
 		expect(coordinator.resolvePendingToolApproval(undefined, "yesButtonClicked")).toBe(true)
 		await expect(approvalPromise).resolves.toEqual({ approved: true })
 	})
+	describe("background tasks", () => {
+		function setup(backgroundIds: string[] = []) {
+			const task = createTaskProxy("foreground", vi.fn(), vi.fn())
+			const messages = new SdkMessageCoordinator({ getTask: () => task })
+			const background = {
+				has: (id: string | undefined) => id !== undefined && backgroundIds.includes(id),
+				holdApproval: vi.fn(async () => ({ approved: true })),
+				holdQuestion: vi.fn(async () => "held answer"),
+			}
+			const coordinator = new SdkInteractionCoordinator({
+				messages,
+				getSessionId: () => "foreground",
+				postStateToWebview: vi.fn().mockResolvedValue(undefined),
+				background,
+			})
+			return { task, coordinator, background }
+		}
+
+		const request = (sessionId: string) => ({
+			sessionId,
+			agentId: "agent",
+			conversationId: "conversation",
+			iteration: 1,
+			toolCallId: "tool-call",
+			toolName: "read_files",
+			input: { path: "README.md" },
+			policy: { autoApprove: false },
+		})
+
+		it("holds approvals and questions of a background task instead of showing them", async () => {
+			const { task, coordinator, background } = setup(["bg"])
+
+			await expect(coordinator.handleRequestToolApproval(request("bg"))).resolves.toEqual({ approved: true })
+			await expect(coordinator.handleAskQuestion("Which?", ["a"], { sessionId: "bg" })).resolves.toBe("held answer")
+
+			expect(background.holdApproval).toHaveBeenCalledWith("bg", request("bg"))
+			expect(background.holdQuestion).toHaveBeenCalledWith("bg", "Which?", ["a"], { sessionId: "bg" })
+			expect(task.messageStateHandler.getClineMessages()).toHaveLength(0)
+		})
+
+		it("still auto-approves tools of a background task", async () => {
+			const { coordinator, background } = setup(["bg"])
+			await expect(
+				coordinator.handleRequestToolApproval({ ...request("bg"), policy: { autoApprove: true } }),
+			).resolves.toEqual({ approved: true })
+			expect(background.holdApproval).not.toHaveBeenCalled()
+		})
+
+		it("detaches a pending approval without settling it, and replays it later", async () => {
+			const { task, coordinator } = setup()
+			const approval = coordinator.handleRequestToolApproval(request("foreground"))
+			await vi.waitFor(() => expect(task.messageStateHandler.getClineMessages()).toHaveLength(1))
+
+			const held = coordinator.detachPending()
+			expect(held.approval?.request).toEqual(request("foreground"))
+			expect(coordinator.resolvePendingToolApproval(undefined, "yesButtonClicked")).toBe(false)
+
+			const settled = vi.fn()
+			void approval.then(settled)
+			await Promise.resolve()
+			expect(settled).not.toHaveBeenCalled()
+
+			void coordinator.replayHeld({ approvals: held.approval ? [held.approval] : [], questions: [] })
+			await vi.waitFor(() => expect(task.messageStateHandler.getClineMessages()).toHaveLength(2))
+			expect(coordinator.resolvePendingToolApproval(undefined, "yesButtonClicked")).toBe(true)
+			await expect(approval).resolves.toEqual({ approved: true })
+		})
+
+		it("detaches a pending question and replays it", async () => {
+			const { task, coordinator } = setup()
+			const answer = coordinator.handleAskQuestion("Which?", [], { sessionId: "foreground" })
+			await vi.waitFor(() => expect(task.messageStateHandler.getClineMessages()).toHaveLength(1))
+
+			const held = coordinator.detachPending()
+			expect(held.question?.question).toBe("Which?")
+			expect(coordinator.resolvePendingAskQuestion("ignored")).toBe(false)
+
+			void coordinator.replayHeld({ approvals: [], questions: held.question ? [held.question] : [] })
+			await vi.waitFor(() => expect(task.messageStateHandler.getClineMessages()).toHaveLength(2))
+			expect(coordinator.resolvePendingAskQuestion("the answer")).toBe(true)
+			await expect(answer).resolves.toBe("the answer")
+		})
+	})
 })

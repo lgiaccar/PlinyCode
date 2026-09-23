@@ -1,5 +1,6 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"
 import { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import { SdkTaskControlCoordinator, type SdkTaskControlCoordinatorOptions } from "./sdk-task-control-coordinator"
@@ -437,6 +438,129 @@ describe("SdkTaskControlCoordinator", () => {
 		expect(setTaskHadMessages).toBe(true)
 		expect(state.task?.taskId).toBe("task-1")
 		expect(options.postStateToWebview).toHaveBeenCalledOnce()
+	})
+	describe("background tasks", () => {
+		function withBackground(input: Partial<MakeCoordinatorInput> & { full?: boolean } = {}) {
+			const made = makeCoordinator(input)
+			const background = new SdkBackgroundSessions({
+				stopSession: vi.fn(async () => {}),
+				recordUsage: vi.fn(),
+				notify: vi.fn(),
+				openTask: vi.fn(),
+				onChanged: vi.fn(),
+				maxSessions: input.full ? 0 : 3,
+			})
+			const sessions = made.options.sessions as unknown as Record<string, ReturnType<typeof vi.fn>>
+			sessions.detachActiveSession = vi.fn(() => input.activeSession)
+			sessions.adoptSession = vi.fn()
+			sessions.stopSession = vi.fn(async () => {})
+			const interactions = made.options.interactions as unknown as Record<string, ReturnType<typeof vi.fn>>
+			interactions.detachPending = vi.fn(() => ({}))
+			interactions.replayHeld = vi.fn(async () => {})
+			const onBackgroundLimitReached = vi.fn()
+			const discardPreviews = vi.fn(async () => {})
+			const coordinator = new SdkTaskControlCoordinator({
+				...made.options,
+				background,
+				onBackgroundLimitReached,
+				discardPreviews,
+			})
+			return { ...made, coordinator, background, sessions, interactions, onBackgroundLimitReached, discardPreviews }
+		}
+
+		it("keeps a running task going in the background on New Task", async () => {
+			const activeSession = makeActiveSession()
+			const task = makeTask("session-123", [{ ts: 1, type: "say", say: "task", text: "Refactor the parser" }])
+			const { coordinator, background, sessions, options, discardPreviews } = withBackground({ activeSession, task })
+
+			await coordinator.clearTask({ detachRunning: true })
+
+			expect(sessions.detachActiveSession).toHaveBeenCalled()
+			expect(options.sessions.endActiveSession).not.toHaveBeenCalled()
+			expect(options.interactions.clearPending).not.toHaveBeenCalled()
+			expect(activeSession.sdkHost.stop).not.toHaveBeenCalled()
+			expect(background.list()).toEqual([{ id: "session-123", status: "running" }])
+			expect(discardPreviews).toHaveBeenCalled()
+			expect(options.setTask).toHaveBeenCalledWith(undefined)
+		})
+
+		it("stops the task as before when not asked to detach", async () => {
+			const activeSession = makeActiveSession()
+			const { coordinator, background, options } = withBackground({ activeSession })
+
+			await coordinator.clearTask()
+
+			expect(options.sessions.endActiveSession).toHaveBeenCalledWith("clearTask")
+			expect(background.list()).toEqual([])
+		})
+
+		it("stops the running task when the background limit is reached", async () => {
+			const activeSession = makeActiveSession()
+			const { coordinator, options, onBackgroundLimitReached } = withBackground({ activeSession, full: true })
+
+			await coordinator.clearTask({ detachRunning: true })
+
+			expect(onBackgroundLimitReached).toHaveBeenCalled()
+			expect(options.sessions.endActiveSession).toHaveBeenCalledWith("clearTask")
+		})
+
+		it("moves the running task to the background when another task is opened", async () => {
+			const activeSession = makeActiveSession()
+			const { coordinator, background, options } = withBackground({ activeSession })
+
+			await coordinator.showTaskWithId("task-1")
+
+			expect(background.has("session-123")).toBe(true)
+			expect(options.sessions.endActiveSession).not.toHaveBeenCalled()
+		})
+
+		it("takes a background task back when it is reopened", async () => {
+			const backgroundSession = { ...makeActiveSession(), sessionId: "task-1" }
+			const history: ClineMessage[] = [{ ts: 1, type: "say", say: "task", text: "hello" }]
+			const { coordinator, background, sessions, interactions, options } = withBackground({ clineMessages: history })
+			background.add(backgroundSession as never, "hello")
+
+			await coordinator.showTaskWithId("task-1")
+
+			expect(sessions.adoptSession).toHaveBeenCalledWith(backgroundSession)
+			expect(background.has("task-1")).toBe(false)
+			expect(options.setTurnPhase).toHaveBeenCalledWith("streaming")
+			const installed = options.setTask.mock.calls.at(-1)?.[0] as {
+				messageStateHandler: { getClineMessages(): ClineMessage[] }
+			}
+			// No resume ask: the task is still running.
+			expect(installed.messageStateHandler.getClineMessages().map((m) => m.ask)).not.toContain("resume_task")
+			expect(interactions.replayHeld).toHaveBeenCalledWith({ approvals: [], questions: [] })
+		})
+
+		it("opens a background task that just finished its turn normally", async () => {
+			const backgroundSession = { ...makeActiveSession(), sessionId: "task-1" }
+			const { coordinator, background, sessions } = withBackground({
+				clineMessages: [{ ts: 1, type: "say", say: "task", text: "hello" }],
+				sessionStatus: "completed",
+			})
+			background.add(backgroundSession as never, "hello")
+			background.handleEvent({
+				type: "agent_event",
+				payload: { sessionId: "task-1", event: { type: "done", reason: "completed" } },
+			} as never)
+
+			await coordinator.showTaskWithId("task-1")
+
+			expect(sessions.stopSession).toHaveBeenCalledWith(backgroundSession, "reopenFinishedBackgroundTask")
+			expect(sessions.adoptSession).not.toHaveBeenCalled()
+		})
+
+		it("does nothing when the running task being shown is reopened", async () => {
+			const activeSession = { ...makeActiveSession(), sessionId: "task-1" }
+			const { coordinator, options, sessions } = withBackground({ activeSession, task: makeTask("task-1") })
+
+			await coordinator.showTaskWithId("task-1")
+
+			expect(options.sessions.endActiveSession).not.toHaveBeenCalled()
+			expect(sessions.detachActiveSession).not.toHaveBeenCalled()
+			expect(options.setTask).not.toHaveBeenCalled()
+		})
 	})
 })
 

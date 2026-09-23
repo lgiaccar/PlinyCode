@@ -10,7 +10,7 @@ import { Controller } from ".."
  */
 export async function clearTask(controller: Controller, _request: EmptyRequest): Promise<Empty> {
 	const startedAt = Date.now()
-	await controller.clearTask()
+	await controller.clearTask({ detachRunning: true })
 	const afterClearTask = Date.now()
 	await controller.postStateToWebview()
 	const totalElapsed = Date.now() - startedAt

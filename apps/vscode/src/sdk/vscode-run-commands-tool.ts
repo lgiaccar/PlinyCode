@@ -226,6 +226,7 @@ export async function executeForeground(
 	abortSignal?: AbortSignal,
 	foregroundCommands?: SdkForegroundCommandCoordinator,
 	terminalProfileId?: string,
+	sessionId?: string,
 ): Promise<string> {
 	const terminalCommand = formatCommandForTerminal(command)
 	const abortedError = (output?: string): CommandAbortedError =>
@@ -264,9 +265,14 @@ export async function executeForeground(
 			applyDetach?.(reason)
 		}
 	}
-	const unregister = foregroundCommands?.register({
-		detach: () => requestDetach("user"),
-	})
+	const unregister = foregroundCommands?.register(
+		{
+			detach: () => requestDetach("user"),
+		},
+		sessionId,
+	)
+	// A task running in the background must not pop its terminal into view.
+	const reveal = foregroundCommands?.isForegroundSession(sessionId) ?? true
 	const autoProceedTimer = setTimeout(() => requestDetach("timeout"), FOREGROUND_COMMAND_AUTO_PROCEED_MS)
 	const onAbort = (): void => {
 		if (state.phase === "waiting") {
@@ -286,7 +292,7 @@ export async function executeForeground(
 		const terminalPromise = terminalManager.getOrCreateTerminal(cwd, terminalProfileId)
 		const startDetached = (terminalInfo: Awaited<typeof terminalPromise>, log: DetachedCommandLog): void => {
 			try {
-				const process = terminalManager.runCommand(terminalInfo, terminalCommand)
+				const process = terminalManager.runCommand(terminalInfo, terminalCommand, { reveal })
 				log.attach(process)
 				void process.catch((error) => log.fail(error))
 				process.detach()
@@ -355,7 +361,7 @@ export async function executeForeground(
 		state.phase = "started"
 		const { terminalInfo } = firstOutcome
 
-		const process = terminalManager.runCommand(terminalInfo, terminalCommand)
+		const process = terminalManager.runCommand(terminalInfo, terminalCommand, { reveal })
 		const outputLines: string[] = []
 		let droppedLines = 0
 
@@ -602,6 +608,7 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 			context.signal,
 			options.foregroundCommands,
 			profileId,
+			context.sessionId,
 		)
 	}
 }

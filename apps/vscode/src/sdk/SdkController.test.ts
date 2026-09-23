@@ -48,6 +48,7 @@ describe("SDK remote-config coordination", () => {
 			backgroundCommandRunning: false,
 			backgroundCommandTaskId: undefined,
 			foregroundCommands: { isRunning: false },
+			background: { list: () => [] },
 			isRemoteConfigAvailable: true,
 			currentRemoteConfigRevision: 7,
 			ensureWorkspaceManager: async () => undefined,

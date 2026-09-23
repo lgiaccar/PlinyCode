@@ -32,8 +32,11 @@ const PREVIEW_OPEN_TIMEOUT_MS = 5_000
 export interface SdkDiffEditCoordinatorOptions {
 	/** Workspace root used to resolve relative tool paths. */
 	getCwd: () => Promise<string>
-	/** When Background Edit is enabled, edits apply headlessly with no preview. */
-	isBackgroundEditEnabled: () => boolean
+	/**
+	 * When Background Edit is enabled, edits apply headlessly with no preview.
+	 * Also true for edits made by a task running in the background.
+	 */
+	isBackgroundEditEnabled: (sessionId?: string) => boolean
 	/** Injectable for tests. Defaults to the host-registered factory. */
 	createEditPreview?: () => EditPreview
 	/** Injectable for tests. Defaults to the SDK's disk-writing editor executor. */
@@ -118,8 +121,9 @@ export class SdkDiffEditCoordinator {
 	async executeEditorTool(input: EditFileInput, cwd: string, context: AgentToolContext): Promise<string> {
 		const toolCallId = context.toolCallId ?? ""
 		const hadPreApprovalPreview = this.sessions.has(toolCallId)
+		const headless = this.options.isBackgroundEditEnabled(context.sessionId)
 		try {
-			if (!hadPreApprovalPreview && !this.options.isBackgroundEditEnabled()) {
+			if (!hadPreApprovalPreview && !headless) {
 				// Auto-approved (or hook-approved) edit: no preview was opened at approval
 				// time, so show one now. Best-effort — never blocks the edit.
 				try {
@@ -134,7 +138,7 @@ export class SdkDiffEditCoordinator {
 				// just cuts the linger short (the edit has already been applied).
 				await lingerDelay(this.autoApprovePreviewLingerMs, context.signal)
 			}
-			if (!context.signal?.aborted) {
+			if (!context.signal?.aborted && !headless) {
 				await this.showEditedFile(this.livePreviewRevealPath(toolCallId))
 			}
 			return result
@@ -155,9 +159,10 @@ export class SdkDiffEditCoordinator {
 		// which file it showed for the post-edit reveal.
 		const preApprovalRevealPath = this.livePreviewRevealPath(toolCallId)
 		try {
+			const headless = this.options.isBackgroundEditEnabled(context.sessionId)
 			if (hadPreApprovalPreview) {
 				await this.discardPreview(toolCallId)
-			} else if (!this.options.isBackgroundEditEnabled()) {
+			} else if (!headless) {
 				try {
 					await this.openPatchPreview(toolCallId, input)
 				} catch (error) {
@@ -169,7 +174,7 @@ export class SdkDiffEditCoordinator {
 			if (!hadPreApprovalPreview && this.sessions.get(toolCallId)?.preview) {
 				await lingerDelay(this.autoApprovePreviewLingerMs, context.signal)
 			}
-			if (!context.signal?.aborted) {
+			if (!context.signal?.aborted && !headless) {
 				await this.showEditedFile(preApprovalRevealPath ?? this.livePreviewRevealPath(toolCallId))
 			}
 			return result

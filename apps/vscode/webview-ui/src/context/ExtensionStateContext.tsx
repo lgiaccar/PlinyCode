@@ -311,6 +311,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		backgroundCommandRunning: false,
 		backgroundCommandTaskId: undefined,
 		foregroundCommandRunning: false,
+		backgroundTasks: [],
 		lastDismissedCliBannerVersion: 0,
 		backgroundEditEnabled: false,
 		showFeatureTips: false,

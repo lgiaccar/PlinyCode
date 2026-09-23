@@ -622,6 +622,75 @@ describe("SdkSessionLifecycle", () => {
 
 		expect(send).toHaveBeenCalledWith(expect.objectContaining({ prompt: "hello" }))
 	})
+	describe("background sessions", () => {
+		it("detaches the active session without stopping it and can adopt it back", async () => {
+			const sdkHost = makeSdkHost({ startResult: { sessionId: "task-1" } })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle()
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+			const session = lifecycle.getActiveSession()
+
+			expect(lifecycle.detachActiveSession()).toBe(session)
+			expect(lifecycle.getActiveSession()).toBeUndefined()
+			expect(sdkHost.stop).not.toHaveBeenCalled()
+
+			lifecycle.adoptSession(session as NonNullable<typeof session>)
+			expect(lifecycle.getActiveSession()).toBe(session)
+		})
+
+		it("refuses to adopt while another session is active", async () => {
+			const sdkHost = makeSdkHost({ startResult: { sessionId: "task-1" } })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle()
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+			const other = { ...lifecycle.getActiveSession(), sessionId: "task-2" } as NonNullable<
+				ReturnType<SdkSessionLifecycle["getActiveSession"]>
+			>
+
+			expect(() => lifecycle.adoptSession(other)).toThrow(/another one is active/)
+		})
+
+		it("stops a detached session without touching the active one", async () => {
+			const sdkHost = makeSdkHost({
+				start: vi.fn().mockResolvedValueOnce({ sessionId: "task-1" }).mockResolvedValueOnce({ sessionId: "task-2" }),
+			})
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle()
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+			const background = lifecycle.detachActiveSession() as NonNullable<ReturnType<SdkSessionLifecycle["getActiveSession"]>>
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			await lifecycle.stopSession(background, "test")
+
+			expect(sdkHost.stop).toHaveBeenCalledWith("task-1")
+			expect(sdkHost.stop).not.toHaveBeenCalledWith("task-2")
+			expect(lifecycle.getActiveSession()?.sessionId).toBe("task-2")
+		})
+
+		it("reports a send that settles after its session moved to the background", async () => {
+			let finishSend!: () => void
+			const sdkHost = makeSdkHost({
+				startResult: { sessionId: "task-1" },
+				send: vi.fn(() => new Promise<void>((resolve) => (finishSend = resolve))),
+			})
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const onDetachedSendSettled = vi.fn()
+			const onSendComplete = vi.fn()
+			const lifecycle = makeLifecycle({ onDetachedSendSettled, onSendComplete })
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			const { sdkHost: host } = await lifecycle.startNewSession({} as any)
+
+			lifecycle.fireAndForgetSend(host, "task-1", "hello")
+			lifecycle.detachActiveSession()
+			finishSend()
+			await vi.waitFor(() => expect(onDetachedSendSettled).toHaveBeenCalledWith("task-1", undefined))
+			expect(onSendComplete).not.toHaveBeenCalled()
+		})
+	})
 })
 
 function makeLifecycle(overrides: Partial<ConstructorParameters<typeof SdkSessionLifecycle>[0]> = {}) {

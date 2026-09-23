@@ -8,6 +8,8 @@ import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import { buildToolApprovalDenialReason } from "./tool-approval-denial"
 
 export interface ToolApprovalRequest {
+	/** Root session the tool call belongs to (delegated sub-agents inherit it). */
+	sessionId?: string
 	agentId: string
 	conversationId: string
 	iteration: number
@@ -15,6 +17,32 @@ export interface ToolApprovalRequest {
 	toolName: string
 	input: unknown
 	policy: { enabled?: boolean; autoApprove?: boolean }
+}
+
+export type ToolApprovalResult = { approved: boolean; reason?: string }
+
+/** A tool approval awaiting the user, detached from the chat view. */
+export interface HeldToolApproval {
+	request: ToolApprovalRequest
+	resolve: (result: ToolApprovalResult) => void
+}
+
+/** An ask_question awaiting the user, detached from the chat view. */
+export interface HeldQuestion {
+	question: string
+	options: string[]
+	context: unknown
+	resolve: (answer: string) => void
+}
+
+/**
+ * Where approvals and questions from a task running in the background go.
+ * They are held (not shown) until the user reopens that task.
+ */
+export interface BackgroundInteractionSink {
+	has(sessionId: string | undefined): boolean
+	holdApproval(sessionId: string, request: ToolApprovalRequest): Promise<ToolApprovalResult>
+	holdQuestion(sessionId: string, question: string, options: string[], context: unknown): Promise<string>
 }
 
 export interface SdkInteractionCoordinatorOptions {
@@ -47,11 +75,15 @@ export interface SdkInteractionCoordinatorOptions {
 	 * shown in tool-approval asks (display only). Optional for tests.
 	 */
 	getCwd?: () => string | undefined
+	/** Tasks running in the background; their interactions are held, not shown. */
+	background?: BackgroundInteractionSink
 }
 
 export class SdkInteractionCoordinator {
 	private pendingAskResolve: ((answer: string) => void) | undefined
+	private pendingAskData: Omit<HeldQuestion, "resolve"> | undefined
 	private pendingToolApprovalResolve: ((result: { approved: boolean; reason?: string }) => void) | undefined
+	private pendingToolApprovalRequest: ToolApprovalRequest | undefined
 	private pendingToolApprovalMessage:
 		| {
 				toolCallId: string
@@ -97,6 +129,10 @@ export class SdkInteractionCoordinator {
 			return { approved: true }
 		}
 
+		if (request.sessionId && this.options.background?.has(request.sessionId)) {
+			return this.options.background.holdApproval(request.sessionId, request)
+		}
+
 		// Open the edit diff preview before the Approve/Reject buttons render. This is the only
 		// pre-execution point where the adapter has the full tool input (the SDK emits the
 		// tool's content events only after approval resolves).
@@ -122,6 +158,7 @@ export class SdkInteractionCoordinator {
 
 		return new Promise<{ approved: boolean; reason?: string }>((resolve) => {
 			this.pendingToolApprovalResolve = resolve
+			this.pendingToolApprovalRequest = request
 			this.pendingToolApprovalMessage = {
 				toolCallId: request.toolCallId,
 				messageTs: toolAskMessage.ts,
@@ -130,7 +167,12 @@ export class SdkInteractionCoordinator {
 		})
 	}
 
-	async handleAskQuestion(question: string, options: string[], _context: unknown): Promise<string> {
+	async handleAskQuestion(question: string, options: string[], context: unknown): Promise<string> {
+		const sessionId = (context as { sessionId?: string } | undefined)?.sessionId
+		if (sessionId && this.options.background?.has(sessionId)) {
+			return this.options.background.holdQuestion(sessionId, question, options, context)
+		}
+
 		const askData: ClineAskQuestion = {
 			question,
 			options: options?.length ? options : undefined,
@@ -152,6 +194,7 @@ export class SdkInteractionCoordinator {
 
 		return new Promise<string>((resolve) => {
 			this.pendingAskResolve = resolve
+			this.pendingAskData = { question, options, context }
 		})
 	}
 
@@ -177,6 +220,7 @@ export class SdkInteractionCoordinator {
 
 		this.pendingToolApprovalResolve = undefined
 		this.pendingToolApprovalMessage = undefined
+		this.pendingToolApprovalRequest = undefined
 
 		const approved = responseType === "yesButtonClicked"
 		Logger.log(`[SdkController] Resolving pending tool approval: approved=${approved} (responseType=${responseType})`)
@@ -222,6 +266,7 @@ export class SdkInteractionCoordinator {
 
 		const resolve = this.pendingAskResolve
 		this.pendingAskResolve = undefined
+		this.pendingAskData = undefined
 		const responseText = prompt ?? ""
 		Logger.log(`[SdkController] Resolving pending ask_question with: "${responseText.substring(0, 80)}"`)
 
@@ -248,6 +293,7 @@ export class SdkInteractionCoordinator {
 	clearPending(reason: string): void {
 		const resolveAsk = this.pendingAskResolve
 		this.pendingAskResolve = undefined
+		this.pendingAskData = undefined
 		// ask_question is awaiting this promise inside the outgoing agent run. Settle it
 		// before session teardown so the run can unwind instead of remaining suspended;
 		// use an empty answer so the lifecycle reason is not presented as user input.
@@ -255,6 +301,7 @@ export class SdkInteractionCoordinator {
 
 		const pendingMessage = this.pendingToolApprovalMessage
 		this.pendingToolApprovalMessage = undefined
+		this.pendingToolApprovalRequest = undefined
 		if (this.pendingToolApprovalResolve) {
 			// Record before resolving: the denial unblocks the core, which emits the
 			// tool's lifecycle events before the caller's abort lands. Unless the
@@ -265,6 +312,42 @@ export class SdkInteractionCoordinator {
 			}
 			this.pendingToolApprovalResolve({ approved: false, reason })
 			this.pendingToolApprovalResolve = undefined
+		}
+	}
+
+	/**
+	 * Take the pending approval/question out of the chat view WITHOUT settling
+	 * it, so the task that asked can keep waiting in the background. The caller
+	 * owns the returned resolvers and replays them when the task is reopened.
+	 */
+	detachPending(): { approval?: HeldToolApproval; question?: HeldQuestion } {
+		const approval =
+			this.pendingToolApprovalResolve && this.pendingToolApprovalRequest
+				? { request: this.pendingToolApprovalRequest, resolve: this.pendingToolApprovalResolve }
+				: undefined
+		const question =
+			this.pendingAskResolve && this.pendingAskData
+				? { ...this.pendingAskData, resolve: this.pendingAskResolve }
+				: undefined
+		this.pendingToolApprovalResolve = undefined
+		this.pendingToolApprovalRequest = undefined
+		this.pendingToolApprovalMessage = undefined
+		this.pendingAskResolve = undefined
+		this.pendingAskData = undefined
+		return { approval, question }
+	}
+
+	/**
+	 * Show a held approval/question in the chat view again (the task was
+	 * reopened) and settle the original resolver with the user's answer.
+	 */
+	async replayHeld(held: { approvals: HeldToolApproval[]; questions: HeldQuestion[] }): Promise<void> {
+		// One at a time: the chat view shows a single pending ask.
+		for (const { request, resolve } of held.approvals) {
+			resolve(await this.handleRequestToolApproval(request).catch(() => ({ approved: false, reason: "Approval failed" })))
+		}
+		for (const { question, options, context, resolve } of held.questions) {
+			resolve(await this.handleAskQuestion(question, options, context).catch(() => ""))
 		}
 	}
 

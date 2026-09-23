@@ -87,7 +87,7 @@ export interface TranslationResult {
 
 type NormalizedUsage = NonNullable<TranslationResult["usage"]>
 
-function normalizeUsageEvent(usageEvent: {
+export function normalizeUsageEvent(usageEvent: {
 	inputTokens?: number
 	outputTokens?: number
 	cacheReadTokens?: number

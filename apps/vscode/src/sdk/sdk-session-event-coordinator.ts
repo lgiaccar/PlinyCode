@@ -39,6 +39,11 @@ export interface SdkSessionEventCoordinatorOptions {
 	getTurnPhase?: () => TurnPhase
 	captureProviderApiError?: (event: ProviderFailureTelemetry) => void
 	beginProviderFailureTelemetryTurn?: () => void
+	/**
+	 * Tasks running in the background. Their events are consumed there and never
+	 * reach the chat view (translator, turn phase, transcript).
+	 */
+	background?: { handleEvent(event: CoreSessionEvent): boolean }
 }
 
 export class SdkSessionEventCoordinator {
@@ -50,6 +55,10 @@ export class SdkSessionEventCoordinator {
 
 	async handleSessionEvent(event: CoreSessionEvent): Promise<void> {
 		this.logQueueEvents(event)
+
+		if (this.options.background?.handleEvent(event)) {
+			return
+		}
 
 		const activeSession = this.options.sessions.getActiveSession()
 		if (!activeSession || event.payload.sessionId !== activeSession.sessionId) {

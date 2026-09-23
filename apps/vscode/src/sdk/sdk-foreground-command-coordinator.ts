@@ -24,16 +24,27 @@ export interface ForegroundCommandHandle {
 export interface SdkForegroundCommandCoordinatorOptions {
 	/** Called whenever isRunning flips; used to push the flag to the webview. */
 	onRunningChanged?: (running: boolean) => void
+	/**
+	 * Whether a session is the one shown in the chat view. Commands of tasks
+	 * running in the background do not drive "Proceed While Running" and do not
+	 * reveal their terminal. Defaults to every session being shown.
+	 */
+	isForegroundSession?: (sessionId: string | undefined) => boolean
 }
 
 export class SdkForegroundCommandCoordinator {
-	private readonly handles = new Set<ForegroundCommandHandle>()
+	private readonly handles = new Map<ForegroundCommandHandle, string | undefined>()
 
 	constructor(private readonly options: SdkForegroundCommandCoordinatorOptions = {}) {}
 
-	/** Whether any foreground command is currently awaited by a tool call. */
+	/** Whether a command of the task shown in the chat view is awaited by a tool call. */
 	get isRunning(): boolean {
-		return this.handles.size > 0
+		return this.foregroundHandles().length > 0
+	}
+
+	/** Whether a command of this session should reveal its terminal. */
+	isForegroundSession(sessionId: string | undefined): boolean {
+		return this.options.isForegroundSession?.(sessionId) ?? true
 	}
 
 	/**
@@ -41,9 +52,9 @@ export class SdkForegroundCommandCoordinator {
 	 * function the caller must invoke when the execution settles (completes,
 	 * fails, aborts, or detaches) — typically from a `finally` block.
 	 */
-	register(handle: ForegroundCommandHandle): () => void {
+	register(handle: ForegroundCommandHandle, sessionId?: string): () => void {
 		const wasRunning = this.isRunning
-		this.handles.add(handle)
+		this.handles.set(handle, sessionId)
 		this.notifyIfChanged(wasRunning)
 		return () => {
 			const wasRunningBefore = this.isRunning
@@ -61,7 +72,7 @@ export class SdkForegroundCommandCoordinator {
 	 * @returns the number of commands detached (0 when none were running).
 	 */
 	proceedWhileRunning(): number {
-		const handles = [...this.handles]
+		const handles = this.foregroundHandles()
 		for (const handle of handles) {
 			try {
 				handle.detach()
@@ -70,6 +81,10 @@ export class SdkForegroundCommandCoordinator {
 			}
 		}
 		return handles.length
+	}
+
+	private foregroundHandles(): ForegroundCommandHandle[] {
+		return [...this.handles].filter(([, sessionId]) => this.isForegroundSession(sessionId)).map(([handle]) => handle)
 	}
 
 	private notifyIfChanged(wasRunning: boolean): void {

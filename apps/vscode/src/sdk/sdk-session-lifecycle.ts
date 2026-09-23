@@ -56,6 +56,11 @@ export interface SdkSessionLifecycleOptions {
 	 */
 	consumeModeSwitchNotice?: (sessionId: string) => ModeSwitchNotice | null
 	onDidBecomeIdle?: () => void
+	/**
+	 * A send settled after its session left the foreground (it now runs in the
+	 * background). The background registry treats it as a turn end.
+	 */
+	onDetachedSendSettled?: (sessionId: string, error?: unknown) => void
 }
 
 export class SdkSessionLifecycle {
@@ -94,6 +99,33 @@ export class SdkSessionLifecycle {
 		const activeSession = this.activeSession
 		this.activeSession = undefined
 		return activeSession
+	}
+
+	/**
+	 * Take the active session out of the foreground WITHOUT stopping it, so it
+	 * can keep running in the background. Its events keep flowing through the
+	 * shared host subscription; the caller routes them.
+	 */
+	detachActiveSession(): ActiveSession | undefined {
+		return this.clearActiveSessionReference()
+	}
+
+	/** Make a detached (background) session the active one again. */
+	adoptSession(session: ActiveSession): void {
+		if (this.activeSession && this.activeSession !== session) {
+			throw new Error("Cannot adopt a session while another one is active")
+		}
+		this.activeSession = session
+	}
+
+	/** Stop a session that is not the active one (a background task). */
+	async stopSession(session: ActiveSession, reason: string): Promise<void> {
+		if (this.activeSession === session) {
+			await this.endActiveSession(reason)
+			return
+		}
+		forgetSession(session.sessionId)
+		await this.trackSessionStop(session.sdkHost, session.sessionId, reason)
 	}
 
 	async endActiveSession(
@@ -379,11 +411,12 @@ export class SdkSessionLifecycle {
 		// auto-continued run to isRunning=false, which makes the event coordinator
 		// treat the new turn's completion as a cancelled-turn straggler).
 		const sessionAtSend = this.activeSession
-		const isSuperseded = (label: string): boolean => {
+		const isSuperseded = (label: string, error?: unknown): boolean => {
 			if (this.activeSession === sessionAtSend) {
 				return false
 			}
 			Logger.debug(`[SdkController] Ignoring ${label} of superseded send for session: ${sessionId}`)
+			this.options.onDetachedSendSettled?.(sessionId, error)
 			return true
 		}
 		// Mark a preceding user-initiated mode switch on this message so the model
@@ -420,7 +453,7 @@ export class SdkSessionLifecycle {
 					Logger.debug(`[SdkController] Agent turn aborted (expected): ${sessionId}`)
 					return
 				}
-				if (isSuperseded("failure")) {
+				if (isSuperseded("failure", error)) {
 					return
 				}
 				Logger.error("[SdkController] Agent turn failed:", error)

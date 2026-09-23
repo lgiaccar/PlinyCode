@@ -28,10 +28,11 @@ vi.mock("@/services/grpc-client", () => ({
 
 const mocks = vi.hoisted(() => ({
 	platform: "linux" as string,
+	backgroundTasks: [] as { id: string; status: "running" | "needs_attention" }[],
 }))
 
 vi.mock("@/context/ExtensionStateContext", () => ({
-	useExtensionState: () => ({ platform: mocks.platform }),
+	useExtensionState: () => ({ platform: mocks.platform, backgroundTasks: mocks.backgroundTasks }),
 }))
 
 function makeItem(overrides: Partial<TaskItem> = {}): TaskItem {
@@ -59,6 +60,38 @@ const noop = () => {}
 describe("HistoryViewItem", () => {
 	beforeEach(() => {
 		mocks.platform = "linux"
+		mocks.backgroundTasks = []
+	})
+
+	function renderItem() {
+		render(
+			<HistoryViewItem
+				handleDeleteHistoryItem={noop}
+				handleHistorySelect={noop}
+				index={0}
+				item={makeItem()}
+				pendingFavoriteToggles={{}}
+				selectedItems={[]}
+				toggleFavorite={noop}
+			/>,
+		)
+	}
+
+	it("shows no badge for a task that is not running in the background", () => {
+		renderItem()
+		expect(screen.queryByTestId("background-task-badge")).toBeNull()
+	})
+
+	it("badges a task running in the background", () => {
+		mocks.backgroundTasks = [{ id: "task-1", status: "running" }]
+		renderItem()
+		expect(screen.getByTestId("background-task-badge").textContent).toBe("Running")
+	})
+
+	it("badges a background task that waits for the user", () => {
+		mocks.backgroundTasks = [{ id: "task-1", status: "needs_attention" }]
+		renderItem()
+		expect(screen.getByTestId("background-task-badge").textContent).toBe("Needs approval")
 	})
 
 	it("shows the workspace basename and a full-path tooltip", () => {
