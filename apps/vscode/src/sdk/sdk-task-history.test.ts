@@ -131,14 +131,12 @@ describe("SdkTaskHistory", () => {
 
 		const historyItem = sessionHistoryRecordToHistoryItem(record)
 		expect(historyItem.cwdOnTaskInitialization).toBe("/repo/apps/web")
+		expect(historyItem.workspaceRootOnTaskInitialization).toBe("/repo")
 
-		// The getTaskHistory RPC handler in SdkController.ts spreads these
-		// fields onto each TaskItem row alongside id/ts/task; workspaceRoot must
-		// carry the same value HistoryItem exposes as cwdOnTaskInitialization so
-		// the "Workspace Only" filter (which compares against this same value)
-		// and the History list display never disagree.
+		// The getTaskHistory RPC handler spreads sessionHistoryRecordToTaskItemFields
+		// onto each TaskItem row; workspaceRoot prefers the session workspace root over cwd.
 		const taskItemFields = sessionHistoryRecordToTaskItemFields(record)
-		expect(taskItemFields.workspaceRoot).toBe(historyItem.cwdOnTaskInitialization)
+		expect(taskItemFields.workspaceRoot).toBe("/repo")
 	})
 
 	it("falls back to workspaceRoot for the TaskItem workspace field when cwd is unset", () => {

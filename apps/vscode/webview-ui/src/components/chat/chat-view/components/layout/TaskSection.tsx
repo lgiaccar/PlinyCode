@@ -4,6 +4,7 @@ import TaskHeader from "@/components/chat/task-header/TaskHeader"
 import { MessageHandlers } from "../../types/chatTypes"
 
 interface TaskSectionProps {
+	clineMessages: ClineMessage[]
 	task: ClineMessage
 	apiMetrics: {
 		totalTokensIn: number
@@ -27,6 +28,7 @@ interface TaskSectionProps {
  * Includes the task header and manages task-specific UI
  */
 export const TaskSection: React.FC<TaskSectionProps> = ({
+	clineMessages,
 	task,
 	apiMetrics,
 	lastApiReqTotalTokens,
@@ -38,6 +40,7 @@ export const TaskSection: React.FC<TaskSectionProps> = ({
 		<TaskHeader
 			cacheReads={apiMetrics.totalCacheReads}
 			cacheWrites={apiMetrics.totalCacheWrites}
+			clineMessages={clineMessages}
 			contextBreakdown={lastContextBreakdown}
 			doesModelSupportPromptCache={selectedModelInfo.supportsPromptCache}
 			hasEstimatedUsage={apiMetrics.hasEstimatedUsage}

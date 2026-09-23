@@ -2,6 +2,7 @@ import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import type { ClineAskUseMcpServer, ClineMessage, ClinePlanModeResponse, ClineSayTool } from "@shared/ExtensionMessage"
 import { getApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem } from "@shared/HistoryItem"
+import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
 
 /** Default number of output lines kept before a fenced block is truncated. */
 export const DEFAULT_MAX_OUTPUT_LINES = 200
@@ -263,8 +264,9 @@ export function renderConversationMarkdown(
 	out.push(`# ${firstLine(historyItem.task) || "PlinyCode Conversation"}`, "")
 
 	const metadata: [string, string][] = [["Date", formatDate(historyItem.ts)]]
-	if (historyItem.cwdOnTaskInitialization) {
-		metadata.push(["Workspace", historyItem.cwdOnTaskInitialization])
+	const workspacePath = historyItemWorkspaceDisplayPath(historyItem)
+	if (workspacePath) {
+		metadata.push(["Workspace", workspacePath])
 	}
 	if (historyItem.modelId) {
 		metadata.push(["Model", historyItem.modelId])

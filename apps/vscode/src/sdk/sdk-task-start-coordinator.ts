@@ -43,7 +43,13 @@ export interface SdkTaskStartCoordinatorOptions {
 			mode: Mode
 		},
 	) => StartInput
-	createHistoryItemFromSession: (sessionId: string, prompt: string, modelId?: string, cwd?: string) => HistoryItem
+	createHistoryItemFromSession: (
+		sessionId: string,
+		prompt: string,
+		modelId?: string,
+		cwd?: string,
+		workspaceRoot?: string,
+	) => HistoryItem
 	clearTask: () => Promise<void>
 	setTask: (task: TaskProxy | undefined) => void
 	onAskResponse: (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
@@ -145,6 +151,7 @@ export class SdkTaskStartCoordinator {
 				prompt ?? "",
 				configWithSessionId.modelId,
 				cwd,
+				configWithSessionId.workspaceRoot ?? cwd,
 			)
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 			await this.options.postStateToWebview()

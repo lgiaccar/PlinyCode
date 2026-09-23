@@ -1700,7 +1700,18 @@ export class Controller {
 			)
 			this.task = task
 
-			const newHistoryItem = createHistoryItemFromSession(startResult.sessionId, historyTitle, config.modelId, cwd)
+			const workspaceRoot =
+				sessionRecord?.workspaceRoot?.trim() ||
+				historyItem?.workspaceRootOnTaskInitialization?.trim() ||
+				config.workspaceRoot?.trim() ||
+				fallbackCwd
+			const newHistoryItem = createHistoryItemFromSession(
+				startResult.sessionId,
+				historyTitle,
+				config.modelId,
+				cwd,
+				workspaceRoot,
+			)
 			if (sourceSessionId !== startResult.sessionId) {
 				try {
 					await this.taskHistory.deleteTaskFromState(sourceSessionId)
@@ -1819,7 +1830,13 @@ export class Controller {
 		)
 		this.task = task
 
-		const newHistoryItem = createHistoryItemFromSession(restored.sessionId, historyTitle, config?.modelId ?? "", cwd)
+		const newHistoryItem = createHistoryItemFromSession(
+			restored.sessionId,
+			historyTitle,
+			config?.modelId ?? "",
+			cwd,
+			config?.workspaceRoot ?? cwd,
+		)
 		await this.taskHistory.updateTaskHistoryItem(newHistoryItem)
 
 		const visibleMessages = currentMessages.slice(0, target.index)
@@ -2199,7 +2216,7 @@ export class Controller {
 			}
 
 			if (currentWorkspaceOnly && workspacePath) {
-				const sessionWorkspacePath = item.cwd ?? item.workspaceRoot
+				const sessionWorkspacePath = item.workspaceRoot || item.cwd
 				if (!sessionWorkspacePath || !arePathsEqual(sessionWorkspacePath, workspacePath)) {
 					return false
 				}

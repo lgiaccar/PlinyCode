@@ -1211,7 +1211,15 @@ export function updateHistoryItem(item: HistoryItem, dataDir?: string): HistoryI
 /**
  * Create a new HistoryItem from a session start result.
  */
-export function createHistoryItemFromSession(sessionId: string, prompt: string, modelId?: string, cwd?: string): HistoryItem {
+export function createHistoryItemFromSession(
+	sessionId: string,
+	prompt: string,
+	modelId?: string,
+	cwd?: string,
+	workspaceRoot?: string,
+): HistoryItem {
+	const trimmedCwd = cwd?.trim() || undefined
+	const trimmedRoot = workspaceRoot?.trim() || trimmedCwd
 	return {
 		id: sessionId,
 		ts: Date.now(),
@@ -1220,6 +1228,7 @@ export function createHistoryItemFromSession(sessionId: string, prompt: string, 
 		tokensOut: 0,
 		totalCost: 0,
 		modelId,
-		cwdOnTaskInitialization: cwd,
+		cwdOnTaskInitialization: trimmedCwd,
+		workspaceRootOnTaskInitialization: trimmedRoot,
 	}
 }
