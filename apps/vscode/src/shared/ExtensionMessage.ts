@@ -103,6 +103,11 @@ export interface ExtensionState {
 	 * run_commands tool call. Drives the "Proceed While Running" button.
 	 */
 	foregroundCommandRunning?: boolean
+	/**
+	 * Tasks still running in the background after the user started or opened
+	 * another task. `needs_attention`: waiting for an approval or an answer.
+	 */
+	backgroundTasks?: { id: string; status: "running" | "needs_attention" }[]
 	lastCompletedCommandTs?: number
 	userInfo?: UserInfo
 	version: string

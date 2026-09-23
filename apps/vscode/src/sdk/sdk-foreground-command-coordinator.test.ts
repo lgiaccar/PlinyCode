@@ -71,4 +71,27 @@ describe("SdkForegroundCommandCoordinator", () => {
 		expect(coordinator.proceedWhileRunning()).toBe(2)
 		expect(detach2).toHaveBeenCalledTimes(1)
 	})
+	it("ignores commands of tasks running in the background", () => {
+		const background = new Set(["bg"])
+		const coordinator = new SdkForegroundCommandCoordinator({
+			isForegroundSession: (sessionId) => !background.has(sessionId ?? ""),
+		})
+		const backgroundDetach = vi.fn()
+		coordinator.register({ detach: backgroundDetach }, "bg")
+
+		expect(coordinator.isRunning).toBe(false)
+		expect(coordinator.isForegroundSession("bg")).toBe(false)
+		expect(coordinator.proceedWhileRunning()).toBe(0)
+		expect(backgroundDetach).not.toHaveBeenCalled()
+
+		const foregroundDetach = vi.fn()
+		coordinator.register({ detach: foregroundDetach }, "fg")
+		expect(coordinator.isRunning).toBe(true)
+		expect(coordinator.proceedWhileRunning()).toBe(1)
+		expect(foregroundDetach).toHaveBeenCalled()
+
+		// Reopening the task brings its command back to the foreground.
+		background.delete("bg")
+		expect(coordinator.proceedWhileRunning()).toBe(2)
+	})
 })

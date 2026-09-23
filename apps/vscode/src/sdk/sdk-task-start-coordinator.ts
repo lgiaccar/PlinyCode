@@ -50,7 +50,8 @@ export interface SdkTaskStartCoordinatorOptions {
 		cwd?: string,
 		workspaceRoot?: string,
 	) => HistoryItem
-	clearTask: () => Promise<void>
+	/** detachRunning keeps a running task going in the background. */
+	clearTask: (options?: { detachRunning?: boolean }) => Promise<void>
 	setTask: (task: TaskProxy | undefined) => void
 	onAskResponse: (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
 	onCancelTask: () => Promise<void>
@@ -79,7 +80,7 @@ export class SdkTaskStartCoordinator {
 		let providerId: string | undefined
 		let modelId: string | undefined
 		try {
-			await this.options.clearTask()
+			await this.options.clearTask({ detachRunning: true })
 
 			const cwd = await this.options.getWorkspaceRoot()
 			const mode = this.getCurrentMode()

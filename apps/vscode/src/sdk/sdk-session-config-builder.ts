@@ -1,4 +1,5 @@
 import type { CoreSessionConfig } from "@plinycode/core"
+import { createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
@@ -19,6 +20,11 @@ export interface SdkSessionConfigBuilderOptions {
 	emitRow?: (message: ClineMessage) => void
 	/** Mints unique, monotonic message ids from the shared authority. */
 	nextMessageTs?: () => number
+	/**
+	 * Whether a session runs in the background. Its hook, routing and
+	 * mistake-limit rows are dropped instead of landing in the displayed task.
+	 */
+	isBackgroundSession?: (sessionId: string | undefined) => boolean
 }
 
 /**
@@ -33,17 +39,41 @@ export class SdkSessionConfigBuilder {
 
 	async build(input: SessionConfigInput): Promise<Awaited<ReturnType<typeof buildSessionConfig>>> {
 		const config = await buildSessionConfig(input)
-		if (this.options.onConsecutiveMistakeLimitReached) {
-			config.onConsecutiveMistakeLimitReached = this.options.onConsecutiveMistakeLimitReached
+		// A session id is fixed up front so per-session emitters below can tell
+		// whether their session runs in the background. Callers that reuse an
+		// existing id overwrite config.sessionId; the emitters read it lazily.
+		config.sessionId = config.sessionId?.trim() || createSessionId()
+		const isBackground = () => this.options.isBackgroundSession?.(config.sessionId) === true
+
+		const onMistakeLimit = this.options.onConsecutiveMistakeLimitReached
+		if (onMistakeLimit) {
+			config.onConsecutiveMistakeLimitReached = (context) =>
+				isBackground() ? { action: "stop", reason: `mistake_limit_reached: ${context.reason}` } : onMistakeLimit(context)
 		}
 
-		config.hooks = buildAgentHooks(this.options.stateManager, this.options.emitHookMessage, input.cwd)
+		const emitHookMessage = this.options.emitHookMessage
+		config.hooks = buildAgentHooks(
+			this.options.stateManager,
+			(message) => {
+				if (!isBackground()) {
+					emitHookMessage(message)
+				}
+			},
+			input.cwd,
+		)
 
 		// FreeAuto routing. Installed for every session: it is a passthrough
 		// unless the selected model is the virtual router, and installing it
 		// unconditionally means switching to FreeAuto mid-task works without a
 		// session rebuild.
-		const emitRow = this.options.emitRow
+		const baseEmitRow = this.options.emitRow
+		const emitRow = baseEmitRow
+			? (message: ClineMessage) => {
+					if (!isBackground()) {
+						baseEmitRow(message)
+					}
+				}
+			: undefined
 		const nextMessageTs = this.options.nextMessageTs
 		if (emitRow && nextMessageTs) {
 			installRouter(config, {

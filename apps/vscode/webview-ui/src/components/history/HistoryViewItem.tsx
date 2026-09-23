@@ -23,6 +23,7 @@ import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { formatLargeNumber, formatSize } from "@/utils/format"
+import { BackgroundTaskBadge } from "./BackgroundTaskBadge"
 
 type HistoryViewItemProps = {
 	item: TaskItem
@@ -109,6 +110,7 @@ const HistoryViewItem = ({
 					<div className="line-clamp-1 overflow-hidden break-words whitespace-pre-wrap flex-1 min-w-0">
 						<span className="ph-no-capture">{item.task}</span>
 					</div>
+					<BackgroundTaskBadge taskId={item.id} />
 					{item.isLegacy && (
 						<span className="text-xs uppercase rounded px-1.5 py-0.5 bg-accent/20 text-description flex-shrink-0">
 							Legacy

@@ -675,4 +675,20 @@ describe("SdkDiffEditCoordinator", () => {
 		expect(previews).toHaveLength(0)
 		expect(showEditedFile).not.toHaveBeenCalled()
 	})
+	it("applies a background task's edits headlessly: no preview and no file reveal", async () => {
+		await writeFile("a.ts", "old content")
+		const backgroundCoordinator = makeCoordinator({
+			isBackgroundEditEnabled: (sessionId) => sessionId === "bg",
+		})
+		const input = { path: "a.ts", old_text: "old", new_text: "new" }
+
+		const result = await backgroundCoordinator.executeEditorTool(input, tempDir, {
+			...makeContext("tc1"),
+			sessionId: "bg",
+		})
+
+		expect(result).toBe("fallback editor result")
+		expect(previews).toHaveLength(0)
+		expect(showEditedFile).not.toHaveBeenCalled()
+	})
 })

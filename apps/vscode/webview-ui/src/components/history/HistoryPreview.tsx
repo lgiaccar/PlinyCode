@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { TaskServiceClient } from "@/services/grpc-client"
+import { BackgroundTaskBadge } from "./BackgroundTaskBadge"
 
 type HistoryPreviewProps = {
 	showHistoryView: () => void
@@ -195,6 +196,7 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 													gap: 4,
 												}}>
 												<div className="history-task-description ph-no-capture">{item.task}</div>
+												<BackgroundTaskBadge className="self-start" taskId={item.id} />
 												<Tooltip>
 													<TooltipContent className="max-w-xs" side="bottom">
 														{workspacePath || "Unknown workspace"}

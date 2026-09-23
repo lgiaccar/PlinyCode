@@ -390,6 +390,19 @@ describe("SdkSessionEventCoordinator", () => {
 			failurePhase: PROVIDER_FAILURE_PHASE.STREAMING,
 		})
 	})
+	it("leaves events of a background task to the background registry", async () => {
+		const { coordinator, options, event } = makeCoordinator()
+		const background = { handleEvent: vi.fn(() => true) }
+		const withBackground = new SdkSessionEventCoordinator({ ...options, background })
+
+		await withBackground.handleSessionEvent(event)
+
+		expect(background.handleEvent).toHaveBeenCalledWith(event)
+		expect(options.translateSessionEvent).not.toHaveBeenCalled()
+		expect(options.setTurnPhase).not.toHaveBeenCalled()
+		expect(options.sessions.setRunning).not.toHaveBeenCalled()
+		void coordinator
+	})
 })
 
 function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {

@@ -1,6 +1,7 @@
 import type { ClineMessage, TurnPhase } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { Logger } from "@/shared/services/Logger"
+import type { SdkBackgroundSessions } from "./sdk-background-sessions"
 import type { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import { isAbortError, type SdkSessionLifecycle } from "./sdk-session-lifecycle"
@@ -47,6 +48,20 @@ export interface SdkTaskControlCoordinatorOptions {
 	 * resources the finished task left behind (idle terminals) can be closed.
 	 */
 	onTaskEnded?: () => void
+	/**
+	 * Tasks running in the background. When provided, a running task keeps
+	 * running when the user starts a new task or opens another one.
+	 */
+	background?: Pick<SdkBackgroundSessions, "add" | "take" | "isFull">
+	/** Closes edit previews of the task leaving the chat view. */
+	discardPreviews?: () => Promise<void>
+	/** The background limit was reached, so the running task is stopped instead. */
+	onBackgroundLimitReached?: () => void
+}
+
+export interface ClearTaskOptions {
+	/** Keep a running task going in the background instead of stopping it. */
+	detachRunning?: boolean
 }
 
 export class SdkTaskControlCoordinator {
@@ -112,13 +127,15 @@ export class SdkTaskControlCoordinator {
 		Logger.log(`[SdkController] Task cancelled: ${sessionId}`)
 	}
 
-	async clearTask(): Promise<void> {
+	async clearTask(options: ClearTaskOptions = {}): Promise<void> {
 		// Supersede any in-flight showTaskWithId so it cannot re-install a task
 		// after the user cleared the view (e.g. clicked New Task).
 		this.taskViewGeneration++
-		this.options.interactions.clearPending("Task cleared")
-
-		await this.options.sessions.endActiveSession("clearTask")
+		const detached = options.detachRunning ? await this.detachRunningTask() : false
+		if (!detached) {
+			this.options.interactions.clearPending("Task cleared")
+			await this.options.sessions.endActiveSession("clearTask")
+		}
 
 		const task = this.options.getTask()
 		if (task) {
@@ -185,20 +202,29 @@ export class SdkTaskControlCoordinator {
 		}
 
 		try {
-			// Reject any outstanding approval before tearing down the old session. Approval
-			// resolvers live on the shared interaction coordinator, so ending the session
-			// alone does not discard them; if one leaks across this task switch, the first
-			// message sent in the newly selected task is consumed as the old task's response.
-			this.options.interactions.clearPending("Task switched")
-
-			// When reopening the task that is currently active, wait for its stop to
-			// land so the persisted session status read below reflects how the last
-			// turn actually ended (completed vs cancelled) instead of a transient
-			// non-terminal status.
 			const activeSession = this.options.sessions.getActiveSession()
-			await this.options.sessions.endActiveSession("showTaskWithId", {
-				awaitStop: activeSession?.sessionId === taskId,
-			})
+			if (activeSession?.sessionId === taskId && activeSession.isRunning && this.options.getTask()?.taskId === taskId) {
+				// Already showing this running task: nothing to switch.
+				return historyItem
+			}
+
+			// A running task keeps going in the background; anything else is stopped.
+			const detached = activeSession?.sessionId !== taskId && (await this.detachRunningTask())
+			if (!detached) {
+				// Reject any outstanding approval before tearing down the old session. Approval
+				// resolvers live on the shared interaction coordinator, so ending the session
+				// alone does not discard them; if one leaks across this task switch, the first
+				// message sent in the newly selected task is consumed as the old task's response.
+				this.options.interactions.clearPending("Task switched")
+
+				// When reopening the task that is currently active, wait for its stop to
+				// land so the persisted session status read below reflects how the last
+				// turn actually ended (completed vs cancelled) instead of a transient
+				// non-terminal status.
+				await this.options.sessions.endActiveSession("showTaskWithId", {
+					awaitStop: activeSession?.sessionId === taskId,
+				})
+			}
 			if (activeSession) {
 				this.releaseTaskResources()
 			}
@@ -231,6 +257,38 @@ export class SdkTaskControlCoordinator {
 				return historyItem
 			}
 			const messages = this.options.messages.finalizeMessagesForSave(rawMessages)
+
+			// Reopening a task that runs in the background: take its live session
+			// back instead of offering to resume it.
+			let reattached = this.options.background?.take(taskId)
+			if (reattached?.turnEnded) {
+				// Finished between its last event and the idle check: open it normally.
+				await this.options.sessions.stopSession(reattached.session, "reopenFinishedBackgroundTask")
+				reattached = undefined
+			}
+			if (reattached) {
+				if (isSuperseded()) {
+					this.options.background?.add(reattached.session, historyItem.task, reattached.held)
+					return historyItem
+				}
+				this.options.sessions.adoptSession(reattached.session)
+				const task = createTaskProxy(
+					taskId,
+					(text?: string, images?: string[], files?: string[], delivery?: string) =>
+						this.options.onAskResponse(text, images, files, delivery),
+					() => this.cancelTask(),
+				)
+				if (messages.length > 0) {
+					task.messageStateHandler.addMessages(messages)
+				}
+				this.options.setTask(task)
+				this.options.setTurnPhase("streaming")
+				await this.options.postStateToWebview()
+				Logger.log(`[SdkController] Reattached background task: ${taskId}`)
+				void this.options.interactions.replayHeld(reattached.held)
+				return historyItem
+			}
+
 			const cleanedMessages = isLegacyTask
 				? this.appendLegacyTaskWarningAndResumeMessage(messages)
 				: messages.length > 0
@@ -276,6 +334,39 @@ export class SdkTaskControlCoordinator {
 			Logger.error("[SdkController] Failed to show task:", error)
 		}
 		return historyItem
+	}
+
+	/**
+	 * Move the running task out of the chat view into the background, keeping
+	 * any approval/question it is waiting on. Returns false (the caller then
+	 * stops the task as before) when nothing is running or the limit is reached.
+	 */
+	private async detachRunningTask(): Promise<boolean> {
+		const background = this.options.background
+		const session = this.options.sessions.getActiveSession()
+		if (!background || !session?.isRunning) {
+			return false
+		}
+		if (background.isFull) {
+			this.options.onBackgroundLimitReached?.()
+			return false
+		}
+		const held = this.options.interactions.detachPending()
+		this.options.sessions.detachActiveSession()
+		background.add(session, this.currentTaskTitle(), {
+			approvals: held.approval ? [held.approval] : [],
+			questions: held.question ? [held.question] : [],
+		})
+		await this.options.discardPreviews?.()
+		return true
+	}
+
+	private currentTaskTitle(): string {
+		const taskMessage = this.options
+			.getTask()
+			?.messageStateHandler.getClineMessages()
+			.find((message) => message.type === "say" && message.say === "task")
+		return taskMessage?.text ?? ""
 	}
 
 	private appendFreshResumeMessage(messages: ClineMessage[], sessionStatus?: string): ClineMessage[] {

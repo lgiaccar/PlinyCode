@@ -222,7 +222,11 @@ export class VscodeTerminalManager {
 		})
 	}
 
-	runCommand(terminalInfo: ITerminalInfo, command: string): ITerminalProcessResultPromise {
+	/**
+	 * @param options.reveal Show the terminal panel (without taking focus).
+	 * False for commands of a task running in the background.
+	 */
+	runCommand(terminalInfo: ITerminalInfo, command: string, options?: { reveal?: boolean }): ITerminalProcessResultPromise {
 		// Cast to VSCode-specific TerminalInfo for internal use
 		// Using unknown as intermediate cast due to structural differences between ITerminal and vscode.Terminal
 		const vscodeTerminalInfo = terminalInfo as unknown as TerminalInfo
@@ -230,7 +234,9 @@ export class VscodeTerminalManager {
 		Logger.log(`[TerminalManager] Terminal ${vscodeTerminalInfo.id} busy state before: ${vscodeTerminalInfo.busy}`)
 
 		try {
-			vscodeTerminalInfo.terminal.show(true)
+			if (options?.reveal !== false) {
+				vscodeTerminalInfo.terminal.show(true)
+			}
 		} catch (error) {
 			vscodeTerminalInfo.busy = false
 			throw error

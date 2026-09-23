@@ -32,6 +32,7 @@ import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import type { TelemetrySetting } from "@shared/TelemetrySetting"
 import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
+import { sendChatButtonClickedEvent } from "@/core/controller/ui/subscribeToChatButtonClicked"
 import { renderConversationMarkdown } from "@/core/export/markdown"
 import { defaultMarkdownExportFilename, saveMarkdownExport } from "@/core/export/save-markdown"
 import { parseMentions } from "@/core/mentions"
@@ -58,7 +59,7 @@ import { ClineAccountService } from "./account-service"
 import { AuthService, LogoutReason } from "./auth-service"
 import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
 import { buildStartSessionInput, createHistoryItemFromSession } from "./cline-session-factory"
-import { MessageTranslatorState, reshapeErrorForWebview } from "./message-translator"
+import { MessageTranslatorState, normalizeUsageEvent, reshapeErrorForWebview } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { parseProviderId } from "./model-catalog/provider-id"
@@ -71,6 +72,7 @@ import {
 } from "./provider-failure-telemetry"
 import { RemoteConfigRefreshCoordinator } from "./remote-config-refresh-coordinator"
 import { emitTurnSummary } from "./router/router-integration"
+import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import {
 	findVisibleCheckpointUserMessageByRun,
 	getCheckpointRunCountForMessage,
@@ -90,7 +92,7 @@ import { SdkSessionEventCoordinator } from "./sdk-session-event-coordinator"
 import { SdkSessionHistoryLoader } from "./sdk-session-history-loader"
 import { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
-import { SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
+import { type ClearTaskOptions, SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
 import { SdkTaskHistory, sessionHistoryRecordToHistoryItem, sessionHistoryRecordToTaskItemFields } from "./sdk-task-history"
 import { SdkTaskStartCoordinator } from "./sdk-task-start-coordinator"
 import { createVscodeSdkTelemetryHandle, type VscodeSdkTelemetryHandle } from "./sdk-telemetry"
@@ -226,7 +228,12 @@ export class Controller {
 		onRunningChanged: () => {
 			void this.postStateToWebview()
 		},
+		isForegroundSession: (sessionId) => !this.background?.has(sessionId),
 	})
+
+	// Tasks that keep running after the user starts a new task or opens another
+	// one. Created in the constructor; its callbacks reach session state lazily.
+	private readonly background: SdkBackgroundSessions
 
 	// Private state kept for stub compatibility
 	private backgroundCommandRunning = false
@@ -360,6 +367,35 @@ export class Controller {
 			getMinter: () => this.messageTranslatorState.getMinter(),
 		})
 		this.sessionHistory = new SdkSessionHistoryLoader()
+		this.background = new SdkBackgroundSessions({
+			stopSession: (session, reason) => this.sessions.stopSession(session, reason),
+			recordUsage: (sessionId, event) => {
+				if (event.type !== "usage") {
+					return
+				}
+				Promise.resolve(this.taskHistory.updateTaskUsage(sessionId, normalizeUsageEvent(event))).catch((error) => {
+					Logger.error("[SdkController] Failed to persist background task usage:", error)
+				})
+			},
+			notify: (message, onOpen) => {
+				void HostProvider.window
+					.showMessage({ type: ShowMessageType.INFORMATION, message, options: { items: ["Open"] } })
+					.then((response) => {
+						if (response.selectedOption === "Open") {
+							onOpen()
+						}
+					})
+					.catch((error) => Logger.warn("[SdkController] Failed to show background task notification:", error))
+			},
+			openTask: (sessionId) => {
+				void this.showTaskWithId(sessionId)
+					.then(() => sendChatButtonClickedEvent())
+					.catch((error) => Logger.warn(`[SdkController] Failed to open background task ${sessionId}:`, error))
+			},
+			onChanged: () => {
+				void this.postStateToWebview()
+			},
+		})
 		this.sessionConfigBuilder = new SdkSessionConfigBuilder({
 			stateManager: this.stateManager,
 			emitHookMessage: (msg) => this.messages.emitHookMessage(msg),
@@ -370,10 +406,12 @@ export class Controller {
 			getSessionId: () => this.sessions.getActiveSession()?.sessionId ?? "",
 			emitRow: (msg) => this.messages.emitHookMessage(msg),
 			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
+			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
-			isBackgroundEditEnabled: () => !!this.stateManager.getGlobalSettingsKey("backgroundEditEnabled"),
+			isBackgroundEditEnabled: (sessionId) =>
+				!!this.stateManager.getGlobalSettingsKey("backgroundEditEnabled") || this.background.has(sessionId),
 		})
 		this.interactions = new SdkInteractionCoordinator({
 			messages: this.messages,
@@ -398,6 +436,7 @@ export class Controller {
 				return autoApprovalSettings ? isToolAutoApproved(request.toolName, autoApprovalSettings) : false
 			},
 			getCwd: () => this.lastKnownWorkspaceRoot,
+			background: this.background,
 		})
 		this.sessions = new SdkSessionLifecycle({
 			mcpHub: this.mcpHub,
@@ -415,6 +454,7 @@ export class Controller {
 				})
 			},
 			onDidBecomeIdle: () => this.handleSessionBecameIdle(),
+			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
 			beforeStartSession: () => this.ensureRemoteConfigForSessionStart(),
 			getRemoteConfigIntegration: () => this.remoteConfigCoreIntegration,
 			foregroundCommands: this.foregroundCommands,
@@ -631,6 +671,14 @@ export class Controller {
 			postStateToWebview: () => this.postStateToWebview(),
 			clearTaskSettings: () => this.stateManager.clearTaskSettings(),
 			onTaskEnded: () => this._terminalManager?.releaseIdleTerminals(),
+			background: this.background,
+			discardPreviews: () => this.diffEdits.discardAllPreviews("task moved to background"),
+			onBackgroundLimitReached: () => {
+				void HostProvider.window.showMessage({
+					type: ShowMessageType.INFORMATION,
+					message: `PlinyCode already has ${MAX_BACKGROUND_SESSIONS} tasks running in the background, so the running task was stopped.`,
+				})
+			},
 		})
 		this.taskStart = new SdkTaskStartCoordinator({
 			stateManager: this.stateManager,
@@ -640,9 +688,9 @@ export class Controller {
 			sessionConfigBuilder: this.sessionConfigBuilder,
 			buildStartSessionInput,
 			createHistoryItemFromSession,
-			clearTask: async () => {
+			clearTask: async (options) => {
 				this.pendingClineAuthRetryPrompt = undefined
-				await this.taskControl.clearTask()
+				await this.taskControl.clearTask(options)
 			},
 			setTask: (task) => {
 				this.task = task
@@ -683,6 +731,7 @@ export class Controller {
 			getTurnPhase: () => this.turnStateTracker.currentPhase,
 			captureProviderApiError: (event) => this.captureProviderFailure(event),
 			beginProviderFailureTelemetryTurn: () => this.beginProviderFailureTelemetryTurn(),
+			background: this.background,
 		})
 		// Subscribe to MCP tool list changes so we can restart the SDK session
 		// when servers are added/removed/reconnected. The SDK's DefaultSessionBuilder
@@ -961,6 +1010,7 @@ export class Controller {
 		this.mcpHub?.clearToolListChangeCallback()
 		await this.diffEdits.discardAllPreviews("controller dispose")
 		await this.clearTask()
+		await this.background.stopAll("SdkController.dispose")
 		await this.sessions.dispose("SdkController.dispose")
 		this._terminalManager?.disposeAll()
 		await this.taskHistory.dispose()
@@ -1517,11 +1567,15 @@ export class Controller {
 		await this.compaction.compactTask()
 	}
 
-	async clearTask(): Promise<void> {
+	/**
+	 * @param options.detachRunning Keep a running task going in the background
+	 * (New Task). Other callers stop it.
+	 */
+	async clearTask(options: ClearTaskOptions = {}): Promise<void> {
 		this.pendingClineAuthRetryPrompt = undefined
 		// No active task — UI returns to idle (input enabled, no buttons/thinking).
 		this.turnStateTracker.set("idle")
-		await this.taskControl.clearTask()
+		await this.taskControl.clearTask(options)
 		await this.postStateToWebview()
 	}
 
@@ -2377,6 +2431,7 @@ export class Controller {
 	}
 
 	async deleteTaskFromState(id: string): Promise<HistoryItem[]> {
+		await this.background.stopTask(id, "task deleted")
 		return this.taskHistory.deleteTaskFromState(id)
 	}
 
@@ -2402,6 +2457,7 @@ export class Controller {
 		if (userChoice === undefined) {
 			return DeleteAllTaskHistoryCount.create({ tasksDeleted: 0 })
 		}
+		await this.background.stopAll("task history deleted")
 
 		if (userChoice === "Delete All Except Favorites") {
 			const hasFavoritedTasks = taskHistory.some(
@@ -2593,6 +2649,7 @@ export class Controller {
 				taskHistory: processedTaskHistory,
 				turnState: this.turnStateTracker.get(),
 				queuedPrompts,
+				backgroundTasks: this.background.list(),
 				stateVersion: minter.nextSeq(),
 				epoch: minter.epoch,
 			}

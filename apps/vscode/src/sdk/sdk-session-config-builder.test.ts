@@ -65,6 +65,54 @@ describe("SdkSessionConfigBuilder", () => {
 		const config = await builder.build({ cwd: "/workspace", mode: "act" })
 
 		expect(config.execution).toEqual({ maxRetries: 1 })
-		expect(config.onConsecutiveMistakeLimitReached).toBe(onConsecutiveMistakeLimitReached)
+		const context = { iteration: 1, consecutiveMistakes: 3, maxConsecutiveMistakes: 3, reason: "api_error" as const }
+		await config.onConsecutiveMistakeLimitReached?.(context)
+		expect(onConsecutiveMistakeLimitReached).toHaveBeenCalledWith(context)
+	})
+
+	it("assigns a session id when the config has none, and keeps an existing one", async () => {
+		const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, emitHookMessage: vi.fn() })
+
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+		const fresh = await builder.build({ cwd: "/workspace", mode: "act" })
+		expect(fresh.sessionId).toEqual(expect.any(String))
+		expect(fresh.sessionId).not.toBe("")
+
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, sessionId: "existing" })
+		const existing = await builder.build({ cwd: "/workspace", mode: "act" })
+		expect(existing.sessionId).toBe("existing")
+	})
+
+	it("drops hook rows and skips the mistake-limit row for a background session", async () => {
+		const emitHookMessage = vi.fn()
+		const onConsecutiveMistakeLimitReached = vi.fn()
+		const background = new Set<string>()
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage,
+			onConsecutiveMistakeLimitReached,
+			isBackgroundSession: (sessionId) => sessionId !== undefined && background.has(sessionId),
+		})
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+		// Rebuilds overwrite the id after build(); the check must follow it.
+		config.sessionId = "task-1"
+		const hookEmitter = (mocks.buildAgentHooks.mock.calls.at(-1) as unknown as [unknown, (m: unknown) => void])[1]
+
+		hookEmitter({ ts: 1 })
+		expect(emitHookMessage).toHaveBeenCalledTimes(1)
+
+		background.add("task-1")
+		hookEmitter({ ts: 2 })
+		expect(emitHookMessage).toHaveBeenCalledTimes(1)
+		const decision = await config.onConsecutiveMistakeLimitReached?.({
+			iteration: 1,
+			consecutiveMistakes: 3,
+			maxConsecutiveMistakes: 3,
+			reason: "api_error",
+		})
+		expect(decision).toMatchObject({ action: "stop" })
+		expect(onConsecutiveMistakeLimitReached).not.toHaveBeenCalled()
 	})
 })
