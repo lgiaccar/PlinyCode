@@ -7,6 +7,7 @@ import TaskHeader from "./TaskHeader"
 const meta: Meta<typeof TaskHeader> = {
 	title: "Views/Components/TaskHeader",
 	component: TaskHeader,
+	render: (args) => <TaskHeader {...args} clineMessages={args.clineMessages ?? [args.task]} />,
 	parameters: {
 		layout: "padded",
 		docs: {

@@ -425,6 +425,7 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 				{task ? (
 					<TaskSection
 						apiMetrics={apiMetrics}
+						clineMessages={messages}
 						lastApiReqTotalTokens={lastApiReqTotalTokens}
 						lastContextBreakdown={lastContextBreakdown}
 						messageHandlers={messageHandlers}

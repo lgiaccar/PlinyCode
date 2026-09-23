@@ -6,6 +6,7 @@ import { formatDisplayUserInput, parseUserInputMode } from "@plinycode/shared"
 import { resolveSessionDataDir } from "@plinycode/shared/storage"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
+import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
 import getFolderSize from "get-folder-size"
 import type { McpHub } from "@/services/mcp/McpHub"
 import type { TelemetryService } from "@/services/telemetry/TelemetryService"
@@ -117,7 +118,7 @@ function historyItemToSessionHistoryRecord(item: HistoryItem): SessionHistoryRec
 		provider: item.apiProvider ?? "",
 		model: item.modelId ?? "",
 		cwd: item.cwdOnTaskInitialization ?? "",
-		workspaceRoot: item.cwdOnTaskInitialization ?? "",
+		workspaceRoot: historyItemWorkspaceDisplayPath(item),
 		enableTools: true,
 		enableSpawn: false,
 		enableTeams: false,
@@ -190,7 +191,8 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		isFavorited: metadataBoolean(metadata, "isFavorited") ?? metadataBoolean(metadata, "is_favorited") ?? false,
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		apiProvider: item.provider || undefined,
-		cwdOnTaskInitialization: item.cwd ?? item.workspaceRoot,
+		cwdOnTaskInitialization: item.cwd || item.workspaceRoot || undefined,
+		workspaceRootOnTaskInitialization: (item.workspaceRoot || item.cwd || "").trim() || undefined,
 		isLegacy:
 			metadataBoolean(metadata, "legacyTask") === true || metadataBoolean(metadata, "migratedFromLegacyTask") === true,
 	}
@@ -201,7 +203,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
  * record: the getTaskHistory RPC handler in SdkController.ts spreads this
  * into each list row (plus its own `id`/`ts`, which depend on sort order
  * context) so the wire shape and sessionHistoryRecordToHistoryItem never
- * drift apart on what a task's workspace root is.
+ * drift apart on what a task's workspace root is (workspace root preferred over cwd).
  */
 export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord): {
 	modelId: string
@@ -213,7 +215,7 @@ export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord)
 	return {
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		apiProvider: item.provider ?? "",
-		workspaceRoot: item.cwd || item.workspaceRoot || "",
+		workspaceRoot: (item.workspaceRoot || item.cwd || "").trim(),
 		isLegacy:
 			metadataBoolean(metadata, "legacyTask") === true || metadataBoolean(metadata, "migratedFromLegacyTask") === true,
 	}

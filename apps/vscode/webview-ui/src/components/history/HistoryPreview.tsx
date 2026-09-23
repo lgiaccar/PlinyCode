@@ -1,5 +1,8 @@
 import { StringRequest } from "@shared/proto/cline/common"
+import { historyItemWorkspaceDisplayPath, workspacePathBasename } from "@shared/workspacePath"
+import { FolderIcon } from "lucide-react"
 import { memo } from "react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { TaskServiceClient } from "@/services/grpc-client"
@@ -9,7 +12,7 @@ type HistoryPreviewProps = {
 }
 
 const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
-	const { taskHistory } = useExtensionState()
+	const { taskHistory, platform } = useExtensionState()
 	const isCostVisible = useUsageCostVisibility()
 	const handleHistorySelect = (id: string) => {
 		TaskServiceClient.showTaskWithId(StringRequest.create({ value: id })).catch((error) =>
@@ -68,6 +71,21 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 						align-items: center;
 						gap: 4px;
 						flex-shrink: 0;
+					}
+					.history-workspace-row {
+						display: flex;
+						align-items: center;
+						gap: 4px;
+						min-width: 0;
+						max-width: 100%;
+						color: var(--vscode-descriptionForeground);
+						font-size: 0.8em;
+					}
+					.history-workspace-label {
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						opacity: 0.85;
 					}
 					.history-date {
 						color: var(--vscode-descriptionForeground);
@@ -149,30 +167,59 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 						taskHistory
 							.filter((item) => item.ts && item.task)
 							.slice(0, 3)
-							.map((item) => (
-								<div className="history-preview-item" key={item.id} onClick={() => handleHistorySelect(item.id)}>
-									<div className="history-task-content">
-										{item.isFavorited && (
-											<span
-												aria-label="Favorited"
-												className="codicon codicon-star-full"
+							.map((item) => {
+								const workspacePath = historyItemWorkspaceDisplayPath(item)
+								const workspaceLabel = workspacePath ? workspacePathBasename(workspacePath, platform) : undefined
+								return (
+									<div
+										className="history-preview-item"
+										key={item.id}
+										onClick={() => handleHistorySelect(item.id)}>
+										<div className="history-task-content">
+											{item.isFavorited && (
+												<span
+													aria-label="Favorited"
+													className="codicon codicon-star-full"
+													style={{
+														color: "var(--vscode-button-background)",
+														flexShrink: 0,
+													}}
+												/>
+											)}
+											<div
 												style={{
-													color: "var(--vscode-button-background)",
-													flexShrink: 0,
-												}}
-											/>
-										)}
-										<div className="history-task-description ph-no-capture">{item.task}</div>
-										{item.isLegacy && <span className="history-cost-chip">Legacy</span>}
+													flex: 1,
+													minWidth: 0,
+													display: "flex",
+													flexDirection: "column",
+													gap: 4,
+												}}>
+												<div className="history-task-description ph-no-capture">{item.task}</div>
+												<Tooltip>
+													<TooltipContent className="max-w-xs" side="bottom">
+														{workspacePath || "Unknown workspace"}
+													</TooltipContent>
+													<TooltipTrigger asChild>
+														<div className="history-workspace-row w-fit max-w-full">
+															<FolderIcon size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+															<span className="history-workspace-label">
+																{workspaceLabel ?? "Unknown workspace"}
+															</span>
+														</div>
+													</TooltipTrigger>
+												</Tooltip>
+											</div>
+											{item.isLegacy && <span className="history-cost-chip">Legacy</span>}
+										</div>
+										<div className="history-meta-stack">
+											<span className="history-date">{formatDate(item.ts)}</span>
+											{item.totalCost != null && isCostVisible(item.apiProvider) && (
+												<span className="history-cost-chip">${item.totalCost.toFixed(2)}</span>
+											)}
+										</div>
 									</div>
-									<div className="history-meta-stack">
-										<span className="history-date">{formatDate(item.ts)}</span>
-										{item.totalCost != null && isCostVisible(item.apiProvider) && (
-											<span className="history-cost-chip">${item.totalCost.toFixed(2)}</span>
-										)}
-									</div>
-								</div>
-							))
+								)
+							})
 					) : (
 						<div
 							style={{

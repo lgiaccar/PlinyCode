@@ -11,6 +11,8 @@ export type HistoryItem = {
 
 	size?: number
 	cwdOnTaskInitialization?: string
+	/** VS Code workspace root when the task started; used for history context when it differs from cwd. */
+	workspaceRootOnTaskInitialization?: string
 	conversationHistoryDeletedRange?: [number, number]
 	isFavorited?: boolean
 

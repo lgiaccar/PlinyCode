@@ -1,6 +1,6 @@
-import type { Platform } from "@shared/ExtensionMessage"
 import { StringRequest } from "@shared/proto/cline/common"
 import { ExportTaskRequest, type TaskItem } from "@shared/proto/cline/task"
+import { workspacePathBasename } from "@shared/workspacePath"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import {
 	ArrowDownIcon,
@@ -23,17 +23,6 @@ import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { formatLargeNumber, formatSize } from "@/utils/format"
-
-/**
- * Basename of a workspace path for the compact history row, matching the
- * platform-aware separator handling in TaskWorkingDirectoryBadge so Windows
- * paths (backslash-separated) don't render as one long unsplit segment.
- */
-function workspaceBasename(p: string, platform: Platform): string {
-	let cleaned = platform === "win32" ? p.replace(/\\/g, "/") : p
-	cleaned = cleaned.replace(/\/+$/, "")
-	return cleaned.split("/").pop() || p
-}
 
 type HistoryViewItemProps = {
 	item: TaskItem
@@ -58,7 +47,7 @@ const HistoryViewItem = ({
 	const { platform } = useExtensionState()
 
 	const workspaceRoot = item.workspaceRoot?.trim()
-	const workspaceLabel = workspaceRoot ? workspaceBasename(workspaceRoot, platform) : undefined
+	const workspaceLabel = workspaceRoot ? workspacePathBasename(workspaceRoot, platform) : undefined
 
 	const isFavoritedItem = useMemo(
 		() => pendingFavoriteToggles[item.id] ?? item.isFavorited,

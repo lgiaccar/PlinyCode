@@ -1501,6 +1501,7 @@ describe("createHistoryItemFromSession", () => {
 		expect(item.task).toBe("Fix the bug in main.ts")
 		expect(item.modelId).toBe("claude-sonnet-4-6")
 		expect(item.cwdOnTaskInitialization).toBe("/home/user/project")
+		expect(item.workspaceRootOnTaskInitialization).toBe("/home/user/project")
 		expect(item.tokensIn).toBe(0)
 		expect(item.tokensOut).toBe(0)
 		expect(item.totalCost).toBe(0)
@@ -1512,6 +1513,13 @@ describe("createHistoryItemFromSession", () => {
 
 		expect(item.modelId).toBeUndefined()
 		expect(item.cwdOnTaskInitialization).toBeUndefined()
+		expect(item.workspaceRootOnTaskInitialization).toBeUndefined()
+	})
+
+	it("stores workspace root separately from task cwd when provided", () => {
+		const item = createHistoryItemFromSession("session-abc", "Fix build", "claude-test", "/repo/apps/web", "/repo")
+		expect(item.cwdOnTaskInitialization).toBe("/repo/apps/web")
+		expect(item.workspaceRootOnTaskInitialization).toBe("/repo")
 	})
 
 	it("creates unique timestamps for different calls", () => {

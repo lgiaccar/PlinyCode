@@ -1,7 +1,8 @@
 import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
-import React, { useCallback, useLayoutEffect, useMemo, useState } from "react"
-import Thumbnails from "@/components/common/Thumbnails"
+import React, { useCallback, useMemo } from "react"
+import { canRestoreWorkspaceFromMessage, getRestoreWorkspaceDisabledReason } from "@/components/chat/chat-view/utils/messageUtils"
+import UserMessage from "@/components/chat/UserMessage"
 import { getModeSpecificFields } from "@/components/settings/utils/providerUtils"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
@@ -19,6 +20,7 @@ import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
 
 const IS_DEV = process.env.IS_DEV === "true"
 interface TaskHeaderProps {
+	clineMessages: ClineMessage[]
 	task: ClineMessage
 	tokensIn: number
 	tokensOut: number
@@ -37,6 +39,7 @@ interface TaskHeaderProps {
 const BUTTON_CLASS = "max-h-3 border-0 font-bold bg-transparent hover:opacity-100 text-foreground"
 
 const TaskHeader: React.FC<TaskHeaderProps> = ({
+	clineMessages,
 	task,
 	tokensIn,
 	tokensOut,
@@ -60,36 +63,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		platform,
 	} = useExtensionState()
 
-	const [isHighlightedTextExpanded, setIsHighlightedTextExpanded] = useState(false)
-	const [isTextOverflowing, setIsTextOverflowing] = useState(false)
-	const highlightedTextRef = React.useRef<HTMLDivElement>(null)
-
 	const highlightedText = useMemo(() => highlightText(task.text, false), [task.text])
-
-	// Check if text overflows the container (i.e., needs clamping)
-	useLayoutEffect(() => {
-		const el = highlightedTextRef.current
-		if (el && isTaskExpanded && !isHighlightedTextExpanded) {
-			// Check if content height exceeds the max-height
-			setIsTextOverflowing(el.scrollHeight > el.clientHeight)
-		}
-	}, [task.text, isTaskExpanded, isHighlightedTextExpanded])
-
-	// Handle click outside to collapse
-	React.useEffect(() => {
-		if (!isHighlightedTextExpanded) {
-			return
-		}
-
-		const handleClickOutside = (event: MouseEvent) => {
-			if (highlightedTextRef.current && !highlightedTextRef.current.contains(event.target as Node)) {
-				setIsHighlightedTextExpanded(false)
-			}
-		}
-
-		document.addEventListener("mousedown", handleClickOutside)
-		return () => document.removeEventListener("mousedown", handleClickOutside)
-	}, [isHighlightedTextExpanded])
 
 	// Simplified computed values
 	const { selectedModelInfo } = useNormalizedApiConfiguration(mode)
@@ -197,31 +171,16 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 				{/* Expand/Collapse Task Details */}
 				{isTaskExpanded && (
 					<div className="flex flex-col break-words" key={`task-details-${currentTaskItem?.id}`}>
-						<div
-							className={cn(
-								"ph-no-capture whitespace-pre-wrap break-words px-0.5 text-sm mt-1 relative",
-								"max-h-[4.5rem] overflow-hidden",
-								{
-									"max-h-[25vh] overflow-y-auto scroll-smooth": isHighlightedTextExpanded,
-									"cursor-pointer": isTextOverflowing,
-								},
-							)}
-							onClick={() => isTextOverflowing && setIsHighlightedTextExpanded(true)}
-							ref={highlightedTextRef}
-							style={
-								!isHighlightedTextExpanded && isTextOverflowing
-									? {
-											WebkitMaskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
-											maskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
-										}
-									: undefined
-							}>
-							{highlightedText}
+						<div className="mt-1">
+							<UserMessage
+								canRestoreWorkspace={canRestoreWorkspaceFromMessage(clineMessages, task.ts)}
+								files={task.files}
+								images={task.images}
+								messageTs={task.ts}
+								restoreWorkspaceDisabledReason={getRestoreWorkspaceDisabledReason(clineMessages, task.ts)}
+								text={task.text}
+							/>
 						</div>
-
-						{((task.images && task.images.length > 0) || (task.files && task.files.length > 0)) && (
-							<Thumbnails files={task.files ?? []} images={task.images ?? []} />
-						)}
 
 						<ContextWindow
 							cacheReads={cacheReads}
