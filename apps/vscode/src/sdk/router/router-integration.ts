@@ -238,7 +238,9 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			...(hadAssistantContent
 				? {
 						continuationPrompt:
-							`Your previous reply was cut off (${error}). Continue exactly where it stopped. ` +
+							// Only the error's headline: the user-facing details and
+							// settings hints would just add noise for the model.
+							`Your previous reply was cut off (${error.split(" (")[0]}). Continue exactly where it stopped. ` +
 							`Do not repeat text you already produced. If you were in the middle of a tool call, re-issue it.`,
 					}
 				: {}),

@@ -42,6 +42,11 @@ export interface SdkTaskControlCoordinatorOptions {
 	 * suppresses its remaining DISPLAY output (usage is still accounted).
 	 */
 	raiseCancelFence?: () => void
+	/**
+	 * Called after the task view is cleared or switched to another task, so
+	 * resources the finished task left behind (idle terminals) can be closed.
+	 */
+	onTaskEnded?: () => void
 }
 
 export class SdkTaskControlCoordinator {
@@ -83,7 +88,7 @@ export class SdkTaskControlCoordinator {
 		this.options.raiseCancelFence?.()
 
 		try {
-			await sdkHost.abort(sessionId)
+			await sdkHost.abort(sessionId, "user_cancel")
 		} catch (error) {
 			if (!isAbortError(error)) {
 				Logger.error("[SdkController] Failed to abort session:", error)
@@ -127,6 +132,15 @@ export class SdkTaskControlCoordinator {
 		await this.options.clearTaskSettings()
 
 		this.options.resetMessageTranslator()
+		this.releaseTaskResources()
+	}
+
+	private releaseTaskResources(): void {
+		try {
+			this.options.onTaskEnded?.()
+		} catch (error) {
+			Logger.warn("[SdkController] Failed to release task resources:", error)
+		}
 	}
 
 	/**
@@ -185,6 +199,9 @@ export class SdkTaskControlCoordinator {
 			await this.options.sessions.endActiveSession("showTaskWithId", {
 				awaitStop: activeSession?.sessionId === taskId,
 			})
+			if (activeSession) {
+				this.releaseTaskResources()
+			}
 
 			// FENCE: everything below mutates the shared task view (clearing the
 			// current task, installing the new proxy, setting the turn phase). If a

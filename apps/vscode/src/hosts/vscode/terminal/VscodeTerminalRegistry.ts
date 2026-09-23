@@ -15,17 +15,31 @@ export interface TerminalInfo {
 	}
 }
 
+/**
+ * Why a terminal was evicted from reuse. Decides whether it may be closed
+ * automatically once it is provably idle:
+ * - cwdSetupFailed: only our own `cd` ran; the user command never started.
+ * - streamError / markerless / unobservedCommand: a command may still be
+ *   running; closed only once shell integration reports nothing running.
+ */
+export type OrphanReason = "cwdSetupFailed" | "streamError" | "markerless" | "unobservedCommand"
+
 // Although vscode.window.terminals provides a list of all open terminals, there's no way to know whether they're busy or not (exitStatus does not provide useful information for most commands). In order to prevent creating too many terminals, we need to keep track of terminals through the life of the extension, as well as session specific terminals for the life of a task (to get latest unretrieved output).
 // Since we have promises keeping track of terminal processes, we get the added benefit of keep track of busy terminals even after a task is closed.
 export class TerminalRegistry {
 	private static terminals: TerminalInfo[] = []
 	private static terminalsPendingCleanup = new Map<number, TerminalInfo>()
+	/** Terminals evicted from reuse but still open, awaiting a safe close. */
+	private static orphans = new Map<number, { info: TerminalInfo; reason: OrphanReason }>()
 	private static nextTerminalId = 1
 
 	static createTerminal(cwd?: string | vscode.Uri | undefined, shellPath?: string): TerminalInfo {
 		const terminalOptions: vscode.TerminalOptions = {
 			cwd,
 			name: "PlinyCode",
+			// Agent terminals are not restored after a window reload: the new
+			// extension host could never reuse or clean them up.
+			isTransient: true,
 			iconPath: new vscode.ThemeIcon("cline-icon"),
 			env: {
 				CLINE_ACTIVE: "true",
@@ -102,6 +116,40 @@ export class TerminalRegistry {
 				TerminalRegistry.terminalsPendingCleanup.set(id, terminalInfo)
 				Logger.warn(`[TerminalRegistry] Failed to dispose fallback terminal ${id}; cleanup will be retried`, error)
 			}
+		}
+	}
+
+	/** Remember an evicted, still-open terminal so it can be closed once idle. */
+	static addOrphan(terminalInfo: TerminalInfo, reason: OrphanReason): void {
+		TerminalRegistry.removeTerminal(terminalInfo.id)
+		if (!TerminalRegistry.isTerminalClosed(terminalInfo.terminal)) {
+			TerminalRegistry.orphans.set(terminalInfo.id, { info: terminalInfo, reason })
+		}
+	}
+
+	static getOrphans(): Array<{ info: TerminalInfo; reason: OrphanReason }> {
+		for (const [id, orphan] of TerminalRegistry.orphans) {
+			if (TerminalRegistry.isTerminalClosed(orphan.info.terminal)) {
+				TerminalRegistry.orphans.delete(id)
+			}
+		}
+		return Array.from(TerminalRegistry.orphans.values())
+	}
+
+	/**
+	 * Close a terminal and drop every registry reference to it. Ownership is
+	 * removed before dispose(), which may synchronously fire close listeners.
+	 * Returns false (and keeps nothing) if disposal throws.
+	 */
+	static disposeTerminal(terminalInfo: TerminalInfo): boolean {
+		TerminalRegistry.removeTerminal(terminalInfo.id)
+		TerminalRegistry.orphans.delete(terminalInfo.id)
+		try {
+			terminalInfo.terminal.dispose()
+			return true
+		} catch (error) {
+			Logger.warn(`[TerminalRegistry] Failed to dispose terminal ${terminalInfo.id}`, error)
+			return false
 		}
 	}
 

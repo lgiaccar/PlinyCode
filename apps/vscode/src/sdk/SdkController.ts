@@ -630,6 +630,7 @@ export class Controller {
 			setTurnPhase: (phase, anchorTs) => this.turnStateTracker.set(phase, anchorTs),
 			postStateToWebview: () => this.postStateToWebview(),
 			clearTaskSettings: () => this.stateManager.clearTaskSettings(),
+			onTaskEnded: () => this._terminalManager?.releaseIdleTerminals(),
 		})
 		this.taskStart = new SdkTaskStartCoordinator({
 			stateManager: this.stateManager,
@@ -961,6 +962,7 @@ export class Controller {
 		await this.diffEdits.discardAllPreviews("controller dispose")
 		await this.clearTask()
 		await this.sessions.dispose("SdkController.dispose")
+		this._terminalManager?.disposeAll()
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()
 		this.messages.dispose()

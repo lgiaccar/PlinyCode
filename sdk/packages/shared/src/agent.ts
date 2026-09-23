@@ -356,7 +356,31 @@ export type AgentModelEvent =
 			 * telemetry.
 			 */
 			errorReported?: boolean;
+			/**
+			 * The output-token cap the gateway applied to this request and why.
+			 * Lets a "max-tokens" finish explain which limit was hit.
+			 */
+			outputLimit?: AgentModelOutputLimit;
 	  };
+
+/** Which cap determined a request's max output tokens. */
+export type AgentModelOutputLimitSource =
+	| "setting"
+	| "default"
+	| "model_limit"
+	| "remaining_context"
+	| "unknown";
+
+export interface AgentModelOutputLimit {
+	providerId?: string;
+	modelId?: string;
+	/** The max output tokens sent to the provider, when one was sent. */
+	maxTokens?: number;
+	source: AgentModelOutputLimitSource;
+	modelMaxOutputTokens?: number;
+	contextWindow?: number;
+	estimatedInputTokens?: number;
+}
 
 export interface AgentModel {
 	stream: (

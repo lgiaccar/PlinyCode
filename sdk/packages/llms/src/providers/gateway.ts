@@ -1,6 +1,8 @@
 import type {
 	AgentModel,
 	AgentModelEvent,
+	AgentModelOutputLimit,
+	AgentModelOutputLimitSource,
 	AgentModelRequest,
 	BasicLogger,
 	GatewayConfig,
@@ -178,7 +180,7 @@ class GatewayModelAdapter implements AgentModel {
 	}
 }
 
-export function resolveGatewayRequestMaxTokens(input: {
+type ResolveGatewayRequestMaxTokensInput = {
 	requestedMaxTokens?: number;
 	model: Pick<GatewayModelDefinition, "contextWindow" | "maxOutputTokens">;
 	estimatedInputTokens: number;
@@ -190,10 +192,29 @@ export function resolveGatewayRequestMaxTokens(input: {
 		estimatedInputTokens: number;
 		reserveTokens: number;
 	}) => void;
-}): number | undefined {
-	const caps: number[] = [];
+};
+
+export function resolveGatewayRequestMaxTokens(
+	input: ResolveGatewayRequestMaxTokensInput,
+): number | undefined {
+	return resolveGatewayRequestMaxTokensDetailed(input).maxTokens;
+}
+
+/**
+ * Like resolveGatewayRequestMaxTokens, but also reports which cap won so a
+ * truncated turn can tell the user what to change. On a tie the more
+ * actionable source wins: setting > model_limit > remaining_context > default.
+ */
+export function resolveGatewayRequestMaxTokensDetailed(
+	input: ResolveGatewayRequestMaxTokensInput,
+): { maxTokens: number | undefined; source: AgentModelOutputLimitSource } {
+	const caps: Array<{ value: number; source: AgentModelOutputLimitSource }> =
+		[];
 	if (isPositiveFiniteNumber(input.requestedMaxTokens)) {
-		caps.push(Math.floor(input.requestedMaxTokens));
+		caps.push({
+			value: Math.floor(input.requestedMaxTokens),
+			source: "setting",
+		});
 	} else {
 		// Providers like Anthropic require max_tokens to exceed the thinking
 		// budget, so an explicit reasoning budget lifts the synthesized default
@@ -210,12 +231,15 @@ export function resolveGatewayRequestMaxTokens(input: {
 			isPositiveFiniteNumber(input.model.maxOutputTokens) ||
 			isPositiveFiniteNumber(input.model.contextWindow)
 		) {
-			caps.push(defaultMaxOutputTokens);
+			caps.push({ value: defaultMaxOutputTokens, source: "default" });
 		}
 	}
 
 	if (isPositiveFiniteNumber(input.model.maxOutputTokens)) {
-		caps.push(Math.floor(input.model.maxOutputTokens));
+		caps.push({
+			value: Math.floor(input.model.maxOutputTokens),
+			source: "model_limit",
+		});
 	}
 
 	if (isPositiveFiniteNumber(input.model.contextWindow)) {
@@ -229,16 +253,44 @@ export function resolveGatewayRequestMaxTokens(input: {
 				estimatedInputTokens: input.estimatedInputTokens,
 				reserveTokens,
 			});
-			return undefined;
+			return { maxTokens: undefined, source: "remaining_context" };
 		}
-		caps.push(Math.floor(remainingContext));
+		caps.push({
+			value: Math.floor(remainingContext),
+			source: "remaining_context",
+		});
 	}
 
 	if (caps.length === 0) {
-		return undefined;
+		return { maxTokens: undefined, source: "unknown" };
 	}
 
-	return Math.max(1, Math.floor(Math.min(...caps)));
+	const priority: AgentModelOutputLimitSource[] = [
+		"setting",
+		"model_limit",
+		"remaining_context",
+		"default",
+	];
+	const min = Math.min(...caps.map((cap) => cap.value));
+	const winner = caps
+		.filter((cap) => cap.value === min)
+		.sort((a, b) => priority.indexOf(a.source) - priority.indexOf(b.source))[0];
+	return {
+		maxTokens: Math.max(1, Math.floor(min)),
+		source: winner?.source ?? "unknown",
+	};
+}
+
+/** Copies the applied output limit onto a max-tokens finish event. */
+async function* withOutputLimit(
+	events: AsyncIterable<AgentModelEvent>,
+	outputLimit: AgentModelOutputLimit,
+): AsyncIterable<AgentModelEvent> {
+	for await (const event of events) {
+		yield event.type === "finish" && event.reason === "max-tokens"
+			? { ...event, outputLimit }
+			: event;
+	}
 }
 
 export class DefaultGateway implements Gateway {
@@ -338,23 +390,25 @@ export class DefaultGateway implements Gateway {
 			request.providerId,
 		);
 		const provider = await providerRecord.createProvider(providerRecord.config);
-		const maxTokens = resolveGatewayRequestMaxTokens({
-			requestedMaxTokens: request.maxTokens,
-			model: resolved.model,
-			estimatedInputTokens: estimateRequestInputTokens(request),
-			reasoningBudgetTokens: request.reasoning?.budgetTokens,
-			onContextOverflow: (details) => {
-				this.logger?.log(
-					"Estimated prompt tokens exceed model context window",
-					{
-						severity: "warn",
-						providerId: resolved.provider.id,
-						modelId: resolved.model.id,
-						...details,
-					},
-				);
-			},
-		});
+		const estimatedInputTokens = estimateRequestInputTokens(request);
+		const { maxTokens, source: maxTokensSource } =
+			resolveGatewayRequestMaxTokensDetailed({
+				requestedMaxTokens: request.maxTokens,
+				model: resolved.model,
+				estimatedInputTokens,
+				reasoningBudgetTokens: request.reasoning?.budgetTokens,
+				onContextOverflow: (details) => {
+					this.logger?.log(
+						"Estimated prompt tokens exceed model context window",
+						{
+							severity: "warn",
+							providerId: resolved.provider.id,
+							modelId: resolved.model.id,
+							...details,
+						},
+					);
+				},
+			});
 		const stream = await provider.stream(
 			{
 				...request,
@@ -374,7 +428,15 @@ export class DefaultGateway implements Gateway {
 			},
 		);
 
-		return toAsyncIterable(stream);
+		return withOutputLimit(toAsyncIterable(stream), {
+			providerId: resolved.provider.id,
+			modelId: resolved.model.id,
+			maxTokens,
+			source: maxTokensSource,
+			modelMaxOutputTokens: resolved.model.maxOutputTokens,
+			contextWindow: resolved.model.contextWindow,
+			estimatedInputTokens,
+		});
 	}
 }
 

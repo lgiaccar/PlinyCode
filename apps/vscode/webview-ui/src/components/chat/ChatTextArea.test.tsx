@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import ChatTextArea from "./ChatTextArea"
 
 const mocks = vi.hoisted(() => ({
@@ -153,5 +153,84 @@ describe("ChatTextArea image attachments vs. model capability", () => {
 		renderTextArea()
 
 		expect(screen.queryByTestId("images-unsupported-notice")).not.toBeInTheDocument()
+	})
+})
+
+describe("ChatTextArea sticky send mode", () => {
+	const store = new Map<string, string>()
+	const localStorage = {
+		getItem: (key: string) => store.get(key) ?? null,
+		setItem: (key: string, value: string) => void store.set(key, value),
+		clear: () => store.clear(),
+	}
+
+	beforeEach(() => {
+		store.clear()
+		vi.stubGlobal("localStorage", localStorage)
+	})
+
+	afterEach(() => {
+		vi.unstubAllGlobals()
+	})
+
+	function renderWithSend() {
+		const onSend = vi.fn()
+		render(
+			<ChatTextArea
+				activeQuote={null}
+				inputValue="hello"
+				onSelectFilesAndImages={vi.fn()}
+				onSend={onSend}
+				placeholderText="Type a message"
+				selectedFiles={[]}
+				selectedImages={[]}
+				sendingDisabled={false}
+				setInputValue={vi.fn()}
+				setSelectedFiles={vi.fn()}
+				setSelectedImages={vi.fn()}
+				shouldDisableFilesAndImages={false}
+			/>,
+		)
+		return { onSend, button: screen.getByTestId("send-button"), select: screen.getByTestId("send-mode-select") }
+	}
+
+	it("sends with the default delivery and the send icon by default", () => {
+		const { onSend, button } = renderWithSend()
+		expect(button).toHaveClass("codicon-send")
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenCalledWith(undefined)
+	})
+
+	it("changing the mode does not send, updates the icon and persists", () => {
+		const { onSend, button, select } = renderWithSend()
+		fireEvent.change(select, { target: { value: "steer" } })
+		expect(onSend).not.toHaveBeenCalled()
+		expect(button).toHaveClass("codicon-zap")
+		expect(localStorage.getItem("plinycode.sendMode")).toBe("steer")
+
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenCalledWith("steer")
+	})
+
+	it("Enter sends with the sticky mode", () => {
+		const { onSend, select } = renderWithSend()
+		fireEvent.change(select, { target: { value: "queue" } })
+		fireEvent.keyDown(screen.getByPlaceholderText("Type a message"), { key: "Enter" })
+		expect(onSend).toHaveBeenCalledWith("queue")
+	})
+
+	it("restores the stored mode and opens the picker in schedule mode", () => {
+		localStorage.setItem("plinycode.sendMode", "schedule")
+		const { onSend, button } = renderWithSend()
+		expect(button).toHaveClass("codicon-watch")
+		fireEvent.click(button)
+		expect(onSend).not.toHaveBeenCalled()
+		expect(screen.getByRole("button", { name: "Schedule" })).toBeInTheDocument()
+	})
+
+	it("falls back to the default mode for an invalid stored value", () => {
+		localStorage.setItem("plinycode.sendMode", "bogus")
+		const { button } = renderWithSend()
+		expect(button).toHaveClass("codicon-send")
 	})
 })

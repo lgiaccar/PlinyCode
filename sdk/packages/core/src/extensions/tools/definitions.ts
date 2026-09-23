@@ -16,7 +16,11 @@ import {
 	zodToJsonSchema,
 } from "@plinycode/shared";
 import { captureRunCommandsTimeout } from "../../services/telemetry/core-events";
-import { CommandExitError } from "./executors/bash";
+import {
+	CommandAbortedError,
+	CommandExitError,
+	describeAbortReason,
+} from "./executors/bash";
 import {
 	MAX_COMMAND_OUTPUT_CHARS,
 	MAX_READ_LINES,
@@ -240,11 +244,24 @@ async function executeShellCommands(
 							success: false,
 						};
 					}
+					if (error instanceof CommandAbortedError) {
+						return {
+							query,
+							result: error.output,
+							error: `Command failed: ${error.message}`,
+							success: false,
+						};
+					}
 					const msg = formatError(error);
+					// An executor that throws a plain error on abort still gets the
+					// command, cwd and cause attached, so the failure is actionable.
+					const abortDetails = context.signal?.aborted
+						? ` — \`${query}\` in ${cwd} (${describeAbortReason(context.signal.reason)})`
+						: "";
 					return {
 						query,
 						result: "",
-						error: `Command failed: ${msg}`,
+						error: `Command failed: ${msg}${abortDetails}`,
 						success: false,
 					};
 				}
