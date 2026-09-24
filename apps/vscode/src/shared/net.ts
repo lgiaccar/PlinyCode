@@ -58,6 +58,12 @@
  * VSCode transparently pulls trusted certificates from the operating system
  * and configures node trust.
  *
+ * Not every editor host does (some Cursor builds don't), and the Pliny gateway
+ * omits its intermediate certificate. So when a request fails certificate
+ * verification, `fetch` retries it once with Node's roots, the OS store and
+ * the bundled Synopsys CAs (see tls-trust.ts), and keeps doing so for that
+ * origin.
+ *
  * JetBrains exports trusted certificates from the OS and writes them to a
  * temporary file, then configures node TLS by setting NODE_EXTRA_CA_CERTS.
  *
@@ -96,10 +102,25 @@
  */
 
 import { EnvHttpProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from "undici"
+import { Logger } from "./services/Logger"
+import { isTlsTrustError, trustedCaCertificates } from "./tls-trust"
 
 type FetchFunction = (...args: Parameters<typeof globalThis.fetch>) => ReturnType<typeof globalThis.fetch>
 
 let mockFetch: FetchFunction | undefined
+
+function requestOrigin(input: string | URL | Request): string | undefined {
+	try {
+		return new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).origin
+	} catch {
+		return undefined
+	}
+}
+
+/** Only string/URL requests whose body is not a one-shot stream can be sent a second time. */
+function canReplay(input: string | URL | Request, init?: RequestInit): boolean {
+	return (typeof input === "string" || input instanceof URL) && !(init?.body instanceof ReadableStream)
+}
 
 /**
  * Platform-configured fetch that respects proxy settings.
@@ -125,8 +146,43 @@ export const fetch: typeof globalThis.fetch = (() => {
 		baseFetch = undiciFetch as any as typeof globalThis.fetch
 	}
 
-	return ((input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-		(mockFetch || baseFetch)(input, init)) as typeof globalThis.fetch
+	// Fallback for hosts whose chain the default trust store cannot verify (see
+	// tls-trust.ts): retried once with the extra CAs, then used for that origin
+	// from then on. Built lazily so a machine that never needs it pays nothing.
+	const trustedOrigins = new Set<string>()
+	let trustedFetch: typeof globalThis.fetch | undefined
+	const getTrustedFetch = (): typeof globalThis.fetch => {
+		if (!trustedFetch) {
+			const ca = trustedCaCertificates()
+			const dispatcher = new EnvHttpProxyAgent({ connect: { ca }, requestTls: { ca } })
+			trustedFetch = ((input: string | URL, init?: RequestInit) =>
+				undiciFetch(input, { ...(init as any), dispatcher })) as any as typeof globalThis.fetch
+		}
+		return trustedFetch
+	}
+
+	return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+		if (mockFetch) {
+			return mockFetch(input, init)
+		}
+		const origin = requestOrigin(input)
+		const replayable = canReplay(input, init)
+		if (origin && replayable && trustedOrigins.has(origin)) {
+			return getTrustedFetch()(input, init)
+		}
+		try {
+			return await baseFetch(input, init)
+		} catch (error) {
+			if (!origin || !replayable || !isTlsTrustError(error)) {
+				throw error
+			}
+			trustedOrigins.add(origin)
+			Logger.warn(
+				`[net] ${origin}: certificate chain not trusted by the default store (${String((error as Error)?.cause ?? error)}); retrying with the OS store and bundled Synopsys CAs`,
+			)
+			return getTrustedFetch()(input, init)
+		}
+	}) as typeof globalThis.fetch
 })()
 
 /**
