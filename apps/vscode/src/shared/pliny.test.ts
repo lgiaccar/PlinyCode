@@ -47,6 +47,9 @@ describe("Pliny constants match the SDK catalog", () => {
 describe("model id predicates agree with the SDK", () => {
 	const ids = [
 		"pliny/free-auto",
+		"pliny/free-auto-fast",
+		"pliny/free-auto-smart",
+		"pliny/free-autonomous",
 		"snps-provider/kimi-k2.6",
 		"snps-provider-vmodels/glm-5.2",
 		"snps-aws-bedrock/global.anthropic.claude-sonnet-5",
@@ -57,6 +60,11 @@ describe("model id predicates agree with the SDK", () => {
 		expect(isPlinyFreeAutoModelId(id)).toBe(sdkIsPlinyFreeAutoModelId(id))
 		expect(isPlinySelfHostedModelId(id)).toBe(sdkIsPlinySelfHostedModelId(id))
 		expect(isPlinyFreeModelId(id)).toBe(sdkIsPlinyFreeModelId(id))
+	})
+
+	it("treats every profile id as the router", () => {
+		expect(isPlinyFreeAutoModelId("pliny/free-auto-fast")).toBe(true)
+		expect(isPlinyFreeAutoModelId("pliny/free-autonomous")).toBe(false)
 	})
 
 	it("treats the router as free but not self-hosted", () => {

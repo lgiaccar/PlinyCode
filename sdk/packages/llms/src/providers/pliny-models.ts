@@ -1,4 +1,8 @@
-import type { ModelCapability, ModelInfo, ModelPricing } from "../catalog/types";
+import type {
+	ModelCapability,
+	ModelInfo,
+	ModelPricing,
+} from "../catalog/types";
 import catalog from "./data/pliny-models.json";
 
 export const PLINY_BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL;
@@ -11,6 +15,42 @@ export const PLINY_BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL;
  * a `ModelInfo` to read.
  */
 export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto";
+
+/**
+ * FreeAuto profiles. Each is its own virtual id (`pliny/free-auto-<profile>`)
+ * with its own rules file, so different routing strategies can be picked per
+ * task and compared side by side. The default profile keeps the bare id.
+ */
+export const PLINY_FREE_AUTO_PROFILES = [
+	{
+		profile: "default",
+		name: "FreeAuto (router)",
+		description:
+			"Routes each call to the best free self-hosted Pliny model and fails over automatically",
+	},
+	{
+		profile: "fast",
+		name: "FreeAuto · fast",
+		description:
+			"FreeAuto tuned for latency: fastest models first, reasoning off wherever it can be",
+	},
+	{
+		profile: "smart",
+		name: "FreeAuto · smart",
+		description:
+			"FreeAuto with a small classifier that picks the model tier and whether to think, once per turn",
+	},
+] as const;
+
+export type PlinyFreeAutoProfile =
+	(typeof PLINY_FREE_AUTO_PROFILES)[number]["profile"];
+
+/** The virtual id for a FreeAuto profile. */
+export function plinyFreeAutoModelId(profile: string): string {
+	return profile === "default"
+		? PLINY_FREE_AUTO_MODEL_ID
+		: `${PLINY_FREE_AUTO_MODEL_ID}-${profile}`;
+}
 
 /**
  * Concrete model used whenever the virtual router id reaches a code path that
@@ -32,6 +72,27 @@ const SELF_HOSTED_PRICING: ModelPricing = {
 	cacheWrite: 0,
 };
 
+/** Request field that turns reasoning off on a model that reasons by default. */
+export type PlinyThinkingOff =
+	| "template-kwargs"
+	| "reasoning-effort-none"
+	| "reasoning-exclude";
+
+/** Request field that turns reasoning on for a model that is off by default. */
+export type PlinyThinkingOn = "reasoning-effort" | "template-kwargs";
+
+/**
+ * Measured reasoning behaviour of a self-hosted model, copied from the
+ * thinking probe (`scripts/probe-pliny-free-models.ts --thinking`). A model
+ * without an entry has not been measured, and nothing is sent to change its
+ * reasoning: an unsupported field is rejected by the gateway, failing the call.
+ */
+export type PlinyThinkingControls = {
+	defaultOn: boolean;
+	off?: PlinyThinkingOff;
+	on?: PlinyThinkingOn;
+};
+
 type PlinyCatalogEntry = {
 	id: string;
 	context?: number;
@@ -40,6 +101,7 @@ type PlinyCatalogEntry = {
 	cache_control?: boolean;
 	auto_cache?: boolean;
 	note?: string;
+	thinking?: PlinyThinkingControls;
 	/** USD per 1M tokens. Absent when no confirmed price is known — never guess a number here. */
 	pricing?: ModelPricing;
 	/** Provenance for `pricing`, e.g. flags a public-list-price stand-in vs a confirmed internal figure. */
@@ -68,6 +130,9 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 	const capabilities = new Set<ModelCapability>(["streaming", "tools"]);
 	if (entry.attachment) {
 		capabilities.add("images");
+	}
+	if (entry.thinking && plinyCanThink(entry.thinking)) {
+		capabilities.add("reasoning");
 	}
 	if (entry.cache_control || entry.auto_cache) {
 		capabilities.add("prompt-cache");
@@ -115,9 +180,42 @@ export function isPlinySelfHostedModelId(modelId: string): boolean {
 	return modelId.startsWith(PLINY_SELF_HOSTED_PREFIX);
 }
 
-/** True for the virtual router id. */
+/** True for the virtual router id and every profile id derived from it. */
 export function isPlinyFreeAutoModelId(modelId: string): boolean {
-	return modelId === PLINY_FREE_AUTO_MODEL_ID;
+	return (
+		modelId === PLINY_FREE_AUTO_MODEL_ID ||
+		modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
+	);
+}
+
+/** The profile a FreeAuto id selects (`"default"` for the bare id). */
+export function plinyFreeAutoProfile(modelId: string): string {
+	return modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
+		? modelId.slice(PLINY_FREE_AUTO_MODEL_ID.length + 1)
+		: "default";
+}
+
+const THINKING_BY_MODEL_ID = new Map(
+	(catalog.selfHosted as PlinyCatalogEntry[])
+		.filter((entry) => entry.thinking)
+		.map((entry) => [entry.id, entry.thinking as PlinyThinkingControls]),
+);
+
+/**
+ * Whether a request can get this model to reason: it does so by default, or
+ * `reasoning_effort` switches it on. A chat-template-only on-switch does not
+ * count: the gateway sends reasoning intent as `reasoning_effort`, never as
+ * `chat_template_kwargs`.
+ */
+export function plinyCanThink(controls: PlinyThinkingControls): boolean {
+	return controls.defaultOn || controls.on === "reasoning-effort";
+}
+
+/** Measured reasoning controls for a self-hosted model, when it was probed. */
+export function plinyThinkingControls(
+	modelId: string,
+): PlinyThinkingControls | undefined {
+	return THINKING_BY_MODEL_ID.get(modelId);
 }
 
 /**
@@ -159,12 +257,13 @@ export function plinyFreePoolIds(): string[] {
  * can honor, so compaction budgets stay valid whichever model a call lands on,
  * while the policy can still route a genuinely huge request to GLM-5.2.
  */
-function buildFreeAutoModelInfo(): ModelInfo {
+function buildFreeAutoModelInfo(
+	profile: (typeof PLINY_FREE_AUTO_PROFILES)[number],
+): ModelInfo {
 	return {
-		id: PLINY_FREE_AUTO_MODEL_ID,
-		name: "FreeAuto (router)",
-		description:
-			"Routes each call to the best free self-hosted Pliny model and fails over automatically",
+		id: plinyFreeAutoModelId(profile.profile),
+		name: profile.name,
+		description: profile.description,
 		contextWindow: 256_000,
 		maxInputTokens: 256_000,
 		maxTokens: 32_768,
@@ -177,6 +276,7 @@ function buildFreeAutoModelInfo(): ModelInfo {
 			pool: null,
 			selfHosted: true,
 			router: true,
+			routerProfile: profile.profile,
 		},
 	};
 }
@@ -188,8 +288,11 @@ function buildFreeAutoModelInfo(): ModelInfo {
 export function buildPlinyModels(): Record<string, ModelInfo> {
 	const models: Record<string, ModelInfo> = {};
 
-	// First so the router heads the picker list.
-	models[PLINY_FREE_AUTO_MODEL_ID] = buildFreeAutoModelInfo();
+	// First so the router profiles head the picker list.
+	for (const profile of PLINY_FREE_AUTO_PROFILES) {
+		const info = buildFreeAutoModelInfo(profile);
+		models[info.id] = info;
+	}
 
 	for (const entry of catalog.selfHosted as PlinyCatalogEntry[]) {
 		if (!entry.tool_call) {

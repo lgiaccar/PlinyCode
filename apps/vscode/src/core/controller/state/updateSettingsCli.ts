@@ -134,7 +134,7 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 
 		// Update subagents setting (requires telemetry on state change)
 		if (subagentsEnabled !== undefined) {
-			const wasEnabled = controller.stateManager.getGlobalSettingsKey("subagentsEnabled") ?? false
+			const wasEnabled = controller.stateManager.getGlobalSettingsKey("subagentsEnabled") ?? true
 			const isEnabled = !!subagentsEnabled
 			controller.stateManager.setGlobalState("subagentsEnabled", isEnabled)
 

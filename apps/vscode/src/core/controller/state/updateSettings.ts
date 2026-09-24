@@ -143,7 +143,7 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 
 		// Update subagents setting
 		if (request.subagentsEnabled !== undefined) {
-			const wasEnabled = controller.stateManager.getGlobalSettingsKey("subagentsEnabled") ?? false
+			const wasEnabled = controller.stateManager.getGlobalSettingsKey("subagentsEnabled") ?? true
 			const isEnabled = !!request.subagentsEnabled
 			controller.stateManager.setGlobalState("subagentsEnabled", isEnabled)
 

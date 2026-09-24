@@ -15,6 +15,7 @@ import type {
 	AgentModel,
 	AgentRuntimeHooks,
 	AgentTool,
+	CompletionGuard,
 	ProviderErrorClass,
 } from "../agent";
 import type { ExtensionContext } from "../extensions/context";
@@ -950,15 +951,15 @@ export interface AgentConfig {
 	 * from the final agent tool list, so built-in and plugin tools can opt in
 	 * with `lifecycle.completesRun`.
 	 *
-	 * `completionGuard` runs when the model returns no tool calls.
-	 * If it returns a non-empty string, that string is injected as a
+	 * `completionGuard` runs when the model returns no tool calls, with that
+	 * reply. If it returns a non-empty string, that string is injected as a
 	 * system-level nudge and the loop continues instead of completing.
 	 * Use this to prevent premature exit when the agent has unfinished
 	 * obligations (e.g. in-progress team tasks).
 	 */
 	completionPolicy?: {
 		requireCompletionTool?: boolean;
-		completionGuard?: () => string | undefined;
+		completionGuard?: CompletionGuard;
 	};
 
 	// -------------------------------------------------------------------------

@@ -787,11 +787,14 @@ export class AgentRuntime {
 		)}. Continue working if requirements are not met. If the task is complete, call the appropriate terminal completion tool now.`;
 	}
 
-	private getCompletionReminderMessages(): string[] {
+	private getCompletionReminderMessages(message: AgentMessage): string[] {
 		return [
 			this.getCompletionToolReminderMessage(),
-			this.config.completionPolicy?.completionGuard?.(),
-		].filter((message): message is string => Boolean(message));
+			this.config.completionPolicy?.completionGuard?.({
+				message,
+				iteration: this.state.iteration,
+			}),
+		].filter((reminder): reminder is string => Boolean(reminder));
 	}
 
 	private async addUserReminderMessage(text: string): Promise<AgentMessage> {
@@ -947,7 +950,7 @@ export class AgentRuntime {
 						toolCallCount: 0,
 					});
 					const completionReminderMessages =
-						this.getCompletionReminderMessages();
+						this.getCompletionReminderMessages(message);
 					if (completionReminderMessages.length > 0) {
 						for (const reminderMessage of completionReminderMessages) {
 							await this.addUserReminderMessage(reminderMessage);

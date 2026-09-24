@@ -12,7 +12,7 @@
  * user messages.
  */
 
-import type { RouterCallRecord } from "./router-types"
+import type { RouterCallRecord, RouterClassification } from "./router-types"
 
 interface ModelHealth {
 	consecutiveFailures: number
@@ -95,6 +95,10 @@ export interface RouterSessionState {
 	failovers: number
 	/** Epoch ms the current turn started, for the elapsed time in the summary. */
 	turnStartedAt: number
+	/** Set once the classifier has run this turn, whatever its outcome. */
+	classifierRan?: boolean
+	/** The classifier's verdict for this turn, reused by every later call. */
+	classification?: RouterClassification
 }
 
 const sessions = new Map<string, RouterSessionState>()
@@ -115,6 +119,8 @@ export function beginTurn(sessionId: string, now: number = Date.now()): RouterSe
 	state.failovers = 0
 	state.stickyModelId = undefined
 	state.turnStartedAt = now
+	state.classifierRan = false
+	state.classification = undefined
 	return state
 }
 

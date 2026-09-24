@@ -187,6 +187,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.openFreeAutoCallLog",
+				"title": "Open FreeAuto Call Log",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.exportTaskToMarkdown",
 				"title": "Export Conversation as Markdown",
 				"category": "PlinyCode"

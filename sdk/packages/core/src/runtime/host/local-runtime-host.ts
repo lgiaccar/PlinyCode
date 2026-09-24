@@ -7,6 +7,7 @@ import {
 	type AgentEvent,
 	type AgentResult,
 	type BasicLogger,
+	type CompletionGuard,
 	captureSdkError,
 	createSessionId,
 	type ITelemetryService,
@@ -237,6 +238,24 @@ function isIncomingCompactionStateStale(
 		return incoming.source_message_count < current.source_message_count;
 	}
 	return Date.parse(incoming.updated_at) < Date.parse(current.updated_at);
+}
+
+/**
+ * Add a host-supplied completion guard to the policy core built. Core's own
+ * guard (team obligations) is asked first, so its reminder wins.
+ */
+export function withHostCompletionGuard(
+	policy: AgentConfig["completionPolicy"],
+	hostGuard: CompletionGuard | undefined,
+): AgentConfig["completionPolicy"] {
+	if (!hostGuard) {
+		return policy;
+	}
+	const coreGuard = policy?.completionGuard;
+	return {
+		...policy,
+		completionGuard: (context) => coreGuard?.(context) ?? hostGuard(context),
+	};
 }
 
 export interface LocalRuntimeHostOptions {
@@ -820,7 +839,10 @@ export class LocalRuntimeHost implements RuntimeHost {
 			telemetry: configWithProvider.telemetry,
 			onConsecutiveMistakeLimitReached:
 				configWithProvider.onConsecutiveMistakeLimitReached,
-			completionPolicy: runtime.completionPolicy,
+			completionPolicy: withHostCompletionGuard(
+				runtime.completionPolicy,
+				configWithProvider.completionGuard,
+			),
 			consumePendingUserMessage: () => {
 				const entry = this.pendingPromptsController.consumeSteer(sessionId);
 				return entry
