@@ -39,6 +39,7 @@ import {
 	migrateWorkspaceToGlobalStorage,
 } from "./core/storage/state-migrations"
 import { workspaceResolver } from "./core/workspace"
+import { registerAutoUpdater } from "./hosts/vscode/auto-update/AutoUpdater"
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
@@ -191,6 +192,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			await openFreeAutoFile(logPath, "call log")
 		}),
 	)
+
+	registerAutoUpdater(context)
 
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
 
