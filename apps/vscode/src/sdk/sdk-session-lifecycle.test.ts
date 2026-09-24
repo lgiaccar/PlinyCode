@@ -189,6 +189,31 @@ describe("SdkSessionLifecycle", () => {
 		expect(onDidBecomeIdle).toHaveBeenCalledOnce()
 	})
 
+	it("reports each run's elapsed time once, including a run cut short by ending the session", async () => {
+		vi.useFakeTimers()
+		try {
+			const onRunElapsed = vi.fn()
+			const sdkHost = makeSdkHost()
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle({ onRunElapsed })
+			const { startResult } = await lifecycle.startNewSession({} as StartInput)
+
+			vi.advanceTimersByTime(3000)
+			lifecycle.setRunning(false)
+			lifecycle.setRunning(false)
+			expect(onRunElapsed).toHaveBeenCalledOnce()
+			expect(onRunElapsed).toHaveBeenLastCalledWith(startResult.sessionId, 3000)
+
+			lifecycle.setRunning(true)
+			vi.advanceTimersByTime(1200)
+			await lifecycle.endActiveSession("test")
+			expect(onRunElapsed).toHaveBeenCalledTimes(2)
+			expect(onRunElapsed).toHaveBeenLastCalledWith(startResult.sessionId, 1200)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("calls the send-start hook before sending to the SDK host", async () => {
 		const onSendStart = vi.fn()
 		const send = vi.fn().mockResolvedValue(undefined)

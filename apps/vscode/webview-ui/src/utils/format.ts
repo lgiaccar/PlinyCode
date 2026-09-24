@@ -62,3 +62,34 @@ export function formatSize(bytes?: number) {
 
 	return prettyBytes(bytes)
 }
+
+/** Compact duration, e.g. "45s", "12m 5s", "2h 3m", "1d 4h". */
+export function formatDuration(ms: number): string {
+	const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+	const days = Math.floor(totalSeconds / 86400)
+	const hours = Math.floor((totalSeconds % 86400) / 3600)
+	const minutes = Math.floor((totalSeconds % 3600) / 60)
+	const seconds = totalSeconds % 60
+	if (days > 0) {
+		return hours > 0 ? `${days}d ${hours}h` : `${days}d`
+	}
+	if (hours > 0) {
+		return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+	}
+	if (minutes > 0) {
+		return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+	}
+	return `${seconds}s`
+}
+
+/** Start time of a conversation: time only for today, otherwise date and time. */
+export function formatStartTime(timestamp: number): string {
+	const date = new Date(timestamp)
+	const sameDay = new Date().toDateString() === date.toDateString()
+	return date.toLocaleString(
+		"en-US",
+		sameDay
+			? { hour: "numeric", minute: "2-digit", hour12: true }
+			: { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true },
+	)
+}

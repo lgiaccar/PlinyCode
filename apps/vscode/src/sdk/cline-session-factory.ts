@@ -92,6 +92,8 @@ export interface ActiveSession {
 	startResult?: StartSessionResult
 	/** Whether the session is currently running */
 	isRunning: boolean
+	/** When the current run started (ms since epoch); set while `isRunning`. */
+	runningSince?: number
 }
 
 function createSdkLogger() {

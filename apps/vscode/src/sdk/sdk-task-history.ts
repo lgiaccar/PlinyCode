@@ -100,6 +100,10 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		cacheReads: item.cacheReads ?? 0,
 		modelId: item.modelId ?? fallbackModelId ?? "",
 		legacyTask: item.isLegacy ?? false,
+		// Carried so a resume, which re-creates the session record, keeps them.
+		...(item.startedTs ? { startedTs: item.startedTs } : {}),
+		...(item.activeMs ? { activeMs: item.activeMs } : {}),
+		...(item.isRenamed ? { isRenamed: true } : {}),
 	}
 }
 
@@ -195,7 +199,18 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		workspaceRootOnTaskInitialization: (item.workspaceRoot || item.cwd || "").trim() || undefined,
 		isLegacy:
 			metadataBoolean(metadata, "legacyTask") === true || metadataBoolean(metadata, "migratedFromLegacyTask") === true,
+		startedTs: sessionStartedTs(item),
+		activeMs: metadataNumber(metadata, "activeMs"),
+		isRenamed: metadataBoolean(metadata, "isRenamed") === true || undefined,
 	}
+}
+
+/**
+ * When the conversation started. Prefers the `startedTs` pinned in metadata:
+ * resuming a task re-creates its session record, which resets `startedAt`.
+ */
+export function sessionStartedTs(item: SessionHistoryRecord): number | undefined {
+	return metadataNumber(item.metadata, "startedTs") || dateStringToTimestamp(item.startedAt) || undefined
 }
 
 /**
@@ -210,6 +225,8 @@ export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord)
 	apiProvider: string
 	workspaceRoot: string
 	isLegacy: boolean
+	startedTs: number
+	activeMs: number
 } {
 	const metadata = item.metadata
 	return {
@@ -218,6 +235,8 @@ export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord)
 		workspaceRoot: (item.workspaceRoot || item.cwd || "").trim(),
 		isLegacy:
 			metadataBoolean(metadata, "legacyTask") === true || metadataBoolean(metadata, "migratedFromLegacyTask") === true,
+		startedTs: sessionStartedTs(item) ?? 0,
+		activeMs: metadataNumber(metadata, "activeMs") ?? 0,
 	}
 }
 
@@ -575,7 +594,11 @@ export class SdkTaskHistory {
 	}
 
 	private async updateSession(sessionId: string, item: HistoryItem): Promise<void> {
-		const { metadata: writtenMetadata, updated } = await this.withHistoryHost(async (host) => {
+		const {
+			metadata: writtenMetadata,
+			title: writtenTitle,
+			updated,
+		} = await this.withHistoryHost(async (host) => {
 			const existing = await host.get(sessionId)
 			const metadata: Record<string, unknown> = {
 				...(existing?.metadata ?? {}),
@@ -589,12 +612,39 @@ export class SdkTaskHistory {
 					delete metadata.size
 				}
 			}
+			// Pin the start time on the first write, and keep the earliest seen: a
+			// resume re-creates the record with a fresh `startedAt`.
+			const startedTs = [
+				metadataNumber(existing?.metadata, "startedTs"),
+				item.startedTs,
+				existing ? dateStringToTimestamp(existing.startedAt) : undefined,
+			].find((value): value is number => typeof value === "number" && value > 0)
+			if (startedTs) {
+				metadata.startedTs = startedTs
+			}
+			// Active time only grows. Taking the max keeps a writer holding a stale
+			// HistoryItem (e.g. a concurrent usage update) from rolling it back.
+			const activeMs = Math.max(metadataNumber(existing?.metadata, "activeMs") ?? 0, item.activeMs ?? 0)
+			if (activeMs > 0) {
+				metadata.activeMs = activeMs
+			}
+			// A user-given title sticks: only another rename replaces it, not the
+			// first-prompt title that task (re)start paths write.
+			const renamedTitle =
+				metadataBoolean(existing?.metadata, "isRenamed") === true && !item.isRenamed
+					? metadataString(existing?.metadata, "title")
+					: undefined
+			if (renamedTitle) {
+				metadata.title = renamedTitle
+				metadata.isRenamed = true
+			}
+			const title = renamedTitle ?? item.task
 			const result = await host.update(sessionId, {
-				prompt: item.task,
+				prompt: title,
 				metadata,
-				title: item.task,
+				title,
 			})
-			return { metadata, updated: result.updated }
+			return { metadata, title, updated: result.updated }
 		})
 		if (!updated) {
 			// The write didn't land (e.g. the session was deleted, or an optimistic-
@@ -610,7 +660,7 @@ export class SdkTaskHistory {
 		// an old HistoryItem whose `ts` predates this write, which would otherwise let
 		// the cached ordering diverge from what's on disk until the cache TTL expires.
 		this.updateCachedSessionRecord(sessionId, {
-			prompt: item.task,
+			prompt: writtenTitle,
 			metadata: writtenMetadata,
 			updatedAt: new Date().toISOString(),
 		})
@@ -618,6 +668,32 @@ export class SdkTaskHistory {
 
 	async updateTaskHistoryItem(item: HistoryItem): Promise<void> {
 		await this.updateSession(item.id, item)
+	}
+
+	/** Sets the task's history title. Returns false when the task is unknown or the title is blank. */
+	async renameTask(taskId: string, title: string): Promise<boolean> {
+		const trimmed = title.trim()
+		if (!trimmed) {
+			return false
+		}
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateTaskHistoryItem({ ...historyItem, task: trimmed, isRenamed: true })
+		return true
+	}
+
+	/** Adds one finished run's duration to the task's accumulated running time. */
+	async addTaskActiveTime(taskId: string, elapsedMs: number): Promise<void> {
+		if (!(elapsedMs > 0)) {
+			return
+		}
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return
+		}
+		await this.updateTaskHistoryItem({ ...historyItem, activeMs: (historyItem.activeMs ?? 0) + elapsedMs })
 	}
 
 	private async deleteSession(sessionId: string): Promise<void> {

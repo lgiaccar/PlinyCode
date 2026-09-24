@@ -1,21 +1,27 @@
 import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
+import { RenameTaskRequest } from "@shared/proto/cline/task"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
-import React, { useCallback, useMemo } from "react"
+import React, { useCallback, useMemo, useState } from "react"
 import { canRestoreWorkspaceFromMessage, getRestoreWorkspaceDisabledReason } from "@/components/chat/chat-view/utils/messageUtils"
 import UserMessage from "@/components/chat/UserMessage"
+import TaskTitleInput from "@/components/history/TaskTitleInput"
 import { getModeSpecificFields } from "@/components/settings/utils/providerUtils"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
 import { useProviderUsageCostDisplay } from "@/hooks/useProviderUsageCostDisplay"
 import { cn } from "@/lib/utils"
+import { TaskServiceClient } from "@/services/grpc-client"
 import { getEnvironmentColor } from "@/utils/environmentColors"
+import { formatStartTime } from "@/utils/format"
 import CopyTaskButton from "./buttons/CopyTaskButton"
 import DeleteTaskButton from "./buttons/DeleteTaskButton"
 import ExportMarkdownButton from "./buttons/ExportMarkdownButton"
 import NewTaskButton from "./buttons/NewTaskButton"
 import OpenDiskConversationHistoryButton from "./buttons/OpenDiskConversationHistoryButton"
+import RenameTaskButton from "./buttons/RenameTaskButton"
 import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
+import TaskRunningTime from "./TaskRunningTime"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
 
 const IS_DEV = process.env.IS_DEV === "true"
@@ -63,7 +69,23 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		platform,
 	} = useExtensionState()
 
-	const highlightedText = useMemo(() => highlightText(task.text, false), [task.text])
+	const [isRenaming, setIsRenaming] = useState(false)
+	const renamedTitle = currentTaskItem?.isRenamed ? currentTaskItem.task : undefined
+	const titleText = renamedTitle ?? task.text
+	const highlightedText = useMemo(() => highlightText(titleText, false), [titleText])
+
+	const renameTask = useCallback(
+		(title: string) => {
+			const taskId = currentTaskItem?.id
+			if (!taskId) {
+				return
+			}
+			TaskServiceClient.renameTask(RenameTaskRequest.create({ taskId, title })).catch((err) =>
+				console.error("Failed to rename task:", err),
+			)
+		},
+		[currentTaskItem?.id],
+	)
 
 	// Simplified computed values
 	const { selectedModelInfo } = useNormalizedApiConfiguration(mode)
@@ -139,13 +161,30 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						)}
 					</div>
 					<div className="flex items-center select-none grow min-w-0 gap-1 justify-between">
-						{!isTaskExpanded && (
+						{isRenaming ? (
+							<TaskTitleInput
+								initialTitle={titleText ?? ""}
+								onCommit={renameTask}
+								onDone={() => setIsRenaming(false)}
+							/>
+						) : isTaskExpanded ? (
+							renamedTitle && (
+								<div className="whitespace-nowrap overflow-hidden text-ellipsis grow min-w-0">
+									<span className="ph-no-capture text-base">{renamedTitle}</span>
+								</div>
+							)
+						) : (
 							<div className="whitespace-nowrap overflow-hidden text-ellipsis grow min-w-0">
 								<span className="ph-no-capture text-base">{highlightedText}</span>
 							</div>
 						)}
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
+						<TaskRunningTime
+							activeMs={currentTaskItem?.activeMs}
+							runningSinceTs={currentTaskItem?.runningSinceTs}
+							startedTs={currentTaskItem?.startedTs}
+						/>
 						<TaskWorkingDirectoryBadge
 							platform={platform}
 							taskCwd={currentTaskItem?.cwdOnTaskInitialization}
@@ -163,6 +202,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 								</span>
 							</div>
 						)}
+						{currentTaskItem?.id && <RenameTaskButton className={BUTTON_CLASS} onClick={() => setIsRenaming(true)} />}
 						<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
 						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
 					</div>
@@ -171,6 +211,9 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 				{/* Expand/Collapse Task Details */}
 				{isTaskExpanded && (
 					<div className="flex flex-col break-words" key={`task-details-${currentTaskItem?.id}`}>
+						{currentTaskItem?.startedTs ? (
+							<div className="text-xs text-description">Started {formatStartTime(currentTaskItem.startedTs)}</div>
+						) : null}
 						<div className="mt-1">
 							<UserMessage
 								canRestoreWorkspace={canRestoreWorkspaceFromMessage(clineMessages, task.ts)}
