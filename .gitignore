@@ -100,3 +100,6 @@ apps/examples/desktop-app/.cursor/settings.json
 
 # AI-generated temporary files and intermediate outputs
 ai_output/
+
+# Claude Code agent worktrees (the .claude/skills/ folder is tracked)
+.claude/worktrees/
