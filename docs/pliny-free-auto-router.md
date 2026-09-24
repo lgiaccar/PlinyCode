@@ -66,9 +66,11 @@ shows the failure and the model that took over, and the turn still completes.
 
 ## Regenerating the probe outside the editor
 
-The gateway's certificate chain includes an intermediate that is not in the
-Windows root store. The extension is unaffected because it inherits the editor's
-OS trust store, but a standalone `bun` run needs the chain passed explicitly:
+The gateway serves only its leaf certificate, without the SNPSica2 intermediate,
+so Node cannot verify it against its own roots. The extension handles this
+itself: when a request fails certificate verification it retries with the OS
+store and the bundled Synopsys CAs (`apps/vscode/src/shared/tls-trust.ts`). A
+standalone `bun` run does not, and needs the chain passed explicitly:
 
 ```powershell
 $env:NODE_EXTRA_CA_CERTS = "<path to a PEM with the server, SNPSica2 and SNPSOfflineCA certs>"
