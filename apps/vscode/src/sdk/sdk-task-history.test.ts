@@ -528,6 +528,55 @@ describe("SdkTaskHistory", () => {
 		)
 	})
 
+	it("renames a task and keeps the title when a start path later writes the first prompt", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1", { metadata: { title: "first prompt" } })])
+
+		await expect(history.renameTask("task-1", "  My feature  ")).resolves.toBe(true)
+		expect(await history.findHistoryItem("task-1")).toMatchObject({ task: "My feature", isRenamed: true })
+
+		// e.g. checkpoint restore rewriting the title from the first user message
+		await history.updateTaskHistoryItem(makeHistoryItem("task-1", { task: "first prompt" }))
+		expect(await history.findHistoryItem("task-1")).toMatchObject({ task: "My feature", isRenamed: true })
+
+		await history.renameTask("task-1", "Renamed again")
+		expect((await history.findHistoryItem("task-1"))?.task).toBe("Renamed again")
+	})
+
+	it("ignores blank renames and unknown tasks", async () => {
+		const { history, updateSession } = makeHistory([makeSessionRecord("task-1")])
+
+		await expect(history.renameTask("task-1", "   ")).resolves.toBe(false)
+		await expect(history.renameTask("missing", "Title")).resolves.toBe(false)
+		expect(updateSession).not.toHaveBeenCalled()
+	})
+
+	it("pins the start time on first write and keeps it when the record is re-created", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1", { startedAt: "2026-01-01T00:00:00.000Z" })])
+
+		await history.updateTaskHistoryItem(makeHistoryItem("task-1"))
+		const pinned = Date.parse("2026-01-01T00:00:00.000Z")
+		expect((await history.findHistoryItem("task-1"))?.startedTs).toBe(pinned)
+
+		// A resume re-creates the record with a fresh startedAt but carries the metadata.
+		const { history: resumed } = makeHistory([
+			makeSessionRecord("task-1", { startedAt: "2026-03-01T00:00:00.000Z", metadata: { startedTs: pinned } }),
+		])
+		expect(sessionHistoryRecordToTaskItemFields((await resumed.listHistory({ hydrate: false }))[0]).startedTs).toBe(pinned)
+	})
+
+	it("accumulates running time and never lets a stale item roll it back", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1")])
+		const stale = await history.findHistoryItem("task-1")
+
+		await history.addTaskActiveTime("task-1", 1500)
+		await history.addTaskActiveTime("task-1", 500)
+		expect((await history.findHistoryItem("task-1"))?.activeMs).toBe(2000)
+
+		// A concurrent usage update holding the pre-run item must not reset it.
+		await history.updateTaskHistoryItem({ ...stale!, tokensIn: 10 })
+		expect(await history.findHistoryItem("task-1")).toMatchObject({ activeMs: 2000, tokensIn: 10 })
+	})
+
 	it("keeps cached SDK task size when updating history without measuring artifacts", async () => {
 		vi.mocked(getFolderSize.loose).mockResolvedValue(8192 as never)
 		const existing = makeSessionRecord("task-1", {

@@ -1,5 +1,5 @@
 import type { TaskItem } from "@shared/proto/cline/task"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import type { PropsWithChildren } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import HistoryViewItem from "./HistoryViewItem"
@@ -51,6 +51,8 @@ function makeItem(overrides: Partial<TaskItem> = {}): TaskItem {
 		isLegacy: false,
 		apiProvider: "anthropic",
 		workspaceRoot: "",
+		startedTs: 0,
+		activeMs: 0,
 		...overrides,
 	}
 }
@@ -71,6 +73,7 @@ describe("HistoryViewItem", () => {
 				index={0}
 				item={makeItem()}
 				pendingFavoriteToggles={{}}
+				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
 			/>,
@@ -102,6 +105,7 @@ describe("HistoryViewItem", () => {
 				index={0}
 				item={makeItem({ workspaceRoot: "/home/user/my-project" })}
 				pendingFavoriteToggles={{}}
+				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
 			/>,
@@ -120,6 +124,7 @@ describe("HistoryViewItem", () => {
 				index={0}
 				item={makeItem({ workspaceRoot: "C:\\Users\\dev\\my-project" })}
 				pendingFavoriteToggles={{}}
+				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
 			/>,
@@ -136,6 +141,7 @@ describe("HistoryViewItem", () => {
 				index={0}
 				item={makeItem({ workspaceRoot: "", isLegacy: true })}
 				pendingFavoriteToggles={{}}
+				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
 			/>,
@@ -152,11 +158,77 @@ describe("HistoryViewItem", () => {
 				index={0}
 				item={makeItem()}
 				pendingFavoriteToggles={{}}
+				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
 			/>,
 		)
 
 		expect(screen.getByRole("button", { name: "Export conversation as Markdown" })).toBeDefined()
+	})
+
+	it("renames the conversation inline and saves on Enter", () => {
+		const renameTask = vi.fn()
+		render(
+			<HistoryViewItem
+				handleDeleteHistoryItem={noop}
+				handleHistorySelect={noop}
+				index={0}
+				item={makeItem()}
+				pendingFavoriteToggles={{}}
+				renameTask={renameTask}
+				selectedItems={[]}
+				toggleFavorite={noop}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Rename conversation" }))
+		const input = screen.getByRole("textbox", { name: "Conversation name" })
+		fireEvent.change(input, { target: { value: "  Build fix  " } })
+		fireEvent.keyDown(input, { key: "Enter" })
+
+		expect(renameTask).toHaveBeenCalledWith("task-1", "Build fix")
+		expect(screen.queryByRole("textbox", { name: "Conversation name" })).toBeNull()
+	})
+
+	it("discards the rename on Escape", () => {
+		const renameTask = vi.fn()
+		render(
+			<HistoryViewItem
+				handleDeleteHistoryItem={noop}
+				handleHistorySelect={noop}
+				index={0}
+				item={makeItem()}
+				pendingFavoriteToggles={{}}
+				renameTask={renameTask}
+				selectedItems={[]}
+				toggleFavorite={noop}
+			/>,
+		)
+
+		fireEvent.click(screen.getByRole("button", { name: "Rename conversation" }))
+		const input = screen.getByRole("textbox", { name: "Conversation name" })
+		fireEvent.change(input, { target: { value: "Other" } })
+		fireEvent.keyDown(input, { key: "Escape" })
+
+		expect(renameTask).not.toHaveBeenCalled()
+	})
+
+	it("shows the start time and the agent running time", () => {
+		render(
+			<HistoryViewItem
+				handleDeleteHistoryItem={noop}
+				handleHistorySelect={noop}
+				index={0}
+				item={makeItem({ startedTs: Date.now() - 3_600_000, activeMs: 125_000 })}
+				pendingFavoriteToggles={{}}
+				renameTask={noop}
+				selectedItems={[]}
+				toggleFavorite={noop}
+			/>,
+		)
+
+		expect(screen.getByText(/^Started /)).toBeDefined()
+		expect(screen.getByText("· ran 2m 5s")).toBeDefined()
 	})
 })

@@ -454,6 +454,11 @@ export class Controller {
 				})
 			},
 			onDidBecomeIdle: () => this.handleSessionBecameIdle(),
+			onRunElapsed: (sessionId, elapsedMs) => {
+				this.taskHistory.addTaskActiveTime(sessionId, elapsedMs).catch((error) => {
+					Logger.error("[SdkController] Failed to persist task running time:", error)
+				})
+			},
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
 			beforeStartSession: () => this.ensureRemoteConfigForSessionStart(),
 			getRemoteConfigIntegration: () => this.remoteConfigCoreIntegration,
@@ -1702,12 +1707,23 @@ export class Controller {
 			}
 
 			const resolvedPrompt = await this.resolveContextMentions(editedText)
+			// Regenerating replaces the session: keep a user-given title and the
+			// conversation's start and running time rather than resetting them.
+			const displayTitle = historyItem?.isRenamed ? historyItem.task : historyTitle
+			const carriedHistoryFields = {
+				startedTs: historyItem?.startedTs,
+				activeMs: historyItem?.activeMs,
+				isRenamed: historyItem?.isRenamed,
+			}
 			const startInput = {
 				...buildStartSessionInput(config, { prompt: historyTitle, cwd, mode }),
 				initialMessages,
 				sessionMetadata: {
-					title: historyTitle,
+					title: displayTitle,
 					modelId: config.modelId,
+					...(carriedHistoryFields.startedTs ? { startedTs: carriedHistoryFields.startedTs } : {}),
+					...(carriedHistoryFields.activeMs ? { activeMs: carriedHistoryFields.activeMs } : {}),
+					...(carriedHistoryFields.isRenamed ? { isRenamed: true } : {}),
 					...(checkpointRunCount
 						? { checkpoint: createRestoredCheckpointMetadata(sessionRecord, checkpointRunCount) }
 						: {}),
@@ -1761,13 +1777,10 @@ export class Controller {
 				historyItem?.workspaceRootOnTaskInitialization?.trim() ||
 				config.workspaceRoot?.trim() ||
 				fallbackCwd
-			const newHistoryItem = createHistoryItemFromSession(
-				startResult.sessionId,
-				historyTitle,
-				config.modelId,
-				cwd,
-				workspaceRoot,
-			)
+			const newHistoryItem = {
+				...createHistoryItemFromSession(startResult.sessionId, displayTitle, config.modelId, cwd, workspaceRoot),
+				...carriedHistoryFields,
+			}
 			if (sourceSessionId !== startResult.sessionId) {
 				try {
 					await this.taskHistory.deleteTaskFromState(sourceSessionId)
@@ -2356,6 +2369,8 @@ export class Controller {
 					apiProvider: "",
 					workspaceRoot: await this.getWorkspaceRoot(),
 					isLegacy: false,
+					startedTs: taskMessage.ts || 0,
+					activeMs: 0,
 				})
 			}
 		}
@@ -2514,6 +2529,14 @@ export class Controller {
 		await this.postStateToWebview()
 	}
 
+	async renameTask(taskId: string, title: string): Promise<void> {
+		if (!(await this.taskHistory.renameTask(taskId, title))) {
+			Logger.log(`[renameTask] Task not found in history or blank title: ${taskId}`)
+			return
+		}
+		await this.postStateToWebview()
+	}
+
 	// ---- Background command state ----
 
 	updateBackgroundCommandState(running: boolean, taskId?: string): void {
@@ -2609,6 +2632,7 @@ export class Controller {
 					mergedTaskHistoryById.set(this.task.taskId, {
 						id: this.task.taskId,
 						ts: taskMessage.ts || Date.now(),
+						startedTs: taskMessage.ts || undefined,
 						task: taskMessage.text,
 						tokensIn: 0,
 						tokensOut: 0,
@@ -2641,11 +2665,16 @@ export class Controller {
 			// out-of-order state pushes and fence traffic from a previous task/render. Sampled
 			// synchronously here (no await between sampling and return).
 			const minter = this.messageTranslatorState.getMinter()
+			const currentHistoryItem = this.task?.taskId
+				? processedTaskHistory.find((item) => item.id === this.task?.taskId)
+				: undefined
+			const runningSince = activeSession?.sessionId === currentHistoryItem?.id ? activeSession?.runningSince : undefined
 			return {
 				...state,
-				currentTaskItem: this.task?.taskId
-					? processedTaskHistory.find((item) => item.id === this.task?.taskId)
-					: undefined,
+				currentTaskItem:
+					currentHistoryItem && runningSince !== undefined
+						? { ...currentHistoryItem, runningSinceTs: runningSince }
+						: currentHistoryItem,
 				taskHistory: processedTaskHistory,
 				turnState: this.turnStateTracker.get(),
 				queuedPrompts,

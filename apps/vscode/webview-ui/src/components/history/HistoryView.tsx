@@ -1,5 +1,5 @@
 import { EmptyRequest, StringArrayRequest } from "@shared/proto/cline/common"
-import { GetTaskHistoryRequest, TaskFavoriteRequest, type TaskItem } from "@shared/proto/cline/task"
+import { GetTaskHistoryRequest, RenameTaskRequest, TaskFavoriteRequest, type TaskItem } from "@shared/proto/cline/task"
 import { VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 import Fuse, { FuseResult } from "fuse.js"
 import { FunnelIcon } from "lucide-react"
@@ -173,6 +173,13 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 		},
 		[showFavoritesOnly, showCurrentWorkspaceOnly, loadTaskHistory],
 	)
+
+	const renameTask = useCallback((taskId: string, title: string) => {
+		setTasks((currentTasks) => currentTasks.map((task) => (task.id === taskId ? { ...task, task: title } : task)))
+		TaskServiceClient.renameTask(RenameTaskRequest.create({ taskId, title })).catch((err) => {
+			console.error(`Failed to rename task ${taskId}:`, err)
+		})
+	}, [])
 
 	// Use the onRelinquishControl hook instead of message event
 	useEffect(() => {
@@ -507,6 +514,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 								index={index}
 								item={item}
 								pendingFavoriteToggles={pendingFavoriteToggles}
+								renameTask={renameTask}
 								selectedItems={selectedItems}
 								toggleFavorite={toggleFavorite}
 							/>

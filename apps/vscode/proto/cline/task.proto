@@ -36,6 +36,8 @@ service TaskService {
   rpc exportTaskToMarkdown(ExportTaskRequest) returns (ExportTaskResult);
   // Toggles the favorite status of a task
   rpc toggleTaskFavorite(TaskFavoriteRequest) returns (Empty);
+  // Renames a task (its history title). A blank title is ignored.
+  rpc renameTask(RenameTaskRequest) returns (Empty);
   // Gets filtered task history
   rpc getTaskHistory(GetTaskHistoryRequest) returns (TaskHistoryArray);
   // Sends a response to a previous ask operation
@@ -82,6 +84,13 @@ message TaskFavoriteRequest {
   Metadata metadata = 1;
   string task_id = 2;
   bool is_favorited = 3;
+}
+
+// Request message for renaming a task
+message RenameTaskRequest {
+  Metadata metadata = 1;
+  string task_id = 2;
+  string title = 3;
 }
 
 // Response for task details
@@ -138,6 +147,10 @@ message TaskItem {
   // for legacy tasks recorded before this field existed; consumers show an
   // "Unknown workspace" fallback in that case.
   string workspace_root = 14;
+  // When the conversation started (ms since epoch). 0 when unknown.
+  int64 started_ts = 15;
+  // Accumulated time the agent spent running turns (ms). 0 when unknown.
+  int64 active_ms = 16;
 }
 
 // Request for ask response operation

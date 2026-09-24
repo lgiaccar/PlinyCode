@@ -228,7 +228,7 @@ describe("ChatTextArea sticky send mode", () => {
 		expect(screen.getByRole("button", { name: "Schedule" })).toBeInTheDocument()
 	})
 
-	it("offers only Send, Send now and Schedule", () => {
+	it("offers only Send, Send now (steering) and Schedule", () => {
 		const { select } = renderWithSend()
 		const values = Array.from(select.querySelectorAll("option")).map((option) => option.getAttribute("value"))
 		expect(values).toEqual(["default", "steer", "schedule"])
