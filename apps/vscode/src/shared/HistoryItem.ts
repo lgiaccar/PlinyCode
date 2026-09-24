@@ -25,4 +25,16 @@ export type HistoryItem = {
 	 */
 	apiProvider?: string
 	isLegacy?: boolean
+	/** When the conversation started (ms since epoch); `ts` is the last activity. */
+	startedTs?: number
+	/** Accumulated time the agent spent running turns (ms). */
+	activeMs?: number
+	/** True once the user renamed the task, so regenerating from an edited first message keeps the title. */
+	isRenamed?: boolean
+	/**
+	 * Transient, never persisted: when the current turn started running (ms since
+	 * epoch). Set only on the webview's `currentTaskItem` while a turn runs, so the
+	 * task header can tick the running time live.
+	 */
+	runningSinceTs?: number
 }

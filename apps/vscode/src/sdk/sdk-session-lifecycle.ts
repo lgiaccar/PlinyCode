@@ -56,6 +56,8 @@ export interface SdkSessionLifecycleOptions {
 	 */
 	consumeModeSwitchNotice?: (sessionId: string) => ModeSwitchNotice | null
 	onDidBecomeIdle?: () => void
+	/** A foreground run ended after `elapsedMs`; feeds the task's accumulated running time. */
+	onRunElapsed?: (sessionId: string, elapsedMs: number) => void
 	/**
 	 * A send settled after its session left the foreground (it now runs in the
 	 * background). The background registry treats it as a turn end.
@@ -90,8 +92,20 @@ export class SdkSessionLifecycle {
 			return
 		}
 		activeSession.isRunning = isRunning
-		if (!isRunning) {
-			this.options.onDidBecomeIdle?.()
+		if (isRunning) {
+			activeSession.runningSince = Date.now()
+			return
+		}
+		this.flushRunTime(activeSession)
+		this.options.onDidBecomeIdle?.()
+	}
+
+	/** Reports the run in progress, if any, as elapsed time. */
+	private flushRunTime(session: ActiveSession): void {
+		const runningSince = session.runningSince
+		session.runningSince = undefined
+		if (runningSince !== undefined) {
+			this.options.onRunElapsed?.(session.sessionId, Date.now() - runningSince)
 		}
 	}
 
@@ -124,6 +138,7 @@ export class SdkSessionLifecycle {
 			await this.endActiveSession(reason)
 			return
 		}
+		this.flushRunTime(session)
 		forgetSession(session.sessionId)
 		await this.trackSessionStop(session.sdkHost, session.sessionId, reason)
 	}
@@ -138,6 +153,7 @@ export class SdkSessionLifecycle {
 		}
 
 		this.safeUnsubscribe(activeSession, reason)
+		this.flushRunTime(activeSession)
 		// Drop the router's per-session state (call log, sticky model, failover
 		// budget). Model health is process-wide and deliberately survives.
 		forgetSession(activeSession.sessionId)
@@ -212,6 +228,7 @@ export class SdkSessionLifecycle {
 			unsubscribe: () => {},
 			startResult,
 			isRunning: true,
+			runningSince: Date.now(),
 		}
 
 		return { startResult, sdkHost }
@@ -273,6 +290,7 @@ export class SdkSessionLifecycle {
 				: activeSession.startConfig,
 			startResult: restored.startResult,
 			isRunning: false,
+			runningSince: undefined,
 		}
 
 		if (restored.sessionId !== sourceSessionId) {

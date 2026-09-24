@@ -12,6 +12,7 @@ import {
 	DownloadIcon,
 	FolderIcon,
 	FolderOpenIcon,
+	PencilIcon,
 	StarIcon,
 	TrashIcon,
 } from "lucide-react"
@@ -22,8 +23,9 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
-import { formatLargeNumber, formatSize } from "@/utils/format"
+import { formatDuration, formatLargeNumber, formatSize } from "@/utils/format"
 import { BackgroundTaskBadge } from "./BackgroundTaskBadge"
+import TaskTitleInput from "./TaskTitleInput"
 
 type HistoryViewItemProps = {
 	item: TaskItem
@@ -32,6 +34,7 @@ type HistoryViewItemProps = {
 	pendingFavoriteToggles: Record<string, boolean>
 	handleDeleteHistoryItem: (id: string) => void
 	toggleFavorite: (id: string, isCurrentlyFavorited: boolean) => void
+	renameTask: (id: string, title: string) => void
 	handleHistorySelect: (itemId: string, checked: boolean) => void
 }
 
@@ -40,10 +43,12 @@ const HistoryViewItem = ({
 	pendingFavoriteToggles,
 	handleDeleteHistoryItem,
 	toggleFavorite,
+	renameTask,
 	handleHistorySelect,
 	selectedItems,
 }: HistoryViewItemProps) => {
 	const [expanded, setExpanded] = useState(false)
+	const [isRenaming, setIsRenaming] = useState(false)
 	const isCostVisible = useUsageCostVisibility()
 	const { platform } = useExtensionState()
 
@@ -107,9 +112,17 @@ const HistoryViewItem = ({
 					handleShowTaskWithId(item.id)
 				}}>
 				<div className="flex items-center gap-2">
-					<div className="line-clamp-1 overflow-hidden break-words whitespace-pre-wrap flex-1 min-w-0">
-						<span className="ph-no-capture">{item.task}</span>
-					</div>
+					{isRenaming ? (
+						<TaskTitleInput
+							initialTitle={item.task}
+							onCommit={(title) => renameTask(item.id, title)}
+							onDone={() => setIsRenaming(false)}
+						/>
+					) : (
+						<div className="line-clamp-1 overflow-hidden break-words whitespace-pre-wrap flex-1 min-w-0">
+							<span className="ph-no-capture">{item.task}</span>
+						</div>
+					)}
 					<BackgroundTaskBadge taskId={item.id} />
 					{item.isLegacy && (
 						<span className="text-xs uppercase rounded px-1.5 py-0.5 bg-accent/20 text-description flex-shrink-0">
@@ -117,6 +130,21 @@ const HistoryViewItem = ({
 						</span>
 					)}
 					<div className="flex gap-1 flex-shrink-0 items-center">
+						<Tooltip>
+							<TooltipContent>Rename conversation</TooltipContent>
+							<TooltipTrigger asChild>
+								<Button
+									aria-label="Rename conversation"
+									className="p-0"
+									onClick={(e) => {
+										e.stopPropagation()
+										setIsRenaming(true)
+									}}
+									variant="icon">
+									<PencilIcon className="opacity-70" />
+								</Button>
+							</TooltipTrigger>
+						</Tooltip>
 						<Tooltip>
 							<TooltipContent>Export conversation as Markdown</TooltipContent>
 							<TooltipTrigger asChild>
@@ -185,7 +213,12 @@ const HistoryViewItem = ({
 					}}
 					variant="icon">
 					<div className="flex items-center justify-between w-full">
-						<div className="text-description text-xs uppercase">{formatDate(item.ts)}</div>
+						<div
+							className="text-description text-xs"
+							title={`Started ${formatDate(item.startedTs || item.ts)} · last active ${formatDate(item.ts)}${item.activeMs ? ` · agent running time ${formatDuration(item.activeMs)}` : ""}`}>
+							<span className="uppercase">Started {formatDate(item.startedTs || item.ts)}</span>
+							{item.activeMs > 0 && <span> · ran {formatDuration(item.activeMs)}</span>}
+						</div>
 						<div className="self-end flex items-center text-xs">
 							{isCostVisible(item.apiProvider) && (
 								<span className="text-description">${item.totalCost?.toFixed(4) ?? 0}</span>
