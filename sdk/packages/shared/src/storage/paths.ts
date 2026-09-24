@@ -458,6 +458,13 @@ function dedupePaths(paths: ReadonlyArray<string>): string[] {
 	return deduped;
 }
 
+/**
+ * Config roots of other coding agents whose `skills/<name>/SKILL.md` layout
+ * follows the same Agent Skills convention, so a workspace set up for GitHub
+ * Copilot, Cursor or Claude Code gets its skills without copying them.
+ */
+export const EXTERNAL_SKILLS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
+
 function getWorkspaceSkillDirectories(workspacePath?: string): string[] {
 	if (!workspacePath) {
 		return [];
@@ -466,6 +473,7 @@ function getWorkspaceSkillDirectories(workspacePath?: string): string[] {
 		DEPRECATED_CONFIG_DIR,
 		CLINE_CONFIG_DIR,
 		LEGACY_AGENT_SKILLS_CONFIG_DIR,
+		...EXTERNAL_SKILLS_CONFIG_DIRS,
 	].map((dir) => join(workspacePath, dir, SKILLS_CONFIG_DIRECTORY_NAME));
 }
 
@@ -535,6 +543,36 @@ export function resolveWorkspaceRulesConfigPaths(
 }
 
 /**
+ * Workspace rule files written for other coding agents, keyed by the tool that
+ * owns them. Each entry is a file or a directory of rule files.
+ *
+ * - GitHub Copilot: `.github/copilot-instructions.md` plus scoped
+ *   `.github/instructions/*.instructions.md` files (`applyTo:` frontmatter)
+ * - Cursor: `.cursor/rules/*.mdc` (`globs:`/`alwaysApply:` frontmatter) and
+ *   the legacy root `.cursorrules` file
+ * - Windsurf: the root `.windsurfrules` file
+ */
+export function resolveExternalWorkspaceRulesConfigPaths(
+	workspacePath: string,
+): {
+	copilot: string[];
+	cursor: string[];
+	windsurf: string[];
+} {
+	return {
+		copilot: [
+			join(workspacePath, ".github", "copilot-instructions.md"),
+			join(workspacePath, ".github", "instructions"),
+		],
+		cursor: [
+			join(workspacePath, ".cursor", RULES_CONFIG_DIRECTORY_NAME),
+			join(workspacePath, ".cursorrules"),
+		],
+		windsurf: [join(workspacePath, ".windsurfrules")],
+	};
+}
+
+/**
  * On Windows, the user's Documents folder is frequently redirected by
  * OneDrive "Known Folder Move" to `%OneDrive%\Documents`. The VS Code
  * extension resolves the real Documents folder through the OS (PowerShell
@@ -584,9 +622,15 @@ export function resolveRulesConfigSearchPaths(
 	const workspaceAgentsFile = workspacePath
 		? [join(workspacePath, AGENTS_RULES_FILE_NAME)]
 		: [];
+	const externalPaths = workspacePath
+		? Object.values(
+				resolveExternalWorkspaceRulesConfigPaths(workspacePath),
+			).flat()
+		: [];
 	return dedupePaths([
 		...workspaceAgentsFile,
 		...wsPaths,
+		...externalPaths,
 		resolveGlobalAgentsRulesPath(),
 		...resolveGlobalRulesConfigPaths(),
 	]);

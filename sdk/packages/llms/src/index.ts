@@ -136,8 +136,17 @@ export {
 	PLINY_DEFAULT_MODEL_ID,
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 	PLINY_FREE_AUTO_MODEL_ID,
+	PLINY_FREE_AUTO_PROFILES,
 	PLINY_TIMEOUT_MS,
+	type PlinyFreeAutoProfile,
+	type PlinyThinkingControls,
+	type PlinyThinkingOff,
+	type PlinyThinkingOn,
+	plinyCanThink,
+	plinyFreeAutoModelId,
+	plinyFreeAutoProfile,
 	plinyFreePoolIds,
+	plinyThinkingControls,
 	resolvePlinyConcreteModelId,
 } from "./providers/pliny-models";
 export { resolveProviderModelCatalogKeys } from "./providers/provider-keys";

@@ -52,6 +52,9 @@ service FileService {
   // Toggle an Agents rule (enable or disable)
   rpc toggleAgentsRule(ToggleAgentsRuleRequest) returns (ClineRulesToggles);
 
+  // Toggle a GitHub Copilot instructions file (enable or disable)
+  rpc toggleCopilotRule(ToggleCopilotRuleRequest) returns (ClineRulesToggles);
+
   // Refreshes all rule toggles (Cline, External, and Workflows)
   rpc refreshRules(EmptyRequest) returns (RefreshedRules);
 
@@ -104,6 +107,9 @@ message RefreshedRules {
   ClineRulesToggles local_agents_rules_toggles = 5;
   ClineRulesToggles local_workflow_toggles = 6;
   ClineRulesToggles global_workflow_toggles = 7;
+  ClineRulesToggles local_copilot_rules_toggles = 8;
+  // Estimated prompt tokens per rule file, keyed by the same absolute path as the toggles
+  map<string, int32> token_counts = 9;
 }
 
 // Request to toggle a Windsurf rule
@@ -308,6 +314,7 @@ message SkillInfo {
   string path = 3; // Full path to SKILL.md file (or "remote:<name>" for remote skills)
   bool enabled = 4; // Whether the skill is enabled
   bool always_enabled = 5; // Whether the skill is always enabled (remote only, user cannot toggle off)
+  int32 tokens = 6; // Estimated tokens of the full SKILL.md, loaded when the skill is used
 }
 
 // Response for refreshSkills operation
@@ -343,4 +350,10 @@ message DeleteSkillRequest {
   Metadata metadata = 1;
   string skill_path = 2; // Path to the skill directory
   bool is_global = 3; // Whether this is a global or workspace skill
+}
+
+message ToggleCopilotRuleRequest {
+  Metadata metadata = 1;
+  string rule_path = 2; // Path to the rule file
+  bool enabled = 3; // Whether to enable or disable the rule
 }

@@ -84,6 +84,7 @@ function coreConfigFromLocalRuntime(
 	const {
 		modelCatalogDefaults: _modelCatalogDefaults,
 		userInstructionService: _userInstructionService,
+		ruleFilter: _ruleFilter,
 		configExtensions: _configExtensions,
 		onTeamRestored: _onTeamRestored,
 		...localConfig

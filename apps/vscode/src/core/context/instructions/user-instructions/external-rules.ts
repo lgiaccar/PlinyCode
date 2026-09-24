@@ -1,11 +1,36 @@
 import { combineRuleToggles, synchronizeRuleToggles } from "@core/context/instructions/user-instructions/rule-helpers"
 import { GlobalFileNames } from "@core/storage/disk"
+import { resolveExternalWorkspaceRulesConfigPaths } from "@plinycode/shared/storage"
 import { ClineRulesToggles } from "@shared/cline-rules"
 import path from "path"
 import { Controller } from "@/core/controller"
 
 /**
- * Refreshes the toggles for windsurf, cursor, and agents rules
+ * Synchronizes toggles for every rule location of one tool. Directories are
+ * scanned once per accepted extension; `synchronizeRuleToggles` prunes toggles
+ * outside what it scanned, so every pass starts from the same state and the
+ * results are combined.
+ */
+async function synchronizeExternalToggles(
+	locations: string[],
+	currentToggles: ClineRulesToggles,
+	directoryExtensions: string[],
+): Promise<ClineRulesToggles> {
+	let combined: ClineRulesToggles = {}
+	for (const location of locations) {
+		for (const extension of directoryExtensions) {
+			combined = combineRuleToggles(combined, await synchronizeRuleToggles(location, currentToggles, extension))
+		}
+	}
+	return combined
+}
+
+/**
+ * Refreshes the toggles for rules written for other agents (GitHub Copilot,
+ * Cursor, Windsurf) and the workspace AGENTS.md. The locations come from the
+ * same shared resolver the SDK runtime loads rules from, so the Rules panel
+ * lists exactly what can reach the model. New files start enabled, like any
+ * other workspace rule.
  */
 export async function refreshExternalRulesToggles(
 	controller: Controller,
@@ -14,36 +39,44 @@ export async function refreshExternalRulesToggles(
 	windsurfLocalToggles: ClineRulesToggles
 	cursorLocalToggles: ClineRulesToggles
 	agentsLocalToggles: ClineRulesToggles
+	copilotLocalToggles: ClineRulesToggles
 }> {
-	// local windsurf toggles
-	const localWindsurfRulesToggles = controller.stateManager.getWorkspaceStateKey("localWindsurfRulesToggles")
-	const localWindsurfRulesFilePath = path.resolve(workingDirectory, GlobalFileNames.windsurfRules)
-	const updatedLocalWindsurfToggles = await synchronizeRuleToggles(localWindsurfRulesFilePath, localWindsurfRulesToggles)
+	const external = resolveExternalWorkspaceRulesConfigPaths(workingDirectory)
+
+	const updatedLocalWindsurfToggles = await synchronizeExternalToggles(
+		external.windsurf,
+		controller.stateManager.getWorkspaceStateKey("localWindsurfRulesToggles"),
+		[""],
+	)
 	controller.stateManager.setWorkspaceState("localWindsurfRulesToggles", updatedLocalWindsurfToggles)
 
-	// local cursor toggles
-	const localCursorRulesToggles = controller.stateManager.getWorkspaceStateKey("localCursorRulesToggles")
-
-	// cursor has two valid locations for rules files, so we need to check both and combine
-	// synchronizeRuleToggles will drop whichever rules files are not in each given path, but combining the results will result in no data loss
-	let localCursorRulesFilePath = path.resolve(workingDirectory, GlobalFileNames.cursorRulesDir)
-	const updatedLocalCursorToggles1 = await synchronizeRuleToggles(localCursorRulesFilePath, localCursorRulesToggles, ".mdc")
-
-	localCursorRulesFilePath = path.resolve(workingDirectory, GlobalFileNames.cursorRulesFile)
-	const updatedLocalCursorToggles2 = await synchronizeRuleToggles(localCursorRulesFilePath, localCursorRulesToggles)
-
-	const updatedLocalCursorToggles = combineRuleToggles(updatedLocalCursorToggles1, updatedLocalCursorToggles2)
+	// Cursor: `.cursor/rules/**/*.mdc` (and plain `.md`) plus the legacy `.cursorrules` file.
+	const updatedLocalCursorToggles = await synchronizeExternalToggles(
+		external.cursor,
+		controller.stateManager.getWorkspaceStateKey("localCursorRulesToggles"),
+		[".mdc", ".md"],
+	)
 	controller.stateManager.setWorkspaceState("localCursorRulesToggles", updatedLocalCursorToggles)
 
-	// local agents toggles
-	const localAgentsRulesToggles = controller.stateManager.getWorkspaceStateKey("localAgentsRulesToggles")
+	// GitHub Copilot: `.github/copilot-instructions.md` plus `.github/instructions/**/*.instructions.md`.
+	const updatedLocalCopilotToggles = await synchronizeExternalToggles(
+		external.copilot,
+		controller.stateManager.getWorkspaceStateKey("localCopilotRulesToggles"),
+		[".md"],
+	)
+	controller.stateManager.setWorkspaceState("localCopilotRulesToggles", updatedLocalCopilotToggles)
+
 	const localAgentsRulesFilePath = path.resolve(workingDirectory, GlobalFileNames.agentsRulesFile)
-	const updatedLocalAgentsToggles = await synchronizeRuleToggles(localAgentsRulesFilePath, localAgentsRulesToggles)
+	const updatedLocalAgentsToggles = await synchronizeRuleToggles(
+		localAgentsRulesFilePath,
+		controller.stateManager.getWorkspaceStateKey("localAgentsRulesToggles"),
+	)
 	controller.stateManager.setWorkspaceState("localAgentsRulesToggles", updatedLocalAgentsToggles)
 
 	return {
 		windsurfLocalToggles: updatedLocalWindsurfToggles,
 		cursorLocalToggles: updatedLocalCursorToggles,
 		agentsLocalToggles: updatedLocalAgentsToggles,
+		copilotLocalToggles: updatedLocalCopilotToggles,
 	}
 }

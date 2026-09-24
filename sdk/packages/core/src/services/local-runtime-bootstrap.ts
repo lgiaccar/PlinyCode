@@ -341,6 +341,7 @@ export async function prepareLocalRuntimeBootstrap(
 	const {
 		modelCatalogDefaults,
 		userInstructionService,
+		ruleFilter,
 		configExtensions,
 		onTeamRestored,
 		...localConfigFields
@@ -599,6 +600,7 @@ export async function prepareLocalRuntimeBootstrap(
 			onSubAgentStart: subAgentLifecycleCallbacks?.onSubAgentStart,
 			onSubAgentEnd: subAgentLifecycleCallbacks?.onSubAgentEnd,
 			userInstructionService: userInstructionService,
+			ruleFilter,
 			pluginSkillDirectories,
 			agentPluginSkills: loadedAgentPluginPackages?.skills,
 			agentPluginMcpServers: loadedAgentPluginPackages?.mcpServers,

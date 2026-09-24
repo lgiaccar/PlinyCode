@@ -12,7 +12,11 @@
  * Nothing in the extension reads these files at runtime; they exist so a human
  * can justify the default ordering and spot models that have gone bad.
  *
- * Usage:  PLINY_API_KEY=... bun scripts/probe-pliny-free-models.ts [--runs 3]
+ * With --thinking it instead measures, per model, whether it reasons by default
+ * and which request fields turn reasoning on or off. The result is what the
+ * `thinking` entries in pliny-models.json are copied from.
+ *
+ * Usage:  PLINY_API_KEY=... bun scripts/probe-pliny-free-models.ts [--runs 3] [--thinking] [--only <substring>]
  */
 
 import { mkdir, writeFile } from "node:fs/promises"
@@ -52,6 +56,8 @@ interface ModelReport {
 const API_KEY = process.env.PLINY_API_KEY
 const BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL
 const RUNS = Number(process.argv[process.argv.indexOf("--runs") + 1]) || 3
+const THINKING = process.argv.includes("--thinking")
+const ONLY = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] : undefined
 const REQUEST_TIMEOUT_MS = 120_000
 
 /** A prompt that forces a tool call, so tool support is observed and not assumed. */
@@ -79,7 +85,7 @@ const TOOL_PROBE = {
 }
 
 function freeModels(): CatalogEntry[] {
-	return (catalog.selfHosted as CatalogEntry[]).filter((entry) => entry.tool_call)
+	return (catalog.selfHosted as CatalogEntry[]).filter((entry) => entry.tool_call && (!ONLY || entry.id.includes(ONLY)))
 }
 
 function median(values: number[]): number | undefined {
@@ -249,6 +255,297 @@ router benches it automatically after repeated failures at runtime.
 `
 }
 
+// ---------------------------------------------------------------------------
+// --thinking: which request fields switch reasoning on and off
+// ---------------------------------------------------------------------------
+
+/** A question small models answer instantly but reasoning models deliberate over. */
+const THINKING_PROMPT =
+	"A bat and a ball cost $1.10 in total. The bat costs $1.00 more than the ball. " +
+	"How much does the ball cost? Reply with just the amount."
+
+/** Body patches tried on every model. Names are what the catalog records. */
+const THINKING_VARIANTS: Record<string, Record<string, unknown>> = {
+	baseline: {},
+	"effort-high": { reasoning_effort: "high" },
+	"template-on": { chat_template_kwargs: { enable_thinking: true } },
+	"effort-none": { reasoning_effort: "none" },
+	"template-off": { chat_template_kwargs: { enable_thinking: false } },
+	"reasoning-exclude": { reasoning: { exclude: true } },
+}
+
+interface ThinkingSample {
+	status: number
+	ok: boolean
+	/** Reasoning characters, from reasoning_content/reasoning deltas or an inline <think> block. */
+	reasoningChars: number
+	reasoningTokens?: number
+	contentChars: number
+	/** Time to the first visible answer character. */
+	ttftMs?: number
+	totalMs?: number
+	error?: string
+}
+
+type ThinkingOff = "template-kwargs" | "reasoning-effort-none" | "reasoning-exclude"
+type ThinkingOn = "reasoning-effort" | "template-kwargs"
+
+interface ThinkingReport {
+	id: string
+	variants: Record<string, ThinkingSample>
+	/** Reasons with no hint at all. */
+	defaultOn: boolean
+	/** The first field that reliably silenced reasoning, when it was on by default. */
+	off?: ThinkingOff
+	/** The first field that produced reasoning, when it was off by default. */
+	on?: ThinkingOn
+	/** Variants the gateway rejected outright (4xx). Sending these would fail the call. */
+	rejected: string[]
+}
+
+async function probeThinkingOnce(modelId: string, patch: Record<string, unknown>): Promise<ThinkingSample> {
+	const startedAt = Date.now()
+	let ttftMs: number | undefined
+	let reasoningChars = 0
+	let reasoningTokens: number | undefined
+	let content = ""
+
+	const controller = new AbortController()
+	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+	try {
+		const response = await fetch(`${BASE_URL}/chat/completions`, {
+			method: "POST",
+			signal: controller.signal,
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${API_KEY}`,
+				...(catalog.headers as Record<string, string>),
+			},
+			body: JSON.stringify({
+				model: modelId,
+				stream: true,
+				stream_options: { include_usage: true },
+				// Enough to see reasoning start; slow models need not finish it.
+				max_tokens: 400,
+				messages: [{ role: "user", content: THINKING_PROMPT }],
+				...patch,
+			}),
+		})
+		if (!response.ok || !response.body) {
+			return {
+				status: response.status,
+				ok: false,
+				reasoningChars: 0,
+				contentChars: 0,
+				error: (await response.text().catch(() => "")).slice(0, 200),
+			}
+		}
+
+		const reader = response.body.getReader()
+		const decoder = new TextDecoder()
+		let buffer = ""
+		for (;;) {
+			const { done, value } = await reader.read()
+			if (done) {
+				break
+			}
+			buffer += decoder.decode(value, { stream: true })
+			const lines = buffer.split("\n")
+			buffer = lines.pop() ?? ""
+			for (const line of lines) {
+				const trimmed = line.trim()
+				if (!trimmed.startsWith("data:")) {
+					continue
+				}
+				const payload = trimmed.slice(5).trim()
+				if (!payload || payload === "[DONE]") {
+					continue
+				}
+				try {
+					const chunk = JSON.parse(payload)
+					const delta = chunk.choices?.[0]?.delta
+					const reasoning = delta?.reasoning_content ?? delta?.reasoning
+					if (typeof reasoning === "string") {
+						reasoningChars += reasoning.length
+					}
+					if (typeof delta?.content === "string" && delta.content) {
+						content += delta.content
+						ttftMs ??= Date.now() - startedAt
+					}
+					const tokens = chunk.usage?.completion_tokens_details?.reasoning_tokens
+					if (typeof tokens === "number") {
+						reasoningTokens = tokens
+					}
+				} catch {
+					// Partial JSON across chunk boundaries is expected; skip it.
+				}
+			}
+		}
+
+		// Models served without a reasoning parser inline their thinking.
+		const inline = content.match(/<think>([\s\S]*?)(<\/think>|$)/)
+		if (inline) {
+			reasoningChars += inline[1].trim().length
+		}
+		return {
+			status: response.status,
+			ok: content.length > 0 || reasoningChars > 0,
+			reasoningChars,
+			...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+			contentChars: content.length,
+			ttftMs,
+			totalMs: Date.now() - startedAt,
+		}
+	} catch (error) {
+		return {
+			status: 0,
+			ok: false,
+			reasoningChars: 0,
+			contentChars: 0,
+			error: error instanceof Error ? error.message : String(error),
+		}
+	} finally {
+		clearTimeout(timeout)
+	}
+}
+
+/** A sample reasons when it produced reasoning text or billed reasoning tokens. */
+function reasons(sample: ThinkingSample | undefined): boolean {
+	return !!sample?.ok && (sample.reasoningChars > 20 || (sample.reasoningTokens ?? 0) > 0)
+}
+
+/**
+ * Probe every variant `RUNS` times and keep, per variant, the most
+ * reasoning-heavy sample: a switch only counts as "off" if it silenced
+ * reasoning on every run.
+ */
+async function probeThinking(entry: CatalogEntry): Promise<ThinkingReport> {
+	const variants: Record<string, ThinkingSample> = {}
+	for (const [name, patch] of Object.entries(THINKING_VARIANTS)) {
+		const samples: ThinkingSample[] = []
+		for (let run = 0; run < RUNS; run += 1) {
+			samples.push(await probeThinkingOnce(entry.id, patch))
+		}
+		variants[name] =
+			samples.find((sample) => !sample.ok) ??
+			samples.reduce((most, sample) => (sample.reasoningChars > most.reasoningChars ? sample : most))
+	}
+
+	const rejected = Object.entries(variants)
+		.filter(([, sample]) => sample.status >= 400 && sample.status < 500)
+		.map(([name]) => name)
+	const defaultOn = reasons(variants.baseline)
+	const silenced = (name: string) => variants[name]?.ok === true && !reasons(variants[name])
+
+	let off: ThinkingOff | undefined
+	let on: ThinkingOn | undefined
+	if (defaultOn) {
+		off = silenced("template-off")
+			? "template-kwargs"
+			: silenced("effort-none")
+				? "reasoning-effort-none"
+				: silenced("reasoning-exclude")
+					? "reasoning-exclude"
+					: undefined
+	} else {
+		on = reasons(variants["effort-high"])
+			? "reasoning-effort"
+			: reasons(variants["template-on"])
+				? "template-kwargs"
+				: undefined
+	}
+
+	return {
+		id: entry.id,
+		variants,
+		defaultOn,
+		...(off ? { off } : {}),
+		...(on ? { on } : {}),
+		rejected,
+	}
+}
+
+function describeThinking(report: ThinkingReport): string {
+	if (report.defaultOn) {
+		return report.off ? `on by default · off via \`${report.off}\`` : "**always on**"
+	}
+	return report.on ? `off by default · on via \`${report.on}\`` : "never"
+}
+
+function renderThinkingMarkdown(reports: ThinkingReport[]): string {
+	const cell = (sample: ThinkingSample | undefined) => {
+		if (!sample) {
+			return "—"
+		}
+		if (!sample.ok) {
+			return sample.status ? `✗ ${sample.status}` : "✗"
+		}
+		const tokens = sample.reasoningTokens ? ` (${sample.reasoningTokens} tok)` : ""
+		return `${sample.reasoningChars}${tokens}`
+	}
+	const names = Object.keys(THINKING_VARIANTS)
+	const rows = reports
+		.map(
+			(report) =>
+				`| \`${report.id}\` | ${describeThinking(report)} | ${names.map((name) => cell(report.variants[name])).join(" | ")} |`,
+		)
+		.join("\n")
+
+	return `# Pliny free model thinking probe
+
+Measured against the live gateway on ${new Date().toISOString().slice(0, 10)}, ${RUNS} run(s) per variant.
+Regenerate with:
+
+\`\`\`sh
+PLINY_API_KEY=... bun apps/vscode/scripts/probe-pliny-free-models.ts --thinking --runs 2
+\`\`\`
+
+Each cell is the number of reasoning characters the model produced for a short
+trick question (reasoning deltas, or an inline \`<think>\` block), with billed
+reasoning tokens in brackets when the gateway reports them. \`✗ 400\` means the
+gateway rejected that request field outright.
+
+| Model | Verdict | ${names.join(" | ")} |
+| --- | --- | ${names.map(() => "---").join(" | ")} |
+${rows}
+
+## How this feeds the router
+
+The verdict is copied into each model's \`thinking\` entry in
+\`sdk/packages/llms/src/providers/data/pliny-models.json\`. FreeAuto's \`quick\`
+routes then turn reasoning off only on models with a known off-switch, and its
+\`think\` routes turn it on only on models with a known on-switch, so an
+unsupported field is never sent.
+`
+}
+
+async function runThinkingProbe(models: CatalogEntry[], repoRoot: string): Promise<void> {
+	console.error(`Probing thinking controls on ${models.length} free models (${RUNS} run(s) per variant)...`)
+	const reports: ThinkingReport[] = []
+	for (const [index, entry] of models.entries()) {
+		process.stderr.write(`  [${index + 1}/${models.length}] ${entry.id} ... `)
+		const report = await probeThinking(entry)
+		reports.push(report)
+		const down = !report.variants.baseline?.ok
+		console.error(
+			down
+				? `DOWN (${report.variants.baseline?.status || "?"}: ${report.variants.baseline?.error?.slice(0, 60) ?? ""})`
+				: describeThinking(report).replace(/[`*]/g, ""),
+		)
+	}
+
+	const jsonPath = path.join(repoRoot, "sdk/packages/llms/src/providers/data/pliny-free-auto-thinking-probe.json")
+	const mdPath = path.join(repoRoot, "docs/pliny-free-auto-thinking.md")
+	await writeFile(
+		jsonPath,
+		`${JSON.stringify({ probedAt: new Date().toISOString(), baseURL: BASE_URL, runs: RUNS, reports }, null, 2)}\n`,
+	)
+	await mkdir(path.dirname(mdPath), { recursive: true })
+	await writeFile(mdPath, renderThinkingMarkdown(reports))
+	console.error(`\nWrote ${jsonPath}`)
+	console.error(`Wrote ${mdPath}`)
+}
+
 async function main(): Promise<void> {
 	if (!API_KEY) {
 		console.error("PLINY_API_KEY is not set; cannot probe the gateway.")
@@ -256,6 +553,11 @@ async function main(): Promise<void> {
 	}
 
 	const models = freeModels()
+	const repoRoot = path.resolve(import.meta.dir, "../../..")
+	if (THINKING) {
+		await runThinkingProbe(models, repoRoot)
+		return
+	}
 	console.error(`Probing ${models.length} free models at ${BASE_URL} (${RUNS} run(s) each)...`)
 
 	const reports: ModelReport[] = []
@@ -270,7 +572,6 @@ async function main(): Promise<void> {
 		console.error(status)
 	}
 
-	const repoRoot = path.resolve(import.meta.dir, "../../..")
 	const jsonPath = path.join(repoRoot, "sdk/packages/llms/src/providers/data/pliny-free-auto-probe.json")
 	const mdPath = path.join(repoRoot, "docs/pliny-free-auto-router.md")
 

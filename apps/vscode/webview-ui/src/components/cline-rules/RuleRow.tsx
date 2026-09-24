@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FileServiceClient } from "@/services/grpc-client"
+import { formatTokenCount } from "./tokenFormat"
 
 function isWin32Path(filePath: string): boolean {
 	return /^[a-zA-Z]:\\/.test(filePath)
@@ -37,7 +38,21 @@ const RuleRow: React.FC<{
 	isRemote?: boolean
 	alwaysEnabled?: boolean
 	onDeleteSkill?: () => void
-}> = ({ rulePath, enabled, isGlobal, toggleRule, ruleType, isRemote = false, alwaysEnabled = false, onDeleteSkill }) => {
+	/** Estimated tokens this file adds to the context; hidden when undefined. */
+	tokens?: number
+	tokensTitle?: string
+}> = ({
+	rulePath,
+	enabled,
+	isGlobal,
+	toggleRule,
+	ruleType,
+	isRemote = false,
+	alwaysEnabled = false,
+	onDeleteSkill,
+	tokens,
+	tokensTitle,
+}) => {
 	const displayName = getDisplayNameFromPath(rulePath)
 	const skillDisplayName = getSkillDisplayNameFromSkillMdPath(rulePath)
 
@@ -81,6 +96,8 @@ const RuleRow: React.FC<{
 						</g>
 					</svg>
 				)
+			case "copilot":
+				return <i className="codicon codicon-copilot" style={{ fontSize: "14px", verticalAlign: "middle" }} />
 			case "agents":
 				return (
 					<svg
@@ -152,6 +169,14 @@ const RuleRow: React.FC<{
 						</Tooltip>
 					)}
 				</span>
+
+				{tokens !== undefined && (
+					<span
+						className={`shrink-0 text-xs tabular-nums mr-1 ${enabled ? "text-description" : "text-description opacity-50 line-through"}`}
+						title={tokensTitle ?? `About ${tokens.toLocaleString()} tokens of context`}>
+						~{formatTokenCount(tokens)} tok
+					</span>
+				)}
 
 				{/* Toggle Switch */}
 				<div className="flex items-center space-x-2 gap-2">

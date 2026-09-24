@@ -1093,7 +1093,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 		checkpoint: {
 			enabled: enableCheckpoints,
 		},
-		enableSpawnAgent: stateManager.getGlobalSettingsKey("subagentsEnabled") === true,
+		enableSpawnAgent: stateManager.getGlobalSettingsKey("subagentsEnabled") !== false,
 		enableAgentTeams: false,
 		...(useAutoCondense
 			? {

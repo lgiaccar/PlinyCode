@@ -10,6 +10,7 @@ export default defineConfig({
 			"src/sdk/**/*.test.ts",
 			"src/hosts/vscode/VscodeEditPreview.test.ts",
 			"src/shared/vsCodeSelectorUtils.test.ts",
+			"src/shared/pliny.test.ts",
 			"src/shared/__tests__/workspacePath.test.ts",
 			"src/shared/__tests__/net-tls-fallback.test.ts",
 			"src/shared/proto-conversions/models/**/*.test.ts",

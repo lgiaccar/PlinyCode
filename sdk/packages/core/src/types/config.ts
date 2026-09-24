@@ -5,6 +5,7 @@ import type {
 	AgentMode,
 	AgentTool,
 	BasicLogger,
+	CompletionGuard,
 	ConsecutiveMistakeLimitContext,
 	ConsecutiveMistakeLimitDecision,
 	ExtensionContext,
@@ -39,6 +40,12 @@ export interface CoreModelConfig {
 	 * different model instead of surfacing a terminal error.
 	 */
 	onRunError?: AgentConfig["onRunError"];
+	/**
+	 * Consulted when the root agent ends a turn without tool calls; returning a
+	 * reminder keeps the run going. Combined with any guard core installs
+	 * itself (core's reminder wins when both fire).
+	 */
+	completionGuard?: CompletionGuard;
 	/**
 	 * Request model-side thinking/reasoning when supported.
 	 */

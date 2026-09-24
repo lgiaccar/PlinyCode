@@ -361,6 +361,7 @@ class StdioHookRunner<Name extends HookName> extends HookRunner<Name> {
 			const stdout = hookProcess.getStdout()
 			const stderr = hookProcess.getStderr()
 			const exitCode = hookProcess.getExitCode()
+			hookProcess.dispose()
 
 			// Try to parse JSON output
 			const parseJsonOutput = (): HookOutput | null => {
@@ -593,6 +594,7 @@ class StdioHookRunner<Name extends HookName> extends HookRunner<Name> {
 			// Hook execution failed - categorize the error
 			const stderr = hookProcess.getStderr()
 			const exitCode = hookProcess.getExitCode()
+			hookProcess.dispose()
 
 			// Check for timeout
 			if (error instanceof Error && error.message.includes("timed out")) {

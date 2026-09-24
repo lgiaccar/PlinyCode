@@ -74,6 +74,7 @@ export class StateManager {
 	private pendingWorkspaceState = new Set<LocalStateKey>()
 	private persistenceTimeout: NodeJS.Timeout | null = null
 	private readonly PERSISTENCE_DELAY_MS = 500
+	private isDisposing = false
 	private taskHistoryWatcher: FSWatcher | null = null
 
 	// Callback for persistence errors
@@ -576,20 +577,21 @@ export class StateManager {
 	 * Dispose of the state manager
 	 */
 	private dispose(): void {
+		this.isDisposing = true
 		if (this.persistenceTimeout) {
 			clearTimeout(this.persistenceTimeout)
 			this.persistenceTimeout = null
 		}
+		// Clear all pending state sets to prevent memory leaks
+		this.pendingGlobalState.clear()
+		this.pendingTaskState.clear()
+		this.pendingSecrets.clear()
+		this.pendingWorkspaceState.clear()
 		// Close file watcher if active
 		if (this.taskHistoryWatcher) {
 			this.taskHistoryWatcher.close()
 			this.taskHistoryWatcher = null
 		}
-
-		this.pendingGlobalState.clear()
-		this.pendingSecrets.clear()
-		this.pendingWorkspaceState.clear()
-		this.pendingTaskState.clear()
 
 		this.globalStateCache = {} as GlobalStateAndSettings
 		this.secretsCache = {} as Secrets
@@ -650,6 +652,11 @@ export class StateManager {
 	 * Schedule debounced persistence - simple timeout-based persistence
 	 */
 	private scheduleDebouncedPersistence(): void {
+		// Don't schedule persistence if disposing
+		if (this.isDisposing) {
+			return
+		}
+
 		// Clear existing timeout if one is pending
 		if (this.persistenceTimeout) {
 			clearTimeout(this.persistenceTimeout)
@@ -657,6 +664,14 @@ export class StateManager {
 
 		// Schedule a new timeout to persist pending changes
 		this.persistenceTimeout = setTimeout(async () => {
+			// Check again if disposing before executing
+			if (this.isDisposing) {
+				if (this.persistenceTimeout) {
+					clearTimeout(this.persistenceTimeout)
+					this.persistenceTimeout = null
+				}
+				return
+			}
 			try {
 				await this.persistPendingState()
 				this.persistenceTimeout = null

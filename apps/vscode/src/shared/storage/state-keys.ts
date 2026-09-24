@@ -264,8 +264,6 @@ const USER_SETTINGS_FIELDS = {
 	 * picks a specific model afterwards is never pushed back to the router.
 	 */
 	plinyFreeAutoMigratedV1: { default: false as boolean },
-	plinycodeContextFoldersEnabled: { default: true as boolean },
-	plinycodeContextFolders: { default: [".github", ".vscode", ".devcontainer", ".cursor"] as string[] },
 	autoApprovalSettings: {
 		default: DEFAULT_AUTO_APPROVAL_SETTINGS as AutoApprovalSettings,
 	},
@@ -283,7 +281,7 @@ const USER_SETTINGS_FIELDS = {
 	defaultTerminalProfile: { default: "default" as string },
 	hooksEnabled: { default: true as boolean },
 	useAutoCondense: { default: true as boolean },
-	subagentsEnabled: { default: false as boolean },
+	subagentsEnabled: { default: true as boolean },
 	worktreesEnabled: { default: false as boolean },
 	preferredLanguage: { default: "English" as string },
 	mode: { default: "act" as Mode },
@@ -375,6 +373,7 @@ export const LocalStateKeys = [
 	"localCursorRulesToggles",
 	"localWindsurfRulesToggles",
 	"localAgentsRulesToggles",
+	"localCopilotRulesToggles",
 	"localSkillsToggles",
 	"workflowToggles",
 ] as const

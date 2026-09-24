@@ -13,11 +13,19 @@
  */
 
 import type { CoreSessionConfig } from "@plinycode/core"
-import { isPlinyFreeAutoModelId, type ModelInfo } from "@plinycode/llms"
+import {
+	isPlinyFreeAutoModelId,
+	isPlinyFreeModelId,
+	type ModelInfo,
+	plinyFreeAutoProfile,
+	plinyThinkingControls,
+} from "@plinycode/llms"
 import { type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
 import { createRoutedAgentModel } from "./routed-agent-model"
+import { appendCallLog, type RouterCallLogRecord } from "./router-call-log"
+import { runClassifier } from "./router-classifier"
 import {
 	beginTurn,
 	forgetSessionsWithPrefix,
@@ -28,7 +36,8 @@ import {
 } from "./router-health"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
-import type { RouterRequestFeatures, RouterRules } from "./router-types"
+import type { RouterCallTiming, RouterRequestFeatures, RouterRules } from "./router-types"
+import { createUnfinishedTurnGuard } from "./unfinished-turn-guard"
 
 export interface RouterInstallDeps {
 	sessionId: string
@@ -40,8 +49,15 @@ export interface RouterInstallDeps {
 	emitRow: (message: ClineMessage) => void
 	/** Mints a unique, monotonic message id. */
 	nextMessageTs: () => number
+	/** Where the call log goes; defaults to the call log next to the rules files. */
+	logCall?: (record: RouterCallLogRecord) => void
 	/** Injectable for tests. */
 	now?: () => number
+}
+
+/** `FreeAuto`, or `FreeAuto·fast` for a non-default profile. */
+function routerLabel(profile: string): string {
+	return profile === "default" ? "FreeAuto" : `FreeAuto·${profile}`
 }
 
 /** `HH:MM:SS` for in-turn rows; the date leads the first row of a turn. */
@@ -106,22 +122,29 @@ function requestHasImages(request: AgentModelRequest): boolean {
 export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps): CoreSessionConfig {
 	const now = deps.now ?? (() => Date.now())
 	const isRouted = () => isPlinyFreeAutoModelId(config.modelId)
+	const logCall = deps.logCall ?? ((record: RouterCallLogRecord) => void appendCallLog(record))
+	const installProfile = plinyFreeAutoProfile(config.modelId)
 
 	// Rules are loaded asynchronously but routing is synchronous, so keep the
-	// last loaded copy and refresh it in the background. The first call of a
-	// session uses built-in defaults if the file has not been read yet, which is
-	// the correct conservative behavior.
-	let cachedRules: RouterRules | undefined
+	// last loaded copy per profile and refresh it in the background. The first
+	// call of a session uses built-in defaults if the file has not been read
+	// yet, which is the correct conservative behavior.
+	const cachedRules = new Map<string, RouterRules>()
+	const rulesFor = (profile: string) => cachedRules.get(profile) ?? defaultRules(profile)
 	let onRulesLoaded: ((rules: RouterRules) => void) | undefined
-	const refreshRules = () => {
-		loadRouterRules({ workspaceRoot: deps.workspaceRoot })
+	const refreshRules = (profile: string) => {
+		loadRouterRules({ workspaceRoot: deps.workspaceRoot, profile })
 			.then((rules) => {
-				cachedRules = rules
-				onRulesLoaded?.(rules)
+				cachedRules.set(profile, rules)
+				if (profile === installProfile) {
+					onRulesLoaded?.(rules)
+				}
 			})
-			.catch((error) => Logger.warn(`[FreeAuto] Failed to load rules: ${error}`))
+			.catch((error) => Logger.warn(`[FreeAuto] Failed to load ${profile} rules: ${error}`))
 	}
-	refreshRules()
+	if (isRouted()) {
+		refreshRules(installProfile)
+	}
 
 	const emitInfo = (text: string) => {
 		deps.emitRow({
@@ -142,54 +165,127 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// one. Parallel spawn_agent calls would share it — a known limitation.
 	let subRunCounter = 0
 	let activeTurnKey = deps.sessionId
+	let activeProfile = installProfile
 
 	config.agentModelFactory = ({ config: agentConfig, createDefault }) => {
 		if (!isPlinyFreeAutoModelId(agentConfig.modelId)) {
 			return createDefault()
 		}
+		const profile = plinyFreeAutoProfile(agentConfig.modelId)
 		const isSubAgent = Boolean(agentConfig.parentAgentId)
 		const turnKey = isSubAgent ? `${deps.sessionId}:sub:${++subRunCounter}` : deps.sessionId
 		if (!isSubAgent) {
 			forgetSessionsWithPrefix(`${deps.sessionId}:sub:`)
 		}
 		activeTurnKey = turnKey
+		activeProfile = profile
 		const rowPrefix = isSubAgent ? "↳ sub-agent " : ""
 		// Each run is a new turn from the router's point of view.
 		beginTurn(turnKey, now())
-		refreshRules()
+		refreshRules(profile)
+
+		const logAttempt = (
+			modelId: string,
+			timing: RouterCallTiming,
+			outcome: RouterCallLogRecord["outcome"],
+			error?: string,
+		) => {
+			const call = [...getSessionState(turnKey).calls].reverse().find((entry) => entry.modelId === modelId)
+			logCall({
+				ts: new Date(timing.startedAt).toISOString(),
+				sessionId: deps.sessionId,
+				subAgent: isSubAgent,
+				profile,
+				route: call?.routeName ?? "default",
+				...(call?.classification ? { tier: call.classification.tier, think: call.classification.think } : {}),
+				...(call?.effort ? { effort: call.effort } : {}),
+				model: modelId,
+				...(call?.estimatedTokens !== undefined ? { estimatedTokens: call.estimatedTokens } : {}),
+				...(timing.firstContentAt !== undefined ? { ttftMs: timing.firstContentAt - timing.startedAt } : {}),
+				durationMs: timing.endedAt - timing.startedAt,
+				outcome,
+				...(error ? { error: error.slice(0, 300) } : {}),
+			})
+		}
 
 		return createRoutedAgentModel({
 			now,
-			rules: () => cachedRules ?? fallbackRules(),
+			rules: () => rulesFor(profile),
 			knownModels: () => agentConfig.knownModels as Record<string, ModelInfo> | undefined,
 			isHealthy: (modelId) => isModelHealthy(modelId, now()),
 			createDelegate: (modelId) => createDefault({ modelId }),
 			features: (request) => buildFeatures(request, { turnKey, isSubAgent, mode: deps.getMode() }),
+			thinkingControls: plinyThinkingControls,
+			classify: async (request, features, rules) => {
+				if (!rules.classifier.enabled || features.isSubAgent) {
+					return undefined
+				}
+				const state = getSessionState(turnKey)
+				if (state.classifierRan) {
+					return state.classification
+				}
+				state.classifierRan = true
+				const startedAt = now()
+				const result = await runClassifier({
+					model: createDefault({ modelId: rules.utility.classifier }),
+					request,
+					features,
+					rules,
+				})
+				const elapsed = now() - startedAt
+				if (result.classification) {
+					state.classification = result.classification
+					Logger.log(
+						`[FreeAuto] classifier (${rules.utility.classifier}, ${elapsed}ms): ` +
+							`tier=${result.classification.tier} think=${result.classification.think}`,
+					)
+				} else {
+					emitInfo(
+						`\`${formatClock(now())}\` ${routerLabel(profile)} classifier gave no verdict (${result.error}) · using the heuristic routes`,
+					)
+					Logger.warn(`[FreeAuto] classifier gave no verdict after ${elapsed}ms: ${result.error}`)
+				}
+				return state.classification
+			},
 			observer: {
-				onCallStart: ({ modelId, decision, features }) => {
+				onCallStart: ({ modelId, decision, features, effort }) => {
 					const state = getSessionState(turnKey)
 					const startedAt = now()
-					state.calls.push({ modelId, startedAt, routeName: decision.routeName })
-					if (cachedRules?.sticky !== false) {
+					state.calls.push({
+						modelId,
+						startedAt,
+						routeName: decision.routeName,
+						estimatedTokens: features.estimatedTokens,
+						...(effort ? { effort } : {}),
+						...(decision.classification ? { classification: decision.classification } : {}),
+					})
+					if (rulesFor(profile).sticky) {
 						state.stickyModelId = modelId
 					}
 					const stamp = state.calls.length === 1 ? formatStamp(startedAt) : formatClock(startedAt)
+					const classifierTag =
+						decision.classification && state.calls.length === 1
+							? ` · classifier: ${decision.classification.tier}${decision.classification.think ? "+think" : ""}`
+							: ""
 					emitInfo(
-						`\`${stamp}\` ${rowPrefix}FreeAuto → **${modelLabel(modelId)}** ` +
-							`(call ${state.calls.length} · route: ${decision.routeName} · ~${approxTokens(features.estimatedTokens)} tok)`,
+						`\`${stamp}\` ${rowPrefix}${routerLabel(profile)} → **${modelLabel(modelId)}** ` +
+							`(call ${state.calls.length} · route: ${decision.routeName}${effort ? ` · ${effort}` : ""}${classifierTag} · ` +
+							`~${approxTokens(features.estimatedTokens)} tok)`,
 					)
 					Logger.log(
-						`[FreeAuto] ${isSubAgent ? "sub-agent " : ""}call ${state.calls.length} → ${modelId} (route=${decision.routeName}, est=${features.estimatedTokens})`,
+						`[FreeAuto] ${isSubAgent ? "sub-agent " : ""}call ${state.calls.length} → ${modelId} ` +
+							`(profile=${profile}, route=${decision.routeName}, effort=${effort ?? "default"}, est=${features.estimatedTokens})`,
 					)
 				},
-				onFailover: ({ modelId, nextModelId, error }) => {
-					const rules = cachedRules ?? fallbackRules()
+				onFailover: ({ modelId, nextModelId, error, timing }) => {
+					const rules = rulesFor(profile)
 					const state = getSessionState(turnKey)
 					state.failovers += 1
 					const last = state.calls[state.calls.length - 1]
 					if (last && last.modelId === modelId) {
 						last.failure = error
 					}
+					logAttempt(modelId, timing, "failover", error)
 					const { benched } = recordFailure(modelId, {
 						error,
 						failuresBeforeCooldown: rules.health.failuresBeforeCooldown,
@@ -206,15 +302,17 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 					)
 					Logger.warn(`[FreeAuto] failover ${modelId} → ${nextModelId ?? "(none)"}: ${error}`)
 				},
-				onCallSuccess: ({ modelId }) => {
+				onCallSuccess: ({ modelId, timing }) => {
 					recordSuccess(modelId)
+					logAttempt(modelId, timing, "success")
 				},
-				onCallError: ({ modelId, error }) => {
+				onCallError: ({ modelId, error, timing }) => {
 					const state = getSessionState(turnKey)
 					const last = state.calls[state.calls.length - 1]
 					if (last && last.modelId === modelId) {
 						last.failure = error
 					}
+					logAttempt(modelId, timing, "error", error)
 					Logger.warn(`[FreeAuto] ${modelId} failed after producing output: ${error}`)
 				},
 			},
@@ -225,7 +323,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		if (!isRouted()) {
 			return false
 		}
-		const rules = cachedRules ?? fallbackRules()
+		const rules = rulesFor(activeProfile)
 		const state = getSessionState(activeTurnKey)
 
 		if (errorClass === "auth") {
@@ -273,13 +371,25 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		}
 	}
 
+	// Free models often announce a step ("Let me check the log:") and end the
+	// reply without the tool call, which would end the run half done.
+	config.completionGuard = createUnfinishedTurnGuard({
+		isActive: () => isPlinyFreeModelId(config.modelId),
+		onNudge: ({ excerpt, nudgesThisRun }) => {
+			emitInfo(
+				`\`${formatClock(now())}\` ↻ The model stopped after _"${excerpt}"_ without acting · asked it to continue (${nudgesThisRun}/3)`,
+			)
+			Logger.log(`[FreeAuto] nudged a reply that announced a step without a tool call: ${excerpt}`)
+		},
+	})
+
 	// Compaction summaries talk to the gateway directly, so they must never be
 	// handed the virtual router id. The rules file has not loaded yet at this
 	// point, so the summarizer starts on the built-in default and is updated in
 	// place once the file is read: core keeps a reference to this object rather
 	// than a copy.
 	if (isRouted()) {
-		const summarizerModelId = fallbackRules().utility.summarizer
+		const summarizerModelId = defaultRules(installProfile).utility.summarizer
 		const summarizer = {
 			providerId: config.providerId,
 			modelId: summarizerModelId,
@@ -328,16 +438,17 @@ export function emitTurnSummary(deps: RouterInstallDeps, modelId: string): void 
 	const elapsed = formatDuration(now() - state.turnStartedAt)
 	const failovers = state.failovers > 0 ? ` · ${state.failovers} failover${state.failovers === 1 ? "" : "s"}` : ""
 
+	const label = routerLabel(plinyFreeAutoProfile(modelId))
 	deps.emitRow({
 		ts: deps.nextMessageTs(),
 		type: "say",
 		say: "info",
 		text:
-			`\`${formatStamp(now())}\` turn ended (${elapsed}) — ` +
+			`\`${formatStamp(now())}\` ${label} turn ended (${elapsed}) — ` +
 			`${state.calls.length} call${state.calls.length === 1 ? "" : "s"}: ${breakdown}${failovers}`,
 		partial: false,
 	})
-	Logger.log(`[FreeAuto] turn ended: ${state.calls.length} calls (${breakdown})${failovers}`)
+	Logger.log(`[FreeAuto] ${label} turn ended: ${state.calls.length} calls (${breakdown})${failovers}`)
 }
 
 /**
@@ -347,14 +458,6 @@ export function emitTurnSummary(deps: RouterInstallDeps, modelId: string): void 
 function isToolFailure(error: string): boolean {
 	const normalized = error.toLowerCase()
 	return normalized.includes("command execution aborted") || normalized.includes("command failed")
-}
-
-/**
- * Built-in defaults, used only for the first call of a session before the rules
- * file has been read.
- */
-function fallbackRules(): RouterRules {
-	return defaultRules()
 }
 
 function buildFeatures(

@@ -1426,7 +1426,8 @@ describe("buildSessionConfig", () => {
 		expect(config.compaction).toBeUndefined()
 	})
 
-	it("enables spawn_agent only when the subagentsEnabled setting is on", async () => {
+	it("enables spawn_agent unless the subagentsEnabled setting is explicitly off", async () => {
+		// The shared beforeEach stores an explicit `false`.
 		expect((await buildSessionConfig({ cwd: "/tmp/workspace" })).enableSpawnAgent).toBe(false)
 
 		mocks.stateManager.getGlobalSettingsKey.mockImplementation((key: string) => {
@@ -1435,10 +1436,12 @@ describe("buildSessionConfig", () => {
 			}
 			return undefined
 		})
+		const enabled = await buildSessionConfig({ cwd: "/tmp/workspace" })
+		expect(enabled.enableSpawnAgent).toBe(true)
+		expect(enabled.enableAgentTeams).toBe(false)
 
-		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
-		expect(config.enableSpawnAgent).toBe(true)
-		expect(config.enableAgentTeams).toBe(false)
+		mocks.stateManager.getGlobalSettingsKey.mockImplementation(() => undefined)
+		expect((await buildSessionConfig({ cwd: "/tmp/workspace" })).enableSpawnAgent).toBe(true)
 	})
 
 	it("lets task useAutoCondense override the global setting", async () => {

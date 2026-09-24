@@ -91,6 +91,7 @@ export interface ExtensionStateContextType extends ExtensionState {
 	setLocalCursorRulesToggles: (toggles: Record<string, boolean>) => void
 	setLocalWindsurfRulesToggles: (toggles: Record<string, boolean>) => void
 	setLocalAgentsRulesToggles: (toggles: Record<string, boolean>) => void
+	setLocalCopilotRulesToggles: (toggles: Record<string, boolean>) => void
 	setLocalWorkflowToggles: (toggles: Record<string, boolean>) => void
 	setGlobalWorkflowToggles: (toggles: Record<string, boolean>) => void
 	setGlobalSkillsToggles: (toggles: Record<string, boolean>) => void
@@ -287,6 +288,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		localCursorRulesToggles: {},
 		localWindsurfRulesToggles: {},
 		localAgentsRulesToggles: {},
+		localCopilotRulesToggles: {},
 		localWorkflowToggles: {},
 		globalWorkflowToggles: {},
 		shellIntegrationTimeout: 4000,
@@ -300,7 +302,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		useAutoCondense: true,
 		compactionStrategy: "basic",
 		webSearchEnabled: false,
-		subagentsEnabled: false,
+		subagentsEnabled: true,
 		worktreesEnabled: { user: true, featureFlag: false },
 		favoritedModelIds: [],
 		lastDismissedInfoBannerVersion: 0,
@@ -900,6 +902,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
 		localWindsurfRulesToggles: state.localWindsurfRulesToggles || {},
 		localAgentsRulesToggles: state.localAgentsRulesToggles || {},
+		localCopilotRulesToggles: state.localCopilotRulesToggles || {},
 		localWorkflowToggles: state.localWorkflowToggles || {},
 		globalWorkflowToggles: state.globalWorkflowToggles || {},
 		remoteRulesToggles: state.remoteRulesToggles || {},
@@ -965,6 +968,11 @@ export const ExtensionStateContextProvider: React.FC<{
 			setState((prevState) => ({
 				...prevState,
 				localAgentsRulesToggles: toggles,
+			})),
+		setLocalCopilotRulesToggles: (toggles) =>
+			setState((prevState) => ({
+				...prevState,
+				localCopilotRulesToggles: toggles,
 			})),
 		setLocalWorkflowToggles: (toggles) =>
 			setState((prevState) => ({

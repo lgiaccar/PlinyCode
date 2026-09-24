@@ -231,6 +231,17 @@ export interface AgentTool<TInput = unknown, TOutput = unknown>
 // Model adapter contract
 // =============================================================================
 
+/**
+ * Consulted when the model ends a turn without tool calls. Returning a string
+ * injects it as a reminder and keeps the run going instead of completing it.
+ * `message` is the assistant reply that made no tool call; `iteration` is its
+ * 1-based position in the current run.
+ */
+export type CompletionGuard = (context: {
+	message: AgentMessage;
+	iteration: number;
+}) => string | undefined;
+
 export interface AgentModelRequest {
 	systemPrompt?: string;
 	messages: readonly AgentMessage[];
@@ -582,7 +593,7 @@ export interface AgentRuntimeConfig {
 	maxIterations?: number;
 	completionPolicy?: {
 		requireCompletionTool?: boolean;
-		completionGuard?: () => string | undefined;
+		completionGuard?: CompletionGuard;
 	};
 	toolExecution?: "sequential" | "parallel";
 	toolPolicies?: Record<string, ToolPolicy>;

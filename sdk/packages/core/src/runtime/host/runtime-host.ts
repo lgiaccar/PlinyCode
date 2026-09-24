@@ -144,6 +144,11 @@ export interface LocalRuntimeStartOptions {
 	compaction?: LocalRuntimeBootstrapConfig["compaction"];
 	modelCatalogDefaults?: Partial<NonNullable<ProviderSettings["modelCatalog"]>>;
 	userInstructionService?: import("../../extensions/config").UserInstructionConfigService;
+	/**
+	 * Drops rules loaded from files the host has disabled (e.g. toggled off in
+	 * the VS Code Rules panel). Evaluated whenever the system prompt is built.
+	 */
+	ruleFilter?: import("../safety/rules").RuleFileFilter;
 	configExtensions?: RuntimeConfigExtensionKind[];
 	onTeamRestored?: () => void;
 }
