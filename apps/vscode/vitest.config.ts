@@ -12,6 +12,7 @@ export default defineConfig({
 			"src/shared/vsCodeSelectorUtils.test.ts",
 			"src/shared/pliny.test.ts",
 			"src/shared/__tests__/workspacePath.test.ts",
+			"src/shared/__tests__/net-tls-fallback.test.ts",
 			"src/shared/proto-conversions/models/**/*.test.ts",
 			"src/core/storage/remote-config/**/*.test.ts",
 			"src/core/controller/account/setUserOrganization.test.ts",
