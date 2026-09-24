@@ -81,12 +81,17 @@ always reports a result.
 **Limits:**
 - The updater only installs versions that are **newer** than the running one. It never downgrades.
 - **0.1.3** is the first release with the updater. Users on 0.1.2 or earlier install it by hand once.
+- **0.1.0** used a different extension ID (`synopsys-plinycode.claude-dev`; later releases are
+  `synopsys-plinycode.plinycode-dev`), so VS Code keeps both installed side by side, and they clash over the same
+  commands. On startup, PlinyCode uninstalls the old `claude-dev` build if it finds it, then offers a reload
+  (`legacy-extension.ts`).
 
 ## One-time setup for users
 
 1. Download `PlinyCode-<version>.vsix` from the newest [GitHub release](https://github.com/lgiaccar/PlinyCode/releases),
    or from the OneDrive folder.
-2. Install it: **Extensions → ⋯ → Install from VSIX…**, then reload the window.
+2. Install it: **Extensions → ⋯ → Install from VSIX…**, then reload the window. If you still have PlinyCode
+   0.1.0, it's removed automatically; reload again when asked.
 
 That's all; later releases install themselves. Optionally, choose **Add shortcut to My files** on the OneDrive
 folder, so updates still arrive if GitHub is blocked on your network.
@@ -146,6 +151,25 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
    or a tag that isn't `HEAD`.
 9. **Open the PR** for the release branch as usual.
 10. **Verify.** On a machine running the previous version, run **PlinyCode: Check for Updates**.
+
+## Testing a release before users get it
+
+GitHub's `/releases/latest` never serves a **pre-release**, so a pre-release reaches only the editors that point
+at it on purpose.
+
+1. On a throwaway branch, set a pre-release version such as `0.1.3-test.2`, commit, then tag and push only the
+   tag: `git tag release_0.1.3-test.2 && git push origin release_0.1.3-test.2`. Pre-release versions sort below
+   the real `0.1.3`, so testers move to the real release automatically once it ships.
+2. `bun run release:package`, write the notes, then `bun run release:publish -- --prerelease`. This publishes to
+   GitHub only (never the OneDrive folder), leaves the release unmarked as latest, and checks that
+   `/releases/latest` still serves the current release. It prints the pre-release's own `latest.json` URL.
+3. Testers set `plinycode.updates.url` to that URL. To test without touching your own install, use a separate
+   profile: `code --user-data-dir <tmp>/user-data --extensions-dir <tmp>/extensions`. Install the older build
+   there, set the URL in `<tmp>/user-data/User/settings.json`, and start it. About 30 s later,
+   `code --user-data-dir … --extensions-dir … --list-extensions --show-versions` shows the new version.
+4. Afterwards, delete the pre-release and its tag:
+   `gh release delete release_0.1.3-test.2 --repo lgiaccar/PlinyCode --cleanup-tag`, then
+   `git tag -d release_0.1.3-test.2`.
 
 ## Pulling a bad release
 

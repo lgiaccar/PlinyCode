@@ -266,7 +266,11 @@ async function publishRelease(): Promise<void> {
 			notes,
 		)
 	}
-	console.log(`\nPublished ${version}. Users get it at their next update check.`)
+	console.log(
+		prerelease
+			? `\nPublished pre-release ${version}. Only editors whose plinycode.updates.url points at it will install it.`
+			: `\nPublished ${version}. Users get it at their next update check.`,
+	)
 }
 
 switch (args[0]) {
@@ -278,6 +282,6 @@ switch (args[0]) {
 		break
 	default:
 		fail(
-			"usage: bun scripts/release.ts <package | publish [--dry-run] [--skip-github] [--skip-folder] [--folder <path>] [--force]>",
+			"usage: bun scripts/release.ts <package | publish [--dry-run] [--prerelease] [--skip-github] [--skip-folder] [--folder <path>] [--force]>",
 		)
 }
