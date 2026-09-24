@@ -24,6 +24,11 @@ export function releaseTag(version: string): string {
 	return `release_${version}`
 }
 
+/** latest.json of one specific release, e.g. a pre-release that /releases/latest never serves. */
+export function releaseManifestUrl(version: string): string {
+	return `https://github.com/${GITHUB_REPO}/releases/download/${releaseTag(version)}/latest.json`
+}
+
 /** Manifest attached to a GitHub release; its URLs point at that release only. */
 export function githubManifest(version: string, sha256: string, releasedAt: string): ReleaseManifest {
 	const tag = releaseTag(version)
