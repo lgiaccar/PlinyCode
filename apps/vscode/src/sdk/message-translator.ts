@@ -1408,6 +1408,7 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 						const taskPrompt = getStringField(parsedInput, "task") ?? ""
 						const callId = event.toolCallId ?? `spawn-${state.nextTs()}`
 						state.addSpawnAgent(callId, taskPrompt)
+						Logger.log(`[Subagent] spawned: ${taskPrompt.replace(/\s+/g, " ").slice(0, 120)}`)
 						if (approvedToolMessageTs !== undefined) {
 							state.setSpawnAgentPromptsTs(approvedToolMessageTs)
 						}
@@ -1627,6 +1628,10 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 							} else {
 								entry.status = "completed"
 							}
+							Logger.log(
+								`[Subagent] ${entry.status} · in ${entry.inputTokens ?? 0} / out ${entry.outputTokens ?? 0} tok` +
+									(entry.error ? ` · ${entry.error}` : ""),
+							)
 						}
 
 						// Determine overall status — all done when every entry is completed/failed

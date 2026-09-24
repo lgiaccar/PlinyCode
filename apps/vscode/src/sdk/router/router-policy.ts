@@ -28,6 +28,9 @@ export function routeMatches(route: RouterRoute, features: RouterRequestFeatures
 	if (when.maxPromptChars !== undefined && features.prompt.length > when.maxPromptChars) {
 		return false
 	}
+	if (when.subAgent !== undefined && when.subAgent !== features.isSubAgent) {
+		return false
+	}
 	if (when.promptRegex) {
 		try {
 			if (!new RegExp(when.promptRegex, "i").test(features.prompt)) {
@@ -66,6 +69,15 @@ export function fitsContext(
 }
 
 /**
+ * Whether a model declares image input. Unlike `fitsContext`, unknown metadata
+ * means "no": sending an image to a text-only model is a hard failure, not a
+ * maybe.
+ */
+export function supportsImages(modelId: string, knownModels: Record<string, ModelInfo> | undefined): boolean {
+	return knownModels?.[modelId]?.capabilities?.includes("images") ?? false
+}
+
+/**
  * Build the ordered candidate list for a call.
  *
  * Order: the matching route's models, then the rest of the pool as backups.
@@ -78,6 +90,9 @@ export function fitsContext(
  * window is a maybe, an unhealthy model is a known problem) and finally the
  * health filter, because refusing to make the call at all is worse than trying
  * a model that failed earlier.
+ *
+ * The image filter is never relaxed: a request with images can only go to a
+ * model that accepts them, and an empty result is the caller's cue to refuse.
  */
 export function selectCandidates(context: {
 	rules: RouterRules
@@ -107,6 +122,18 @@ export function selectCandidates(context: {
 		push(id)
 	}
 
+	const excludedNoImages: string[] = []
+	if (features.hasImages) {
+		const eligible = ordered.filter((id) => {
+			const ok = supportsImages(id, knownModels)
+			if (!ok) {
+				excludedNoImages.push(id)
+			}
+			return ok
+		})
+		ordered.splice(0, ordered.length, ...eligible)
+	}
+
 	const excludedUnhealthy: string[] = []
 	const excludedTooSmall: string[] = []
 	const healthy: string[] = []
@@ -132,5 +159,5 @@ export function selectCandidates(context: {
 		candidates = ordered
 	}
 
-	return { candidates, routeName, excludedUnhealthy, excludedTooSmall }
+	return { candidates, routeName, excludedUnhealthy, excludedTooSmall, excludedNoImages }
 }

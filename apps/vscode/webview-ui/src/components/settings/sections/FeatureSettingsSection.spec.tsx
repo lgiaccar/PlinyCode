@@ -49,6 +49,18 @@ describe("FeatureSettingsSection", () => {
 		expect(agentSection?.querySelector("#Hooks")).toBeNull()
 	})
 
+	it("renders the Sub-agents toggle in the Advanced section and wires it to subagentsEnabled", () => {
+		const { container } = render(<FeatureSettingsSection renderSectionHeader={() => null} />)
+
+		const advancedSection = container.querySelector("#advanced-features")
+		const subagentsSwitch = advancedSection?.querySelector('[id="Sub-agents"]')
+		expect(subagentsSwitch).toBeTruthy()
+
+		fireEvent.click(subagentsSwitch as Element)
+
+		expect(mockUpdateSetting).toHaveBeenCalledWith("subagentsEnabled", true)
+	})
+
 	it("renders Feature Tips toggle in the Editor section", () => {
 		const { container } = render(<FeatureSettingsSection renderSectionHeader={() => null} />)
 

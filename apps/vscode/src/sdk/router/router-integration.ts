@@ -18,7 +18,14 @@ import { type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/s
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
 import { createRoutedAgentModel } from "./routed-agent-model"
-import { beginTurn, getSessionState, isModelHealthy, recordFailure, recordSuccess } from "./router-health"
+import {
+	beginTurn,
+	forgetSessionsWithPrefix,
+	getSessionState,
+	isModelHealthy,
+	recordFailure,
+	recordSuccess,
+} from "./router-health"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import type { RouterRequestFeatures, RouterRules } from "./router-types"
@@ -105,10 +112,12 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// session uses built-in defaults if the file has not been read yet, which is
 	// the correct conservative behavior.
 	let cachedRules: RouterRules | undefined
+	let onRulesLoaded: ((rules: RouterRules) => void) | undefined
 	const refreshRules = () => {
 		loadRouterRules({ workspaceRoot: deps.workspaceRoot })
 			.then((rules) => {
 				cachedRules = rules
+				onRulesLoaded?.(rules)
 			})
 			.catch((error) => Logger.warn(`[FreeAuto] Failed to load rules: ${error}`))
 	}
@@ -124,12 +133,29 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		})
 	}
 
+	// Core copies this factory into every spawned sub-agent, whose runs happen
+	// inside the parent's turn. Each such run gets its own turn key so it cannot
+	// reset the parent's call log, sticky model or failover budget; model health
+	// stays process-wide. `activeTurnKey` is what `onRunError` (also copied to
+	// sub-agents, without access to the run) consults; sub-agent runs are
+	// sequential within the parent's tool call, so the latest key is the right
+	// one. Parallel spawn_agent calls would share it — a known limitation.
+	let subRunCounter = 0
+	let activeTurnKey = deps.sessionId
+
 	config.agentModelFactory = ({ config: agentConfig, createDefault }) => {
 		if (!isPlinyFreeAutoModelId(agentConfig.modelId)) {
 			return createDefault()
 		}
+		const isSubAgent = Boolean(agentConfig.parentAgentId)
+		const turnKey = isSubAgent ? `${deps.sessionId}:sub:${++subRunCounter}` : deps.sessionId
+		if (!isSubAgent) {
+			forgetSessionsWithPrefix(`${deps.sessionId}:sub:`)
+		}
+		activeTurnKey = turnKey
+		const rowPrefix = isSubAgent ? "↳ sub-agent " : ""
 		// Each run is a new turn from the router's point of view.
-		beginTurn(deps.sessionId, now())
+		beginTurn(turnKey, now())
 		refreshRules()
 
 		return createRoutedAgentModel({
@@ -138,10 +164,10 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			knownModels: () => agentConfig.knownModels as Record<string, ModelInfo> | undefined,
 			isHealthy: (modelId) => isModelHealthy(modelId, now()),
 			createDelegate: (modelId) => createDefault({ modelId }),
-			features: (request) => buildFeatures(request, deps, now()),
+			features: (request) => buildFeatures(request, { turnKey, isSubAgent, mode: deps.getMode() }),
 			observer: {
 				onCallStart: ({ modelId, decision, features }) => {
-					const state = getSessionState(deps.sessionId)
+					const state = getSessionState(turnKey)
 					const startedAt = now()
 					state.calls.push({ modelId, startedAt, routeName: decision.routeName })
 					if (cachedRules?.sticky !== false) {
@@ -149,16 +175,16 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 					}
 					const stamp = state.calls.length === 1 ? formatStamp(startedAt) : formatClock(startedAt)
 					emitInfo(
-						`\`${stamp}\` FreeAuto → **${modelLabel(modelId)}** ` +
+						`\`${stamp}\` ${rowPrefix}FreeAuto → **${modelLabel(modelId)}** ` +
 							`(call ${state.calls.length} · route: ${decision.routeName} · ~${approxTokens(features.estimatedTokens)} tok)`,
 					)
 					Logger.log(
-						`[FreeAuto] call ${state.calls.length} → ${modelId} (route=${decision.routeName}, est=${features.estimatedTokens})`,
+						`[FreeAuto] ${isSubAgent ? "sub-agent " : ""}call ${state.calls.length} → ${modelId} (route=${decision.routeName}, est=${features.estimatedTokens})`,
 					)
 				},
 				onFailover: ({ modelId, nextModelId, error }) => {
 					const rules = cachedRules ?? fallbackRules()
-					const state = getSessionState(deps.sessionId)
+					const state = getSessionState(turnKey)
 					state.failovers += 1
 					const last = state.calls[state.calls.length - 1]
 					if (last && last.modelId === modelId) {
@@ -174,7 +200,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						state.stickyModelId = nextModelId
 					}
 					emitInfo(
-						`\`${formatClock(now())}\` ⚠ **${modelLabel(modelId)}** failed: _${error}_` +
+						`\`${formatClock(now())}\` ${rowPrefix}⚠ **${modelLabel(modelId)}** failed: _${error}_` +
 							(benched ? " · benched" : "") +
 							(nextModelId ? ` → continuing with **${modelLabel(nextModelId)}**` : " · no candidates left"),
 					)
@@ -184,7 +210,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 					recordSuccess(modelId)
 				},
 				onCallError: ({ modelId, error }) => {
-					const state = getSessionState(deps.sessionId)
+					const state = getSessionState(turnKey)
 					const last = state.calls[state.calls.length - 1]
 					if (last && last.modelId === modelId) {
 						last.failure = error
@@ -200,7 +226,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			return false
 		}
 		const rules = cachedRules ?? fallbackRules()
-		const state = getSessionState(deps.sessionId)
+		const state = getSessionState(activeTurnKey)
 
 		if (errorClass === "auth") {
 			return false
@@ -248,21 +274,30 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	}
 
 	// Compaction summaries talk to the gateway directly, so they must never be
-	// handed the virtual router id.
+	// handed the virtual router id. The rules file has not loaded yet at this
+	// point, so the summarizer starts on the built-in default and is updated in
+	// place once the file is read: core keeps a reference to this object rather
+	// than a copy.
 	if (isRouted()) {
-		const rules = cachedRules ?? fallbackRules()
-		const summarizerModelId = rules.utility.summarizer
+		const summarizerModelId = fallbackRules().utility.summarizer
+		const summarizer = {
+			providerId: config.providerId,
+			modelId: summarizerModelId,
+			apiKey: config.apiKey,
+			baseUrl: config.baseUrl,
+			knownModels: config.knownModels,
+			...(config.providerConfig ? { providerConfig: { ...config.providerConfig, modelId: summarizerModelId } } : {}),
+		}
 		config.compaction = {
 			...(config.compaction ?? {}),
 			enabled: config.compaction?.enabled ?? true,
-			summarizer: {
-				providerId: config.providerId,
-				modelId: summarizerModelId,
-				apiKey: config.apiKey,
-				baseUrl: config.baseUrl,
-				knownModels: config.knownModels,
-				...(config.providerConfig ? { providerConfig: { ...config.providerConfig, modelId: summarizerModelId } } : {}),
-			},
+			summarizer,
+		}
+		onRulesLoaded = (rules) => {
+			summarizer.modelId = rules.utility.summarizer
+			if (summarizer.providerConfig) {
+				summarizer.providerConfig.modelId = rules.utility.summarizer
+			}
 		}
 	}
 
@@ -322,17 +357,21 @@ function fallbackRules(): RouterRules {
 	return defaultRules()
 }
 
-function buildFeatures(request: AgentModelRequest, deps: RouterInstallDeps, _now: number): RouterRequestFeatures {
-	const state = getSessionState(deps.sessionId)
+function buildFeatures(
+	request: AgentModelRequest,
+	run: { turnKey: string; isSubAgent: boolean; mode: "plan" | "act" },
+): RouterRequestFeatures {
+	const state = getSessionState(run.turnKey)
 	return {
 		estimatedTokens: estimateRequestInputTokens({
 			systemPrompt: request.systemPrompt,
 			messages: request.messages,
 			tools: request.tools,
 		}),
-		mode: deps.getMode(),
+		mode: run.mode,
 		prompt: latestUserPrompt(request),
 		hasImages: requestHasImages(request),
+		isSubAgent: run.isSubAgent,
 		callIndex: state.calls.length + 1,
 		...(state.stickyModelId ? { stickyModelId: state.stickyModelId } : {}),
 	}

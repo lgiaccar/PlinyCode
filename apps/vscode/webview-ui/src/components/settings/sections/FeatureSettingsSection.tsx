@@ -78,6 +78,13 @@ const advancedFeatures: FeatureToggle[] = [
 		stateKey: "hooksEnabled",
 		settingKey: "hooksEnabled",
 	},
+	{
+		id: "subagents",
+		label: "Sub-agents",
+		description: "Let the agent delegate focused tasks to short-lived sub-agents (spawn_agent tool). Applies to new tasks.",
+		stateKey: "subagentsEnabled",
+		settingKey: "subagentsEnabled",
+	},
 ]
 
 const FeatureRow = memo(

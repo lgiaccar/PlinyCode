@@ -168,7 +168,11 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 				yield {
 					type: "finish",
 					reason: "error",
-					error: "FreeAuto has no free Pliny models available to route to.",
+					error:
+						features.hasImages && decision.excludedNoImages.length > 0
+							? "FreeAuto routes only to free Pliny models, none of which accept images. " +
+								"Pick a vision-capable model or remove the image."
+							: "FreeAuto has no free Pliny models available to route to.",
 					errorRetryable: false,
 				}
 				return

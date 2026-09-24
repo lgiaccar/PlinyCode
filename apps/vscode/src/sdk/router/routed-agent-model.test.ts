@@ -17,7 +17,14 @@ function rules(overrides: Partial<RouterRules> = {}): RouterRules {
 }
 
 function features(): RouterRequestFeatures {
-	return { estimatedTokens: 100, mode: "act", prompt: "do the thing", hasImages: false, callIndex: 1 }
+	return {
+		estimatedTokens: 100,
+		mode: "act",
+		prompt: "do the thing",
+		hasImages: false,
+		isSubAgent: false,
+		callIndex: 1,
+	}
 }
 
 function request(): AgentModelRequest {
@@ -228,6 +235,25 @@ describe("createRoutedAgentModel", () => {
 		expect(out).toHaveLength(1)
 		expect(out[0]).toMatchObject({ type: "finish", reason: "error", errorRetryable: false })
 		expect((out[0] as { error?: string }).error).toContain("nope")
+	})
+
+	it("refuses a request with images instead of sending it to a text-only model", async () => {
+		const createDelegate = vi.fn(() => scripted([TEXT, STOP]))
+		const { observer, events } = recordingObserver()
+		const model = createRoutedAgentModel({
+			rules: () => rules(),
+			features: () => ({ ...features(), hasImages: true }),
+			knownModels: () => undefined,
+			isHealthy: () => true,
+			createDelegate,
+			observer,
+		})
+		const out = await collect(model)
+		expect(out).toHaveLength(1)
+		expect(out[0]).toMatchObject({ type: "finish", reason: "error", errorRetryable: false })
+		expect((out[0] as { error?: string }).error).toContain("images")
+		expect(createDelegate).not.toHaveBeenCalled()
+		expect(events).toEqual([])
 	})
 
 	it("errors cleanly when the policy yields no candidates", async () => {

@@ -55,15 +55,17 @@ const DEFAULT_UTILITY = {
  * retired from the catalog simply disappears.
  */
 const PREFERRED_HEAD = [
-	// Ordered from the live probe: every model here answered and really called a
-	// tool. kimi-k2.6 leads on throughput at a 256k window; nemotron-super and
-	// nemotron-ultra are the fastest large-context responders; the coder model
-	// is kept high because the coding route needs it.
+	// Ordered from the live probe plus field experience: every model here
+	// answered and really called a tool. The coder model leads because most
+	// turns are code edits and it has the fastest first token of the large
+	// models; nemotron-ultra and kimi-k2.6 are the fastest large-context
+	// generalists. GLM-5.2 is last: it is the only 512k option but far slower
+	// than everything else, so it is a fallback rather than a first choice.
+	"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+	"snps-provider/nemotron-3-ultra-550b-a55",
 	"snps-provider/kimi-k2.6",
 	"snps-provider/nvidia-nemotron-3-super-120b-a12",
 	"snps-provider/qwen3.5-397b-fp8",
-	"snps-provider/nemotron-3-ultra-550b-a55",
-	"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 	"snps-provider/GLM-5.2",
 ]
 
@@ -84,6 +86,16 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 		use: ["snps-provider-vmodels/glm-5.2", "snps-provider/GLM-5.2"],
 	},
 	{
+		name: "subagent",
+		// Delegated tasks are short and bounded: favour first-token latency.
+		when: { subAgent: true, maxEstimatedTokens: 100_000 },
+		use: [
+			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+			"snps-provider/nvidia-nemotron-3-super-120b-a12",
+			"snps-provider/kimi-k2.6",
+		],
+	},
+	{
 		name: "plan-and-reasoning",
 		when: {
 			mode: "plan",
@@ -97,9 +109,13 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 			mode: "act",
 			maxEstimatedTokens: 100_000,
 			promptRegex:
-				"\\b(fix|implement|refactor|add|edit|write|test|bug|error|compile|patch|rename)\\b|\\.(ts|tsx|py|go|rs|java|cs|js)\\b",
+				"\\b(fix|implement|refactor|add|edit|write|test|bug|error|compile|patch|rename|conflicts?|merge|rebase|lint|failing)\\b|type ?error|\\.(ts|tsx|py|go|rs|java|cs|js)\\b",
 		},
-		use: ["snps-provider/qwen3-coder-480b-a35b-inst-fp8", "snps-provider/kimi-k2.6", "snps-provider/GLM-5.2"],
+		use: [
+			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+			"snps-provider/nemotron-3-ultra-550b-a55",
+			"snps-provider/kimi-k2.6",
+		],
 	},
 	{
 		name: "quick",
@@ -117,9 +133,9 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 	{
 		name: "default",
 		use: [
+			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 			"snps-provider/kimi-k2.6",
-			"snps-provider/GLM-5.2",
-			"snps-provider/qwen3.5-397b-fp8",
+			"snps-provider/nemotron-3-ultra-550b-a55",
 			"snps-provider/nvidia-nemotron-3-super-120b-a12",
 		],
 	},
@@ -205,12 +221,14 @@ function parseCondition(value: unknown): RouterRoute["when"] {
 	const minEstimatedTokens = asPositive(raw.minEstimatedTokens)
 	const maxEstimatedTokens = asPositive(raw.maxEstimatedTokens)
 	const maxPromptChars = asPositive(raw.maxPromptChars)
+	const subAgent = typeof raw.subAgent === "boolean" ? raw.subAgent : undefined
 	return {
 		...(mode === "plan" || mode === "act" ? { mode } : {}),
 		...(minEstimatedTokens !== undefined ? { minEstimatedTokens } : {}),
 		...(maxEstimatedTokens !== undefined ? { maxEstimatedTokens } : {}),
 		...(maxPromptChars !== undefined ? { maxPromptChars } : {}),
 		...(promptRegex && isValidRegex(promptRegex) ? { promptRegex } : {}),
+		...(subAgent !== undefined ? { subAgent } : {}),
 	}
 }
 

@@ -123,6 +123,15 @@ export function forgetSession(sessionId: string): void {
 	sessions.delete(sessionId)
 }
 
+/** Drop every session whose id starts with `prefix` (a root turn's sub-agent runs). */
+export function forgetSessionsWithPrefix(prefix: string): void {
+	for (const key of [...sessions.keys()]) {
+		if (key.startsWith(prefix)) {
+			sessions.delete(key)
+		}
+	}
+}
+
 /** Reset all session state. Tests use this. */
 export function resetSessions(): void {
 	sessions.clear()

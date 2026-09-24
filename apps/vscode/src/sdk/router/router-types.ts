@@ -19,6 +19,8 @@ export interface RouterRouteCondition {
 	maxPromptChars?: number
 	/** Case-insensitive regular expression matched against the latest user prompt. */
 	promptRegex?: string
+	/** Restrict the route to sub-agent runs (true) or to the main agent (false). */
+	subAgent?: boolean
 }
 
 export interface RouterRoute {
@@ -83,6 +85,8 @@ export interface RouterRequestFeatures {
 	prompt: string
 	/** True when the request carries image parts (no free model accepts them). */
 	hasImages: boolean
+	/** True when the call comes from a spawned sub-agent rather than the main agent. */
+	isSubAgent: boolean
 	/** 1-based index of this call within the turn. */
 	callIndex: number
 	/** Model this turn already settled on, when sticky routing applies. */
@@ -98,6 +102,8 @@ export interface RouterDecision {
 	excludedUnhealthy: string[]
 	/** Models excluded because their context window is too small. */
 	excludedTooSmall: string[]
+	/** Models excluded because the request carries images they cannot accept. */
+	excludedNoImages: string[]
 }
 
 /** One LLM call, as recorded for the end-of-turn summary. */
