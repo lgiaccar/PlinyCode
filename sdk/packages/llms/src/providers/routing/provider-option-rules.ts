@@ -16,6 +16,11 @@ import {
 	buildRoutedGlmReasoningProviderOptionsPatch,
 } from "./glm-thinking";
 import { buildMiniMaxThinkingProviderOptionsPatch } from "./minimax-thinking";
+import { plinyThinkingControls } from "../pliny-models";
+import {
+	hasPlinyThinkingControls,
+	plinyThinkingFields,
+} from "./pliny-thinking";
 import type {
 	MatchedProviderOptionRule,
 	ProviderOptionBuildInput,
@@ -482,6 +487,30 @@ const miniMaxThinkingRule: ProviderOptionRule = {
 		),
 };
 
+const plinyThinkingRule: ProviderOptionRule = {
+	id: "provider.pliny.thinking",
+	phase: "provider-reasoning",
+	description:
+		"Pliny self-hosted models switch reasoning with the field the thinking probe measured for that model.",
+	applies: (input) =>
+		hasPlinyThinkingControls(input.request) &&
+		typeof input.request.reasoning?.enabled === "boolean",
+	suppresses: { genericThinking: true },
+	build: (input) => {
+		const fields = plinyThinkingFields(
+			input.request.reasoning?.enabled,
+			plinyThinkingControls(input.request.modelId),
+		);
+		return fields
+			? buildProviderAndAliasPatch({
+					providerId: input.request.providerId,
+					providerOptionsKey: input.providerOptionsKey,
+					bucketOptions: fields,
+				})
+			: undefined;
+	},
+};
+
 const routedGlmReasoningRule: ProviderOptionRule = {
 	id: "family.glm.routed-reasoning",
 	phase: "model-overlay",
@@ -489,6 +518,8 @@ const routedGlmReasoningRule: ProviderOptionRule = {
 		"Routed GLM models use the generic reasoning include/exclude shape, not thinking.type.",
 	applies: (input) =>
 		!usesGlmThinkingProviderRouting(input) &&
+		// Measured Pliny controls take precedence over the GLM family guess.
+		!hasPlinyThinkingControls(input.request) &&
 		isGlmModel(input.request, input.context),
 	suppresses: { genericThinking: true },
 	build: (input) =>
@@ -528,6 +559,7 @@ export const PROVIDER_OPTION_RULES: ReadonlyArray<ProviderOptionRule> = [
 	nonGlmProviderRoutingSuppressionRule,
 	nativeZaiGlmThinkingRule,
 	miniMaxThinkingRule,
+	plinyThinkingRule,
 	routedGlmReasoningRule,
 	togetherReasoningToggleRule,
 ];

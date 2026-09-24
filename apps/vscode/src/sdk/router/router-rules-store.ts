@@ -1,8 +1,10 @@
 /**
- * Where the FreeAuto rules file lives, and how it is created and re-read.
+ * Where the FreeAuto rules files live, and how they are created and re-read.
  *
- * Two locations, both optional:
- *   - global:    <data dir>/pliny-free-auto.md   (created on first activation)
+ * One global file per profile, plus an optional workspace file shared by all
+ * profiles:
+ *   - global:    <data dir>/pliny-free-auto.md          (default profile)
+ *                <data dir>/pliny-free-auto.<profile>.md (fast, smart, ...)
  *   - workspace: <workspace>/.cline/pliny-free-auto.md
  *
  * Rules are cached and re-read only when a file's mtime changes, so routing a
@@ -10,16 +12,17 @@
  * defaults; a rules file must never be able to block a turn.
  */
 
+import { PLINY_FREE_AUTO_PROFILES } from "@plinycode/llms"
 import fs from "fs/promises"
 import path from "path"
 import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
-import { defaultRules, mergeRules, parseRulesMarkdown, ROUTER_RULES_FILENAME } from "./router-rules"
+import { defaultRules, mergeRules, parseRulesMarkdown, ROUTER_RULES_FILENAME, rulesFilenameForProfile } from "./router-rules"
 import type { RouterRules } from "./router-types"
 
-/** Absolute path of the global rules file. */
-export function globalRulesPath(dataDir?: string): string {
-	return path.join(resolveDataDir(dataDir), ROUTER_RULES_FILENAME)
+/** Absolute path of a profile's global rules file. */
+export function globalRulesPath(dataDir?: string, profile = "default"): string {
+	return path.join(resolveDataDir(dataDir), rulesFilenameForProfile(profile))
 }
 
 /** Absolute path of a workspace's optional rules file. */
@@ -39,7 +42,7 @@ export function clearRulesCache(): void {
 	cache.clear()
 }
 
-async function readRulesFile(filePath: string): Promise<RouterRules | undefined> {
+async function readRulesFile(filePath: string, profile: string): Promise<RouterRules | undefined> {
 	let stat: Awaited<ReturnType<typeof fs.stat>>
 	try {
 		stat = await fs.stat(filePath)
@@ -49,15 +52,16 @@ async function readRulesFile(filePath: string): Promise<RouterRules | undefined>
 		return undefined
 	}
 
-	const cached = cache.get(filePath)
+	const cacheKey = `${profile}\0${filePath}`
+	const cached = cache.get(cacheKey)
 	if (cached && cached.mtimeMs === stat.mtimeMs) {
 		return cached.rules
 	}
 
 	try {
 		const markdown = await fs.readFile(filePath, "utf8")
-		const rules = parseRulesMarkdown(markdown)
-		cache.set(filePath, { mtimeMs: stat.mtimeMs, rules })
+		const rules = parseRulesMarkdown(markdown, profile)
+		cache.set(cacheKey, { mtimeMs: stat.mtimeMs, rules })
 		return rules
 	} catch (error) {
 		Logger.warn(`[FreeAuto] Failed to read rules file ${filePath}: ${error}`)
@@ -66,24 +70,29 @@ async function readRulesFile(filePath: string): Promise<RouterRules | undefined>
 }
 
 /**
- * Effective rules for a session: the global file (or built-in defaults) with
- * the workspace file merged over it.
+ * Effective rules for a session: the profile's global file (or its built-in
+ * defaults) with the workspace file merged over it.
  */
-export async function loadRouterRules(options?: { workspaceRoot?: string; dataDir?: string }): Promise<RouterRules> {
-	const global = (await readRulesFile(globalRulesPath(options?.dataDir))) ?? defaultRules()
+export async function loadRouterRules(options?: {
+	workspaceRoot?: string
+	dataDir?: string
+	profile?: string
+}): Promise<RouterRules> {
+	const profile = options?.profile ?? "default"
+	const global = (await readRulesFile(globalRulesPath(options?.dataDir, profile), profile)) ?? defaultRules(profile)
 	if (!options?.workspaceRoot) {
 		return global
 	}
-	const workspace = await readRulesFile(workspaceRulesPath(options.workspaceRoot))
+	const workspace = await readRulesFile(workspaceRulesPath(options.workspaceRoot), profile)
 	return mergeRules(global, workspace)
 }
 
 /**
- * Write the documented default rules file if none exists. Returns the path so
- * a caller can open it. Never throws.
+ * Write a profile's documented rules file if none exists. Returns the path so a
+ * caller can open it. Never throws.
  */
-export async function initialiseDefaultRulesFile(dataDir?: string): Promise<string | undefined> {
-	const filePath = globalRulesPath(dataDir)
+export async function initialiseDefaultRulesFile(dataDir?: string, profile = "default"): Promise<string | undefined> {
+	const filePath = globalRulesPath(dataDir, profile)
 	try {
 		await fs.access(filePath)
 		return filePath
@@ -92,7 +101,7 @@ export async function initialiseDefaultRulesFile(dataDir?: string): Promise<stri
 	}
 	try {
 		await fs.mkdir(path.dirname(filePath), { recursive: true })
-		await fs.writeFile(filePath, renderDefaultRulesMarkdown(), "utf8")
+		await fs.writeFile(filePath, renderDefaultRulesMarkdown(profile), "utf8")
 		Logger.log(`[FreeAuto] Created default rules file at ${filePath}`)
 		return filePath
 	} catch (error) {
@@ -101,17 +110,36 @@ export async function initialiseDefaultRulesFile(dataDir?: string): Promise<stri
 	}
 }
 
+/** Create any missing profile rules file. Never throws. */
+export async function initialiseAllRulesFiles(dataDir?: string): Promise<void> {
+	for (const { profile } of PLINY_FREE_AUTO_PROFILES) {
+		await initialiseDefaultRulesFile(dataDir, profile)
+	}
+}
+
+const PROFILE_BLURBS: Record<string, string> = {
+	default:
+		"This is the **default** profile (the `FreeAuto (router)` model): heuristic routes, with reasoning\nswitched per route.",
+	fast: "This is the **fast** profile (the `FreeAuto · fast` model): the same routes, with reasoning switched\noff everywhere it can be.",
+	smart: "This is the **smart** profile (the `FreeAuto · smart` model): the default routes plus the\nclassifier, which picks the tier and whether to think once per turn.",
+}
+
 /**
  * The starter rules document. The prose is deliberately substantial: it is both
  * the user's documentation and, when the classifier is enabled, the guidance
  * handed to the classifying model.
  */
-export function renderDefaultRulesMarkdown(): string {
-	const rules = defaultRules()
+export function renderDefaultRulesMarkdown(profile = "default"): string {
+	const rules = defaultRules(profile)
 	const poolLines = rules.pool.map((id) => `  - ${id}`).join("\n")
 	const fence = "```"
+	const blurb = PROFILE_BLURBS[profile] ?? `This is the **${profile}** profile.`
 
 	return `# PlinyCode FreeAuto routing rules
+
+${blurb} Each FreeAuto model in the picker has its own file like
+this one, so strategies can be compared side by side; every routed call is
+logged to \`pliny-free-auto-calls.jsonl\` next to it.
 
 FreeAuto picks a free, self-hosted Pliny model for every request and moves to a
 backup when one fails. Edit this file to change those choices; it is re-read
@@ -144,14 +172,28 @@ retried in place with the next model, continuing rather than restarting.
 | \`promptRegex\` | case-insensitive pattern matched against your message |
 | \`subAgent\` | \`true\` to match only calls made by a spawned sub-agent, \`false\` for only the main agent |
 
+## Route settings
+
+| Setting | Meaning |
+| --- | --- |
+| \`effort\` | \`quick\` switches reasoning off, \`think\` switches it on; unset keeps each model's default |
+| \`reasoningEffort\` | \`low\`, \`medium\` or \`high\`, sent when a \`think\` route turns reasoning on |
+| \`tier\` | \`quick\`, \`code\`, \`reason\` or \`huge\`: the classifier verdict this route serves |
+
+Effort only changes models whose reasoning switch was measured by the thinking
+probe (see \`docs/pliny-free-auto-thinking.md\`); a switch a backend does not
+understand would fail the call, so every other model keeps its default.
+
 ## Other settings
 
 - \`pool\` — every model FreeAuto may use, best first.
 - \`utility\` — models for background jobs: prompt classification, conversation
   summaries, and commit messages.
-- \`classifier.enabled\` — off by default. When on, a small model reads your
-  message once per turn and picks a route, using the prose in this file as
-  guidance. Costs one extra fast call per turn.
+- \`classifier.enabled\` — when on, a small model reads your message once per
+  turn and returns a tier and whether to think. The first route tagged with
+  that tier is used (its size and \`subAgent\` conditions must still hold), and
+  the think verdict overrides the route's \`effort\`. Costs one extra fast call
+  per turn; any failure or timeout falls back to the routes above.
 - \`health\` — how quickly a failing model is benched, how many failovers a
   single turn allows, and how long to wait before treating a silent stream as
   stalled.
@@ -200,6 +242,15 @@ ${fence}
 
 function renderRouteYaml(route: RouterRules["routes"][number]): string {
 	const lines = [`  - name: ${route.name}`]
+	if (route.tier) {
+		lines.push(`    tier: ${route.tier}`)
+	}
+	if (route.effort) {
+		lines.push(`    effort: ${route.effort}`)
+	}
+	if (route.reasoningEffort) {
+		lines.push(`    reasoningEffort: ${route.reasoningEffort}`)
+	}
 	if (route.when && Object.keys(route.when).length > 0) {
 		lines.push("    when:")
 		if (route.when.mode) {
@@ -215,7 +266,8 @@ function renderRouteYaml(route: RouterRules["routes"][number]): string {
 			lines.push(`      maxPromptChars: ${route.when.maxPromptChars}`)
 		}
 		if (route.when.promptRegex) {
-			lines.push(`      promptRegex: "${route.when.promptRegex.replace(/"/g, '\\"')}"`)
+			// Single-quoted: YAML double quotes treat the regex's backslashes as escapes.
+			lines.push(`      promptRegex: '${route.when.promptRegex.replace(/'/g, "''")}'`)
 		}
 		if (route.when.subAgent !== undefined) {
 			lines.push(`      subAgent: ${route.when.subAgent}`)

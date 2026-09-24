@@ -13,10 +13,22 @@
 import { isPlinySelfHostedModelId, plinyFreePoolIds } from "@plinycode/llms"
 import * as yaml from "js-yaml"
 import { Logger } from "@/shared/services/Logger"
-import type { RouterRoute, RouterRules } from "./router-types"
+import {
+	ROUTER_TIERS,
+	type RouterEffort,
+	type RouterReasoningEffort,
+	type RouterRoute,
+	type RouterRules,
+	type RouterTier,
+} from "./router-types"
 
-/** Name of the rules file in both the global and workspace locations. */
+/** Name of the default profile's rules file in both the global and workspace locations. */
 export const ROUTER_RULES_FILENAME = "pliny-free-auto.md"
+
+/** Rules file name for a profile: `pliny-free-auto.md`, `pliny-free-auto.fast.md`, ... */
+export function rulesFilenameForProfile(profile: string): string {
+	return profile === "default" ? ROUTER_RULES_FILENAME : `pliny-free-auto.${profile}.md`
+}
 
 const DEFAULT_HEALTH = {
 	cooldownMs: 600_000,
@@ -77,13 +89,22 @@ export function defaultPool(): string[] {
 	return [...head, ...tail]
 }
 
+/**
+ * Effort follows the thinking probe: reasoning is switched off for everyday
+ * work (it multiplies latency on the models that do it by default, GLM-5.2
+ * above all) and on for planning. It only applies to models whose switch was
+ * measured; every other model keeps its default.
+ */
 const DEFAULT_ROUTES: RouterRoute[] = [
 	{
 		name: "huge-context",
+		tier: "huge",
 		when: { minEstimatedTokens: 180_000 },
 		// Both 512k. The vmodels replica is load-balanced and measured faster
-		// than the primary, so it leads; the primary is the backup.
+		// than the primary, so it leads; the primary is the backup. Reasoning
+		// off: at this size GLM's default thinking dominates the wait.
 		use: ["snps-provider-vmodels/glm-5.2", "snps-provider/GLM-5.2"],
+		effort: "quick",
 	},
 	{
 		name: "subagent",
@@ -94,17 +115,22 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 			"snps-provider/nvidia-nemotron-3-super-120b-a12",
 			"snps-provider/kimi-k2.6",
 		],
+		effort: "quick",
 	},
 	{
 		name: "plan-and-reasoning",
+		tier: "reason",
 		when: {
 			mode: "plan",
 			promptRegex: "\\b(plan|design|architect|why|explain|review|compare|investigate|analy[sz]e)\\b",
 		},
 		use: ["snps-provider/qwen3.5-397b-fp8", "snps-provider/kimi-k2.6", "snps-provider/nemotron-3-ultra-550b-a55"],
+		effort: "think",
+		reasoningEffort: "high",
 	},
 	{
 		name: "coding",
+		tier: "code",
 		when: {
 			mode: "act",
 			maxEstimatedTokens: 100_000,
@@ -116,9 +142,11 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 			"snps-provider/nemotron-3-ultra-550b-a55",
 			"snps-provider/kimi-k2.6",
 		],
+		effort: "quick",
 	},
 	{
 		name: "quick",
+		tier: "quick",
 		when: {
 			maxPromptChars: 300,
 			maxEstimatedTokens: 30_000,
@@ -129,6 +157,7 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 			"snps-provider/nvidia-nemotron-3-super-120b-a12",
 			"snps-provider/kimi-k2.6",
 		],
+		effort: "quick",
 	},
 	{
 		name: "default",
@@ -141,17 +170,32 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 	},
 ]
 
-/** The rules used when no file exists, or when one cannot be parsed. */
-export function defaultRules(): RouterRules {
+/**
+ * Built-in rules for a FreeAuto profile, used when its file does not exist or
+ * cannot be parsed, and to seed the file on first activation.
+ *
+ * - default: heuristic routes, reasoning per route, no classifier.
+ * - fast: the same routes with reasoning off everywhere it can be switched off.
+ * - smart: the default routes plus the classifier, which picks the tier and
+ *   whether to think once per turn.
+ */
+export function defaultRules(profile = "default"): RouterRules {
+	const routes = DEFAULT_ROUTES.map((route) => ({ ...route, use: [...route.use] }))
+	if (profile === "fast") {
+		for (const route of routes) {
+			route.effort = "quick"
+			delete route.reasoningEffort
+		}
+	}
 	return {
 		version: 1,
 		pool: defaultPool(),
 		utility: { ...DEFAULT_UTILITY },
-		classifier: { ...DEFAULT_CLASSIFIER },
+		classifier: { ...DEFAULT_CLASSIFIER, enabled: profile === "smart" },
 		health: { ...DEFAULT_HEALTH },
 		contextMarginRatio: 1.15,
 		sticky: true,
-		routes: DEFAULT_ROUTES.map((route) => ({ ...route, use: [...route.use] })),
+		routes,
 	}
 }
 
@@ -232,6 +276,14 @@ function parseCondition(value: unknown): RouterRoute["when"] {
 	}
 }
 
+function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+	const text = asString(value)?.toLowerCase()
+	return text && (allowed as readonly string[]).includes(text) ? (text as T) : undefined
+}
+
+const EFFORTS: readonly RouterEffort[] = ["quick", "think"]
+const REASONING_EFFORTS: readonly RouterReasoningEffort[] = ["low", "medium", "high"]
+
 function parseRoutes(value: unknown): RouterRoute[] {
 	if (!Array.isArray(value)) {
 		return []
@@ -246,10 +298,16 @@ function parseRoutes(value: unknown): RouterRoute[] {
 		if (use.length === 0) {
 			continue
 		}
+		const tier = oneOf<RouterTier>(raw.tier, ROUTER_TIERS)
+		const effort = oneOf(raw.effort, EFFORTS)
+		const reasoningEffort = oneOf(raw.reasoningEffort, REASONING_EFFORTS)
 		routes.push({
 			name: asString(raw.name) ?? `route-${routes.length + 1}`,
+			...(tier ? { tier } : {}),
 			when: parseCondition(raw.when),
 			use,
+			...(effort ? { effort } : {}),
+			...(reasoningEffort ? { reasoningEffort } : {}),
 		})
 	}
 	return routes
@@ -257,10 +315,10 @@ function parseRoutes(value: unknown): RouterRoute[] {
 
 /**
  * Turn a parsed YAML document into `RouterRules`, filling anything missing or
- * invalid from the defaults. Never throws.
+ * invalid from the profile's defaults. Never throws.
  */
-export function normalizeRules(document: unknown, guidance?: string): RouterRules {
-	const defaults = defaultRules()
+export function normalizeRules(document: unknown, guidance?: string, profile = "default"): RouterRules {
+	const defaults = defaultRules(profile)
 	if (!document || typeof document !== "object") {
 		return { ...defaults, ...(guidance ? { guidance } : {}) }
 	}
@@ -286,7 +344,7 @@ export function normalizeRules(document: unknown, guidance?: string): RouterRule
 			commit: utilityOrDefault(utility.commit, defaults.utility.commit),
 		},
 		classifier: {
-			enabled: classifier.enabled === true,
+			enabled: typeof classifier.enabled === "boolean" ? classifier.enabled : defaults.classifier.enabled,
 			timeoutMs: asPositive(classifier.timeoutMs) ?? defaults.classifier.timeoutMs,
 			maxPromptChars: asPositive(classifier.maxPromptChars) ?? defaults.classifier.maxPromptChars,
 		},
@@ -305,18 +363,18 @@ export function normalizeRules(document: unknown, guidance?: string): RouterRule
 }
 
 /** Parse a rules file's Markdown into rules. Never throws. */
-export function parseRulesMarkdown(markdown: string): RouterRules {
+export function parseRulesMarkdown(markdown: string, profile = "default"): RouterRules {
 	const guidance = extractGuidance(markdown)
 	const block = extractYamlBlock(markdown)
 	if (!block) {
 		Logger.warn("[FreeAuto] Rules file has no yaml block; using built-in defaults")
-		return { ...defaultRules(), ...(guidance ? { guidance } : {}) }
+		return { ...defaultRules(profile), ...(guidance ? { guidance } : {}) }
 	}
 	try {
-		return normalizeRules(yaml.load(block, { schema: yaml.JSON_SCHEMA }), guidance)
+		return normalizeRules(yaml.load(block, { schema: yaml.JSON_SCHEMA }), guidance, profile)
 	} catch (error) {
 		Logger.warn(`[FreeAuto] Rules file YAML is invalid; using built-in defaults: ${error}`)
-		return { ...defaultRules(), ...(guidance ? { guidance } : {}) }
+		return { ...defaultRules(profile), ...(guidance ? { guidance } : {}) }
 	}
 }
 

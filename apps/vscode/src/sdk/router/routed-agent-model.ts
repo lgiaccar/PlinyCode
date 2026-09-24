@@ -18,22 +18,35 @@
  * it from the transcript and guaranteeing duplication on the retry.
  */
 
-import { classifyProviderError, type ModelInfo } from "@plinycode/llms"
+import { classifyProviderError, type ModelInfo, type PlinyThinkingControls } from "@plinycode/llms"
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
-import { selectCandidates } from "./router-policy"
-import type { RouterDecision, RouterRequestFeatures, RouterRules } from "./router-types"
+import { effortOptions, selectCandidates } from "./router-policy"
+import type {
+	RouterCallTiming,
+	RouterClassification,
+	RouterDecision,
+	RouterEffort,
+	RouterRequestFeatures,
+	RouterRules,
+} from "./router-types"
 
 /** What the router reports back to the host so it can show rows and keep state. */
 export interface RouterObserver {
-	/** A call is about to start on `modelId`. */
-	onCallStart(info: { modelId: string; decision: RouterDecision; features: RouterRequestFeatures }): void
+	/** A call is about to start on `modelId`; `effort` is set when the router changed its reasoning. */
+	onCallStart(info: { modelId: string; decision: RouterDecision; features: RouterRequestFeatures; effort?: RouterEffort }): void
 	/** A candidate failed before producing output; `nextModelId` takes over. */
-	onFailover(info: { modelId: string; nextModelId: string | undefined; error: string; benched: boolean }): void
+	onFailover(info: {
+		modelId: string
+		nextModelId: string | undefined
+		error: string
+		benched: boolean
+		timing: RouterCallTiming
+	}): void
 	/** A call produced output and finished without a routing-level error. */
-	onCallSuccess(info: { modelId: string }): void
+	onCallSuccess(info: { modelId: string; timing: RouterCallTiming }): void
 	/** A call failed after producing output; the run-level hook decides next. */
-	onCallError(info: { modelId: string; error: string }): void
+	onCallError(info: { modelId: string; error: string; timing: RouterCallTiming }): void
 }
 
 export interface RoutedAgentModelDeps {
@@ -43,6 +56,14 @@ export interface RoutedAgentModelDeps {
 	isHealthy: (modelId: string) => boolean
 	createDelegate: (modelId: string) => AgentModel
 	observer: RouterObserver
+	/** Measured reasoning switches per model; models without one keep their default. */
+	thinkingControls?: (modelId: string) => PlinyThinkingControls | undefined
+	/** Classifier verdict for the call, when the host runs one. Never throws. */
+	classify?: (
+		request: AgentModelRequest,
+		features: RouterRequestFeatures,
+		rules: RouterRules,
+	) => Promise<RouterClassification | undefined>
 	/** Injectable for tests. */
 	now?: () => number
 }
@@ -156,11 +177,13 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 		async *stream(request: AgentModelRequest): AsyncGenerator<AgentModelEvent> {
 			const rules = deps.rules()
 			const features = deps.features(request)
+			const classification = features.hasImages ? undefined : await deps.classify?.(request, features, rules)
 			const decision = selectCandidates({
 				rules,
 				features,
 				knownModels: deps.knownModels(),
 				isHealthy: deps.isHealthy,
+				classification,
 			})
 
 			const candidates = decision.candidates
@@ -184,15 +207,28 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 				const modelId = candidates[index]
 				const nextModelId = candidates[index + 1]
 				const startedAt = now()
-				deps.observer.onCallStart({ modelId, decision, features })
+				const reasoning = effortOptions(decision.effort, decision.reasoningEffort, deps.thinkingControls?.(modelId))
+				const delegateRequest = reasoning ? { ...request, options: { ...request.options, ...reasoning } } : request
+				deps.observer.onCallStart({
+					modelId,
+					decision,
+					features,
+					...(reasoning && decision.effort ? { effort: decision.effort } : {}),
+				})
 
 				let producedContent = false
+				let firstContentAt: number | undefined
 				let finished = false
 				let failure: { error: string; raw: unknown } | undefined
+				const timing = (): RouterCallTiming => ({
+					startedAt,
+					...(firstContentAt !== undefined ? { firstContentAt } : {}),
+					endedAt: now(),
+				})
 
 				try {
 					const delegate = delegateFor(modelId)
-					const source = await delegate.stream(request)
+					const source = await delegate.stream(delegateRequest)
 					const guarded = withStallWatchdog(source, {
 						firstTokenTimeoutMs: rules.health.firstTokenTimeoutMs,
 						stallTimeoutMs: rules.health.stallTimeoutMs,
@@ -224,8 +260,9 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 							yield event
 							break
 						}
-						if (isContentEvent(event)) {
+						if (isContentEvent(event) && !producedContent) {
 							producedContent = true
+							firstContentAt = now()
 						}
 						yield event
 					}
@@ -244,6 +281,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 							deps.observer.onCallError({
 								modelId,
 								error: "Response stream ended without a finish reason",
+								timing: timing(),
 							})
 							return
 						}
@@ -273,13 +311,13 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 							errorClass: classifyProviderError(error),
 							errorRetryable: true,
 						}
-						deps.observer.onCallError({ modelId, error: failure.error })
+						deps.observer.onCallError({ modelId, error: failure.error, timing: timing() })
 						return
 					}
 				}
 
 				if (!failure) {
-					deps.observer.onCallSuccess({ modelId })
+					deps.observer.onCallSuccess({ modelId, timing: timing() })
 					return
 				}
 
@@ -287,7 +325,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 
 				if (producedContent) {
 					// Already forwarded the failing finish above.
-					deps.observer.onCallError({ modelId, error: failure.error })
+					deps.observer.onCallError({ modelId, error: failure.error, timing: timing() })
 					return
 				}
 
@@ -300,7 +338,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 						errorClass: classifyProviderError(failure.raw),
 						errorRetryable: false,
 					}
-					deps.observer.onCallError({ modelId, error: failure.error })
+					deps.observer.onCallError({ modelId, error: failure.error, timing: timing() })
 					return
 				}
 
@@ -310,6 +348,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 					nextModelId,
 					error: failure.error,
 					benched: false,
+					timing: timing(),
 				})
 			}
 

@@ -8,7 +8,11 @@ import {
 	PLINY_DEFAULT_MODEL_ID,
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 	PLINY_FREE_AUTO_MODEL_ID,
+	PLINY_FREE_AUTO_PROFILES,
+	plinyFreeAutoModelId,
+	plinyFreeAutoProfile,
 	plinyFreePoolIds,
+	plinyThinkingControls,
 	resolvePlinyConcreteModelId,
 } from "./pliny-models";
 
@@ -144,5 +148,65 @@ describe("resolvePlinyConcreteModelId", () => {
 		expect(resolvePlinyConcreteModelId(undefined)).toBe(
 			PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 		);
+	});
+
+	it("maps every profile id onto a real model too", () => {
+		expect(resolvePlinyConcreteModelId("pliny/free-auto-fast")).toBe(
+			PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
+		);
+	});
+});
+
+describe("FreeAuto profiles", () => {
+	it("keeps the bare id for the default profile", () => {
+		expect(plinyFreeAutoModelId("default")).toBe(PLINY_FREE_AUTO_MODEL_ID);
+		expect(plinyFreeAutoProfile(PLINY_FREE_AUTO_MODEL_ID)).toBe("default");
+	});
+
+	it("round-trips every profile through its id", () => {
+		for (const { profile } of PLINY_FREE_AUTO_PROFILES) {
+			const id = plinyFreeAutoModelId(profile);
+			expect(isPlinyFreeAutoModelId(id)).toBe(true);
+			expect(plinyFreeAutoProfile(id)).toBe(profile);
+		}
+	});
+
+	it("lists every profile as a free, zero-priced router model at the top of the catalog", () => {
+		const models = buildPlinyModels();
+		const ids = Object.keys(models);
+		PLINY_FREE_AUTO_PROFILES.forEach(({ profile }, index) => {
+			const id = plinyFreeAutoModelId(profile);
+			expect(ids[index]).toBe(id);
+			expect(models[id]?.pricing).toMatchObject({ input: 0, output: 0 });
+			expect(isPlinyFreeModelId(id)).toBe(true);
+		});
+	});
+
+	it("does not treat a lookalike id as a profile", () => {
+		expect(isPlinyFreeAutoModelId("pliny/free-autonomous")).toBe(false);
+	});
+});
+
+describe("measured thinking controls", () => {
+	it("records the probe verdict for every free pool model", () => {
+		for (const id of plinyFreePoolIds()) {
+			expect(plinyThinkingControls(id), id).toBeDefined();
+		}
+	});
+
+	it("marks models that can reason with the reasoning capability", () => {
+		const models = buildPlinyModels();
+		expect(models["snps-provider/GLM-5.2"]?.capabilities).toContain(
+			"reasoning",
+		);
+		expect(
+			models["snps-provider/qwen3-coder-480b-a35b-inst-fp8"]?.capabilities,
+		).not.toContain("reasoning");
+	});
+
+	it("never guesses controls for hosted models", () => {
+		expect(
+			plinyThinkingControls("snps-aws-bedrock/aws-claude-sonnet-4.6"),
+		).toBeUndefined();
 	});
 });

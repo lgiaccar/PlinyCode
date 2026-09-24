@@ -2555,3 +2555,40 @@ describe("composeAiSdkProviderOptions: ClinePass bucket normalization", () => {
 		expect(result).not.toHaveProperty("clinePass");
 	});
 });
+
+describe("composeAiSdkProviderOptions: Pliny measured thinking switches", () => {
+	const compose = (modelId: string, enabled: boolean | undefined) =>
+		composeAiSdkProviderOptions(
+			makeRequest({
+				providerId: "pliny",
+				modelId,
+				reasoning: enabled === undefined ? undefined : { enabled },
+			}),
+			makeContext({ providerId: "pliny", modelId }),
+		);
+
+	it("turns GLM-5.2's default reasoning off through the chat template, not the GLM family guess", () => {
+		const result = compose("snps-provider/GLM-5.2", false);
+		expect(result.pliny).toEqual(
+			expect.objectContaining({
+				chat_template_kwargs: { enable_thinking: false },
+			}),
+		);
+		expect(result.pliny).not.toHaveProperty("reasoning");
+		expect(result.openaiCompatible).not.toHaveProperty("reasoning");
+	});
+
+	it("sends nothing to switch off a model that never reasons", () => {
+		const result = compose(
+			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+			false,
+		);
+		expect(result.pliny).not.toHaveProperty("chat_template_kwargs");
+		expect(result.pliny).not.toHaveProperty("reasoning_effort");
+	});
+
+	it("leaves a model's reasoning alone when the request does not ask", () => {
+		const result = compose("snps-provider/GLM-5.2", undefined);
+		expect(result.pliny).not.toHaveProperty("chat_template_kwargs");
+	});
+});

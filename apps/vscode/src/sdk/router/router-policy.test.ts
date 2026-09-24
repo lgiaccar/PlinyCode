@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fitsContext, routeMatches, selectCandidates, selectRoute } from "./router-policy"
+import { effortOptions, fitsContext, routeMatches, selectCandidates, selectRoute } from "./router-policy"
 import { defaultRules } from "./router-rules"
 import type { RouterRequestFeatures, RouterRules } from "./router-types"
 
@@ -91,6 +91,67 @@ describe("selectRoute", () => {
 			routes: [{ name: "never", when: { minEstimatedTokens: 999_999 }, use: ["snps-provider/a"] }],
 		})
 		expect(selectRoute(configured, features())).toBeUndefined()
+	})
+
+	describe("with a classifier verdict", () => {
+		const configured = rules({
+			routes: [
+				{ name: "huge", tier: "huge", when: { minEstimatedTokens: 180_000 }, use: ["snps-provider/a"] },
+				{ name: "plan", tier: "reason", when: { mode: "plan", promptRegex: "^design" }, use: ["snps-provider/b"] },
+				{ name: "code", tier: "code", when: { maxEstimatedTokens: 100_000 }, use: ["snps-provider/c"] },
+				{ name: "fallback", use: ["snps-provider/d"] },
+			],
+		})
+
+		it("uses the route tagged with the tier, ignoring its soft conditions", () => {
+			// Act mode and no "design" prefix: the heuristics alone would not pick "plan".
+			expect(selectRoute(configured, features({ mode: "act" }), { tier: "reason", think: true })?.name).toBe("plan")
+		})
+
+		it("still respects the size bound of the tagged route", () => {
+			const huge = features({ estimatedTokens: 200_000 })
+			expect(selectRoute(configured, huge, { tier: "code", think: false })?.name).toBe("huge")
+		})
+
+		it("falls back to the heuristics when no route carries the tier", () => {
+			expect(selectRoute(configured, features(), { tier: "quick", think: false })?.name).toBe("code")
+		})
+	})
+})
+
+describe("effortOptions", () => {
+	const reasonsByDefault = { defaultOn: true, off: "template-kwargs" as const }
+	const alwaysOn = { defaultOn: true }
+	const neverReasons = { defaultOn: false }
+	const effortSwitch = { defaultOn: false, on: "reasoning-effort" as const }
+	const templateOnly = { defaultOn: false, on: "template-kwargs" as const }
+
+	it("leaves unmeasured models and routes without effort alone", () => {
+		expect(effortOptions("quick", undefined, undefined)).toBeUndefined()
+		expect(effortOptions(undefined, undefined, reasonsByDefault)).toBeUndefined()
+	})
+
+	it("switches reasoning off when the model has an off-switch or never reasons", () => {
+		expect(effortOptions("quick", undefined, reasonsByDefault)).toEqual({ thinking: false, reasoningEffort: undefined })
+		expect(effortOptions("quick", undefined, neverReasons)).toEqual({ thinking: false, reasoningEffort: undefined })
+	})
+
+	it("cannot make an always-on model quick", () => {
+		expect(effortOptions("quick", undefined, alwaysOn)).toBeUndefined()
+	})
+
+	it("lets a model that reasons by default keep its default rather than resend a switch", () => {
+		expect(effortOptions("think", "high", reasonsByDefault)).toEqual({ thinking: undefined, reasoningEffort: undefined })
+	})
+
+	it("turns reasoning on through reasoning_effort at the route's level", () => {
+		expect(effortOptions("think", "high", effortSwitch)).toEqual({ thinking: true, reasoningEffort: "high" })
+		expect(effortOptions("think", undefined, effortSwitch)).toEqual({ thinking: true, reasoningEffort: "medium" })
+	})
+
+	it("cannot make a model think without a usable on-switch", () => {
+		expect(effortOptions("think", "high", neverReasons)).toBeUndefined()
+		expect(effortOptions("think", "high", templateOnly)).toBeUndefined()
 	})
 })
 
@@ -246,6 +307,24 @@ describe("selectCandidates", () => {
 		// Unlike health and size, this filter is never relaxed.
 		expect(decision.candidates).toEqual([])
 		expect(decision.excludedNoImages).toEqual(pool)
+	})
+
+	it("carries the route's effort, and lets the classifier's think verdict override it", () => {
+		const configured = rules({
+			pool,
+			routes: [{ name: "plan", tier: "reason", effort: "think", reasoningEffort: "high", use: pool }],
+		})
+		const plain = selectCandidates({ rules: configured, features: features(), isHealthy: alwaysHealthy })
+		expect(plain).toMatchObject({ effort: "think", reasoningEffort: "high" })
+		expect(plain.classification).toBeUndefined()
+
+		const classified = selectCandidates({
+			rules: configured,
+			features: features(),
+			isHealthy: alwaysHealthy,
+			classification: { tier: "reason", think: false },
+		})
+		expect(classified).toMatchObject({ effort: "quick", classification: { tier: "reason", think: false } })
 	})
 
 	it("names the route default when none match", () => {

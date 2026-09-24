@@ -23,12 +23,31 @@ export interface RouterRouteCondition {
 	subAgent?: boolean
 }
 
+/**
+ * How much the chosen model should reason. `quick` switches reasoning off and
+ * `think` switches it on, but only on models whose switch was measured; any
+ * other model is left at its default.
+ */
+export type RouterEffort = "quick" | "think"
+
+export type RouterReasoningEffort = "low" | "medium" | "high"
+
+/** Tiers the classifier can pick. Each maps to the first route tagged with it. */
+export const ROUTER_TIERS = ["quick", "code", "reason", "huge"] as const
+export type RouterTier = (typeof ROUTER_TIERS)[number]
+
 export interface RouterRoute {
 	/** Shown in the routing row so the user can tell which rule fired. */
 	name: string
 	when?: RouterRouteCondition
 	/** Candidate models, best first. Ids outside the free pool are dropped. */
 	use: string[]
+	/** Reasoning for calls on this route; unset leaves each model's default. */
+	effort?: RouterEffort
+	/** Effort level sent when this route turns reasoning on. */
+	reasoningEffort?: RouterReasoningEffort
+	/** Classifier tier this route serves. */
+	tier?: RouterTier
 }
 
 export interface RouterHealthSettings {
@@ -76,6 +95,12 @@ export interface RouterRules {
 	guidance?: string
 }
 
+/** The classifier's verdict for a turn. */
+export interface RouterClassification {
+	tier: RouterTier
+	think: boolean
+}
+
 /** Everything the policy knows about the call it is routing. */
 export interface RouterRequestFeatures {
 	/** Estimated size of the whole request, in tokens. */
@@ -98,6 +123,11 @@ export interface RouterDecision {
 	candidates: string[]
 	/** Name of the route that matched, for the routing row. */
 	routeName: string
+	/** Reasoning the route asks for, after any classifier override. */
+	effort?: RouterEffort
+	reasoningEffort?: RouterReasoningEffort
+	/** The classifier verdict that picked the route, when it did. */
+	classification?: RouterClassification
 	/** Models excluded because they are benched, for diagnostics. */
 	excludedUnhealthy: string[]
 	/** Models excluded because their context window is too small. */
@@ -106,11 +136,23 @@ export interface RouterDecision {
 	excludedNoImages: string[]
 }
 
-/** One LLM call, as recorded for the end-of-turn summary. */
+/** One LLM call, as recorded for the end-of-turn summary and the call log. */
 export interface RouterCallRecord {
 	modelId: string
 	startedAt: number
 	routeName: string
+	/** Reasoning actually requested from this model, when the router set it. */
+	effort?: RouterEffort
+	estimatedTokens?: number
+	classification?: RouterClassification
 	/** Set when the call failed and the router moved on. */
 	failure?: string
+}
+
+/** Wall-clock timing of one delegate call, reported to the observer. */
+export interface RouterCallTiming {
+	startedAt: number
+	/** When the first content event arrived; absent if none did. */
+	firstContentAt?: number
+	endedAt: number
 }

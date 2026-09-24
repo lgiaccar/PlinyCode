@@ -1,6 +1,6 @@
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { createRoutedAgentModel, type RouterObserver } from "./routed-agent-model"
+import { createRoutedAgentModel, type RoutedAgentModelDeps, type RouterObserver } from "./routed-agent-model"
 import { defaultRules } from "./router-rules"
 import type { RouterRequestFeatures, RouterRules } from "./router-types"
 
@@ -72,6 +72,7 @@ function build(options: {
 	configured?: RouterRules
 	observer?: RouterObserver
 	isHealthy?: (modelId: string) => boolean
+	classify?: RoutedAgentModelDeps["classify"]
 }) {
 	const { observer, events } = recordingObserver()
 	const model = createRoutedAgentModel({
@@ -81,6 +82,7 @@ function build(options: {
 		isHealthy: options.isHealthy ?? (() => true),
 		createDelegate: (modelId) => options.delegates[modelId] ?? scripted([{ type: "finish", reason: "stop" }]),
 		observer: options.observer ?? observer,
+		...(options.classify ? { classify: options.classify } : {}),
 		now: () => 1_700_000_000_000,
 	})
 	return { model, events }
@@ -254,6 +256,106 @@ describe("createRoutedAgentModel", () => {
 		expect((out[0] as { error?: string }).error).toContain("images")
 		expect(createDelegate).not.toHaveBeenCalled()
 		expect(events).toEqual([])
+	})
+
+	it("switches reasoning per candidate from the route's effort and the model's measured switch", async () => {
+		const seen: Array<{ modelId: string; options: unknown }> = []
+		const recordingDelegate = (modelId: string, events: AgentModelEvent[]): AgentModel => ({
+			async *stream(req) {
+				seen.push({ modelId, options: req.options })
+				yield* events
+			},
+		})
+		const { observer, events } = recordingObserver()
+		const starts: Array<{ modelId: string; effort?: string }> = []
+		const model = createRoutedAgentModel({
+			rules: () => rules({ routes: [{ name: "fast", use: POOL, effort: "quick" }] }),
+			features,
+			knownModels: () => undefined,
+			isHealthy: () => true,
+			thinkingControls: (modelId) =>
+				modelId === "snps-provider/first" ? { defaultOn: true, off: "template-kwargs" } : undefined,
+			createDelegate: (modelId) =>
+				modelId === "snps-provider/first"
+					? recordingDelegate(modelId, [{ type: "finish", reason: "error", error: "boom" }])
+					: recordingDelegate(modelId, [TEXT, STOP]),
+			observer: {
+				...observer,
+				onCallStart: (info) => {
+					starts.push({ modelId: info.modelId, effort: info.effort })
+					observer.onCallStart(info)
+				},
+			},
+		})
+		await collect(model, { ...request(), options: { thinking: true, reasoningEffort: "high" } })
+
+		// The measured model gets reasoning switched off; the unmeasured backup keeps the caller's options.
+		expect(seen[0]).toEqual({
+			modelId: "snps-provider/first",
+			options: { thinking: false, reasoningEffort: undefined },
+		})
+		expect(seen[1]).toEqual({ modelId: "snps-provider/second", options: { thinking: true, reasoningEffort: "high" } })
+		expect(starts).toEqual([
+			{ modelId: "snps-provider/first", effort: "quick" },
+			{ modelId: "snps-provider/second", effort: undefined },
+		])
+		expect(events.map((e) => e.kind)).toEqual(["start", "failover", "start", "success"])
+	})
+
+	it("routes with the classifier's verdict", async () => {
+		const classify = vi.fn(async () => ({ tier: "code" as const, think: false }))
+		const { model, events } = build({
+			delegates: { "snps-provider/third": scripted([TEXT, STOP]) },
+			configured: rules({
+				routes: [
+					{ name: "coding", tier: "code", use: ["snps-provider/third"] },
+					{ name: "test", use: POOL },
+				],
+			}),
+			classify,
+		})
+		expect(await collect(model)).toEqual([TEXT, STOP])
+		expect(classify).toHaveBeenCalledTimes(1)
+		expect(events[0]).toEqual({ kind: "start", modelId: "snps-provider/third" })
+	})
+
+	it("does not consult the classifier for a request with images", async () => {
+		const classify = vi.fn(async () => ({ tier: "code" as const, think: false }))
+		const model = createRoutedAgentModel({
+			rules: () => rules(),
+			features: () => ({ ...features(), hasImages: true }),
+			knownModels: () => undefined,
+			isHealthy: () => true,
+			createDelegate: () => scripted([TEXT, STOP]),
+			observer: recordingObserver().observer,
+			classify,
+		})
+		await collect(model)
+		expect(classify).not.toHaveBeenCalled()
+	})
+
+	it("reports when the first content arrived", async () => {
+		let clock = 1_000
+		const timings: unknown[] = []
+		const slow: AgentModel = {
+			async *stream() {
+				clock = 1_250
+				yield TEXT
+				clock = 1_900
+				yield STOP
+			},
+		}
+		const model = createRoutedAgentModel({
+			rules: () => rules(),
+			features,
+			knownModels: () => undefined,
+			isHealthy: () => true,
+			createDelegate: () => slow,
+			observer: { ...recordingObserver().observer, onCallSuccess: ({ timing }) => timings.push(timing) },
+			now: () => clock,
+		})
+		await collect(model)
+		expect(timings).toEqual([{ startedAt: 1_000, firstContentAt: 1_250, endedAt: 1_900 }])
 	})
 
 	it("errors cleanly when the policy yields no candidates", async () => {

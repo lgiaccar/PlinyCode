@@ -68,9 +68,12 @@ export const PLINY_FEATURED_MODELS = [
  */
 export const PLINY_FREE_AUTO_RULES_URI = "pliny://free-auto-rules"
 
-/** True for the virtual router id. */
+/** True for the virtual router id and its profile ids (`pliny/free-auto-fast`, ...). */
 export function isPlinyFreeAutoModelId(modelId: string | undefined | null): boolean {
-	return modelId === PLINY_FREE_AUTO_MODEL_ID
+	return (
+		typeof modelId === "string" &&
+		(modelId === PLINY_FREE_AUTO_MODEL_ID || modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`))
+	)
 }
 
 /** True for free self-hosted Pliny models (all `snps-provider*` pools). */

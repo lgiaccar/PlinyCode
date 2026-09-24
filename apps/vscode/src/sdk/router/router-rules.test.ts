@@ -1,3 +1,4 @@
+import * as yaml from "js-yaml"
 import { describe, expect, it } from "vitest"
 import {
 	defaultPool,
@@ -156,13 +157,62 @@ describe("default routes", () => {
 		expect(route("subagent")?.when).toEqual({ subAgent: true, maxEstimatedTokens: 100_000 })
 	})
 
-	it("survives a render/parse round trip of the starter rules file", () => {
-		const parsed = parseRulesMarkdown(renderDefaultRulesMarkdown())
-		const defaults = defaultRules()
-		expect(parsed.routes.map((r) => r.name)).toEqual(defaults.routes.map((r) => r.name))
-		expect(parsed.routes.find((r) => r.name === "subagent")?.when).toEqual(route("subagent")?.when)
-		expect(parsed.routes.find((r) => r.name === "coding")?.when).toEqual(route("coding")?.when)
-		expect(parsed.pool).toEqual(defaults.pool)
+	it.each(["default", "fast", "smart"])("renders a %s starter file whose YAML really parses", (profile) => {
+		const markdown = renderDefaultRulesMarkdown(profile)
+		// Parse directly: parseRulesMarkdown would hide a YAML error behind the defaults.
+		const document = yaml.load(extractYamlBlock(markdown) ?? "", { schema: yaml.JSON_SCHEMA })
+		const parsed = normalizeRules(document, undefined, profile)
+		expect(parsed).toEqual(defaultRules(profile))
+	})
+
+	it("keeps regex backslashes intact through the rendered file", () => {
+		const document = yaml.load(extractYamlBlock(renderDefaultRulesMarkdown()) ?? "", {
+			schema: yaml.JSON_SCHEMA,
+		}) as { routes: Array<{ name: string; when?: { promptRegex?: string } }> }
+		const coding = document.routes.find((r) => r.name === "coding")
+		expect(coding?.when?.promptRegex).toBe(route("coding")?.when?.promptRegex)
+	})
+})
+
+describe("profiles", () => {
+	it("turns reasoning off on every route of the fast profile", () => {
+		const routes = defaultRules("fast").routes
+		expect(routes.every((r) => r.effort === "quick" && r.reasoningEffort === undefined)).toBe(true)
+	})
+
+	it("enables the classifier only for the smart profile", () => {
+		expect(defaultRules().classifier.enabled).toBe(false)
+		expect(defaultRules("fast").classifier.enabled).toBe(false)
+		expect(defaultRules("smart").classifier.enabled).toBe(true)
+	})
+
+	it("keeps the smart classifier on when its file omits the flag", () => {
+		expect(normalizeRules({ classifier: { timeoutMs: 5_000 } }, undefined, "smart").classifier.enabled).toBe(true)
+		expect(normalizeRules({ classifier: { enabled: false } }, undefined, "smart").classifier.enabled).toBe(false)
+	})
+
+	it("thinks on the planning route and stays quick on the coding route by default", () => {
+		const routes = defaultRules().routes
+		expect(routes.find((r) => r.name === "plan-and-reasoning")).toMatchObject({
+			effort: "think",
+			reasoningEffort: "high",
+			tier: "reason",
+		})
+		expect(routes.find((r) => r.name === "coding")).toMatchObject({ effort: "quick", tier: "code" })
+	})
+
+	it("parses tier, effort and reasoningEffort and drops unknown values", () => {
+		const use = ["snps-provider/GLM-5.2"]
+		const [good, bad] = normalizeRules({
+			routes: [
+				{ name: "good", tier: "Reason", effort: "think", reasoningEffort: "low", use },
+				{ name: "bad", tier: "galaxy", effort: "sometimes", reasoningEffort: "extreme", use },
+			],
+		}).routes
+		expect(good).toMatchObject({ tier: "reason", effort: "think", reasoningEffort: "low" })
+		expect(bad.tier).toBeUndefined()
+		expect(bad.effort).toBeUndefined()
+		expect(bad.reasoningEffort).toBeUndefined()
 	})
 })
 

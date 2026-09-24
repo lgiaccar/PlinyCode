@@ -16,6 +16,7 @@ import { WebviewProvider } from "./core/webview"
 import { createClineAPI } from "./exports"
 import "./utils/path" // necessary to have access to String.prototype.toPosix
 import path from "node:path"
+import { PLINY_FREE_AUTO_PROFILES } from "@plinycode/llms"
 import type { ExtensionContext } from "vscode"
 import { HostProvider } from "@/hosts/host-provider"
 import { vscodeHostBridgeClient } from "@/hosts/vscode/hostbridge/client/host-grpc-client"
@@ -51,7 +52,8 @@ import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { ExtensionRegistryInfo } from "./registry"
 import { AuthService, LogoutReason } from "./sdk/auth-service"
-import { globalRulesPath, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
+import { callLogPath } from "./sdk/router/router-call-log"
+import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { telemetryService } from "./services/telemetry"
 import type { RolloutBundleActivation } from "./services/telemetry/rollout-metadata"
 import { LG_TASK_URI_PATH, SharedUriHandler, TASK_URI_PATH } from "./services/uri/SharedUriHandler"
@@ -147,20 +149,46 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand(commands.AccountButton, () => sendAccountButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.WorktreesButton, () => sendWorktreesButtonClickedEvent()))
 
-	// FreeAuto: make sure the routing rules file exists so the command below
-	// always has something to open, then let the user edit it.
-	void initialiseDefaultRulesFile().catch(() => undefined)
+	// FreeAuto: make sure every profile's routing rules file exists so the
+	// command below always has something to open, then let the user edit it.
+	void initialiseAllRulesFiles().catch(() => undefined)
+	const openFreeAutoFile = async (filePath: string, what: string) => {
+		try {
+			const document = await vscode.workspace.openTextDocument(filePath)
+			await vscode.window.showTextDocument(document)
+		} catch (error) {
+			void vscode.window.showErrorMessage(
+				`Could not open the FreeAuto ${what} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+	}
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commands.OpenFreeAutoRules, async () => {
-			const rulesPath = (await initialiseDefaultRulesFile()) ?? globalRulesPath()
-			try {
-				const document = await vscode.workspace.openTextDocument(rulesPath)
-				await vscode.window.showTextDocument(document)
-			} catch (error) {
-				void vscode.window.showErrorMessage(
-					`Could not open the FreeAuto rules file at ${rulesPath}: ${error instanceof Error ? error.message : String(error)}`,
-				)
+			const picked = await vscode.window.showQuickPick(
+				PLINY_FREE_AUTO_PROFILES.map((entry) => ({
+					label: entry.name,
+					description: entry.profile,
+					detail: entry.description,
+					profile: entry.profile,
+				})),
+				{ placeHolder: "Which FreeAuto profile's routing rules?" },
+			)
+			if (!picked) {
+				return
 			}
+			const rulesPath =
+				(await initialiseDefaultRulesFile(undefined, picked.profile)) ?? globalRulesPath(undefined, picked.profile)
+			await openFreeAutoFile(rulesPath, "rules file")
+		}),
+		vscode.commands.registerCommand(commands.OpenFreeAutoCallLog, async () => {
+			const logPath = callLogPath()
+			if (!(await fileExistsAtPath(logPath))) {
+				void vscode.window.showInformationMessage(
+					"The FreeAuto call log is empty: it is written as soon as a FreeAuto model handles a request.",
+				)
+				return
+			}
+			await openFreeAutoFile(logPath, "call log")
 		}),
 	)
 
