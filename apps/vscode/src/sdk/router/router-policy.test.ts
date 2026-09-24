@@ -9,6 +9,7 @@ function features(overrides: Partial<RouterRequestFeatures> = {}): RouterRequest
 		mode: "act",
 		prompt: "hello",
 		hasImages: false,
+		isSubAgent: false,
 		callIndex: 1,
 		...overrides,
 	}
@@ -62,6 +63,15 @@ describe("routeMatches", () => {
 		const route = { name: "bad", when: { promptRegex: "([unclosed" }, use: ["snps-provider/a"] }
 		expect(() => routeMatches(route, features())).not.toThrow()
 		expect(routeMatches(route, features())).toBe(false)
+	})
+
+	it("respects the subAgent condition in both directions", () => {
+		const subOnly = { name: "sub", when: { subAgent: true }, use: ["snps-provider/a"] }
+		const mainOnly = { name: "main", when: { subAgent: false }, use: ["snps-provider/a"] }
+		expect(routeMatches(subOnly, features({ isSubAgent: true }))).toBe(true)
+		expect(routeMatches(subOnly, features({ isSubAgent: false }))).toBe(false)
+		expect(routeMatches(mainOnly, features({ isSubAgent: true }))).toBe(false)
+		expect(routeMatches(mainOnly, features({ isSubAgent: false }))).toBe(true)
 	})
 })
 
@@ -202,6 +212,40 @@ describe("selectCandidates", () => {
 			isHealthy: () => false,
 		})
 		expect(decision.candidates).toEqual(pool)
+	})
+
+	it("keeps only image-capable models when the request carries images", () => {
+		const known = {
+			"snps-provider/a": { id: "snps-provider/a", name: "a", contextWindow: 100_000, capabilities: ["tools"] },
+			"snps-provider/b": {
+				id: "snps-provider/b",
+				name: "b",
+				contextWindow: 100_000,
+				capabilities: ["tools", "images"],
+			},
+		} as never
+		const configured = rules({ pool, routes: [{ name: "r", use: pool }] })
+		const decision = selectCandidates({
+			rules: configured,
+			features: features({ hasImages: true }),
+			knownModels: known,
+			isHealthy: alwaysHealthy,
+		})
+		expect(decision.candidates).toEqual(["snps-provider/b"])
+		expect(decision.excludedNoImages).toEqual(["snps-provider/a", "snps-provider/c"])
+	})
+
+	it("yields no candidates for an image request when no model accepts images", () => {
+		const configured = rules({ pool, routes: [{ name: "r", use: pool }] })
+		const decision = selectCandidates({
+			rules: configured,
+			features: features({ hasImages: true }),
+			knownModels: undefined,
+			isHealthy: alwaysHealthy,
+		})
+		// Unlike health and size, this filter is never relaxed.
+		expect(decision.candidates).toEqual([])
+		expect(decision.excludedNoImages).toEqual(pool)
 	})
 
 	it("names the route default when none match", () => {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import {
 	beginTurn,
 	forgetSession,
+	forgetSessionsWithPrefix,
 	getSessionState,
 	healthSnapshot,
 	isModelHealthy,
@@ -107,5 +108,17 @@ describe("session state", () => {
 		getSessionState("s1").failovers = 4
 		forgetSession("s1")
 		expect(getSessionState("s1").failovers).toBe(0)
+	})
+
+	it("forgets only the sessions under a prefix", () => {
+		getSessionState("s1").failovers = 1
+		getSessionState("s1:sub:1").failovers = 2
+		getSessionState("s1:sub:2").failovers = 3
+		getSessionState("s10:sub:1").failovers = 4
+		forgetSessionsWithPrefix("s1:sub:")
+		expect(getSessionState("s1").failovers).toBe(1)
+		expect(getSessionState("s1:sub:1").failovers).toBe(0)
+		expect(getSessionState("s1:sub:2").failovers).toBe(0)
+		expect(getSessionState("s10:sub:1").failovers).toBe(4)
 	})
 })

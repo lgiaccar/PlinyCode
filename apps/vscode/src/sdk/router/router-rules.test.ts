@@ -8,6 +8,7 @@ import {
 	normalizeRules,
 	parseRulesMarkdown,
 } from "./router-rules"
+import { renderDefaultRulesMarkdown } from "./router-rules-store"
 
 const FENCE = "```"
 
@@ -89,6 +90,15 @@ describe("normalizeRules", () => {
 		expect(rules.routes[0].when?.promptRegex).toBeUndefined()
 	})
 
+	it("parses a boolean subAgent condition and ignores anything else", () => {
+		const use = ["snps-provider/GLM-5.2"]
+		expect(normalizeRules({ routes: [{ name: "r", when: { subAgent: true }, use }] }).routes[0].when?.subAgent).toBe(true)
+		expect(normalizeRules({ routes: [{ name: "r", when: { subAgent: false }, use }] }).routes[0].when?.subAgent).toBe(false)
+		expect(
+			normalizeRules({ routes: [{ name: "r", when: { subAgent: "yes" }, use }] }).routes[0].when?.subAgent,
+		).toBeUndefined()
+	})
+
 	it("rejects a paid utility model and keeps the default", () => {
 		const rules = normalizeRules({ utility: { summarizer: "azure-openai/gpt-5.2" } })
 		expect(rules.utility.summarizer).toBe(defaultRules().utility.summarizer)
@@ -114,6 +124,45 @@ describe("normalizeRules", () => {
 	it("honours sticky:false but defaults to true", () => {
 		expect(normalizeRules({}).sticky).toBe(true)
 		expect(normalizeRules({ sticky: false }).sticky).toBe(false)
+	})
+})
+
+describe("default routes", () => {
+	const GLM = "snps-provider/GLM-5.2"
+	const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
+	const route = (name: string) => defaultRules().routes.find((r) => r.name === name)
+
+	it("keeps the slow GLM-5.2 out of the everyday routes", () => {
+		expect(route("coding")?.use).not.toContain(GLM)
+		expect(route("default")?.use).not.toContain(GLM)
+		expect(route("huge-context")?.use).toContain(GLM)
+	})
+
+	it("leads the coding and default routes with the coder model", () => {
+		expect(route("coding")?.use[0]).toBe(CODER)
+		expect(route("default")?.use[0]).toBe(CODER)
+		expect(defaultPool()[0]).toBe(CODER)
+	})
+
+	it("sends merge-conflict prompts to the coding route", () => {
+		const pattern = new RegExp(route("coding")?.when?.promptRegex ?? "$^", "i")
+		expect(pattern.test("resolve the merge conflicts")).toBe(true)
+		expect(pattern.test("there is a type error in the build")).toBe(true)
+	})
+
+	it("gives sub-agent calls a dedicated route ahead of the general ones", () => {
+		const names = defaultRules().routes.map((r) => r.name)
+		expect(names.indexOf("subagent")).toBeLessThan(names.indexOf("coding"))
+		expect(route("subagent")?.when).toEqual({ subAgent: true, maxEstimatedTokens: 100_000 })
+	})
+
+	it("survives a render/parse round trip of the starter rules file", () => {
+		const parsed = parseRulesMarkdown(renderDefaultRulesMarkdown())
+		const defaults = defaultRules()
+		expect(parsed.routes.map((r) => r.name)).toEqual(defaults.routes.map((r) => r.name))
+		expect(parsed.routes.find((r) => r.name === "subagent")?.when).toEqual(route("subagent")?.when)
+		expect(parsed.routes.find((r) => r.name === "coding")?.when).toEqual(route("coding")?.when)
+		expect(parsed.pool).toEqual(defaults.pool)
 	})
 })
 

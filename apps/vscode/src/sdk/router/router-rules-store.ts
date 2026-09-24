@@ -142,6 +142,7 @@ retried in place with the next model, continuing rather than restarting.
 | \`maxEstimatedTokens\` | request is at most this large |
 | \`maxPromptChars\` | your message is at most this long |
 | \`promptRegex\` | case-insensitive pattern matched against your message |
+| \`subAgent\` | \`true\` to match only calls made by a spawned sub-agent, \`false\` for only the main agent |
 
 ## Other settings
 
@@ -215,6 +216,9 @@ function renderRouteYaml(route: RouterRules["routes"][number]): string {
 		}
 		if (route.when.promptRegex) {
 			lines.push(`      promptRegex: "${route.when.promptRegex.replace(/"/g, '\\"')}"`)
+		}
+		if (route.when.subAgent !== undefined) {
+			lines.push(`      subAgent: ${route.when.subAgent}`)
 		}
 	}
 	lines.push("    use:")
