@@ -6,6 +6,7 @@ import {
 	SkillInfo,
 	ToggleAgentsRuleRequest,
 	ToggleClineRuleRequest,
+	ToggleCopilotRuleRequest,
 	ToggleCursorRuleRequest,
 	ToggleSkillRequest,
 	ToggleWindsurfRuleRequest,
@@ -25,6 +26,7 @@ import HookRow from "./HookRow"
 import NewRuleRow from "./NewRuleRow"
 import RuleRow from "./RuleRow"
 import RulesToggleList from "./RulesToggleList"
+import { estimateSkillListingTokens, formatTokenCount, sumEnabledTokens } from "./tokenFormat"
 
 const ClineRulesToggleModal: React.FC = () => {
 	const {
@@ -33,6 +35,7 @@ const ClineRulesToggleModal: React.FC = () => {
 		localCursorRulesToggles = {},
 		localWindsurfRulesToggles = {},
 		localAgentsRulesToggles = {},
+		localCopilotRulesToggles = {},
 		localWorkflowToggles = {},
 		globalWorkflowToggles = {},
 		hooksEnabled,
@@ -41,6 +44,7 @@ const ClineRulesToggleModal: React.FC = () => {
 		setLocalCursorRulesToggles,
 		setLocalWindsurfRulesToggles,
 		setLocalAgentsRulesToggles,
+		setLocalCopilotRulesToggles,
 		setLocalWorkflowToggles,
 		setGlobalWorkflowToggles,
 		setGlobalSkillsToggles,
@@ -53,6 +57,7 @@ const ClineRulesToggleModal: React.FC = () => {
 	>([])
 	const [globalSkills, setGlobalSkills] = useState<SkillInfo[]>([])
 	const [localSkills, setLocalSkills] = useState<SkillInfo[]>([])
+	const [ruleTokenCounts, setRuleTokenCounts] = useState<Record<string, number>>({})
 
 	const isWindows = !isMacOSOrLinux()
 	const [isVisible, setIsVisible] = useState(false)
@@ -87,6 +92,10 @@ const ClineRulesToggleModal: React.FC = () => {
 					if (response.localWindsurfRulesToggles?.toggles) {
 						setLocalWindsurfRulesToggles(response.localWindsurfRulesToggles.toggles)
 					}
+					if (response.localCopilotRulesToggles?.toggles) {
+						setLocalCopilotRulesToggles(response.localCopilotRulesToggles.toggles)
+					}
+					setRuleTokenCounts(response.tokenCounts ?? {})
 					if (response.localAgentsRulesToggles?.toggles) {
 						setLocalAgentsRulesToggles(response.localAgentsRulesToggles.toggles)
 					}
@@ -108,6 +117,8 @@ const ClineRulesToggleModal: React.FC = () => {
 		setGlobalWorkflowToggles,
 		setLocalCursorRulesToggles,
 		setLocalWindsurfRulesToggles,
+		setLocalAgentsRulesToggles,
+		setLocalCopilotRulesToggles,
 		setLocalWorkflowToggles,
 	])
 
@@ -208,6 +219,24 @@ const ClineRulesToggleModal: React.FC = () => {
 		.map(([path, enabled]): [string, boolean] => [path, enabled as boolean])
 		.sort(([a], [b]) => a.localeCompare(b))
 
+	const copilotRules = Object.entries(localCopilotRulesToggles || {})
+		.map(([path, enabled]): [string, boolean] => [path, enabled as boolean])
+		.sort(([a], [b]) => a.localeCompare(b))
+
+	// Skills cost their name + description on every request; the full file only when used.
+	// globalSkills also carries the remote (enterprise) skills under "remote:<name>" paths.
+	const allSkills = [...globalSkills, ...localSkills]
+	const enabledSkills = allSkills.filter((skill) => skill.enabled || skill.alwaysEnabled)
+	const enabledSkillListingTokens = enabledSkills.reduce((total, skill) => total + estimateSkillListingTokens(skill), 0)
+	const enabledSkillFileTokens = enabledSkills.reduce((total, skill) => total + (skill.tokens ?? 0), 0)
+	const skillTokensByPath = Object.fromEntries(allSkills.map((skill) => [skill.path, skill.tokens ?? 0]))
+
+	// Context budget of the file-based rules (remote rules are managed and not counted).
+	const allFileRules = [...globalRules, ...localRules, ...agentsRules, ...copilotRules, ...cursorRules, ...windsurfRules]
+	const enabledRuleCount = allFileRules.filter(([, enabled]) => enabled).length
+	const enabledRuleTokens = sumEnabledTokens(allFileRules, ruleTokenCounts)
+	const totalRuleTokens = allFileRules.reduce((total, [rulePath]) => total + (ruleTokenCounts[rulePath] ?? 0), 0)
+
 	const localWorkflows = Object.entries(localWorkflowToggles || {})
 		.map(([path, enabled]): [string, boolean] => [path, enabled as boolean])
 		.sort(([a], [b]) => a.localeCompare(b))
@@ -269,6 +298,23 @@ const ClineRulesToggleModal: React.FC = () => {
 			})
 			.catch((error) => {
 				console.error("Error toggling Cursor rule:", error)
+			})
+	}
+
+	const toggleCopilotRule = (rulePath: string, enabled: boolean) => {
+		FileServiceClient.toggleCopilotRule(
+			ToggleCopilotRuleRequest.create({
+				rulePath,
+				enabled,
+			}),
+		)
+			.then((response: ClineRulesToggles) => {
+				if (response.toggles) {
+					setLocalCopilotRulesToggles(response.toggles)
+				}
+			})
+			.catch((error) => {
+				console.error("Error toggling Copilot rule:", error)
 			})
 	}
 
@@ -468,7 +514,9 @@ const ClineRulesToggleModal: React.FC = () => {
 							{currentView === "rules" ? (
 								<p>
 									Rules allow you to provide PlinyCode with system-level guidance. Think of them as a persistent
-									way to include context and preferences for your projects or globally for every conversation.{" "}
+									way to include context and preferences for your projects or globally for every conversation.
+									Workspace rules written for GitHub Copilot, Cursor and Windsurf are picked up too; switch off
+									the ones you don't need to save context.{" "}
 									<VSCodeLink
 										className="text-xs"
 										href="https://docs.cline.bot/features/cline-rules"
@@ -491,7 +539,8 @@ const ClineRulesToggleModal: React.FC = () => {
 								<p>
 									Skills are reusable instruction sets that PlinyCode can activate on-demand. When a task
 									matches a skill's description, PlinyCode uses the <span className="font-bold">use_skill</span>{" "}
-									tool to load the full instructions.
+									tool to load the full instructions. Skills in <code>.github/skills</code>,{" "}
+									<code>.cursor/skills</code> and <code>.claude/skills</code> are picked up too.
 								</p>
 							) : (
 								<p>
@@ -517,6 +566,12 @@ const ClineRulesToggleModal: React.FC = () => {
 						)}
 						{currentView === "rules" ? (
 							<>
+								<ContextBudget
+									detail={`${enabledRuleCount} of ${allFileRules.length} rule files enabled · ~${formatTokenCount(totalRuleTokens)} if all were on`}
+									label="Rules added to every request"
+									tokens={enabledRuleTokens}
+								/>
+
 								{/* Remote Rules Section */}
 								{hasRemoteRules && (
 									<div className="mb-3">
@@ -554,6 +609,7 @@ const ClineRulesToggleModal: React.FC = () => {
 										showNewRule={true}
 										showNoRules={false}
 										toggleRule={(rulePath, enabled) => toggleRule(true, rulePath, enabled)}
+										tokenCounts={ruleTokenCounts}
 									/>
 								</div>
 
@@ -568,6 +624,7 @@ const ClineRulesToggleModal: React.FC = () => {
 										showNewRule={false}
 										showNoRules={false}
 										toggleRule={(rulePath, enabled) => toggleRule(false, rulePath, enabled)}
+										tokenCounts={ruleTokenCounts}
 									/>
 
 									<RulesToggleList
@@ -578,6 +635,17 @@ const ClineRulesToggleModal: React.FC = () => {
 										showNewRule={false}
 										showNoRules={false}
 										toggleRule={toggleCursorRule}
+										tokenCounts={ruleTokenCounts}
+									/>
+									<RulesToggleList
+										isGlobal={false}
+										listGap="small"
+										rules={copilotRules}
+										ruleType={"copilot"}
+										showNewRule={false}
+										showNoRules={false}
+										toggleRule={toggleCopilotRule}
+										tokenCounts={ruleTokenCounts}
 									/>
 									<RulesToggleList
 										isGlobal={false}
@@ -587,6 +655,7 @@ const ClineRulesToggleModal: React.FC = () => {
 										showNewRule={false}
 										showNoRules={false}
 										toggleRule={toggleWindsurfRule}
+										tokenCounts={ruleTokenCounts}
 									/>
 									<RulesToggleList
 										isGlobal={false}
@@ -596,6 +665,7 @@ const ClineRulesToggleModal: React.FC = () => {
 										showNewRule={true}
 										showNoRules={false}
 										toggleRule={toggleAgentsRule}
+										tokenCounts={ruleTokenCounts}
 									/>
 								</div>
 							</>
@@ -770,6 +840,12 @@ const ClineRulesToggleModal: React.FC = () => {
 							</>
 						) : currentView === "skills" ? (
 							<>
+								<ContextBudget
+									detail={`${enabledSkills.length} of ${allSkills.length} skills enabled · the full SKILL.md (~${formatTokenCount(enabledSkillFileTokens)} in total) loads only when a skill is used`}
+									label="Skill names and descriptions added to every request"
+									tokens={enabledSkillListingTokens}
+								/>
+
 								{/* Enterprise Skills Section (remote) */}
 								{hasRemoteSkills && (
 									<div className="mb-3">
@@ -789,6 +865,8 @@ const ClineRulesToggleModal: React.FC = () => {
 															rulePath={skill.name}
 															ruleType="skill"
 															toggleRule={(_path, enabled) => skill.toggle(enabled)}
+															tokens={skillTokensByPath[`remote:${skill.name}`]}
+															tokensTitle={SKILL_TOKENS_TITLE}
 														/>
 													)
 												})}
@@ -811,6 +889,8 @@ const ClineRulesToggleModal: React.FC = () => {
 													rulePath={skill.path}
 													ruleType="skill"
 													toggleRule={(_path, enabled) => toggleSkill(true, skill.path, enabled)}
+													tokens={skill.tokens}
+													tokensTitle={SKILL_TOKENS_TITLE}
 												/>
 											))}
 										<NewRuleRow isGlobal={true} ruleType="skill" />
@@ -831,6 +911,8 @@ const ClineRulesToggleModal: React.FC = () => {
 													rulePath={skill.path}
 													ruleType="skill"
 													toggleRule={(path, enabled) => toggleSkill(false, path, enabled)}
+													tokens={skill.tokens}
+													tokensTitle={SKILL_TOKENS_TITLE}
 												/>
 											))}
 										<NewRuleRow isGlobal={false} ruleType="skill" />
@@ -844,6 +926,22 @@ const ClineRulesToggleModal: React.FC = () => {
 		</div>
 	)
 }
+
+const SKILL_TOKENS_TITLE =
+	"Approximate size of the full SKILL.md, loaded only when the skill is used. Until then only its name and description are in context."
+
+/** One-line summary of how many tokens the enabled entries of a tab add to the context. */
+const ContextBudget = ({ label, tokens, detail }: { label: string; tokens: number; detail: string }) => (
+	<div className="flex flex-col gap-0.5 px-2 py-2 mb-3 rounded bg-text-block-background text-xs">
+		<div className="flex items-center justify-between gap-2">
+			<span>{label}</span>
+			<span className="font-semibold tabular-nums" title={`About ${tokens.toLocaleString()} tokens`}>
+				~{formatTokenCount(tokens)} tokens
+			</span>
+		</div>
+		<span className="text-description">{detail}</span>
+	</div>
+)
 
 const StyledTabButton = styled.button<{ $isActive: boolean }>`
 	background: none;

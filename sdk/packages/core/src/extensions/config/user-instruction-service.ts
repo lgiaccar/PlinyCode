@@ -225,6 +225,11 @@ export function combineUserInstructionConfigServices(
 						content: () =>
 							formatRulesForSystemPrompt(
 								listRecords<RuleConfig>("rule")
+									.filter(
+										(record) =>
+											!options.ruleFilter ||
+											options.ruleFilter(record.filePath),
+									)
 									.map((record) => record.item)
 									.filter((rule) => rule.disabled !== true),
 							),

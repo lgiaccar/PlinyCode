@@ -318,6 +318,102 @@ Escalation runbook`,
 		}
 	});
 
+	it("loads GitHub Copilot, Cursor and Windsurf rules and skills from the workspace", async () => {
+		const tempRoot = await mkdtemp(
+			join(tmpdir(), "core-user-instructions-external-"),
+		);
+		tempRoots.push(tempRoot);
+
+		const originalHomeDir = process.env.HOME?.trim() || homedir();
+		setHomeDir(join(tempRoot, "home"));
+		const workspaceRoot = join(tempRoot, "workspace");
+		const writeWorkspaceFile = async (relativePath: string, content: string) => {
+			const filePath = join(workspaceRoot, relativePath);
+			await mkdir(join(filePath, ".."), { recursive: true });
+			await writeFile(filePath, content);
+		};
+		await writeWorkspaceFile(
+			".github/copilot-instructions.md",
+			"Prefer COPILOT-OK.",
+		);
+		await writeWorkspaceFile(
+			".github/instructions/api/python.instructions.md",
+			"---\napplyTo: '**/*.py'\n---\nUse PY-OK.",
+		);
+		// Cursor writes unquoted globs, which strict YAML rejects as an alias.
+		await writeWorkspaceFile(
+			".cursor/rules/frontend/react.mdc",
+			"---\ndescription: React rules\nglobs: *.tsx, src/**/*.tsx\nalwaysApply: false\n---\nUse CURSOR-OK.",
+		);
+		await writeWorkspaceFile(".cursorrules", "Legacy CURSORRULES-OK.");
+		await writeWorkspaceFile(".windsurfrules", "Use WINDSURF-OK.");
+		// Same basename as the Cursor rule: must not collide with it.
+		await writeWorkspaceFile(".clinerules/react.md", "Cline REACT-OK.");
+		// Unrelated `.github` content is not a rule.
+		await writeWorkspaceFile(".github/ISSUE_TEMPLATE/bug.md", "Bug template");
+		for (const root of [".github", ".cursor", ".claude"]) {
+			await writeWorkspaceFile(
+				`${root}/skills/${root.slice(1)}-skill/SKILL.md`,
+				`---\nname: ${root.slice(1)}-skill\ndescription: From ${root}\n---\nDo it.`,
+			);
+		}
+
+		const watcher = createUserInstructionConfigWatcher({
+			skills: { workspacePath: workspaceRoot },
+			rules: { workspacePath: workspaceRoot },
+			workflows: { workspacePath: workspaceRoot },
+		});
+
+		try {
+			await watcher.refreshAll();
+			const rules = new Map(
+				[...watcher.getSnapshot("rule").values()].map((record) => [
+					record.item.name,
+					record.item,
+				]),
+			);
+			expect(rules.get(".github/copilot-instructions.md")?.instructions).toBe(
+				"Prefer COPILOT-OK.",
+			);
+			expect(
+				rules.get(".github/instructions/api/python.instructions.md")
+					?.frontmatter,
+			).toMatchObject({ applyTo: "**/*.py" });
+			expect(rules.get(".cursor/rules/frontend/react.mdc")).toMatchObject({
+				instructions: "Use CURSOR-OK.",
+				frontmatter: {
+					globs: "*.tsx, src/**/*.tsx",
+					alwaysApply: false,
+				},
+			});
+			expect(rules.get(".cursorrules")?.instructions).toBe(
+				"Legacy CURSORRULES-OK.",
+			);
+			expect(rules.get(".windsurfrules")?.instructions).toBe(
+				"Use WINDSURF-OK.",
+			);
+			expect(rules.get("react")?.instructions).toBe("Cline REACT-OK.");
+			expect(
+				[...rules.values()].some((rule) =>
+					rule.instructions.includes("Bug template"),
+				),
+			).toBe(false);
+
+			const skillNames = [...watcher.getSnapshot("skill").values()].map(
+				(record) => record.item.name,
+			);
+			expect(skillNames).toEqual(
+				expect.arrayContaining([
+					"github-skill",
+					"cursor-skill",
+					"claude-skill",
+				]),
+			);
+		} finally {
+			setHomeDir(originalHomeDir);
+		}
+	});
+
 	it("loads global and workspace AGENTS.md rules without clobbering either source", async () => {
 		const tempRoot = await mkdtemp(
 			join(tmpdir(), "core-user-instructions-agents-"),

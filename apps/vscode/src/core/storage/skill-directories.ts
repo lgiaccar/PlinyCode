@@ -6,6 +6,8 @@ const SKILL_DIRECTORY_NAMES = {
 	clineSkillsDir: ".cline/skills",
 	claudeSkillsDir: ".claude/skills",
 	agentsSkillsDir: ".agents/skills",
+	githubSkillsDir: ".github/skills",
+	cursorSkillsDir: ".cursor/skills",
 } as const
 
 export type SkillsScanDirectory = {
@@ -35,6 +37,8 @@ export function getSkillsDirectoriesForScan(cwd: string): SkillsScanDirectory[] 
 		{ path: path.join(cwd, SKILL_DIRECTORY_NAMES.clineSkillsDir), source: "project" },
 		{ path: path.join(cwd, SKILL_DIRECTORY_NAMES.claudeSkillsDir), source: "project" },
 		{ path: path.join(cwd, SKILL_DIRECTORY_NAMES.agentsSkillsDir), source: "project" },
+		{ path: path.join(cwd, SKILL_DIRECTORY_NAMES.githubSkillsDir), source: "project" },
+		{ path: path.join(cwd, SKILL_DIRECTORY_NAMES.cursorSkillsDir), source: "project" },
 		{ path: getClineSkillsDirectoryPath(), source: "global" },
 		{ path: getAgentSkillsDirectoryPath(), source: "global" },
 	]

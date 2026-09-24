@@ -117,6 +117,8 @@ message Settings {
   reserved 139; // was max_consecutive_mistakes (removed; the SDK owns the mistake limit)
   reserved "max_consecutive_mistakes";
   reserved 142; // was yolo_mode_toggled (removed; migrated into auto_approval_settings)
+  reserved 187, 188; // were plinycode_context_folders_enabled / plinycode_context_folders (context-folder import removed)
+  reserved "plinycode_context_folders_enabled", "plinycode_context_folders";
   optional string lite_llm_base_url = 1;
   optional bool lite_llm_use_prompt_cache = 2;
   optional string anthropic_base_url = 4;
@@ -286,8 +288,6 @@ message Settings {
   optional OpenRouterModelInfo plan_mode_cline_pass_model_info = 184;
   optional string act_mode_cline_pass_model_id = 185;
   optional OpenRouterModelInfo act_mode_cline_pass_model_info = 186;
-  optional bool plinycode_context_folders_enabled = 187;
-  optional string plinycode_context_folders = 188;
   optional string open_telemetry_traces_exporter = 189;
   optional bool pliny_free_auto_migrated_v1 = 190;
 }

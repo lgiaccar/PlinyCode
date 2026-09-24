@@ -1,5 +1,8 @@
 import type { AgentExtension, AgentTool } from "@plinycode/shared";
-import { loadRulesForSystemPromptFromWatcher } from "../../runtime/safety/rules";
+import {
+	loadRulesForSystemPromptFromWatcher,
+	type RuleFileFilter,
+} from "../../runtime/safety/rules";
 import {
 	createSkillsTool,
 	type SkillsExecutor,
@@ -56,6 +59,8 @@ export interface CreateUserInstructionPluginOptions {
 	includeWorkflows?: boolean;
 	registerSkillsTool?: boolean;
 	allowedSkillNames?: ReadonlyArray<string>;
+	/** Drops rules whose source file the host has disabled. */
+	ruleFilter?: RuleFileFilter;
 }
 
 function normalizeSkillToken(token: string): string {
@@ -256,7 +261,11 @@ export function createUserInstructionPlugin(
 				api.registerRule({
 					id: "cline-user-instructions:rules",
 					source: "user-instruction-watcher",
-					content: () => loadRulesForSystemPromptFromWatcher(options.watcher),
+					content: () =>
+						loadRulesForSystemPromptFromWatcher(
+							options.watcher,
+							options.ruleFilter,
+						),
 				});
 			}
 

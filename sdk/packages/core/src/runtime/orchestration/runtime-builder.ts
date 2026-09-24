@@ -410,6 +410,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			createSpawnTool,
 			onTeamRestored,
 			userInstructionService: sharedUserInstructionService,
+			ruleFilter,
 			configExtensions,
 			toolExecutors,
 		} = input;
@@ -540,6 +541,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 						includeWorkflows: workflowsEnabled,
 						registerSkillsTool,
 						allowedSkillNames: config.skills,
+						ruleFilter,
 					})
 				: undefined;
 		// Plan mode keeps run_commands for read-only investigation; this

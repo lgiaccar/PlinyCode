@@ -97,6 +97,7 @@ export async function getStateToPostToWebview(controller: {
 	const localWindsurfRulesToggles = stateManager.getWorkspaceStateKey("localWindsurfRulesToggles")
 	const localCursorRulesToggles = stateManager.getWorkspaceStateKey("localCursorRulesToggles")
 	const localAgentsRulesToggles = stateManager.getWorkspaceStateKey("localAgentsRulesToggles")
+	const localCopilotRulesToggles = stateManager.getWorkspaceStateKey("localCopilotRulesToggles")
 	const workflowToggles = stateManager.getWorkspaceStateKey("workflowToggles")
 
 	const currentTaskItem = controller.task?.taskId
@@ -160,6 +161,7 @@ export async function getStateToPostToWebview(controller: {
 		localWindsurfRulesToggles: localWindsurfRulesToggles || {},
 		localCursorRulesToggles: localCursorRulesToggles || {},
 		localAgentsRulesToggles: localAgentsRulesToggles || {},
+		localCopilotRulesToggles: localCopilotRulesToggles || {},
 		localWorkflowToggles: workflowToggles || {},
 		globalWorkflowToggles: globalWorkflowToggles || {},
 		globalSkillsToggles: globalSkillsToggles || {},
