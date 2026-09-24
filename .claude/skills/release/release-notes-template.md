@@ -4,7 +4,8 @@ Internal Synopsys release of the PlinyCode VS Code / Cursor extension.
 
 **Package:** `PlinyCode-<version>.vsix`  
 **Install:** if you already run PlinyCode 0.1.3 or later, it updates itself: click **Reload Now** when asked.
-Otherwise: Extensions -> ... -> **Install from VSIX...** -> select this folder's `.vsix` file, then reload the window.
+Otherwise download the `.vsix` from this release (GitHub) or from the PlinyCodeRelease folder, then
+Extensions -> ... -> **Install from VSIX...** and reload the window.
 
 **Gateway:** `https://snps-inference.internal.synopsys.com` (Synopsys network only)
 

@@ -360,12 +360,17 @@
 				"plinycode.updates.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Automatically install new PlinyCode releases from the shared PlinyCodeRelease folder synced by OneDrive. Checks shortly after startup and every 6 hours."
+					"description": "Automatically install new PlinyCode releases from GitHub, or from the shared PlinyCodeRelease folder synced by OneDrive. Checks shortly after startup and every 6 hours."
+				},
+				"plinycode.updates.url": {
+					"type": "string",
+					"default": "https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json",
+					"description": "URL of the latest.json that describes the newest PlinyCode release. Leave empty to use only the synced PlinyCodeRelease folder."
 				},
 				"plinycode.updates.folder": {
 					"type": "string",
 					"default": "",
-					"description": "Path to the synced PlinyCodeRelease folder (the one containing latest.json). Leave empty to find it in your OneDrive automatically."
+					"description": "Path to the synced PlinyCodeRelease folder (the one containing latest.json), used as a fallback when GitHub is unreachable. Leave empty to find it in your OneDrive automatically."
 				}
 			}
 		}

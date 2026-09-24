@@ -2,6 +2,7 @@ import os from "node:os"
 import path from "node:path"
 import * as vscode from "vscode"
 import { ExtensionRegistryInfo } from "@/registry"
+import { fetch } from "@/shared/net"
 import { Logger } from "@/shared/services/Logger"
 import {
 	compareVersions,
@@ -12,6 +13,7 @@ import {
 	resolveInReleaseFolder,
 	stageVsix,
 } from "./release-folder"
+import { DEFAULT_RELEASE_URL, downloadVsix, fetchRemoteManifest, resolveRemoteAsset } from "./release-remote"
 
 const FIRST_CHECK_DELAY_MS = 30_000
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -22,9 +24,20 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
  */
 const INSTALLED_VERSION_KEY = "plinycode.autoUpdate.installedVersion"
 
+/** A release offered by one update source. */
+interface UpdateCandidate {
+	manifest: ReleaseManifest
+	/** Where it came from, for logs and messages. */
+	source: string
+	/** Puts a verified copy of the .vsix in `stagingDir` and returns its path. */
+	stage(stagingDir: string): Promise<string>
+	openNotes?(): Thenable<unknown>
+}
+
 /**
- * Keeps PlinyCode current from the shared `PlinyCodeRelease` OneDrive folder
- * (see release-folder.ts). Checks shortly after startup and every few hours;
+ * Keeps PlinyCode current from GitHub Releases and, as a fallback, the shared
+ * `PlinyCodeRelease` OneDrive folder (see release-remote.ts and
+ * release-folder.ts). Checks shortly after startup and every few hours;
  * automatic checks stay silent unless there is an update to offer.
  */
 class AutoUpdater {
@@ -68,67 +81,129 @@ class AutoUpdater {
 	}
 
 	private async runCheck(interactive: boolean): Promise<void> {
-		const settings = vscode.workspace.getConfiguration("plinycode.updates")
-		const folder = await findReleaseFolder({
-			override: settings.get<string>("folder"),
-			homeDir: os.homedir(),
-			env: process.env,
-			platform: process.platform,
-		})
-		if (!folder) {
-			Logger.log("[AutoUpdate] No synced release folder found")
+		const { candidates, errors } = await this.findCandidates()
+		if (candidates.length === 0) {
+			Logger.log(`[AutoUpdate] No update source available${errors.length ? `: ${errors.join("; ")}` : ""}`)
 			if (interactive) {
-				await this.showFolderNotFound()
+				await this.showNoSource(errors)
 			}
 			return
 		}
 
-		const manifest = await readManifest(folder)
-		if (compareVersions(manifest.version, this.currentVersion) <= 0) {
-			Logger.log(`[AutoUpdate] Up to date (running ${this.currentVersion}, latest ${manifest.version})`)
+		// Newest first; on a tie the earlier source (GitHub) wins.
+		const newer = candidates
+			.filter((candidate) => compareVersions(candidate.manifest.version, this.currentVersion) > 0)
+			.sort((a, b) => compareVersions(b.manifest.version, a.manifest.version))
+		if (newer.length === 0) {
+			const latest = candidates.map((c) => `${c.manifest.version} from ${c.source}`).join(", ")
+			Logger.log(`[AutoUpdate] Up to date (running ${this.currentVersion}; ${latest})`)
 			if (interactive) {
 				void vscode.window.showInformationMessage(`PlinyCode is up to date (v${this.currentVersion}).`)
 			}
 			return
 		}
 
-		if (this.context.globalState.get<string>(INSTALLED_VERSION_KEY) !== manifest.version) {
-			Logger.log(`[AutoUpdate] Installing ${manifest.version} from ${folder}`)
-			const stagingDir = path.join(this.context.globalStorageUri.fsPath, "updates")
-			const vsix = await stageVsix(folder, manifest, stagingDir)
-			await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(vsix))
-			await this.context.globalState.update(INSTALLED_VERSION_KEY, manifest.version)
-		}
+		const version = newer[0].manifest.version
+		const installed = this.context.globalState.get<string>(INSTALLED_VERSION_KEY) === version
+		const candidate = installed ? newer[0] : await this.install(newer.filter((c) => c.manifest.version === version))
 
-		if (interactive || this.promptedVersion !== manifest.version) {
-			this.promptedVersion = manifest.version
-			void this.promptReload(folder, manifest)
+		if (interactive || this.promptedVersion !== version) {
+			this.promptedVersion = version
+			void this.promptReload(candidate)
 		}
 	}
 
-	private async promptReload(folder: string, manifest: ReleaseManifest): Promise<void> {
+	/** Installs from the first source that delivers a verified .vsix. */
+	private async install(candidates: UpdateCandidate[]): Promise<UpdateCandidate> {
+		const stagingDir = path.join(this.context.globalStorageUri.fsPath, "updates")
+		const failures: string[] = []
+		for (const candidate of candidates) {
+			try {
+				Logger.log(`[AutoUpdate] Installing ${candidate.manifest.version} from ${candidate.source}`)
+				const vsix = await candidate.stage(stagingDir)
+				await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(vsix))
+				await this.context.globalState.update(INSTALLED_VERSION_KEY, candidate.manifest.version)
+				return candidate
+			} catch (error) {
+				failures.push(`${candidate.source}: ${error instanceof Error ? error.message : String(error)}`)
+			}
+		}
+		throw new Error(failures.join("; "))
+	}
+
+	private async findCandidates(): Promise<{ candidates: UpdateCandidate[]; errors: string[] }> {
+		const settings = vscode.workspace.getConfiguration("plinycode.updates")
+		const candidates: UpdateCandidate[] = []
+		const errors: string[] = []
+
+		const url = settings.get<string>("url", DEFAULT_RELEASE_URL).trim()
+		if (url) {
+			try {
+				const manifest = await fetchRemoteManifest(url, fetch)
+				if (manifest) {
+					candidates.push({
+						manifest,
+						source: new URL(url).host,
+						stage: (stagingDir) => downloadVsix(url, manifest, stagingDir, fetch),
+						openNotes: manifest.notes
+							? () => vscode.env.openExternal(vscode.Uri.parse(resolveRemoteAsset(url, manifest.notes as string)))
+							: undefined,
+					})
+				}
+			} catch (error) {
+				errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`)
+			}
+		}
+
+		const folder = await findReleaseFolder({
+			override: settings.get<string>("folder"),
+			homeDir: os.homedir(),
+			env: process.env,
+			platform: process.platform,
+		})
+		if (folder) {
+			try {
+				const manifest = await readManifest(folder)
+				candidates.push({
+					manifest,
+					source: folder,
+					stage: (stagingDir) => stageVsix(folder, manifest, stagingDir),
+					openNotes: manifest.notes
+						? () =>
+								vscode.commands.executeCommand(
+									"markdown.showPreview",
+									vscode.Uri.file(resolveInReleaseFolder(folder, manifest.notes as string)),
+								)
+						: undefined,
+				})
+			} catch (error) {
+				errors.push(`${folder}: ${error instanceof Error ? error.message : String(error)}`)
+			}
+		}
+
+		return { candidates, errors }
+	}
+
+	private async promptReload(candidate: UpdateCandidate): Promise<void> {
 		const reload = "Reload Now"
 		const notes = "Release Notes"
-		const actions = manifest.notes ? [reload, notes] : [reload]
+		const actions = candidate.openNotes ? [reload, notes] : [reload]
 		const choice = await vscode.window.showInformationMessage(
-			`PlinyCode ${manifest.version} is installed. Reload the window to start using it.`,
+			`PlinyCode ${candidate.manifest.version} is installed. Reload the window to start using it.`,
 			...actions,
 		)
 		if (choice === reload) {
 			await vscode.commands.executeCommand("workbench.action.reloadWindow")
-		} else if (choice === notes && manifest.notes) {
-			const notesUri = vscode.Uri.file(resolveInReleaseFolder(folder, manifest.notes))
-			await vscode.commands.executeCommand("markdown.showPreview", notesUri)
+		} else if (choice === notes) {
+			await candidate.openNotes?.()
 		}
 	}
 
-	private async showFolderNotFound(): Promise<void> {
-		const remote = vscode.env.remoteName
-			? ` This window runs on a remote host (${vscode.env.remoteName}), which cannot see your OneDrive; update from a local window instead.`
-			: ""
+	private async showNoSource(errors: string[]): Promise<void> {
+		const reason = errors.length ? ` (${errors.join("; ")})` : ""
 		const openSettings = "Open Settings"
 		const choice = await vscode.window.showWarningMessage(
-			`PlinyCode could not find the shared "${RELEASE_FOLDER_NAME}" folder. Open the release link and choose "Add shortcut to My files" so OneDrive syncs it, or set plinycode.updates.folder to its path.${remote}`,
+			`PlinyCode could not check for updates${reason}. It checks GitHub releases (plinycode.updates.url) and the synced "${RELEASE_FOLDER_NAME}" OneDrive folder (plinycode.updates.folder).`,
 			openSettings,
 		)
 		if (choice === openSettings) {

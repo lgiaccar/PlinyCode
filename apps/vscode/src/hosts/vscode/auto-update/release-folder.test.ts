@@ -122,6 +122,7 @@ describe("release-folder", () => {
 		it("refuses paths that escape the release folder", () => {
 			expect(() => resolveInReleaseFolder(home, "../evil.vsix")).to.throw(/outside/)
 			expect(() => resolveInReleaseFolder(home, path.resolve(home, "..", "evil.vsix"))).to.throw(/outside/)
+			expect(() => resolveInReleaseFolder(home, "https://github.com/a.vsix")).to.throw(/outside/)
 			expect(resolveInReleaseFolder(home, "0.1.3/a.vsix")).to.equal(path.join(home, "0.1.3", "a.vsix"))
 		})
 	})

@@ -4,10 +4,11 @@ import fs from "node:fs/promises"
 import path from "node:path"
 
 /**
- * PlinyCode is not on a marketplace, so it updates itself from a shared
- * OneDrive/SharePoint folder that each user syncs to disk. Nothing here talks
- * to SharePoint: OneDrive puts the files on disk and we only read them. See
- * docs/releasing.md for the folder layout and the publishing steps.
+ * PlinyCode is not on a marketplace, so it updates itself from GitHub Releases
+ * (release-remote.ts) and, as a fallback, from a shared OneDrive/SharePoint
+ * folder that each user syncs to disk. Nothing here talks to SharePoint:
+ * OneDrive puts the files on disk and we only read them. See
+ * docs/releasing.md for the layout and the publishing steps.
  */
 
 /** Name of the shared release folder, as it appears once synced. */
@@ -114,7 +115,7 @@ export async function readManifest(folder: string): Promise<ReleaseManifest> {
 export function resolveInReleaseFolder(folder: string, relativePath: string): string {
 	const root = path.resolve(folder)
 	const resolved = path.resolve(root, relativePath)
-	if (path.isAbsolute(relativePath) || !resolved.startsWith(root + path.sep)) {
+	if (path.isAbsolute(relativePath) || relativePath.includes("://") || !resolved.startsWith(root + path.sep)) {
 		throw new Error(`"${relativePath}" is outside the release folder`)
 	}
 	return resolved
@@ -130,12 +131,19 @@ export async function stageVsix(folder: string, manifest: ReleaseManifest, stagi
 	await fs.mkdir(stagingDir, { recursive: true })
 	const staged = path.join(stagingDir, `PlinyCode-${manifest.version}.vsix`)
 	await fs.copyFile(source, staged)
+	return verifyStagedVsix(staged, manifest, stagingDir)
+}
 
+/**
+ * Checks a staged .vsix against the manifest's checksum, deleting it on a
+ * mismatch, then removes staged copies of older releases.
+ */
+export async function verifyStagedVsix(staged: string, manifest: ReleaseManifest, stagingDir: string): Promise<string> {
 	const actual = await sha256File(staged)
 	if (actual !== manifest.sha256) {
 		await fs.rm(staged, { force: true })
 		throw new Error(
-			`checksum mismatch for ${manifest.vsix} (expected ${manifest.sha256}, got ${actual}); OneDrive may still be syncing it`,
+			`checksum mismatch for ${manifest.vsix} (expected ${manifest.sha256}, got ${actual}); the file may still be syncing or was not fully downloaded`,
 		)
 	}
 
