@@ -7,11 +7,13 @@ import {
 	join,
 	relative,
 	resolve,
+	sep,
 } from "node:path";
 import { stripUtf8Bom } from "@plinycode/shared";
 import {
 	AGENTS_RULES_FILE_NAME,
 	RULES_CONFIG_DIRECTORY_NAME,
+	resolveExternalWorkspaceRulesConfigPaths,
 	resolveGlobalAgentsRulesPath,
 	resolveRulesConfigSearchPaths as resolveRulesConfigSearchPathsFromShared,
 	resolveSkillsConfigSearchPaths as resolveSkillsConfigSearchPathsFromShared,
@@ -37,6 +39,25 @@ const SKILL_FILE_NAME = "SKILL.md";
 const MANAGED_PLUGIN_MANIFEST_FILE_NAME = "managed.json";
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".txt"]);
+/** Rules also accept Cursor's `.mdc` rule files. */
+const RULE_EXTENSIONS = new Set([...MARKDOWN_EXTENSIONS, ".mdc"]);
+/** Extension-less single-file rule sets recognized at the workspace root. */
+const RULE_FILE_NAMES = new Set([
+	".clinerules",
+	".cursorrules",
+	".windsurfrules",
+]);
+/**
+ * Rule directories owned by other agents that allow nested sub-directories
+ * (`.cursor/rules/frontend/*.mdc`, `.github/instructions/api/*.instructions.md`).
+ * Cline's own `.clinerules` stays flat because its sub-directories hold
+ * workflows, hooks and skills.
+ */
+const NESTED_RULE_DIRECTORY_SUFFIXES = [
+	join(".cursor", "rules"),
+	join(".github", "instructions"),
+];
+const MAX_NESTED_RULE_DEPTH = 4;
 
 export {
 	RULES_CONFIG_DIRECTORY_NAME,
@@ -140,6 +161,20 @@ function isIgnorableDirectoryError(error: unknown): boolean {
 
 function isMarkdownFile(fileName: string): boolean {
 	return MARKDOWN_EXTENSIONS.has(extname(fileName).toLowerCase());
+}
+
+function isRuleFile(fileName: string): boolean {
+	return (
+		RULE_FILE_NAMES.has(fileName) ||
+		RULE_EXTENSIONS.has(extname(fileName).toLowerCase())
+	);
+}
+
+function allowsNestedRules(directoryPath: string): boolean {
+	const normalized = resolve(directoryPath);
+	return NESTED_RULE_DIRECTORY_SUFFIXES.some((suffix) =>
+		normalized.endsWith(`${sep}${suffix}`),
+	);
 }
 
 function dedupeDirectoryPaths(directories: ReadonlyArray<string>): string[] {
@@ -328,11 +363,30 @@ function parseBooleanField(
 	return value;
 }
 
+function isExternalWorkspaceRule(
+	filePath: string,
+	workspacePath: string,
+): boolean {
+	const resolvedFile = resolve(filePath);
+	return Object.values(resolveExternalWorkspaceRulesConfigPaths(workspacePath))
+		.flat()
+		.some((rootPath) => isPathWithin(resolve(rootPath), resolvedFile));
+}
+
 function resolveRuleFallbackName(
 	context: UnifiedConfigFileContext<"rule">,
 	workspacePath?: string,
 ): string {
 	const fileName = basename(context.filePath);
+	if (
+		workspacePath &&
+		isExternalWorkspaceRule(context.filePath, workspacePath)
+	) {
+		// Another agent's rule file (Copilot, Cursor, Windsurf): name it by its
+		// workspace path so it never collides with a same-named Cline rule and
+		// the model can tell where the guidance came from.
+		return relative(workspacePath, context.filePath).split(sep).join("/");
+	}
 	if (fileName.toLowerCase() !== AGENTS_RULES_FILE_NAME.toLowerCase()) {
 		return basename(context.filePath, extname(context.filePath));
 	}
@@ -380,13 +434,47 @@ export function parseSkillConfigFromMarkdown(
 	};
 }
 
+/**
+ * Line-based `key: value` fallback for rule frontmatter that is not valid YAML.
+ * Cursor writes unquoted globs such as `globs: *.ts, src/**`, which YAML reads
+ * as an alias and rejects; dropping the whole rule over that would silently
+ * hide it from the model.
+ */
+function parseLenientFrontmatter(content: string): {
+	data: Record<string, unknown>;
+	body: string;
+} | null {
+	const match = stripUtf8Bom(content).match(
+		/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/,
+	);
+	if (!match) {
+		return null;
+	}
+	const [, frontmatter, body] = match;
+	const data: Record<string, unknown> = {};
+	for (const line of frontmatter.split(/\r?\n/)) {
+		const entry = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+		if (!entry) {
+			continue;
+		}
+		const raw = entry[2].trim().replace(/^(["'])(.*)\1$/, "$2");
+		data[entry[1]] = raw === "true" ? true : raw === "false" ? false : raw;
+	}
+	return { data, body };
+}
+
 export function parseRuleConfigFromMarkdown(
 	content: string,
 	fallbackName: string,
 ): RuleConfig {
-	const { data, body, parseError } = parseMarkdownFrontmatter(content);
-	if (parseError) {
-		throw new Error(`Failed to parse YAML frontmatter: ${parseError}`);
+	const parsed = parseMarkdownFrontmatter(content);
+	let { data, body } = parsed;
+	if (parsed.parseError) {
+		const lenient = parseLenientFrontmatter(content);
+		if (!lenient) {
+			throw new Error(`Failed to parse YAML frontmatter: ${parsed.parseError}`);
+		}
+		({ data, body } = lenient);
 	}
 	const instructions = body.trim();
 	if (!instructions) {
@@ -506,6 +594,36 @@ async function discoverSkillFiles(
 	}
 }
 
+async function discoverNestedRuleFiles(
+	directoryPath: string,
+	depth: number,
+): Promise<UnifiedConfigFileCandidate[]> {
+	const entries = await readdir(directoryPath, { withFileTypes: true });
+	const candidates: UnifiedConfigFileCandidate[] = [];
+	for (const entry of entries) {
+		const entryPath = join(directoryPath, entry.name);
+		if (entry.isFile() && isRuleFile(entry.name)) {
+			candidates.push({
+				directoryPath,
+				fileName: entry.name,
+				filePath: entryPath,
+			});
+		} else if (entry.isDirectory() && depth > 0) {
+			candidates.push(
+				...(await discoverNestedRuleFiles(entryPath, depth - 1).catch(
+					(error) => {
+						if (isIgnorableDirectoryError(error)) {
+							return [];
+						}
+						throw error;
+					},
+				)),
+			);
+		}
+	}
+	return candidates;
+}
+
 async function discoverRulesLikeFiles(
 	directoryPath: string,
 ): Promise<ReadonlyArray<UnifiedConfigFileCandidate>> {
@@ -537,14 +655,15 @@ async function discoverRulesLikeFiles(
 	}
 
 	try {
-		const entries = await readdir(directoryPath, { withFileTypes: true });
-		const candidates = entries
-			.filter((entry) => entry.isFile() && isMarkdownFile(entry.name))
-			.map((entry) => ({
-				directoryPath,
-				fileName: entry.name,
-				filePath: join(directoryPath, entry.name),
-			}));
+		const candidates = allowsNestedRules(directoryPath)
+			? await discoverNestedRuleFiles(directoryPath, MAX_NESTED_RULE_DEPTH)
+			: (await readdir(directoryPath, { withFileTypes: true }))
+					.filter((entry) => entry.isFile() && isRuleFile(entry.name))
+					.map((entry) => ({
+						directoryPath,
+						fileName: entry.name,
+						filePath: join(directoryPath, entry.name),
+					}));
 
 		// Special case: if this is a workspace root directory, also check for AGENTS.md
 		const agentsPath = join(directoryPath, "AGENTS.md");
@@ -671,9 +790,7 @@ export function createRulesConfigDefinition(
 		directories: managedRoot ? [...directories, managedRoot] : directories,
 		discoverFiles: discoverRulesLikeFiles,
 		includeFile: (fileName, filePath) =>
-			fileName === ".clinerules" ||
-			isMarkdownFile(fileName) ||
-			isMarkdownFile(filePath),
+			isRuleFile(fileName) || isRuleFile(basename(filePath)),
 		parseFile: (context) =>
 			parseRuleConfigFromMarkdown(
 				context.content,

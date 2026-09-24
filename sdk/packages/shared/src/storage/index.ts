@@ -58,6 +58,8 @@ export {
 	resolveWorkflowsConfigSearchPaths,
 	resolveWorkspaceCronSpecsDir,
 	resolveWorkspaceRulesConfigPaths,
+	resolveExternalWorkspaceRulesConfigPaths,
+	EXTERNAL_SKILLS_CONFIG_DIRS,
 	resolveWorkspaceTaskSpecsDir,
 	SKILLS_CONFIG_DIRECTORY_NAME,
 	setClineDir,

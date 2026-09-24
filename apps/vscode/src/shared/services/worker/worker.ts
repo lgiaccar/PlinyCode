@@ -170,9 +170,15 @@ export class SyncWorker {
 		}
 
 		if (waitForCurrent) {
-			// Wait for any in-progress processing to complete
-			while (this.isProcessing) {
+			// Wait for any in-progress processing to complete (max 30s)
+			const maxWaitMs = 30000
+			const start = Date.now()
+			while (this.isProcessing && Date.now() - start < maxWaitMs) {
 				await new Promise((resolve) => setTimeout(resolve, 100))
+			}
+			if (this.isProcessing) {
+				Logger.warn("SyncWorker stop timed out waiting for current processing to complete")
+				this.isProcessing = false
 			}
 		}
 

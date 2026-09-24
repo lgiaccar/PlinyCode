@@ -126,6 +126,7 @@ export interface ExtensionState {
 	remoteRulesToggles?: ClineRulesToggles
 	remoteWorkflowToggles?: ClineRulesToggles
 	localAgentsRulesToggles: ClineRulesToggles
+	localCopilotRulesToggles: ClineRulesToggles
 	mcpResponsesCollapsed?: boolean
 	useAutoCondense?: boolean
 	compactionStrategy?: string

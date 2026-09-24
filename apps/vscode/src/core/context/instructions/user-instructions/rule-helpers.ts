@@ -167,6 +167,7 @@ type RuleFileController = {
 				| "localCursorRulesToggles"
 				| "localWindsurfRulesToggles"
 				| "localAgentsRulesToggles"
+				| "localCopilotRulesToggles"
 				| "localClineRulesToggles",
 		): ClineRulesToggles
 		setWorkspaceState(
@@ -175,6 +176,7 @@ type RuleFileController = {
 				| "localCursorRulesToggles"
 				| "localWindsurfRulesToggles"
 				| "localAgentsRulesToggles"
+				| "localCopilotRulesToggles"
 				| "localClineRulesToggles",
 			value: ClineRulesToggles,
 		): void
@@ -445,6 +447,10 @@ export async function deleteRuleFile(
 				const toggles = controller.stateManager.getWorkspaceStateKey("localAgentsRulesToggles")
 				delete toggles[rulePath]
 				controller.stateManager.setWorkspaceState("localAgentsRulesToggles", toggles)
+			} else if (type === "copilot") {
+				const toggles = controller.stateManager.getWorkspaceStateKey("localCopilotRulesToggles")
+				delete toggles[rulePath]
+				controller.stateManager.setWorkspaceState("localCopilotRulesToggles", toggles)
 			} else {
 				const toggles = controller.stateManager.getWorkspaceStateKey("localClineRulesToggles")
 				delete toggles[rulePath]

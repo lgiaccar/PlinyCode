@@ -11,6 +11,7 @@ const RulesToggleList = ({
 	showNoRules,
 	isRemote = false,
 	alwaysEnabledMap = {},
+	tokenCounts,
 }: {
 	rules: [string, boolean][]
 	toggleRule: (rulePath: string, enabled: boolean) => void
@@ -21,6 +22,8 @@ const RulesToggleList = ({
 	showNoRules: boolean
 	isRemote?: boolean
 	alwaysEnabledMap?: Record<string, boolean>
+	/** Estimated tokens per rule path; rows show a token badge when provided. */
+	tokenCounts?: Record<string, number>
 }) => {
 	const gapClasses = {
 		small: "gap-0",
@@ -44,6 +47,7 @@ const RulesToggleList = ({
 							rulePath={rulePath}
 							ruleType={ruleType}
 							toggleRule={toggleRule}
+							tokens={tokenCounts ? (tokenCounts[rulePath] ?? 0) : undefined}
 						/>
 					))}
 					{showNewRule && <NewRuleRow isGlobal={isGlobal} ruleType={ruleType} />}

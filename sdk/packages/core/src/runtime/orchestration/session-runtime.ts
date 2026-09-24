@@ -16,6 +16,7 @@ import type {
 	AgentPluginPackageSkill,
 } from "../../extensions/agent-plugin";
 import type { UserInstructionConfigService } from "../../extensions/config";
+import type { RuleFileFilter } from "../safety/rules";
 import type {
 	RunCommandExecutionController,
 	ToolExecutors,
@@ -74,6 +75,8 @@ export interface RuntimeBuilderInput {
 	createSpawnTool?: () => AgentTool;
 	onTeamRestored?: () => void;
 	userInstructionService?: UserInstructionConfigService;
+	/** Host predicate that drops rules loaded from disabled files. */
+	ruleFilter?: RuleFileFilter;
 	pluginSkillDirectories?: ReadonlyArray<string>;
 	agentPluginSkills?: ReadonlyArray<AgentPluginPackageSkill>;
 	agentPluginMcpServers?: ReadonlyArray<AgentPluginPackageMcpServer>;

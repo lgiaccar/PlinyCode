@@ -39,6 +39,7 @@ import {
 	type ToolApprovalResult,
 	type ToolPolicy,
 } from "@plinycode/shared"
+import { createRuleFileFilter } from "@/core/context/instructions/user-instructions/rule-file-filter"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { getDistinctId } from "@/services/logging/distinctId"
@@ -166,6 +167,9 @@ export class VscodeSessionHost implements SdkSessionHost {
 				// would execute twice per event.
 				localRuntime: {
 					...(inputWithRemoteConfig.localRuntime ?? {}),
+					// Honor the Rules panel toggles: the SDK discovers rule files
+					// itself, so disabled files must be filtered out here.
+					ruleFilter: createRuleFileFilter(StateManager.get()),
 					configExtensions: (
 						inputWithRemoteConfig.localRuntime?.configExtensions ?? RUNTIME_CONFIG_EXTENSION_KINDS
 					).filter((kind) => kind !== "hooks"),

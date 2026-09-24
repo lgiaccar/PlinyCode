@@ -83,9 +83,10 @@ export async function getHookLaunchConfig(
  * Key features:
  * - Real-time stdout/stderr streaming via line events
  * - Separate handling of visual output vs. JSON response
- * - 30-second execution timeout
+ * - Configurable execution timeout (default 30 seconds)
  * - 1MB output size limit (prevents memory issues)
  * - Process lifecycle management with abort support
+ * - dispose() for deterministic cleanup of listeners and timers
  */
 export class HookProcess extends EventEmitter {
 	private childProcess: ChildProcess | null = null
@@ -94,6 +95,7 @@ export class HookProcess extends EventEmitter {
 	private lastRetrievedIndex = 0
 	private exitCode: number | null = null
 	private isCompleted = false
+	private isDisposed = false
 	private timeoutHandle: NodeJS.Timeout | null = null // 30-second execution timeout
 
 	// Separate buffers for stdout and stderr
@@ -332,6 +334,41 @@ export class HookProcess extends EventEmitter {
 	}
 
 	/**
+	 * Dispose of the hook process to prevent memory leaks.
+	 * Clears all buffers, clears the timeout timer, removes all event
+	 * listeners, and unregisters from the process registry.
+	 * This should be called after the consumer is done reading output.
+	 */
+	public dispose(): void {
+		if (this.isDisposed) {
+			return
+		}
+		this.isDisposed = true
+
+		// Clear the execution timeout timer to prevent it from holding a
+		// reference to this object after the consumer is done with it.
+		if (this.timeoutHandle) {
+			clearTimeout(this.timeoutHandle)
+			this.timeoutHandle = null
+		}
+
+		// Remove all listeners so the EventEmitter does not retain closures
+		// (e.g. the streamCallback registered by StdioHookRunner) that would
+		// otherwise keep this object and its captured scope alive.
+		this.removeAllListeners()
+
+		this.buffer = ""
+		this.fullOutput = ""
+		this.stdoutBuffer = ""
+		this.stderrBuffer = ""
+		this.lastRetrievedIndex = 0
+		this.stdoutSize = 0
+		this.stderrSize = 0
+		this.outputTruncated = false
+		this.safeUnregister()
+	}
+
+	/**
 	 * Handle output data and emit line events.
 	 * Enforces 1MB total output limit to prevent memory issues.
 	 */
@@ -439,7 +476,7 @@ export class HookProcess extends EventEmitter {
 	async terminate(): Promise<void> {
 		if (!this.childProcess || this.isCompleted) {
 			// Still ensure unregistration even if process already completed
-			this.safeUnregister()
+			this.dispose()
 			return
 		}
 
@@ -485,7 +522,7 @@ export class HookProcess extends EventEmitter {
 				this.timeoutHandle = null
 			}
 			// Ensure unregistration even if termination fails
-			this.safeUnregister()
+			this.dispose()
 		}
 	}
 }
