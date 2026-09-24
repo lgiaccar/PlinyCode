@@ -113,6 +113,46 @@ describe("installRouter turn isolation", () => {
 	})
 })
 
+describe("installRouter unfinished-turn guard", () => {
+	const unfinished = {
+		message: {
+			id: "a",
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "Let me check the log:" }],
+			createdAt: 0,
+		},
+		iteration: 3,
+	}
+
+	it("nudges a free model that announced a step without acting, and says so in the chat", () => {
+		const rows: string[] = []
+		const config = installRouter(
+			{ providerId: "pliny", modelId: PLINY_FREE_AUTO_MODEL_ID, cwd: "/tmp" } as unknown as CoreSessionConfig,
+			{
+				sessionId: "s",
+				getMode: () => "act",
+				emitRow: (message) => rows.push(message.text ?? ""),
+				nextMessageTs: () => 1,
+				logCall: () => undefined,
+			},
+		)
+		expect(config.completionGuard?.(unfinished)).toContain("did not call a tool")
+		expect(rows[0]).toContain("stopped after")
+	})
+
+	it("stays out of the way for a paid hosted model", () => {
+		const config = installRouter(
+			{
+				providerId: "pliny",
+				modelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
+				cwd: "/tmp",
+			} as unknown as CoreSessionConfig,
+			{ sessionId: "s", getMode: () => "act", emitRow: () => undefined, nextMessageTs: () => 1 },
+		)
+		expect(config.completionGuard?.(unfinished)).toBeUndefined()
+	})
+})
+
 describe("installRouter profiles, effort and call log", () => {
 	beforeEach(() => {
 		resetHealth()

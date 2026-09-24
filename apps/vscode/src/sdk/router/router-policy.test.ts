@@ -167,6 +167,16 @@ describe("fitsContext", () => {
 		expect(fitsContext("snps-provider/big", features({ estimatedTokens: 900 }), configured, known)).toBe(true)
 	})
 
+	it("reserves room for the model's full output", () => {
+		// The real failure: a 128k model with a 32k output limit given ~89k of input.
+		const coder = {
+			"snps-provider/coder": { id: "snps-provider/coder", name: "coder", contextWindow: 128_000, maxTokens: 32_000 },
+		} as never
+		const configured = rules({ contextMarginRatio: 1.15 })
+		expect(fitsContext("snps-provider/coder", features({ estimatedTokens: 89_449 }), configured, coder)).toBe(false)
+		expect(fitsContext("snps-provider/coder", features({ estimatedTokens: 60_000 }), configured, coder)).toBe(true)
+	})
+
 	it("allows a model with unknown metadata rather than shrinking the pool", () => {
 		expect(fitsContext("snps-provider/unlisted", features(), rules(), known)).toBe(true)
 		expect(fitsContext("snps-provider/unlisted", features(), rules(), undefined)).toBe(true)

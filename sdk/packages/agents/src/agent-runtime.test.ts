@@ -1436,6 +1436,41 @@ describe("AgentRuntime", () => {
 		expect(model.requests).toHaveLength(2);
 	});
 
+	it("hands completionGuard the no-tool reply so it can judge it", async () => {
+		const seen: Array<{ text: string; iteration: number }> = [];
+		const model = new ScriptedModel([
+			() => [
+				{ type: "text-delta", text: "Let me run the build:" },
+				{ type: "finish", reason: "stop" },
+			],
+			() => [
+				{ type: "text-delta", text: "All done." },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			completionPolicy: {
+				completionGuard: ({ message, iteration }) => {
+					const text = message.content
+						.map((part) => (part.type === "text" ? part.text : ""))
+						.join("");
+					seen.push({ text, iteration });
+					return text.endsWith(":") ? "[SYSTEM] Call the tool." : undefined;
+				},
+			},
+		});
+
+		const result = await runtime.run("Start");
+
+		expect(result.status).toBe("completed");
+		expect(result.outputText).toBe("All done.");
+		expect(seen).toEqual([
+			{ text: "Let me run the build:", iteration: 1 },
+			{ text: "All done.", iteration: 2 },
+		]);
+	});
+
 	it("announces and enforces required completion tools from tool lifecycle metadata", async () => {
 		const submitTool: AgentTool<{ summary: string }, string> = {
 			name: "custom_finish",

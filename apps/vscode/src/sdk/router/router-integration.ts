@@ -13,7 +13,13 @@
  */
 
 import type { CoreSessionConfig } from "@plinycode/core"
-import { isPlinyFreeAutoModelId, type ModelInfo, plinyFreeAutoProfile, plinyThinkingControls } from "@plinycode/llms"
+import {
+	isPlinyFreeAutoModelId,
+	isPlinyFreeModelId,
+	type ModelInfo,
+	plinyFreeAutoProfile,
+	plinyThinkingControls,
+} from "@plinycode/llms"
 import { type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
@@ -31,6 +37,7 @@ import {
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import type { RouterCallTiming, RouterRequestFeatures, RouterRules } from "./router-types"
+import { createUnfinishedTurnGuard } from "./unfinished-turn-guard"
 
 export interface RouterInstallDeps {
 	sessionId: string
@@ -363,6 +370,18 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				: {}),
 		}
 	}
+
+	// Free models often announce a step ("Let me check the log:") and end the
+	// reply without the tool call, which would end the run half done.
+	config.completionGuard = createUnfinishedTurnGuard({
+		isActive: () => isPlinyFreeModelId(config.modelId),
+		onNudge: ({ excerpt, nudgesThisRun }) => {
+			emitInfo(
+				`\`${formatClock(now())}\` ↻ The model stopped after _"${excerpt}"_ without acting · asked it to continue (${nudgesThisRun}/3)`,
+			)
+			Logger.log(`[FreeAuto] nudged a reply that announced a step without a tool call: ${excerpt}`)
+		},
+	})
 
 	// Compaction summaries talk to the gateway directly, so they must never be
 	// handed the virtual router id. The rules file has not loaded yet at this

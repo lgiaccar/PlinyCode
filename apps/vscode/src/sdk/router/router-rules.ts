@@ -68,14 +68,14 @@ const DEFAULT_UTILITY = {
  */
 const PREFERRED_HEAD = [
 	// Ordered from the live probe plus field experience: every model here
-	// answered and really called a tool. The coder model leads because most
-	// turns are code edits and it has the fastest first token of the large
-	// models; nemotron-ultra and kimi-k2.6 are the fastest large-context
-	// generalists. GLM-5.2 is last: it is the only 512k option but far slower
-	// than everything else, so it is a fallback rather than a first choice.
+	// answered and really called a tool. kimi-k2.6 leads: a 256k window, the
+	// best throughput, and it keeps calling tools through long multi-step
+	// tasks. The coder model is quick at targeted edits but tends to announce
+	// a step and stop on long tasks, so it leads only the coding route.
+	// GLM-5.2 is last: the only 512k option, but far slower than the rest.
+	"snps-provider/kimi-k2.6",
 	"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 	"snps-provider/nemotron-3-ultra-550b-a55",
-	"snps-provider/kimi-k2.6",
 	"snps-provider/nvidia-nemotron-3-super-120b-a12",
 	"snps-provider/qwen3.5-397b-fp8",
 	"snps-provider/GLM-5.2",
@@ -108,12 +108,13 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 	},
 	{
 		name: "subagent",
-		// Delegated tasks are short and bounded: favour first-token latency.
+		// Delegated tasks are bounded but multi-step (explore, then report), and
+		// a sub-agent that stops early hands the parent a half result.
 		when: { subAgent: true, maxEstimatedTokens: 100_000 },
 		use: [
+			"snps-provider/kimi-k2.6",
 			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 			"snps-provider/nvidia-nemotron-3-super-120b-a12",
-			"snps-provider/kimi-k2.6",
 		],
 		effort: "quick",
 	},
@@ -161,9 +162,11 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 	},
 	{
 		name: "default",
+		// The catch-all gets the long multi-step tasks, so it leads with the
+		// model that keeps acting rather than the fastest editor.
 		use: [
-			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 			"snps-provider/kimi-k2.6",
+			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
 			"snps-provider/nemotron-3-ultra-550b-a55",
 			"snps-provider/nvidia-nemotron-3-super-120b-a12",
 		],

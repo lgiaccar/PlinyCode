@@ -124,9 +124,12 @@ export function effortOptions(
 
 /**
  * Whether a model's context window can hold the request, with the configured
- * safety margin. Models whose window we do not know are allowed through: the
- * gateway is the authority, and excluding them would shrink the pool on
- * metadata gaps alone.
+ * safety margin on the input plus room for the model's full output. The
+ * gateway asks for the full output whenever the (under-counting) estimate
+ * leaves room for it, so a window that only fits the input is rejected with
+ * "maximum context length" and wastes a call. Models whose window we do not
+ * know are allowed through: the gateway is the authority, and excluding them
+ * would shrink the pool on metadata gaps alone.
  */
 export function fitsContext(
 	modelId: string,
@@ -134,11 +137,13 @@ export function fitsContext(
 	rules: RouterRules,
 	knownModels: Record<string, ModelInfo> | undefined,
 ): boolean {
-	const contextWindow = knownModels?.[modelId]?.contextWindow
+	const model = knownModels?.[modelId]
+	const contextWindow = model?.contextWindow
 	if (!contextWindow || contextWindow <= 0) {
 		return true
 	}
-	return contextWindow >= features.estimatedTokens * rules.contextMarginRatio
+	const outputReserve = model?.maxTokens && model.maxTokens > 0 ? model.maxTokens : 0
+	return contextWindow >= features.estimatedTokens * rules.contextMarginRatio + outputReserve
 }
 
 /**
