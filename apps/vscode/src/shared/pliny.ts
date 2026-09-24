@@ -9,7 +9,14 @@ export const PLINY_PROVIDER_ID = "pliny" as const satisfies ApiProvider
  */
 export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto"
 
-/** Concrete model used wherever the virtual id cannot be routed. */
+/**
+ * Virtual BalanceAuto router. Mirrors `PLINY_BALANCE_AUTO_MODEL_ID` in
+ * `@plinycode/llms`. Unlike FreeAuto it may route to paid models, so it is
+ * neither free nor always visible.
+ */
+export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
+
+/** Concrete model used wherever a virtual router id cannot be routed. */
 export const PLINY_FREE_AUTO_FALLBACK_MODEL_ID = "snps-provider/kimi-k2.6"
 
 export const PLINY_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
@@ -76,22 +83,32 @@ export function isPlinyFreeAutoModelId(modelId: string | undefined | null): bool
 	)
 }
 
+/** True for the virtual BalanceAuto router id. */
+export function isPlinyBalanceAutoModelId(modelId: string | undefined | null): boolean {
+	return modelId === PLINY_BALANCE_AUTO_MODEL_ID
+}
+
+/** True for every virtual router id: the FreeAuto profiles and BalanceAuto. */
+export function isPlinyRouterModelId(modelId: string | undefined | null): boolean {
+	return isPlinyFreeAutoModelId(modelId) || isPlinyBalanceAutoModelId(modelId)
+}
+
 /** True for free self-hosted Pliny models (all `snps-provider*` pools). */
 export function isPlinySelfHostedModelId(modelId: string | undefined | null): boolean {
 	return typeof modelId === "string" && modelId.startsWith("snps-provider")
 }
 
-/** True for anything that costs nothing: the free models and the router. */
+/** True for anything that costs nothing: the free models and the FreeAuto router. BalanceAuto is not free. */
 export function isPlinyFreeModelId(modelId: string | undefined | null): boolean {
 	return isPlinyFreeAutoModelId(modelId) || isPlinySelfHostedModelId(modelId)
 }
 
-/** Map the virtual router id onto a model the gateway can resolve. */
+/** Map a virtual router id onto a model the gateway can resolve. */
 export function resolvePlinyConcreteModelId(
 	modelId: string | undefined,
 	fallbackModelId: string = PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 ): string {
-	return modelId && isPlinyFreeAutoModelId(modelId) ? fallbackModelId : (modelId ?? fallbackModelId)
+	return modelId && isPlinyRouterModelId(modelId) ? fallbackModelId : (modelId ?? fallbackModelId)
 }
 
 export function isPlinyProviderId(providerId: string | undefined | null): boolean {

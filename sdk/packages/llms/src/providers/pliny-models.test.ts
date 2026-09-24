@@ -1,17 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildPlinyModels,
+	isPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId,
 	isPlinyFreeModelId,
+	isPlinyRouterModelId,
 	isPlinySelfHostedModelId,
+	PLINY_BALANCE_AUTO_MODEL_ID,
 	PLINY_BASE_URL,
 	PLINY_DEFAULT_MODEL_ID,
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 	PLINY_FREE_AUTO_MODEL_ID,
 	PLINY_FREE_AUTO_PROFILES,
+	PLINY_ROUTER_PROFILES,
 	plinyFreeAutoModelId,
 	plinyFreeAutoProfile,
 	plinyFreePoolIds,
+	plinyHostedPoolIds,
+	plinyRouterModelId,
+	plinyRouterProfile,
+	plinyRouterProfileAllowsPaid,
 	plinyThinkingControls,
 	resolvePlinyConcreteModelId,
 } from "./pliny-models";
@@ -184,6 +192,89 @@ describe("FreeAuto profiles", () => {
 
 	it("does not treat a lookalike id as a profile", () => {
 		expect(isPlinyFreeAutoModelId("pliny/free-autonomous")).toBe(false);
+	});
+});
+
+describe("BalanceAuto router model", () => {
+	it("is a router id but not a free one", () => {
+		expect(isPlinyRouterModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(true);
+		expect(isPlinyBalanceAutoModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(true);
+		expect(isPlinyFreeAutoModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false);
+		expect(isPlinyFreeModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false);
+		expect(isPlinySelfHostedModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false);
+		// Only the exact id: nothing derives profiles from it.
+		expect(isPlinyBalanceAutoModelId("pliny/balance-auto-fast")).toBe(false);
+		expect(isPlinyRouterModelId("pliny/balance-auto-fast")).toBe(false);
+	});
+
+	it("is the last router profile and not a FreeAuto profile", () => {
+		const last = PLINY_ROUTER_PROFILES[PLINY_ROUTER_PROFILES.length - 1];
+		expect(last).toMatchObject({
+			profile: "balance",
+			id: PLINY_BALANCE_AUTO_MODEL_ID,
+			family: "balance",
+		});
+		expect(
+			PLINY_FREE_AUTO_PROFILES.some((entry) => entry.profile === "balance"),
+		).toBe(false);
+		expect(PLINY_FREE_AUTO_PROFILES).toHaveLength(
+			PLINY_ROUTER_PROFILES.length - 1,
+		);
+	});
+
+	it("round-trips through its profile name", () => {
+		expect(plinyRouterProfile(PLINY_BALANCE_AUTO_MODEL_ID)).toBe("balance");
+		expect(plinyRouterModelId("balance")).toBe(PLINY_BALANCE_AUTO_MODEL_ID);
+		expect(plinyRouterProfile(PLINY_FREE_AUTO_MODEL_ID)).toBe("default");
+		expect(plinyRouterProfile("pliny/free-auto-fast")).toBe("fast");
+		expect(plinyRouterModelId("fast")).toBe("pliny/free-auto-fast");
+	});
+
+	it("is the only profile allowed to route to paid models", () => {
+		expect(plinyRouterProfileAllowsPaid("balance")).toBe(true);
+		for (const { profile } of PLINY_FREE_AUTO_PROFILES) {
+			expect(plinyRouterProfileAllowsPaid(profile), profile).toBe(false);
+		}
+		expect(plinyRouterProfileAllowsPaid("unknown")).toBe(false);
+	});
+
+	it("sits right after the free profiles in the catalog, unpriced, with tools and images", () => {
+		const models = buildPlinyModels();
+		const ids = Object.keys(models);
+		expect(ids[PLINY_FREE_AUTO_PROFILES.length]).toBe(
+			PLINY_BALANCE_AUTO_MODEL_ID,
+		);
+		const router = models[PLINY_BALANCE_AUTO_MODEL_ID];
+		expect(router?.capabilities).toEqual(
+			expect.arrayContaining(["streaming", "tools", "images"]),
+		);
+		expect(router?.metadata).toMatchObject({
+			provider: "pliny",
+			router: true,
+			routerProfile: "balance",
+			selfHosted: false,
+			paid: true,
+		});
+		// Billing follows the concrete model each call lands on.
+		expect(router?.pricing).toBeUndefined();
+	});
+
+	it("maps onto the free fallback for direct gateway callers", () => {
+		expect(resolvePlinyConcreteModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(
+			PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
+		);
+	});
+});
+
+describe("hosted pool", () => {
+	it("contains only tool-call-capable paid models from the catalog", () => {
+		const pool = plinyHostedPoolIds();
+		const models = buildPlinyModels();
+		expect(pool.length).toBeGreaterThan(5);
+		expect(pool.every((id) => !isPlinySelfHostedModelId(id))).toBe(true);
+		expect(pool.every((id) => models[id] !== undefined)).toBe(true);
+		expect(pool).toContain("snps-aws-bedrock/global.anthropic.claude-sonnet-5");
+		expect(pool).not.toContain("snps-google-gcp/gemini-3.1-pro-preview");
 	});
 });
 

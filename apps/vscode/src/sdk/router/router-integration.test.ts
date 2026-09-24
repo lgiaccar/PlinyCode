@@ -1,5 +1,5 @@
 import type { CoreSessionConfig } from "@plinycode/core"
-import { PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
+import { PLINY_BALANCE_AUTO_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { RouterCallLogRecord } from "./router-call-log"
@@ -64,7 +64,17 @@ function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID) {
 			}
 		}
 	}
-	return { rows, logged, run, createdFor, classifierModel }
+	return { rows, logged, run, createdFor, classifierModel, config }
+}
+
+const UNFINISHED_REPLY = {
+	message: {
+		id: "a",
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text: "Let me check the log:" }],
+		createdAt: 0,
+	},
+	iteration: 3,
 }
 
 describe("installRouter turn isolation", () => {
@@ -195,6 +205,39 @@ describe("installRouter profiles, effort and call log", () => {
 
 		await run()
 		expect(classifierModel).toHaveBeenCalledTimes(2)
+	})
+
+	it("routes BalanceAuto's coding work to the paid model and its sub-agents to a free one", async () => {
+		const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		await run()
+		expect(classifierModel).toHaveBeenCalledTimes(1)
+		expect(rows[0]).toContain("BalanceAuto → **global.anthropic.claude-sonnet-5**")
+		expect(rows[0]).toContain("route: coding")
+		expect(rows[0]).toContain("classifier: code")
+
+		await run({ parentAgentId: "parent" })
+		expect(rows[1]).toContain("↳ sub-agent BalanceAuto → **kimi-k2.6**")
+		expect(rows[1]).toContain("route: subagent")
+
+		expect(logged.map((record) => [record.profile, record.subAgent, record.model])).toEqual([
+			["balance", false, "snps-aws-bedrock/global.anthropic.claude-sonnet-5"],
+			["balance", true, "snps-provider/kimi-k2.6"],
+		])
+	})
+
+	it("nudges an unfinished BalanceAuto reply only when a free model wrote it", async () => {
+		const { rows, run, config } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		// Nothing has run yet: no model to blame, so no nudge.
+		expect(config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
+
+		await run()
+		// The paid model handled the turn; it does not stop early.
+		expect(config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
+
+		await run({ parentAgentId: "parent" })
+		// The sub-agent ran on a free model, which does.
+		expect(config.completionGuard?.(UNFINISHED_REPLY)).toContain("did not call a tool")
+		expect(rows[rows.length - 1]).toContain("stopped after")
 	})
 
 	it("never classifies a sub-agent call, nor anything on the default profile", async () => {

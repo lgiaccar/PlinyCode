@@ -16,7 +16,7 @@ import { WebviewProvider } from "./core/webview"
 import { createClineAPI } from "./exports"
 import "./utils/path" // necessary to have access to String.prototype.toPosix
 import path from "node:path"
-import { PLINY_FREE_AUTO_PROFILES } from "@plinycode/llms"
+import { PLINY_ROUTER_PROFILES } from "@plinycode/llms"
 import type { ExtensionContext } from "vscode"
 import { HostProvider } from "@/hosts/host-provider"
 import { vscodeHostBridgeClient } from "@/hosts/vscode/hostbridge/client/host-grpc-client"
@@ -150,8 +150,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand(commands.AccountButton, () => sendAccountButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.WorktreesButton, () => sendWorktreesButtonClickedEvent()))
 
-	// FreeAuto: make sure every profile's routing rules file exists so the
-	// command below always has something to open, then let the user edit it.
+	// FreeAuto / BalanceAuto: make sure every profile's routing rules file
+	// exists so the command below always has something to open, then let the
+	// user edit it.
 	void initialiseAllRulesFiles().catch(() => undefined)
 	const openFreeAutoFile = async (filePath: string, what: string) => {
 		try {
@@ -159,20 +160,20 @@ export async function activate(context: vscode.ExtensionContext) {
 			await vscode.window.showTextDocument(document)
 		} catch (error) {
 			void vscode.window.showErrorMessage(
-				`Could not open the FreeAuto ${what} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+				`Could not open the router ${what} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
 			)
 		}
 	}
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commands.OpenFreeAutoRules, async () => {
 			const picked = await vscode.window.showQuickPick(
-				PLINY_FREE_AUTO_PROFILES.map((entry) => ({
+				PLINY_ROUTER_PROFILES.map((entry) => ({
 					label: entry.name,
 					description: entry.profile,
 					detail: entry.description,
 					profile: entry.profile,
 				})),
-				{ placeHolder: "Which FreeAuto profile's routing rules?" },
+				{ placeHolder: "Which router profile's routing rules?" },
 			)
 			if (!picked) {
 				return
@@ -185,7 +186,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const logPath = callLogPath()
 			if (!(await fileExistsAtPath(logPath))) {
 				void vscode.window.showInformationMessage(
-					"The FreeAuto call log is empty: it is written as soon as a FreeAuto model handles a request.",
+					"The router call log is empty: it is written as soon as a FreeAuto or BalanceAuto model handles a request.",
 				)
 				return
 			}
