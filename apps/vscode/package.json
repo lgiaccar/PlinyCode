@@ -187,6 +187,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.checkForUpdates",
+				"title": "Check for Updates",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.exportTaskToMarkdown",
 				"title": "Export Conversation as Markdown",
 				"category": "PlinyCode"
@@ -351,6 +356,16 @@
 						".cursor"
 					],
 					"description": "List of context folders to scan for automatic rule generation. These folders will be scanned and rules generated in .cline/rules/."
+				},
+				"plinycode.updates.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically install new PlinyCode releases from the shared PlinyCodeRelease folder synced by OneDrive. Checks shortly after startup and every 6 hours."
+				},
+				"plinycode.updates.folder": {
+					"type": "string",
+					"default": "",
+					"description": "Path to the synced PlinyCodeRelease folder (the one containing latest.json). Leave empty to find it in your OneDrive automatically."
 				}
 			}
 		}
@@ -365,6 +380,8 @@
 		"watch:esbuild": "bun esbuild.mjs --watch",
 		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
 		"package": "bun run check-types && bun run build:webview && bun run lint && bun esbuild.mjs --production",
+		"release:package": "bun scripts/release.ts package",
+		"release:publish": "bun scripts/release.ts publish",
 		"protos": "node scripts/build-proto.mjs",
 		"protos-python": "node scripts/build-python-proto.mjs",
 		"download-ripgrep": "node scripts/download-ripgrep.mjs",

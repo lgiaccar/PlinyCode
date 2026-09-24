@@ -38,13 +38,19 @@ It talks **only** to Synopsys internal models through the Pliny gateway at
 
 ## Install
 
-Install the packaged extension directly:
+Releases are published to the shared **PlinyCodeRelease** OneDrive folder, and the extension keeps itself up
+to date from it.
 
-```sh
-code --install-extension PlinyCode-0.1.0.vsix
-```
+1. Open the [release folder](https://synopsys-my.sharepoint.com/:f:/p/lgiaccar/IgBld6NhNTGwSb_WqFxvTLOSAd5IkJfiWSM3k3l8jdgrgZw?e=nx2JeG)
+   and choose **Add shortcut to My files** so OneDrive syncs it to your disk.
+2. Install the newest `.vsix` from it once: **Extensions → ⋯ → Install from VSIX…** (or
+   `code --install-extension PlinyCode-<version>.vsix`), then reload the window.
+3. Open the PlinyCode icon in the Activity Bar.
 
-Then open the PlinyCode icon in the Activity Bar.
+From 0.1.3 on, new releases install themselves: PlinyCode checks the synced folder at startup and every 6 hours,
+then offers **Reload Now**. Run **PlinyCode: Check for Updates** to check right away. Remote-SSH and Linux
+windows don't see OneDrive, so update those by hand. See [docs/releasing.md](docs/releasing.md) for details and
+for how to publish a release.
 
 ## Build from source
 
