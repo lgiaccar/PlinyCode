@@ -1,14 +1,10 @@
 # Releasing PlinyCode
 
-PlinyCode is not on the VS Code Marketplace or Open VSX. It updates itself from two sources:
+PlinyCode is not on the VS Code Marketplace or Open VSX. It updates itself from **GitHub Releases**:
+<https://github.com/lgiaccar/PlinyCode/releases>. That needs no login or setup, and works on Windows, macOS, Linux
+and Remote-SSH hosts.
 
-1. **GitHub Releases** (primary): <https://github.com/lgiaccar/PlinyCode/releases>. Needs no login or setup, and
-   works on Windows, macOS, Linux and Remote-SSH hosts.
-2. **The shared `PlinyCodeRelease` OneDrive folder** (fallback and archive):
-   <https://synopsys-my.sharepoint.com/:f:/p/lgiaccar/IgBld6NhNTGwSb_WqFxvTLOSAd5IkJfiWSM3k3l8jdgrgZw?e=nx2JeG>.
-   It's shared with the PlinyCode users Teams group, and used when GitHub can't be reached.
-
-Every release is published to both. In Claude Code, the `/release` skill walks through the steps below.
+In Claude Code, the `/release` skill walks through the steps below.
 
 > **The repository is public**, so GitHub releases (and the `.vsix` files) can be downloaded by anyone.
 
@@ -32,65 +28,50 @@ It has two assets:
   ```
 
 The updater fetches `https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json`, which GitHub
-always serves from the newest published (non-draft, non-prerelease) release.
+always serves from the newest published (non-draft, non-prerelease) release. Until an official release exists,
+that URL answers 404.
 
-**OneDrive folder:** the same files, with paths relative to the folder:
-
-```
-PlinyCodeRelease/
-├── latest.json              ← {"vsix": "0.1.3/PlinyCode-0.1.3.vsix", "notes": "0.1.3/README.md", ...}
-├── 0.1.2/
-│   ├── PlinyCode-0.1.2.vsix
-│   └── README.md
-└── 0.1.3/
-    ├── PlinyCode-0.1.3.vsix
-    └── README.md
-```
-
-Never edit a `latest.json` by hand; `bun run release:publish` writes both.
+Never edit a `latest.json` by hand; `bun run release:publish` writes it.
 
 ## How auto-update works
 
-The code is in `apps/vscode/src/hosts/vscode/auto-update/`. `release-remote.ts` handles GitHub,
-`release-folder.ts` the OneDrive folder, and `AutoUpdater.ts` the checks, install and prompts.
+The code is in `apps/vscode/src/hosts/vscode/auto-update/`. `release-remote.ts` talks to GitHub,
+`release-manifest.ts` parses `latest.json` and checks downloads, and `AutoUpdater.ts` runs the checks, install and
+prompts.
 
-1. About 30 seconds after startup, and every 6 hours after that, the extension reads `latest.json` from both sources:
-   - **GitHub:** `plinycode.updates.url`. Downloads use the extension's shared `fetch`, which honours proxy settings
-     and retries certificate failures with the bundled Synopsys CAs. The manifest may only point at `https` URLs on
-     the same host.
-   - **Folder:** `plinycode.updates.folder` if set. Otherwise it looks in the OneDrive roots (`%OneDriveCommercial%`,
-     `%OneDrive%`, home-directory folders starting with `OneDrive` or containing `Synopsys`, and on macOS
-     `~/Library/CloudStorage/OneDrive-*`) for a folder named, or ending in, `PlinyCodeRelease`. SharePoint needs a
-     Microsoft login, so the extension never downloads from SharePoint itself; it only reads what OneDrive has
-     synced to disk.
+1. About 30 seconds after startup, and every 6 hours after that, the extension reads:
+   - **The official release:** `latest.json` from `plinycode.updates.url` (empty means the default URL).
    - **GitHub pre-releases**, only with `plinycode.updates.prerelease` on (see
      [Official releases and pre-releases](#official-releases-and-pre-releases)).
-2. It picks the newest version from any source (GitHub wins a tie). If that version is newer than the running
-   one, it downloads or copies the `.vsix` into its own storage and checks the sha256. It then installs it and
-   offers **Reload Now** and **Release Notes**.
-3. If one source fails (network error, or a checksum mismatch because OneDrive is still syncing), it tries the
-   other. Otherwise it tries again at the next check.
 
-Automatic checks show nothing unless there is an update. **PlinyCode: Check for Updates** in the Command Palette
-always reports a result.
+   Requests use the extension's shared `fetch`, which honours proxy settings and retries certificate failures
+   with the bundled Synopsys CAs. The manifest may only point at `https` URLs on the same host.
+2. It picks the newest version found (the official release wins a tie). If that version is newer than the running
+   one, it downloads the `.vsix` into its own storage and checks the sha256. It then installs it and offers
+   **Reload Now** and **Release Notes**.
+3. If a check fails, it tries again at the next one.
+
+Automatic checks show nothing unless there is an update. **PlinyCode: Check for Updates** in the Command Palette,
+or the **Check for Updates** button in PlinyCode's **Settings → About**, always reports a result: an update, "up to date" (with the newest version on GitHub when that is older than the
+running one), "no release published yet", or why GitHub couldn't be reached.
 
 | Setting                        | Default                                                                      | Meaning                                                       |
 | ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `plinycode.updates.enabled`    | `true`                                                                       | Check and install automatically.                              |
 | `plinycode.updates.prerelease` | `false`                                                                      | Also install `-test.N` pre-releases (developers and testers). |
-| `plinycode.updates.url`        | `https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json` | Remote `latest.json`. Empty = use only the folder.            |
-| `plinycode.updates.folder`     | `""`                                                                         | Synced `PlinyCodeRelease` folder, if not found automatically. |
+| `plinycode.updates.url`        | `https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json` | `latest.json` of the newest official release.                 |
 
 ### Official releases and pre-releases
 
-By default an editor gets **official releases only** (`0.1.3`, `0.1.4`, …): `/releases/latest` and the OneDrive
-folder never serve a pre-release, so a `-test.N` build can't replace an official install.
+By default an editor gets **official releases only** (`0.1.3`, `0.1.4`, …): `/releases/latest` never serves a
+pre-release, so a `-test.N` build can't replace an official install.
 
 Developers and testers turn on **Install pre-releases** in PlinyCode's **Settings → About**, or tick
 `plinycode.updates.prerelease` in VS Code's Settings. Both control the same user setting, so it persists across
 restarts (and follows Settings Sync). With it on, the updater also reads
 `https://github.com/lgiaccar/PlinyCode/releases.atom`, tries the newest five `release_*` versions in order, and
-offers the first whose `latest.json` exists. Turning it on checks immediately.
+offers the first whose `latest.json` exists. Turning it on checks immediately and reports the result. When
+**Check for Updates** finds no official release, it offers **Include Pre-releases**, which turns the setting on.
 
 - **Pre-releases and releases share one track.** `0.1.4-test.1` < `0.1.4-test.2` < `0.1.4` < `0.1.5-test.1`, so a
   tester moves to each official release automatically when it ships, then on to the next pre-release.
@@ -110,13 +91,11 @@ offers the first whose `latest.json` exists. Turning it on checks immediately.
 
 ## One-time setup for users
 
-1. Download `PlinyCode-<version>.vsix` from the newest [GitHub release](https://github.com/lgiaccar/PlinyCode/releases),
-   or from the OneDrive folder.
+1. Download `PlinyCode-<version>.vsix` from the newest [GitHub release](https://github.com/lgiaccar/PlinyCode/releases).
 2. Install it: **Extensions → ⋯ → Install from VSIX…**, then reload the window. If you still have PlinyCode
    0.1.0, it's removed automatically; reload again when asked.
 
-That's all; later releases install themselves. Optionally, choose **Add shortcut to My files** on the OneDrive
-folder, so updates still arrive if GitHub is blocked on your network.
+That's all; later releases install themselves.
 
 ## Publishing a release
 
@@ -152,7 +131,7 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
 6. **Write the release notes** in `apps/vscode/dist/release/<version>/README.md`. Follow
    `.claude/skills/release/release-notes-template.md`: what changed for users since the last release (from
    `git log release_<previous>..HEAD`), any upgrade steps, and build info. They become the GitHub release
-   description and the folder's `README.md`.
+   description.
 7. **Smoke test.** Install the `.vsix` in VS Code and in Cursor (**Install from VSIX…**), reload, and send one
    message through the Pliny gateway.
 8. **Publish.**
@@ -162,15 +141,11 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
    bun run release:publish
    ```
    All checks run before anything is published: `gh` is logged in, the tag is on `origin` and points at `HEAD`,
-   no GitHub release exists for the tag yet, and the version is newer than what each source serves. Then:
-   - **GitHub:** the release is created as a draft, both assets are uploaded, and only then is it published and
-     marked latest, so users never see a half-uploaded release. The script then checks that the `latest.json`
-     URL serves the new version.
-   - **Folder:** the `.vsix` and notes are copied first and `latest.json` is written last. If the folder isn't
-     found, this step is skipped with a warning (`--folder <path>` or `PLINYCODE_RELEASE_FOLDER` point at it).
+   no GitHub release exists for the tag yet, and the version is newer than the published one. Then the release
+   is created as a draft, both assets are uploaded, and only then is it published and marked latest, so users
+   never see a half-uploaded release. The script then checks that the `latest.json` URL serves the new version.
 
-   `--skip-github` and `--skip-folder` publish to one source only. `--force` allows a version that isn't newer,
-   or a tag that isn't `HEAD`.
+   `--force` allows a version that isn't newer, or a tag that isn't `HEAD`.
 9. **Open the PR** for the release branch as usual.
 10. **Verify.** On a machine running the previous version, run **PlinyCode: Check for Updates**.
 
@@ -202,8 +177,8 @@ Pre-releases are numbered `<next release>-test.<N>` and tagged `release_<version
 1. On a throwaway branch, set a pre-release version such as `0.1.3-test.2`, commit, then tag and push only the
    tag: `git tag release_0.1.3-test.2 && git push origin release_0.1.3-test.2`. Pre-release versions sort below
    the real `0.1.3`, so testers move to the real release automatically once it ships.
-2. `bun run release:package`, write the notes, then `bun run release:publish -- --prerelease`. This publishes to
-   GitHub only (never the OneDrive folder), leaves the release unmarked as latest, and checks that
+2. `bun run release:package`, write the notes, then `bun run release:publish -- --prerelease`. This marks the
+   GitHub release as a pre-release, leaves it unmarked as latest, and checks that
    `/releases/latest` still serves the current release.
 3. Editors with **Install pre-releases** on install it at their next check, or straight away on
    **PlinyCode: Check for Updates**. To test without touching your own install, use a separate profile:
@@ -219,21 +194,24 @@ Pre-releases are numbered `<next release>-test.<N>` and tagged `release_<version
 The updater never downgrades, so the fix is always a new, higher version (for example 0.1.4 to replace a broken
 0.1.3).
 
-To stop the bad release reaching more people while you fix it:
-- **GitHub:** edit the release and tick **Set as a pre-release**. `/releases/latest` then falls back to the
-  previous release. Editors with pre-releases on would still see it, so also delete the release's `latest.json`
-  asset; the updater skips releases without one. The same step pulls a bad pre-release.
-- **Folder:** rename `latest.json` to `latest.json.paused`.
+To stop the bad release reaching more people while you fix it, edit the release on GitHub and tick **Set as a
+pre-release**. `/releases/latest` then falls back to the previous release. Editors with pre-releases on would
+still see it, so also delete the release's `latest.json` asset; the updater skips releases without one. The same
+step pulls a bad pre-release.
 
 Users who already updated can install the previous `.vsix` by hand. Publishing the fix makes it the latest
-release again; delete the `.paused` file then.
+release again.
 
 ## Troubleshooting
 
-- **"Could not check for updates":** neither source was available. The message says why for each source. Usually
-  GitHub is blocked and the OneDrive folder isn't synced. Sync the folder, or set `plinycode.updates.folder`.
-- **An update never arrives:** open **Output → PlinyCode** and look for `[AutoUpdate]` lines. A checksum mismatch
-  from the folder means OneDrive hasn't finished downloading the `.vsix`.
+- **"Could not check GitHub for updates: …":** the request failed; the message gives the reason (proxy,
+  certificate, timeout, HTTP error). Check that `github.com` is reachable from the editor.
+- **"No official PlinyCode release is published on GitHub yet":** `/releases/latest` has nothing to serve,
+  because every release is a pre-release (or has no `latest.json`). Publish an official release, or choose
+  **Include Pre-releases**.
+- **"Up to date", but you expected an update:** the message names the newest version on GitHub. If it is older
+  than yours, the build you're running was never published as a release.
+- **An update never arrives:** open **Output → PlinyCode** and look for `[AutoUpdate]` lines.
 - **The "Reload" prompt comes back after reloading:** the install didn't take effect. Install the `.vsix` by
   hand, and report it.
 - **`release:publish` says the tag isn't on origin, or isn't `HEAD`:** push the tag, or check out the tagged

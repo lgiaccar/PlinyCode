@@ -1,5 +1,7 @@
-import { VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
+import { EmptyRequest } from "@shared/proto/cline/common"
+import { VSCodeButton, VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
+import { UiServiceClient } from "@/services/grpc-client"
 import Section from "../Section"
 import { updateSetting } from "../utils/settingsHandlers"
 
@@ -37,6 +39,20 @@ const AboutSection = ({ version, extensionVariant, renderSectionHeader }: AboutS
 					</p>
 
 					<h3 className="text-md font-semibold">Updates</h3>
+					<div>
+						<VSCodeButton
+							appearance="secondary"
+							onClick={() =>
+								UiServiceClient.checkForUpdates(EmptyRequest.create()).catch((error) =>
+									console.error("Failed to check for updates:", error),
+								)
+							}>
+							Check for Updates
+						</VSCodeButton>
+						<p className="text-sm mt-[5px] text-description">
+							PlinyCode also checks GitHub automatically at startup and every 6 hours.
+						</p>
+					</div>
 					<div>
 						<VSCodeCheckbox
 							checked={!!prereleaseUpdatesEnabled}

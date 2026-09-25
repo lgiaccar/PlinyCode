@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut and publish a PlinyCode release to GitHub Releases and the shared PlinyCodeRelease OneDrive folder, which the extension auto-updates from. Bumps the version, builds, tests, tags, packages the .vsix, writes release notes and publishes. Use when the user asks to release, ship or publish a new PlinyCode version.
+description: Cut and publish a PlinyCode release to GitHub Releases, which the extension auto-updates from. Bumps the version, builds, tests, tags, packages the .vsix, writes release notes and publishes. Use when the user asks to release, ship or publish a new PlinyCode version.
 disable-model-invocation: true
 ---
 
@@ -66,7 +66,7 @@ This writes `apps/vscode/dist/release/<version>/PlinyCode-<version>.vsix` and pr
 - Collect the changes: `git log --no-merges release_<previous>..HEAD`, plus the merged PR descriptions where
   commit subjects are too terse.
 - Write `apps/vscode/dist/release/<version>/README.md` from `release-notes-template.md` next to this file. It
-  becomes the GitHub release description and the folder's README. The readers are PlinyCode users, not
+  becomes the GitHub release description. The readers are PlinyCode users, not
   developers: describe what changed for them, group it by feature, and leave out refactors, tests and CI.
 - Include upgrade steps whenever users must do something (reset a file, change a setting).
 - Show the notes to the user and apply their edits.
@@ -83,15 +83,13 @@ cd apps/vscode
 bun run release:publish -- --dry-run
 ```
 
-Show the user the dry-run output: the GitHub release tag, the folder, the versions currently published and the
-sha256. After they confirm:
+Show the user the dry-run output: the GitHub release tag, the version currently published and the sha256. After
+they confirm:
 
 ```sh
 bun run release:publish
 ```
 
-- If the OneDrive folder isn't found, the script skips it with a warning. Ask the user for its path and rerun
-  with `--skip-github --folder <path>`, since GitHub is already done.
 - Never pass `--force` unless the user asks for it.
 - If publishing fails halfway, report exactly which step failed. The script says what was and wasn't
   published. Don't delete GitHub releases or tags yourself.
@@ -100,7 +98,7 @@ bun run release:publish
 
 - Open the PR for the release branch if the user wants one.
 - Tell the user the version, the sha256, the release URL
-  (`https://github.com/lgiaccar/PlinyCode/releases/tag/release_<version>`), and what went to the folder.
+  (`https://github.com/lgiaccar/PlinyCode/releases/tag/release_<version>`).
 - Suggest running **PlinyCode: Check for Updates** on a machine with the previous version.
 - If this is 0.1.3, the first release with the auto-updater, remind them that users on older versions must
   install it by hand once (`docs/releasing.md`, "One-time setup for users").
