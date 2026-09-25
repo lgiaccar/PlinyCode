@@ -35,10 +35,11 @@ telling the agent to shorten them; they are never truncated silently.
 
 ## In the PlinyCode GUI
 
-Open **MCP Servers** (the server icon at the top of the PlinyCode panel) → **Configure**. The **PlinyCode
-DevOps** card at the top shows whether the server is running and how many tools it has, with a switch to turn
-it off and a restart button. Expand it for its tools, sign-in details and the steps to use it from the
-editor's own chat.
+The server is listed first wherever PlinyCode lists MCP servers: the server icon in the chat input, and
+**MCP Servers** (the server icon at the top of the PlinyCode panel) → **Configure**. The row shows whether it's
+running and how many tools it has, with a ▶ button that runs a read-only test task in PlinyCode (repository,
+branch and latest CI runs), a restart button and an on/off switch. In the Configure view, click the row for
+its tools, sign-in details, the steps to use it from the editor's own chat, and **Copy prompt** for that chat.
 
 ## Using it from Copilot Chat or Cursor
 
@@ -46,8 +47,10 @@ editor's own chat.
 **Agent** mode, click **Configure Tools** and tick **PlinyCode DevOps**. VS Code may ask you to trust the server
 the first time. **MCP: List Servers** in the Command Palette starts, stops or shows its output.
 
-**Cursor.** PlinyCode registers the server as `plinycode-devops` through Cursor's extension API. Open **Cursor
-Settings → MCP** (**Tools & MCP** in newer versions), check that it's switched on, and ask the agent.
+**Cursor.** PlinyCode registers the server as `plinycode-devops` through Cursor's extension API. To see it,
+open **Cursor Settings** (gear icon at the top right, or Ctrl+Shift+J) → **Customize** → **MCPs**; Cursor
+versions before 3.x call the page **Tools & MCP**. Check that it's switched on, then ask the agent in Agent
+mode (Ctrl+L).
 
 **Other clients.** In the card, **Copy MCP config** copies an `mcpServers` entry. It runs the editor's own
 executable in Node mode (`ELECTRON_RUN_AS_NODE=1`) with a copy of the server kept in the extension's global

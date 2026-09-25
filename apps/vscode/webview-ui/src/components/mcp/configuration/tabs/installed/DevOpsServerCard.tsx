@@ -57,9 +57,15 @@ const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerSta
 		}
 	}
 
+	const tryInPlinyCode = () =>
+		run(async () => {
+			await TaskServiceClient.newTask(NewTaskRequest.create({ text: TEST_PROMPT, images: [] }))
+			navigateToChat()
+		})
+
 	const summary =
 		status.state === "running"
-			? `${STATE_LABEL.running} · ${status.tools.length} tools`
+			? `${STATE_LABEL.running} · ${status.tools.length} tools${compact || expanded ? "" : " · click for setup and testing"}`
 			: status.state === "error"
 				? (status.error ?? STATE_LABEL.error)
 				: STATE_LABEL[status.state]
@@ -79,6 +85,17 @@ const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerSta
 						{summary}
 					</span>
 				</span>
+				<Button
+					disabled={busy || status.state !== "running"}
+					onClick={(e) => {
+						e.stopPropagation()
+						tryInPlinyCode()
+					}}
+					size="icon"
+					title="Try it in PlinyCode (read-only: repository, branch and latest CI runs)"
+					variant="icon">
+					<PlayIcon />
+				</Button>
 				<Button
 					disabled={busy || !status.enabled || status.state === "starting"}
 					onClick={(e) => {
@@ -129,14 +146,7 @@ const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerSta
 							nothing. PlinyCode shows each call as an MCP tool row in the chat.
 						</p>
 						<div className="flex flex-wrap gap-2">
-							<Button
-								disabled={busy || status.state !== "running"}
-								onClick={() =>
-									run(async () => {
-										await TaskServiceClient.newTask(NewTaskRequest.create({ text: TEST_PROMPT, images: [] }))
-										navigateToChat()
-									})
-								}>
+							<Button disabled={busy || status.state !== "running"} onClick={tryInPlinyCode}>
 								<PlayIcon className="mr-1.5 size-3.5" />
 								Try in PlinyCode
 							</Button>
@@ -219,9 +229,9 @@ const EditorInstructions = ({ status }: { status: DevOpsServerStatus }) => {
 		return (
 			<ol className="m-0 pl-5 text-description">
 				<li>
-					It's already registered with Cursor as <code>plinycode-devops</code>: in{" "}
-					<b>Cursor Settings → Tools &amp; MCP</b> (<b>MCP</b> in older versions) it has a green dot and 7 tools. Switch
-					it on if it's off.
+					It's already registered with Cursor as <code>plinycode-devops</code>. To see it, open <b>Cursor Settings</b>{" "}
+					(gear icon at the top right, or <b>Ctrl+Shift+J</b>) → <b>Customize</b> → <b>MCPs</b> (older Cursor versions:{" "}
+					<b>Tools &amp; MCP</b>). Switch it on if it's off.
 				</li>
 				<li>
 					Click <b>Copy prompt for Cursor</b> above, open Cursor's chat (<b>Ctrl+L</b> / <b>Cmd+L</b>) in <b>Agent</b>{" "}

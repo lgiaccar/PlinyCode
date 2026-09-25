@@ -42,6 +42,8 @@ describe("ServersToggleList", () => {
 		expect(screen.getByText("PlinyCode DevOps")).toBeTruthy()
 		expect(screen.getByText("Running · 2 tools")).toBeTruthy()
 		expect(screen.getByText("No other MCP servers installed")).toBeTruthy()
+		// The test entry point is on the row itself, so it's reachable without expanding anything.
+		expect(screen.getByTitle(/^Try it in PlinyCode/)).toBeTruthy()
 	})
 
 	it("puts the built-in server before configured servers", () => {
