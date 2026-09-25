@@ -229,11 +229,13 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 	},
 	{
 		name: "default",
-		// The catch-all gets the long multi-step tasks, so it leads with the
-		// model that keeps acting rather than the fastest editor.
+		// The catch-all gets the long multi-step tasks. kimi-k2.6 reasons inside
+		// its content with no off-switch, and past ~80k tokens it tends to end on
+		// its plan instead of acting (0 tool calls in 7 calls on one benchmark
+		// run), so the coder leads and kimi is the fallback.
 		use: [
-			"snps-provider/kimi-k2.6",
 			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+			"snps-provider/kimi-k2.6",
 			"snps-provider/nemotron-3-ultra-550b-a55",
 			"snps-provider/nvidia-nemotron-3-super-120b-a12",
 		],

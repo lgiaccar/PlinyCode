@@ -166,3 +166,20 @@ export interface RouterCallTiming {
 	firstContentAt?: number
 	endedAt: number
 }
+
+/**
+ * What one delegate call produced, reported next to its timing. This is what
+ * tells a stall apart from a stop in the call log: a reply of text only, ended
+ * by "stop", with nothing in the reasoning channel, is a model that thought in
+ * its content and never acted.
+ */
+export interface RouterCallShape {
+	/** The stream's finish reason; absent when the stream ended without one. */
+	finishReason?: string
+	/** Visible text characters. */
+	textChars: number
+	/** Characters on the reasoning channel. */
+	reasoningChars: number
+	/** Distinct tool calls the reply made. */
+	toolCalls: number
+}

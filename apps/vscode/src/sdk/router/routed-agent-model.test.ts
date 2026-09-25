@@ -410,6 +410,43 @@ describe("createRoutedAgentModel", () => {
 		expect(timings).toEqual([{ startedAt: 1_000, firstContentAt: 1_250, endedAt: 1_900 }])
 	})
 
+	it("reports what each call produced: finish reason, text, reasoning and distinct tool calls", async () => {
+		const shapes: unknown[] = []
+		const acting: AgentModel = {
+			async *stream() {
+				yield { type: "reasoning-delta", text: "think " }
+				yield TEXT
+				yield { type: "tool-call-delta", toolCallId: "c1", toolName: "read", inputText: "{" }
+				yield { type: "tool-call-delta", toolCallId: "c1", inputText: "}" }
+				yield { type: "tool-call", toolCallId: "c2", toolName: "bash", input: {} }
+				yield { type: "finish", reason: "tool-calls" }
+			},
+		}
+		const model = createRoutedAgentModel({
+			rules: () => rules(),
+			features,
+			knownModels: () => undefined,
+			isHealthy: () => true,
+			createDelegate: () => acting,
+			observer: { ...recordingObserver().observer, onCallSuccess: ({ shape }) => shapes.push(shape) },
+		})
+		await collect(model)
+		expect(shapes).toEqual([{ finishReason: "tool-calls", textChars: 5, reasoningChars: 6, toolCalls: 2 }])
+
+		// The stall signature: text only, clean stop, nothing on the reasoning channel.
+		const stalled: unknown[] = []
+		const textOnly = createRoutedAgentModel({
+			rules: () => rules(),
+			features,
+			knownModels: () => undefined,
+			isHealthy: () => true,
+			createDelegate: () => scripted([TEXT, STOP]),
+			observer: { ...recordingObserver().observer, onCallSuccess: ({ shape }) => stalled.push(shape) },
+		})
+		await collect(textOnly)
+		expect(stalled).toEqual([{ finishReason: "stop", textChars: 5, reasoningChars: 0, toolCalls: 0 }])
+	})
+
 	it("errors cleanly when the policy yields no candidates", async () => {
 		const { model } = build({
 			delegates: {},

@@ -6,6 +6,8 @@
  * recognisable ways collected from real FreeAuto transcripts:
  *
  * - they announce the next step and stop ("Let me check the log tail:");
+ * - they end on their own to-do list ("I need to: 1. Check the logs 2. Report")
+ *   without taking the first step;
  * - they promise to come back later ("I'll check again at 15:28. Stand by!"),
  *   which they cannot do — nothing runs once the turn is over;
  * - they think out loud in prose and trail off mid-sentence;
@@ -70,11 +72,56 @@ export function looksUnfinished(text: string): boolean {
 	if (/:\s*$/.test(trimmed)) {
 		return true
 	}
+	if (endsWithPlanList(trimmed)) {
+		return true
+	}
 	const last = lastSentence(trimmed)
 	if (!last || endsWithHandBack(trimmed)) {
 		return false
 	}
 	return ANNOUNCEMENT.test(last)
+}
+
+/** A line that introduces the model's own plan, as opposed to a summary or a list of options. */
+const PLAN_INTRO =
+	/\b(i need to|i should|i'll|i will|i'm going to|i am going to|let me|i must|i plan to|my plan|the plan is|here's (my|the) plan|steps? i('ll| will) take)\b/i
+
+/** A list item: `1.`, `1)`, `-`, `*`, `•`, with optional markdown emphasis after it. */
+const LIST_ITEM = /^\s*(?:\d+[.)]|[-*•])\s+[*_`]*(\S.*)$/
+
+/** Imperative verbs that open a step in a to-do list, as opposed to a result line ("Wall time: 476s"). */
+const IMPERATIVE_STEP =
+	/^(check|verify|confirm|inspect|examine|look|read|open|list|find|search|locate|get|extract|parse|collect|gather|run|execute|launch|start|kick|rerun|re-run|build|compile|install|test|create|write|add|append|update|edit|modify|fix|remove|delete|move|copy|rename|generate|implement|complete|finish|continue|wait|poll|monitor|watch|report|give|provide|show|display|print|summarize|summarise|compare|analyze|analyse|determine|identify|ensure|make|prepare|load|save|set|use|call|try|apply|clean|reset|restart|stop|kill|switch|checkout|pull|push|commit|merge|clone|fetch|document|review)\b/i
+
+/**
+ * True when the reply ends with the model's to-do list: an "I need to:" line
+ * followed by imperative steps and nothing after. Reasoning models that think
+ * in their content end this way — the plan is the whole reply, and the first
+ * step's tool call never comes. A results list ("- stage: 476s") or a list of
+ * options for the user does not match: it needs both the first-person intro
+ * and imperative items.
+ */
+export function endsWithPlanList(text: string): boolean {
+	const lines = text
+		.trim()
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean)
+	let index = lines.length - 1
+	const items: string[] = []
+	while (index >= 0) {
+		const match = lines[index]?.match(LIST_ITEM)
+		if (!match?.[1]) {
+			break
+		}
+		items.unshift(match[1])
+		index -= 1
+	}
+	if (items.length < 2 || !items.every((item) => IMPERATIVE_STEP.test(item))) {
+		return false
+	}
+	const intro = lines[index] ?? ""
+	return PLAN_INTRO.test(intro)
 }
 
 /**

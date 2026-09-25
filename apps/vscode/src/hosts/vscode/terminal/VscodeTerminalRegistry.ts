@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
+import { AGENT_TERMINAL_ENV } from "./agent-terminal-env"
 
 export interface TerminalInfo {
 	terminal: vscode.Terminal
@@ -42,7 +43,7 @@ export class TerminalRegistry {
 			isTransient: true,
 			iconPath: new vscode.ThemeIcon("cline-icon"),
 			env: {
-				CLINE_ACTIVE: "true",
+				...AGENT_TERMINAL_ENV,
 				// Override $SHELL to match the selected shell profile so that
 				// child processes (make, npm scripts, etc.) that read $SHELL
 				// see the correct value instead of the user's login shell.

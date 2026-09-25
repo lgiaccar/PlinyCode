@@ -32,6 +32,10 @@ interface CallRecord {
 	ttftMs?: number
 	durationMs: number
 	outcome: "success" | "failover" | "error"
+	finishReason?: string
+	textChars?: number
+	reasoningChars?: number
+	toolCalls?: number
 }
 
 interface RunRecord {
@@ -85,6 +89,13 @@ function summariseCalls(records: CallRecord[]) {
 		ttft: ms(median(ok.flatMap((r) => (r.ttftMs === undefined ? [] : [r.ttftMs])))),
 		duration: ms(median(ok.map((r) => r.durationMs))),
 		think: records.filter((r) => r.effort === "think").length,
+		// A clean stop with text and no tool call ends the run: the share of
+		// those among calls that recorded a shape is each model's stop rate.
+		textStops: (() => {
+			const shaped = ok.filter((r) => r.toolCalls !== undefined)
+			const stops = shaped.filter((r) => r.toolCalls === 0 && r.finishReason === "stop")
+			return shaped.length === 0 ? "—" : `${stops.length} (${percent(stops.length, shaped.length)})`
+		})(),
 	}
 }
 
@@ -93,13 +104,13 @@ function callsTable(title: string, groups: Map<string, CallRecord[]>): string {
 		.sort((a, b) => b[1].length - a[1].length)
 		.map(([key, records]) => {
 			const s = summariseCalls(records)
-			return `| ${key} | ${s.calls} | ${s.success} | ${s.failovers} | ${s.errors} | ${s.ttft} | ${s.duration} | ${s.think} |`
+			return `| ${key} | ${s.calls} | ${s.success} | ${s.failovers} | ${s.errors} | ${s.ttft} | ${s.duration} | ${s.think} | ${s.textStops} |`
 		})
 	return [
 		`## ${title}`,
 		"",
-		"| | Calls | Success | Failovers | Errors | TTFT (median) | Duration (median) | Thinking |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| | Calls | Success | Failovers | Errors | TTFT (median) | Duration (median) | Thinking | Text-only stops |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		...rows,
 		"",
 	].join("\n")
