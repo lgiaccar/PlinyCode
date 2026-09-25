@@ -4,6 +4,7 @@ import type {
 	GatewayProviderManifest,
 } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
+import { toGatewayModelCapabilities } from "../model-capabilities";
 import {
 	isAnthropicCompatibleModel,
 	isAnthropicCompatibleModelId,
@@ -12,11 +13,14 @@ import {
 	isQwenModel,
 	resolveClaudeThinkingEra,
 } from "../model-facts";
+import { buildPlinyModels } from "../pliny-models";
 import {
 	applyPromptCacheToLastTextPart,
+	PLINY_ROUTING_METADATA,
 	resolveAnthropicReasoningRequestPolicy,
 	resolvePromptCacheRoute,
 	shouldApplyPromptCache,
+	withContentBlockCacheBreakpoints,
 } from "./anthropic-compatible";
 
 function makeProvider(
@@ -649,6 +653,143 @@ describe("anthropic-compatible routing helpers", () => {
 				openaiCompatible: { cache_control: { type: "ephemeral" } },
 				openrouter: { cache_control: { type: "ephemeral" } },
 			},
+		});
+	});
+});
+
+describe("Pliny prompt caching", () => {
+	const plinyModels = buildPlinyModels();
+
+	function plinyContext(modelId: string): GatewayProviderContext {
+		const info = plinyModels[modelId];
+		return makeContext(
+			info?.family,
+			PLINY_ROUTING_METADATA,
+			toGatewayModelCapabilities(info?.capabilities),
+		);
+	}
+
+	function applies(modelId: string): boolean {
+		return shouldApplyPromptCache(
+			{ providerId: "pliny", modelId, messages: [] },
+			plinyContext(modelId),
+		);
+	}
+
+	it("caches the Claude models the catalog flags cache_control", () => {
+		expect(applies("snps-aws-bedrock/global.anthropic.claude-sonnet-5")).toBe(
+			true,
+		);
+		expect(applies("snps-aws-bedrock/aws-claude-sonnet-4.6")).toBe(true);
+		expect(
+			applies(
+				"snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0",
+			),
+		).toBe(true);
+	});
+
+	it("skips Claude presets without cache_control and non-Claude models", () => {
+		expect(applies("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")).toBe(
+			false,
+		);
+		expect(applies("azure-openai/gpt-5.2")).toBe(false);
+		expect(applies("snps-provider/qwen3-coder-480b-a35b-inst-fp8")).toBe(false);
+	});
+});
+
+describe("withContentBlockCacheBreakpoints", () => {
+	const marker = { type: "ephemeral" };
+
+	it("leaves a body without cache intent unchanged", () => {
+		const body = {
+			model: "m",
+			messages: [{ role: "system", content: "sys" }],
+		};
+		expect(withContentBlockCacheBreakpoints(body)).toBe(body);
+	});
+
+	it("marks the system prompt and the newest assistant text as content blocks", () => {
+		const out = withContentBlockCacheBreakpoints({
+			model: "m",
+			cache_control: marker,
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "task", cache_control: marker },
+				{
+					role: "assistant",
+					content: "reading a",
+					tool_calls: [{ id: "c1" }],
+				},
+				{ role: "tool", tool_call_id: "c1", content: "file a" },
+			],
+		});
+
+		expect(out.cache_control).toBeUndefined();
+		expect(out.messages).toEqual([
+			{
+				role: "system",
+				content: [{ type: "text", text: "sys", cache_control: marker }],
+			},
+			{ role: "user", content: "task" },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "reading a", cache_control: marker }],
+				tool_calls: [{ id: "c1" }],
+			},
+			{ role: "tool", tool_call_id: "c1", content: "file a" },
+		]);
+	});
+
+	it("falls back past tool-only assistant turns and blank text to the newest text", () => {
+		const out = withContentBlockCacheBreakpoints({
+			cache_control: marker,
+			messages: [
+				{ role: "system", content: "sys" },
+				{
+					role: "user",
+					content: [
+						{ type: "text", text: "task", cache_control: marker },
+						{ type: "text", text: " " },
+					],
+				},
+				{ role: "assistant", content: null, tool_calls: [{ id: "c1" }] },
+				{ role: "tool", tool_call_id: "c1", content: "file a" },
+			],
+		});
+		const messages = out.messages as Record<string, unknown>[];
+
+		expect(messages[1]).toEqual({
+			role: "user",
+			content: [
+				{ type: "text", text: "task", cache_control: marker },
+				{ type: "text", text: " " },
+			],
+		});
+		expect(messages[2]).toEqual({
+			role: "assistant",
+			content: null,
+			tool_calls: [{ id: "c1" }],
+		});
+	});
+
+	it("never uses more than the system and tail breakpoints", () => {
+		const out = withContentBlockCacheBreakpoints({
+			cache_control: marker,
+			messages: [
+				{ role: "system", content: "sys", cache_control: marker },
+				{
+					role: "user",
+					content: [{ type: "text", text: "one", cache_control: marker }],
+				},
+				{ role: "assistant", content: "two" },
+				{ role: "user", content: "three", cache_control: marker },
+			],
+		});
+
+		expect(JSON.stringify(out).match(/cache_control/g)).toHaveLength(2);
+		expect((out.messages as Record<string, unknown>[])[3]).toEqual({
+			role: "user",
+			content: [{ type: "text", text: "three", cache_control: marker }],
 		});
 	});
 });

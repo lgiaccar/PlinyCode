@@ -45,6 +45,7 @@ const QWEN_PROMPT_CACHE_ROUTE: GatewayModelRoute = {
 
 function createAnthropicRoutingMetadata(options?: {
 	promptCacheRoutes?: GatewayModelRoute[];
+	promptCacheWirePlacement?: "content-blocks";
 	reasoningRoutes?: GatewayModelRoute[];
 }): GatewayProviderMetadata {
 	const promptCacheRoutes: GatewayModelRoute[] = options?.promptCacheRoutes ?? [
@@ -60,6 +61,9 @@ function createAnthropicRoutingMetadata(options?: {
 						promptCache: {
 							format: "anthropic-cache-control",
 							routes: promptCacheRoutes.map((route) => ({ ...route })),
+							...(options?.promptCacheWirePlacement
+								? { wirePlacement: options.promptCacheWirePlacement }
+								: {}),
 						},
 					}
 				: {}),
@@ -86,6 +90,112 @@ export const ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA =
 	createAnthropicRoutingMetadata({
 		promptCacheRoutes: [ANTHROPIC_COMPATIBLE_ROUTE, QWEN_PROMPT_CACHE_ROUTE],
 	});
+
+/**
+ * Pliny caches only the Claude models its catalog flags `cache_control`, and
+ * honors a breakpoint only on a system/user/assistant content block (measured
+ * against the live gateway: message-level, top-level and tool-message markers
+ * are silently dropped).
+ */
+export const PLINY_ROUTING_METADATA = createAnthropicRoutingMetadata({
+	promptCacheRoutes: [
+		{ matcher: "anthropic-compatible", requiredCapability: "prompt-cache" },
+	],
+	promptCacheWirePlacement: "content-blocks",
+});
+
+type WireMessage = Record<string, unknown>;
+
+function withoutCacheControl(message: WireMessage): WireMessage {
+	const { cache_control: _dropped, ...rest } = message;
+	if (!Array.isArray(rest.content)) {
+		return rest;
+	}
+	return {
+		...rest,
+		content: rest.content.map((part) => {
+			if (!part || typeof part !== "object") {
+				return part;
+			}
+			const { cache_control: _partDropped, ...partRest } = part as WireMessage;
+			return partRest;
+		}),
+	};
+}
+
+function withBreakpointOnLastText(
+	message: WireMessage,
+	marker: unknown,
+): WireMessage | undefined {
+	const { content } = message;
+	if (typeof content === "string") {
+		return content.trim()
+			? {
+					...message,
+					content: [{ type: "text", text: content, cache_control: marker }],
+				}
+			: undefined;
+	}
+	if (!Array.isArray(content)) {
+		return undefined;
+	}
+	for (let i = content.length - 1; i >= 0; i--) {
+		const part = content[i] as WireMessage | undefined;
+		if (
+			part?.type === "text" &&
+			typeof part.text === "string" &&
+			part.text.trim()
+		) {
+			const next = [...content];
+			next[i] = { ...part, cache_control: marker };
+			return { ...message, content: next };
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Moves the request's prompt-cache intent (the top-level `cache_control` that
+ * `buildCompatibleProviderOptions` sets when a cache route matched) onto two
+ * content-block breakpoints of a serialized OpenAI-compatible chat body:
+ *
+ * - the system prompt, caching tools + system for every turn and session;
+ * - the newest user/assistant text, a breakpoint that advances each turn so
+ *   the whole conversation before the latest tool results is read from cache.
+ *
+ * Every other marker is dropped so the request stays within Anthropic's limit
+ * of four breakpoints. A body without cache intent is returned unchanged.
+ */
+export function withContentBlockCacheBreakpoints(
+	body: Record<string, unknown>,
+): Record<string, unknown> {
+	const { cache_control: marker, ...rest } = body;
+	if (!marker || !Array.isArray(rest.messages)) {
+		return body;
+	}
+	const messages = (rest.messages as WireMessage[]).map(withoutCacheControl);
+
+	let systemIndex = messages.length - 1;
+	while (systemIndex >= 0 && messages[systemIndex].role !== "system") {
+		systemIndex--;
+	}
+	if (systemIndex >= 0) {
+		messages[systemIndex] =
+			withBreakpointOnLastText(messages[systemIndex], marker) ??
+			messages[systemIndex];
+	}
+	for (let i = messages.length - 1; i > systemIndex; i--) {
+		if (messages[i].role !== "user" && messages[i].role !== "assistant") {
+			continue;
+		}
+		const marked = withBreakpointOnLastText(messages[i], marker);
+		if (marked) {
+			messages[i] = marked;
+			break;
+		}
+	}
+	return { ...rest, messages };
+}
 
 export function createPromptCacheProviderOptions(
 	providerId: string,

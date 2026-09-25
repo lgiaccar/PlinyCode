@@ -2,7 +2,7 @@
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
-	"version": "0.1.3-test.6",
+	"version": "0.1.3-test.8",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.101.0"

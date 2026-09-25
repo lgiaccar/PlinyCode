@@ -1,16 +1,17 @@
 import { createGateway } from "@ai-sdk/gateway";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type {
 	GatewayProviderContext,
 	GatewayResolvedProviderConfig,
 } from "@plinycode/shared";
 import { modelProducesImages } from "@plinycode/shared";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { wrapLanguageModel } from "ai";
 import { ensureFetch, resolveApiKey } from "../http";
 import { splitToolImagesMiddleware } from "../middleware/split-tool-images";
 import { isOpenAIReasoningEraModelId } from "../model-facts";
+import { withContentBlockCacheBreakpoints } from "../routing/anthropic-compatible";
 import type { ProviderFactoryResult } from "./types";
 
 type FetchInput = Parameters<typeof fetch>[0];
@@ -240,6 +241,9 @@ export async function createOpenAICompatibleProviderModule(
 				onResponseError,
 			})
 		: fetch;
+	const contentBlockCache =
+		context.provider.metadata?.routing?.promptCache?.wirePlacement ===
+		"content-blocks";
 	const provider = createOpenAICompatible({
 		name: context.provider.id,
 		apiKey,
@@ -247,7 +251,12 @@ export async function createOpenAICompatibleProviderModule(
 		...(config.headers ? { headers: config.headers } : {}),
 		...(providerFetch ? { fetch: providerFetch } : {}),
 		includeUsage: true,
-		transformRequestBody: withMaxCompletionTokensForReasoningModels,
+		transformRequestBody: contentBlockCache
+			? (body: Record<string, unknown>) =>
+					withMaxCompletionTokensForReasoningModels(
+						withContentBlockCacheBreakpoints(body),
+					)
+			: withMaxCompletionTokensForReasoningModels,
 	} as never);
 	const useOpenRouterImageTransport =
 		context.provider.metadata?.imageTransport === "openrouter" &&
