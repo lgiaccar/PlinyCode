@@ -292,8 +292,6 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 						textChars += event.text.length
 					} else if (event.type === "reasoning-delta") {
 						reasoningChars += event.text.length
-					} else if (event.type === "tool-call") {
-						toolCallIds.add(event.toolCallId)
 					} else if (event.type === "tool-call-delta") {
 						if (event.toolCallId) {
 							toolCallIds.add(event.toolCallId)

@@ -413,12 +413,12 @@ describe("createRoutedAgentModel", () => {
 	it("reports what each call produced: finish reason, text, reasoning and distinct tool calls", async () => {
 		const shapes: unknown[] = []
 		const acting: AgentModel = {
-			async *stream() {
+			async *stream(): AsyncGenerator<AgentModelEvent> {
 				yield { type: "reasoning-delta", text: "think " }
 				yield TEXT
 				yield { type: "tool-call-delta", toolCallId: "c1", toolName: "read", inputText: "{" }
 				yield { type: "tool-call-delta", toolCallId: "c1", inputText: "}" }
-				yield { type: "tool-call", toolCallId: "c2", toolName: "bash", input: {} }
+				yield { type: "tool-call-delta", toolCallId: "c2", toolName: "bash", input: {} }
 				yield { type: "finish", reason: "tool-calls" }
 			},
 		}
