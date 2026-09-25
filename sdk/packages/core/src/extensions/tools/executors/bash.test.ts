@@ -32,6 +32,10 @@ const longRunningCommand = {
 	args: ["-e", "setInterval(() => {}, 1_000)"],
 };
 
+// Log directories are removed on a timer, and on Windows the rm itself may
+// retry for up to 1.5s; expect.poll's 1s default is too tight on busy runners.
+const LOG_REMOVAL_POLL = { timeout: 5_000 };
+
 async function fileExists(path: string): Promise<boolean> {
 	try {
 		await access(path);
@@ -227,7 +231,9 @@ describe("createShellExecutor", () => {
 			});
 			await new Promise((resolve) => setTimeout(resolve, 350));
 			expect(await fileExists(logPath)).toBe(true);
-			await expect.poll(() => fileExists(dirname(logPath))).toBe(false);
+			await expect
+				.poll(() => fileExists(dirname(logPath)), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(dirname(logPath), { recursive: true, force: true });
 		}
@@ -301,7 +307,9 @@ describe("createShellExecutor", () => {
 			expect(await fileExists(staleDirectory)).toBe(false);
 			expect(await fileExists(freshDirectory)).toBe(true);
 			expect(await fileExists(unrelatedDirectory)).toBe(true);
-			await expect.poll(() => fileExists(freshDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(freshDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(tempDirectory, { recursive: true, force: true });
 		}
@@ -352,7 +360,9 @@ describe("createShellExecutor", () => {
 			expect(await fileExists(join(completedDirectory, "completed-at"))).toBe(
 				true,
 			);
-			await expect.poll(() => fileExists(completedDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(completedDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 			expect(await fileExists(liveDirectory)).toBe(true);
 
 			liveCommandExists = false;
@@ -360,7 +370,9 @@ describe("createShellExecutor", () => {
 				.poll(() => fileExists(join(liveDirectory, "active-command.json")))
 				.toBe(false);
 			expect(await fileExists(join(liveDirectory, "completed-at"))).toBe(true);
-			await expect.poll(() => fileExists(liveDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(liveDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(tempDirectory, { recursive: true, force: true });
 		}
@@ -399,7 +411,9 @@ describe("createShellExecutor", () => {
 			expect(await fileExists(join(reusedPidDirectory, "completed-at"))).toBe(
 				true,
 			);
-			await expect.poll(() => fileExists(reusedPidDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(reusedPidDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(tempDirectory, { recursive: true, force: true });
 		}
