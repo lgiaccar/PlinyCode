@@ -63,7 +63,9 @@ The code is in `apps/vscode/src/hosts/vscode/auto-update/`. `release-remote.ts` 
      `~/Library/CloudStorage/OneDrive-*`) for a folder named, or ending in, `PlinyCodeRelease`. SharePoint needs a
      Microsoft login, so the extension never downloads from SharePoint itself; it only reads what OneDrive has
      synced to disk.
-2. It picks the newest version from either source (GitHub wins a tie). If that version is newer than the running
+   - **GitHub pre-releases**, only with `plinycode.updates.prerelease` on (see
+     [Official releases and pre-releases](#official-releases-and-pre-releases)).
+2. It picks the newest version from any source (GitHub wins a tie). If that version is newer than the running
    one, it downloads or copies the `.vsix` into its own storage and checks the sha256. It then installs it and
    offers **Reload Now** and **Release Notes**.
 3. If one source fails (network error, or a checksum mismatch because OneDrive is still syncing), it tries the
@@ -72,11 +74,31 @@ The code is in `apps/vscode/src/hosts/vscode/auto-update/`. `release-remote.ts` 
 Automatic checks show nothing unless there is an update. **PlinyCode: Check for Updates** in the Command Palette
 always reports a result.
 
-| Setting                     | Default                                                                      | Meaning                                                 |
-| --------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `plinycode.updates.enabled` | `true`                                                                       | Check and install automatically.                        |
-| `plinycode.updates.url`     | `https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json` | Remote `latest.json`. Empty = use only the folder.      |
-| `plinycode.updates.folder`  | `""`                                                                         | Synced `PlinyCodeRelease` folder, if not found automatically. |
+| Setting                        | Default                                                                      | Meaning                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `plinycode.updates.enabled`    | `true`                                                                       | Check and install automatically.                              |
+| `plinycode.updates.prerelease` | `false`                                                                      | Also install `-test.N` pre-releases (developers and testers). |
+| `plinycode.updates.url`        | `https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json` | Remote `latest.json`. Empty = use only the folder.            |
+| `plinycode.updates.folder`     | `""`                                                                         | Synced `PlinyCodeRelease` folder, if not found automatically. |
+
+### Official releases and pre-releases
+
+By default an editor gets **official releases only** (`0.1.3`, `0.1.4`, …): `/releases/latest` and the OneDrive
+folder never serve a pre-release, so a `-test.N` build can't replace an official install.
+
+Developers and testers turn on **Install pre-releases** in PlinyCode's **Settings → About**, or tick
+`plinycode.updates.prerelease` in VS Code's Settings. Both control the same user setting, so it persists across
+restarts (and follows Settings Sync). With it on, the updater also reads
+`https://github.com/lgiaccar/PlinyCode/releases.atom`, tries the newest five `release_*` versions in order, and
+offers the first whose `latest.json` exists. Turning it on checks immediately.
+
+- **Pre-releases and releases share one track.** `0.1.4-test.1` < `0.1.4-test.2` < `0.1.4` < `0.1.5-test.1`, so a
+  tester moves to each official release automatically when it ships, then on to the next pre-release.
+- **Turning it off never downgrades.** An editor on `0.1.4-test.2` stays there until `0.1.4` (or later) ships, then
+  follows official releases only.
+- **The feed, not `api.github.com`.** GitHub's API allows 60 anonymous requests an hour per IP address, and one
+  office behind one proxy address uses that up; the feed on github.com has no such limit. If the feed can't be
+  read, the updater still installs official releases.
 
 **Limits:**
 - The updater only installs versions that are **newer** than the running one. It never downgrades.
@@ -154,8 +176,9 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
 
 ## Testing a release before users get it
 
-GitHub's `/releases/latest` never serves a **pre-release**, so a pre-release reaches only the editors that point
-at it on purpose.
+GitHub's `/releases/latest` never serves a **pre-release**, so a pre-release reaches only the editors that turned
+on **Install pre-releases** (`plinycode.updates.prerelease`; see
+[Official releases and pre-releases](#official-releases-and-pre-releases)).
 
 ### Pre-release version convention
 
@@ -181,12 +204,13 @@ Pre-releases are numbered `<next release>-test.<N>` and tagged `release_<version
    the real `0.1.3`, so testers move to the real release automatically once it ships.
 2. `bun run release:package`, write the notes, then `bun run release:publish -- --prerelease`. This publishes to
    GitHub only (never the OneDrive folder), leaves the release unmarked as latest, and checks that
-   `/releases/latest` still serves the current release. It prints the pre-release's own `latest.json` URL.
-3. Testers set `plinycode.updates.url` to that URL. To test without touching your own install, use a separate
-   profile: `code --user-data-dir <tmp>/user-data --extensions-dir <tmp>/extensions`. Install the older build
-   there, set the URL in `<tmp>/user-data/User/settings.json`, and start it. About 30 s later,
+   `/releases/latest` still serves the current release.
+3. Editors with **Install pre-releases** on install it at their next check, or straight away on
+   **PlinyCode: Check for Updates**. To test without touching your own install, use a separate profile:
+   `code --user-data-dir <tmp>/user-data --extensions-dir <tmp>/extensions`. Install the older build there, put
+   `"plinycode.updates.prerelease": true` in `<tmp>/user-data/User/settings.json`, and start it. About 30 s later,
    `code --user-data-dir … --extensions-dir … --list-extensions --show-versions` shows the new version.
-4. Afterwards, delete the pre-release and its tag:
+4. A throwaway pre-release can be deleted afterwards, with its tag:
    `gh release delete release_0.1.3-test.2 --repo lgiaccar/PlinyCode --cleanup-tag`, then
    `git tag -d release_0.1.3-test.2`.
 
@@ -197,7 +221,8 @@ The updater never downgrades, so the fix is always a new, higher version (for ex
 
 To stop the bad release reaching more people while you fix it:
 - **GitHub:** edit the release and tick **Set as a pre-release**. `/releases/latest` then falls back to the
-  previous release.
+  previous release. Editors with pre-releases on would still see it, so also delete the release's `latest.json`
+  asset; the updater skips releases without one. The same step pulls a bad pre-release.
 - **Folder:** rename `latest.json` to `latest.json.paused`.
 
 Users who already updated can install the previous `.vsix` by hand. Publishing the fix makes it the latest

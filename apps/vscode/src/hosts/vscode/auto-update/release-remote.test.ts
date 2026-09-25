@@ -6,7 +6,17 @@ import path from "node:path"
 import { expect } from "chai"
 import packageJson from "../../../../package.json"
 import type { ReleaseManifest } from "./release-folder"
-import { DEFAULT_RELEASE_URL, downloadVsix, fetchRemoteManifest, githubManifest, resolveRemoteAsset } from "./release-remote"
+import {
+	DEFAULT_RELEASE_URL,
+	downloadVsix,
+	fetchRemoteManifest,
+	findNewestRelease,
+	githubManifest,
+	RELEASES_FEED_URL,
+	releaseManifestUrl,
+	resolveRemoteAsset,
+	versionsInReleaseFeed,
+} from "./release-remote"
 
 const VSIX_BYTES = Buffer.from("not really a vsix")
 const VSIX_SHA256 = createHash("sha256").update(VSIX_BYTES).digest("hex")
@@ -85,6 +95,57 @@ describe("release-remote", () => {
 			expect(errors).to.have.length(2)
 			expect(errors[0]).to.match(/HTTP 503/)
 			expect(errors[1]).to.match(/not an https URL/)
+		})
+	})
+
+	describe("findNewestRelease", () => {
+		/** A releases.atom entry, shaped like GitHub's. */
+		const entry = (tag: string) =>
+			`<entry><id>tag:github.com,2008:Repository/1/${tag}</id><link rel="alternate" type="text/html" href="https://github.com/lgiaccar/PlinyCode/releases/tag/${tag}"/><title>${tag}</title></entry>`
+		const feed = (...tags: string[]) => `<?xml version="1.0" encoding="UTF-8"?><feed>${tags.map(entry).join("")}</feed>`
+		/** Serves the feed plus a latest.json for each of `published`. */
+		const github = (tags: string[], published: string[]) => {
+			const routes: Record<string, () => Response> = { [RELEASES_FEED_URL]: () => new Response(feed(...tags)) }
+			for (const version of published) {
+				routes[releaseManifestUrl(version)] = () => Response.json(githubManifest(version, VSIX_SHA256, "2026-09-25"))
+			}
+			return fakeFetch(routes)
+		}
+
+		it("lists the feed's versions newest first, ignoring other tags", () => {
+			const tags = ["release_0.1.4-test.2", "release_0.1.3", "nightly", "release_0.1.4-test.10", "release_0.1.4-test.2"]
+			expect(versionsInReleaseFeed(feed(...tags))).to.deep.equal(["0.1.4-test.10", "0.1.4-test.2", "0.1.3"])
+		})
+
+		it("returns the newest release, pre-releases included", async () => {
+			const { fetchImpl } = github(["release_0.1.3", "release_0.1.4-test.1"], ["0.1.3", "0.1.4-test.1"])
+			const found = await findNewestRelease(fetchImpl)
+			expect(found?.url).to.equal(releaseManifestUrl("0.1.4-test.1"))
+			expect(found?.manifest.version).to.equal("0.1.4-test.1")
+		})
+
+		it("prefers an official release over its own pre-releases", async () => {
+			const { fetchImpl } = github(["release_0.1.4", "release_0.1.4-test.3"], ["0.1.4", "0.1.4-test.3"])
+			expect((await findNewestRelease(fetchImpl))?.manifest.version).to.equal("0.1.4")
+		})
+
+		it("skips tags without a published latest.json", async () => {
+			const { fetchImpl, requested } = github(["release_0.1.5-test.1", "release_0.1.3"], ["0.1.3"])
+			expect((await findNewestRelease(fetchImpl))?.manifest.version).to.equal("0.1.3")
+			expect(requested).to.include(releaseManifestUrl("0.1.5-test.1"))
+		})
+
+		it("returns undefined when nothing is published", async () => {
+			expect(await findNewestRelease(github([], []).fetchImpl)).to.equal(undefined)
+		})
+
+		it("rejects feed errors", async () => {
+			const { fetchImpl } = fakeFetch({ [RELEASES_FEED_URL]: () => new Response("busy", { status: 429 }) })
+			let error: unknown
+			await findNewestRelease(fetchImpl).catch((caught) => {
+				error = caught
+			})
+			expect(String(error)).to.match(/HTTP 429/)
 		})
 	})
 

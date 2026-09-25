@@ -8,6 +8,7 @@ import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
 import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@plinycode/core"
 import type { ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
+import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { BannerService } from "@/services/banner/BannerService"
 import { featureFlagsService } from "@/services/feature-flags"
@@ -62,6 +63,7 @@ export async function getStateToPostToWebview(controller: {
 	const useAutoCondense = stateManager.getGlobalSettingsKey("useAutoCondense")
 	const compactionStrategy = readCompactionStrategyGlobally()
 	const webSearchEnabled = isModelToolEnabledGlobally("web_search")
+	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
 	const userInfo = stateManager.getGlobalStateKey("userInfo")
 	const mcpMarketplaceEnabled = stateManager.getGlobalStateKey("mcpMarketplaceEnabled")
@@ -146,6 +148,7 @@ export async function getStateToPostToWebview(controller: {
 		useAutoCondense,
 		compactionStrategy,
 		webSearchEnabled,
+		prereleaseUpdatesEnabled,
 		subagentsEnabled,
 		userInfo,
 		mcpMarketplaceEnabled,
