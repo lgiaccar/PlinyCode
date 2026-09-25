@@ -1,7 +1,7 @@
 /**
- * The `AgentModel` that makes FreeAuto work.
+ * The `AgentModel` that makes FreeAuto and BalanceAuto work.
  *
- * Every call it receives is routed to a concrete free Pliny model chosen by the
+ * Every call it receives is routed to a concrete Pliny model chosen by the
  * policy, and delegated to the model the SDK would otherwise have built. When a
  * delegate misbehaves *before producing any output*, the next candidate takes
  * over silently — the consumer never learns the first attempt happened.
@@ -52,6 +52,8 @@ export interface RouterObserver {
 }
 
 export interface RoutedAgentModelDeps {
+	/** Router name used in user-facing errors; defaults to FreeAuto. */
+	label?: string
 	rules: () => RouterRules
 	features: (request: AgentModelRequest) => RouterRequestFeatures
 	knownModels: () => Record<string, ModelInfo> | undefined
@@ -200,6 +202,7 @@ async function* withStallWatchdog(
  */
 export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 	const now = deps.now ?? (() => Date.now())
+	const label = deps.label ?? "FreeAuto"
 	const delegates = new Map<string, AgentModel>()
 
 	const delegateFor = (modelId: string): AgentModel => {
@@ -231,15 +234,15 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 					reason: "error",
 					error:
 						features.hasImages && decision.excludedNoImages.length > 0
-							? "FreeAuto routes only to free Pliny models, none of which accept images. " +
+							? `${label} has no model that accepts images among its candidates. ` +
 								"Pick a vision-capable model or remove the image."
-							: "FreeAuto has no free Pliny models available to route to.",
+							: `${label} has no Pliny models available to route to.`,
 					errorRetryable: false,
 				}
 				return
 			}
 
-			let lastError = "FreeAuto exhausted every candidate model."
+			let lastError = `${label} exhausted every candidate model.`
 
 			for (let index = 0; index < candidates.length; index += 1) {
 				const modelId = candidates[index]
@@ -413,7 +416,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 			yield {
 				type: "finish",
 				reason: "error",
-				error: `FreeAuto could not complete the request. Last error: ${lastError}`,
+				error: `${label} could not complete the request. Last error: ${lastError}`,
 				errorRetryable: false,
 			}
 		},

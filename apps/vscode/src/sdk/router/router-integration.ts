@@ -1,23 +1,27 @@
 /**
- * Wires FreeAuto into a session's `CoreSessionConfig`.
+ * Wires the router (FreeAuto and BalanceAuto) into a session's `CoreSessionConfig`.
  *
  * This is the only file that knows about both the router and the extension
  * host: it owns the per-session state, turns routing events into the visible
  * timestamped chat rows, and decides whether a failed run should be recovered
  * with a different model.
  *
- * `installRouter` is called for every Pliny session, not only when FreeAuto is
- * selected. The router is a passthrough for a concrete model, and installing it
- * unconditionally means a mid-task switch to FreeAuto works — the session config
- * is not rebuilt when only the model changes.
+ * `installRouter` is called for every Pliny session, not only when a router
+ * model is selected. The router is a passthrough for a concrete model, and
+ * installing it unconditionally means a mid-task switch to FreeAuto or
+ * BalanceAuto works — the session config is not rebuilt when only the model
+ * changes.
  */
 
 import type { CoreSessionConfig } from "@plinycode/core"
 import {
-	isPlinyFreeAutoModelId,
+	isPlinyBalanceAutoModelId,
 	isPlinyFreeModelId,
+	isPlinyRouterModelId,
+	isPlinySelfHostedModelId,
 	type ModelInfo,
-	plinyFreeAutoProfile,
+	plinyRouterProfile,
+	plinyRouterProfileSpec,
 	plinyThinkingControls,
 } from "@plinycode/llms"
 import { type AgentModel, type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
@@ -81,9 +85,9 @@ export function detachedCommandNote(failure: ShellFailure): string {
 	)
 }
 
-/** `FreeAuto`, or `FreeAuto·fast` for a non-default profile. */
+/** `FreeAuto`, `FreeAuto·fast`, `BalanceAuto`, ... as shown in the chat rows. */
 function routerLabel(profile: string): string {
-	return profile === "default" ? "FreeAuto" : `FreeAuto·${profile}`
+	return plinyRouterProfileSpec(profile)?.label ?? (profile === "default" ? "FreeAuto" : `FreeAuto·${profile}`)
 }
 
 /** `HH:MM:SS` for in-turn rows; the date leads the first row of a turn. */
@@ -142,17 +146,35 @@ function requestHasImages(request: AgentModelRequest): boolean {
 }
 
 /**
- * Install FreeAuto on a session config. Safe to call for any Pliny session;
- * the hooks no-op unless the session's model is the router.
+ * Install the router on a session config. Safe to call for any Pliny session;
+ * the hooks no-op unless the session's model is a router id.
  */
 export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps): CoreSessionConfig {
 	const now = deps.now ?? (() => Date.now())
-	const isRouted = () => isPlinyFreeAutoModelId(config.modelId)
-	// The guard and the shell-result notes help every free model, routed or not.
-	const guardActive = () => isPlinyFreeModelId(config.modelId)
+	const isRouted = () => isPlinyRouterModelId(config.modelId)
 	const logCall = deps.logCall ?? ((record: RouterCallLogRecord) => void appendCallLog(record))
 	const logRun = deps.logRun ?? ((record: RouterRunLogRecord) => void appendRunLog(record))
-	const installProfile = plinyFreeAutoProfile(config.modelId)
+	const installProfile = plinyRouterProfile(config.modelId)
+
+	/**
+	 * Whether the completion guard and the shell-result notes apply to a turn.
+	 * They exist for the free models, which stop early; the paid ones do not.
+	 * A free model (FreeAuto or a concrete free pick) always qualifies. On
+	 * BalanceAuto it depends on who is actually answering: the turn's last call
+	 * must have run on a free model, and a nudge to a paid one would just cost
+	 * a call.
+	 */
+	const freeModelIsAnswering = (turnKey: string): boolean => {
+		if (isPlinyFreeModelId(config.modelId)) {
+			return true
+		}
+		if (!isPlinyBalanceAutoModelId(config.modelId)) {
+			return false
+		}
+		const calls = getSessionState(turnKey).calls
+		const last = calls[calls.length - 1]
+		return last !== undefined && isPlinySelfHostedModelId(last.modelId)
+	}
 
 	// Rules are loaded asynchronously but routing is synchronous, so keep the
 	// last loaded copy per profile and refresh it in the background. The first
@@ -201,10 +223,10 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 
 	config.agentModelFactory = ({ config: agentConfig, createDefault }) => {
 		createUtilityModel = (modelId) => createDefault({ modelId })
-		if (!isPlinyFreeAutoModelId(agentConfig.modelId)) {
+		if (!isPlinyRouterModelId(agentConfig.modelId)) {
 			return createDefault()
 		}
-		const profile = plinyFreeAutoProfile(agentConfig.modelId)
+		const profile = plinyRouterProfile(agentConfig.modelId)
 		const isSubAgent = Boolean(agentConfig.parentAgentId)
 		const turnKey = isSubAgent ? `${deps.sessionId}:sub:${++subRunCounter}` : deps.sessionId
 		if (!isSubAgent) {
@@ -246,6 +268,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 
 		return createRoutedAgentModel({
 			now,
+			label: routerLabel(profile),
 			rules: () => rulesFor(profile),
 			knownModels: () => agentConfig.knownModels as Record<string, ModelInfo> | undefined,
 			isHealthy: (modelId) => isModelHealthy(modelId, now()),
@@ -370,7 +393,9 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			return false
 		}
 		if (state.failovers >= rules.health.maxFailoversPerTurn) {
-			emitInfo(`\`${formatClock(now())}\` ⚠ FreeAuto stopped retrying after ${state.failovers} failovers this turn.`)
+			emitInfo(
+				`\`${formatClock(now())}\` ⚠ ${routerLabel(activeProfile)} stopped retrying after ${state.failovers} failovers this turn.`,
+			)
 			return false
 		}
 
@@ -418,12 +443,13 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// Free models often stop before the task is done: they announce a step
 	// ("Let me check the log:") without the tool call, promise to check back
 	// later, or report a failed command as if it were the result. The guard
-	// keeps such runs going; core applies it to the root agent only, so its
-	// state is the root turn's.
+	// keeps such runs going. Core applies it to the root agent only (sub-agents
+	// get no completion policy), so both its state and the BalanceAuto "is a
+	// free model answering?" check are the root turn's — never a sub-agent's.
 	const rootState = () => getSessionState(deps.sessionId)
 	const MAX_NUDGES = 3
 	config.completionGuard = createRouterCompletionGuard({
-		isActive: guardActive,
+		isActive: () => freeModelIsAnswering(deps.sessionId),
 		getMode: deps.getMode,
 		toolCallsThisRun: () => rootState().run.toolCalls,
 		maxNudgesPerRun: MAX_NUDGES,
@@ -501,7 +527,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// summary script reads to compare early-stop rates per model.
 	config.hooks = composeHooks(config.hooks, {
 		afterTool: ({ snapshot, tool, toolCall, result }) => {
-			if (!guardActive()) {
+			// Hooks run in sub-agents too; judge by the agent that ran the tool.
+			if (!freeModelIsAnswering(snapshot.parentAgentId ? activeTurnKey : deps.sessionId)) {
 				return undefined
 			}
 			const failure = shellFailureFromResult({
@@ -601,7 +628,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
  * succeeded or failed.
  */
 export function emitTurnSummary(deps: RouterInstallDeps, modelId: string): void {
-	if (!isPlinyFreeAutoModelId(modelId)) {
+	if (!isPlinyRouterModelId(modelId)) {
 		return
 	}
 	const now = deps.now ?? (() => Date.now())
@@ -620,7 +647,7 @@ export function emitTurnSummary(deps: RouterInstallDeps, modelId: string): void 
 	const elapsed = formatDuration(now() - state.turnStartedAt)
 	const failovers = state.failovers > 0 ? ` · ${state.failovers} failover${state.failovers === 1 ? "" : "s"}` : ""
 
-	const label = routerLabel(plinyFreeAutoProfile(modelId))
+	const label = routerLabel(plinyRouterProfile(modelId))
 	deps.emitRow({
 		ts: deps.nextMessageTs(),
 		type: "say",

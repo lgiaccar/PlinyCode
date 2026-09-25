@@ -15,7 +15,9 @@ import { useEffect, useState } from "react"
  * configuration ("Unlock Pliny paid models" / "Unlock Pliny free models"),
  * each defaulting to off. Only the virtual FreeAuto router
  * (`PLINY_FREE_AUTO_MODEL_ID`) is always visible, since it is the safe,
- * effective default and never costs anything. The preferences are persisted
+ * effective default and never costs anything. The BalanceAuto router
+ * (`PLINY_BALANCE_AUTO_MODEL_ID`) routes to paid models too, so it is gated
+ * with them behind the paid toggle. The preferences are persisted
  * in the webview's `localStorage` so they survive reloads/restarts; this is a
  * pure display policy and never affects the model actually used by a running
  * task (a previously-selected hidden model keeps working and is shown as the
@@ -27,6 +29,9 @@ const PLINY_UNLOCK_FREE_STORAGE_KEY = "plinyCode.unlockFreeModels"
 
 /** The virtual FreeAuto router id (mirrors `@plinycode/llms`). */
 export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto"
+
+/** The virtual BalanceAuto router id (mirrors `@plinycode/llms`). It may route to paid models. */
+export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
 
 /**
  * Default model to surface in the picker when paid models are locked and no
@@ -43,6 +48,11 @@ export function isPlinySelfHostedModelId(modelId: string): boolean {
 /** True for the virtual router id and its profile ids (`pliny/free-auto-fast`, ...). */
 export function isPlinyFreeAutoModelId(modelId: string): boolean {
 	return modelId === PLINY_FREE_AUTO_MODEL_ID || modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
+}
+
+/** True for the virtual BalanceAuto router id. */
+export function isPlinyBalanceAutoModelId(modelId: string): boolean {
+	return modelId === PLINY_BALANCE_AUTO_MODEL_ID
 }
 
 /**
@@ -169,10 +179,11 @@ export interface FilteredPlinyModels {
 /**
  * Filter a Pliny provider model map for display in the picker.
  *
- * Paid (hosted) models are kept only when `unlockPaid` is true. Free
- * self-hosted models (`snps-provider*`) are kept only when `unlockFree` is
- * true. The virtual FreeAuto router is always kept regardless of either
- * toggle, since it is free, effective, and the intended default.
+ * Paid (hosted) models, and the BalanceAuto router that uses them, are kept
+ * only when `unlockPaid` is true. Free self-hosted models (`snps-provider*`)
+ * are kept only when `unlockFree` is true. The virtual FreeAuto router is
+ * always kept regardless of either toggle, since it is free, effective, and
+ * the intended default.
  *
  * When a class is filtered out and the catalog default falls in that class
  * (or isn't in the filtered set at all), the default model id is redirected
@@ -203,6 +214,7 @@ export function filterPlinyModels(
 				filtered[id] = info
 			}
 		} else if (unlockPaid) {
+			// Paid hosted models and BalanceAuto, which routes to them.
 			filtered[id] = info
 		}
 	}

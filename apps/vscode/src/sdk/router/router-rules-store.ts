@@ -1,23 +1,31 @@
 /**
  * Where the FreeAuto rules files live, and how they are created and re-read.
  *
- * One global file per profile, plus an optional workspace file shared by all
- * profiles:
+ * One global file per profile, plus an optional workspace file per family
+ * (shared by every FreeAuto profile; BalanceAuto has its own):
  *   - global:    <data dir>/pliny-free-auto.md          (default profile)
  *                <data dir>/pliny-free-auto.<profile>.md (fast, smart, ...)
+ *                <data dir>/pliny-balance-auto.md        (BalanceAuto)
  *   - workspace: <workspace>/.cline/pliny-free-auto.md
+ *                <workspace>/.cline/pliny-balance-auto.md
  *
  * Rules are cached and re-read only when a file's mtime changes, so routing a
  * call costs no I/O in the common case. Every failure degrades to the built-in
  * defaults; a rules file must never be able to block a turn.
  */
 
-import { PLINY_FREE_AUTO_PROFILES } from "@plinycode/llms"
+import { PLINY_ROUTER_PROFILES, plinyRouterProfileAllowsPaid } from "@plinycode/llms"
 import fs from "fs/promises"
 import path from "path"
 import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
-import { defaultRules, mergeRules, parseRulesMarkdown, ROUTER_RULES_FILENAME, rulesFilenameForProfile } from "./router-rules"
+import {
+	defaultRules,
+	mergeRules,
+	parseRulesMarkdown,
+	rulesFilenameForProfile,
+	workspaceRulesFilenameForProfile,
+} from "./router-rules"
 import type { RouterRules } from "./router-types"
 
 /** Absolute path of a profile's global rules file. */
@@ -25,9 +33,9 @@ export function globalRulesPath(dataDir?: string, profile = "default"): string {
 	return path.join(resolveDataDir(dataDir), rulesFilenameForProfile(profile))
 }
 
-/** Absolute path of a workspace's optional rules file. */
-export function workspaceRulesPath(workspaceRoot: string): string {
-	return path.join(workspaceRoot, ".cline", ROUTER_RULES_FILENAME)
+/** Absolute path of a workspace's optional rules file for a profile's family. */
+export function workspaceRulesPath(workspaceRoot: string, profile = "default"): string {
+	return path.join(workspaceRoot, ".cline", workspaceRulesFilenameForProfile(profile))
 }
 
 interface CacheEntry {
@@ -83,7 +91,7 @@ export async function loadRouterRules(options?: {
 	if (!options?.workspaceRoot) {
 		return global
 	}
-	const workspace = await readRulesFile(workspaceRulesPath(options.workspaceRoot), profile)
+	const workspace = await readRulesFile(workspaceRulesPath(options.workspaceRoot, profile), profile)
 	return mergeRules(global, workspace)
 }
 
@@ -112,7 +120,7 @@ export async function initialiseDefaultRulesFile(dataDir?: string, profile = "de
 
 /** Create any missing profile rules file. Never throws. */
 export async function initialiseAllRulesFiles(dataDir?: string): Promise<void> {
-	for (const { profile } of PLINY_FREE_AUTO_PROFILES) {
+	for (const { profile } of PLINY_ROUTER_PROFILES) {
 		await initialiseDefaultRulesFile(dataDir, profile)
 	}
 }
@@ -122,7 +130,32 @@ const PROFILE_BLURBS: Record<string, string> = {
 		"This is the **default** profile (the `FreeAuto (router)` model): heuristic routes, with reasoning\nswitched per route.",
 	fast: "This is the **fast** profile (the `FreeAuto · fast` model): the same routes, with reasoning switched\noff everywhere it can be.",
 	smart: "This is the **smart** profile (the `FreeAuto · smart` model): the default routes plus the\nclassifier, which picks the tier and whether to think once per turn.",
+	balance:
+		"This is the **balance** profile (the `BalanceAuto (router)` model): paid high-end models for\ndifficult work, cheaper or free models for simple requests and for sub-agents, with the classifier\ndeciding which is which once per turn.",
 }
+
+const FREE_GUARD = `Only free \`snps-provider*\` models can be routed to. Any other id in this file
+is ignored, so routing can never start spending money by accident.`
+
+const BALANCE_GUARD = `This profile may route to paid hosted models as well as the free \`snps-provider*\`
+ones, and every call is billed at the model it actually lands on. The paid
+models are the expensive part: keep them on the routes for difficult work and
+lead the simple routes (short questions, sub-agents) with free models, with the
+cheap hosted model as their backup. Hosted models have no measured reasoning
+switch, so \`effort\` leaves them at their default; use a preset such as
+\`aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking\` where thinking is wanted.`
+
+const FREE_GUIDANCE = `Prefer the coding-specialised model for writing or changing code. Prefer a
+large-context model when the conversation is long or many files are attached.
+Prefer a fast small model for short factual questions. When in doubt, choose the
+default route.`
+
+const BALANCE_GUIDANCE = `The quick tier runs on free models and costs nothing; the code and reason tiers
+run on paid high-end models. Choose quick whenever a small model would do:
+short factual questions, one-line or mechanical edits, lookups, reformatting,
+anything a junior engineer would finish in a minute. Choose code for real
+implementation work and reason for design, planning, review, or a bug whose
+cause is unknown. Set think only for design trade-offs and tricky bugs.`
 
 /**
  * The starter rules document. The prose is deliberately substantial: it is both
@@ -134,19 +167,23 @@ export function renderDefaultRulesMarkdown(profile = "default"): string {
 	const poolLines = rules.pool.map((id) => `  - ${id}`).join("\n")
 	const fence = "```"
 	const blurb = PROFILE_BLURBS[profile] ?? `This is the **${profile}** profile.`
+	const paid = plinyRouterProfileAllowsPaid(profile)
+	const router = paid ? "BalanceAuto" : "FreeAuto"
+	const picks = paid
+		? "picks a Pliny model for every request, paid or free according to the routes below,"
+		: "picks a free, self-hosted Pliny model for every request"
 
-	return `# PlinyCode FreeAuto routing rules
+	return `# PlinyCode ${router} routing rules
 
-${blurb} Each FreeAuto model in the picker has its own file like
+${blurb} Each router model in the picker has its own file like
 this one, so strategies can be compared side by side; every routed call is
 logged to \`pliny-free-auto-calls.jsonl\` next to it.
 
-FreeAuto picks a free, self-hosted Pliny model for every request and moves to a
+${router} ${picks} and moves to a
 backup when one fails. Edit this file to change those choices; it is re-read
 automatically whenever you save it, so there is no need to restart.
 
-Only free \`snps-provider*\` models can be routed to. Any other id in this file
-is ignored, so routing can never start spending money by accident.
+${paid ? BALANCE_GUARD : FREE_GUARD}
 
 ## How a model is chosen
 
@@ -210,10 +247,7 @@ understand would fail the call, so every other model keeps its default.
 
 ## Guidance for the classifier
 
-Prefer the coding-specialised model for writing or changing code. Prefer a
-large-context model when the conversation is long or many files are attached.
-Prefer a fast small model for short factual questions. When in doubt, choose the
-default route.
+${paid ? BALANCE_GUIDANCE : FREE_GUIDANCE}
 
 ${fence}yaml
 version: 1

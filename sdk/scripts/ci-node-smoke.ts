@@ -72,6 +72,40 @@ async function packWorkspace(
 	return join(destination, files[0]);
 }
 
+/**
+ * Transitive dependencies resolve from the live registry, so a version that
+ * was published minutes ago can be listed in the package metadata before its
+ * tarball has replicated, and npm fails with a 404 (seen with
+ * @ai-sdk/google 4.0.80, published two minutes before the install). Retrying
+ * after a pause rides out that window; a real failure still fails the run.
+ */
+async function installWithRetry(
+	cwd: string,
+	env: Record<string, string | undefined>,
+	attempts = 3,
+	delayMs = 60_000,
+): Promise<void> {
+	for (let attempt = 1; ; attempt += 1) {
+		try {
+			await runCommand([npmCommand, "install"], {
+				cwd,
+				env,
+				timeoutMs: 10 * 60_000,
+			});
+			return;
+		} catch (error) {
+			if (attempt >= attempts) {
+				throw error;
+			}
+			console.warn(
+				`npm install failed (attempt ${attempt}/${attempts}); retrying in ${delayMs / 1000}s...`,
+			);
+			await rm(join(cwd, "node_modules"), { recursive: true, force: true });
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
+		}
+	}
+}
+
 async function main(): Promise<void> {
 	const packDir = await mkdtemp(join(tmpdir(), "cline-node-smoke-packs-"));
 	const smokeDir = await mkdtemp(join(tmpdir(), "cline-node-smoke-"));
@@ -118,11 +152,7 @@ async function main(): Promise<void> {
 		);
 
 		console.log("Installing smoke-test dependencies...");
-		await runCommand([npmCommand, "install"], {
-			cwd: smokeDir,
-			env: npmEnv,
-			timeoutMs: 10 * 60_000,
-		});
+		await installWithRetry(smokeDir, npmEnv);
 
 		const nodeMajor = Number(process.versions.node.split(".")[0] || "0");
 		const smokeSource =

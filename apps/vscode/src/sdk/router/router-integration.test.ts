@@ -1,5 +1,5 @@
 import type { CoreSessionConfig } from "@plinycode/core"
-import { PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
+import { PLINY_BALANCE_AUTO_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
 import type { AgentMessage, AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { RouterCallLogRecord } from "./router-call-log"
@@ -65,7 +65,17 @@ function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID) {
 			}
 		}
 	}
-	return { rows, logged, run, createdFor, classifierModel }
+	return { rows, logged, run, createdFor, classifierModel, config }
+}
+
+const UNFINISHED_REPLY = {
+	message: {
+		id: "a",
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text: "Let me check the log:" }],
+		createdAt: 0,
+	},
+	iteration: 3,
 }
 
 describe("installRouter turn isolation", () => {
@@ -371,6 +381,72 @@ describe("installRouter profiles, effort and call log", () => {
 		expect(logged[0]?.classifierError).toContain("unusable reply")
 		expect(logged[0]?.tier).toBeUndefined()
 		expect(logged[1]?.classifierError).toBeUndefined()
+	})
+
+	it("routes BalanceAuto's coding work to the paid model and its sub-agents to a free one", async () => {
+		const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		await run()
+		expect(classifierModel).toHaveBeenCalledTimes(1)
+		expect(rows[0]).toContain("BalanceAuto → **global.anthropic.claude-sonnet-5**")
+		expect(rows[0]).toContain("route: coding")
+		expect(rows[0]).toContain("classifier: code")
+
+		await run({ parentAgentId: "parent" })
+		expect(rows[1]).toContain("↳ sub-agent BalanceAuto → **kimi-k2.6**")
+		expect(rows[1]).toContain("route: subagent")
+
+		expect(logged.map((record) => [record.profile, record.subAgent, record.model])).toEqual([
+			["balance", false, "snps-aws-bedrock/global.anthropic.claude-sonnet-5"],
+			["balance", true, "snps-provider/kimi-k2.6"],
+		])
+	})
+
+	it("nudges an unfinished BalanceAuto reply only when a free model wrote it", async () => {
+		const { rows, run, config, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		// Nothing has run yet: no model to blame, so no nudge.
+		expect(await config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
+
+		await run()
+		// The paid model handled the turn; it does not stop early.
+		expect(await config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
+
+		// The guard only ever judges the root agent's reply (sub-agents get no
+		// completion policy), so a free sub-agent run must not make a paid root
+		// reply look like a free model's.
+		await run({ parentAgentId: "parent" })
+		expect(await config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
+
+		// A root turn the classifier sends to a free model is nudged.
+		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"quick","think":false}' }, STOP]))
+		await run()
+		expect(rows[rows.length - 1]).toContain("BalanceAuto → **kimi-k2.6**")
+		expect(await config.completionGuard?.({ ...UNFINISHED_REPLY, iteration: 1 })).toContain("did not call a tool")
+		expect(rows[rows.length - 1]).toContain("stopped after")
+	})
+
+	it("adds the failed-command note on BalanceAuto only for a tool a free model ran", async () => {
+		const { run, config } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		const failedShell = (parentAgentId?: string) =>
+			config.hooks?.afterTool?.({
+				snapshot: { agentId: "a", iteration: 1, ...(parentAgentId ? { parentAgentId } : {}) } as never,
+				tool: { name: "run_commands" } as never,
+				toolCall: { type: "tool-call", toolCallId: "c1", toolName: "run_commands", input: {} },
+				input: {},
+				result: { output: [{ query: "make", result: "", error: "Command exited with code 2", success: false }] },
+				startedAt: new Date(NOW),
+				endedAt: new Date(NOW),
+				durationMs: 0,
+			})
+
+		await run()
+		// Root turn on the paid model: no note.
+		expect(await failedShell()).toBeUndefined()
+
+		await run({ parentAgentId: "parent" })
+		// The sub-agent's tool ran under a free model: note added.
+		expect((await failedShell("parent"))?.appendContext).toContain("exit code 2")
+		// The root agent is still on the paid model.
+		expect(await failedShell()).toBeUndefined()
 	})
 
 	it("never classifies a sub-agent call, nor anything on the default profile", async () => {

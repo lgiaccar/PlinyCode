@@ -87,7 +87,9 @@ models use that exit far too early — real transcripts show them announcing a
 step and stopping ("Let me check the log:"), promising to "check back at 15:28",
 asking permission for something the user already asked for, reporting a failed
 command as if it were the result, or degenerating into a repeated character for
-thousands of characters. Three pieces push back, all only for free models:
+thousands of characters. Three pieces push back, all only for free models (on
+BalanceAuto, only when the turn's last call ran on a free model — see
+[pliny-balance-auto.md](pliny-balance-auto.md)):
 
 - **Pattern rules** (`unfinished-turn-guard.ts`, applied by
   `completion-guard.ts`) read the reply and, for the shell rule, the tool result

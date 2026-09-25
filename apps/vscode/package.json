@@ -2,7 +2,7 @@
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
-	"version": "0.1.3-dev.2",
+	"version": "0.1.3-dev.3",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -183,12 +183,12 @@
 			},
 			{
 				"command": "cline.openFreeAutoRules",
-				"title": "Open FreeAuto Routing Rules",
+				"title": "Open Routing Rules (FreeAuto / BalanceAuto)",
 				"category": "PlinyCode"
 			},
 			{
 				"command": "cline.openFreeAutoCallLog",
-				"title": "Open FreeAuto Call Log",
+				"title": "Open Router Call Log (FreeAuto / BalanceAuto)",
 				"category": "PlinyCode"
 			},
 			{
