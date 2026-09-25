@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
-import { compareVersions, parseManifest, type ReleaseManifest, verifyStagedVsix } from "./release-folder"
+import { compareVersions, parseManifest, type ReleaseManifest, verifyStagedVsix } from "./release-manifest"
 
 /**
  * GitHub Releases is the primary update source: it needs no login or sync, so

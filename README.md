@@ -38,16 +38,15 @@ It talks **only** to Synopsys internal models through the Pliny gateway at
 
 ## Install
 
-1. Download `PlinyCode-<version>.vsix` from the newest [GitHub release](https://github.com/lgiaccar/PlinyCode/releases)
-   (or from the shared [PlinyCodeRelease folder](https://synopsys-my.sharepoint.com/:f:/p/lgiaccar/IgBld6NhNTGwSb_WqFxvTLOSAd5IkJfiWSM3k3l8jdgrgZw?e=nx2JeG)).
+1. Download `PlinyCode-<version>.vsix` from the newest [GitHub release](https://github.com/lgiaccar/PlinyCode/releases).
 2. Install it once: **Extensions → ⋯ → Install from VSIX…** (or `code --install-extension PlinyCode-<version>.vsix`),
    then reload the window. An old PlinyCode 0.1.0 install is removed automatically; reload again when asked.
 3. Open the PlinyCode icon in the Activity Bar.
 
 From 0.1.3 on, new releases install themselves: PlinyCode checks GitHub at startup and every 6 hours, then offers
-**Reload Now**. Run **PlinyCode: Check for Updates** to check right away. If GitHub is blocked on your network,
-choose **Add shortcut to My files** on the PlinyCodeRelease folder, and PlinyCode updates from your OneDrive copy
-instead. See [docs/releasing.md](docs/releasing.md) for details and for how to publish a release.
+**Reload Now**. Run **PlinyCode: Check for Updates**, or click **Check for Updates** in PlinyCode's
+**Settings → About**, to check right away. See [docs/releasing.md](docs/releasing.md)
+for details and for how to publish a release.
 
 ## Build from source
 

@@ -1,36 +1,28 @@
 #!/usr/bin/env bun
 
 /**
- * Packages a PlinyCode release and publishes it where the extension's
- * auto-updater looks: a GitHub release (primary) and the shared
- * PlinyCodeRelease OneDrive folder (fallback). See docs/releasing.md.
+ * Packages a PlinyCode release and publishes it as a GitHub release, which is
+ * where the extension's auto-updater looks. See docs/releasing.md.
  *
  * Usage (from apps/vscode):
  *   bun scripts/release.ts package              # build dist/release/<version>/PlinyCode-<version>.vsix
  *   bun scripts/release.ts publish --dry-run    # run every check and show what publish would do
- *   bun scripts/release.ts publish              # GitHub release, then the OneDrive folder
+ *   bun scripts/release.ts publish              # publish the GitHub release
  *
  * Options for publish:
- *   --prerelease      publish a GitHub pre-release only: not served by /releases/latest and never
- *                     copied to the folder; editors with plinycode.updates.prerelease on install it
- *   --skip-github     publish to the folder only
- *   --skip-folder     publish to GitHub only
- *   --folder <path>   release folder (default: $PLINYCODE_RELEASE_FOLDER, else found in OneDrive)
+ *   --prerelease      publish a GitHub pre-release: not served by /releases/latest; editors with
+ *                     plinycode.updates.prerelease on install it
  *   --force           publish a version that is not newer than the published one, or whose tag is not HEAD
  */
 
 import fs from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 import {
 	compareVersions,
-	findReleaseFolder,
 	MANIFEST_FILE_NAME,
-	RELEASE_FOLDER_NAME,
 	type ReleaseManifest,
-	readManifest,
 	sha256File,
-} from "../src/hosts/vscode/auto-update/release-folder"
+} from "../src/hosts/vscode/auto-update/release-manifest"
 import {
 	DEFAULT_RELEASE_URL,
 	fetchRemoteManifest,
@@ -50,10 +42,6 @@ const prerelease = process.argv.includes("--prerelease")
 
 const args = process.argv.slice(2)
 const flag = (name: string) => args.includes(name)
-const option = (name: string) => {
-	const index = args.indexOf(name)
-	return index >= 0 ? args[index + 1] : undefined
-}
 
 function fail(message: string): never {
 	console.error(`release: ${message}`)
@@ -106,27 +94,6 @@ async function packageRelease(): Promise<void> {
 	console.log(`\nPackaged ${path.relative(projectRoot, out)}`)
 	console.log(`sha256 ${await sha256File(out)}`)
 	console.log(`Next: write ${path.relative(projectRoot, path.join(stagingDir, "README.md"))}, then run publish.`)
-}
-
-async function resolveReleaseFolder(): Promise<string | undefined> {
-	const explicit = option("--folder") ?? process.env.PLINYCODE_RELEASE_FOLDER
-	if (explicit) {
-		if (!(await exists(explicit))) {
-			fail(`release folder ${explicit} does not exist`)
-		}
-		return path.resolve(explicit)
-	}
-	const found = await findReleaseFolder({ homeDir: os.homedir(), env: process.env, platform: process.platform })
-	if (found) {
-		return found
-	}
-	// First publish: the folder exists but has no latest.json yet.
-	for (const root of [process.env.OneDriveCommercial, process.env.OneDrive]) {
-		if (root && (await exists(path.join(root, RELEASE_FOLDER_NAME)))) {
-			return path.join(root, RELEASE_FOLDER_NAME)
-		}
-	}
-	return undefined
 }
 
 function requireNewer(target: string, published: string | undefined): void {
@@ -202,22 +169,6 @@ async function publishGithub(manifest: ReleaseManifest, notes: string): Promise<
 	}
 }
 
-async function publishFolder(folder: string, manifest: ReleaseManifest, notes: string): Promise<void> {
-	// The .vsix and notes go first and latest.json last, so users are only
-	// pointed at a release whose files are already in the folder.
-	const targetDir = path.join(folder, version)
-	await fs.mkdir(targetDir, { recursive: true })
-	await fs.copyFile(path.join(stagingDir, vsixName), path.join(targetDir, vsixName))
-	await fs.copyFile(notes, path.join(targetDir, "README.md"))
-	if ((await sha256File(path.join(targetDir, vsixName))) !== manifest.sha256) {
-		fail("the copied .vsix does not match its checksum; latest.json was not updated")
-	}
-	const manifestPath = path.join(folder, MANIFEST_FILE_NAME)
-	await fs.writeFile(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, "\t")}\n`)
-	await fs.rename(`${manifestPath}.tmp`, manifestPath)
-	console.log(`Folder: published ${version} to ${folder}; OneDrive will upload it`)
-}
-
 async function publishRelease(): Promise<void> {
 	const dryRun = flag("--dry-run")
 	const vsix = path.join(stagingDir, vsixName)
@@ -232,47 +183,19 @@ async function publishRelease(): Promise<void> {
 	const releasedAt = new Date().toISOString().slice(0, 10)
 
 	// Every check runs before anything is published.
-	const github = !flag("--skip-github")
-	if (prerelease && !github) {
-		fail("--prerelease publishes to GitHub only; drop --skip-github")
-	}
-	if (github) {
-		const published = await checkGithub()
-		requireNewer(`GitHub (${GITHUB_REPO})`, published)
-		console.log(`GitHub: ${GITHUB_REPO} release ${tag} (published now: ${published ?? "none"})`)
-	}
-	// The folder has no pre-release channel: everyone who syncs it would install it.
-	const skipFolder = flag("--skip-folder") || prerelease
-	const folder = skipFolder ? undefined : await resolveReleaseFolder()
-	if (folder) {
-		const published = (await exists(path.join(folder, MANIFEST_FILE_NAME))) ? (await readManifest(folder)).version : undefined
-		requireNewer(folder, published)
-		console.log(`Folder: ${folder} (published now: ${published ?? "none"})`)
-	} else if (!skipFolder) {
-		console.warn(`Folder: ${RELEASE_FOLDER_NAME} not found, skipping it (pass --folder to include it)`)
-	}
-	if (!github && !folder) {
-		fail("nothing to publish to")
-	}
+	const published = await checkGithub()
+	requireNewer(`GitHub (${GITHUB_REPO})`, published)
+	console.log(`GitHub: ${GITHUB_REPO} release ${tag} (published now: ${published ?? "none"})`)
 	console.log(`Release: ${version}  sha256 ${sha256}`)
 
 	if (dryRun) {
 		console.log("\nDry run: all checks passed; nothing was published.")
 		return
 	}
-	if (github) {
-		await publishGithub(githubManifest(version, sha256, releasedAt), notes)
-	}
-	if (folder) {
-		await publishFolder(
-			folder,
-			{ product: "plinycode", version, vsix: `${version}/${vsixName}`, sha256, notes: `${version}/README.md`, releasedAt },
-			notes,
-		)
-	}
+	await publishGithub(githubManifest(version, sha256, releasedAt), notes)
 	console.log(
 		prerelease
-			? `\nPublished pre-release ${version}. Only editors whose plinycode.updates.url points at it will install it.`
+			? `\nPublished pre-release ${version}. Editors with plinycode.updates.prerelease on install it.`
 			: `\nPublished ${version}. Users get it at their next update check.`,
 	)
 }
@@ -285,7 +208,5 @@ switch (args[0]) {
 		await publishRelease()
 		break
 	default:
-		fail(
-			"usage: bun scripts/release.ts <package | publish [--dry-run] [--prerelease] [--skip-github] [--skip-folder] [--folder <path>] [--force]>",
-		)
+		fail("usage: bun scripts/release.ts <package | publish [--dry-run] [--prerelease] [--force]>")
 }

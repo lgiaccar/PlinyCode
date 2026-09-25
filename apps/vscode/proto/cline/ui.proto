@@ -305,6 +305,9 @@ service UiService {
   // Opens the Cline walkthrough
   rpc openWalkthrough(EmptyRequest) returns (Empty);
 
+  // Starts "PlinyCode: Check for Updates"; the result is shown as VS Code notifications
+  rpc checkForUpdates(EmptyRequest) returns (Empty);
+
   // Tracks intent signals before task creation or first model activity
   rpc trackIntent(IntentEvent) returns (Empty);
 }

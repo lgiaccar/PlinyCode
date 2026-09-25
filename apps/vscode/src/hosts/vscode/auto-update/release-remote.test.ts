@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import { expect } from "chai"
 import packageJson from "../../../../package.json"
-import type { ReleaseManifest } from "./release-folder"
+import type { ReleaseManifest } from "./release-manifest"
 import {
 	DEFAULT_RELEASE_URL,
 	downloadVsix,
@@ -150,13 +150,15 @@ describe("release-remote", () => {
 	})
 
 	describe("downloadVsix", () => {
-		it("downloads and verifies the vsix", async () => {
+		it("downloads and verifies the vsix, removing older staged copies", async () => {
 			const { fetchImpl, requested } = fakeFetch({ [release.vsix]: () => new Response(VSIX_BYTES) })
+			await fs.writeFile(path.join(staging, "PlinyCode-0.1.2.vsix"), "old")
 
 			const staged = await downloadVsix(DEFAULT_RELEASE_URL, release, staging, fetchImpl)
 
 			expect(requested).to.deep.equal([release.vsix])
 			expect(await fs.readFile(staged)).to.deep.equal(VSIX_BYTES)
+			expect(await fs.readdir(staging)).to.deep.equal(["PlinyCode-0.1.3.vsix"])
 		})
 
 		it("discards a download whose checksum does not match", async () => {
