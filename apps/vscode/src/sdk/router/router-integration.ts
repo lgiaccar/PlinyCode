@@ -85,9 +85,9 @@ export function detachedCommandNote(failure: ShellFailure): string {
 	)
 }
 
-/** `FreeAuto`, `FreeAuto·fast`, `BalanceAuto`, ... as shown in the chat rows. */
+/** `auto-free`, `auto-free-fast`, `auto-paid-balanced`, ... as shown in the chat rows. */
 function routerLabel(profile: string): string {
-	return plinyRouterProfileSpec(profile)?.label ?? (profile === "default" ? "FreeAuto" : `FreeAuto·${profile}`)
+	return plinyRouterProfileSpec(profile)?.label ?? (profile === "default" ? "auto-free" : `auto-free-${profile}`)
 }
 
 /** `HH:MM:SS` for in-turn rows; the date leads the first row of a turn. */

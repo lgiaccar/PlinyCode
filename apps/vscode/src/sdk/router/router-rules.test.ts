@@ -314,8 +314,12 @@ describe("balance profile", () => {
 	})
 
 	it("still refuses a virtual router id as a candidate", () => {
+		// Both the current ids and the ones from before the auto-* rename.
 		const rules = normalizeRules(
-			{ pool: ["pliny/free-auto", "pliny/balance-auto", SONNET_5], routes: [{ name: "r", use: ["pliny/free-auto"] }] },
+			{
+				pool: ["pliny/auto-free", "pliny/auto-paid-balanced", "pliny/free-auto", "pliny/balance-auto", SONNET_5],
+				routes: [{ name: "r", use: ["pliny/auto-free", "pliny/free-auto"] }],
+			},
 			undefined,
 			"balance",
 		)

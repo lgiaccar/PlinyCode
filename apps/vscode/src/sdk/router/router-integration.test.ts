@@ -336,10 +336,10 @@ describe("installRouter profiles, effort and call log", () => {
 	})
 
 	it("names a non-default profile and the effort it applied in the routing row", async () => {
-		const { rows, run } = setup("pliny/free-auto-fast")
+		const { rows, run } = setup("pliny/auto-free-fast")
 		await run()
 		// "fix the failing test" hits the coding route, whose first model never reasons: quick is applied.
-		expect(rows[0]).toContain("FreeAuto·fast → **qwen3-coder-480b-a35b-inst-fp8**")
+		expect(rows[0]).toContain("auto-free-fast → **qwen3-coder-480b-a35b-inst-fp8**")
 		expect(rows[0]).toContain("route: coding · quick")
 	})
 
@@ -362,7 +362,7 @@ describe("installRouter profiles, effort and call log", () => {
 	})
 
 	it("runs the smart profile's classifier once per turn and reuses its verdict", async () => {
-		const { rows, logged, run, classifierModel } = setup("pliny/free-auto-smart")
+		const { rows, logged, run, classifierModel } = setup("pliny/auto-free-smart")
 		await run({}, 3)
 		expect(classifierModel).toHaveBeenCalledTimes(1)
 		expect(rows[0]).toContain("classifier: code")
@@ -374,7 +374,7 @@ describe("installRouter profiles, effort and call log", () => {
 	})
 
 	it("records why the classifier gave no verdict on the turn's first call", async () => {
-		const { rows, logged, run, classifierModel } = setup("pliny/free-auto-smart")
+		const { rows, logged, run, classifierModel } = setup("pliny/auto-free-smart")
 		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: "I believe this is a coding task, so" }, STOP]))
 		await run({}, 2)
 		expect(rows[0]).toContain("classifier gave no verdict")
@@ -387,12 +387,12 @@ describe("installRouter profiles, effort and call log", () => {
 		const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
 		await run()
 		expect(classifierModel).toHaveBeenCalledTimes(1)
-		expect(rows[0]).toContain("BalanceAuto → **global.anthropic.claude-sonnet-5**")
+		expect(rows[0]).toContain("auto-paid-balanced → **global.anthropic.claude-sonnet-5**")
 		expect(rows[0]).toContain("route: coding")
 		expect(rows[0]).toContain("classifier: code")
 
 		await run({ parentAgentId: "parent" })
-		expect(rows[1]).toContain("↳ sub-agent BalanceAuto → **kimi-k2.6**")
+		expect(rows[1]).toContain("↳ sub-agent auto-paid-balanced → **kimi-k2.6**")
 		expect(rows[1]).toContain("route: subagent")
 
 		expect(logged.map((record) => [record.profile, record.subAgent, record.model])).toEqual([
@@ -419,7 +419,7 @@ describe("installRouter profiles, effort and call log", () => {
 		// A root turn the classifier sends to a free model is nudged.
 		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"quick","think":false}' }, STOP]))
 		await run()
-		expect(rows[rows.length - 1]).toContain("BalanceAuto → **kimi-k2.6**")
+		expect(rows[rows.length - 1]).toContain("auto-paid-balanced → **kimi-k2.6**")
 		expect(await config.completionGuard?.({ ...UNFINISHED_REPLY, iteration: 1 })).toContain("did not call a tool")
 		expect(rows[rows.length - 1]).toContain("stopped after")
 	})
@@ -450,7 +450,7 @@ describe("installRouter profiles, effort and call log", () => {
 	})
 
 	it("never classifies a sub-agent call, nor anything on the default profile", async () => {
-		const smart = setup("pliny/free-auto-smart")
+		const smart = setup("pliny/auto-free-smart")
 		await smart.run({ parentAgentId: "parent" })
 		expect(smart.classifierModel).not.toHaveBeenCalled()
 

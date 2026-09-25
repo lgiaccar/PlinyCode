@@ -23,7 +23,7 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
-import { formatDuration, formatLargeNumber, formatSize } from "@/utils/format"
+import { formatDuration, formatLargeNumber, formatSize, formatStartTime } from "@/utils/format"
 import { BackgroundTaskBadge } from "./BackgroundTaskBadge"
 import TaskTitleInput from "./TaskTitleInput"
 
@@ -64,32 +64,6 @@ const HistoryViewItem = ({
 		TaskServiceClient.showTaskWithId(StringRequest.create({ value: id })).catch((error) =>
 			console.error("Error showing task:", error),
 		)
-	}, [])
-
-	const formatDate = useCallback((timestamp: number) => {
-		const date = new Date(timestamp)
-		const today = new Date()
-		const isToday = today.toDateString() === date.toDateString()
-
-		return date
-			.toLocaleString(
-				"en-US",
-				isToday
-					? {
-							hour: "numeric",
-							minute: "2-digit",
-							hour12: true,
-						}
-					: {
-							month: "long",
-							day: "numeric",
-							hour: "numeric",
-							minute: "2-digit",
-							hour12: true,
-						},
-			)
-			.replace(", ", " ")
-			.replace(" at", ",")
 	}, [])
 
 	return (
@@ -215,8 +189,8 @@ const HistoryViewItem = ({
 					<div className="flex items-center justify-between w-full">
 						<div
 							className="text-description text-xs"
-							title={`Started ${formatDate(item.startedTs || item.ts)} · last active ${formatDate(item.ts)}${item.activeMs ? ` · agent running time ${formatDuration(item.activeMs)}` : ""}`}>
-							<span className="uppercase">Started {formatDate(item.startedTs || item.ts)}</span>
+							title={`Started ${formatStartTime(item.startedTs || item.ts)} · last active ${formatStartTime(item.ts)}${item.activeMs ? ` · agent running time ${formatDuration(item.activeMs)}` : ""}`}>
+							<span>Started {formatStartTime(item.startedTs || item.ts)}</span>
 							{item.activeMs > 0 && <span> · ran {formatDuration(item.activeMs)}</span>}
 						</div>
 						<div className="self-end flex items-center text-xs">

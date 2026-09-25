@@ -1,10 +1,15 @@
 # BalanceAuto: paid models for hard work, free ones for the rest
 
-`pliny/balance-auto` is a fourth router profile beside the three FreeAuto
-profiles (`pliny/free-auto`, `-fast`, `-smart`). It runs on the same router
+`pliny/auto-paid-balanced` is a fourth router profile beside the three FreeAuto
+profiles (`pliny/auto-free`, `-fast`, `-smart`). It runs on the same router
 (`apps/vscode/src/sdk/router/`), with one difference: its rules file may name
 paid hosted Pliny models. Every call is billed at the concrete model it lands
 on; the virtual id itself carries no price.
+
+The ids were `pliny/balance-auto` and `pliny/free-auto[-fast|-smart]` before
+0.1.3. The old ids are still accepted everywhere (`canonicalPlinyModelId`), and
+a saved selection is rewritten to the new id on activation. The rules and log
+file names (`pliny-free-auto.md`, `pliny-balance-auto.md`, ...) are unchanged.
 
 ## Where it shows up
 

@@ -18,7 +18,7 @@ import {
 import type { StorageContext } from "@shared/storage/storage-context"
 import { FSWatcher } from "chokidar"
 import { initializeDistinctId } from "@/services/logging/distinctId"
-import { isPlinySelfHostedModelId, PLINY_FREE_AUTO_MODEL_ID } from "@/shared/pliny"
+import { canonicalPlinyModelId, isPlinySelfHostedModelId, PLINY_FREE_AUTO_MODEL_ID } from "@/shared/pliny"
 import { Logger } from "@/shared/services/Logger"
 import { AgentConfigLoader } from "../task/tools/subagent/AgentConfigLoader"
 import { readTaskSettingsFromStorage, writeTaskSettingsToStorage } from "./disk"
@@ -114,6 +114,7 @@ export class StateManager {
 			StateManager.instance.isInitialized = true
 
 			StateManager.instance.migratePlinyFreeAutoSelection()
+			StateManager.instance.migratePlinyRouterModelIds()
 
 			await AgentConfigLoader.getInstance().ready()
 		} catch (error) {
@@ -153,6 +154,32 @@ export class StateManager {
 		} catch (error) {
 			// A failed migration must never block activation.
 			Logger.warn("[StateManager] FreeAuto migration failed: " + String(error))
+		}
+	}
+
+	/**
+	 * Rewrite a saved router selection from before the `auto-*` rename
+	 * (`pliny/free-auto` → `pliny/auto-free`, `pliny/balance-auto` →
+	 * `pliny/auto-paid-balanced`, ...) so the picker shows it as selected.
+	 * Idempotent: current ids map onto themselves, so no flag is needed.
+	 */
+	private migratePlinyRouterModelIds(): void {
+		try {
+			const keys = ["planModeApiModelId", "actModeApiModelId", "planModeClineModelId", "actModeClineModelId"] as const
+			const updates: Partial<GlobalStateAndSettings> = {}
+			for (const key of keys) {
+				const modelId = this.getGlobalSettingsKey(key)
+				if (typeof modelId === "string" && canonicalPlinyModelId(modelId) !== modelId) {
+					updates[key] = canonicalPlinyModelId(modelId)
+				}
+			}
+			if (Object.keys(updates).length > 0) {
+				this.setGlobalStateBatch(updates)
+				Logger.log("[StateManager] Renamed saved router model ids to the auto-* scheme")
+			}
+		} catch (error) {
+			// A failed migration must never block activation; the old ids still route.
+			Logger.warn("[StateManager] Router id migration failed: " + String(error))
 		}
 	}
 

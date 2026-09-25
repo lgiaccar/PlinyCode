@@ -189,12 +189,12 @@
 			},
 			{
 				"command": "cline.openFreeAutoRules",
-				"title": "Open Routing Rules (FreeAuto / BalanceAuto)",
+				"title": "Open Routing Rules (auto-free / auto-paid-balanced)",
 				"category": "PlinyCode"
 			},
 			{
 				"command": "cline.openFreeAutoCallLog",
-				"title": "Open Router Call Log (FreeAuto / BalanceAuto)",
+				"title": "Open Router Call Log (auto-free / auto-paid-balanced)",
 				"category": "PlinyCode"
 			},
 			{

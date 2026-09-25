@@ -21,7 +21,7 @@ import OpenDiskConversationHistoryButton from "./buttons/OpenDiskConversationHis
 import RenameTaskButton from "./buttons/RenameTaskButton"
 import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
-import TaskRunningTime from "./TaskRunningTime"
+import TaskUsageCounter from "./TaskUsageCounter"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
 
 const IS_DEV = process.env.IS_DEV === "true"
@@ -180,28 +180,22 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						)}
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
-						<TaskRunningTime
+						<TaskUsageCounter
 							activeMs={currentTaskItem?.activeMs}
+							cacheReads={cacheReads}
+							cacheWrites={cacheWrites}
+							hasEstimatedUsage={hasEstimatedUsage}
 							runningSinceTs={currentTaskItem?.runningSinceTs}
 							startedTs={currentTaskItem?.startedTs}
+							tokensIn={tokensIn}
+							tokensOut={tokensOut}
+							totalCost={isCostAvailable ? (totalCost ?? 0) : undefined}
 						/>
 						<TaskWorkingDirectoryBadge
 							platform={platform}
 							taskCwd={currentTaskItem?.cwdOnTaskInitialization}
 							workspaceRoots={workspaceRoots}
 						/>
-						{isCostAvailable && (
-							<div
-								className="mx-1 px-1 py-0.25 rounded-full inline-flex shrink-0 text-badge-background bg-badge-foreground/80 items-center"
-								id="price-tag"
-								title={
-									hasEstimatedUsage ? "Based on an estimated token count; the real cost may differ" : undefined
-								}>
-								<span className="text-xs sm:text-sm">
-									{hasEstimatedUsage ? "~" : ""}${totalCost?.toFixed(4)}
-								</span>
-							</div>
-						)}
 						{currentTaskItem?.id && <RenameTaskButton className={BUTTON_CLASS} onClick={() => setIsRenaming(true)} />}
 						<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
 						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />

@@ -348,19 +348,20 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 				    (see inputMarkers above); pointer events are limited to the ticks so the
 				    overlay never intercepts clicks/drags meant for the scrollbar or content. */}
 				{showInputMarkers && (
-					<div className="absolute top-0 right-0 bottom-0 w-1.5 z-20 pointer-events-none">
+					<div className="absolute top-0 right-0 bottom-0 w-2.5 z-20 pointer-events-none">
 						{inputMarkers.map((marker) => (
 							<button
 								className={cn(
-									"absolute right-0 w-1.5 h-0.5 pointer-events-auto cursor-pointer",
-									"opacity-60 hover:opacity-100 transition-opacity",
+									"absolute right-0 w-2.5 h-1 -translate-y-1/2 rounded-[1px] pointer-events-auto cursor-pointer",
+									"opacity-75 hover:opacity-100 transition-opacity",
 									marker.index === activeMarkerIndex && "opacity-100",
 								)}
 								key={marker.index}
 								onClick={() => handleMarkerClick(marker.index)}
 								style={{
 									top: `${marker.position * 100}%`,
-									backgroundColor: "var(--vscode-scrollbarSlider-activeBackground)",
+									// The accent colour stands out against the translucent scrollbar slider.
+									backgroundColor: "var(--vscode-focusBorder, var(--vscode-scrollbarSlider-activeBackground))",
 								}}
 								title={marker.preview}
 								type="button"

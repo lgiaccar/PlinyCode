@@ -14,7 +14,7 @@ export const PLINY_BASE_URL = process.env.PLINY_BASE_URL ?? catalog.baseURL;
  * the catalog so the picker can show it and so context/compaction budgets have
  * a `ModelInfo` to read.
  */
-export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto";
+export const PLINY_FREE_AUTO_MODEL_ID = "pliny/auto-free";
 
 /**
  * Virtual "BalanceAuto" router model. Like FreeAuto it is never sent to the
@@ -22,12 +22,36 @@ export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto";
  * the difficult work, cheaper or free ones the simple work and sub-agent runs.
  * It only appears in the picker when paid models are unlocked.
  */
-export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto";
+export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/auto-paid-balanced";
+
+/** FreeAuto id prefix before the `auto-*` rename (`pliny/free-auto[-<profile>]`). */
+const LEGACY_FREE_AUTO_MODEL_ID = "pliny/free-auto";
+/** BalanceAuto id before the `auto-*` rename. */
+const LEGACY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto";
+
+/**
+ * Map a router id from before the `auto-*` rename (`pliny/free-auto`,
+ * `pliny/free-auto-fast`, `pliny/balance-auto`, ...) onto its current id.
+ * Every other id is returned unchanged. Saved selections, agent configs and
+ * rules files written before the rename keep working through this.
+ */
+export function canonicalPlinyModelId(modelId: string): string {
+	if (modelId === LEGACY_FREE_AUTO_MODEL_ID) {
+		return PLINY_FREE_AUTO_MODEL_ID;
+	}
+	if (modelId.startsWith(`${LEGACY_FREE_AUTO_MODEL_ID}-`)) {
+		return `${PLINY_FREE_AUTO_MODEL_ID}${modelId.slice(LEGACY_FREE_AUTO_MODEL_ID.length)}`;
+	}
+	if (modelId === LEGACY_BALANCE_AUTO_MODEL_ID) {
+		return PLINY_BALANCE_AUTO_MODEL_ID;
+	}
+	return modelId;
+}
 
 /**
  * Router profiles. Each is its own virtual id with its own rules file, so
  * different routing strategies can be picked per task and compared side by
- * side. The `free` family (`pliny/free-auto[-<profile>]`) only ever routes to
+ * side. The `free` family (`pliny/auto-free[-<profile>]`) only ever routes to
  * free self-hosted models; the `balance` family may also use paid ones.
  */
 export const PLINY_ROUTER_PROFILES = [
@@ -35,8 +59,8 @@ export const PLINY_ROUTER_PROFILES = [
 		profile: "default",
 		id: PLINY_FREE_AUTO_MODEL_ID,
 		family: "free",
-		name: "FreeAuto (router)",
-		label: "FreeAuto",
+		name: "auto-free (router)",
+		label: "auto-free",
 		description:
 			"Routes each call to the best free self-hosted Pliny model and fails over automatically",
 	},
@@ -44,8 +68,8 @@ export const PLINY_ROUTER_PROFILES = [
 		profile: "fast",
 		id: `${PLINY_FREE_AUTO_MODEL_ID}-fast`,
 		family: "free",
-		name: "FreeAuto · fast",
-		label: "FreeAuto·fast",
+		name: "auto-free-fast (router)",
+		label: "auto-free-fast",
 		description:
 			"FreeAuto tuned for latency: fastest models first, reasoning off wherever it can be",
 	},
@@ -53,8 +77,8 @@ export const PLINY_ROUTER_PROFILES = [
 		profile: "smart",
 		id: `${PLINY_FREE_AUTO_MODEL_ID}-smart`,
 		family: "free",
-		name: "FreeAuto · smart",
-		label: "FreeAuto·smart",
+		name: "auto-free-smart (router)",
+		label: "auto-free-smart",
 		description:
 			"FreeAuto with a small classifier that picks the model tier and whether to think, once per turn",
 	},
@@ -62,8 +86,8 @@ export const PLINY_ROUTER_PROFILES = [
 		profile: "balance",
 		id: PLINY_BALANCE_AUTO_MODEL_ID,
 		family: "balance",
-		name: "BalanceAuto (router)",
-		label: "BalanceAuto",
+		name: "auto-paid-balanced (router)",
+		label: "auto-paid-balanced",
 		description:
 			"Paid high-end models for difficult work, cheaper or free models for simple requests and sub-agents",
 	},
@@ -73,7 +97,7 @@ export type PlinyRouterProfileSpec = (typeof PLINY_ROUTER_PROFILES)[number];
 export type PlinyRouterProfile = PlinyRouterProfileSpec["profile"];
 export type PlinyRouterFamily = PlinyRouterProfileSpec["family"];
 
-/** The free-only profiles (`pliny/free-auto[-<profile>]`). */
+/** The free-only profiles (`pliny/auto-free[-<profile>]`). */
 export const PLINY_FREE_AUTO_PROFILES = PLINY_ROUTER_PROFILES.filter(
 	(entry) => entry.family === "free",
 );
@@ -238,15 +262,16 @@ export function isPlinySelfHostedModelId(modelId: string): boolean {
 
 /** True for the virtual FreeAuto id and every profile id derived from it. */
 export function isPlinyFreeAutoModelId(modelId: string): boolean {
+	const id = canonicalPlinyModelId(modelId);
 	return (
-		modelId === PLINY_FREE_AUTO_MODEL_ID ||
-		modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
+		id === PLINY_FREE_AUTO_MODEL_ID ||
+		id.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
 	);
 }
 
 /** True for the virtual BalanceAuto id. */
 export function isPlinyBalanceAutoModelId(modelId: string): boolean {
-	return modelId === PLINY_BALANCE_AUTO_MODEL_ID;
+	return canonicalPlinyModelId(modelId) === PLINY_BALANCE_AUTO_MODEL_ID;
 }
 
 /** True for every virtual router id: the FreeAuto profiles and BalanceAuto. */
@@ -256,8 +281,9 @@ export function isPlinyRouterModelId(modelId: string): boolean {
 
 /** The profile a FreeAuto id selects (`"default"` for the bare id). */
 export function plinyFreeAutoProfile(modelId: string): string {
-	return modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
-		? modelId.slice(PLINY_FREE_AUTO_MODEL_ID.length + 1)
+	const id = canonicalPlinyModelId(modelId);
+	return id.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
+		? id.slice(PLINY_FREE_AUTO_MODEL_ID.length + 1)
 		: "default";
 }
 

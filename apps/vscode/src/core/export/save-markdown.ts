@@ -45,7 +45,7 @@ export async function saveMarkdownExport(
 		await HostProvider.window.showMessage(
 			ShowMessageRequest.create({
 				type: ShowMessageType.INFORMATION,
-				message: `Conversation exported to ${path.basename(selectedPath)}`,
+				message: `Conversation exported to ${selectedPath}`,
 				options: { items: ["Open file"] },
 			}),
 		)
