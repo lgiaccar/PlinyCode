@@ -9,6 +9,7 @@ import {
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID as SDK_FALLBACK,
 	PLINY_FREE_AUTO_MODEL_ID as SDK_FREE_AUTO,
 	PLINY_DEFAULT_MODEL_ID as SDK_PLINY_DEFAULT_MODEL_ID,
+	canonicalPlinyModelId as sdkCanonicalPlinyModelId,
 	isPlinyBalanceAutoModelId as sdkIsPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId as sdkIsPlinyFreeAutoModelId,
 	isPlinyFreeModelId as sdkIsPlinyFreeModelId,
@@ -18,6 +19,7 @@ import {
 } from "@plinycode/llms"
 import { describe, expect, it } from "vitest"
 import {
+	canonicalPlinyModelId,
 	isPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId,
 	isPlinyFreeModelId,
@@ -56,6 +58,13 @@ describe("Pliny constants match the SDK catalog", () => {
 
 describe("model id predicates agree with the SDK", () => {
 	const ids = [
+		"pliny/auto-free",
+		"pliny/auto-free-fast",
+		"pliny/auto-free-smart",
+		"pliny/auto-freedom",
+		"pliny/auto-paid-balanced",
+		"pliny/auto-paid-balanced-fast",
+		// ids from before the auto-* rename
 		"pliny/free-auto",
 		"pliny/free-auto-fast",
 		"pliny/free-auto-smart",
@@ -84,8 +93,12 @@ describe("model id predicates agree with the SDK", () => {
 	})
 
 	it("treats every profile id as the router", () => {
-		expect(isPlinyFreeAutoModelId("pliny/free-auto-fast")).toBe(true)
-		expect(isPlinyFreeAutoModelId("pliny/free-autonomous")).toBe(false)
+		expect(isPlinyFreeAutoModelId("pliny/auto-free-fast")).toBe(true)
+		expect(isPlinyFreeAutoModelId("pliny/auto-freedom")).toBe(false)
+	})
+
+	it.each(ids)("renames %s the same way", (id) => {
+		expect(canonicalPlinyModelId(id)).toBe(sdkCanonicalPlinyModelId(id))
 	})
 
 	it("treats the router as free but not self-hosted", () => {

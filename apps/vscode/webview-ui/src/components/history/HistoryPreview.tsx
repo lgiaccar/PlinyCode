@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
 import { TaskServiceClient } from "@/services/grpc-client"
+import { formatStartTime } from "@/utils/format"
 import { BackgroundTaskBadge } from "./BackgroundTaskBadge"
 
 type HistoryPreviewProps = {
@@ -19,14 +20,6 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 		TaskServiceClient.showTaskWithId(StringRequest.create({ value: id })).catch((error) =>
 			console.error("Error showing task:", error),
 		)
-	}
-
-	const formatDate = (timestamp: number) => {
-		const date = new Date(timestamp)
-		return date?.toLocaleString("en-US", {
-			month: "short",
-			day: "numeric",
-		})
 	}
 
 	return (
@@ -214,7 +207,11 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 											{item.isLegacy && <span className="history-cost-chip">Legacy</span>}
 										</div>
 										<div className="history-meta-stack">
-											<span className="history-date">{formatDate(item.ts)}</span>
+											<span
+												className="history-date"
+												title={`Started ${formatStartTime(item.startedTs || item.ts)} · last active ${formatStartTime(item.ts)}`}>
+												{formatStartTime(item.startedTs || item.ts)}
+											</span>
 											{item.totalCost != null && isCostVisible(item.apiProvider) && (
 												<span className="history-cost-chip">${item.totalCost.toFixed(2)}</span>
 											)}

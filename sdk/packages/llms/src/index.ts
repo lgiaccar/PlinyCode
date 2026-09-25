@@ -128,6 +128,7 @@ export {
 } from "./providers/model-tools";
 export {
 	buildPlinyModels,
+	canonicalPlinyModelId,
 	isPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId,
 	isPlinyFreeModelId,

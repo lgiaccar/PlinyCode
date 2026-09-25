@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildPlinyModels,
+	canonicalPlinyModelId,
 	isPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId,
 	isPlinyFreeModelId,
@@ -159,7 +160,7 @@ describe("resolvePlinyConcreteModelId", () => {
 	});
 
 	it("maps every profile id onto a real model too", () => {
-		expect(resolvePlinyConcreteModelId("pliny/free-auto-fast")).toBe(
+		expect(resolvePlinyConcreteModelId("pliny/auto-free-fast")).toBe(
 			PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 		);
 	});
@@ -191,7 +192,34 @@ describe("FreeAuto profiles", () => {
 	});
 
 	it("does not treat a lookalike id as a profile", () => {
+		expect(isPlinyFreeAutoModelId("pliny/auto-freedom")).toBe(false);
 		expect(isPlinyFreeAutoModelId("pliny/free-autonomous")).toBe(false);
+	});
+});
+
+describe("router ids from before the auto-* rename", () => {
+	it("maps each legacy id onto its current id", () => {
+		expect(canonicalPlinyModelId("pliny/free-auto")).toBe("pliny/auto-free");
+		expect(canonicalPlinyModelId("pliny/free-auto-fast")).toBe(
+			"pliny/auto-free-fast",
+		);
+		expect(canonicalPlinyModelId("pliny/free-auto-smart")).toBe(
+			"pliny/auto-free-smart",
+		);
+		expect(canonicalPlinyModelId("pliny/balance-auto")).toBe(
+			"pliny/auto-paid-balanced",
+		);
+		expect(canonicalPlinyModelId("snps-provider/GLM-5.2")).toBe(
+			"snps-provider/GLM-5.2",
+		);
+	});
+
+	it("still routes a legacy id to the same profile", () => {
+		expect(isPlinyFreeAutoModelId("pliny/free-auto")).toBe(true);
+		expect(plinyRouterProfile("pliny/free-auto-smart")).toBe("smart");
+		expect(isPlinyBalanceAutoModelId("pliny/balance-auto")).toBe(true);
+		expect(plinyRouterProfile("pliny/balance-auto")).toBe("balance");
+		expect(isPlinyFreeModelId("pliny/balance-auto")).toBe(false);
 	});
 });
 
@@ -203,8 +231,10 @@ describe("BalanceAuto router model", () => {
 		expect(isPlinyFreeModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false);
 		expect(isPlinySelfHostedModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false);
 		// Only the exact id: nothing derives profiles from it.
-		expect(isPlinyBalanceAutoModelId("pliny/balance-auto-fast")).toBe(false);
-		expect(isPlinyRouterModelId("pliny/balance-auto-fast")).toBe(false);
+		expect(isPlinyBalanceAutoModelId("pliny/auto-paid-balanced-fast")).toBe(
+			false,
+		);
+		expect(isPlinyRouterModelId("pliny/auto-paid-balanced-fast")).toBe(false);
 	});
 
 	it("is the last router profile and not a FreeAuto profile", () => {
@@ -226,8 +256,8 @@ describe("BalanceAuto router model", () => {
 		expect(plinyRouterProfile(PLINY_BALANCE_AUTO_MODEL_ID)).toBe("balance");
 		expect(plinyRouterModelId("balance")).toBe(PLINY_BALANCE_AUTO_MODEL_ID);
 		expect(plinyRouterProfile(PLINY_FREE_AUTO_MODEL_ID)).toBe("default");
-		expect(plinyRouterProfile("pliny/free-auto-fast")).toBe("fast");
-		expect(plinyRouterModelId("fast")).toBe("pliny/free-auto-fast");
+		expect(plinyRouterProfile("pliny/auto-free-fast")).toBe("fast");
+		expect(plinyRouterModelId("fast")).toBe("pliny/auto-free-fast");
 	});
 
 	it("is the only profile allowed to route to paid models", () => {

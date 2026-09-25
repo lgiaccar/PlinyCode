@@ -7,14 +7,35 @@ export const PLINY_PROVIDER_ID = "pliny" as const satisfies ApiProvider
  * `@plinycode/llms`; the two are asserted equal by a unit test so the webview
  * and extension never drift from the SDK catalog.
  */
-export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto"
+export const PLINY_FREE_AUTO_MODEL_ID = "pliny/auto-free"
 
 /**
  * Virtual BalanceAuto router. Mirrors `PLINY_BALANCE_AUTO_MODEL_ID` in
  * `@plinycode/llms`. Unlike FreeAuto it may route to paid models, so it is
  * neither free nor always visible.
  */
-export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
+export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/auto-paid-balanced"
+
+const LEGACY_FREE_AUTO_MODEL_ID = "pliny/free-auto"
+const LEGACY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
+
+/**
+ * Map a router id from before the `auto-*` rename (`pliny/free-auto[-<profile>]`,
+ * `pliny/balance-auto`) onto its current id. Mirrors `canonicalPlinyModelId` in
+ * `@plinycode/llms`; every other id is returned unchanged.
+ */
+export function canonicalPlinyModelId(modelId: string): string {
+	if (modelId === LEGACY_FREE_AUTO_MODEL_ID) {
+		return PLINY_FREE_AUTO_MODEL_ID
+	}
+	if (modelId.startsWith(`${LEGACY_FREE_AUTO_MODEL_ID}-`)) {
+		return `${PLINY_FREE_AUTO_MODEL_ID}${modelId.slice(LEGACY_FREE_AUTO_MODEL_ID.length)}`
+	}
+	if (modelId === LEGACY_BALANCE_AUTO_MODEL_ID) {
+		return PLINY_BALANCE_AUTO_MODEL_ID
+	}
+	return modelId
+}
 
 /** Concrete model used wherever a virtual router id cannot be routed. */
 export const PLINY_FREE_AUTO_FALLBACK_MODEL_ID = "snps-provider/kimi-k2.6"
@@ -25,7 +46,7 @@ export const PLINY_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
 export const PLINY_FEATURED_MODELS = [
 	{
 		id: PLINY_FREE_AUTO_MODEL_ID,
-		name: "FreeAuto (router)",
+		name: "auto-free (router)",
 		description: "Picks the best free model per task and fails over automatically",
 		tags: ["DEFAULT", "FREE"],
 	},
@@ -75,17 +96,18 @@ export const PLINY_FEATURED_MODELS = [
  */
 export const PLINY_FREE_AUTO_RULES_URI = "pliny://free-auto-rules"
 
-/** True for the virtual router id and its profile ids (`pliny/free-auto-fast`, ...). */
+/** True for the virtual router id and its profile ids (`pliny/auto-free-fast`, ...). */
 export function isPlinyFreeAutoModelId(modelId: string | undefined | null): boolean {
-	return (
-		typeof modelId === "string" &&
-		(modelId === PLINY_FREE_AUTO_MODEL_ID || modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`))
-	)
+	if (typeof modelId !== "string") {
+		return false
+	}
+	const id = canonicalPlinyModelId(modelId)
+	return id === PLINY_FREE_AUTO_MODEL_ID || id.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
 }
 
 /** True for the virtual BalanceAuto router id. */
 export function isPlinyBalanceAutoModelId(modelId: string | undefined | null): boolean {
-	return modelId === PLINY_BALANCE_AUTO_MODEL_ID
+	return typeof modelId === "string" && canonicalPlinyModelId(modelId) === PLINY_BALANCE_AUTO_MODEL_ID
 }
 
 /** True for every virtual router id: the FreeAuto profiles and BalanceAuto. */

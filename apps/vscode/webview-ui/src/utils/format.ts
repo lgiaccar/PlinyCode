@@ -82,14 +82,27 @@ export function formatDuration(ms: number): string {
 	return `${seconds}s`
 }
 
-/** Start time of a conversation: time only for today, otherwise date and time. */
-export function formatStartTime(timestamp: number): string {
+/**
+ * When a conversation was created, always with the day so it can be told apart
+ * from others: "Today, 5:53 PM", "Yesterday, 9:02 AM", "Sep 21, 5:53 PM", and
+ * the year too once it is not the current one ("Dec 30, 2025, 5:53 PM").
+ */
+export function formatStartTime(timestamp: number, now: number = Date.now()): string {
 	const date = new Date(timestamp)
-	const sameDay = new Date().toDateString() === date.toDateString()
-	return date.toLocaleString(
-		"en-US",
-		sameDay
-			? { hour: "numeric", minute: "2-digit", hour12: true }
-			: { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true },
-	)
+	const today = new Date(now)
+	const yesterday = new Date(now)
+	yesterday.setDate(today.getDate() - 1)
+	const time = date.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+	if (date.toDateString() === today.toDateString()) {
+		return `Today, ${time}`
+	}
+	if (date.toDateString() === yesterday.toDateString()) {
+		return `Yesterday, ${time}`
+	}
+	const day = date.toLocaleString("en-US", {
+		month: "short",
+		day: "numeric",
+		...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+	})
+	return `${day}, ${time}`
 }

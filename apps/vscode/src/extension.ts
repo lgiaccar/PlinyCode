@@ -191,7 +191,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const logPath = callLogPath()
 			if (!(await fileExistsAtPath(logPath))) {
 				void vscode.window.showInformationMessage(
-					"The router call log is empty: it is written as soon as a FreeAuto or BalanceAuto model handles a request.",
+					"The router call log is empty: it is written as soon as an auto-free or auto-paid-balanced model handles a request.",
 				)
 				return
 			}

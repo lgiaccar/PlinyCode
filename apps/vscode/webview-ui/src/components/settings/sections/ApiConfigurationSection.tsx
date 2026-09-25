@@ -71,7 +71,7 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 						Unlock Pliny free models
 					</VSCodeCheckbox>
 					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
-						<code>FreeAuto</code> (the automatic free router) is always shown and is the recommended default. Enable
+						<code>auto-free</code> (the automatic free router) is always shown and is the recommended default. Enable
 						this to also list the individual free self-hosted models (<code>snps-provider</code>) in the model picker.
 					</p>
 				</div>
@@ -85,17 +85,17 @@ const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiCo
 					</VSCodeCheckbox>
 					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
 						Enable this to list paid hosted models (Bedrock, Azure, GCP, Vertex) in the model picker, together with{" "}
-						<code>BalanceAuto</code>: the router that sends difficult work to paid high-end models and simple requests
-						and sub-agents to cheaper or free ones.
+						<code>auto-paid-balanced</code>: the router that sends difficult work to paid high-end models and simple
+						requests and sub-agents to cheaper or free ones.
 					</p>
 				</div>
 
 				<div className="mb-[5px]">
 					<label className="block font-medium mb-[5px]">Routing rules</label>
 					<p className="text-xs mt-[5px] text-(--vscode-descriptionForeground)">
-						<code>FreeAuto</code> picks a free model for each request and switches to a backup when one fails. Edit
+						<code>auto-free</code> picks a free model for each request and switches to a backup when one fails. Edit
 						the rules file to change which model is used when; it takes effect on the next request, with no restart.
-						The other profiles, including <code>BalanceAuto</code>, have their own files: run{" "}
+						The other profiles, including <code>auto-paid-balanced</code>, have their own files: run{" "}
 						<code>PlinyCode: Open Routing Rules</code> from the command palette.{" "}
 						<VSCodeLink
 							className="inline text-inherit"

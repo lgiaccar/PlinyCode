@@ -1,4 +1,12 @@
 import type { ModelInfo } from "@shared/api"
+import {
+	isPlinyBalanceAutoModelId,
+	isPlinyFreeAutoModelId,
+	isPlinyFreeModelId,
+	isPlinySelfHostedModelId,
+	PLINY_BALANCE_AUTO_MODEL_ID,
+	PLINY_FREE_AUTO_MODEL_ID,
+} from "@shared/pliny"
 import { useEffect, useState } from "react"
 
 /**
@@ -27,11 +35,16 @@ import { useEffect, useState } from "react"
 const PLINY_UNLOCK_PAID_STORAGE_KEY = "plinyCode.unlockPaidModels"
 const PLINY_UNLOCK_FREE_STORAGE_KEY = "plinyCode.unlockFreeModels"
 
-/** The virtual FreeAuto router id (mirrors `@plinycode/llms`). */
-export const PLINY_FREE_AUTO_MODEL_ID = "pliny/free-auto"
-
-/** The virtual BalanceAuto router id (mirrors `@plinycode/llms`). It may route to paid models. */
-export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
+// The router ids and predicates are shared with the extension (`@shared/pliny`),
+// whose unit tests hold them equal to the SDK catalog.
+export {
+	isPlinyBalanceAutoModelId,
+	isPlinyFreeAutoModelId,
+	isPlinyFreeModelId,
+	isPlinySelfHostedModelId,
+	PLINY_BALANCE_AUTO_MODEL_ID,
+	PLINY_FREE_AUTO_MODEL_ID,
+}
 
 /**
  * Default model to surface in the picker when paid models are locked and no
@@ -39,29 +52,6 @@ export const PLINY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
  * pool and fails over automatically, so it is the safest cost-free start.
  */
 export const PLINY_FREE_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
-
-/** True for free self-hosted Pliny models (ids starting with `snps-provider`). */
-export function isPlinySelfHostedModelId(modelId: string): boolean {
-	return modelId.startsWith("snps-provider")
-}
-
-/** True for the virtual router id and its profile ids (`pliny/free-auto-fast`, ...). */
-export function isPlinyFreeAutoModelId(modelId: string): boolean {
-	return modelId === PLINY_FREE_AUTO_MODEL_ID || modelId.startsWith(`${PLINY_FREE_AUTO_MODEL_ID}-`)
-}
-
-/** True for the virtual BalanceAuto router id. */
-export function isPlinyBalanceAutoModelId(modelId: string): boolean {
-	return modelId === PLINY_BALANCE_AUTO_MODEL_ID
-}
-
-/**
- * True for anything that costs nothing to run: the free self-hosted models and
- * the router, which only ever delegates to them.
- */
-export function isPlinyFreeModelId(modelId: string): boolean {
-	return isPlinyFreeAutoModelId(modelId) || isPlinySelfHostedModelId(modelId)
-}
 
 /** True for paid/hosted Pliny models (everything that is not free). */
 export function isPlinyPaidModel(modelId: string): boolean {
