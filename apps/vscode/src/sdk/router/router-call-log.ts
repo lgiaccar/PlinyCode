@@ -23,6 +23,8 @@ export interface RouterCallLogRecord {
 	/** Classifier verdict for the turn, when the classifier ran and answered. */
 	tier?: RouterTier
 	think?: boolean
+	/** On the turn's first call: why the classifier gave no verdict, when it ran and failed. */
+	classifierError?: string
 	/** Reasoning the router actually set on this model. */
 	effort?: RouterEffort
 	model: string

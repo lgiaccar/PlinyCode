@@ -6,6 +6,7 @@ import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
 import { Logger } from "@/shared/services/Logger"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
+import { createWaitTool } from "./vscode-wait-tool"
 
 interface McpToolDescriptor {
 	name: string
@@ -105,6 +106,10 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 			`[VscodeRuntimeTools] Added custom run_commands tool (mode=${executionMode}, timeoutMs=${executionMode === "vscodeTerminal" ? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS : "default"})`,
 		)
 	}
+
+	// `wait` gives the agent a way to pass time between checks on a long-running
+	// command, instead of ending its turn with "I'll check back later".
+	tools.push(createWaitTool())
 
 	Logger.log(`[VscodeRuntimeTools] Prepared ${tools.length} VSCode extra tools`)
 	return tools

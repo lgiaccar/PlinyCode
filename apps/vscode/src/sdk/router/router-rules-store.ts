@@ -187,13 +187,20 @@ understand would fail the call, so every other model keeps its default.
 ## Other settings
 
 - \`pool\` — every model FreeAuto may use, best first.
-- \`utility\` — models for background jobs: prompt classification, conversation
-  summaries, and commit messages.
+- \`utility\` — models for background jobs: prompt classification, the
+  completion judge, conversation summaries, and commit messages.
 - \`classifier.enabled\` — when on, a small model reads your message once per
   turn and returns a tier and whether to think. The first route tagged with
   that tier is used (its size and \`subAgent\` conditions must still hold), and
   the think verdict overrides the route's \`effort\`. Costs one extra fast call
   per turn; any failure or timeout falls back to the routes above.
+- \`guard.judge\` — free models often end a run before the task is done. Pattern
+  rules always catch the obvious cases (a step announced but not taken, "I'll
+  check back later", stopping right after a failed command) and send the model
+  a reminder, at most three per run. With \`judge\` on, a small model is also
+  asked once per agentic run whether the request was actually carried out, so
+  "would you like me to run it now?" after you said to run it is caught too.
+  No verdict within \`guard.judgeTimeoutMs\` means the reply is accepted.
 - \`health\` — how quickly a failing model is benched, how many failovers a
   single turn allows, and how long to wait before treating a silent stream as
   stalled.
@@ -216,6 +223,7 @@ ${poolLines}
 
 utility:
   classifier: ${rules.utility.classifier}
+  judge: ${rules.utility.judge}
   summarizer: ${rules.utility.summarizer}
   commit: ${rules.utility.commit}
 
@@ -223,6 +231,10 @@ classifier:
   enabled: ${rules.classifier.enabled}
   timeoutMs: ${rules.classifier.timeoutMs}
   maxPromptChars: ${rules.classifier.maxPromptChars}
+
+guard:
+  judge: ${rules.guard.judge}
+  judgeTimeoutMs: ${rules.guard.judgeTimeoutMs}
 
 health:
   cooldownMs: ${rules.health.cooldownMs}

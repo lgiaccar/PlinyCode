@@ -5,7 +5,13 @@
  * classifier can never name a model, only a kind of work.
  *
  * Every failure — timeout, garbage output, a transport error — resolves to
- * "no verdict", and the heuristic routes decide as they would without it.
+ * "no verdict", and the heuristic routes decide as they would without it. The
+ * raw reply travels with the failure so the reason can be logged: the first
+ * weeks of the smart profile produced no verdict at all, silently.
+ *
+ * `collectModelText` and `extractJsonObjects` are shared with the completion
+ * judge (`router-completion-judge.ts`), which asks the same utility model a
+ * different one-shot question.
  */
 
 import type { AgentMessage, AgentModel, AgentModelRequest } from "@plinycode/shared"
@@ -13,10 +19,14 @@ import { ROUTER_TIERS, type RouterClassification, type RouterRequestFeatures, ty
 
 const DIGEST_MESSAGES = 6
 const DIGEST_CHARS_PER_MESSAGE = 200
-const CLASSIFIER_MAX_TOKENS = 256
+/**
+ * Room for a verbose model: the probe showed the default classifier model
+ * filling 256 tokens on a trivial prompt, which truncated the verdict away.
+ */
+const CLASSIFIER_MAX_TOKENS = 512
 
 const INSTRUCTIONS = `You route requests for a coding assistant to a model tier.
-Reply with one JSON object and nothing else: {"tier": "quick" | "code" | "reason" | "huge", "think": true | false}
+Output one JSON object first, before any other text, and nothing after it: {"tier": "quick" | "code" | "reason" | "huge", "think": true | false}
 
 Tiers:
 - quick: a short factual question, or a trivial one-line change.
@@ -69,61 +79,119 @@ export function buildClassifierRequest(
 	}
 }
 
+/**
+ * Every balanced `{…}` in the text, outermost first, as parsed objects.
+ * Anything that is not valid JSON is skipped. Closed think blocks are removed
+ * first; an unclosed one is left in, since a verdict may be inside it.
+ */
+export function extractJsonObjects(text: string): Record<string, unknown>[] {
+	const cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, "")
+	const objects: Record<string, unknown>[] = []
+	let depth = 0
+	let start = -1
+	let inString = false
+	let escaped = false
+	for (let index = 0; index < cleaned.length; index += 1) {
+		const char = cleaned[index]
+		if (inString) {
+			if (escaped) {
+				escaped = false
+			} else if (char === "\\") {
+				escaped = true
+			} else if (char === '"') {
+				inString = false
+			}
+			continue
+		}
+		if (char === '"' && depth > 0) {
+			inString = true
+		} else if (char === "{") {
+			if (depth === 0) {
+				start = index
+			}
+			depth += 1
+		} else if (char === "}" && depth > 0) {
+			depth -= 1
+			if (depth === 0 && start >= 0) {
+				try {
+					const parsed: unknown = JSON.parse(cleaned.slice(start, index + 1))
+					if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+						objects.push(parsed as Record<string, unknown>)
+					}
+				} catch {
+					// Not JSON; keep scanning.
+				}
+				start = -1
+			}
+		}
+	}
+	return objects
+}
+
+/** `true`/`false`, also when the model quoted them. */
+export function looseBoolean(value: unknown): boolean | undefined {
+	if (typeof value === "boolean") {
+		return value
+	}
+	if (typeof value === "string") {
+		const normalized = value.trim().toLowerCase()
+		if (normalized === "true") {
+			return true
+		}
+		if (normalized === "false") {
+			return false
+		}
+	}
+	return undefined
+}
+
 /** Extract a verdict from the classifier's reply; undefined for anything unusable. */
 export function parseClassification(text: string): RouterClassification | undefined {
-	// Reasoning models may still wrap their answer in a think block.
-	const answer = text.replace(/<think>[\s\S]*?(<\/think>|$)/g, "")
-	for (const match of answer.matchAll(/\{[^{}]*\}/g)) {
-		try {
-			const parsed = JSON.parse(match[0]) as { tier?: unknown; think?: unknown }
-			const tier = typeof parsed.tier === "string" ? parsed.tier.trim().toLowerCase() : undefined
-			if (tier && (ROUTER_TIERS as readonly string[]).includes(tier)) {
-				return { tier: tier as RouterClassification["tier"], think: parsed.think === true }
-			}
-		} catch {
-			// Not JSON; keep looking.
+	for (const parsed of extractJsonObjects(text)) {
+		const tier = typeof parsed.tier === "string" ? parsed.tier.trim().toLowerCase() : undefined
+		if (tier && (ROUTER_TIERS as readonly string[]).includes(tier)) {
+			return { tier: tier as RouterClassification["tier"], think: looseBoolean(parsed.think) === true }
 		}
 	}
 	return undefined
 }
 
 /**
- * Run the classifier. Resolves within `rules.classifier.timeoutMs` even if the
- * model hangs, and aborts the underlying request when the turn is cancelled.
+ * Stream one short reply out of a utility model. Resolves within `timeoutMs`
+ * even if the model hangs, and aborts the underlying request when the parent
+ * request is cancelled. Never throws.
  */
-export async function runClassifier(options: {
+export async function collectModelText(options: {
 	model: AgentModel
-	request: AgentModelRequest
-	features: RouterRequestFeatures
-	rules: RouterRules
-}): Promise<{ classification?: RouterClassification; error?: string }> {
-	const { model, request, features, rules } = options
+	buildRequest: (signal: AbortSignal) => AgentModelRequest
+	timeoutMs: number
+	parentSignal?: AbortSignal
+}): Promise<{ text?: string; error?: string }> {
 	const controller = new AbortController()
 	const onParentAbort = () => controller.abort()
-	request.signal?.addEventListener("abort", onParentAbort, { once: true })
+	options.parentSignal?.addEventListener("abort", onParentAbort, { once: true })
 	let timer: ReturnType<typeof setTimeout> | undefined
 
-	const collect = async (): Promise<{ classification?: RouterClassification; error?: string }> => {
+	const collect = async (): Promise<{ text?: string; error?: string }> => {
 		let text = ""
-		for await (const event of await model.stream(buildClassifierRequest(request, features, rules, controller.signal))) {
+		for await (const event of await options.model.stream(options.buildRequest(controller.signal))) {
 			if (event.type === "text-delta") {
 				text += event.text
 			} else if (event.type === "finish") {
 				if (event.reason === "error") {
-					return { error: event.error ?? "classifier call failed" }
+					return { error: event.error ?? "utility model call failed", ...(text ? { text } : {}) }
 				}
 				break
 			}
 		}
-		const classification = parseClassification(text)
-		return classification ? { classification } : { error: `unusable reply: ${text.slice(0, 80) || "(empty)"}` }
+		return { text }
 	}
 
 	const timeout = new Promise<{ error: string }>((resolve) => {
 		timer = setTimeout(() => {
 			controller.abort()
-			resolve({ error: `timed out after ${rules.classifier.timeoutMs}ms` })
-		}, rules.classifier.timeoutMs)
+			resolve({ error: `timed out after ${options.timeoutMs}ms` })
+		}, options.timeoutMs)
 	})
 
 	try {
@@ -135,7 +203,36 @@ export async function runClassifier(options: {
 		if (timer) {
 			clearTimeout(timer)
 		}
-		request.signal?.removeEventListener("abort", onParentAbort)
+		options.parentSignal?.removeEventListener("abort", onParentAbort)
 		controller.abort()
 	}
+}
+
+/**
+ * Run the classifier. Resolves within `rules.classifier.timeoutMs` even if the
+ * model hangs, and aborts the underlying request when the turn is cancelled.
+ * On failure `raw` carries the start of whatever the model said, for the log.
+ */
+export async function runClassifier(options: {
+	model: AgentModel
+	request: AgentModelRequest
+	features: RouterRequestFeatures
+	rules: RouterRules
+}): Promise<{ classification?: RouterClassification; error?: string; raw?: string }> {
+	const { model, request, features, rules } = options
+	const result = await collectModelText({
+		model,
+		buildRequest: (signal) => buildClassifierRequest(request, features, rules, signal),
+		timeoutMs: rules.classifier.timeoutMs,
+		parentSignal: request.signal,
+	})
+	const raw = result.text?.slice(0, 300)
+	if (result.error) {
+		return { error: result.error, ...(raw ? { raw } : {}) }
+	}
+	const classification = parseClassification(result.text ?? "")
+	if (classification) {
+		return { classification }
+	}
+	return { error: `unusable reply: ${(result.text ?? "").slice(0, 80) || "(empty)"}`, ...(raw ? { raw } : {}) }
 }

@@ -19,30 +19,38 @@ describe("withHostCompletionGuard", () => {
 		expect(withHostCompletionGuard(undefined, undefined)).toBeUndefined();
 	});
 
-	it("installs the host guard on its own, passing it the reply", () => {
+	it("installs the host guard on its own, passing it the reply", async () => {
 		const seen: unknown[] = [];
 		const merged = withHostCompletionGuard(undefined, (ctx) => {
 			seen.push(ctx);
 			return "keep going";
 		});
-		expect(merged?.completionGuard?.(context)).toBe("keep going");
+		expect(await merged?.completionGuard?.(context)).toBe("keep going");
 		expect(seen).toEqual([context]);
 	});
 
-	it("asks core's guard first and keeps its other settings", () => {
+	it("asks core's guard first and keeps its other settings", async () => {
 		const merged = withHostCompletionGuard(
 			{ requireCompletionTool: true, completionGuard: () => "team first" },
 			() => "host",
 		);
 		expect(merged?.requireCompletionTool).toBe(true);
-		expect(merged?.completionGuard?.(context)).toBe("team first");
+		expect(await merged?.completionGuard?.(context)).toBe("team first");
 	});
 
-	it("falls back to the host guard when core's has nothing to say", () => {
+	it("falls back to the host guard when core's has nothing to say", async () => {
 		const merged = withHostCompletionGuard(
 			{ completionGuard: () => undefined },
 			() => "host",
 		);
-		expect(merged?.completionGuard?.(context)).toBe("host");
+		expect(await merged?.completionGuard?.(context)).toBe("host");
+	});
+
+	it("awaits guards that answer asynchronously", async () => {
+		const merged = withHostCompletionGuard(
+			{ completionGuard: async () => undefined },
+			async () => "host later",
+		);
+		expect(await merged?.completionGuard?.(context)).toBe("host later");
 	});
 });

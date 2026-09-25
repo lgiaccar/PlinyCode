@@ -73,10 +73,19 @@ export interface RouterClassifierSettings {
 export interface RouterUtilityModels {
 	/** Model asked to classify the prompt when the classifier is enabled. */
 	classifier: string
+	/** Model asked whether the task is done when a run is about to end on a tool-free reply. */
+	judge: string
 	/** Model used for conversation compaction summaries. */
 	summarizer: string
 	/** Model used for commit message generation. */
 	commit: string
+}
+
+/** The completion guard's knobs; its pattern rules are always on. */
+export interface RouterGuardSettings {
+	/** Ask the judge model whether the task is done before accepting a tool-free reply. */
+	judge: boolean
+	judgeTimeoutMs: number
 }
 
 export interface RouterRules {
@@ -85,6 +94,7 @@ export interface RouterRules {
 	pool: string[]
 	utility: RouterUtilityModels
 	classifier: RouterClassifierSettings
+	guard: RouterGuardSettings
 	health: RouterHealthSettings
 	/** Multiplier applied to the estimate when checking a context window. */
 	contextMarginRatio: number

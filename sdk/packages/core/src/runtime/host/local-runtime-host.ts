@@ -254,7 +254,8 @@ export function withHostCompletionGuard(
 	const coreGuard = policy?.completionGuard;
 	return {
 		...policy,
-		completionGuard: (context) => coreGuard?.(context) ?? hostGuard(context),
+		completionGuard: async (context) =>
+			(await coreGuard?.(context)) ?? (await hostGuard(context)),
 	};
 }
 

@@ -5,15 +5,14 @@ import {
 } from "@plinycode/llms";
 import type {
 	AgentAfterToolResult,
-	GatewayProviderSettings,
 	AgentBeforeModelResult,
 	AgentBeforeToolResult,
 	AgentMessage,
 	AgentMessagePart,
 	AgentModel,
 	AgentModelEvent,
-	AgentModelOutputLimit,
 	AgentModelFinishReason,
+	AgentModelOutputLimit,
 	AgentModelRequest,
 	AgentModelToolActivity,
 	AgentRunResult,
@@ -28,6 +27,7 @@ import type {
 	AgentUsage,
 	AgentRuntimeConfig as BaseAgentRuntimeConfig,
 	CaptureTaskLifecycleEventInput,
+	GatewayProviderSettings,
 	ProviderErrorClass,
 	TelemetryProperties,
 	ToolApprovalResult,
@@ -589,6 +589,8 @@ export class AgentRuntime {
 	 * providers that require them first in the following turn.
 	 */
 	private pendingHookContexts: string[] = [];
+	/** Index into `state.messages` where the current run's messages begin. */
+	private runStartMessageIndex = 0;
 	private readonly state = {
 		agentId: "",
 		agentRole: undefined as string | undefined,
@@ -787,19 +789,26 @@ export class AgentRuntime {
 		)}. Continue working if requirements are not met. If the task is complete, call the appropriate terminal completion tool now.`;
 	}
 
-	private getCompletionReminderMessages(message: AgentMessage): string[] {
+	private async getCompletionReminderMessages(
+		message: AgentMessage,
+	): Promise<string[]> {
 		return [
 			this.getCompletionToolReminderMessage(),
-			this.config.completionPolicy?.completionGuard?.({
+			await this.config.completionPolicy?.completionGuard?.({
 				message,
 				iteration: this.state.iteration,
+				runMessages: this.state.messages.slice(this.runStartMessageIndex),
+				messages: this.state.messages,
 			}),
 		].filter((reminder): reminder is string => Boolean(reminder));
 	}
 
 	private async addUserReminderMessage(text: string): Promise<AgentMessage> {
+		// displayRole "system" keeps the reminder out of user-facing transcripts:
+		// it is model-facing, and hosts announce it their own way.
 		const reminderMessage = createMessage("user", [{ type: "text", text }], {
 			userRunSpan: 0,
+			displayRole: "system",
 		});
 		this.state.messages.push(reminderMessage);
 		await this.emit({
@@ -820,6 +829,7 @@ export class AgentRuntime {
 		this.state.runId = createUID("run");
 		this.state.status = "running";
 		this.state.iteration = 0;
+		this.runStartMessageIndex = this.state.messages.length;
 		this.state.pendingToolCalls = [];
 		this.state.lastError = undefined;
 		this.state.lastErrorClass = undefined;
@@ -950,7 +960,7 @@ export class AgentRuntime {
 						toolCallCount: 0,
 					});
 					const completionReminderMessages =
-						this.getCompletionReminderMessages(message);
+						await this.getCompletionReminderMessages(message);
 					if (completionReminderMessages.length > 0) {
 						for (const reminderMessage of completionReminderMessages) {
 							await this.addUserReminderMessage(reminderMessage);

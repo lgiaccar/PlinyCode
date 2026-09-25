@@ -20,12 +20,14 @@ import {
 	plinyFreeAutoProfile,
 	plinyThinkingControls,
 } from "@plinycode/llms"
-import { type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
+import { type AgentModel, type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
-import { createRoutedAgentModel } from "./routed-agent-model"
+import { createRouterCompletionGuard } from "./completion-guard"
+import { createRoutedAgentModel, isDegenerateOutputError } from "./routed-agent-model"
 import { appendCallLog, type RouterCallLogRecord } from "./router-call-log"
 import { runClassifier } from "./router-classifier"
+import { runCompletionJudge } from "./router-completion-judge"
 import {
 	beginTurn,
 	forgetSessionsWithPrefix,
@@ -34,10 +36,12 @@ import {
 	recordFailure,
 	recordSuccess,
 } from "./router-health"
+import { composeHooks } from "./router-hooks"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
+import { appendRunLog, type RouterRunEnding, type RouterRunLogRecord } from "./router-run-log"
 import type { RouterCallTiming, RouterRequestFeatures, RouterRules } from "./router-types"
-import { createUnfinishedTurnGuard } from "./unfinished-turn-guard"
+import { type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
 
 export interface RouterInstallDeps {
 	sessionId: string
@@ -51,8 +55,30 @@ export interface RouterInstallDeps {
 	nextMessageTs: () => number
 	/** Where the call log goes; defaults to the call log next to the rules files. */
 	logCall?: (record: RouterCallLogRecord) => void
+	/** Where the run log goes; defaults to the run log next to the rules files. */
+	logRun?: (record: RouterRunLogRecord) => void
 	/** Injectable for tests. */
 	now?: () => number
+}
+
+/** Model-facing note appended to a failed shell result, so weak models do not stop on it. */
+export function failedCommandNote(failure: ShellFailure): string {
+	const what = failure.command ? `The command \`${failure.command.slice(0, 120)}\`` : "The command above"
+	const how = failure.exitCode !== undefined ? ` failed with exit code ${failure.exitCode}` : " failed"
+	return (
+		`[${what}${how}. Do not end your turn now: fix the problem and rerun it. If the failure is expected, ` +
+		"or you are blocked, say so explicitly and ask the user how to proceed.]"
+	)
+}
+
+/** Model-facing note appended to a detached shell result. */
+export function detachedCommandNote(failure: ShellFailure): string {
+	const where = failure.logPath ? ` Its output is being written to ${failure.logPath}.` : ""
+	return (
+		`[The command is still running in the background.${where} Do not end your turn to "check later" — you ` +
+		"cannot come back. If the user is waiting for its result, call the `wait` tool, then read the log or run a " +
+		"status command, and repeat until it finishes or you have a concrete blocker.]"
+	)
 }
 
 /** `FreeAuto`, or `FreeAuto·fast` for a non-default profile. */
@@ -122,7 +148,10 @@ function requestHasImages(request: AgentModelRequest): boolean {
 export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps): CoreSessionConfig {
 	const now = deps.now ?? (() => Date.now())
 	const isRouted = () => isPlinyFreeAutoModelId(config.modelId)
+	// The guard and the shell-result notes help every free model, routed or not.
+	const guardActive = () => isPlinyFreeModelId(config.modelId)
 	const logCall = deps.logCall ?? ((record: RouterCallLogRecord) => void appendCallLog(record))
+	const logRun = deps.logRun ?? ((record: RouterRunLogRecord) => void appendRunLog(record))
 	const installProfile = plinyFreeAutoProfile(config.modelId)
 
 	// Rules are loaded asynchronously but routing is synchronous, so keep the
@@ -166,8 +195,12 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	let subRunCounter = 0
 	let activeTurnKey = deps.sessionId
 	let activeProfile = installProfile
+	// The judge needs a gateway model for the utility id; the factory is the
+	// only place one can be built, so remember how from the latest run.
+	let createUtilityModel: ((modelId: string) => AgentModel) | undefined
 
 	config.agentModelFactory = ({ config: agentConfig, createDefault }) => {
+		createUtilityModel = (modelId) => createDefault({ modelId })
 		if (!isPlinyFreeAutoModelId(agentConfig.modelId)) {
 			return createDefault()
 		}
@@ -190,7 +223,9 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			outcome: RouterCallLogRecord["outcome"],
 			error?: string,
 		) => {
-			const call = [...getSessionState(turnKey).calls].reverse().find((entry) => entry.modelId === modelId)
+			const state = getSessionState(turnKey)
+			const call = [...state.calls].reverse().find((entry) => entry.modelId === modelId)
+			const firstCall = call !== undefined && call === state.calls[0]
 			logCall({
 				ts: new Date(timing.startedAt).toISOString(),
 				sessionId: deps.sessionId,
@@ -198,6 +233,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				profile,
 				route: call?.routeName ?? "default",
 				...(call?.classification ? { tier: call.classification.tier, think: call.classification.think } : {}),
+				...(firstCall && state.classifierError ? { classifierError: state.classifierError.slice(0, 200) } : {}),
 				...(call?.effort ? { effort: call.effort } : {}),
 				model: modelId,
 				...(call?.estimatedTokens !== undefined ? { estimatedTokens: call.estimatedTokens } : {}),
@@ -240,10 +276,14 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 							`tier=${result.classification.tier} think=${result.classification.think}`,
 					)
 				} else {
+					state.classifierError = result.error ?? "no verdict"
 					emitInfo(
 						`\`${formatClock(now())}\` ${routerLabel(profile)} classifier gave no verdict (${result.error}) · using the heuristic routes`,
 					)
-					Logger.warn(`[FreeAuto] classifier gave no verdict after ${elapsed}ms: ${result.error}`)
+					Logger.warn(
+						`[FreeAuto] classifier (${rules.utility.classifier}) gave no verdict after ${elapsed}ms: ${result.error}` +
+							(result.raw ? ` · raw reply: ${JSON.stringify(result.raw)}` : ""),
+					)
 				}
 				return state.classification
 			},
@@ -361,25 +401,167 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			retry: true,
 			...(hadAssistantContent
 				? {
-						continuationPrompt:
-							// Only the error's headline: the user-facing details and
-							// settings hints would just add noise for the model.
-							`Your previous reply was cut off (${error.split(" (")[0]}). Continue exactly where it stopped. ` +
-							`Do not repeat text you already produced. If you were in the middle of a tool call, re-issue it.`,
+						continuationPrompt: isDegenerateOutputError(error)
+							? // The partial reply is garbage; continuing it would only produce more.
+								"Your previous reply was corrupted (the same characters repeated over and over) and has been " +
+								"disregarded. Do not continue it. Redo the step from the last tool result: continue with the next " +
+								"tool call, or give the final result if the task is complete."
+							: // Only the error's headline: the user-facing details and
+								// settings hints would just add noise for the model.
+								`Your previous reply was cut off (${error.split(" (")[0]}). Continue exactly where it stopped. ` +
+								`Do not repeat text you already produced. If you were in the middle of a tool call, re-issue it.`,
 					}
 				: {}),
 		}
 	}
 
-	// Free models often announce a step ("Let me check the log:") and end the
-	// reply without the tool call, which would end the run half done.
-	config.completionGuard = createUnfinishedTurnGuard({
-		isActive: () => isPlinyFreeModelId(config.modelId),
-		onNudge: ({ excerpt, nudgesThisRun }) => {
-			emitInfo(
-				`\`${formatClock(now())}\` ↻ The model stopped after _"${excerpt}"_ without acting · asked it to continue (${nudgesThisRun}/3)`,
+	// Free models often stop before the task is done: they announce a step
+	// ("Let me check the log:") without the tool call, promise to check back
+	// later, or report a failed command as if it were the result. The guard
+	// keeps such runs going; core applies it to the root agent only, so its
+	// state is the root turn's.
+	const rootState = () => getSessionState(deps.sessionId)
+	const MAX_NUDGES = 3
+	config.completionGuard = createRouterCompletionGuard({
+		isActive: guardActive,
+		getMode: deps.getMode,
+		toolCallsThisRun: () => rootState().run.toolCalls,
+		maxNudgesPerRun: MAX_NUDGES,
+		judge: async (context) => {
+			const rules = rulesFor(activeProfile)
+			if (!rules.guard.judge || !createUtilityModel) {
+				return undefined
+			}
+			const startedAt = now()
+			const result = await runCompletionJudge({
+				model: createUtilityModel(rules.utility.judge),
+				context,
+				timeoutMs: rules.guard.judgeTimeoutMs,
+			})
+			const elapsed = now() - startedAt
+			if (!result.verdict) {
+				Logger.warn(
+					`[FreeAuto] judge (${rules.utility.judge}) gave no verdict after ${elapsed}ms: ${result.error}` +
+						(result.raw ? ` · raw reply: ${JSON.stringify(result.raw)}` : ""),
+				)
+				return undefined
+			}
+			Logger.log(
+				`[FreeAuto] judge (${rules.utility.judge}, ${elapsed}ms): done=${result.verdict.done}${result.verdict.reason ? ` — ${result.verdict.reason}` : ""}`,
 			)
-			Logger.log(`[FreeAuto] nudged a reply that announced a step without a tool call: ${excerpt}`)
+			return result.verdict
+		},
+		onJudge: (outcome) => {
+			rootState().run.judge = outcome
+		},
+		onNudge: ({ rule, excerpt, nudgesThisRun, escalated, reason }) => {
+			const run = rootState().run
+			run.nudges = nudgesThisRun
+			run.guardRules.push(rule)
+			if (escalated) {
+				run.escalated = true
+			}
+			const clock = `\`${formatClock(now())}\``
+			if (rule === "judge") {
+				emitInfo(
+					`${clock} ⚖ The task looks unfinished${reason ? ` — _${reason}_` : ""} · asked the model to continue (${nudgesThisRun}/${MAX_NUDGES})`,
+				)
+			} else if (escalated) {
+				emitInfo(
+					`${clock} ↻ The model stalled again after _"${excerpt}"_ · sent a firmer reminder (${nudgesThisRun}/${MAX_NUDGES})`,
+				)
+			} else {
+				emitInfo(
+					`${clock} ↻ The model stopped after _"${excerpt}"_ without acting · asked it to continue (rule: ${rule}, ${nudgesThisRun}/${MAX_NUDGES})`,
+				)
+			}
+			Logger.log(`[FreeAuto] completion guard fired (${rule}${escalated ? ", escalated" : ""}): ${excerpt}`)
+		},
+		onEscalate: () => {
+			// A model that ignores a reminder gets swapped for the default
+			// route's lead — the one that keeps acting on long tasks.
+			if (!isRouted()) {
+				return
+			}
+			const state = rootState()
+			const current = state.calls[state.calls.length - 1]?.modelId
+			const rules = rulesFor(activeProfile)
+			const preferred = rules.routes.find((route) => route.name === "default")?.use ?? []
+			const next = [...preferred, ...rules.pool].find((id) => id !== current && rules.pool.includes(id))
+			if (next && rules.sticky) {
+				state.stickyModelId = next
+				emitInfo(`\`${formatClock(now())}\` ↪ switching to **${modelLabel(next)}** for the rest of the turn`)
+				Logger.log(`[FreeAuto] escalation: sticky model ${current ?? "(none)"} → ${next}`)
+			}
+		},
+	})
+
+	// Observe tool results and run endings: the shell-result note stops weak
+	// models from ending on a failed command, and the run record is what the
+	// summary script reads to compare early-stop rates per model.
+	config.hooks = composeHooks(config.hooks, {
+		afterTool: ({ snapshot, tool, toolCall, result }) => {
+			if (!guardActive()) {
+				return undefined
+			}
+			const failure = shellFailureFromResult({
+				type: "tool-result",
+				toolCallId: toolCall.toolCallId,
+				toolName: tool.name,
+				output: result.output,
+				...(result.isError ? { isError: true } : {}),
+			})
+			// Only the root agent's tools feed the completion guard's state.
+			if (!snapshot.parentAgentId) {
+				const run = rootState().run
+				run.toolCalls += 1
+				run.previousTool = tool.name
+				run.previousToolFailed = failure?.kind === "failed"
+				run.previousToolDetached = failure?.kind === "detached"
+			}
+			if (!failure) {
+				return undefined
+			}
+			return { appendContext: failure.kind === "failed" ? failedCommandNote(failure) : detachedCommandNote(failure) }
+		},
+		afterRun: ({ snapshot, result }) => {
+			if (!isRouted()) {
+				return
+			}
+			const subAgent = Boolean(snapshot.parentAgentId)
+			const state = getSessionState(subAgent ? activeTurnKey : deps.sessionId)
+			const lastCall = state.calls[state.calls.length - 1]
+			const lastAssistant = [...result.messages].reverse().find((message) => message.role === "assistant")
+			const reply = lastAssistant
+				? lastAssistant.content
+						.filter((part) => part.type === "text")
+						.map((part) => part.text)
+						.join("")
+				: ""
+			const ending: RouterRunEnding =
+				result.status === "aborted"
+					? "aborted"
+					: result.status === "failed"
+						? "error"
+						: lastAssistant?.content.some((part) => part.type === "tool-call")
+							? "completion-tool"
+							: "text"
+			const { guardRules, ...run } = state.run
+			logRun({
+				ts: new Date(now()).toISOString(),
+				sessionId: deps.sessionId,
+				subAgent,
+				profile: activeProfile,
+				...(lastCall ? { model: lastCall.modelId, route: lastCall.routeName } : {}),
+				calls: state.calls.length,
+				iterations: result.iterations,
+				ending,
+				...run,
+				guardRules: [...guardRules],
+				replyChars: reply.length,
+				replyTail: reply.trim().slice(-120),
+				durationMs: now() - state.turnStartedAt,
+			})
 		},
 	})
 

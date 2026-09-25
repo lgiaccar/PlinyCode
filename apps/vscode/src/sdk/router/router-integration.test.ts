@@ -1,10 +1,11 @@
 import type { CoreSessionConfig } from "@plinycode/core"
 import { PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
-import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
+import type { AgentMessage, AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { RouterCallLogRecord } from "./router-call-log"
 import { getSessionState, resetHealth, resetSessions } from "./router-health"
 import { installRouter, type RouterInstallDeps } from "./router-integration"
+import type { RouterRunLogRecord } from "./router-run-log"
 
 vi.mock("./router-rules-store", async () => {
 	const { defaultRules } = await import("./router-rules")
@@ -113,43 +114,208 @@ describe("installRouter turn isolation", () => {
 	})
 })
 
-describe("installRouter unfinished-turn guard", () => {
-	const unfinished = {
-		message: {
-			id: "a",
-			role: "assistant" as const,
-			content: [{ type: "text" as const, text: "Let me check the log:" }],
-			createdAt: 0,
-		},
-		iteration: 3,
-	}
+function assistant(text: string, id = "a"): AgentMessage {
+	return { id, role: "assistant", content: [{ type: "text", text }], createdAt: 0 }
+}
 
-	it("nudges a free model that announced a step without acting, and says so in the chat", () => {
-		const rows: string[] = []
-		const config = installRouter(
-			{ providerId: "pliny", modelId: PLINY_FREE_AUTO_MODEL_ID, cwd: "/tmp" } as unknown as CoreSessionConfig,
-			{
-				sessionId: "s",
-				getMode: () => "act",
-				emitRow: (message) => rows.push(message.text ?? ""),
-				nextMessageTs: () => 1,
-				logCall: () => undefined,
-			},
-		)
-		expect(config.completionGuard?.(unfinished)).toContain("did not call a tool")
-		expect(rows[0]).toContain("stopped after")
+function toolResult(toolName: string, output: unknown, id = "t"): AgentMessage {
+	return { id, role: "tool", content: [{ type: "tool-result", toolCallId: "c1", toolName, output }], createdAt: 0 }
+}
+
+describe("installRouter completion guard", () => {
+	beforeEach(() => {
+		resetHealth()
+		resetSessions()
 	})
 
-	it("stays out of the way for a paid hosted model", () => {
-		const config = installRouter(
-			{
-				providerId: "pliny",
-				modelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
-				cwd: "/tmp",
-			} as unknown as CoreSessionConfig,
-			{ sessionId: "s", getMode: () => "act", emitRow: () => undefined, nextMessageTs: () => 1 },
-		)
-		expect(config.completionGuard?.(unfinished)).toBeUndefined()
+	const unfinished = { message: assistant("Let me check the log:"), iteration: 3 }
+
+	function install(modelId: string = PLINY_FREE_AUTO_MODEL_ID) {
+		const rows: string[] = []
+		const runs: RouterRunLogRecord[] = []
+		const config = installRouter({ providerId: "pliny", modelId, cwd: "/tmp" } as unknown as CoreSessionConfig, {
+			sessionId: "s",
+			getMode: () => "act",
+			emitRow: (message) => rows.push(message.text ?? ""),
+			nextMessageTs: () => 1,
+			logCall: () => undefined,
+			logRun: (record) => runs.push(record),
+			now: () => NOW,
+		})
+		return { config, rows, runs }
+	}
+
+	it("nudges a free model that announced a step without acting, and says so in the chat", async () => {
+		const { config, rows } = install()
+		expect(await config.completionGuard?.(unfinished)).toContain("did not call a tool")
+		expect(rows[0]).toContain("stopped after")
+		expect(rows[0]).toContain("rule: announcement")
+	})
+
+	it("stays out of the way for a paid hosted model", async () => {
+		const { config } = install("snps-aws-bedrock/aws-claude-sonnet-4.6")
+		expect(await config.completionGuard?.(unfinished)).toBeUndefined()
+	})
+
+	it("escalates on a second consecutive stall and switches the turn to another model", async () => {
+		const { config, rows } = install()
+		const state = getSessionState("s")
+		state.calls.push({ modelId: "snps-provider/kimi-k2.6", startedAt: NOW, routeName: "default" })
+		state.stickyModelId = "snps-provider/kimi-k2.6"
+
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 4 })).toContain("Second reminder")
+		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
+		expect(state.run.escalated).toBe(true)
+		expect(state.run.guardRules).toEqual(["announcement", "announcement"])
+		// A third stall in a row is taken at its word.
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 5 })).toBeUndefined()
+	})
+
+	it("appends a note to a failed shell result and remembers it for the guard", async () => {
+		const { config } = install()
+		const afterTool = config.hooks?.afterTool
+		if (!afterTool) {
+			throw new Error("router did not install an afterTool hook")
+		}
+		const result = await afterTool({
+			snapshot: { agentId: "root", iteration: 2 } as never,
+			tool: { name: "run_commands" } as never,
+			toolCall: { type: "tool-call", toolCallId: "c1", toolName: "run_commands", input: {} },
+			input: {},
+			result: {
+				output: [
+					{
+						query: "bun test",
+						result: "[Command exited with code 1]\n1 failed",
+						error: "Command exited with code 1",
+						success: false,
+					},
+				],
+			},
+			startedAt: new Date(NOW),
+			endedAt: new Date(NOW),
+			durationMs: 0,
+		})
+		expect(result?.appendContext).toContain("failed with exit code 1")
+		expect(result?.appendContext).toContain("`bun test`")
+		const run = getSessionState("s").run
+		expect(run).toMatchObject({
+			toolCalls: 1,
+			previousTool: "run_commands",
+			previousToolFailed: true,
+			previousToolDetached: false,
+		})
+	})
+
+	it("adds nothing to a successful result, but still counts the tool call", async () => {
+		const { config } = install()
+		const result = await config.hooks?.afterTool?.({
+			snapshot: { agentId: "root", iteration: 2 } as never,
+			tool: { name: "read_files" } as never,
+			toolCall: { type: "tool-call", toolCallId: "c1", toolName: "read_files", input: {} },
+			input: {},
+			result: { output: "contents" },
+			startedAt: new Date(NOW),
+			endedAt: new Date(NOW),
+			durationMs: 0,
+		})
+		expect(result).toBeUndefined()
+		expect(getSessionState("s").run.toolCalls).toBe(1)
+	})
+
+	it("nudges a reply that ends right after a failed command, naming the exit code", async () => {
+		const { config, rows } = install()
+		const reply = assistant("The build fails because libfoo is missing from the link line.")
+		const runMessages = [
+			toolResult("run_commands", [
+				{ query: "make", result: "[Command exited with code 2]", error: "Command exited with code 2", success: false },
+			]),
+			reply,
+		]
+		const reminder = await config.completionGuard?.({ message: reply, iteration: 2, runMessages, messages: runMessages })
+		expect(reminder).toContain("exit code 2")
+		expect(rows[0]).toContain("rule: after-failed-command")
+	})
+
+	it("writes one run record when a routed run ends on a tool-free reply", async () => {
+		const { config, runs } = install()
+		const state = getSessionState("s")
+		state.calls.push({ modelId: "snps-provider/kimi-k2.6", startedAt: NOW, routeName: "coding" })
+		state.run.toolCalls = 4
+		state.run.previousTool = "run_commands"
+		state.run.guardRules.push("announcement")
+		state.run.nudges = 1
+		await config.hooks?.afterRun?.({
+			snapshot: { agentId: "root", iteration: 5 } as never,
+			result: {
+				agentId: "root",
+				runId: "r1",
+				status: "completed",
+				iterations: 5,
+				outputText: "Done.",
+				messages: [assistant("All tests pass. Done.")],
+				usage: {} as never,
+			},
+		})
+		expect(runs).toEqual([
+			expect.objectContaining({
+				sessionId: "s",
+				subAgent: false,
+				profile: "default",
+				model: "snps-provider/kimi-k2.6",
+				route: "coding",
+				calls: 1,
+				iterations: 5,
+				ending: "text",
+				toolCalls: 4,
+				previousTool: "run_commands",
+				guardRules: ["announcement"],
+				nudges: 1,
+				replyChars: 21,
+				replyTail: "All tests pass. Done.",
+			}),
+		])
+	})
+
+	it("records a completion-tool ending and skips the run log for a concrete model", async () => {
+		const { config, runs } = install()
+		await config.hooks?.afterRun?.({
+			snapshot: { agentId: "root", iteration: 1 } as never,
+			result: {
+				agentId: "root",
+				runId: "r1",
+				status: "completed",
+				iterations: 1,
+				outputText: "",
+				messages: [
+					{
+						id: "a",
+						role: "assistant",
+						content: [{ type: "tool-call", toolCallId: "c", toolName: "submit_and_exit", input: {} }],
+						createdAt: 0,
+					},
+				],
+				usage: {} as never,
+			},
+		})
+		expect(runs[0]?.ending).toBe("completion-tool")
+
+		const direct = install("snps-provider/kimi-k2.6")
+		await direct.config.hooks?.afterRun?.({
+			snapshot: { agentId: "root", iteration: 1 } as never,
+			result: {
+				agentId: "root",
+				runId: "r2",
+				status: "completed",
+				iterations: 1,
+				outputText: "",
+				messages: [],
+				usage: {} as never,
+			},
+		})
+		expect(direct.runs).toHaveLength(0)
 	})
 })
 
@@ -195,6 +361,16 @@ describe("installRouter profiles, effort and call log", () => {
 
 		await run()
 		expect(classifierModel).toHaveBeenCalledTimes(2)
+	})
+
+	it("records why the classifier gave no verdict on the turn's first call", async () => {
+		const { rows, logged, run, classifierModel } = setup("pliny/free-auto-smart")
+		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: "I believe this is a coding task, so" }, STOP]))
+		await run({}, 2)
+		expect(rows[0]).toContain("classifier gave no verdict")
+		expect(logged[0]?.classifierError).toContain("unusable reply")
+		expect(logged[0]?.tier).toBeUndefined()
+		expect(logged[1]?.classifierError).toBeUndefined()
 	})
 
 	it("never classifies a sub-agent call, nor anything on the default profile", async () => {

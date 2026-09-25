@@ -18,10 +18,11 @@
  * it from the transcript and guaranteeing duplication on the retry.
  */
 
-import { classifyProviderError, type ModelInfo, type PlinyThinkingControls } from "@plinycode/llms"
+import { classifyProviderError, isPlinySelfHostedModelId, type ModelInfo, type PlinyThinkingControls } from "@plinycode/llms"
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
 import { effortOptions, selectCandidates } from "./router-policy"
+import { withRouterAddendum } from "./router-prompt"
 import type {
 	RouterCallTiming,
 	RouterClassification,
@@ -30,6 +31,7 @@ import type {
 	RouterRequestFeatures,
 	RouterRules,
 } from "./router-types"
+import { looksDegenerate } from "./unfinished-turn-guard"
 
 /** What the router reports back to the host so it can show rows and keep state. */
 export interface RouterObserver {
@@ -95,6 +97,42 @@ function isNonRoutableFailure(error: unknown, aborted: boolean): boolean {
 		return true
 	}
 	return classifyProviderError(error) === "auth"
+}
+
+const DEGENERATE_OUTPUT_PREFIX = "Degenerate output"
+
+/** True for the error a call reports when its text collapsed into repetition. */
+export function isDegenerateOutputError(error: string): boolean {
+	return error.startsWith(DEGENERATE_OUTPUT_PREFIX)
+}
+
+/**
+ * Wrap a stream so that text collapsing into one repeated token (" .   .   .",
+ * "]]]]" for thousands of characters) ends the call as an error instead of
+ * being accepted as the answer. Checked every ~1 000 characters once the reply
+ * is long enough for repetition to be unambiguous.
+ */
+async function* withDegenerateOutputDetector(
+	source: AsyncIterable<AgentModelEvent>,
+	options: { modelId: string; onDetect: (chars: number) => void },
+): AsyncGenerator<AgentModelEvent> {
+	let text = ""
+	let nextCheckAt = 2000
+	for await (const event of source) {
+		if (event.type === "text-delta") {
+			text += event.text
+			if (text.length >= nextCheckAt) {
+				nextCheckAt = text.length + 1000
+				if (looksDegenerate(text)) {
+					options.onDetect(text.length)
+					throw new Error(
+						`${DEGENERATE_OUTPUT_PREFIX} (repeated text) from ${options.modelId} after ${text.length} characters`,
+					)
+				}
+			}
+		}
+		yield event
+	}
 }
 
 /**
@@ -208,7 +246,16 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 				const nextModelId = candidates[index + 1]
 				const startedAt = now()
 				const reasoning = effortOptions(decision.effort, decision.reasoningEffort, deps.thinkingControls?.(modelId))
-				const delegateRequest = reasoning ? { ...request, options: { ...request.options, ...reasoning } } : request
+				// The free models get the extra "how your turn ends" instructions;
+				// a paid candidate (BalanceAuto) is sent the prompt untouched.
+				const systemPrompt = isPlinySelfHostedModelId(modelId)
+					? withRouterAddendum(request.systemPrompt)
+					: request.systemPrompt
+				const delegateRequest: AgentModelRequest = {
+					...request,
+					...(systemPrompt !== undefined ? { systemPrompt } : {}),
+					...(reasoning ? { options: { ...request.options, ...reasoning } } : {}),
+				}
 				deps.observer.onCallStart({
 					modelId,
 					decision,
@@ -229,11 +276,19 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 				try {
 					const delegate = delegateFor(modelId)
 					const source = await delegate.stream(delegateRequest)
-					const guarded = withStallWatchdog(source, {
-						firstTokenTimeoutMs: rules.health.firstTokenTimeoutMs,
-						stallTimeoutMs: rules.health.stallTimeoutMs,
-						onStall: (ms) => Logger.warn(`[FreeAuto] ${modelId} stalled after ${ms}ms (call started ${startedAt})`),
-					})
+					const guarded = withDegenerateOutputDetector(
+						withStallWatchdog(source, {
+							firstTokenTimeoutMs: rules.health.firstTokenTimeoutMs,
+							stallTimeoutMs: rules.health.stallTimeoutMs,
+							onStall: (ms) =>
+								Logger.warn(`[FreeAuto] ${modelId} stalled after ${ms}ms (call started ${startedAt})`),
+						}),
+						{
+							modelId,
+							onDetect: (chars) =>
+								Logger.warn(`[FreeAuto] ${modelId} degenerated into repeated text after ${chars} characters`),
+						},
+					)
 
 					for await (const event of guarded) {
 						if (event.type === "finish") {
