@@ -131,6 +131,8 @@ export interface ExtensionState {
 	useAutoCondense?: boolean
 	compactionStrategy?: string
 	webSearchEnabled?: boolean
+	/** `plinycode.updates.prerelease`: the auto-updater also installs pre-releases. */
+	prereleaseUpdatesEnabled?: boolean
 	subagentsEnabled?: boolean
 	worktreesEnabled?: ClineFeatureSetting
 	favoritedModelIds: string[]

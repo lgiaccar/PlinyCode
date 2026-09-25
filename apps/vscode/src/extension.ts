@@ -201,6 +201,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	registerAutoUpdater(context)
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration((event) => {
+			// Keep the Settings view's pre-release checkbox in step with edits made in VS Code's settings.
+			if (event.affectsConfiguration("plinycode.updates.prerelease")) {
+				void WebviewProvider.getInstance()?.controller.postStateToWebview()
+			}
+		}),
+	)
 
 	// Built-in PR / pipeline MCP server, for PlinyCode and the editor's own AI chat.
 	DevOpsMcpService.activate(context).catch((error) => Logger.error("[DevOpsMcp] Failed to start:", error))

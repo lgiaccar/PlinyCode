@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
-import { parseManifest, type ReleaseManifest, verifyStagedVsix } from "./release-folder"
+import { compareVersions, parseManifest, type ReleaseManifest, verifyStagedVsix } from "./release-folder"
 
 /**
  * GitHub Releases is the primary update source: it needs no login or sync, so
@@ -13,6 +13,18 @@ export const GITHUB_REPO = "lgiaccar/PlinyCode"
 
 /** Always serves latest.json from the newest non-draft, non-prerelease release. */
 export const DEFAULT_RELEASE_URL = `https://github.com/${GITHUB_REPO}/releases/latest/download/latest.json`
+
+/**
+ * Atom feed of the newest releases and tags, pre-releases included (drafts
+ * never appear). Read only when `plinycode.updates.prerelease` is on, since
+ * /releases/latest never serves a pre-release. The feed is used instead of
+ * api.github.com because the API allows 60 anonymous requests an hour per IP,
+ * which a whole office behind one proxy address exhausts.
+ */
+export const RELEASES_FEED_URL = `https://github.com/${GITHUB_REPO}/releases.atom`
+
+/** How many of the feed's newest versions to try before giving up. */
+const MAX_FEED_VERSIONS = 5
 
 const MANIFEST_TIMEOUT_MS = 30_000
 const DOWNLOAD_TIMEOUT_MS = 5 * 60_000
@@ -74,6 +86,45 @@ export async function fetchRemoteManifest(manifestUrl: string, fetchImpl: Fetch)
 		resolveRemoteAsset(manifestUrl, manifest.notes)
 	}
 	return manifest
+}
+
+/** Versions named by the feed's `release_<version>` tags, newest first. */
+export function versionsInReleaseFeed(feed: string): string[] {
+	const versions = new Set<string>()
+	for (const match of feed.matchAll(/\/releases\/tag\/release_([^"'<>\s]+)/g)) {
+		const version = decodeURIComponent(match[1])
+		// compareVersions sorts invalid versions first, so this drops tags that aren't versions.
+		if (compareVersions(version, "") > 0) {
+			versions.add(version)
+		}
+	}
+	return [...versions].sort((a, b) => compareVersions(b, a))
+}
+
+/**
+ * Finds the newest published release, pre-releases included, and returns its
+ * manifest with the latest.json URL it came from, or undefined when there is
+ * none. The feed also lists bare tags, so versions whose latest.json is
+ * missing (404) are skipped; deleting that asset therefore takes a release off
+ * the pre-release channel. The URL is on github.com, like DEFAULT_RELEASE_URL,
+ * so the usual same-origin checks apply to the manifest.
+ */
+export async function findNewestRelease(fetchImpl: Fetch): Promise<{ url: string; manifest: ReleaseManifest } | undefined> {
+	const response = await fetchImpl(RELEASES_FEED_URL, {
+		headers: { Accept: "application/atom+xml" },
+		signal: AbortSignal.timeout(MANIFEST_TIMEOUT_MS),
+	})
+	if (!response.ok) {
+		throw new Error(`${RELEASES_FEED_URL} returned HTTP ${response.status}`)
+	}
+	for (const version of versionsInReleaseFeed(await response.text()).slice(0, MAX_FEED_VERSIONS)) {
+		const url = releaseManifestUrl(version)
+		const manifest = await fetchRemoteManifest(url, fetchImpl)
+		if (manifest) {
+			return { url, manifest }
+		}
+	}
+	return undefined
 }
 
 /** Downloads the release's .vsix into `stagingDir` and verifies its checksum. */

@@ -5,6 +5,7 @@ import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-
 import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { TelemetrySetting } from "@shared/TelemetrySetting"
 import { ClineEnv } from "@/config"
+import { setPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { McpDisplayMode } from "@/shared/McpDisplayMode"
 import { Logger } from "@/shared/services/Logger"
 import { telemetryService } from "../../../services/telemetry"
@@ -168,6 +169,11 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 		// Update web search setting (stored in the SDK global settings file; applied when the next session is built)
 		if (request.webSearchEnabled !== undefined) {
 			setModelToolEnabledGlobally("web_search", !!request.webSearchEnabled)
+		}
+
+		// Stored as the plinycode.updates.prerelease VS Code setting, which the auto-updater watches
+		if (request.prereleaseUpdatesEnabled !== undefined) {
+			await setPrereleaseChannelEnabled(request.prereleaseUpdatesEnabled)
 		}
 
 		if (request.compactionStrategy !== undefined) {

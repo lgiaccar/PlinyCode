@@ -383,6 +383,12 @@
 					"default": true,
 					"description": "Automatically install new PlinyCode releases from GitHub, or from the shared PlinyCodeRelease folder synced by OneDrive. Checks shortly after startup and every 6 hours."
 				},
+				"plinycode.updates.prerelease": {
+					"type": "boolean",
+					"default": false,
+					"scope": "application",
+					"markdownDescription": "Also install PlinyCode **pre-releases** (e.g. `0.1.4-test.1`) from GitHub, for developers and testers. Leave off to get official releases only (e.g. `0.1.4`). Turning it off never downgrades: a pre-release you already have stays until a newer official release replaces it."
+				},
 				"plinycode.updates.url": {
 					"type": "string",
 					"default": "https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json",

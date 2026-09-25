@@ -12,7 +12,7 @@
  *
  * Options for publish:
  *   --prerelease      publish a GitHub pre-release only: not served by /releases/latest and never
- *                     copied to the folder; testers point plinycode.updates.url at its latest.json
+ *                     copied to the folder; editors with plinycode.updates.prerelease on install it
  *   --skip-github     publish to the folder only
  *   --skip-folder     publish to GitHub only
  *   --folder <path>   release folder (default: $PLINYCODE_RELEASE_FOLDER, else found in OneDrive)
@@ -161,7 +161,7 @@ async function publishGithub(manifest: ReleaseManifest, notes: string): Promise<
 	// A draft is invisible to /releases/latest, so users only see the release
 	// once both assets are uploaded and it is published in the second step.
 	// A pre-release is never served by /releases/latest, so it only reaches
-	// editors whose plinycode.updates.url points at its own latest.json.
+	// editors with plinycode.updates.prerelease on (or pointed at its latest.json).
 	const vsix = path.join(stagingDir, vsixName)
 	const create = ["gh", "release", "create", tag, "--repo", GITHUB_REPO, "--verify-tag", "--draft"]
 	if (prerelease) {
@@ -192,9 +192,13 @@ async function publishGithub(manifest: ReleaseManifest, notes: string): Promise<
 		if (latest?.version === version) {
 			console.warn(`GitHub: WARNING: ${DEFAULT_RELEASE_URL} serves the pre-release; mark it as a pre-release on GitHub`)
 		} else {
-			console.log(`GitHub: ${DEFAULT_RELEASE_URL} still serves ${latest?.version ?? "no release"}, so users are unaffected`)
+			console.log(
+				`GitHub: ${DEFAULT_RELEASE_URL} still serves ${latest?.version ?? "no release"}, so users without pre-releases turned on are unaffected`,
+			)
 		}
-		console.log(`To test it, set plinycode.updates.url to ${url}`)
+		console.log(
+			`Editors with plinycode.updates.prerelease on install it at their next check, or on "PlinyCode: Check for Updates"`,
+		)
 	}
 }
 

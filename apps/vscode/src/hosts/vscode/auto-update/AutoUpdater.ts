@@ -13,7 +13,8 @@ import {
 	resolveInReleaseFolder,
 	stageVsix,
 } from "./release-folder"
-import { DEFAULT_RELEASE_URL, downloadVsix, fetchRemoteManifest, resolveRemoteAsset } from "./release-remote"
+import { DEFAULT_RELEASE_URL, downloadVsix, fetchRemoteManifest, findNewestRelease, resolveRemoteAsset } from "./release-remote"
+import { isPrereleaseChannelEnabled, PRERELEASE_SETTING, UPDATE_SETTINGS_SECTION } from "./update-settings"
 
 const FIRST_CHECK_DELAY_MS = 30_000
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -89,6 +90,9 @@ class AutoUpdater {
 			}
 			return
 		}
+		if (errors.length) {
+			Logger.warn(`[AutoUpdate] Some update sources failed: ${errors.join("; ")}`)
+		}
 
 		// Newest first; on a tie the earlier source (GitHub) wins.
 		const newer = candidates
@@ -132,18 +136,18 @@ class AutoUpdater {
 	}
 
 	private async findCandidates(): Promise<{ candidates: UpdateCandidate[]; errors: string[] }> {
-		const settings = vscode.workspace.getConfiguration("plinycode.updates")
+		const settings = vscode.workspace.getConfiguration(UPDATE_SETTINGS_SECTION)
 		const candidates: UpdateCandidate[] = []
 		const errors: string[] = []
 
-		const url = settings.get<string>("url", DEFAULT_RELEASE_URL).trim()
-		if (url) {
+		const addRemote = async (source: string, find: () => Promise<{ url: string; manifest: ReleaseManifest } | undefined>) => {
 			try {
-				const manifest = await fetchRemoteManifest(url, fetch)
-				if (manifest) {
+				const found = await find()
+				if (found) {
+					const { url, manifest } = found
 					candidates.push({
 						manifest,
-						source: new URL(url).host,
+						source,
 						stage: (stagingDir) => downloadVsix(url, manifest, stagingDir, fetch),
 						openNotes: manifest.notes
 							? () => vscode.env.openExternal(vscode.Uri.parse(resolveRemoteAsset(url, manifest.notes as string)))
@@ -151,7 +155,20 @@ class AutoUpdater {
 					})
 				}
 			} catch (error) {
-				errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`)
+				errors.push(`${source}: ${error instanceof Error ? error.message : String(error)}`)
+			}
+		}
+
+		const url = settings.get<string>("url", DEFAULT_RELEASE_URL).trim()
+		if (url) {
+			await addRemote(url, async () => {
+				const manifest = await fetchRemoteManifest(url, fetch)
+				return manifest && { url, manifest }
+			})
+			// Developers and testers also take the newest pre-release; the URL
+			// above still serves official releases if the feed can't be read.
+			if (isPrereleaseChannelEnabled()) {
+				await addRemote("GitHub pre-releases", () => findNewestRelease(fetch))
 			}
 		}
 
@@ -182,6 +199,18 @@ class AutoUpdater {
 		}
 
 		return { candidates, errors }
+	}
+
+	/**
+	 * The updater never downgrades, so someone who opts out while running a
+	 * pre-release keeps it until an official release overtakes it.
+	 */
+	explainLeavingPrereleases(): void {
+		if (this.currentVersion.includes("-")) {
+			void vscode.window.showInformationMessage(
+				`PlinyCode will stay on pre-release ${this.currentVersion} until a newer official release is published, then update to it.`,
+			)
+		}
 	}
 
 	private async promptReload(candidate: UpdateCandidate): Promise<void> {
@@ -220,10 +249,25 @@ export function registerAutoUpdater(context: vscode.ExtensionContext): void {
 	)
 
 	const autoCheck = () => {
-		if (vscode.workspace.getConfiguration("plinycode.updates").get<boolean>("enabled", true)) {
+		if (vscode.workspace.getConfiguration(UPDATE_SETTINGS_SECTION).get<boolean>("enabled", true)) {
 			void updater.check(false)
 		}
 	}
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration((event) => {
+			// User settings change in every open window; only the one the user is in reacts.
+			if (!event.affectsConfiguration(`${UPDATE_SETTINGS_SECTION}.${PRERELEASE_SETTING}`) || !vscode.window.state.focused) {
+				return
+			}
+			if (isPrereleaseChannelEnabled()) {
+				// Opting in: fetch the newest pre-release now rather than in up to 6 hours.
+				autoCheck()
+			} else {
+				updater.explainLeavingPrereleases()
+			}
+		}),
+	)
 	const firstCheck = setTimeout(() => {
 		void updater.forgetStaleInstall().then(autoCheck)
 	}, FIRST_CHECK_DELAY_MS)
