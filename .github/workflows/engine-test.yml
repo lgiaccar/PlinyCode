@@ -45,7 +45,9 @@ jobs:
                   bun run types
 
             - name: Lint & Format
-              run: bun run lint
+              run: |
+                  bun run lint
+                  bun run format
 
     test:
         needs: quality-checks
