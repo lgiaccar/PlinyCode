@@ -60,7 +60,7 @@ function clampSeconds(value: unknown, max: number): number {
 	return Math.min(Math.round(seconds), max)
 }
 
-export function createWaitTool(options: WaitToolOptions = {}): AgentTool<WaitToolInput, string> {
+export function createWaitTool(options: WaitToolOptions = {}): AgentTool {
 	const maxSeconds = options.maxSeconds ?? WAIT_TOOL_MAX_SECONDS
 	const maxTotal = options.maxTotalSecondsPerRun ?? WAIT_TOOL_MAX_TOTAL_SECONDS_PER_RUN
 	const sleep = options.sleep ?? defaultSleep
@@ -97,7 +97,10 @@ export function createWaitTool(options: WaitToolOptions = {}): AgentTool<WaitToo
 		// Waiting is inert: nothing to approve, nothing to retry.
 		retryable: false,
 		timeoutMs: (maxSeconds + 60) * 1000,
-		async execute(input: WaitToolInput, context: AgentToolContext): Promise<string> {
+		// Typed `unknown` like every runtime tool: the model's arguments are only
+		// as trustworthy as the schema it was shown, and clampSeconds copes.
+		async execute(rawInput: unknown, context: AgentToolContext): Promise<string> {
+			const input = (rawInput ?? {}) as Partial<WaitToolInput>
 			const key = context.runId ?? "(no run)"
 			const alreadyWaited = waitedPerRun.get(key) ?? 0
 			const remaining = maxTotal - alreadyWaited
