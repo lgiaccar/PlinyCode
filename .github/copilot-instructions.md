@@ -10,6 +10,6 @@ Do not add rules here; update the relevant `AGENTS.md` instead. The essentials, 
 
 - Use Bun (`bun install`, `bun run …`), never npm, yarn or pnpm.
 - After changing anything under `sdk/`, run `bun run build:sdk` before building or testing the extension.
-- Typecheck the extension with `cd apps/vscode && bun run check-types`. The root `bun run types` covers the engine packages only.
+- Before pushing, run `bun run check` (lint, format, builds and typecheck for every package, including the extension).
 - Pull requests target the `stage` branch.
 - The product name in anything users see is **PlinyCode**. Internal `cline` identifiers (command IDs, the `cline` proto package, `.clinerules`) are kept on purpose.
