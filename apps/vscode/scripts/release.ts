@@ -11,6 +11,8 @@
  *   bun scripts/release.ts publish              # GitHub release, then the OneDrive folder
  *
  * Options for publish:
+ *   --prerelease      publish a GitHub pre-release only: not served by /releases/latest and never
+ *                     copied to the folder; testers point plinycode.updates.url at its latest.json
  *   --skip-github     publish to the folder only
  *   --skip-folder     publish to GitHub only
  *   --folder <path>   release folder (default: $PLINYCODE_RELEASE_FOLDER, else found in OneDrive)
@@ -34,6 +36,7 @@ import {
 	fetchRemoteManifest,
 	GITHUB_REPO,
 	githubManifest,
+	releaseManifestUrl,
 	releaseTag,
 } from "../src/hosts/vscode/auto-update/release-remote"
 import { restore, swapIn } from "./marketplace-readme.mjs"
@@ -43,6 +46,7 @@ const { version } = JSON.parse(await fs.readFile(path.join(projectRoot, "package
 const vsixName = `PlinyCode-${version}.vsix`
 const stagingDir = path.join(projectRoot, "dist", "release", version)
 const tag = releaseTag(version)
+const prerelease = process.argv.includes("--prerelease")
 
 const args = process.argv.slice(2)
 const flag = (name: string) => args.includes(name)
@@ -156,24 +160,42 @@ async function publishGithub(manifest: ReleaseManifest, notes: string): Promise<
 
 	// A draft is invisible to /releases/latest, so users only see the release
 	// once both assets are uploaded and it is published in the second step.
+	// A pre-release is never served by /releases/latest, so it only reaches
+	// editors whose plinycode.updates.url points at its own latest.json.
 	const vsix = path.join(stagingDir, vsixName)
 	const create = ["gh", "release", "create", tag, "--repo", GITHUB_REPO, "--verify-tag", "--draft"]
+	if (prerelease) {
+		create.push("--prerelease")
+	}
 	if (!run([...create, "--title", `PlinyCode ${version}`, "--notes-file", notes, vsix, manifestFile], true).ok) {
 		fail("gh release create failed; nothing was published")
 	}
-	if (!run(["gh", "release", "edit", tag, "--repo", GITHUB_REPO, "--draft=false", "--latest"], true).ok) {
+	const edit = ["gh", "release", "edit", tag, "--repo", GITHUB_REPO, "--draft=false", `--latest=${!prerelease}`]
+	if (!run(edit, true).ok) {
 		fail(`the draft release ${tag} is uploaded but could not be published; publish it on GitHub`)
 	}
 
+	const url = prerelease ? releaseManifestUrl(version) : DEFAULT_RELEASE_URL
 	for (let attempt = 0; attempt < 5; attempt++) {
-		const live = await fetchRemoteManifest(DEFAULT_RELEASE_URL, fetch).catch(() => undefined)
+		const live = await fetchRemoteManifest(url, fetch).catch(() => undefined)
 		if (live?.version === version) {
-			console.log(`GitHub: ${DEFAULT_RELEASE_URL} now serves ${version}`)
-			return
+			console.log(`GitHub: ${url} now serves ${version}`)
+			break
+		}
+		if (attempt === 4) {
+			console.warn(`GitHub: ${url} does not serve ${version} yet; check the release page`)
 		}
 		await Bun.sleep(3000)
 	}
-	console.warn(`GitHub: ${DEFAULT_RELEASE_URL} does not serve ${version} yet; check the release page`)
+	if (prerelease) {
+		const latest = await fetchRemoteManifest(DEFAULT_RELEASE_URL, fetch).catch(() => undefined)
+		if (latest?.version === version) {
+			console.warn(`GitHub: WARNING: ${DEFAULT_RELEASE_URL} serves the pre-release; mark it as a pre-release on GitHub`)
+		} else {
+			console.log(`GitHub: ${DEFAULT_RELEASE_URL} still serves ${latest?.version ?? "no release"}, so users are unaffected`)
+		}
+		console.log(`To test it, set plinycode.updates.url to ${url}`)
+	}
 }
 
 async function publishFolder(folder: string, manifest: ReleaseManifest, notes: string): Promise<void> {
@@ -207,17 +229,22 @@ async function publishRelease(): Promise<void> {
 
 	// Every check runs before anything is published.
 	const github = !flag("--skip-github")
+	if (prerelease && !github) {
+		fail("--prerelease publishes to GitHub only; drop --skip-github")
+	}
 	if (github) {
 		const published = await checkGithub()
 		requireNewer(`GitHub (${GITHUB_REPO})`, published)
 		console.log(`GitHub: ${GITHUB_REPO} release ${tag} (published now: ${published ?? "none"})`)
 	}
-	const folder = flag("--skip-folder") ? undefined : await resolveReleaseFolder()
+	// The folder has no pre-release channel: everyone who syncs it would install it.
+	const skipFolder = flag("--skip-folder") || prerelease
+	const folder = skipFolder ? undefined : await resolveReleaseFolder()
 	if (folder) {
 		const published = (await exists(path.join(folder, MANIFEST_FILE_NAME))) ? (await readManifest(folder)).version : undefined
 		requireNewer(folder, published)
 		console.log(`Folder: ${folder} (published now: ${published ?? "none"})`)
-	} else if (!flag("--skip-folder")) {
+	} else if (!skipFolder) {
 		console.warn(`Folder: ${RELEASE_FOLDER_NAME} not found, skipping it (pass --folder to include it)`)
 	}
 	if (!github && !folder) {
@@ -239,7 +266,11 @@ async function publishRelease(): Promise<void> {
 			notes,
 		)
 	}
-	console.log(`\nPublished ${version}. Users get it at their next update check.`)
+	console.log(
+		prerelease
+			? `\nPublished pre-release ${version}. Only editors whose plinycode.updates.url points at it will install it.`
+			: `\nPublished ${version}. Users get it at their next update check.`,
+	)
 }
 
 switch (args[0]) {
@@ -251,6 +282,6 @@ switch (args[0]) {
 		break
 	default:
 		fail(
-			"usage: bun scripts/release.ts <package | publish [--dry-run] [--skip-github] [--skip-folder] [--folder <path>] [--force]>",
+			"usage: bun scripts/release.ts <package | publish [--dry-run] [--prerelease] [--skip-github] [--skip-folder] [--folder <path>] [--force]>",
 		)
 }

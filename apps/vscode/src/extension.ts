@@ -40,6 +40,7 @@ import {
 } from "./core/storage/state-migrations"
 import { workspaceResolver } from "./core/workspace"
 import { registerAutoUpdater } from "./hosts/vscode/auto-update/AutoUpdater"
+import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extension"
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
@@ -70,6 +71,10 @@ export async function reportRolloutActivation(input: RolloutBundleActivation): P
 // for all-platform should be registered in common.ts.
 export async function activate(context: vscode.ExtensionContext) {
 	const activationStartTime = performance.now()
+
+	// The 0.1.0 build (old extension ID) registers the same commands; remove it
+	// before anything below can trip over them.
+	void removeLegacyExtension()
 
 	// Before anything spawns with the workspace as cwd (rg, git, hooks, MCP).
 	disableCurrentDirectoryExecutableSearch()
