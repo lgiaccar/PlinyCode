@@ -1,5 +1,7 @@
-import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
+import { VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
+import { useExtensionState } from "@/context/ExtensionStateContext"
 import Section from "../Section"
+import { updateSetting } from "../utils/settingsHandlers"
 
 interface AboutSectionProps {
 	version: string
@@ -13,6 +15,8 @@ const VARIANT_LABELS: Record<"legacy" | "next", string> = {
 }
 
 const AboutSection = ({ version, extensionVariant, renderSectionHeader }: AboutSectionProps) => {
+	const { prereleaseUpdatesEnabled } = useExtensionState()
+
 	return (
 		<div>
 			{renderSectionHeader("about")}
@@ -31,6 +35,19 @@ const AboutSection = ({ version, extensionVariant, renderSectionHeader }: AboutS
 						step-by-step with tools that let him create & edit files, explore large projects, use the browser, and
 						execute terminal commands (after you grant permission).
 					</p>
+
+					<h3 className="text-md font-semibold">Updates</h3>
+					<div>
+						<VSCodeCheckbox
+							checked={!!prereleaseUpdatesEnabled}
+							onChange={(e: any) => updateSetting("prereleaseUpdatesEnabled", e.target.checked === true)}>
+							Install pre-releases (developers and testers)
+						</VSCodeCheckbox>
+						<p className="text-sm mt-[5px] text-description">
+							Also install test builds such as 0.1.4-test.1 as soon as they are published. Leave off to get official
+							releases only. Turning this off keeps your current build until a newer official release replaces it.
+						</p>
+					</div>
 
 					<h3 className="text-md font-semibold">Community & Support</h3>
 					<p>

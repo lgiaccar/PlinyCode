@@ -200,6 +200,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	registerAutoUpdater(context)
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration((event) => {
+			// Keep the Settings view's pre-release checkbox in step with edits made in VS Code's settings.
+			if (event.affectsConfiguration("plinycode.updates.prerelease")) {
+				void WebviewProvider.getInstance()?.controller.postStateToWebview()
+			}
+		}),
+	)
 
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
 
