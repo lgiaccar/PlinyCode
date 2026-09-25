@@ -1,12 +1,18 @@
 #!/usr/bin/env bun
 
 /**
- * Fails when a tracked markdown file links to a repo path that does not exist.
+ * Fails when a tracked markdown file links to a repo path that does not exist,
+ * or when a Claude Code skill (`.claude/skills/<name>/SKILL.md`) has invalid
+ * frontmatter.
  *
  * Checks relative targets of inline links, images and reference definitions,
  * outside code blocks and code spans. External URLs and `#anchor`-only links
  * are skipped, and anchors are not checked. Only files tracked by git are
  * read, so node_modules and local worktrees are never scanned.
+ *
+ * A skill needs a `name` equal to its directory name (lowercase words joined
+ * by hyphens, at most 64 characters) and a non-empty `description` of at most
+ * 1024 characters, which is what decides when the skill is used.
  */
 
 import { existsSync } from "node:fs";
@@ -21,6 +27,11 @@ const REFERENCE_DEFINITION = /^ {0,3}\[[^\]]+\]:\s*(<[^>]*>|\S+)/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const CODE_SPAN = /(`+)[\s\S]*?\1/g;
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const SKILL_FILE = /^\.claude\/skills\/([^/]+)\/SKILL\.md$/;
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_SKILL_NAME_LENGTH = 64;
+const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
 
 type BrokenLink = { file: string; line: number; target: string };
 
@@ -92,20 +103,80 @@ async function checkFile(file: string): Promise<BrokenLink[]> {
 	return broken;
 }
 
+async function checkSkill(
+	file: string,
+	directoryName: string,
+): Promise<string[]> {
+	const text = await readFile(path.join(root, file), "utf8");
+	const frontmatter = FRONTMATTER.exec(text);
+	if (!frontmatter) {
+		return ["missing YAML frontmatter between --- lines at the top"];
+	}
+	let data: unknown;
+	try {
+		data = Bun.YAML.parse(frontmatter[1]);
+	} catch (error) {
+		return [`frontmatter is not valid YAML: ${(error as Error).message}`];
+	}
+	const fields = (data ?? {}) as Record<string, unknown>;
+	const problems: string[] = [];
+
+	const { name, description } = fields;
+	if (typeof name !== "string" || name === "") {
+		problems.push("missing `name`");
+	} else if (name !== directoryName) {
+		problems.push(
+			`\`name\` is "${name}" but the directory is "${directoryName}"`,
+		);
+	} else if (!SKILL_NAME.test(name) || name.length > MAX_SKILL_NAME_LENGTH) {
+		problems.push(
+			`\`name\` must be lowercase words joined by hyphens, at most ${MAX_SKILL_NAME_LENGTH} characters`,
+		);
+	}
+	if (typeof description !== "string" || description.trim() === "") {
+		problems.push("missing `description`");
+	} else if (description.length > MAX_SKILL_DESCRIPTION_LENGTH) {
+		problems.push(
+			`\`description\` is ${description.length} characters; the limit is ${MAX_SKILL_DESCRIPTION_LENGTH}`,
+		);
+	}
+	return problems;
+}
+
 async function main(): Promise<void> {
 	const files = listTrackedMarkdown();
 	const broken = (await Promise.all(files.map(checkFile))).flat();
+	const skills = files.flatMap((file) => {
+		const match = SKILL_FILE.exec(file);
+		return match ? [{ file, directoryName: match[1] }] : [];
+	});
+	const skillProblems = (
+		await Promise.all(
+			skills.map(async ({ file, directoryName }) =>
+				(
+					await checkSkill(file, directoryName)
+				).map((problem) => `${file}: ${problem}`),
+			),
+		)
+	).flat();
 
 	for (const { file, line, target } of broken) {
 		console.error(`${file}:${line}: broken link to ${target}`);
 	}
-	if (broken.length > 0) {
+	for (const problem of skillProblems) {
+		console.error(problem);
+	}
+	if (broken.length > 0 || skillProblems.length > 0) {
 		console.error(
-			`\n${broken.length} broken link(s) in ${files.length} markdown files.`,
+			`\n${broken.length} broken link(s) in ${files.length} markdown files; ` +
+				`${skillProblems.length} problem(s) in ${skills.length} skills.`,
 		);
 		process.exit(1);
 	}
-	console.log(`All relative links resolve in ${files.length} markdown files.`);
+	console.log(
+		`All relative links resolve in ${files.length} markdown files; ` +
+			`all ${skills.length} skills have valid frontmatter.`,
+	);
 }
 
 await main();
