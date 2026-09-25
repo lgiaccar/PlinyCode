@@ -1,7 +1,8 @@
 {
-  "_comment": "Verified live against the Pliny gateway 2026-09-20. context = measured max_model_len reported by the gateway itself, NOT hand-entered. tool_call = a real tool_calls response was observed.",
+  "_comment": "Verified live against the Pliny gateway 2026-09-20. selfHosted context = measured max_model_len reported by the gateway itself, NOT hand-entered. hosted context / max_output = the limits listed on the Pliny Model Catalog page (2026-09-25); hosted entries without them fall back to 200k / 64k in code. tool_call = a real tool_calls response was observed.",
   "_thinkingNote": "selfHosted `thinking` = measured by `apps/vscode/scripts/probe-pliny-free-models.ts --thinking` on 2026-09-24 (see docs/pliny-free-auto-thinking.md): whether the model reasons with no hint (defaultOn), and which request field reliably turns reasoning off (off) or on (on). Never hand-guess these: an unsupported field such as reasoning_effort is rejected with a 400 by several backends.",
-  "_pricingNote": "pricing is USD per 1M tokens, mapped straight into ModelInfo.pricing. selfHosted models are always free (pricing: 0/0/0/0), stamped in code (see toModelInfo), not here. hosted entries with a `pricing` block were priced from the public list price of the closest known underlying model (see each entry's `priceSource`) as a stand-in for the real internal Pliny price list, which is not available in this repo -- verify before relying on these for billing. hosted entries with NO `pricing` block (gpt-5.2, gpt-5.6-terra, gpt-5.6-luna, the Kimi-K2 family, the claude-4-6 vmodels thinking presets, gemini-3.7-flash, gemini-3-5-flash, glm-5.2, glm-5) have no confidently-matched public price and are left unpriced on purpose -- cost renders as unavailable for them until a real number is supplied.",
+  "_pricingNote": "pricing is USD per 1M tokens, mapped straight into ModelInfo.pricing. selfHosted models are always free (pricing: 0/0/0/0, and Pliny does not count them against the monthly budget), stamped in code (see toModelInfo), not here. hosted prices marked `PLINY_CATALOG` in `priceSource` are copied from the Pliny Model Catalog page (docs site, 'Model Catalog', read 2026-09-25); where a model has both a Standard and an Azure price the Azure one is used, because that is the deployment Pliny serves. `PUBLIC_ESTIMATE` entries are the public list price of the closest known model, standing in for a price the Pliny page does not list. hosted entries with NO `pricing` block (gpt-5.6-terra, gpt-5.6-luna, Kimi-K2.7-Code, gemini-3.7-flash, google-vertex/glm-5.2) are not on the Pliny page and have no confident stand-in, so they are left unpriced on purpose and render as 'price unknown'. Never guess a number here.",
+  "_paramsNote": "`params` = parameter counts in billions from the model's public card (`total` = all weights, `active` = weights used per token; equal for a dense model). Closed models (Claude, GPT, Gemini) do not publish them and have no `params`. `name` / `summary` are the picker's display name and its one- or two-sentence strengths/weaknesses blurb; keep summaries qualitative so they do not go stale.",
   "baseURL": "https://snps-inference.internal.synopsys.com/api/llm",
   "auth": "Authorization: Bearer $PLINY_API_KEY",
   "headers": {
@@ -11,48 +12,278 @@
   "timeouts": { "timeout": 300000, "headerTimeout": 120000, "chunkTimeout": 120000 },
 
   "selfHosted": [
-    { "id": "snps-provider/GLM-5.2",                          "context": 512000, "tool_call": true, "note": "largest self-hosted context", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider-internal-tests/glm-5-2",           "context": 512000, "tool_call": true, "note": "internal-tests pool", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider-vmodels/glm-5.2",                  "context": 512000, "tool_call": true, "note": "vmodels pool (load-balanced)", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/kimi-k2.6",                        "context": 256000, "tool_call": true, "note": "reasons inside content; no measured off-switch", "thinking": {"defaultOn": true} },
-    { "id": "snps-provider/nvidia-nemotron-3-super-120b-a12", "context": 256000, "tool_call": true, "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/qwen3-8-27b",                      "context": 256000, "tool_call": true, "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/qwen3-6-27b",                      "context": 256000, "tool_call": true, "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider-sia/qwen3-8-27b-sia",              "context": 256000, "tool_call": true, "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/gemma-4-31b-it-1-reasoning",       "context": 255500, "tool_call": true, "thinking": {"defaultOn": false, "on": "reasoning-effort"} },
-    { "id": "snps-provider/qwen3.5-397b-fp8",                 "context": 220000, "tool_call": true, "note": "Kilo's current default", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider-sia/qwen3-5-397b-a17b-sia",        "context": 220000, "tool_call": true, "note": "reasons inside content", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/nemotron-3-ultra-550b-a55",        "context": 200000, "tool_call": true, "note": "reasons inside content", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/nim-llama-3-3-70b-instruct-a7786", "context": 131072, "tool_call": true, "thinking": {"defaultOn": false} },
-    { "id": "snps-provider/qwen3-coder-480b-a35b-inst-fp8",   "context": 128000, "tool_call": true, "note": "coding-specialised", "thinking": {"defaultOn": false} },
-    { "id": "snps-provider/qwen3-6-27b-ft",                   "context": 128000, "tool_call": true, "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/qwen3-6-35b-a3b-1-28dd3",          "context": 128000, "tool_call": true, "note": "reasons inside content", "thinking": {"defaultOn": true, "off": "template-kwargs"} },
-    { "id": "snps-provider/gemma-4-31b-it-29cea",             "context": 128000, "tool_call": true, "thinking": {"defaultOn": false, "on": "template-kwargs"} },
-    { "id": "snps-provider/llama-3-3-70b-instruct-128k",      "context": 128000, "tool_call": true, "thinking": {"defaultOn": false} },
-    { "id": "snps-provider/llama-3-3-70b-instruct-74k-ae1a8", "context":  74000, "tool_call": true, "thinking": {"defaultOn": false} },
-    { "id": "snps-provider/qwen2-5-32b-instruct-fe66b",       "context":  64000, "tool_call": true, "thinking": {"defaultOn": false} },
-    { "id": "snps-provider/qwen3-next-80b-a3b-instruct-d79b4","context":  32000, "tool_call": true, "thinking": {"defaultOn": false} },
-    { "id": "snps-provider/llama-3-1-70b-instruct-20ad2",     "context":  32000, "tool_call": true, "thinking": {"defaultOn": false} }
+    {
+      "id": "snps-provider/GLM-5.2", "context": 512000, "tool_call": true, "note": "largest self-hosted context",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "GLM-5.2",
+      "summary": "The strongest free open-weight model for coding and long agentic runs, with the largest context. This pool is the slowest replica; the vmodels pool serves the same model faster.",
+      "params": {"total": 744, "active": 40, "source": "zai-org/GLM-5.2 model card"}
+    },
+    {
+      "id": "snps-provider-internal-tests/glm-5-2", "context": 512000, "tool_call": true, "note": "internal-tests pool",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "GLM-5.2 (internal tests)",
+      "summary": "GLM-5.2 on the internal-tests pool: top free model for coding and huge contexts. A test deployment, so availability can change without notice.",
+      "params": {"total": 744, "active": 40, "source": "zai-org/GLM-5.2 model card"}
+    },
+    {
+      "id": "snps-provider-vmodels/glm-5.2", "context": 512000, "tool_call": true, "note": "vmodels pool (load-balanced)",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "GLM-5.2 (vmodels)",
+      "summary": "GLM-5.2 on the load-balanced pool: the best free choice for large codebases and long tasks. Thinks by default, so simple replies are slower than on smaller models.",
+      "params": {"total": 744, "active": 40, "source": "zai-org/GLM-5.2 model card"}
+    },
+    {
+      "id": "snps-provider/kimi-k2.6", "context": 256000, "tool_call": true, "note": "reasons inside content; no measured off-switch",
+      "thinking": {"defaultOn": true},
+      "name": "Kimi K2.6",
+      "summary": "Fast, strong agentic coder and reliable tool caller; FreeAuto's workhorse. Reasons inside the answer text and cannot be told to stop thinking.",
+      "params": {"total": 1000, "active": 32, "source": "moonshotai/Kimi-K2.6 model card"}
+    },
+    {
+      "id": "snps-provider/nvidia-nemotron-3-super-120b-a12", "context": 256000, "tool_call": true,
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Nemotron 3 Super",
+      "summary": "Efficient hybrid Mamba MoE: a quick, dependable all-rounder for everyday agent work. Less capable than GLM-5.2 or Kimi on hard coding problems.",
+      "params": {"total": 120, "active": 12, "source": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B model card"}
+    },
+    {
+      "id": "snps-provider/qwen3-8-27b", "context": 256000, "tool_call": true,
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.8 27B",
+      "summary": "Recent dense 27B model that codes well for its size, with a 256K context. Slow to generate on this pool, and weaker than the big MoE models on complex tasks.",
+      "params": {"total": 27, "active": 27, "source": "Qwen/Qwen3.8-27B model card"}
+    },
+    {
+      "id": "snps-provider/qwen3-6-27b", "context": 256000, "tool_call": true,
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.6 27B",
+      "summary": "Dense 27B model with good coding for its size and a 256K context. Slow first token on this pool; superseded by Qwen3.8 27B.",
+      "params": {"total": 27, "active": 27, "source": "Qwen/Qwen3.6-27B model card"}
+    },
+    {
+      "id": "snps-provider-sia/qwen3-8-27b-sia", "context": 256000, "tool_call": true,
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.8 27B (SIA)",
+      "summary": "Qwen3.8 27B on the SIA pool: same model and context as the main pool. This pool was down in the last probe, so expect failovers.",
+      "params": {"total": 27, "active": 27, "source": "Qwen/Qwen3.8-27B model card"}
+    },
+    {
+      "id": "snps-provider/gemma-4-31b-it-1-reasoning", "context": 255500, "tool_call": true,
+      "thinking": {"defaultOn": false, "on": "reasoning-effort"},
+      "name": "Gemma 4 31B (reasoning)",
+      "summary": "Google's dense 31B with switchable reasoning and a 256K context: solid, balanced general model. Not as strong at coding as the Qwen or GLM models.",
+      "params": {"total": 31, "active": 31, "source": "google/gemma-4-31B model card (30.7B)"}
+    },
+    {
+      "id": "snps-provider/qwen3.5-397b-fp8", "context": 220000, "tool_call": true, "note": "Kilo's current default",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.5 397B",
+      "summary": "Large MoE with strong reasoning and coding, and a 220K context. Generation is fairly slow, and the newer Qwen3.6/3.8 dense models now match it on coding.",
+      "params": {"total": 397, "active": 17, "source": "Qwen/Qwen3.5-397B-A17B model card"}
+    },
+    {
+      "id": "snps-provider-sia/qwen3-5-397b-a17b-sia", "context": 220000, "tool_call": true, "note": "reasons inside content",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.5 397B (SIA)",
+      "summary": "Qwen3.5 397B on the SIA pool. Reasons inside the answer text, and the pool was down in the last probe.",
+      "params": {"total": 397, "active": 17, "source": "Qwen/Qwen3.5-397B-A17B model card"}
+    },
+    {
+      "id": "snps-provider/nemotron-3-ultra-550b-a55", "context": 200000, "tool_call": true, "note": "reasons inside content",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Nemotron 3 Ultra",
+      "summary": "NVIDIA's largest open reasoning model, quick for its size and good at planning and multi-step reasoning. Reasons inside the answer text, which clutters replies.",
+      "params": {"total": 550, "active": 55, "source": "nvidia/Nemotron-3-Ultra-550B-A55B model card"}
+    },
+    {
+      "id": "snps-provider/nim-llama-3-3-70b-instruct-a7786", "context": 131072, "tool_call": true,
+      "thinking": {"defaultOn": false},
+      "name": "Llama 3.3 70B (NIM)",
+      "summary": "Older dense model that answers quickly and calls tools reliably, without reasoning. Clearly weaker than current models at coding and long tasks.",
+      "params": {"total": 70, "active": 70, "source": "meta-llama/Llama-3.3-70B-Instruct model card"}
+    },
+    {
+      "id": "snps-provider/qwen3-coder-480b-a35b-inst-fp8", "context": 128000, "tool_call": true, "note": "coding-specialised",
+      "thinking": {"defaultOn": false},
+      "name": "Qwen3 Coder 480B",
+      "summary": "Coding-specialised MoE that is good at edits and tool use, with no thinking overhead. Slow generation on this pool and only 128K context.",
+      "params": {"total": 480, "active": 35, "source": "Qwen/Qwen3-Coder-480B-A35B-Instruct model card"}
+    },
+    {
+      "id": "snps-provider/qwen3-6-27b-ft", "context": 128000, "tool_call": true,
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.6 27B (fine-tuned)",
+      "summary": "Synopsys fine-tune of Qwen3.6 27B. The slowest free model in probes, with half the base model's context.",
+      "params": {"total": 27, "active": 27, "source": "Qwen/Qwen3.6-27B model card (base)"}
+    },
+    {
+      "id": "snps-provider/qwen3-6-35b-a3b-1-28dd3", "context": 128000, "tool_call": true, "note": "reasons inside content",
+      "thinking": {"defaultOn": true, "off": "template-kwargs"},
+      "name": "Qwen3.6 35B-A3B",
+      "summary": "Very fast small MoE, good for quick questions. Only 3B active parameters, reasons inside the answer text, and often skips tool calls.",
+      "params": {"total": 35, "active": 3, "source": "Qwen/Qwen3.6-35B-A3B model card"}
+    },
+    {
+      "id": "snps-provider/gemma-4-31b-it-29cea", "context": 128000, "tool_call": true,
+      "thinking": {"defaultOn": false, "on": "template-kwargs"},
+      "name": "Gemma 4 31B",
+      "summary": "Google's dense 31B without reasoning: steady, balanced general model. Reasoning cannot be switched on through the gateway, and coding trails the Qwen and GLM models.",
+      "params": {"total": 31, "active": 31, "source": "google/gemma-4-31B model card (30.7B)"}
+    },
+    {
+      "id": "snps-provider/llama-3-3-70b-instruct-128k", "context": 128000, "tool_call": true,
+      "thinking": {"defaultOn": false},
+      "name": "Llama 3.3 70B",
+      "summary": "Older dense model that answers quickly and calls tools reliably, without reasoning. Clearly weaker than current models at coding and long tasks.",
+      "params": {"total": 70, "active": 70, "source": "meta-llama/Llama-3.3-70B-Instruct model card"}
+    },
+    {
+      "id": "snps-provider/llama-3-3-70b-instruct-74k-ae1a8", "context": 74000, "tool_call": true,
+      "thinking": {"defaultOn": false},
+      "name": "Llama 3.3 70B (74K)",
+      "summary": "Llama 3.3 70B on a smaller-context pool: dependable tool calls, no reasoning. Weaker than current models, and the 74K context fills quickly.",
+      "params": {"total": 70, "active": 70, "source": "meta-llama/Llama-3.3-70B-Instruct model card"}
+    },
+    {
+      "id": "snps-provider/qwen2-5-32b-instruct-fe66b", "context": 64000, "tool_call": true,
+      "thinking": {"defaultOn": false},
+      "name": "Qwen2.5 32B",
+      "summary": "Older dense model that is fine for short, simple tasks. Weak at agentic coding by current standards, with a 64K context.",
+      "params": {"total": 32, "active": 32, "source": "Qwen/Qwen2.5-32B-Instruct model card (32.5B)"}
+    },
+    {
+      "id": "snps-provider/qwen3-next-80b-a3b-instruct-d79b4", "context": 32000, "tool_call": true,
+      "thinking": {"defaultOn": false},
+      "name": "Qwen3 Next 80B-A3B",
+      "summary": "Sparse MoE with quick first tokens, suited to short questions. Only 3B active parameters and a 32K context.",
+      "params": {"total": 80, "active": 3, "source": "Qwen/Qwen3-Next-80B-A3B-Instruct model card"}
+    },
+    {
+      "id": "snps-provider/llama-3-1-70b-instruct-20ad2", "context": 32000, "tool_call": true,
+      "thinking": {"defaultOn": false},
+      "name": "Llama 3.1 70B",
+      "summary": "The oldest model in the pool, with dependable tool calls. Slow, a 32K context, and weak at coding by current standards.",
+      "params": {"total": 70, "active": 70, "source": "meta-llama/Llama-3.1-70B-Instruct model card"}
+    }
   ],
 
   "hosted": [
-    { "id": "snps-aws-bedrock/global.anthropic.claude-sonnet-5",                "tool_call": true, "attachment": true, "cache_control": true, "note": "strongest coder; supports explicit prompt caching (10x saving)", "pricing": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 }, "priceSource": "PUBLIC_ESTIMATE: Anthropic Claude Sonnet public list price (AWS Bedrock), not verified against internal Pliny billing" },
-    { "id": "snps-aws-bedrock/aws-claude-sonnet-4.6",                           "tool_call": true, "attachment": true, "cache_control": true, "pricing": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 }, "priceSource": "PUBLIC_ESTIMATE: Anthropic Claude Sonnet public list price (AWS Bedrock), not verified against internal Pliny billing" },
-    { "id": "snps-aws-bedrock/aws-claude-sonnet-4.5",                           "tool_call": true, "attachment": true, "cache_control": true, "pricing": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 }, "priceSource": "PUBLIC_ESTIMATE: Anthropic Claude Sonnet 4.5 public list price (AWS Bedrock), not verified against internal Pliny billing" },
-    { "id": "snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0", "tool_call": true, "attachment": true, "cache_control": true, "note": "cheap/fast", "pricing": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 }, "priceSource": "PUBLIC_ESTIMATE: Anthropic Claude Haiku 4.5 public list price (AWS Bedrock), not verified against internal Pliny billing" },
-    { "id": "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking",              "tool_call": true, "note": "preset thinking budget" },
-    { "id": "aws-bedrock-vmodels/claude-4-6-sonet-medium-thinking",             "tool_call": true },
-    { "id": "azure-openai/gpt-5.2",                                             "tool_call": true, "attachment": true, "auto_cache": true },
-    { "id": "azure-openai/gpt-5.6-terra",                                       "tool_call": true },
-    { "id": "azure-openai/gpt-5.6-luna",                                        "tool_call": true },
-    { "id": "azure-openai/Kimi-K2.6",                                           "tool_call": true },
-    { "id": "azure-openai/Kimi-K2-Thinking",                                    "tool_call": true },
-    { "id": "azure-openai-internaltests/Kimi-K2.7-Code",                        "tool_call": true },
-    { "id": "snps-google-gcp/gemini-3.7-flash",                                 "tool_call": true },
-    { "id": "snps-google-gcp/gemini-3-5-flash",                                 "tool_call": true },
-    { "id": "snps-google-gcp/gemini-2-5-flash",                                 "tool_call": true, "pricing": { "input": 0.3, "output": 2.5 }, "priceSource": "PUBLIC_ESTIMATE: Google Gemini 2.5 Flash public list price, not verified against internal Pliny billing" },
-    { "id": "google-vertex/glm-5.2",                                            "tool_call": true },
-    { "id": "google-vertex/glm-5",                                              "tool_call": true }
+    {
+      "id": "snps-aws-bedrock/global.anthropic.claude-sonnet-5", "tool_call": true, "attachment": true, "cache_control": true,
+      "note": "strongest coder; supports explicit prompt caching (10x saving)",
+      "pricing": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+      "priceSource": "PUBLIC_ESTIMATE: Anthropic Claude Sonnet public list price (AWS Bedrock); not listed on the Pliny Model Catalog page",
+      "name": "Claude Sonnet 5",
+      "summary": "The strongest coder available: best at large refactors, debugging and long agentic runs, with image input and prompt caching. A paid model that counts against your Pliny budget."
+    },
+    {
+      "id": "snps-aws-bedrock/aws-claude-sonnet-4.6", "context": 1000000, "max_output": 64000, "tool_call": true, "attachment": true, "cache_control": true,
+      "pricing": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+      "priceSource": "PLINY_CATALOG 2026-09-25",
+      "name": "Claude Sonnet 4.6",
+      "summary": "Excellent coder with a 1M-token context, image input and prompt caching. Slightly behind Sonnet 5 at the same price."
+    },
+    {
+      "id": "snps-aws-bedrock/aws-claude-sonnet-4.5", "context": 200000, "max_output": 64000, "tool_call": true, "attachment": true, "cache_control": true,
+      "pricing": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+      "priceSource": "PLINY_CATALOG 2026-09-25 (input/output); cache prices are the Anthropic public list price, the page lists none",
+      "name": "Claude Sonnet 4.5",
+      "summary": "Previous-generation Sonnet, still a strong coder with image input. Same price as the newer Sonnets for less capability."
+    },
+    {
+      "id": "snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0", "context": 200000, "max_output": 64000, "tool_call": true, "attachment": true, "cache_control": true,
+      "note": "cheap/fast",
+      "pricing": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
+      "priceSource": "PLINY_CATALOG 2026-09-25",
+      "name": "Claude Haiku 4.5",
+      "summary": "Fast, cheap Claude, good for simple edits, questions and sub-agents. Noticeably weaker than Sonnet on hard reasoning and large changes."
+    },
+    {
+      "id": "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking", "tool_call": true, "note": "preset thinking budget",
+      "pricing": { "input": 3, "output": 15 },
+      "priceSource": "PUBLIC_ESTIMATE: priced as Claude Sonnet 4.6, the preset's base model; the preset is not listed on the Pliny Model Catalog page",
+      "name": "Claude Sonnet 4.6 (high thinking)",
+      "summary": "Sonnet 4.6 with a large thinking budget preset: best for planning, design and tricky debugging. Slower and costlier per turn (thinking is billed as output), and no image input."
+    },
+    {
+      "id": "aws-bedrock-vmodels/claude-4-6-sonet-medium-thinking", "tool_call": true,
+      "pricing": { "input": 3, "output": 15 },
+      "priceSource": "PUBLIC_ESTIMATE: priced as Claude Sonnet 4.6, the preset's base model; the preset is not listed on the Pliny Model Catalog page",
+      "name": "Claude Sonnet 4.6 (medium thinking)",
+      "summary": "Sonnet 4.6 with a medium thinking budget: a balance of reasoning depth and speed. No image input."
+    },
+    {
+      "id": "azure-openai/gpt-5.2", "context": 272000, "max_output": 128000,
+      "_contextNote": "The Pliny page lists 400K, but that window includes the 128K output. 241K-token prompts are accepted live (2026-09-25); a 340K one is rejected with 429 on every retry (it exceeds the deployment's per-minute token quota). So PlinyCode budgets the 272K input share.", "tool_call": true, "attachment": true, "auto_cache": true,
+      "pricing": { "input": 1.75, "output": 14, "cacheRead": 0.175 },
+      "priceSource": "PLINY_CATALOG 2026-09-25",
+      "name": "GPT-5.2",
+      "summary": "Strong reasoning and planning with a large context, image input and automatic caching. Can be slow while it reasons, and its reasoning effort cannot be tuned from PlinyCode."
+    },
+    {
+      "id": "azure-openai/gpt-5.6-terra", "tool_call": true,
+      "name": "GPT-5.6 Terra",
+      "summary": "An Azure OpenAI GPT-5.6 deployment. Not yet characterised in PlinyCode; its price and limits are not on the Pliny catalog page."
+    },
+    {
+      "id": "azure-openai/gpt-5.6-luna", "tool_call": true,
+      "name": "GPT-5.6 Luna",
+      "summary": "An Azure OpenAI GPT-5.6 deployment. Not yet characterised in PlinyCode; its price and limits are not on the Pliny catalog page."
+    },
+    {
+      "id": "azure-openai/Kimi-K2.6", "context": 262144, "tool_call": true,
+      "pricing": { "input": 0.6, "output": 3, "cacheRead": 0.15 },
+      "priceSource": "PLINY_CATALOG 2026-09-25 (Azure price)",
+      "name": "Kimi K2.6 (Azure)",
+      "summary": "Kimi K2.6 hosted on Azure: a strong agentic coder at a low price. The same model is free self-hosted, so pick this only when that pool is busy."
+    },
+    {
+      "id": "azure-openai/Kimi-K2-Thinking", "context": 262144, "tool_call": true,
+      "pricing": { "input": 0.6, "output": 2.5 },
+      "priceSource": "PLINY_CATALOG 2026-09-25",
+      "name": "Kimi K2 Thinking",
+      "summary": "Kimi's long-reasoning model: good at multi-step problems, and cheap. Slow, verbose thinking, and older than K2.6."
+    },
+    {
+      "id": "azure-openai-internaltests/Kimi-K2.7-Code", "tool_call": true,
+      "name": "Kimi K2.7 Code",
+      "summary": "Kimi's coding-specialised release, on an internal-tests pool. Price not on the Pliny catalog page, and availability may change.",
+      "params": {"total": 1000, "active": 32, "source": "moonshotai/Kimi-K2.7-Code model card"}
+    },
+    {
+      "id": "snps-google-gcp/gemini-3.7-flash", "tool_call": true,
+      "name": "Gemini 3.7 Flash",
+      "summary": "Google's newest fast Flash model. Not yet characterised in PlinyCode; its price and limits are not on the Pliny catalog page."
+    },
+    {
+      "id": "snps-google-gcp/gemini-3-5-flash", "context": 1048576, "max_output": 65536, "tool_call": true,
+      "pricing": { "input": 1.5, "output": 9, "cacheRead": 0.15 },
+      "priceSource": "PLINY_CATALOG 2026-09-25",
+      "name": "Gemini 3.5 Flash",
+      "summary": "Fast model with a 1M-token context, good for reading large codebases or logs. Weaker than Claude or GPT-5.2 at careful multi-file edits."
+    },
+    {
+      "id": "snps-google-gcp/gemini-2-5-flash", "context": 1048576, "max_output": 65535, "tool_call": true,
+      "pricing": { "input": 0.3, "output": 2.5, "cacheRead": 0.03 },
+      "priceSource": "PLINY_CATALOG 2026-09-25",
+      "name": "Gemini 2.5 Flash",
+      "summary": "The cheapest paid model, with a 1M-token context, fine for summaries and simple tasks. Older, and weak at agentic coding."
+    },
+    {
+      "id": "google-vertex/glm-5.2", "tool_call": true,
+      "name": "GLM-5.2 (Vertex)",
+      "summary": "GLM-5.2 hosted on Google Vertex. The same model is free self-hosted with a larger context, and this deployment's price is not on the Pliny catalog page.",
+      "params": {"total": 744, "active": 40, "source": "zai-org/GLM-5.2 model card"}
+    },
+    {
+      "id": "google-vertex/glm-5", "context": 200000, "max_output": 128000, "tool_call": true,
+      "pricing": { "input": 1, "output": 3.2, "cacheRead": 0.12 },
+      "priceSource": "PLINY_CATALOG 2026-09-25 (cache read listed as ~$0.10 to ~$0.12; the upper bound is used)",
+      "name": "GLM-5 (Vertex)",
+      "summary": "Previous-generation GLM, a capable open-weight coder at a low price. The newer GLM-5.2 is free self-hosted and stronger.",
+      "params": {"total": 744, "active": 40, "source": "zai-org/GLM-5 model card"}
+    }
   ],
 
   "noToolCall": [

@@ -44,10 +44,13 @@ Two things the router cannot do for hosted models:
   `effort` leaves hosted models at their default. Where thinking is wanted,
   route to a preset such as `aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking`,
   as the reasoning route does.
-- **Context beyond 200k.** Hosted entries have no measured window, so they are
-  budgeted at the 200k hosted default and a request beyond roughly 118k
-  estimated tokens (window minus the output reserve) skips them for a free
-  large-context model.
+- **Context beyond 200k.** Hosted entries take their window from the Pliny
+  Model Catalog page: Claude Sonnet 4.6 1M, GPT-5.2 272k (the input share of
+  its 400k), Gemini 3.5 / 2.5 Flash 1M. Entries the page does not list (Claude
+  Sonnet 5, the Sonnet 4.6 thinking presets) keep the 200k hosted default, and a
+  request beyond roughly 118k estimated tokens (window minus the output reserve)
+  skips them for a model with room. The conversation itself still compacts
+  against BalanceAuto's own 200k window.
 
 Utility jobs (classifier, compaction summaries, commit messages) stay on free
 models by default. The rules file may point any of them at a paid model.

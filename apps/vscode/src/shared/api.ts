@@ -114,6 +114,15 @@ export interface ModelInfo {
 	operation?: ModelOperation
 	/** SDK execution modes preserved for operation-specific clients. */
 	operationModes?: readonly ModelOperationMode[]
+	/** Parameter counts in billions. `activeB` below `totalB` marks a mixture-of-experts model. */
+	parameters?: { totalB?: number; activeB?: number }
+	/**
+	 * No price is known. `inputPrice` / `outputPrice` still default to 0 for cost
+	 * accounting, so display code must check this before rendering them as free.
+	 */
+	pricingUnavailable?: boolean
+	/** Where the price comes from, or how a router model is billed. */
+	pricingNote?: string
 }
 
 export interface OpenAiCompatibleModelInfo extends ModelInfo {

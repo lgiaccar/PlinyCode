@@ -74,14 +74,100 @@ describe("buildPlinyModels", () => {
 		expect(sonnet?.metadata?.priceSource).toContain("PUBLIC_ESTIMATE");
 
 		const flash = models["snps-google-gcp/gemini-2-5-flash"];
-		expect(flash?.pricing).toEqual({ input: 0.3, output: 2.5 });
+		expect(flash?.pricing).toEqual({
+			input: 0.3,
+			output: 2.5,
+			cacheRead: 0.03,
+		});
+
+		const gpt = models["azure-openai/gpt-5.2"];
+		expect(gpt?.pricing).toEqual({ input: 1.75, output: 14, cacheRead: 0.175 });
+		expect(gpt?.metadata?.pricingNote).toBe(
+			"Price from the Pliny model catalog",
+		);
+		expect(models["azure-openai/Kimi-K2.6"]?.pricing).toEqual({
+			input: 0.6,
+			output: 3,
+			cacheRead: 0.15,
+		});
+		expect(sonnet?.metadata?.pricingNote).toContain("Estimated");
 	});
 
-	it("leaves pricing undefined for hosted models with no confirmed price", () => {
+	it("leaves pricing undefined for hosted models the Pliny catalog does not price", () => {
 		const models = buildPlinyModels();
-		expect(models["azure-openai/gpt-5.2"]?.pricing).toBeUndefined();
-		expect(models["azure-openai/Kimi-K2.6"]?.pricing).toBeUndefined();
-		expect(models["google-vertex/glm-5.2"]?.pricing).toBeUndefined();
+		for (const id of [
+			"azure-openai/gpt-5.6-terra",
+			"azure-openai/gpt-5.6-luna",
+			"azure-openai-internaltests/Kimi-K2.7-Code",
+			"snps-google-gcp/gemini-3.7-flash",
+			"google-vertex/glm-5.2",
+		]) {
+			expect(models[id]?.pricing, id).toBeUndefined();
+			expect(models[id]?.metadata?.pricingNote, id).toBe(
+				"Price not listed on the Pliny catalog",
+			);
+		}
+	});
+
+	it("uses the Pliny catalog's context and output limits for hosted models", () => {
+		const models = buildPlinyModels();
+		expect(models["snps-aws-bedrock/aws-claude-sonnet-4.6"]).toMatchObject({
+			contextWindow: 1_000_000,
+			maxInputTokens: 1_000_000,
+			maxTokens: 64_000,
+		});
+		// The page's 400K includes the 128K output; the input share is budgeted.
+		expect(models["azure-openai/gpt-5.2"]).toMatchObject({
+			contextWindow: 272_000,
+			maxTokens: 128_000,
+		});
+		expect(models["snps-google-gcp/gemini-3-5-flash"]?.contextWindow).toBe(
+			1_048_576,
+		);
+		// Not on the catalog page: keeps the hosted defaults.
+		expect(
+			models["snps-aws-bedrock/global.anthropic.claude-sonnet-5"],
+		).toMatchObject({ contextWindow: 200_000, maxTokens: 64_000 });
+	});
+
+	it("gives every picker model a display name and a strengths/weaknesses summary", () => {
+		const models = buildPlinyModels();
+		for (const [id, info] of Object.entries(models)) {
+			expect(info.name, id).toBeTruthy();
+			expect(info.name, id).not.toBe(id);
+			// The summary is at least a sentence, not just the hosting line.
+			expect(
+				info.description?.split("\n\n")[0]?.length ?? 0,
+				id,
+			).toBeGreaterThan(40);
+		}
+		expect(models["snps-provider/GLM-5.2"]?.name).toBe("GLM-5.2");
+		expect(models["snps-provider/GLM-5.2"]?.description).toContain(
+			"Self-hosted via Pliny · pool: snps-provider",
+		);
+	});
+
+	it("records parameter counts for open-weight models only", () => {
+		const models = buildPlinyModels();
+		for (const [id, info] of Object.entries(models)) {
+			const total = info.metadata?.paramsTotalB;
+			const active = info.metadata?.paramsActiveB;
+			if (isPlinySelfHostedModelId(id)) {
+				expect(typeof total, id).toBe("number");
+				expect(typeof active, id).toBe("number");
+			}
+			if (typeof total === "number" && typeof active === "number") {
+				expect(active, id).toBeGreaterThan(0);
+				expect(active, id).toBeLessThanOrEqual(total);
+			}
+		}
+		expect(models["snps-provider/kimi-k2.6"]?.metadata).toMatchObject({
+			paramsTotalB: 1000,
+			paramsActiveB: 32,
+		});
+		expect(
+			models["snps-aws-bedrock/aws-claude-sonnet-4.6"]?.metadata?.paramsTotalB,
+		).toBeUndefined();
 	});
 });
 
@@ -287,6 +373,9 @@ describe("BalanceAuto router model", () => {
 		});
 		// Billing follows the concrete model each call lands on.
 		expect(router?.pricing).toBeUndefined();
+		expect(router?.metadata?.pricingNote).toContain(
+			"billed at the price of the model it lands on",
+		);
 	});
 
 	it("maps onto the free fallback for direct gateway callers", () => {

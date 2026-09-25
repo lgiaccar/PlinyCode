@@ -120,6 +120,13 @@ message OpenRouterModelInfo {
   optional double temperature = 14;
   optional bool supports_reasoning = 15;
   optional ApiFormat api_format = 16;
+  // Parameter counts in billions; active < total for mixture-of-experts models.
+  optional double params_total_b = 17;
+  optional double params_active_b = 18;
+  // True when no price is known: input/output_price then read 0 but mean "unknown", not "free".
+  optional bool pricing_unavailable = 19;
+  // Where the price comes from, or how a router is billed.
+  optional string pricing_note = 20;
 }
 
 // User-authored per-model metadata stored in models.json.

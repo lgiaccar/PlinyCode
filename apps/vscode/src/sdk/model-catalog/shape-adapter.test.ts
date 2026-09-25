@@ -207,6 +207,36 @@ describe("adaptSdkModelInfo", () => {
 		})
 	})
 
+	describe("display details", () => {
+		it("flags a model with no price as unavailable while keeping the 0 cost defaults", () => {
+			const model = adaptSdkModelInfo({ id: "azure-openai/gpt-5.6-terra" })
+			expect(model.pricingUnavailable).toBe(true)
+			expect(model.inputPrice).toBe(0)
+			expect(model.outputPrice).toBe(0)
+		})
+
+		it("does not flag a priced or explicitly free model", () => {
+			expect(adaptSdkModelInfo({ id: "a", pricing: { input: 3, output: 15 } }).pricingUnavailable).toBeUndefined()
+			expect(adaptSdkModelInfo({ id: "b", pricing: { input: 0, output: 0 } }).pricingUnavailable).toBeUndefined()
+		})
+
+		it("maps parameter counts and the pricing note from metadata", () => {
+			const model = adaptSdkModelInfo({
+				id: "snps-provider/kimi-k2.6",
+				pricing: { input: 0, output: 0 },
+				metadata: { paramsTotalB: 1000, paramsActiveB: 32, pricingNote: "Free: self-hosted" },
+			})
+			expect(model.parameters).toEqual({ totalB: 1000, activeB: 32 })
+			expect(model.pricingNote).toBe("Free: self-hosted")
+		})
+
+		it("ignores malformed display metadata instead of failing the catalog", () => {
+			const model = adaptSdkModelInfo({ id: "m", metadata: { paramsTotalB: "big", pricingNote: 7 } })
+			expect(model.parameters).toBeUndefined()
+			expect(model.pricingNote).toBeUndefined()
+		})
+	})
+
 	describe("safe defaults for sparse input", () => {
 		it("fills documented safe defaults for LiteLLM-like sparse input", () => {
 			const model = adaptSdkModelInfo({ id: "gpt-5.4", name: "GPT-5.4" })

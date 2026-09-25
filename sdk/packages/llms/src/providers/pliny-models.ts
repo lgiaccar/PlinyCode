@@ -63,6 +63,8 @@ export const PLINY_ROUTER_PROFILES = [
 		label: "auto-free",
 		description:
 			"Routes each call to the best free self-hosted Pliny model and fails over automatically",
+		summary:
+			"Free default. Sends each call to the best available free model (GLM-5.2, Kimi K2.6, ...) and fails over when one is down. Only as strong as the free pool: hard tasks go better on Claude.",
 	},
 	{
 		profile: "fast",
@@ -72,6 +74,8 @@ export const PLINY_ROUTER_PROFILES = [
 		label: "auto-free-fast",
 		description:
 			"FreeAuto tuned for latency: fastest models first, reasoning off wherever it can be",
+		summary:
+			"Free and quick: fastest models first, with reasoning off wherever possible. Best for small edits and questions; weaker on problems that need thinking.",
 	},
 	{
 		profile: "smart",
@@ -81,6 +85,8 @@ export const PLINY_ROUTER_PROFILES = [
 		label: "auto-free-smart",
 		description:
 			"FreeAuto with a small classifier that picks the model tier and whether to think, once per turn",
+		summary:
+			"Free, with a small classifier that picks the model tier and whether to think, once per turn. Adapts to each request, but the classifier adds a short delay to every turn.",
 	},
 	{
 		profile: "balance",
@@ -90,6 +96,8 @@ export const PLINY_ROUTER_PROFILES = [
 		label: "auto-paid-balanced",
 		description:
 			"Paid high-end models for difficult work, cheaper or free models for simple requests and sub-agents",
+		summary:
+			"Claude Sonnet and GPT-5.2 for planning and hard coding; free models for quick questions, sub-agents and huge contexts. Much stronger than the free routers, but its paid calls count against your Pliny budget.",
 	},
 ] as const;
 
@@ -186,6 +194,14 @@ type PlinyCatalogEntry = {
 	pricing?: ModelPricing;
 	/** Provenance for `pricing`, e.g. flags a public-list-price stand-in vs a confirmed internal figure. */
 	priceSource?: string;
+	/** Hosted max output tokens, from the Pliny catalog page. */
+	max_output?: number;
+	/** Picker display name; defaults to the id's leaf. */
+	name?: string;
+	/** One or two sentences: what the model is good at, then its main weakness. */
+	summary?: string;
+	/** Parameter counts in billions from the public model card; closed models have none. */
+	params?: { total: number; active: number; source?: string };
 };
 
 const HOSTED_DEFAULT_CONTEXT = 200_000;
@@ -219,23 +235,28 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 	}
 
 	const pool = poolLabel(entry.id);
-	const descriptionParts = [
+	const hosting = [
 		selfHosted ? "Self-hosted via Pliny" : "Hosted via Pliny",
 		pool ? `pool: ${pool}` : undefined,
-		entry.note,
-	].filter(Boolean);
+	]
+		.filter(Boolean)
+		.join(" · ");
+	const description = entry.summary
+		? `${entry.summary}\n\n${hosting}`
+		: [hosting, entry.note].filter(Boolean).join(" · ");
 
 	const pricing = selfHosted ? SELF_HOSTED_PRICING : entry.pricing;
+	const priceNote = pricingNote(entry, selfHosted);
 
 	return {
 		id: entry.id,
-		name: displayName(entry.id),
-		description: descriptionParts.join(" · "),
+		name: entry.name ?? displayName(entry.id),
+		description,
 		contextWindow,
 		maxInputTokens: contextWindow,
 		maxTokens: selfHosted
 			? Math.min(Math.floor(contextWindow / 4), 65_536)
-			: HOSTED_DEFAULT_MAX_OUTPUT,
+			: (entry.max_output ?? HOSTED_DEFAULT_MAX_OUTPUT),
 		capabilities: [...capabilities],
 		// No `family`: lineage routing (Claude cache/thinking) reads the family
 		// before the model id, so a hosting label here hid every Claude model.
@@ -249,8 +270,35 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 			...(!selfHosted && entry.priceSource
 				? { priceSource: entry.priceSource }
 				: {}),
+			...(entry.params
+				? {
+						paramsTotalB: entry.params.total,
+						paramsActiveB: entry.params.active,
+					}
+				: {}),
+			...(priceNote ? { pricingNote: priceNote } : {}),
 		},
 	};
+}
+
+/** One-line provenance for a model's price, shown beside it in the picker. */
+function pricingNote(
+	entry: PlinyCatalogEntry,
+	selfHosted: boolean,
+): string | undefined {
+	if (selfHosted) {
+		return "Free: self-hosted, not counted against your Pliny budget";
+	}
+	if (!entry.pricing) {
+		return "Price not listed on the Pliny catalog";
+	}
+	if (entry.priceSource?.startsWith("PUBLIC_ESTIMATE")) {
+		return "Estimated from the public list price; not on the Pliny catalog";
+	}
+	if (entry.priceSource?.startsWith("PLINY_CATALOG")) {
+		return "Price from the Pliny model catalog";
+	}
+	return undefined;
 }
 
 /** Prefix shared by every free, self-hosted Pliny pool. */
@@ -373,7 +421,7 @@ function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 	return {
 		id: profile.id,
 		name: profile.name,
-		description: profile.description,
+		description: profile.summary,
 		contextWindow: 256_000,
 		maxInputTokens: 256_000,
 		maxTokens: 32_768,
@@ -387,6 +435,7 @@ function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 			selfHosted: true,
 			router: true,
 			routerProfile: profile.profile,
+			pricingNote: "Free: routes only to self-hosted models",
 		},
 	};
 }
@@ -403,7 +452,7 @@ function buildBalanceAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 	return {
 		id: profile.id,
 		name: profile.name,
-		description: profile.description,
+		description: profile.summary,
 		contextWindow: HOSTED_DEFAULT_CONTEXT,
 		maxInputTokens: HOSTED_DEFAULT_CONTEXT,
 		maxTokens: 32_768,
@@ -416,6 +465,8 @@ function buildBalanceAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 			router: true,
 			routerProfile: profile.profile,
 			paid: true,
+			pricingNote:
+				"Each call is billed at the price of the model it lands on: free models cost nothing, Claude Sonnet $3 in / $15 out per 1M",
 		},
 	};
 }

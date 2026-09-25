@@ -317,6 +317,23 @@ export function adaptSdkModelInfo(input: unknown): ModelInfo {
 	if (operationModes !== undefined) {
 		result.operationModes = operationModes as NonNullable<ModelInfo["operationModes"]>
 	}
+	if (pricing?.input === undefined && pricing?.output === undefined) {
+		result.pricingUnavailable = true
+	}
+
+	// Display-only details (parameter counts, price provenance) travel in the
+	// SDK's free-form metadata; malformed values are ignored, not fatal.
+	const metadata = isPlainObject(input.metadata) ? input.metadata : undefined
+	if (metadata) {
+		const totalB = isFiniteNumber(metadata.paramsTotalB) ? metadata.paramsTotalB : undefined
+		const activeB = isFiniteNumber(metadata.paramsActiveB) ? metadata.paramsActiveB : undefined
+		if (totalB !== undefined || activeB !== undefined) {
+			result.parameters = { totalB, activeB }
+		}
+		if (typeof metadata.pricingNote === "string" && metadata.pricingNote.length > 0) {
+			result.pricingNote = metadata.pricingNote
+		}
+	}
 
 	return result
 }
