@@ -16,15 +16,9 @@ const STATE_LABEL: Record<string, string> = {
 
 const EXAMPLES = ["Open a PR for this branch with a summary of the changes", "Why did the last pipeline run fail?"]
 
-/**
- * The built-in PlinyCode DevOps MCP server: status, on/off, restart, and how to
- * use the same server from the editor's own AI chat (Copilot Chat, Cursor).
- */
-const DevOpsServerCard = () => {
+/** Live status of the built-in DevOps server; undefined until the extension has answered. */
+export function useDevOpsServerStatus(): DevOpsServerStatus | undefined {
 	const [status, setStatus] = useState<DevOpsServerStatus>()
-	const [expanded, setExpanded] = useState(false)
-	const [busy, setBusy] = useState(false)
-
 	useEffect(() => {
 		const unsubscribe = McpServiceClient.subscribeToDevOpsServer(EmptyRequest.create({}), {
 			onResponse: (response: DevOpsServerStatus) => setStatus(response),
@@ -33,10 +27,17 @@ const DevOpsServerCard = () => {
 		})
 		return unsubscribe
 	}, [])
+	return status
+}
 
-	if (!status) {
-		return null
-	}
+/**
+ * The built-in PlinyCode DevOps MCP server: status, on/off, restart, and how to
+ * use the same server from the editor's own AI chat (Copilot Chat, Cursor).
+ * `compact` is the one-line row used in the chat input's MCP popup.
+ */
+const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerStatus; compact?: boolean }) => {
+	const [expanded, setExpanded] = useState(false)
+	const [busy, setBusy] = useState(false)
 
 	const run = async (action: () => Promise<DevOpsServerStatus | unknown>) => {
 		setBusy(true)
@@ -57,11 +58,11 @@ const DevOpsServerCard = () => {
 				: STATE_LABEL[status.state]
 
 	return (
-		<div className="mb-4">
+		<div className="mb-2.5">
 			<div
-				className="flex bg-code-block-background p-2 gap-4 items-center cursor-pointer"
-				onClick={() => setExpanded(!expanded)}>
-				<span className={cn("mr-2 codicon", expanded ? "codicon-chevron-down" : "codicon-chevron-right")} />
+				className={cn("flex bg-code-block-background p-2 gap-4 items-center", { "cursor-pointer": !compact })}
+				onClick={() => !compact && setExpanded(!expanded)}>
+				{!compact && <span className={cn("mr-2 codicon", expanded ? "codicon-chevron-down" : "codicon-chevron-right")} />}
 				<span className="flex-1 min-w-0 overflow-hidden break-words whitespace-normal">
 					<span className="flex items-center gap-2 font-medium">
 						PlinyCode DevOps
@@ -100,7 +101,7 @@ const DevOpsServerCard = () => {
 				/>
 			</div>
 
-			{expanded && (
+			{expanded && !compact && (
 				<div className="bg-code-block-background px-3 pb-3 pt-1 text-sm flex flex-col gap-3">
 					<p className="m-0 text-description">
 						Creates and updates pull requests and reports CI pipeline runs, on GitHub and Azure DevOps. The repository
