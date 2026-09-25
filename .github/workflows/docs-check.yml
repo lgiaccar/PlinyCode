@@ -1,0 +1,32 @@
+name: docs-check
+
+# No path filter: the check takes seconds, and renaming or deleting any file
+# can break a link in a markdown file that the change did not touch.
+on:
+    push:
+        branches:
+            - master
+            - stage
+    pull_request:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    links:
+        runs-on: ubuntu-latest
+        name: Markdown links
+        timeout-minutes: 5
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: "1.3.13"
+
+            # The checker only uses Bun built-ins and git, so no install is needed.
+            - name: Check relative links in markdown
+              run: bun run check:docs
