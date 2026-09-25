@@ -183,12 +183,12 @@
 			},
 			{
 				"command": "cline.openFreeAutoRules",
-				"title": "Open FreeAuto Routing Rules",
+				"title": "Open Routing Rules (FreeAuto / BalanceAuto)",
 				"category": "PlinyCode"
 			},
 			{
 				"command": "cline.openFreeAutoCallLog",
-				"title": "Open FreeAuto Call Log",
+				"title": "Open Router Call Log (FreeAuto / BalanceAuto)",
 				"category": "PlinyCode"
 			},
 			{

@@ -10,7 +10,14 @@
  * not be able to block a turn.
  */
 
-import { isPlinySelfHostedModelId, plinyFreePoolIds } from "@plinycode/llms"
+import {
+	isPlinyRouterModelId,
+	isPlinySelfHostedModelId,
+	plinyFreePoolIds,
+	plinyHostedPoolIds,
+	plinyRouterProfileAllowsPaid,
+	plinyRouterProfileSpec,
+} from "@plinycode/llms"
 import * as yaml from "js-yaml"
 import { Logger } from "@/shared/services/Logger"
 import {
@@ -22,12 +29,35 @@ import {
 	type RouterTier,
 } from "./router-types"
 
-/** Name of the default profile's rules file in both the global and workspace locations. */
+/** Name of the FreeAuto default profile's rules file in both the global and workspace locations. */
 export const ROUTER_RULES_FILENAME = "pliny-free-auto.md"
 
-/** Rules file name for a profile: `pliny-free-auto.md`, `pliny-free-auto.fast.md`, ... */
+/** Name of BalanceAuto's rules file in both the global and workspace locations. */
+export const BALANCE_RULES_FILENAME = "pliny-balance-auto.md"
+
+/** True for the BalanceAuto family, whose rules may name paid models. */
+function isBalanceProfile(profile: string): boolean {
+	return plinyRouterProfileSpec(profile)?.family === "balance"
+}
+
+/**
+ * Global rules file name for a profile: `pliny-free-auto.md`,
+ * `pliny-free-auto.fast.md`, ..., and `pliny-balance-auto.md` for BalanceAuto.
+ */
 export function rulesFilenameForProfile(profile: string): string {
+	if (isBalanceProfile(profile)) {
+		return BALANCE_RULES_FILENAME
+	}
 	return profile === "default" ? ROUTER_RULES_FILENAME : `pliny-free-auto.${profile}.md`
+}
+
+/**
+ * Workspace rules file name for a profile. One file per family: every FreeAuto
+ * profile shares `pliny-free-auto.md`, BalanceAuto has `pliny-balance-auto.md`,
+ * so a project's free-only overrides never displace BalanceAuto's paid routes.
+ */
+export function workspaceRulesFilenameForProfile(profile: string): string {
+	return isBalanceProfile(profile) ? BALANCE_RULES_FILENAME : ROUTER_RULES_FILENAME
 }
 
 const DEFAULT_HEALTH = {
@@ -81,12 +111,37 @@ const PREFERRED_HEAD = [
 	"snps-provider/GLM-5.2",
 ]
 
-export function defaultPool(): string[] {
+// Paid hosted models BalanceAuto routes to. Only ids the catalog verified to
+// call tools; the pool filter below drops any that a catalog refresh retires.
+const SONNET_5 = "snps-aws-bedrock/global.anthropic.claude-sonnet-5"
+const SONNET_46 = "snps-aws-bedrock/aws-claude-sonnet-4.6"
+// A preset with thinking baked in: hosted models have no measured reasoning
+// switch, so the router cannot turn thinking on for them per call.
+const SONNET_46_THINKING = "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"
+const HAIKU_45 = "snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0"
+const GPT_52 = "azure-openai/gpt-5.2"
+
+/**
+ * Paid models BalanceAuto may use, best first. They head its pool so that a
+ * turn whose free candidates all fail still lands on a strong model.
+ */
+const BALANCE_PAID_HEAD = [SONNET_5, SONNET_46_THINKING, SONNET_46, GPT_52, HAIKU_45]
+
+/**
+ * The pool a profile may route to: the free self-hosted models, preferred ones
+ * first, plus BalanceAuto's paid models at the front for the balance profile.
+ */
+export function defaultPool(profile = "default"): string[] {
 	const catalogIds = plinyFreePoolIds()
 	const available = new Set(catalogIds)
 	const head = PREFERRED_HEAD.filter((id) => available.has(id))
 	const tail = catalogIds.filter((id) => !head.includes(id))
-	return [...head, ...tail]
+	const free = [...head, ...tail]
+	if (!plinyRouterProfileAllowsPaid(profile)) {
+		return free
+	}
+	const hosted = new Set(plinyHostedPoolIds())
+	return [...BALANCE_PAID_HEAD.filter((id) => hosted.has(id)), ...free]
 }
 
 /**
@@ -174,16 +229,81 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 ]
 
 /**
- * Built-in rules for a FreeAuto profile, used when its file does not exist or
+ * BalanceAuto routes. Difficult work (reasoning, coding, the catch-all) leads
+ * with a paid high-end model; simple work (short questions) and sub-agent runs
+ * lead with free models and fall back to the cheap paid Haiku; huge requests
+ * stay on the free 512k GLM, which no paid model here can hold. The classifier
+ * is on, so the verdict, not the keyword heuristics, usually picks the tier.
+ */
+const BALANCE_ROUTES: RouterRoute[] = [
+	{
+		name: "huge-context",
+		tier: "huge",
+		when: { minEstimatedTokens: 180_000 },
+		use: ["snps-provider-vmodels/glm-5.2", "snps-provider/GLM-5.2"],
+		effort: "quick",
+	},
+	{
+		name: "subagent",
+		// Delegated work is bounded: exploring, then reporting. A free model
+		// handles it, with the cheapest paid model as the backup.
+		when: { subAgent: true },
+		use: ["snps-provider/kimi-k2.6", "snps-provider/qwen3-coder-480b-a35b-inst-fp8", HAIKU_45],
+		effort: "quick",
+	},
+	{
+		name: "plan-and-reasoning",
+		tier: "reason",
+		when: {
+			mode: "plan",
+			promptRegex: "\\b(plan|design|architect|why|explain|review|compare|investigate|analy[sz]e)\\b",
+		},
+		use: [SONNET_46_THINKING, SONNET_5, GPT_52],
+		effort: "think",
+		reasoningEffort: "high",
+	},
+	{
+		name: "coding",
+		tier: "code",
+		when: {
+			mode: "act",
+			promptRegex:
+				"\\b(fix|implement|refactor|add|edit|write|test|bug|error|compile|patch|rename|conflicts?|merge|rebase|lint|failing)\\b|type ?error|\\.(ts|tsx|py|go|rs|java|cs|js)\\b",
+		},
+		use: [SONNET_5, SONNET_46, "snps-provider/qwen3-coder-480b-a35b-inst-fp8"],
+		effort: "quick",
+	},
+	{
+		name: "quick",
+		tier: "quick",
+		when: {
+			maxPromptChars: 300,
+			maxEstimatedTokens: 30_000,
+			promptRegex: "^(what|how|where|which|is|does|can|list|show)\\b",
+		},
+		use: ["snps-provider/kimi-k2.6", "snps-provider/nvidia-nemotron-3-super-120b-a12", HAIKU_45],
+		effort: "quick",
+	},
+	{
+		name: "default",
+		use: [SONNET_5, SONNET_46, "snps-provider/kimi-k2.6"],
+	},
+]
+
+/**
+ * Built-in rules for a router profile, used when its file does not exist or
  * cannot be parsed, and to seed the file on first activation.
  *
  * - default: heuristic routes, reasoning per route, no classifier.
  * - fast: the same routes with reasoning off everywhere it can be switched off.
  * - smart: the default routes plus the classifier, which picks the tier and
  *   whether to think once per turn.
+ * - balance: paid models for difficult work, free or cheap ones for the rest,
+ *   with the classifier on so the split is decided per turn.
  */
 export function defaultRules(profile = "default"): RouterRules {
-	const routes = DEFAULT_ROUTES.map((route) => ({ ...route, use: [...route.use] }))
+	const balance = plinyRouterProfileAllowsPaid(profile)
+	const routes = (balance ? BALANCE_ROUTES : DEFAULT_ROUTES).map((route) => ({ ...route, use: [...route.use] }))
 	if (profile === "fast") {
 		for (const route of routes) {
 			route.effort = "quick"
@@ -192,9 +312,9 @@ export function defaultRules(profile = "default"): RouterRules {
 	}
 	return {
 		version: 1,
-		pool: defaultPool(),
+		pool: defaultPool(profile),
 		utility: { ...DEFAULT_UTILITY },
-		classifier: { ...DEFAULT_CLASSIFIER, enabled: profile === "smart" },
+		classifier: { ...DEFAULT_CLASSIFIER, enabled: profile === "smart" || balance },
 		health: { ...DEFAULT_HEALTH },
 		contextMarginRatio: 1.15,
 		sticky: true,
@@ -228,10 +348,19 @@ function asPositive(value: unknown): number | undefined {
 }
 
 /**
- * Only free, self-hosted ids may be routed to. This is the guard that keeps a
- * hand-edited rules file from silently sending work to a paid hosted model.
+ * Whether a rules file may route to this id. Free, self-hosted ids always
+ * qualify. Paid ids qualify only for a profile that allows them (BalanceAuto):
+ * this is the guard that keeps a hand-edited FreeAuto file from silently
+ * sending work to a paid hosted model. A virtual router id never qualifies.
  */
-function sanitizeModelIds(value: unknown): string[] {
+function isRoutableModelId(id: string, allowPaid: boolean): boolean {
+	if (isPlinySelfHostedModelId(id)) {
+		return true
+	}
+	return allowPaid && !isPlinyRouterModelId(id)
+}
+
+function sanitizeModelIds(value: unknown, allowPaid: boolean): string[] {
 	if (!Array.isArray(value)) {
 		return []
 	}
@@ -239,7 +368,7 @@ function sanitizeModelIds(value: unknown): string[] {
 	const ids: string[] = []
 	for (const entry of value) {
 		const id = asString(entry)
-		if (!id || seen.has(id) || !isPlinySelfHostedModelId(id)) {
+		if (!id || seen.has(id) || !isRoutableModelId(id, allowPaid)) {
 			continue
 		}
 		seen.add(id)
@@ -287,7 +416,7 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | und
 const EFFORTS: readonly RouterEffort[] = ["quick", "think"]
 const REASONING_EFFORTS: readonly RouterReasoningEffort[] = ["low", "medium", "high"]
 
-function parseRoutes(value: unknown): RouterRoute[] {
+function parseRoutes(value: unknown, allowPaid: boolean): RouterRoute[] {
 	if (!Array.isArray(value)) {
 		return []
 	}
@@ -297,7 +426,7 @@ function parseRoutes(value: unknown): RouterRoute[] {
 			continue
 		}
 		const raw = entry as Record<string, unknown>
-		const use = sanitizeModelIds(raw.use)
+		const use = sanitizeModelIds(raw.use, allowPaid)
 		if (use.length === 0) {
 			continue
 		}
@@ -326,16 +455,17 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 		return { ...defaults, ...(guidance ? { guidance } : {}) }
 	}
 	const raw = document as Record<string, unknown>
+	const allowPaid = plinyRouterProfileAllowsPaid(profile)
 
-	const pool = sanitizeModelIds(raw.pool)
-	const routes = parseRoutes(raw.routes)
+	const pool = sanitizeModelIds(raw.pool, allowPaid)
+	const routes = parseRoutes(raw.routes, allowPaid)
 	const utility = (raw.utility ?? {}) as Record<string, unknown>
 	const classifier = (raw.classifier ?? {}) as Record<string, unknown>
 	const health = (raw.health ?? {}) as Record<string, unknown>
 
 	const utilityOrDefault = (value: unknown, fallback: string): string => {
 		const id = asString(value)
-		return id && isPlinySelfHostedModelId(id) ? id : fallback
+		return id && isRoutableModelId(id, allowPaid) ? id : fallback
 	}
 
 	return {

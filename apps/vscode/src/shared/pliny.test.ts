@@ -5,19 +5,25 @@
  */
 
 import {
+	PLINY_BALANCE_AUTO_MODEL_ID as SDK_BALANCE_AUTO,
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID as SDK_FALLBACK,
 	PLINY_FREE_AUTO_MODEL_ID as SDK_FREE_AUTO,
 	PLINY_DEFAULT_MODEL_ID as SDK_PLINY_DEFAULT_MODEL_ID,
+	isPlinyBalanceAutoModelId as sdkIsPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId as sdkIsPlinyFreeAutoModelId,
 	isPlinyFreeModelId as sdkIsPlinyFreeModelId,
+	isPlinyRouterModelId as sdkIsPlinyRouterModelId,
 	isPlinySelfHostedModelId as sdkIsPlinySelfHostedModelId,
 	resolvePlinyConcreteModelId as sdkResolvePlinyConcreteModelId,
 } from "@plinycode/llms"
 import { describe, expect, it } from "vitest"
 import {
+	isPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId,
 	isPlinyFreeModelId,
+	isPlinyRouterModelId,
 	isPlinySelfHostedModelId,
+	PLINY_BALANCE_AUTO_MODEL_ID,
 	PLINY_DEFAULT_MODEL_ID,
 	PLINY_FEATURED_MODELS,
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
@@ -29,6 +35,10 @@ import {
 describe("Pliny constants match the SDK catalog", () => {
 	it("uses the same router id", () => {
 		expect(PLINY_FREE_AUTO_MODEL_ID).toBe(SDK_FREE_AUTO)
+	})
+
+	it("uses the same BalanceAuto id", () => {
+		expect(PLINY_BALANCE_AUTO_MODEL_ID).toBe(SDK_BALANCE_AUTO)
 	})
 
 	it("uses the same concrete fallback", () => {
@@ -50,6 +60,8 @@ describe("model id predicates agree with the SDK", () => {
 		"pliny/free-auto-fast",
 		"pliny/free-auto-smart",
 		"pliny/free-autonomous",
+		"pliny/balance-auto",
+		"pliny/balance-auto-fast",
 		"snps-provider/kimi-k2.6",
 		"snps-provider-vmodels/glm-5.2",
 		"snps-aws-bedrock/global.anthropic.claude-sonnet-5",
@@ -58,8 +70,17 @@ describe("model id predicates agree with the SDK", () => {
 
 	it.each(ids)("classifies %s the same way", (id) => {
 		expect(isPlinyFreeAutoModelId(id)).toBe(sdkIsPlinyFreeAutoModelId(id))
+		expect(isPlinyBalanceAutoModelId(id)).toBe(sdkIsPlinyBalanceAutoModelId(id))
+		expect(isPlinyRouterModelId(id)).toBe(sdkIsPlinyRouterModelId(id))
 		expect(isPlinySelfHostedModelId(id)).toBe(sdkIsPlinySelfHostedModelId(id))
 		expect(isPlinyFreeModelId(id)).toBe(sdkIsPlinyFreeModelId(id))
+	})
+
+	it("treats BalanceAuto as a router that is not free", () => {
+		expect(isPlinyRouterModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(true)
+		expect(isPlinyFreeAutoModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false)
+		expect(isPlinyFreeModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(false)
+		expect(isPlinyBalanceAutoModelId(undefined)).toBe(false)
 	})
 
 	it("treats every profile id as the router", () => {
@@ -86,6 +107,11 @@ describe("resolvePlinyConcreteModelId", () => {
 	it("maps the router id to a concrete model, like the SDK", () => {
 		expect(resolvePlinyConcreteModelId(PLINY_FREE_AUTO_MODEL_ID)).toBe(sdkResolvePlinyConcreteModelId(SDK_FREE_AUTO))
 		expect(resolvePlinyConcreteModelId(PLINY_FREE_AUTO_MODEL_ID)).not.toBe(PLINY_FREE_AUTO_MODEL_ID)
+	})
+
+	it("maps BalanceAuto to the same concrete fallback", () => {
+		expect(resolvePlinyConcreteModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(PLINY_FREE_AUTO_FALLBACK_MODEL_ID)
+		expect(resolvePlinyConcreteModelId(PLINY_BALANCE_AUTO_MODEL_ID)).toBe(sdkResolvePlinyConcreteModelId(SDK_BALANCE_AUTO))
 	})
 
 	it("leaves a concrete model untouched", () => {
