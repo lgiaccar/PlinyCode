@@ -1,4 +1,5 @@
 import type { AutoApprovalSettings } from "@shared/AutoApprovalSettings"
+import { getRunningBuiltinMcpSources } from "@/services/devops-mcp/builtin-mcp-registry"
 import type { McpHub } from "@/services/mcp/McpHub"
 
 /**
@@ -33,6 +34,13 @@ export function buildToolPolicies(
 				const sdkName = `${server.name}__${tool.name}`
 				policies[sdkName] = { autoApprove: false }
 			}
+		}
+	}
+
+	// Built-in MCP tools follow the same approval rule as the user's MCP servers.
+	for (const source of getRunningBuiltinMcpSources()) {
+		for (const tool of source.toolNames()) {
+			policies[`${source.serverName}__${tool}`] = { autoApprove: false }
 		}
 	}
 

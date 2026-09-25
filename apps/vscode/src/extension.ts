@@ -56,6 +56,7 @@ import { ExtensionRegistryInfo } from "./registry"
 import { AuthService, LogoutReason } from "./sdk/auth-service"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
+import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
 import { telemetryService } from "./services/telemetry"
 import type { RolloutBundleActivation } from "./services/telemetry/rollout-metadata"
 import { LG_TASK_URI_PATH, SharedUriHandler, TASK_URI_PATH } from "./services/uri/SharedUriHandler"
@@ -200,6 +201,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	registerAutoUpdater(context)
+
+	// Built-in PR / pipeline MCP server, for PlinyCode and the editor's own AI chat.
+	DevOpsMcpService.activate(context).catch((error) => Logger.error("[DevOpsMcp] Failed to start:", error))
 
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
 

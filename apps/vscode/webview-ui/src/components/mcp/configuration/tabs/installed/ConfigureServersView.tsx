@@ -2,6 +2,7 @@ import { EmptyRequest } from "@shared/proto/cline/common"
 import { VSCodeButton, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { McpServiceClient } from "@/services/grpc-client"
+import DevOpsServerCard from "./DevOpsServerCard"
 import ServersToggleList from "./ServersToggleList"
 
 const ConfigureServersView = () => {
@@ -41,6 +42,8 @@ const ConfigureServersView = () => {
 					<span className="text-base">Your organization manages some MCP servers</span>
 				</div>
 			)}
+
+			<DevOpsServerCard />
 
 			<ServersToggleList hasTrashIcon={false} isExpandable={true} servers={servers} />
 

@@ -181,6 +181,17 @@ const standaloneConfig = {
 	external: ["vscode", "@grpc/reflection", "grpc-health-check", "better-sqlite3"],
 }
 
+// The built-in PR/pipeline MCP server. It runs in its own process (started with
+// the editor's runtime), so it is a separate bundle with no `vscode` import.
+const extensionVersion = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")).version
+const devopsMcpConfig = {
+	...baseConfig,
+	entryPoints: ["src/services/devops-mcp/server/main.ts"],
+	outfile: `${destDir}/devops-mcp.js`,
+	define: { ...buildEnvVars, __DEVOPS_MCP_VERSION__: JSON.stringify(extensionVersion) },
+	external: [],
+}
+
 // E2E build script configuration
 const e2eBuildConfig = {
 	...baseConfig,
@@ -193,12 +204,15 @@ const e2eBuildConfig = {
 
 async function main() {
 	const config = standalone ? standaloneConfig : e2eBuild ? e2eBuildConfig : extensionConfig
-	const extensionCtx = await esbuild.context(config)
+	const configs = config === extensionConfig ? [extensionConfig, devopsMcpConfig] : [config]
+	const contexts = await Promise.all(configs.map((c) => esbuild.context(c)))
 	if (watch) {
-		await extensionCtx.watch()
+		await Promise.all(contexts.map((ctx) => ctx.watch()))
 	} else {
-		await extensionCtx.rebuild()
-		await extensionCtx.dispose()
+		for (const ctx of contexts) {
+			await ctx.rebuild()
+			await ctx.dispose()
+		}
 	}
 }
 

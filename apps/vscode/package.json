@@ -2,7 +2,7 @@
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
-	"version": "0.1.3-test.3",
+	"version": "0.1.3-test.5",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -42,6 +42,12 @@
 	],
 	"main": "./dist/extension.js",
 	"contributes": {
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "plinycode.devops",
+				"label": "PlinyCode DevOps"
+			}
+		],
 		"icons": {
 			"cline-icon": {
 				"description": "cline",
@@ -361,6 +367,16 @@
 						".cursor"
 					],
 					"description": "List of context folders to scan for automatic rule generation. These folders will be scanned and rules generated in .cline/rules/."
+				},
+				"plinycode.devops.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Run the built-in PlinyCode DevOps MCP server, which lets the agent create and update pull requests and read CI pipeline results on GitHub and Azure DevOps."
+				},
+				"plinycode.devops.registerWithEditor": {
+					"type": "boolean",
+					"default": true,
+					"description": "Also offer the PlinyCode DevOps MCP server to the editor's own AI chat: Copilot Chat agent mode in VS Code, or the agent in Cursor."
 				},
 				"plinycode.updates.enabled": {
 					"type": "boolean",
