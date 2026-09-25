@@ -1,6 +1,7 @@
 import { ExecuteCommandInTerminalRequest, ExecuteCommandInTerminalResponse } from "@shared/proto/host/workspace"
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
+import { AGENT_TERMINAL_ENV } from "../../terminal/agent-terminal-env"
 
 /**
  * Executes a command in a new terminal
@@ -15,9 +16,7 @@ export async function executeCommandInTerminal(
 		const terminalOptions: vscode.TerminalOptions = {
 			name: "PlinyCode",
 			iconPath: new vscode.ThemeIcon("cline-icon"),
-			env: {
-				CLINE_ACTIVE: "true",
-			},
+			env: { ...AGENT_TERMINAL_ENV },
 		}
 
 		// Create a new terminal

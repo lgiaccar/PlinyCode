@@ -24,6 +24,7 @@ import { Logger } from "@/shared/services/Logger"
 import { effortOptions, selectCandidates } from "./router-policy"
 import { withRouterAddendum } from "./router-prompt"
 import type {
+	RouterCallShape,
 	RouterCallTiming,
 	RouterClassification,
 	RouterDecision,
@@ -46,9 +47,9 @@ export interface RouterObserver {
 		timing: RouterCallTiming
 	}): void
 	/** A call produced output and finished without a routing-level error. */
-	onCallSuccess(info: { modelId: string; timing: RouterCallTiming }): void
+	onCallSuccess(info: { modelId: string; timing: RouterCallTiming; shape: RouterCallShape }): void
 	/** A call failed after producing output; the run-level hook decides next. */
-	onCallError(info: { modelId: string; error: string; timing: RouterCallTiming }): void
+	onCallError(info: { modelId: string; error: string; timing: RouterCallTiming; shape: RouterCallShape }): void
 }
 
 export interface RoutedAgentModelDeps {
@@ -275,6 +276,34 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 					...(firstContentAt !== undefined ? { firstContentAt } : {}),
 					endedAt: now(),
 				})
+				let finishReason: string | undefined
+				let textChars = 0
+				let reasoningChars = 0
+				const toolCallIds = new Set<string>()
+				let anonymousToolCall = false
+				const shape = (): RouterCallShape => ({
+					...(finishReason !== undefined ? { finishReason } : {}),
+					textChars,
+					reasoningChars,
+					toolCalls: toolCallIds.size + (anonymousToolCall ? 1 : 0),
+				})
+				const observe = (event: AgentModelEvent): void => {
+					if (event.type === "text-delta") {
+						textChars += event.text.length
+					} else if (event.type === "reasoning-delta") {
+						reasoningChars += event.text.length
+					} else if (event.type === "tool-call-delta") {
+						if (event.toolCallId) {
+							toolCallIds.add(event.toolCallId)
+						} else if (event.index === undefined) {
+							anonymousToolCall = true
+						} else {
+							toolCallIds.add(`#${event.index}`)
+						}
+					} else if (event.type === "finish") {
+						finishReason = event.reason
+					}
+				}
 
 				try {
 					const delegate = delegateFor(modelId)
@@ -294,6 +323,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 					)
 
 					for await (const event of guarded) {
+						observe(event)
 						if (event.type === "finish") {
 							finished = true
 							if (event.reason === "error") {
@@ -340,6 +370,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 								modelId,
 								error: "Response stream ended without a finish reason",
 								timing: timing(),
+								shape: shape(),
 							})
 							return
 						}
@@ -369,13 +400,13 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 							errorClass: classifyProviderError(error),
 							errorRetryable: true,
 						}
-						deps.observer.onCallError({ modelId, error: failure.error, timing: timing() })
+						deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape() })
 						return
 					}
 				}
 
 				if (!failure) {
-					deps.observer.onCallSuccess({ modelId, timing: timing() })
+					deps.observer.onCallSuccess({ modelId, timing: timing(), shape: shape() })
 					return
 				}
 
@@ -383,7 +414,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 
 				if (producedContent) {
 					// Already forwarded the failing finish above.
-					deps.observer.onCallError({ modelId, error: failure.error, timing: timing() })
+					deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape() })
 					return
 				}
 
@@ -396,7 +427,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 						errorClass: classifyProviderError(failure.raw),
 						errorRetryable: false,
 					}
-					deps.observer.onCallError({ modelId, error: failure.error, timing: timing() })
+					deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape() })
 					return
 				}
 

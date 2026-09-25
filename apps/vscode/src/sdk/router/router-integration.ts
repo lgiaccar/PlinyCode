@@ -44,7 +44,7 @@ import { composeHooks } from "./router-hooks"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import { appendRunLog, type RouterRunEnding, type RouterRunLogRecord } from "./router-run-log"
-import type { RouterCallTiming, RouterRequestFeatures, RouterRules } from "./router-types"
+import type { RouterCallShape, RouterCallTiming, RouterRequestFeatures, RouterRules } from "./router-types"
 import { type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
 
 export interface RouterInstallDeps {
@@ -244,6 +244,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			timing: RouterCallTiming,
 			outcome: RouterCallLogRecord["outcome"],
 			error?: string,
+			shape?: RouterCallShape,
 		) => {
 			const state = getSessionState(turnKey)
 			const call = [...state.calls].reverse().find((entry) => entry.modelId === modelId)
@@ -263,6 +264,14 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				durationMs: timing.endedAt - timing.startedAt,
 				outcome,
 				...(error ? { error: error.slice(0, 300) } : {}),
+				...(shape
+					? {
+							...(shape.finishReason !== undefined ? { finishReason: shape.finishReason } : {}),
+							textChars: shape.textChars,
+							reasoningChars: shape.reasoningChars,
+							toolCalls: shape.toolCalls,
+						}
+					: {}),
 			})
 		}
 
@@ -365,17 +374,17 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 					)
 					Logger.warn(`[FreeAuto] failover ${modelId} → ${nextModelId ?? "(none)"}: ${error}`)
 				},
-				onCallSuccess: ({ modelId, timing }) => {
+				onCallSuccess: ({ modelId, timing, shape }) => {
 					recordSuccess(modelId)
-					logAttempt(modelId, timing, "success")
+					logAttempt(modelId, timing, "success", undefined, shape)
 				},
-				onCallError: ({ modelId, error, timing }) => {
+				onCallError: ({ modelId, error, timing, shape }) => {
 					const state = getSessionState(turnKey)
 					const last = state.calls[state.calls.length - 1]
 					if (last && last.modelId === modelId) {
 						last.failure = error
 					}
-					logAttempt(modelId, timing, "error", error)
+					logAttempt(modelId, timing, "error", error, shape)
 					Logger.warn(`[FreeAuto] ${modelId} failed after producing output: ${error}`)
 				},
 			},

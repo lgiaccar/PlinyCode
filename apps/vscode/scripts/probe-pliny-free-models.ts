@@ -409,9 +409,21 @@ async function probeThinkingOnce(modelId: string, patch: Record<string, unknown>
 	}
 }
 
-/** A sample reasons when it produced reasoning text or billed reasoning tokens. */
+/**
+ * The prompt asks for one amount, so a reply that runs to a paragraph is the
+ * model deliberating in its content. Some backends (kimi-k2.6, the qwen3.6
+ * 35B, the nemotron ultra, the sia qwen3.5) expose no reasoning channel and
+ * think in the visible reply; counting only reasoning deltas marked each of
+ * them as a non-reasoner, so the off-switch was never sent to them.
+ */
+const IN_CONTENT_REASONING_MIN_CHARS = 60
+
+/** A sample reasons when it produced reasoning text, billed reasoning tokens, or a long answer to a one-word question. */
 function reasons(sample: ThinkingSample | undefined): boolean {
-	return !!sample?.ok && (sample.reasoningChars > 20 || (sample.reasoningTokens ?? 0) > 0)
+	return (
+		!!sample?.ok &&
+		(sample.reasoningChars > 20 || (sample.reasoningTokens ?? 0) > 0 || sample.contentChars > IN_CONTENT_REASONING_MIN_CHARS)
+	)
 }
 
 /**

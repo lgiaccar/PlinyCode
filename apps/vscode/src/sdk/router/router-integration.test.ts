@@ -357,6 +357,10 @@ describe("installRouter profiles, effort and call log", () => {
 				outcome: "success",
 				durationMs: 0,
 				ttftMs: 0,
+				finishReason: "stop",
+				textChars: 5,
+				reasoningChars: 0,
+				toolCalls: 0,
 			}),
 		])
 	})

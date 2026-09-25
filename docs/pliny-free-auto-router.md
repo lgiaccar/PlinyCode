@@ -119,3 +119,44 @@ files: how it ended, the last model and tool, which rules fired, what the judge
 said, and the reply's tail. `bun apps/vscode/scripts/summarize-free-auto-log.ts
 --tails` turns that and the call log into per-profile, per-model and per-route
 tables, including how often the classifier actually produced a verdict.
+
+## Models that think in their content
+
+The gateway exposes no reasoning channel for some self-hosted models: their
+deliberation arrives as ordinary content. The thinking probe used to count only
+reasoning deltas, so `kimi-k2.6`, `qwen3-6-35b-a3b-1-28dd3`,
+`nemotron-3-ultra-550b-a55` and the sia `qwen3-5-397b-a17b` were catalogued as
+non-reasoners and the off-switch was never sent to them. That is why the smart
+profile's classifier and the judge (both on the 35B) answered with a
+paragraph of thinking that was cut off before the JSON verdict: "classifier
+gave no verdict (unusable reply: The user wants to run tests. …)".
+
+The probe now treats a paragraph in answer to its one-word question as
+reasoning (`IN_CONTENT_REASONING_MIN_CHARS`), and the catalog marks the four
+as `defaultOn: true`. The three with a working `chat_template_kwargs`
+off-switch get it on `quick` and utility calls; kimi has no measured
+off-switch, reasons in content at every size, and past ~80k tokens tends to
+end on its plan ("I need to: 1. Check … 2. Report …") instead of acting, so it
+no longer leads the `default` route. The guard flags that ending too (a
+first-person plan followed by imperative list items, and nothing after it).
+
+Existing rules files keep their own route order: they are only written when
+missing, so move `~/.cline/data/pliny-free-auto*.md` aside to pick up the new
+defaults.
+
+## Reading the call log
+
+Each line of `pliny-free-auto-calls.jsonl` now records what the call produced
+besides how long it took: `finishReason`, `textChars`, `reasoningChars` and
+`toolCalls`. A `stop` with text and no tool call is a reply that ended the
+run; the summary script's "Text-only stops" column counts those per model, so
+the stop rate of each free model can be read off real use instead of
+transcripts.
+
+## The agent terminal
+
+Commands the model runs go through a terminal with `GIT_PAGER=cat`,
+`PAGER=cat` and `GIT_TERMINAL_PROMPT=0` (`agent-terminal-env.ts`). Without
+them `git branch` or `git log` with more output than the terminal is tall
+hands over to a pager that waits for a keypress the model cannot send, which
+looked like a three-minute hang in one benchmark session.

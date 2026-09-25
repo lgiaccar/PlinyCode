@@ -213,10 +213,11 @@ describe("default routes", () => {
 		expect(route("huge-context")?.use).toContain(GLM)
 	})
 
-	it("leads the coding route with the coder model and the long-task routes with kimi", () => {
+	it("leads the coding and default routes with the coder model and the sub-agent route with kimi", () => {
 		const KIMI = "snps-provider/kimi-k2.6"
 		expect(route("coding")?.use[0]).toBe(CODER)
-		expect(route("default")?.use[0]).toBe(KIMI)
+		expect(route("default")?.use[0]).toBe(CODER)
+		expect(route("default")?.use[1]).toBe(KIMI)
 		expect(route("subagent")?.use[0]).toBe(KIMI)
 		expect(defaultPool()[0]).toBe(KIMI)
 	})

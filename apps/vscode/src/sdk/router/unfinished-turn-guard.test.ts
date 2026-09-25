@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@plinycode/shared"
 import { describe, expect, it } from "vitest"
 import {
+	endsWithPlanList,
 	latestUserRequest,
 	looksDegenerate,
 	looksLikeLeakedReasoning,
@@ -64,7 +65,34 @@ describe("looksUnfinished", () => {
 		expect(looksUnfinished("I'll be here — let me know if you need anything else.")).toBe(false)
 		expect(looksUnfinished("")).toBe(false)
 	})
+
+	// kimi-k2.6 endings from the 2026-09-25 benchmark session: the plan was
+	// the whole reply, and the first step's tool call never came.
+	it.each(PLAN_LISTS)("flags a reply that ends on the model's own to-do list: %s", (text) => {
+		expect(looksUnfinished(text)).toBe(true)
+		expect(endsWithPlanList(text)).toBe(true)
+	})
+
+	it("accepts a results list, a list of options for the user, and a plan followed by a result", () => {
+		expect(looksUnfinished("Results so far:\n- stage: 476.6 s, 18.6 GB peak\n- 14_pd2d: 471.2 s, 18.5 GB peak")).toBe(false)
+		expect(looksUnfinished("You could go two ways:\n1. Run the full suite overnight\n2. Run only the GR9hA case now")).toBe(
+			false,
+		)
+		expect(
+			looksUnfinished(
+				"I need to:\n1. Check what's running\n2. Read the logs\n\nAll four bench_stage cases have completed and their metrics are in the table above.",
+			),
+		).toBe(false)
+		expect(endsWithPlanList("I need to:\n1. Check the logs")).toBe(false)
+	})
 })
+
+const PLAN_LISTS = [
+	"The system is reminding me that I keep saying what I'll do but not actually calling tools. I need to just do it.\n\nLet me check the current status of the running tests by calling the appropriate tools. I should:\n1. Check for running processes\n2. Check what's in the log files\n3. Report the current status to the user",
+	"Let me actually make the tool calls to check the current status of the tests. I need to:\n1. Check what's currently running\n2. Check what logs exist\n3. Extract results from completed logs\n4. Give a clear status update",
+	"Let me continue adding content to the script file. I need to:\n- Complete the Run-SingleTest function (timing parsing and return logic)\n- Add the main execution loop where we iterate through branches and tests\n- Add the results summary and output logic",
+	"Here's the plan:\n1) **Verify** the CUDA build exists\n2) **Run** the four cases on bench_stage",
+]
 
 describe("looksLikeWaitBailOut", () => {
 	it.each(WAIT_BAIL_OUTS)("flags a promise to come back later: %s", (text) => {

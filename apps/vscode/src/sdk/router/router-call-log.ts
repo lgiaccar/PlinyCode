@@ -35,6 +35,14 @@ export interface RouterCallLogRecord {
 	/** success: finished; failover: failed before output, next model tried; error: failed after output or for good. */
 	outcome: "success" | "failover" | "error"
 	error?: string
+	/** The stream's finish reason (`stop`, `tool-calls`, `max-tokens`, …); absent when the stream ended without one. */
+	finishReason?: string
+	/** Visible text characters the call produced. */
+	textChars?: number
+	/** Characters on the reasoning channel; zero for a model that thinks in its content. */
+	reasoningChars?: number
+	/** Distinct tool calls in the reply. A `stop` with text and no tool calls is a turn-ending reply. */
+	toolCalls?: number
 }
 
 export function callLogPath(dataDir?: string): string {
