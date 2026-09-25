@@ -19,7 +19,7 @@
     },
     "apps/vscode": {
       "name": "plinycode-dev",
-      "version": "0.1.4",
+      "version": "0.1.5-test.1",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.37.0",
         "@bufbuild/protobuf": "^2.2.5",
