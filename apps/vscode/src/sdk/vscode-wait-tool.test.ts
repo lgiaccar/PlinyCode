@@ -62,6 +62,18 @@ describe("createWaitTool", () => {
 		expect(result).toContain("Wait cancelled")
 	})
 
+	it("returns early and says why when the user steers", async () => {
+		const tool = createWaitTool()
+		const steer = new AbortController()
+		const pending = tool.execute(
+			{ seconds: 600 },
+			context({ signal: new AbortController().signal, userMessageSignal: steer.signal }),
+		)
+		steer.abort()
+		const result = await pending
+		expect(result).toContain("the user sent a new message")
+	})
+
 	it("treats nonsense input as the shortest wait", async () => {
 		const clock = fakeClock()
 		const tool = createWaitTool({ sleep: clock.sleep, now: clock.now })

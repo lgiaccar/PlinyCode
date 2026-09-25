@@ -193,6 +193,99 @@ describe("AgentRuntime", () => {
 		).toBe(false);
 	});
 
+	it("signals a running tool when steering arrives and reads the message next step", async () => {
+		const toolStarted = Promise.withResolvers<void>();
+		let pending: string | undefined;
+		const signals: AbortSignal[] = [];
+		const waitTool: AgentTool<unknown, string> = {
+			name: "wait",
+			description: "wait",
+			inputSchema: { type: "object", properties: {} },
+			execute: async (_input, context) => {
+				const signal = context.userMessageSignal;
+				if (!signal) throw new Error("missing userMessageSignal");
+				signals.push(signal);
+				toolStarted.resolve();
+				await new Promise<void>((resolve) =>
+					signal.addEventListener("abort", () => resolve(), { once: true }),
+				);
+				return "wait ended by user message";
+			},
+		};
+		const model = new ScriptedModel([
+			() => [
+				{
+					type: "tool-call-delta",
+					toolCallId: "w1",
+					toolName: "wait",
+					inputText: "{}",
+				},
+				{ type: "finish", reason: "tool-calls" },
+			],
+			(request) => {
+				expect(request.messages.at(-1)).toMatchObject({
+					role: "user",
+					content: [{ type: "text", text: "Stop waiting" }],
+				});
+				return [
+					{ type: "text-delta", text: "Steered" },
+					{ type: "finish", reason: "stop" },
+				];
+			},
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			tools: [waitTool],
+			consumePendingUserMessage: () => {
+				const message = pending;
+				pending = undefined;
+				return message;
+			},
+		});
+		const resultPromise = runtime.run("Start");
+		await toolStarted.promise;
+		pending = "Stop waiting";
+		runtime.notifyPendingUserMessage();
+		const result = await resultPromise;
+		expect(result.outputText).toBe("Steered");
+		expect(signals[0]?.aborted).toBe(true);
+		expect(model.requests).toHaveLength(2);
+	});
+
+	it("does not carry a consumed steer into the next run's tools", async () => {
+		const signals: AbortSignal[] = [];
+		const probe: AgentTool<unknown, string> = {
+			name: "probe",
+			description: "probe",
+			inputSchema: { type: "object", properties: {} },
+			execute: async (_input, context) => {
+				if (context.userMessageSignal) signals.push(context.userMessageSignal);
+				return "ok";
+			},
+		};
+		const toolTurn = () => [
+			{
+				type: "tool-call-delta" as const,
+				toolCallId: "p",
+				toolName: "probe",
+				inputText: "{}",
+			},
+			{ type: "finish" as const, reason: "tool-calls" as const },
+		];
+		const doneTurn = () => [
+			{ type: "text-delta" as const, text: "done" },
+			{ type: "finish" as const, reason: "stop" as const },
+		];
+		const model = new ScriptedModel([doneTurn, toolTurn, doneTurn]);
+		const runtime = new AgentRuntime({ model, tools: [probe] });
+		await runtime.run("first");
+		// A steer that lands between runs is drained as the next prompt.
+		runtime.notifyPendingUserMessage();
+		await runtime.continue("second");
+		expect(signals).toHaveLength(1);
+		expect(signals[0]?.aborted).toBe(false);
+	});
+
 	it("persists generated images in assistant message content", async () => {
 		const model = new ScriptedModel([
 			() => [

@@ -10,7 +10,8 @@
  * Bounded twice: per call (`maxSeconds`) so a single wait cannot hang a turn,
  * and per run (`maxTotalSecondsPerRun`) so a model cannot sleep through an
  * afternoon; past the budget the tool answers with an error telling the model
- * to ask the user. Aborting the run ends the wait at once.
+ * to ask the user. Aborting the run, or a steering message from the user,
+ * ends the wait at once.
  */
 
 import type { AgentTool, AgentToolContext } from "@plinycode/shared"
@@ -113,10 +114,16 @@ export function createWaitTool(options: WaitToolOptions = {}): AgentTool {
 			const requested = clampSeconds(input.seconds, maxSeconds)
 			const seconds = Math.min(requested, remaining)
 			const startedAt = now()
-			const outcome = await sleep(seconds * 1000, context.signal)
+			// A steering message from the user ends the wait too: the agent must
+			// read it now, not after up to ten minutes of sleep.
+			const signals = [context.signal, context.userMessageSignal].filter((signal): signal is AbortSignal => !!signal)
+			const outcome = await sleep(seconds * 1000, signals.length > 1 ? AbortSignal.any(signals) : signals[0])
 			const waited = Math.round((now() - startedAt) / 1000)
 			waitedPerRun.set(key, alreadyWaited + waited)
 			if (outcome === "aborted") {
+				if (context.userMessageSignal?.aborted && !context.signal?.aborted) {
+					return `Wait ended after ${waited} s because the user sent a new message. Read it and act on it before waiting again.`
+				}
 				return `Wait cancelled after ${waited} s.`
 			}
 			const clamped = requested !== clampSeconds(input.seconds, Number.POSITIVE_INFINITY) || seconds !== requested

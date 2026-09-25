@@ -203,13 +203,15 @@ function createDetachedCommandLog(terminalCommand: string, existingLines: string
 	}
 }
 
-type DetachReason = "user" | "timeout"
+type DetachReason = "user" | "timeout" | "steer"
 
 function formatDetachedResult(logFilePath: string, output: string, reason: DetachReason): string {
 	return [
 		reason === "user"
 			? "The user chose to proceed while the command is starting or still running in their terminal."
-			: `The command was still starting or running after ${FOREGROUND_COMMAND_AUTO_PROCEED_MS / 1000} seconds, so Cline automatically proceeded while leaving it running in the terminal.`,
+			: reason === "steer"
+				? "The user sent a new message while the command was still starting or running, so PlinyCode stopped waiting for it and left it running in the terminal. Read the user's message and act on it first."
+				: `The command was still starting or running after ${FOREGROUND_COMMAND_AUTO_PROCEED_MS / 1000} seconds, so PlinyCode automatically proceeded while leaving it running in the terminal.`,
 		`This is partial output; further output is being redirected to this file, which you can read to check progress: ${logFilePath}`,
 		output.length > 0 ? `Output so far:\n${output}` : "No output so far.",
 	].join("\n")
@@ -227,6 +229,7 @@ export async function executeForeground(
 	foregroundCommands?: SdkForegroundCommandCoordinator,
 	terminalProfileId?: string,
 	sessionId?: string,
+	userMessageSignal?: AbortSignal,
 ): Promise<string> {
 	const terminalCommand = formatCommandForTerminal(command)
 	const abortedError = (output?: string): CommandAbortedError =>
@@ -274,6 +277,13 @@ export async function executeForeground(
 	// A task running in the background must not pop its terminal into view.
 	const reveal = foregroundCommands?.isForegroundSession(sessionId) ?? true
 	const autoProceedTimer = setTimeout(() => requestDetach("timeout"), FOREGROUND_COMMAND_AUTO_PROCEED_MS)
+	// A steering message detaches the command like "Proceed While Running", so
+	// the agent reads the message now instead of when the command ends.
+	const onUserMessage = (): void => requestDetach("steer")
+	userMessageSignal?.addEventListener("abort", onUserMessage, { once: true })
+	if (userMessageSignal?.aborted) {
+		onUserMessage()
+	}
 	const onAbort = (): void => {
 		if (state.phase === "waiting") {
 			state.phase = "aborted"
@@ -494,6 +504,7 @@ export async function executeForeground(
 	} finally {
 		clearTimeout(autoProceedTimer)
 		abortSignal?.removeEventListener("abort", onAbort)
+		userMessageSignal?.removeEventListener("abort", onUserMessage)
 		unregister?.()
 	}
 }
@@ -609,6 +620,7 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 			options.foregroundCommands,
 			profileId,
 			context.sessionId,
+			context.userMessageSignal,
 		)
 	}
 }
