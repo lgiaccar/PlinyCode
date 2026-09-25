@@ -42,6 +42,14 @@ const DETACHED_LOG_DIRECTORY_PREFIX = "cline-command-";
 const DETACHED_LOG_FILENAME = "output.log";
 const DETACHED_LOG_ACTIVE_COMMAND_FILENAME = "active-command.json";
 const DETACHED_LOG_COMPLETED_FILENAME = "completed-at";
+// On Windows, a scanner or indexer briefly holding a file open makes a
+// recursive rm fail with EBUSY/EPERM/ENOTEMPTY; Node retries only those codes.
+const DETACHED_LOG_REMOVE_OPTIONS = {
+	recursive: true,
+	force: true,
+	maxRetries: 5,
+	retryDelay: 100,
+} as const;
 const COMMAND_PROGRESS_FLUSH_INTERVAL_MS = 48;
 /**
  * How long the executor waits after the shell process exits for its stdio
@@ -246,7 +254,7 @@ async function reconcileDetachedCommandLogDirectory(
 		);
 		return false;
 	}
-	await rm(directory, { recursive: true, force: true });
+	await rm(directory, DETACHED_LOG_REMOVE_OPTIONS);
 	return true;
 }
 
@@ -572,7 +580,7 @@ function scheduleDetachedLogCleanup(
 	retentionMs: number,
 ): void {
 	const cleanupTimer = setTimeout(() => {
-		void rm(directory, { recursive: true, force: true }).catch(() => undefined);
+		void rm(directory, DETACHED_LOG_REMOVE_OPTIONS).catch(() => undefined);
 	}, retentionMs);
 	cleanupTimer.unref();
 }
