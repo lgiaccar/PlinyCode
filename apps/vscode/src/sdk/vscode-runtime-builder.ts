@@ -1,6 +1,7 @@
 import { createMcpTools } from "@plinycode/core"
 import type { AgentTool, AgentToolContext } from "@plinycode/shared"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { getRunningBuiltinMcpSources } from "@/services/devops-mcp/builtin-mcp-registry"
 import type { McpHub } from "@/services/mcp/McpHub"
 import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
 import { Logger } from "@/shared/services/Logger"
@@ -83,10 +84,31 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 		}),
 	)
 
+	// Built-in servers (e.g. PlinyCode DevOps) are not in the MCP settings file,
+	// so McpHub doesn't list them; their tools come from the builtin registry.
+	const builtinTools = await Promise.all(
+		getRunningBuiltinMcpSources().map(async (source) => {
+			try {
+				return await createMcpTools({
+					serverName: source.serverName,
+					provider: source.provider,
+					timeoutMs: source.timeoutMs,
+				})
+			} catch (error) {
+				Logger.warn(
+					`[VscodeRuntimeTools] Failed to load tools from built-in MCP server "${source.serverName}": ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				)
+				return []
+			}
+		}),
+	)
+
 	// No completion tool is exposed: the agent simply ends its turn with a text
 	// response, and the turn-end inference in message-translator.ts styles that
 	// final text as the completion feedback row.
-	const tools: AgentTool[] = [...mcpTools.flat()]
+	const tools: AgentTool[] = [...mcpTools.flat(), ...builtinTools.flat()]
 
 	// Add the custom run_commands tool when a terminal manager is available.
 	// This replaces the SDK's built-in run_commands, which is suppressed via

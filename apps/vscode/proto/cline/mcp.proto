@@ -21,6 +21,28 @@ service McpService {
 
   // Subscribe to MCP server updates
   rpc subscribeToMcpServers(EmptyRequest) returns (stream McpServers);
+
+  // Built-in PlinyCode DevOps server (PRs and pipelines for GitHub / Azure DevOps)
+  rpc subscribeToDevOpsServer(EmptyRequest) returns (stream DevOpsServerStatus);
+  rpc restartDevOpsServer(EmptyRequest) returns (DevOpsServerStatus);
+  rpc setDevOpsServerEnabled(BooleanRequest) returns (DevOpsServerStatus);
+  // Copies an MCP config for other clients to the clipboard
+  rpc copyDevOpsServerConfig(EmptyRequest) returns (Empty);
+}
+
+message DevOpsServerStatus {
+  // off | starting | running | error
+  string state = 1;
+  optional string error = 2;
+  repeated string tools = 3;
+  // Editor product name, e.g. "Visual Studio Code" or "Cursor"
+  string editor = 4;
+  // How the editor's own AI chat reaches the server: cursor | vscode | none
+  string integration = 5;
+  bool editor_registered = 6;
+  optional string editor_error = 7;
+  bool enabled = 8;
+  bool register_with_editor = 9;
 }
 
 message ToggleMcpServerRequest {

@@ -45,6 +45,7 @@ import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalMan
 import { ExtensionRegistryInfo } from "@/registry"
 import { OcaAuthService } from "@/services/auth/oca/OcaAuthService"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
+import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { telemetryService } from "@/services/telemetry"
@@ -251,6 +252,7 @@ export class Controller {
 
 	// Timer for periodic remote config fetching (enterprise policy enforcement)
 	private remoteConfigTimer?: NodeJS.Timeout
+	private unsubscribeBuiltinMcp?: () => void
 	private remoteConfigCoreIntegration?: PreparedRemoteConfigCoreIntegration
 	private remoteConfigRevision = 0
 	private remoteConfigAvailable = false
@@ -742,6 +744,8 @@ export class Controller {
 		// when servers are added/removed/reconnected. The SDK's DefaultSessionBuilder
 		// does not support dynamic MCP tools, so we must restart the session.
 		this.mcpHub.setToolListChangeCallback(() => this.mcpTools.handleToolListChanged())
+		// Same for built-in servers (PlinyCode DevOps), which McpHub doesn't manage.
+		this.unsubscribeBuiltinMcp = onBuiltinMcpToolsChanged(() => this.mcpTools.handleToolListChanged())
 
 		// Initialize gRPC bridge
 		this.grpcBridge = new WebviewGrpcBridge(this.messageTranslatorState)
@@ -1013,6 +1017,7 @@ export class Controller {
 		this.messages.cancelPendingSave()
 		// Clear MCP tool list change callback before disposing McpHub
 		this.mcpHub?.clearToolListChangeCallback()
+		this.unsubscribeBuiltinMcp?.()
 		await this.diffEdits.discardAllPreviews("controller dispose")
 		await this.clearTask()
 		await this.background.stopAll("SdkController.dispose")
