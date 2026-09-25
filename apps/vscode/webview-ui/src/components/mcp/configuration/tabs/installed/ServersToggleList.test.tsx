@@ -13,6 +13,10 @@ vi.mock("@/services/grpc-client", () => ({
 	},
 }))
 
+vi.mock("@/context/ExtensionStateContext", () => ({
+	useExtensionState: () => ({ navigateToChat: () => {} }),
+}))
+
 vi.mock("./server-row/ServerRow", () => ({
 	default: ({ server }: { server: { name: string } }) => <div>row:{server.name}</div>,
 }))

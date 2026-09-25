@@ -1,11 +1,13 @@
-import { BooleanRequest, EmptyRequest } from "@shared/proto/cline/common"
+import { BooleanRequest, EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import type { DevOpsServerStatus } from "@shared/proto/cline/mcp"
-import { CopyIcon, RefreshCcwIcon } from "lucide-react"
+import { NewTaskRequest } from "@shared/proto/cline/task"
+import { CopyIcon, PlayIcon, RefreshCcwIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
+import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
-import { McpServiceClient } from "@/services/grpc-client"
+import { FileServiceClient, McpServiceClient, TaskServiceClient } from "@/services/grpc-client"
 
 const STATE_LABEL: Record<string, string> = {
 	running: "Running",
@@ -15,6 +17,10 @@ const STATE_LABEL: Record<string, string> = {
 }
 
 const EXAMPLES = ["Open a PR for this branch with a summary of the changes", "Why did the last pipeline run fail?"]
+
+/** Read-only smoke test, used by "Try in PlinyCode" and copied for the editor's own chat. */
+export const TEST_PROMPT =
+	'Use the plinycode-devops MCP tools (not the terminal): call repo_context for this workspace, then pipeline_runs with branch "*" and limit 5. Summarize the repository, the current branch, any open PR and the latest runs in a short table.'
 
 /** Live status of the built-in DevOps server; undefined until the extension has answered. */
 export function useDevOpsServerStatus(): DevOpsServerStatus | undefined {
@@ -36,6 +42,7 @@ export function useDevOpsServerStatus(): DevOpsServerStatus | undefined {
  * `compact` is the one-line row used in the chat input's MCP popup.
  */
 const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerStatus; compact?: boolean }) => {
+	const { navigateToChat } = useExtensionState()
 	const [expanded, setExpanded] = useState(false)
 	const [busy, setBusy] = useState(false)
 
@@ -115,6 +122,39 @@ const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerSta
 						.
 					</p>
 
+					<div>
+						<div className="font-medium mb-1">Try it</div>
+						<p className="m-0 mb-2 text-description">
+							A read-only check: it shows the repository, the current branch and the latest CI runs, and changes
+							nothing. PlinyCode shows each call as an MCP tool row in the chat.
+						</p>
+						<div className="flex flex-wrap gap-2">
+							<Button
+								disabled={busy || status.state !== "running"}
+								onClick={() =>
+									run(async () => {
+										await TaskServiceClient.newTask(NewTaskRequest.create({ text: TEST_PROMPT, images: [] }))
+										navigateToChat()
+									})
+								}>
+								<PlayIcon className="mr-1.5 size-3.5" />
+								Try in PlinyCode
+							</Button>
+							{status.integration !== "none" && (
+								<Button
+									disabled={busy}
+									onClick={() =>
+										run(() => FileServiceClient.copyToClipboard(StringRequest.create({ value: TEST_PROMPT })))
+									}
+									title={`Paste it into ${status.editor}'s agent chat`}
+									variant="secondary">
+									<CopyIcon className="mr-1.5 size-3.5" />
+									Copy prompt for {status.integration === "cursor" ? "Cursor" : "Copilot Chat"}
+								</Button>
+							)}
+						</div>
+					</div>
+
 					{status.tools.length > 0 && (
 						<div className="flex flex-wrap gap-1">
 							{status.tools.map((tool) => (
@@ -179,12 +219,15 @@ const EditorInstructions = ({ status }: { status: DevOpsServerStatus }) => {
 		return (
 			<ol className="m-0 pl-5 text-description">
 				<li>
-					It's already registered with Cursor as <code>plinycode-devops</code>.
+					It's already registered with Cursor as <code>plinycode-devops</code>: in{" "}
+					<b>Cursor Settings → Tools &amp; MCP</b> (<b>MCP</b> in older versions) it has a green dot and 7 tools. Switch
+					it on if it's off.
 				</li>
 				<li>
-					Open <b>Cursor Settings → MCP</b> (<b>Tools &amp; MCP</b> in newer versions) and check that it's switched on.
+					Click <b>Copy prompt for Cursor</b> above, open Cursor's chat (<b>Ctrl+L</b> / <b>Cmd+L</b>) in <b>Agent</b>{" "}
+					mode, and paste it.
 				</li>
-				<li>Ask Cursor's agent, for example "open a PR for this branch".</li>
+				<li>Allow the tool calls when Cursor asks. The answer shows this repository and its latest CI runs.</li>
 			</ol>
 		)
 	}
@@ -199,7 +242,10 @@ const EditorInstructions = ({ status }: { status: DevOpsServerStatus }) => {
 					<b>PlinyCode DevOps</b>. VS Code may ask you to trust the server the first time.
 				</li>
 				<li>
-					Or run <b>MCP: List Servers</b> from the Command Palette to start, stop or inspect it.
+					Click <b>Copy prompt for Copilot Chat</b> above, paste it into the chat and allow the tool calls.
+				</li>
+				<li>
+					<b>MCP: List Servers</b> in the Command Palette starts, stops or shows the output of the server.
 				</li>
 			</ol>
 		)
