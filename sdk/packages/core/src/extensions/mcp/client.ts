@@ -1,13 +1,13 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
 	type AgentToolContext,
 	formatMcpTimeoutErrorMessage,
 	isMcpTimeoutConfigured,
 } from "@plinycode/shared";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
 	createMcpOAuthClientInformation,
 	createMcpOAuthProviderContext,

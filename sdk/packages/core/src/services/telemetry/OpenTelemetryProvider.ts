@@ -1,12 +1,3 @@
-import { LangfuseAttributesSpanProcessor } from "@plinycode/llms";
-import type {
-	BasicLogger,
-	ITelemetryService,
-	OpenTelemetryClientConfig,
-	TelemetryMetadata,
-	TelemetryProperties,
-} from "@plinycode/shared";
-import { markOtlpTraceRelayProvider } from "@plinycode/shared";
 import { metrics, type Tracer, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { OTLPLogExporter as OTLPLogExporterHttp } from "@opentelemetry/exporter-logs-otlp-http";
@@ -36,6 +27,15 @@ import {
 	ATTR_SERVICE_NAME,
 	ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import { LangfuseAttributesSpanProcessor } from "@plinycode/llms";
+import type {
+	BasicLogger,
+	ITelemetryService,
+	OpenTelemetryClientConfig,
+	TelemetryMetadata,
+	TelemetryProperties,
+} from "@plinycode/shared";
+import { markOtlpTraceRelayProvider } from "@plinycode/shared";
 import { isTelemetryOptedOutGlobally } from "../global-settings";
 import { resolveCoreDistinctId } from "./distinct-id";
 import {

@@ -482,7 +482,10 @@ describe("sdk-gateway", () => {
 				model: { maxOutputTokens: 64_000, contextWindow: 128_000 },
 				estimatedInputTokens: 1_000,
 			}),
-		).toEqual({ maxTokens: DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS, source: "default" });
+		).toEqual({
+			maxTokens: DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS,
+			source: "default",
+		});
 		expect(
 			resolveGatewayRequestMaxTokensDetailed({
 				requestedMaxTokens: 64_000,
@@ -613,7 +616,10 @@ describe("sdk-gateway", () => {
 	it("reports the applied output limit on a max-tokens finish", async () => {
 		const createProvider = vi.fn(() => ({
 			async *stream() {
-				yield { type: "finish", reason: "max-tokens" } satisfies AgentModelEvent;
+				yield {
+					type: "finish",
+					reason: "max-tokens",
+				} satisfies AgentModelEvent;
 			},
 		}));
 

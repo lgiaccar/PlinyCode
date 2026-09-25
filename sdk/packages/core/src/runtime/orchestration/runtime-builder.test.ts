@@ -517,15 +517,17 @@ Use the review guidance.`,
 
 	// The mock MCP server speaks newline-delimited JSON over stdio; the Windows
 	// pipe framing breaks that handshake, so the server never registers its tools.
-	it.skipIf(process.platform === "win32")("includes MCP tools from configured servers", async () => {
-		const tempRoot = mkdtempSync(join(tmpdir(), "runtime-builder-mcp-"));
-		const serverPath = join(tempRoot, "mock-mcp-server.js");
-		const settingsPath = join(tempRoot, "cline_mcp_settings.json");
-		const previousSettingsPath = process.env.CLINE_MCP_SETTINGS_PATH;
+	it.skipIf(process.platform === "win32")(
+		"includes MCP tools from configured servers",
+		async () => {
+			const tempRoot = mkdtempSync(join(tmpdir(), "runtime-builder-mcp-"));
+			const serverPath = join(tempRoot, "mock-mcp-server.js");
+			const settingsPath = join(tempRoot, "cline_mcp_settings.json");
+			const previousSettingsPath = process.env.CLINE_MCP_SETTINGS_PATH;
 
-		writeFileSync(
-			serverPath,
-			`let buffer = "";
+			writeFileSync(
+				serverPath,
+				`let buffer = "";
 function write(payload) {
   process.stdout.write(JSON.stringify(payload) + "\\n");
 }
@@ -555,69 +557,72 @@ process.stdin.on("data", (chunk) => {
     handle(message);
   }
 });`,
-			"utf8",
-		);
-		writeFileSync(
-			settingsPath,
-			JSON.stringify(
-				{
-					mcpServers: {
-						mock: {
-							command: process.execPath,
-							args: [serverPath],
+				"utf8",
+			);
+			writeFileSync(
+				settingsPath,
+				JSON.stringify(
+					{
+						mcpServers: {
+							mock: {
+								command: process.execPath,
+								args: [serverPath],
+							},
 						},
 					},
-				},
-				null,
-				2,
-			),
-			"utf8",
-		);
+					null,
+					2,
+				),
+				"utf8",
+			);
 
-		process.env.CLINE_MCP_SETTINGS_PATH = settingsPath;
-		try {
-			const runtime = await new DefaultRuntimeBuilder().build({
-				config: makeBaseConfig(),
-			});
-			expect(runtime.tools.map((tool) => tool.name)).toContain("mock__echo");
-			await runtime.shutdown("test");
-		} finally {
-			process.env.CLINE_MCP_SETTINGS_PATH = previousSettingsPath;
-		}
-	});
+			process.env.CLINE_MCP_SETTINGS_PATH = settingsPath;
+			try {
+				const runtime = await new DefaultRuntimeBuilder().build({
+					config: makeBaseConfig(),
+				});
+				expect(runtime.tools.map((tool) => tool.name)).toContain("mock__echo");
+				await runtime.shutdown("test");
+			} finally {
+				process.env.CLINE_MCP_SETTINGS_PATH = previousSettingsPath;
+			}
+		},
+	);
 
 	// The mock MCP server speaks newline-delimited JSON over stdio; the Windows
 	// pipe framing breaks that handshake, so the server never registers its tools.
-	it.skipIf(process.platform === "win32")("combines hub-owned Agent Plugin skills and MCP servers with client instructions", async () => {
-		const tempRoot = realpathSync.native(
-			mkdtempSync(join(tmpdir(), "runtime-builder-agent-plugin-")),
-		);
-		tempDirs.push(tempRoot);
-		const previousSettingsPath = process.env.CLINE_MCP_SETTINGS_PATH;
-		process.env.CLINE_MCP_SETTINGS_PATH = join(
-			tempRoot,
-			"missing-settings.json",
-		);
-		const pluginRoot = join(tempRoot, "portable");
-		const pluginSkillRoot = join(pluginRoot, "skills", "portable-review");
-		const pluginSkillPath = join(pluginSkillRoot, "SKILL.md");
-		const localSkillRoot = join(tempRoot, "local-skills", "local-review");
-		const serverPath = join(pluginRoot, "server.js");
-		mkdirSync(pluginSkillRoot, { recursive: true });
-		mkdirSync(localSkillRoot, { recursive: true });
-		writeFileSync(
-			pluginSkillPath,
-			"---\nname: portable-review\ndescription: Review with the portable plugin\n---\nUse portable guidance.",
-			"utf8",
-		);
-		writeFileSync(
-			join(localSkillRoot, "SKILL.md"),
-			"---\nname: local-review\ndescription: Review locally\n---\nUse local guidance.",
-			"utf8",
-		);
-		writeFileSync(
-			serverPath,
-			`let buffer = "";
+	it.skipIf(process.platform === "win32")(
+		"combines hub-owned Agent Plugin skills and MCP servers with client instructions",
+		async () => {
+			const tempRoot = realpathSync.native(
+				mkdtempSync(join(tmpdir(), "runtime-builder-agent-plugin-")),
+			);
+			tempDirs.push(tempRoot);
+			const previousSettingsPath = process.env.CLINE_MCP_SETTINGS_PATH;
+			process.env.CLINE_MCP_SETTINGS_PATH = join(
+				tempRoot,
+				"missing-settings.json",
+			);
+			const pluginRoot = join(tempRoot, "portable");
+			const pluginSkillRoot = join(pluginRoot, "skills", "portable-review");
+			const pluginSkillPath = join(pluginSkillRoot, "SKILL.md");
+			const localSkillRoot = join(tempRoot, "local-skills", "local-review");
+			const serverPath = join(pluginRoot, "server.js");
+			mkdirSync(pluginSkillRoot, { recursive: true });
+			mkdirSync(localSkillRoot, { recursive: true });
+			writeFileSync(
+				pluginSkillPath,
+				"---\nname: portable-review\ndescription: Review with the portable plugin\n---\nUse portable guidance.",
+				"utf8",
+			);
+			writeFileSync(
+				join(localSkillRoot, "SKILL.md"),
+				"---\nname: local-review\ndescription: Review locally\n---\nUse local guidance.",
+				"utf8",
+			);
+			writeFileSync(
+				serverPath,
+				`let buffer = "";
 function write(payload) { process.stdout.write(JSON.stringify(payload) + "\\n"); }
 process.stdin.on("data", (chunk) => {
   buffer += chunk.toString("utf8");
@@ -633,96 +638,99 @@ process.stdin.on("data", (chunk) => {
     if (message.method === "tools/call") write({ jsonrpc: "2.0", id: message.id, result: { echoed: message.params?.arguments ?? null } });
   }
 });`,
-			"utf8",
-		);
-		const resolvedPluginRoot = realpathSync.native(pluginRoot);
-		const resolvedPluginSkillRoot = realpathSync.native(pluginSkillRoot);
-		const resolvedPluginSkillPath = realpathSync.native(pluginSkillPath);
+				"utf8",
+			);
+			const resolvedPluginRoot = realpathSync.native(pluginRoot);
+			const resolvedPluginSkillRoot = realpathSync.native(pluginSkillRoot);
+			const resolvedPluginSkillPath = realpathSync.native(pluginSkillPath);
 
-		const clientInstructionService = createUserInstructionConfigService({
-			skills: { directories: [join(tempRoot, "local-skills")] },
-			rules: { directories: [] },
-			workflows: { directories: [] },
-		});
-		let runtime:
-			| Awaited<ReturnType<DefaultRuntimeBuilder["build"]>>
-			| undefined;
-		try {
-			runtime = await new DefaultRuntimeBuilder().build({
-				config: makeBaseConfig({
-					cwd: tempRoot,
-					disableMcpSettingsTools: true,
-				}),
-				userInstructionService: clientInstructionService,
-				agentPluginSkills: [
-					{
-						pluginName: "portable",
-						pluginRoot: resolvedPluginRoot,
-						directoryPath: resolvedPluginSkillRoot,
-						filePath: resolvedPluginSkillPath,
-						metadata: {
-							name: "portable-review",
-							description: "Review with the portable plugin",
-						},
-					},
-				],
-				agentPluginMcpServers: [
-					{
-						pluginName: "portable",
-						pluginRoot: resolvedPluginRoot,
-						pluginDataPath: join(tempRoot, "plugin-data"),
-						serverName: "tools",
-						registration: {
-							name: "portable.tools",
-							transport: {
-								type: "stdio",
-								command: process.execPath,
-								args: [serverPath],
-								cwd: resolvedPluginRoot,
-							},
-							metadata: {
-								source: "agent-plugin",
-								pluginDataPath: join(tempRoot, "plugin-data"),
-							},
-						},
-					},
-				],
+			const clientInstructionService = createUserInstructionConfigService({
+				skills: { directories: [join(tempRoot, "local-skills")] },
+				rules: { directories: [] },
+				workflows: { directories: [] },
 			});
+			let runtime:
+				| Awaited<ReturnType<DefaultRuntimeBuilder["build"]>>
+				| undefined;
+			try {
+				runtime = await new DefaultRuntimeBuilder().build({
+					config: makeBaseConfig({
+						cwd: tempRoot,
+						disableMcpSettingsTools: true,
+					}),
+					userInstructionService: clientInstructionService,
+					agentPluginSkills: [
+						{
+							pluginName: "portable",
+							pluginRoot: resolvedPluginRoot,
+							directoryPath: resolvedPluginSkillRoot,
+							filePath: resolvedPluginSkillPath,
+							metadata: {
+								name: "portable-review",
+								description: "Review with the portable plugin",
+							},
+						},
+					],
+					agentPluginMcpServers: [
+						{
+							pluginName: "portable",
+							pluginRoot: resolvedPluginRoot,
+							pluginDataPath: join(tempRoot, "plugin-data"),
+							serverName: "tools",
+							registration: {
+								name: "portable.tools",
+								transport: {
+									type: "stdio",
+									command: process.execPath,
+									args: [serverPath],
+									cwd: resolvedPluginRoot,
+								},
+								metadata: {
+									source: "agent-plugin",
+									pluginDataPath: join(tempRoot, "plugin-data"),
+								},
+							},
+						},
+					],
+				});
 
-			const mcpTool = runtime.tools.find(
-				(tool) => tool.description === "Portable echo",
-			);
-			expect(existsSync(join(tempRoot, "plugin-data"))).toBe(true);
-			expect(mcpTool).toBeDefined();
-			const extensionTools = await collectExtensionTools(runtime.extensions);
-			const skillsTool = extensionTools.find((tool) => tool.name === "skills");
-			expect(skillsTool).toBeDefined();
-			if (!skillsTool) {
-				throw new Error("Expected combined skills tool.");
+				const mcpTool = runtime.tools.find(
+					(tool) => tool.description === "Portable echo",
+				);
+				expect(existsSync(join(tempRoot, "plugin-data"))).toBe(true);
+				expect(mcpTool).toBeDefined();
+				const extensionTools = await collectExtensionTools(runtime.extensions);
+				const skillsTool = extensionTools.find(
+					(tool) => tool.name === "skills",
+				);
+				expect(skillsTool).toBeDefined();
+				if (!skillsTool) {
+					throw new Error("Expected combined skills tool.");
+				}
+				expect(skillsTool.description).toContain("portable:portable-review");
+				const context = {
+					agentId: "agent-1",
+					conversationId: "conv-1",
+					iteration: 1,
+				};
+				const portableResult = await skillsTool.execute(
+					{ skill: "portable:portable-review" },
+					context,
+				);
+				expect(portableResult).toContain("Use portable guidance.");
+				expect(portableResult).toContain(
+					`<skill-root>${resolvedPluginSkillRoot}</skill-root>`,
+				);
+				await expect(
+					skillsTool.execute({ skill: "local-review" }, context),
+				).resolves.toContain("Use local guidance.");
+			} finally {
+				await runtime?.shutdown("test");
+				clientInstructionService.stop();
+				process.env.CLINE_MCP_SETTINGS_PATH = previousSettingsPath;
 			}
-			expect(skillsTool.description).toContain("portable:portable-review");
-			const context = {
-				agentId: "agent-1",
-				conversationId: "conv-1",
-				iteration: 1,
-			};
-			const portableResult = await skillsTool.execute(
-				{ skill: "portable:portable-review" },
-				context,
-			);
-			expect(portableResult).toContain("Use portable guidance.");
-			expect(portableResult).toContain(
-				`<skill-root>${resolvedPluginSkillRoot}</skill-root>`,
-			);
-			await expect(
-				skillsTool.execute({ skill: "local-review" }, context),
-			).resolves.toContain("Use local guidance.");
-		} finally {
-			await runtime?.shutdown("test");
-			clientInstructionService.stop();
-			process.env.CLINE_MCP_SETTINGS_PATH = previousSettingsPath;
-		}
-	});
+		},
+	);
 
 	it("skips MCP settings tools when disableMcpSettingsTools is true", async () => {
 		const tempRoot = mkdtempSync(

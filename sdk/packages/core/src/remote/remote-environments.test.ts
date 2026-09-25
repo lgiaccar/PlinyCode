@@ -166,22 +166,25 @@ describe("RemoteEnvironmentService", () => {
 	});
 	// SIGTERM/SIGKILL escalation is POSIX-only; Windows has no signal semantics
 	// for a process to ignore, so the escalation path cannot be exercised there.
-	it.skipIf(process.platform === "win32")("waits for SIGKILL when a timed-out process ignores SIGTERM", async () => {
-		const pidFile = join(testDirectory, "process.pid");
-		await expect(
-			runRemoteProcess(
-				process.execPath,
-				[
-					"-e",
-					`require('fs').writeFileSync(process.argv[1], String(process.pid)); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)`,
-					pidFile,
-				],
-				{ timeoutMs: 500 },
-			),
-		).rejects.toThrow("timed out");
-		const pid = Number(await readFile(pidFile, "utf8"));
-		expect(() => process.kill(pid, 0)).toThrow();
-	});
+	it.skipIf(process.platform === "win32")(
+		"waits for SIGKILL when a timed-out process ignores SIGTERM",
+		async () => {
+			const pidFile = join(testDirectory, "process.pid");
+			await expect(
+				runRemoteProcess(
+					process.execPath,
+					[
+						"-e",
+						`require('fs').writeFileSync(process.argv[1], String(process.pid)); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)`,
+						pidFile,
+					],
+					{ timeoutMs: 500 },
+				),
+			).rejects.toThrow("timed out");
+			const pid = Number(await readFile(pidFile, "utf8"));
+			expect(() => process.kill(pid, 0)).toThrow();
+		},
+	);
 	it("cleans up when the upload input cannot be opened", async () => {
 		await expect(
 			runRemoteProcess(process.execPath, ["-e", "process.stdin.resume()"], {

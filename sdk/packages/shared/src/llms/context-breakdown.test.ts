@@ -9,7 +9,10 @@ describe("estimateContextBreakdown", () => {
 			systemPrompt,
 			rulesText,
 			messages: [
-				{ role: "user", content: [{ type: "text", text: "Fix the bug in foo.ts" }] },
+				{
+					role: "user",
+					content: [{ type: "text", text: "Fix the bug in foo.ts" }],
+				},
 			],
 		});
 
@@ -29,7 +32,11 @@ describe("estimateContextBreakdown", () => {
 					role: "user",
 					content: [
 						{ type: "text", text: "look at this" },
-						{ type: "image", image: "data:image/png;base64,AAAA", mediaType: "image/png" },
+						{
+							type: "image",
+							image: "data:image/png;base64,AAAA",
+							mediaType: "image/png",
+						},
 					],
 				},
 			],
@@ -40,11 +47,16 @@ describe("estimateContextBreakdown", () => {
 	});
 
 	it("attributes skills and workflows text to their own buckets, not conversation", () => {
-		const skillsText = "## Skill: deploy\nRun the deploy script.".repeat(5)
+		const skillsText = "## Skill: deploy\nRun the deploy script.".repeat(5);
 		const breakdown = estimateContextBreakdown({
 			systemPrompt: "sys",
 			skillsText,
-			messages: [{ role: "user", content: [{ type: "text", text: `/deploy\n\n${skillsText}` }] }],
+			messages: [
+				{
+					role: "user",
+					content: [{ type: "text", text: `/deploy\n\n${skillsText}` }],
+				},
+			],
 		});
 
 		expect(breakdown.skills).toBeGreaterThan(0);
@@ -54,7 +66,12 @@ describe("estimateContextBreakdown", () => {
 		const breakdown = estimateContextBreakdown(
 			{
 				systemPrompt: "You are a coding agent.",
-				messages: [{ role: "user", content: [{ type: "text", text: "hello".repeat(50) }] }],
+				messages: [
+					{
+						role: "user",
+						content: [{ type: "text", text: "hello".repeat(50) }],
+					},
+				],
 			},
 			1000,
 		);

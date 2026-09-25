@@ -101,9 +101,9 @@ import {
 	handleSessionRemovePendingPrompt,
 	handleSessionRestore,
 	handleSessionSearch,
+	handleSessionSteerFirstPendingPrompt,
 	handleSessionUpdate,
 	handleSessionUpdateConnection,
-	handleSessionSteerFirstPendingPrompt,
 	handleSessionUpdatePendingPrompt,
 } from "./handlers/session-handlers";
 import { HubEventLogStore } from "./hub-event-log";

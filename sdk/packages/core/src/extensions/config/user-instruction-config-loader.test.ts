@@ -327,7 +327,10 @@ Escalation runbook`,
 		const originalHomeDir = process.env.HOME?.trim() || homedir();
 		setHomeDir(join(tempRoot, "home"));
 		const workspaceRoot = join(tempRoot, "workspace");
-		const writeWorkspaceFile = async (relativePath: string, content: string) => {
+		const writeWorkspaceFile = async (
+			relativePath: string,
+			content: string,
+		) => {
 			const filePath = join(workspaceRoot, relativePath);
 			await mkdir(join(filePath, ".."), { recursive: true });
 			await writeFile(filePath, content);

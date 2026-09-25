@@ -80,7 +80,9 @@ if (
 ) {
 	throw new Error("palette.css and tokens.css must remain framework-neutral");
 }
-if (!tokensWithoutComments.includes('@import "@plinycode/ui/theme/palette.css";')) {
+if (
+	!tokensWithoutComments.includes('@import "@plinycode/ui/theme/palette.css";')
+) {
 	throw new Error("tokens.css must import the owned palette");
 }
 if (

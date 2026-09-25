@@ -1,13 +1,13 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { markOtlpTraceRelayProvider } from "@plinycode/shared";
 import { context, trace } from "@opentelemetry/api";
 import {
 	InMemorySpanExporter,
 	NodeTracerProvider,
 	SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-node";
+import { markOtlpTraceRelayProvider } from "@plinycode/shared";
 import { jsonSchema, streamText, tool } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";

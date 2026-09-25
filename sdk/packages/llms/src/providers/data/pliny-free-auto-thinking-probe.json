@@ -1,1229 +1,1215 @@
 {
-  "probedAt": "2026-09-24T05:27:39.953Z",
-  "baseURL": "https://snps-inference.internal.synopsys.com/api/llm",
-  "runs": 1,
-  "reports": [
-    {
-      "id": "snps-provider/GLM-5.2",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 784,
-          "contentChars": 5,
-          "ttftMs": 4189,
-          "totalMs": 4248
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1102,
-          "contentChars": 0,
-          "totalMs": 11308
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1020,
-          "contentChars": 5,
-          "ttftMs": 58945,
-          "totalMs": 59029
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 636,
-          "totalMs": 678
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 292,
-          "totalMs": 330
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1130,
-          "contentChars": 0,
-          "totalMs": 7190
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider-internal-tests/glm-5-2",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 842,
-          "contentChars": 5,
-          "ttftMs": 7242,
-          "totalMs": 7290
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 635,
-          "contentChars": 5,
-          "ttftMs": 4385,
-          "totalMs": 4418
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1050,
-          "contentChars": 5,
-          "ttftMs": 28165,
-          "totalMs": 28642
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 403,
-          "totalMs": 442
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 412,
-          "totalMs": 449
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1074,
-          "contentChars": 5,
-          "ttftMs": 13500,
-          "totalMs": 13564
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider-vmodels/glm-5.2",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1003,
-          "contentChars": 5,
-          "ttftMs": 6859,
-          "totalMs": 6925
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 694,
-          "contentChars": 5,
-          "ttftMs": 24160,
-          "totalMs": 24351
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 995,
-          "contentChars": 5,
-          "ttftMs": 14076,
-          "totalMs": 15584
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 4400,
-          "totalMs": 4400
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 568,
-          "totalMs": 568
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1172,
-          "contentChars": 0,
-          "totalMs": 7430
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/kimi-k2.6",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1339,
-          "ttftMs": 537,
-          "totalMs": 6700
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1286,
-          "ttftMs": 743,
-          "totalMs": 6267
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 796,
-          "ttftMs": 447,
-          "totalMs": 4490
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1251,
-          "ttftMs": 856,
-          "totalMs": 6835
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1066,
-          "ttftMs": 317,
-          "totalMs": 5508
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 703,
-          "ttftMs": 415,
-          "totalMs": 3830
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/nvidia-nemotron-3-super-120b-a12",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 371,
-          "contentChars": 5,
-          "ttftMs": 2496,
-          "totalMs": 3004
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 232,
-          "contentChars": 5,
-          "ttftMs": 1360,
-          "totalMs": 1427
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 296,
-          "contentChars": 5,
-          "ttftMs": 1877,
-          "totalMs": 1952
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 4,
-          "ttftMs": 356,
-          "totalMs": 379
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 316,
-          "totalMs": 358
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 346,
-          "contentChars": 5,
-          "ttftMs": 2399,
-          "totalMs": 2473
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/qwen3-8-27b",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 236,
-          "contentChars": 7,
-          "ttftMs": 1729,
-          "totalMs": 1806
-        },
-        "effort-high": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low.\",\"error\":{\"message\":\"self-hosted error: Unexpected reasoning e"
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 240,
-          "contentChars": 7,
-          "ttftMs": 11857,
-          "totalMs": 11955
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 309,
-          "totalMs": 365
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 320,
-          "totalMs": 382
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 352,
-          "contentChars": 7,
-          "ttftMs": 2278,
-          "totalMs": 2359
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": [
-        "effort-high"
-      ]
-    },
-    {
-      "id": "snps-provider/qwen3-6-27b",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1166,
-          "contentChars": 0,
-          "totalMs": 3960
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1006,
-          "contentChars": 0,
-          "totalMs": 3981
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 875,
-          "contentChars": 7,
-          "ttftMs": 3379,
-          "totalMs": 3646
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 518,
-          "totalMs": 519
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 243,
-          "totalMs": 271
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1142,
-          "contentChars": 0,
-          "totalMs": 3949
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider-sia/qwen3-8-27b-sia",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 151,
-          "reasoningTokens": 58,
-          "contentChars": 7,
-          "ttftMs": 1652,
-          "totalMs": 1771
-        },
-        "effort-high": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low.\",\"error\":{\"message\":\"self-hosted error: Unexpected reasoning e"
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 259,
-          "reasoningTokens": 104,
-          "contentChars": 7,
-          "ttftMs": 2802,
-          "totalMs": 2913
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "reasoningTokens": 0,
-          "contentChars": 5,
-          "ttftMs": 372,
-          "totalMs": 456
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "reasoningTokens": 0,
-          "contentChars": 8,
-          "ttftMs": 504,
-          "totalMs": 540
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 309,
-          "reasoningTokens": 91,
-          "contentChars": 7,
-          "ttftMs": 2347,
-          "totalMs": 2460
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": [
-        "effort-high"
-      ]
-    },
-    {
-      "id": "snps-provider/gemma-4-31b-it-1-reasoning",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "reasoningTokens": 0,
-          "contentChars": 5,
-          "ttftMs": 254,
-          "totalMs": 353
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 444,
-          "reasoningTokens": 225,
-          "contentChars": 5,
-          "ttftMs": 8028,
-          "totalMs": 8187
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 483,
-          "reasoningTokens": 226,
-          "contentChars": 5,
-          "ttftMs": 5583,
-          "totalMs": 5707
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "reasoningTokens": 0,
-          "contentChars": 5,
-          "ttftMs": 249,
-          "totalMs": 343
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "reasoningTokens": 0,
-          "contentChars": 5,
-          "ttftMs": 244,
-          "totalMs": 340
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "reasoningTokens": 0,
-          "contentChars": 5,
-          "ttftMs": 317,
-          "totalMs": 447
-        }
-      },
-      "defaultOn": false,
-      "on": "reasoning-effort",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/qwen3.5-397b-fp8",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1011,
-          "contentChars": 0,
-          "totalMs": 3500
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1012,
-          "contentChars": 0,
-          "totalMs": 3195
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1038,
-          "contentChars": 0,
-          "totalMs": 3049
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1034,
-          "contentChars": 0,
-          "totalMs": 3050
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 258,
-          "totalMs": 272
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1009,
-          "contentChars": 0,
-          "totalMs": 3284
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider-sia/qwen3-5-397b-a17b-sia",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1017,
-          "ttftMs": 343,
-          "totalMs": 2851
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1024,
-          "ttftMs": 270,
-          "totalMs": 3082
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1008,
-          "ttftMs": 265,
-          "totalMs": 2760
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 257,
-          "totalMs": 268
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 257,
-          "totalMs": 267
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1008,
-          "ttftMs": 260,
-          "totalMs": 2822
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/nemotron-3-ultra-550b-a55",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 205,
-          "ttftMs": 768,
-          "totalMs": 3646
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 204,
-          "ttftMs": 307,
-          "totalMs": 1412
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 340,
-          "ttftMs": 276,
-          "totalMs": 2068
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 271,
-          "totalMs": 310
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 270,
-          "totalMs": 314
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 165,
-          "ttftMs": 643,
-          "totalMs": 1542
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/nim-llama-3-3-70b-instruct-a7786",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 331,
-          "totalMs": 369
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 258,
-          "totalMs": 284
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 261,
-          "totalMs": 297
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 232,
-          "totalMs": 275
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 273,
-          "totalMs": 309
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 232,
-          "totalMs": 266
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/qwen3-coder-480b-a35b-inst-fp8",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 250,
-          "totalMs": 286
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 238,
-          "totalMs": 274
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 340,
-          "totalMs": 340
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 237,
-          "totalMs": 274
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 240,
-          "totalMs": 276
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 276,
-          "totalMs": 311
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/qwen3-6-27b-ft",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1103,
-          "contentChars": 0,
-          "totalMs": 6239
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1051,
-          "contentChars": 0,
-          "totalMs": 6223
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1057,
-          "contentChars": 0,
-          "totalMs": 6241
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 277,
-          "totalMs": 311
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1,
-          "ttftMs": 263,
-          "totalMs": 264
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 1077,
-          "contentChars": 0,
-          "totalMs": 6268
-        }
-      },
-      "defaultOn": true,
-      "off": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/qwen3-6-35b-a3b-1-28dd3",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1106,
-          "ttftMs": 272,
-          "totalMs": 2551
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1065,
-          "ttftMs": 266,
-          "totalMs": 2737
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1010,
-          "ttftMs": 271,
-          "totalMs": 2310
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 978,
-          "ttftMs": 271,
-          "totalMs": 2298
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 255,
-          "totalMs": 259
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 1064,
-          "ttftMs": 252,
-          "totalMs": 2539
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/gemma-4-31b-it-29cea",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 262,
-          "totalMs": 359
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 245,
-          "totalMs": 338
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 448,
-          "contentChars": 5,
-          "ttftMs": 5632,
-          "totalMs": 5754
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 2052,
-          "totalMs": 2148
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 254,
-          "totalMs": 373
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 250,
-          "totalMs": 363
-        }
-      },
-      "defaultOn": false,
-      "on": "template-kwargs",
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/llama-3-3-70b-instruct-128k",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 268,
-          "totalMs": 300
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 236,
-          "totalMs": 270
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 232,
-          "totalMs": 266
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 262,
-          "totalMs": 290
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 242,
-          "totalMs": 276
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 230,
-          "totalMs": 263
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/llama-3-3-70b-instruct-74k-ae1a8",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 243,
-          "totalMs": 285
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 298,
-          "totalMs": 340
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 235,
-          "totalMs": 277
-        },
-        "effort-none": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 243,
-          "totalMs": 286
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 236,
-          "totalMs": 275
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 236,
-          "totalMs": 273
-        }
-      },
-      "defaultOn": false,
-      "rejected": []
-    },
-    {
-      "id": "snps-provider/qwen2-5-32b-instruct-fe66b",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 310,
-          "totalMs": 355
-        },
-        "effort-high": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'high'}]\",\"error\":{\"message\":\"self"
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 257,
-          "totalMs": 306
-        },
-        "effort-none": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'none'}]\",\"error\":{\"message\":\"self"
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 244,
-          "totalMs": 286
-        },
-        "reasoning-exclude": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning'), 'msg': 'Extra inputs are not permitted', 'input': {'exclude': True}}]\",\"error\":{\"message\":\""
-        }
-      },
-      "defaultOn": false,
-      "rejected": [
-        "effort-high",
-        "effort-none",
-        "reasoning-exclude"
-      ]
-    },
-    {
-      "id": "snps-provider/qwen3-next-80b-a3b-instruct-d79b4",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 312,
-          "totalMs": 340
-        },
-        "effort-high": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 292,
-          "totalMs": 320
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 294,
-          "totalMs": 321
-        },
-        "effort-none": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'literal_error', 'loc': ('body', 'reasoning_effort'), 'msg': \\\"Input should be 'low', 'medium' or 'high'\\\", 'input': 'none', 'ctx': {'expect"
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 299,
-          "totalMs": 325
-        },
-        "reasoning-exclude": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 296,
-          "totalMs": 322
-        }
-      },
-      "defaultOn": false,
-      "rejected": [
-        "effort-none"
-      ]
-    },
-    {
-      "id": "snps-provider/llama-3-1-70b-instruct-20ad2",
-      "variants": {
-        "baseline": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 336,
-          "totalMs": 402
-        },
-        "effort-high": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'high'}]\",\"error\":{\"message\":\"self"
-        },
-        "template-on": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 258,
-          "totalMs": 319
-        },
-        "effort-none": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'none'}]\",\"error\":{\"message\":\"self"
-        },
-        "template-off": {
-          "status": 200,
-          "ok": true,
-          "reasoningChars": 0,
-          "contentChars": 5,
-          "ttftMs": 273,
-          "totalMs": 361
-        },
-        "reasoning-exclude": {
-          "status": 400,
-          "ok": false,
-          "reasoningChars": 0,
-          "contentChars": 0,
-          "error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning'), 'msg': 'Extra inputs are not permitted', 'input': {'exclude': True}}]\",\"error\":{\"message\":\""
-        }
-      },
-      "defaultOn": false,
-      "rejected": [
-        "effort-high",
-        "effort-none",
-        "reasoning-exclude"
-      ]
-    }
-  ]
+	"probedAt": "2026-09-24T05:27:39.953Z",
+	"baseURL": "https://snps-inference.internal.synopsys.com/api/llm",
+	"runs": 1,
+	"reports": [
+		{
+			"id": "snps-provider/GLM-5.2",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 784,
+					"contentChars": 5,
+					"ttftMs": 4189,
+					"totalMs": 4248
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1102,
+					"contentChars": 0,
+					"totalMs": 11308
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1020,
+					"contentChars": 5,
+					"ttftMs": 58945,
+					"totalMs": 59029
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 636,
+					"totalMs": 678
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 292,
+					"totalMs": 330
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1130,
+					"contentChars": 0,
+					"totalMs": 7190
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider-internal-tests/glm-5-2",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 842,
+					"contentChars": 5,
+					"ttftMs": 7242,
+					"totalMs": 7290
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 635,
+					"contentChars": 5,
+					"ttftMs": 4385,
+					"totalMs": 4418
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1050,
+					"contentChars": 5,
+					"ttftMs": 28165,
+					"totalMs": 28642
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 403,
+					"totalMs": 442
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 412,
+					"totalMs": 449
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1074,
+					"contentChars": 5,
+					"ttftMs": 13500,
+					"totalMs": 13564
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider-vmodels/glm-5.2",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1003,
+					"contentChars": 5,
+					"ttftMs": 6859,
+					"totalMs": 6925
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 694,
+					"contentChars": 5,
+					"ttftMs": 24160,
+					"totalMs": 24351
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 995,
+					"contentChars": 5,
+					"ttftMs": 14076,
+					"totalMs": 15584
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 4400,
+					"totalMs": 4400
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 568,
+					"totalMs": 568
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1172,
+					"contentChars": 0,
+					"totalMs": 7430
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/kimi-k2.6",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1339,
+					"ttftMs": 537,
+					"totalMs": 6700
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1286,
+					"ttftMs": 743,
+					"totalMs": 6267
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 796,
+					"ttftMs": 447,
+					"totalMs": 4490
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1251,
+					"ttftMs": 856,
+					"totalMs": 6835
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1066,
+					"ttftMs": 317,
+					"totalMs": 5508
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 703,
+					"ttftMs": 415,
+					"totalMs": 3830
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/nvidia-nemotron-3-super-120b-a12",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 371,
+					"contentChars": 5,
+					"ttftMs": 2496,
+					"totalMs": 3004
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 232,
+					"contentChars": 5,
+					"ttftMs": 1360,
+					"totalMs": 1427
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 296,
+					"contentChars": 5,
+					"ttftMs": 1877,
+					"totalMs": 1952
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 4,
+					"ttftMs": 356,
+					"totalMs": 379
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 316,
+					"totalMs": 358
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 346,
+					"contentChars": 5,
+					"ttftMs": 2399,
+					"totalMs": 2473
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/qwen3-8-27b",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 236,
+					"contentChars": 7,
+					"ttftMs": 1729,
+					"totalMs": 1806
+				},
+				"effort-high": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low.\",\"error\":{\"message\":\"self-hosted error: Unexpected reasoning e"
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 240,
+					"contentChars": 7,
+					"ttftMs": 11857,
+					"totalMs": 11955
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 309,
+					"totalMs": 365
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 320,
+					"totalMs": 382
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 352,
+					"contentChars": 7,
+					"ttftMs": 2278,
+					"totalMs": 2359
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": ["effort-high"]
+		},
+		{
+			"id": "snps-provider/qwen3-6-27b",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1166,
+					"contentChars": 0,
+					"totalMs": 3960
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1006,
+					"contentChars": 0,
+					"totalMs": 3981
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 875,
+					"contentChars": 7,
+					"ttftMs": 3379,
+					"totalMs": 3646
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 518,
+					"totalMs": 519
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 243,
+					"totalMs": 271
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1142,
+					"contentChars": 0,
+					"totalMs": 3949
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider-sia/qwen3-8-27b-sia",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 151,
+					"reasoningTokens": 58,
+					"contentChars": 7,
+					"ttftMs": 1652,
+					"totalMs": 1771
+				},
+				"effort-high": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low.\",\"error\":{\"message\":\"self-hosted error: Unexpected reasoning e"
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 259,
+					"reasoningTokens": 104,
+					"contentChars": 7,
+					"ttftMs": 2802,
+					"totalMs": 2913
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"reasoningTokens": 0,
+					"contentChars": 5,
+					"ttftMs": 372,
+					"totalMs": 456
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"reasoningTokens": 0,
+					"contentChars": 8,
+					"ttftMs": 504,
+					"totalMs": 540
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 309,
+					"reasoningTokens": 91,
+					"contentChars": 7,
+					"ttftMs": 2347,
+					"totalMs": 2460
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": ["effort-high"]
+		},
+		{
+			"id": "snps-provider/gemma-4-31b-it-1-reasoning",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"reasoningTokens": 0,
+					"contentChars": 5,
+					"ttftMs": 254,
+					"totalMs": 353
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 444,
+					"reasoningTokens": 225,
+					"contentChars": 5,
+					"ttftMs": 8028,
+					"totalMs": 8187
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 483,
+					"reasoningTokens": 226,
+					"contentChars": 5,
+					"ttftMs": 5583,
+					"totalMs": 5707
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"reasoningTokens": 0,
+					"contentChars": 5,
+					"ttftMs": 249,
+					"totalMs": 343
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"reasoningTokens": 0,
+					"contentChars": 5,
+					"ttftMs": 244,
+					"totalMs": 340
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"reasoningTokens": 0,
+					"contentChars": 5,
+					"ttftMs": 317,
+					"totalMs": 447
+				}
+			},
+			"defaultOn": false,
+			"on": "reasoning-effort",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/qwen3.5-397b-fp8",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1011,
+					"contentChars": 0,
+					"totalMs": 3500
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1012,
+					"contentChars": 0,
+					"totalMs": 3195
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1038,
+					"contentChars": 0,
+					"totalMs": 3049
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1034,
+					"contentChars": 0,
+					"totalMs": 3050
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 258,
+					"totalMs": 272
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1009,
+					"contentChars": 0,
+					"totalMs": 3284
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider-sia/qwen3-5-397b-a17b-sia",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1017,
+					"ttftMs": 343,
+					"totalMs": 2851
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1024,
+					"ttftMs": 270,
+					"totalMs": 3082
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1008,
+					"ttftMs": 265,
+					"totalMs": 2760
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 257,
+					"totalMs": 268
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 257,
+					"totalMs": 267
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1008,
+					"ttftMs": 260,
+					"totalMs": 2822
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/nemotron-3-ultra-550b-a55",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 205,
+					"ttftMs": 768,
+					"totalMs": 3646
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 204,
+					"ttftMs": 307,
+					"totalMs": 1412
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 340,
+					"ttftMs": 276,
+					"totalMs": 2068
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 271,
+					"totalMs": 310
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 270,
+					"totalMs": 314
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 165,
+					"ttftMs": 643,
+					"totalMs": 1542
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/nim-llama-3-3-70b-instruct-a7786",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 331,
+					"totalMs": 369
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 258,
+					"totalMs": 284
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 261,
+					"totalMs": 297
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 232,
+					"totalMs": 275
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 273,
+					"totalMs": 309
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 232,
+					"totalMs": 266
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 250,
+					"totalMs": 286
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 238,
+					"totalMs": 274
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 340,
+					"totalMs": 340
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 237,
+					"totalMs": 274
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 240,
+					"totalMs": 276
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 276,
+					"totalMs": 311
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/qwen3-6-27b-ft",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1103,
+					"contentChars": 0,
+					"totalMs": 6239
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1051,
+					"contentChars": 0,
+					"totalMs": 6223
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1057,
+					"contentChars": 0,
+					"totalMs": 6241
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 277,
+					"totalMs": 311
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1,
+					"ttftMs": 263,
+					"totalMs": 264
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 1077,
+					"contentChars": 0,
+					"totalMs": 6268
+				}
+			},
+			"defaultOn": true,
+			"off": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/qwen3-6-35b-a3b-1-28dd3",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1106,
+					"ttftMs": 272,
+					"totalMs": 2551
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1065,
+					"ttftMs": 266,
+					"totalMs": 2737
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1010,
+					"ttftMs": 271,
+					"totalMs": 2310
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 978,
+					"ttftMs": 271,
+					"totalMs": 2298
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 255,
+					"totalMs": 259
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 1064,
+					"ttftMs": 252,
+					"totalMs": 2539
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/gemma-4-31b-it-29cea",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 262,
+					"totalMs": 359
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 245,
+					"totalMs": 338
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 448,
+					"contentChars": 5,
+					"ttftMs": 5632,
+					"totalMs": 5754
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 2052,
+					"totalMs": 2148
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 254,
+					"totalMs": 373
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 250,
+					"totalMs": 363
+				}
+			},
+			"defaultOn": false,
+			"on": "template-kwargs",
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/llama-3-3-70b-instruct-128k",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 268,
+					"totalMs": 300
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 236,
+					"totalMs": 270
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 232,
+					"totalMs": 266
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 262,
+					"totalMs": 290
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 242,
+					"totalMs": 276
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 230,
+					"totalMs": 263
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/llama-3-3-70b-instruct-74k-ae1a8",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 243,
+					"totalMs": 285
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 298,
+					"totalMs": 340
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 235,
+					"totalMs": 277
+				},
+				"effort-none": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 243,
+					"totalMs": 286
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 236,
+					"totalMs": 275
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 236,
+					"totalMs": 273
+				}
+			},
+			"defaultOn": false,
+			"rejected": []
+		},
+		{
+			"id": "snps-provider/qwen2-5-32b-instruct-fe66b",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 310,
+					"totalMs": 355
+				},
+				"effort-high": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'high'}]\",\"error\":{\"message\":\"self"
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 257,
+					"totalMs": 306
+				},
+				"effort-none": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'none'}]\",\"error\":{\"message\":\"self"
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 244,
+					"totalMs": 286
+				},
+				"reasoning-exclude": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning'), 'msg': 'Extra inputs are not permitted', 'input': {'exclude': True}}]\",\"error\":{\"message\":\""
+				}
+			},
+			"defaultOn": false,
+			"rejected": ["effort-high", "effort-none", "reasoning-exclude"]
+		},
+		{
+			"id": "snps-provider/qwen3-next-80b-a3b-instruct-d79b4",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 312,
+					"totalMs": 340
+				},
+				"effort-high": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 292,
+					"totalMs": 320
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 294,
+					"totalMs": 321
+				},
+				"effort-none": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'literal_error', 'loc': ('body', 'reasoning_effort'), 'msg': \\\"Input should be 'low', 'medium' or 'high'\\\", 'input': 'none', 'ctx': {'expect"
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 299,
+					"totalMs": 325
+				},
+				"reasoning-exclude": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 296,
+					"totalMs": 322
+				}
+			},
+			"defaultOn": false,
+			"rejected": ["effort-none"]
+		},
+		{
+			"id": "snps-provider/llama-3-1-70b-instruct-20ad2",
+			"variants": {
+				"baseline": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 336,
+					"totalMs": 402
+				},
+				"effort-high": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'high'}]\",\"error\":{\"message\":\"self"
+				},
+				"template-on": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 258,
+					"totalMs": 319
+				},
+				"effort-none": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning_effort'), 'msg': 'Extra inputs are not permitted', 'input': 'none'}]\",\"error\":{\"message\":\"self"
+				},
+				"template-off": {
+					"status": 200,
+					"ok": true,
+					"reasoningChars": 0,
+					"contentChars": 5,
+					"ttftMs": 273,
+					"totalMs": 361
+				},
+				"reasoning-exclude": {
+					"status": 400,
+					"ok": false,
+					"reasoningChars": 0,
+					"contentChars": 0,
+					"error": "{\"status\":\"failure\",\"message\":\"self-hosted error: [{'type': 'extra_forbidden', 'loc': ('body', 'reasoning'), 'msg': 'Extra inputs are not permitted', 'input': {'exclude': True}}]\",\"error\":{\"message\":\""
+				}
+			},
+			"defaultOn": false,
+			"rejected": ["effort-high", "effort-none", "reasoning-exclude"]
+		}
+	]
 }
