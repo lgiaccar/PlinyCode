@@ -1507,6 +1507,10 @@ async function* emitAiSdkEvents(
 	let streamError: CapturedStreamError | undefined;
 	let finishUsage: unknown;
 	let finishProviderMetadata: unknown;
+	// Only per-step usage keeps the provider's raw wire usage; the SDK's
+	// aggregated `stream.usage` / `finish.totalUsage` drop it, and with it
+	// fields it does not map, such as Anthropic `cache_creation_input_tokens`.
+	let finishStepRawUsage: unknown;
 	let streamAborted = false;
 	let sawVisibleContent = false;
 	const mediaBudget = createMediaBudgetState();
@@ -1849,6 +1853,12 @@ async function* emitAiSdkEvents(
 					continue;
 				}
 
+				if (part.type === "finish-step") {
+					finishStepRawUsage =
+						(part.usage as { raw?: unknown } | undefined)?.raw ??
+						finishStepRawUsage;
+				}
+
 				if (part.type === "finish") {
 					finishUsage = part.usage ?? part.totalUsage;
 					finishProviderMetadata = part.providerMetadata;
@@ -1994,6 +2004,15 @@ async function* emitAiSdkEvents(
 	} else {
 		usageToEmit = finishUsage;
 		metadataToUse = finishProviderMetadata;
+	}
+	if (
+		usageToEmit &&
+		typeof usageToEmit === "object" &&
+		!("raw" in usageToEmit && usageToEmit.raw) &&
+		finishStepRawUsage &&
+		typeof finishStepRawUsage === "object"
+	) {
+		usageToEmit = { ...usageToEmit, raw: finishStepRawUsage };
 	}
 
 	if (usageToEmit) {

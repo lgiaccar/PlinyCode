@@ -58,6 +58,7 @@ import { GENERATED_PROVIDER_SPECS } from "./providers.generated";
 import {
 	ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA,
 	ANTHROPIC_ROUTING_METADATA,
+	PLINY_ROUTING_METADATA,
 	QWEN_CACHE_ROUTING_METADATA,
 } from "./routing/anthropic-compatible";
 import { BEDROCK_ROUTING_METADATA } from "./routing/bedrock-cache-point";
@@ -788,7 +789,7 @@ const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 			timeoutMs: PLINY_TIMEOUT_MS,
 		},
 		metadata: {
-			...ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA,
+			...PLINY_ROUTING_METADATA,
 			// Hosted Pliny models now carry real `pricing`; self-hosted models
 			// carry explicit zero pricing. Neither is a flat-rate subscription
 			// like ClinePass, so the per-task cost badge should render.

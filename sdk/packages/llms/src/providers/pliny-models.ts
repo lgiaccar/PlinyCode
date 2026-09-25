@@ -237,7 +237,8 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 			? Math.min(Math.floor(contextWindow / 4), 65_536)
 			: HOSTED_DEFAULT_MAX_OUTPUT,
 		capabilities: [...capabilities],
-		family: selfHosted ? "pliny-self-hosted" : "pliny-hosted",
+		// No `family`: lineage routing (Claude cache/thinking) reads the family
+		// before the model id, so a hosting label here hid every Claude model.
 		...(pricing ? { pricing } : {}),
 		metadata: {
 			provider: "pliny",

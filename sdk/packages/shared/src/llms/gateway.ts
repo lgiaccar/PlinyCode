@@ -54,7 +54,10 @@ export type GatewayReasoningFormat =
 	| "glm-thinking"
 	| "minimax-thinking";
 export type GatewayModelRoute =
-	| { matcher: "anthropic-compatible" }
+	| {
+			matcher: "anthropic-compatible";
+			requiredCapability?: GatewayModelCapability;
+	  }
 	| {
 			matcher: "model-operation";
 			operation: ModelOperation;
@@ -103,6 +106,16 @@ export interface GatewayProviderRouting {
 	promptCache?: {
 		format: GatewayPromptCacheFormat;
 		routes: GatewayModelRoute[];
+		/**
+		 * Where OpenAI-compatible transports put `cache_control` on the wire.
+		 * Omitted: wherever the AI SDK serializes it (message-level for a
+		 * single-text user turn, plus a top-level request field).
+		 * `"content-blocks"`: rewrite the serialized body so the system prompt
+		 * and the newest user/assistant text each carry a content-block
+		 * breakpoint — for gateways (Pliny) that ignore message-level,
+		 * top-level and tool-message markers.
+		 */
+		wirePlacement?: "content-blocks";
 	};
 	reasoning?: {
 		format: GatewayReasoningFormat;

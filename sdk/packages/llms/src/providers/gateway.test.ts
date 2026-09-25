@@ -3980,6 +3980,76 @@ describe("sdk-gateway", () => {
 		});
 	});
 
+	it("reads Anthropic cache writes from the finish-step raw usage", async () => {
+		// The AI SDK's aggregated usage drops `raw`; only finish-step keeps
+		// the wire fields it does not map, like cache_creation_input_tokens.
+		const aggregated = {
+			inputTokens: 9300,
+			inputTokenDetails: { noCacheTokens: 9300, cacheReadTokens: 0 },
+			outputTokens: 64,
+		};
+		streamTextSpy.mockReturnValue({
+			fullStream: makeStreamParts([
+				{
+					type: "finish-step",
+					usage: {
+						...aggregated,
+						raw: {
+							prompt_tokens: 9300,
+							completion_tokens: 64,
+							cache_read_input_tokens: 0,
+							cache_creation_input_tokens: 9297,
+						},
+					},
+				},
+				{ type: "finish", finishReason: "stop", totalUsage: aggregated },
+			]),
+			usage: Promise.resolve(aggregated),
+		});
+
+		const gateway = createGateway({
+			providerConfigs: [
+				{
+					providerId: "pliny",
+					apiKey: "pliny-key",
+					models: [
+						{
+							id: "snps-aws-bedrock/aws-claude-sonnet-4.6",
+							name: "Sonnet",
+							metadata: {
+								pricing: {
+									input: 3,
+									output: 15,
+									cacheRead: 0.3,
+									cacheWrite: 3.75,
+								},
+							},
+						},
+					],
+				},
+			],
+		});
+
+		const events = await collect(
+			await gateway.stream({
+				providerId: "pliny",
+				modelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
+				messages: baseMessages,
+			}),
+		);
+
+		const usageEvent = events.find(
+			(event): event is Extract<AgentModelEvent, { type: "usage" }> =>
+				event.type === "usage",
+		);
+		expect(usageEvent?.usage.cacheWriteTokens).toBe(9297);
+		// 3 uncached input + 9297 written + 64 output
+		expect(usageEvent?.usage.totalCost).toBeCloseTo(
+			(3 * 3 + 9297 * 3.75 + 64 * 15) / 1e6,
+			9,
+		);
+	});
+
 	it.skip("does not emit duplicate usage when finish parts already carry totals", async () => {
 		streamTextSpy.mockReturnValue({
 			fullStream: makeStreamParts([
