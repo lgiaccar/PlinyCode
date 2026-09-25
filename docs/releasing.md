@@ -157,6 +157,25 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
 GitHub's `/releases/latest` never serves a **pre-release**, so a pre-release reaches only the editors that point
 at it on purpose.
 
+### Pre-release version convention
+
+Pre-releases are numbered `<next release>-test.<N>` and tagged `release_<version>`:
+
+| Build | Version | Tag |
+| --- | --- | --- |
+| first pre-release of 0.1.3 | `0.1.3-test.1` | `release_0.1.3-test.1` |
+| each later one | `0.1.3-test.2`, `0.1.3-test.3`, … | `release_0.1.3-test.3` |
+| the release | `0.1.3` | `release_0.1.3` |
+| first pre-release of the next one | `0.1.4-test.1` | `release_0.1.4-test.1` |
+
+- **Always `test`.** The updater compares the text after `-` alphabetically, so a different word can sort below
+  a build testers already have: `0.1.3-dev.9` and `0.1.3-rc.1` are both *older* than `0.1.3-test.2`, and an
+  editor on `test.2` would never update to them.
+- **Tick `N` by one for every pre-release**, and never reuse a number, even after deleting a pre-release: an
+  editor that installed it keeps that version. The number is compared numerically, so `test.10` follows `test.9`.
+- **The release itself sorts above all its pre-releases**, so testers move to `0.1.3` automatically once it ships,
+  and `0.1.4-test.1` sorts above `0.1.3`.
+
 1. On a throwaway branch, set a pre-release version such as `0.1.3-test.2`, commit, then tag and push only the
    tag: `git tag release_0.1.3-test.2 && git push origin release_0.1.3-test.2`. Pre-release versions sort below
    the real `0.1.3`, so testers move to the real release automatically once it ships.

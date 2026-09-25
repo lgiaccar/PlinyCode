@@ -86,6 +86,32 @@ export function healthSnapshot(now: number = Date.now()): Array<{
 // Per-session turn state
 // ---------------------------------------------------------------------------
 
+/**
+ * How the current run is going from the completion guard's point of view,
+ * accumulated by the hooks and written out as one run record when it ends.
+ */
+export interface RouterRunState {
+	/** Tool calls executed this run. */
+	toolCalls: number
+	/** Name of the most recent tool that ran, e.g. `run_commands`. */
+	previousTool?: string
+	/** The most recent tool result reported a failure (non-zero exit, error). */
+	previousToolFailed?: boolean
+	/** The most recent command was left running (detached) rather than finished. */
+	previousToolDetached?: boolean
+	/** Guard rules that fired this run, in order. */
+	guardRules: string[]
+	/** Reminders sent this run. */
+	nudges: number
+	/** A second consecutive stall made the guard escalate (and switch model). */
+	escalated?: boolean
+	/** Outcome of the completion judge, when it was consulted. */
+	judge?: "done" | "not-done" | "no-verdict" | "skipped"
+	/** Length and tail of the reply that ended the run, for the run log. */
+	replyChars?: number
+	replyTail?: string
+}
+
 export interface RouterSessionState {
 	/** Calls made during the current turn, for the end-of-turn summary. */
 	calls: RouterCallRecord[]
@@ -99,14 +125,22 @@ export interface RouterSessionState {
 	classifierRan?: boolean
 	/** The classifier's verdict for this turn, reused by every later call. */
 	classification?: RouterClassification
+	/** Why the classifier gave no verdict this turn, when it ran and failed. */
+	classifierError?: string
+	/** Guard-related progress of the current run. */
+	run: RouterRunState
 }
 
 const sessions = new Map<string, RouterSessionState>()
 
+function freshRunState(): RouterRunState {
+	return { toolCalls: 0, guardRules: [], nudges: 0 }
+}
+
 export function getSessionState(sessionId: string): RouterSessionState {
 	let state = sessions.get(sessionId)
 	if (!state) {
-		state = { calls: [], failovers: 0, turnStartedAt: Date.now() }
+		state = { calls: [], failovers: 0, turnStartedAt: Date.now(), run: freshRunState() }
 		sessions.set(sessionId, state)
 	}
 	return state
@@ -121,6 +155,8 @@ export function beginTurn(sessionId: string, now: number = Date.now()): RouterSe
 	state.turnStartedAt = now
 	state.classifierRan = false
 	state.classification = undefined
+	state.classifierError = undefined
+	state.run = freshRunState()
 	return state
 }
 

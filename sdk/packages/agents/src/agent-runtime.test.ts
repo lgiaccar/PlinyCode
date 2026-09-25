@@ -1471,6 +1471,78 @@ describe("AgentRuntime", () => {
 		]);
 	});
 
+	it("awaits an async completionGuard and hands it the run's messages", async () => {
+		const lookup: AgentTool<{ q: string }, string> = {
+			name: "lookup",
+			description: "Look something up",
+			inputSchema: { type: "object" },
+			async execute(input) {
+				return `found ${input.q}`;
+			},
+		};
+		const model = new ScriptedModel([
+			() => [
+				{
+					type: "tool-call-delta",
+					toolCallId: "call_1",
+					toolName: "lookup",
+					inputText: '{"q":"x"}',
+				},
+				{ type: "finish", reason: "tool-calls" },
+			],
+			() => [
+				{ type: "text-delta", text: "Let me check the log:" },
+				{ type: "finish", reason: "stop" },
+			],
+			() => [
+				{ type: "text-delta", text: "All done." },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		const seen: Array<{ runRoles: string[]; total: number }> = [];
+		const runtime = new AgentRuntime({
+			model,
+			tools: [lookup],
+			completionPolicy: {
+				completionGuard: async ({ message, runMessages, messages }) => {
+					await Promise.resolve();
+					seen.push({
+						runRoles: (runMessages ?? []).map((m) => m.role),
+						total: messages?.length ?? 0,
+					});
+					const text = message.content
+						.map((part) => (part.type === "text" ? part.text : ""))
+						.join("");
+					return text.endsWith(":") ? "[SYSTEM] Call the tool." : undefined;
+				},
+			},
+		});
+
+		const result = await runtime.run("Start");
+
+		expect(result.status).toBe("completed");
+		expect(result.outputText).toBe("All done.");
+		// The guard sees the whole run so far: prompt, tool call, tool result,
+		// and the reply it is judging — and the transcript grows with the nudge.
+		expect(seen[0]?.runRoles).toEqual([
+			"user",
+			"assistant",
+			"tool",
+			"assistant",
+		]);
+		expect(seen[0]?.total).toBe(4);
+		expect(seen[1]?.runRoles).toEqual([
+			"user",
+			"assistant",
+			"tool",
+			"assistant",
+			"user",
+			"assistant",
+		]);
+		const reminder = model.requests[2]?.messages.at(-1);
+		expect(reminder?.metadata?.displayRole).toBe("system");
+	});
+
 	it("announces and enforces required completion tools from tool lifecycle metadata", async () => {
 		const submitTool: AgentTool<{ summary: string }, string> = {
 			name: "custom_finish",

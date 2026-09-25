@@ -232,15 +232,28 @@ export interface AgentTool<TInput = unknown, TOutput = unknown>
 // =============================================================================
 
 /**
- * Consulted when the model ends a turn without tool calls. Returning a string
- * injects it as a reminder and keeps the run going instead of completing it.
- * `message` is the assistant reply that made no tool call; `iteration` is its
- * 1-based position in the current run.
+ * What a completion guard is handed when the model ends a turn without tool
+ * calls. `message` is the assistant reply that made no tool call; `iteration`
+ * is its 1-based position in the current run. `runMessages` are the messages
+ * appended during this run, oldest first, including the tool results the
+ * reply follows; `messages` is the whole conversation. Both are live,
+ * read-only references into the runtime's transcript, not copies.
  */
-export type CompletionGuard = (context: {
+export interface CompletionGuardContext {
 	message: AgentMessage;
 	iteration: number;
-}) => string | undefined;
+	runMessages?: readonly AgentMessage[];
+	messages?: readonly AgentMessage[];
+}
+
+/**
+ * Consulted when the model ends a turn without tool calls. Returning a string
+ * (or a promise of one) injects it as a reminder and keeps the run going
+ * instead of completing it.
+ */
+export type CompletionGuard = (
+	context: CompletionGuardContext,
+) => string | undefined | Promise<string | undefined>;
 
 export interface AgentModelRequest {
 	systemPrompt?: string;

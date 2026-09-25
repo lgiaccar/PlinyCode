@@ -73,6 +73,21 @@ appended to `pliny-free-auto-calls.jsonl` with `profile: "balance"`, so
 `scripts/summarize-free-auto-log.ts` compares it against the free profiles on
 real use, including how often a turn stayed on free models.
 
-The unfinished-turn guard, which nudges a reply that announces a step without
-calling a tool, applies to a BalanceAuto turn only when the last call ran on a
-free model. The paid models do not stop early, and a nudge would cost a call.
+The early-stop defences described in
+[pliny-free-auto-router.md](pliny-free-auto-router.md#keeping-runs-going-the-completion-guard-the-judge-and-wait)
+— the completion guard's pattern rules, the completion judge, and the note
+appended to a failed or detached command — apply to a BalanceAuto turn only when
+its last call ran on a free model. The paid models do not stop early, and a
+nudge would cost a call. The guard judges the main agent's reply, so it looks at
+the main agent's last call: a free sub-agent run inside a turn does not make a
+paid reply look like a free one. The command note follows whichever agent ran
+the command.
+
+When a free model ignores a reminder and stalls again, the rest of the turn moves
+to the lead of the `default` route — on BalanceAuto that is Claude Sonnet 5, so
+the escalation hands the stuck step to a paid model that does not stall.
+
+The system-prompt addendum about how a turn ends is added only for free
+candidates, so the paid models see the prompt unchanged. A reply that collapses
+into repetition is cut off and failed over on any model. Every run is logged to
+`pliny-free-auto-runs.jsonl` with `profile: "balance"` as well.

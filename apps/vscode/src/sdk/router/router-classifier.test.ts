@@ -1,6 +1,6 @@
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { describe, expect, it, vi } from "vitest"
-import { buildClassifierRequest, parseClassification, runClassifier } from "./router-classifier"
+import { buildClassifierRequest, extractJsonObjects, parseClassification, runClassifier } from "./router-classifier"
 import { defaultRules } from "./router-rules"
 import type { RouterRequestFeatures, RouterRules } from "./router-types"
 
@@ -62,6 +62,31 @@ describe("parseClassification", () => {
 		expect(parseClassification('{"tier":"galaxy-brain","think":true}')).toBeUndefined()
 		expect(parseClassification("code, and think hard")).toBeUndefined()
 	})
+
+	it("reads a verdict from a fenced block, with nested braces, or quoted booleans", () => {
+		expect(parseClassification('Here you go:\n```json\n{"tier": "code", "think": "true"}\n```')).toEqual({
+			tier: "code",
+			think: true,
+		})
+		expect(parseClassification('{"analysis": {"kind": "bug"}, "tier": "reason", "think": true}')).toEqual({
+			tier: "reason",
+			think: true,
+		})
+		expect(parseClassification('{"tier": "quick", "think": "false", "note": "a } in a string"}')).toEqual({
+			tier: "quick",
+			think: false,
+		})
+	})
+
+	it("still finds a verdict inside a think block the model never closed", () => {
+		expect(parseClassification('<think>The user wants an edit, so {"tier": "code", "think": false} is right. Now I')).toEqual(
+			{ tier: "code", think: false },
+		)
+	})
+
+	it("reads the verdict from an object list", () => {
+		expect(extractJsonObjects('a {"x": 1} b {"y": {"z": 2}} c')).toEqual([{ x: 1 }, { y: { z: 2 } }])
+	})
 })
 
 describe("buildClassifierRequest", () => {
@@ -122,6 +147,13 @@ describe("runClassifier", () => {
 		})
 		expect(result.classification).toBeUndefined()
 		expect(result.error).toContain("unusable reply")
+		expect(result.raw).toBe("I think this is a coding task.")
+	})
+
+	it("asks for the JSON first and leaves room for a verbose model", () => {
+		const built = buildClassifierRequest(request([["user", "x"]]), features(), rules(), new AbortController().signal)
+		expect(built.systemPrompt).toContain("Output one JSON object first")
+		expect(built.options).toMatchObject({ maxTokens: 512 })
 	})
 
 	it("reports a failed call", async () => {

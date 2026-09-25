@@ -168,6 +168,28 @@ describe("normalizeRules", () => {
 		expect(normalizeRules({ classifier: { enabled: "yes" } }).classifier.enabled).toBe(false)
 	})
 
+	it("keeps the judge on by default and lets the file switch it off", () => {
+		expect(normalizeRules({}).guard).toEqual({ judge: true, judgeTimeoutMs: 6000 })
+		expect(normalizeRules({ guard: { judge: false, judgeTimeoutMs: 2500 } }).guard).toEqual({
+			judge: false,
+			judgeTimeoutMs: 2500,
+		})
+		expect(normalizeRules({ guard: { judge: "no", judgeTimeoutMs: -1 } }).guard).toEqual({
+			judge: true,
+			judgeTimeoutMs: 6000,
+		})
+	})
+
+	it("lets the judge follow the classifier unless named", () => {
+		expect(normalizeRules({ utility: { classifier: "snps-provider/kimi-k2.6" } }).utility.judge).toBe(
+			"snps-provider/kimi-k2.6",
+		)
+		expect(
+			normalizeRules({ utility: { classifier: "snps-provider/kimi-k2.6", judge: "snps-provider/GLM-5.2" } }).utility.judge,
+		).toBe("snps-provider/GLM-5.2")
+		expect(normalizeRules({ utility: { judge: "azure-openai/gpt-5.2" } }).utility.judge).toBe(defaultRules().utility.judge)
+	})
+
 	it("ignores non-positive health numbers", () => {
 		const rules = normalizeRules({ health: { cooldownMs: -5, maxFailoversPerTurn: 0 } })
 		expect(rules.health.cooldownMs).toBe(defaultRules().health.cooldownMs)

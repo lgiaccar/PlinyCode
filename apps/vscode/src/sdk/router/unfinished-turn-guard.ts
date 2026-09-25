@@ -1,26 +1,24 @@
 /**
- * Keeps a run going when the model announces its next step but forgets to take
- * it.
+ * Rules that tell a premature stop from a real final answer.
  *
  * The agent loop ends a run as soon as a reply carries no tool call. Strong
- * models rarely do that mid-task, but the free self-hosted ones often write
- * "Let me check the log tail." or "I'll update the script:" and stop there, so
- * the task silently ends half done. Real transcripts separate the two cases by
- * the reply's last sentence: a premature stop ends on a colon or with an
- * announcement ("Let me…", "I'll…", "I should…"), while a real final answer
- * ends with a result, a question to the user, or an offer to help further.
+ * models rarely do that mid-task, but the free self-hosted ones do, in a few
+ * recognisable ways collected from real FreeAuto transcripts:
  *
- * On such a reply the guard injects one reminder and the loop continues. It
- * never nudges twice in a row (a model that answers the reminder with text
- * again is taken at its word), and at most `maxNudgesPerRun` times per run.
+ * - they announce the next step and stop ("Let me check the log tail:");
+ * - they promise to come back later ("I'll check again at 15:28. Stand by!"),
+ *   which they cannot do — nothing runs once the turn is over;
+ * - they think out loud in prose and trail off mid-sentence;
+ * - they stop right after a command failed, reporting the failure as if it
+ *   were the result;
+ * - they degenerate into a repeated token for thousands of characters.
+ *
+ * Every rule here is a pure function of text (and, for the shell rule, of the
+ * run's messages), so it can be tested against transcript endings. The guard
+ * that applies them lives in `completion-guard.ts`.
  */
 
-import type { AgentMessage, CompletionGuard } from "@plinycode/shared"
-
-export const UNFINISHED_TURN_REMINDER =
-	"[SYSTEM] Your last message said what you would do next, but you did not call a tool, so nothing happened " +
-	"and the task is not finished. Continue now by calling the tool for that step. If the task really is " +
-	"complete, reply with a short final summary instead."
+import type { AgentMessage, AgentToolResultPart } from "@plinycode/shared"
 
 /** Announcements of a next step, matched in the reply's last sentence. */
 const ANNOUNCEMENT =
@@ -29,7 +27,7 @@ const ANNOUNCEMENT =
 /** Endings that hand the turn back to the user on purpose. */
 const HAND_BACK = /\b(let me know|if you('d| would)? like|would you like|anything else|should i|do you want|shall i)\b/i
 
-function replyText(message: AgentMessage): string {
+export function replyText(message: AgentMessage): string {
 	return message.content
 		.filter((part): part is { type: "text"; text: string } => part.type === "text")
 		.map((part) => part.text)
@@ -37,13 +35,29 @@ function replyText(message: AgentMessage): string {
 		.trim()
 }
 
-/** The last sentence or line of a reply, markdown decoration stripped. */
-function lastSentence(text: string): string {
-	const pieces = text
+/** Sentences or lines of a reply, markdown decoration stripped, empty ones dropped. */
+function sentences(text: string): string[] {
+	return text
 		.split(/(?<=[.!?])\s+|\n+/)
 		.map((piece) => piece.replace(/^[\s>*#-]+|[*_`]+/g, "").trim())
 		.filter(Boolean)
+}
+
+/** The last sentence or line of a reply, markdown decoration stripped. */
+export function lastSentence(text: string): string {
+	const pieces = sentences(text)
 	return pieces[pieces.length - 1] ?? ""
+}
+
+/** The reply's closing: its last three sentences joined. */
+function closing(text: string): string {
+	return sentences(text).slice(-3).join(" ")
+}
+
+/** True when the reply ends by asking the user something or offering to go on. */
+export function endsWithHandBack(text: string): boolean {
+	const last = lastSentence(text)
+	return /\?\s*$/.test(last) || HAND_BACK.test(last)
 }
 
 /** True when a tool-free reply announces work it did not do. */
@@ -57,46 +71,216 @@ export function looksUnfinished(text: string): boolean {
 		return true
 	}
 	const last = lastSentence(trimmed)
-	if (!last || /\?\s*$/.test(last) || HAND_BACK.test(last)) {
+	if (!last || endsWithHandBack(trimmed)) {
 		return false
 	}
 	return ANNOUNCEMENT.test(last)
 }
 
-export function createUnfinishedTurnGuard(options: {
-	/** Evaluated per reply, so a mid-task model switch takes effect. */
-	isActive: () => boolean
-	/** Called whenever a reminder is sent, e.g. to show a chat row. */
-	onNudge?: (info: { excerpt: string; nudgesThisRun: number }) => void
-	maxNudgesPerRun?: number
-}): CompletionGuard {
-	const maxNudges = options.maxNudgesPerRun ?? 3
-	let lastIteration = 0
-	let lastNudgeIteration: number | undefined
-	let nudgesThisRun = 0
+/**
+ * Promises to act later. The model has no later: once the turn ends nothing
+ * runs for it, so "I'll check again at 15:28" is a stop, not a plan.
+ */
+const WAIT_BAIL_OUT = [
+	/\b(i(?:'ll| will)|let me|i can|i'm going to) (check|look|report|follow up|get back|update|circle back|be back|come back|review|verify|monitor)\b[^.!?]{0,60}\b(back|again|later|shortly|soon|periodically|in \d+|at \d{1,2}:\d{2}|mark|when|once|after)\b/i,
+	/\b(i(?:'ll| will)|let me|i'm going to|i am going to) (just )?(wait|monitor|keep (an eye|watching|monitoring|polling|checking)|check (back|again|in|on it))\b/i,
+	/\bstand by\b/i,
+	/\bnothing (to do|left(?: to do)?|more to do|else to do) (but|except|other than|than) (to )?wait\b/i,
+	/\b(cannot|can't|can not|won't be able to|am not able to|unable to) (sit|stay|wait|remain|keep watching|keep monitoring|monitor|watch)\b/i,
+	/\b(message|ping|ask|tell|prompt|call) me (later|again|back|when|once|after|in)\b/i,
+	/\btimer is running\b/i,
+	/\bwill (keep|continue) running on its own\b/i,
+]
 
-	return ({ message, iteration }) => {
-		// Iterations restart at 1 on every run.
-		if (iteration <= lastIteration) {
-			nudgesThisRun = 0
-			lastNudgeIteration = undefined
-		}
-		lastIteration = iteration
+/** True when the reply's closing defers work to a later moment the model will never see. */
+export function looksLikeWaitBailOut(text: string): boolean {
+	const tail = closing(text)
+	return Boolean(tail) && WAIT_BAIL_OUT.some((pattern) => pattern.test(tail))
+}
 
-		if (!options.isActive() || nudgesThisRun >= maxNudges) {
-			return undefined
-		}
-		// The reply right after a reminder is the model's considered answer.
-		if (lastNudgeIteration !== undefined && iteration === lastNudgeIteration + 1) {
-			return undefined
-		}
-		const text = replyText(message)
-		if (!looksUnfinished(text)) {
-			return undefined
-		}
-		nudgesThisRun += 1
-		lastNudgeIteration = iteration
-		options.onNudge?.({ excerpt: lastSentence(text).slice(0, 120), nudgesThisRun })
-		return UNFINISHED_TURN_REMINDER
+/** Words a sentence does not end on; a reply ending on one trailed off. */
+const DANGLING_LAST_WORD =
+	/\b(in|on|at|to|the|a|an|and|or|but|of|for|with|from|by|is|are|was|were|that|which|if|then|so|because|as|into|onto|this|these|those|it|its|my|i|we|they|he|she|you|be|been|being|have|has|had|will|would|should|could|can|not|no|very|also|just|now|first|then|about|after|before|while|when|where|whether)$/i
+
+const THINKING_ALOUD = /(^|[.!?]\s+|\n\s*)(hmm+|wait|actually|okay|ok|so|but|alright|right)\b[,.!:]?\s/gi
+const NARRATING_USER = /\bthe user (wants|asked|said|is asking|keeps|expects|needs)\b/gi
+
+/**
+ * True when a non-thinking model reasoned in prose instead of acting: it
+ * argues with itself for several sentences, narrates what "the user wants", or
+ * simply trails off mid-sentence.
+ */
+export function looksLikeLeakedReasoning(text: string): boolean {
+	const trimmed = text.trim()
+	if (!trimmed) {
+		return false
 	}
+	if ((trimmed.match(THINKING_ALOUD) ?? []).length >= 3) {
+		return true
+	}
+	if ((trimmed.match(NARRATING_USER) ?? []).length >= 2) {
+		return true
+	}
+	const lastLine = trimmed.split("\n").pop()?.trim() ?? ""
+	const isProse = lastLine.length > 40 && !/^([-*+>#|]|\d+[.)]|```)/.test(lastLine)
+	return isProse && !/[.!?:;)\]"'`*_~]$/.test(lastLine) && DANGLING_LAST_WORD.test(lastLine)
+}
+
+/**
+ * True when a long reply is mostly one short unit repeated — " .   .   .",
+ * "]]]]" — which is a broken generation, not an answer.
+ */
+export function looksDegenerate(text: string, minChars = 2000): boolean {
+	if (text.length < minChars) {
+		return false
+	}
+	const tail = text.slice(-1500).replace(/\s+/g, " ")
+	if (/(.{1,8}?)\1{30,}\s*$/.test(tail)) {
+		return true
+	}
+	const size = 8
+	const grams = new Set<string>()
+	for (let index = 0; index + size <= tail.length; index += 1) {
+		grams.add(tail.slice(index, index + size))
+	}
+	return grams.size / Math.max(1, tail.length - size + 1) < 0.05
+}
+
+/** "Ready to run", said to a user who asked for it to be run. */
+const READINESS =
+	/\b(is|are|it's|script is|everything is) (now )?(all )?ready (to|for) (run|execute|launch|use|go|be run|be executed|start|testing|execution)\b/i
+const ASKS_TO_RUN = /\b(run|execute|launch|start|kick off|try it)\b/i
+
+/** True when the reply declares something ready to run after the user asked to run it. */
+export function looksLikeReadinessInsteadOfAction(text: string, userRequest: string): boolean {
+	return Boolean(userRequest) && ASKS_TO_RUN.test(userRequest) && READINESS.test(closing(text)) && !endsWithHandBack(text)
+}
+
+export interface ShellFailure {
+	kind: "failed" | "detached"
+	tool: string
+	/** The command, when the result named it. */
+	command?: string
+	exitCode?: number
+	/** Where a detached command keeps writing, when the result said. */
+	logPath?: string
+}
+
+const SHELL_TOOLS = new Set(["run_commands", "bash", "shell", "execute_command"])
+
+function resultText(output: unknown): string {
+	if (typeof output === "string") {
+		return output
+	}
+	try {
+		return JSON.stringify(output) ?? ""
+	} catch {
+		return String(output)
+	}
+}
+
+/**
+ * Inspect one shell tool result. Failures arrive as `success: false` entries
+ * (with the exit code in `error`) or as `[Command exited with code N]` text;
+ * detached commands come back as successes whose text says the command is
+ * still running and where its output goes.
+ */
+export function shellFailureFromResult(part: AgentToolResultPart): ShellFailure | undefined {
+	if (!SHELL_TOOLS.has(part.toolName)) {
+		return undefined
+	}
+	const entries = Array.isArray(part.output) ? (part.output as unknown[]) : [part.output]
+	for (const entry of entries) {
+		const record = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : undefined
+		const text = record ? `${resultText(record.result)}\n${resultText(record.error)}` : resultText(entry)
+		const command = typeof record?.query === "string" ? record.query : undefined
+		const exit = text.match(/Command exited with code (\d+)/i)
+		if (record?.success === false || part.isError || exit || /\bCommand (failed|timed out)\b/i.test(text)) {
+			return {
+				kind: "failed",
+				tool: part.toolName,
+				...(command ? { command } : {}),
+				...(exit ? { exitCode: Number(exit[1]) } : {}),
+			}
+		}
+		if (
+			/still (starting or )?running|automatically proceeded|chose to proceed|Output will continue in|completion could not be observed/i.test(
+				text,
+			)
+		) {
+			const log = text.match(/(?:redirected to this file[^:]*:|Output will continue in)\s*(\S+?)(?:\]|\s|$)/i)
+			return {
+				kind: "detached",
+				tool: part.toolName,
+				...(command ? { command } : {}),
+				...(log ? { logPath: log[1] } : {}),
+			}
+		}
+	}
+	return undefined
+}
+
+/**
+ * The shell failure the reply follows, if the message right before it is a
+ * tool result and one of its shell results failed or was left running.
+ */
+export function previousShellFailure(
+	runMessages: readonly AgentMessage[] | undefined,
+	reply: AgentMessage,
+): ShellFailure | undefined {
+	if (!runMessages) {
+		return undefined
+	}
+	const index = runMessages.lastIndexOf(reply)
+	const previous = runMessages[index >= 0 ? index - 1 : runMessages.length - 1]
+	if (!previous || previous.role !== "tool") {
+		return undefined
+	}
+	for (const part of previous.content) {
+		if (part.type !== "tool-result") {
+			continue
+		}
+		const failure = shellFailureFromResult(part)
+		if (failure) {
+			return failure
+		}
+	}
+	return undefined
+}
+
+/** Strip the `<user_input mode="…">` wrapper the host puts around prompts. */
+function unwrapUserInput(text: string): string {
+	return text
+		.replace(/<mode_notice>[\s\S]*?<\/mode_notice>/g, "")
+		.replace(/^\s*<user_input[^>]*>/, "")
+		.replace(/<\/user_input>\s*$/, "")
+		.trim()
+}
+
+/**
+ * The latest thing the user actually asked for: the last user message that is
+ * neither a tool result nor a runtime-injected reminder or hook context.
+ */
+export function latestUserRequest(messages: readonly AgentMessage[] | undefined): string {
+	if (!messages) {
+		return ""
+	}
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index]
+		if (!message || message.role !== "user") {
+			continue
+		}
+		const metadata = message.metadata ?? {}
+		if (metadata.displayRole === "system" || metadata.userRunSpan === 0) {
+			continue
+		}
+		if (message.content.some((part) => part.type === "tool-result")) {
+			continue
+		}
+		const text = unwrapUserInput(replyText(message))
+		if (text && !text.startsWith("[SYSTEM]") && !text.startsWith("<hook_context")) {
+			return text
+		}
+	}
+	return ""
 }

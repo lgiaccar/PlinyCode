@@ -115,6 +115,58 @@ describe("createRoutedAgentModel", () => {
 		])
 	})
 
+	it("appends the router addendum to the system prompt for a free candidate only", async () => {
+		const seen: Array<string | undefined> = []
+		const capturing: AgentModel = {
+			async *stream(req) {
+				seen.push(req.systemPrompt)
+				yield TEXT
+				yield STOP
+			},
+		}
+		const { model } = build({
+			delegates: { "snps-provider/first": capturing, "snps-aws-bedrock/paid": capturing },
+			configured: rules({
+				pool: ["snps-provider/first", "snps-aws-bedrock/paid"],
+				routes: [{ name: "test", use: ["snps-provider/first"] }],
+			}),
+		})
+		await collect(model, { ...request(), systemPrompt: "You are Cline." })
+		expect(seen[0]).toContain("You are Cline.")
+		expect(seen[0]).toContain("# How your turn ends")
+
+		const paid = build({
+			delegates: { "snps-aws-bedrock/paid": capturing },
+			configured: rules({ pool: ["snps-aws-bedrock/paid"], routes: [{ name: "test", use: ["snps-aws-bedrock/paid"] }] }),
+		})
+		await collect(paid.model, { ...request(), systemPrompt: "You are Cline." })
+		expect(seen[1]).toBe("You are Cline.")
+	})
+
+	it("ends a call whose text degenerates into repetition as an error, so the run retries", async () => {
+		const dots = Array.from(
+			{ length: 40 },
+			() =>
+				({
+					type: "text-delta",
+					text: " .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .",
+				}) as AgentModelEvent,
+		)
+		const { model, events } = build({
+			delegates: {
+				"snps-provider/first": scripted([{ type: "text-delta", text: "Good, we're on stage. ]]]]}]" }, ...dots, STOP]),
+			},
+		})
+		const out = await collect(model)
+		const finish = out.at(-1)
+		expect(finish).toMatchObject({ type: "finish", reason: "error", errorRetryable: true })
+		expect((finish as { error?: string }).error).toContain("Degenerate output")
+		// The dots already streamed stay in the transcript; the loop's run-level retry handles them.
+		expect(out.filter((event) => event.type === "text-delta").length).toBeGreaterThan(1)
+		expect(out.filter((event) => event.type === "text-delta").length).toBeLessThan(dots.length + 1)
+		expect(events.at(-1)).toMatchObject({ kind: "error", modelId: "snps-provider/first" })
+	})
+
 	it("fails over silently when a candidate errors before producing output", async () => {
 		const { model, events } = build({
 			delegates: {

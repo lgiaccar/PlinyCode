@@ -75,18 +75,30 @@ const DEFAULT_CLASSIFIER = {
 } as const
 
 /**
+ * The completion guard's pattern rules are always on; the judge — one extra
+ * small-model call when an agentic run is about to end — is on by default
+ * because a missed early stop costs far more than the call.
+ */
+const DEFAULT_GUARD = {
+	judge: true,
+	judgeTimeoutMs: 6_000,
+} as const
+
+/**
  * Background-job models, chosen from the live probe
  * (`scripts/probe-pliny-free-models.ts`, see docs/pliny-free-auto-router.md):
  *
  * - classifier: the fastest responder measured (~284ms to first token). It does
  *   not call tools, which is irrelevant here — classification is a plain
  *   text answer — and it keeps the extra per-turn call cheap.
+ * - judge: the same model, asked once per run whether the task is done.
  * - summarizer: a large-context model, because a compaction summary is by
  *   definition produced from a conversation that no longer fits.
  * - commit: a mid-size model with a good token rate; commit messages are short.
  */
 const DEFAULT_UTILITY = {
 	classifier: "snps-provider/qwen3-6-35b-a3b-1-28dd3",
+	judge: "snps-provider/qwen3-6-35b-a3b-1-28dd3",
 	summarizer: "snps-provider/nvidia-nemotron-3-super-120b-a12",
 	commit: "snps-provider/qwen3-next-80b-a3b-instruct-d79b4",
 } as const
@@ -315,6 +327,7 @@ export function defaultRules(profile = "default"): RouterRules {
 		pool: defaultPool(profile),
 		utility: { ...DEFAULT_UTILITY },
 		classifier: { ...DEFAULT_CLASSIFIER, enabled: profile === "smart" || balance },
+		guard: { ...DEFAULT_GUARD },
 		health: { ...DEFAULT_HEALTH },
 		contextMarginRatio: 1.15,
 		sticky: true,
@@ -461,6 +474,7 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 	const routes = parseRoutes(raw.routes, allowPaid)
 	const utility = (raw.utility ?? {}) as Record<string, unknown>
 	const classifier = (raw.classifier ?? {}) as Record<string, unknown>
+	const guard = (raw.guard ?? {}) as Record<string, unknown>
 	const health = (raw.health ?? {}) as Record<string, unknown>
 
 	const utilityOrDefault = (value: unknown, fallback: string): string => {
@@ -468,11 +482,14 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 		return id && isRoutableModelId(id, allowPaid) ? id : fallback
 	}
 
+	const classifierModel = utilityOrDefault(utility.classifier, defaults.utility.classifier)
 	return {
 		version: asPositive(raw.version) ?? defaults.version,
 		pool: pool.length > 0 ? pool : defaults.pool,
 		utility: {
-			classifier: utilityOrDefault(utility.classifier, defaults.utility.classifier),
+			classifier: classifierModel,
+			// An unset judge follows the classifier, so one edit moves both.
+			judge: utilityOrDefault(utility.judge, utility.judge === undefined ? classifierModel : defaults.utility.judge),
 			summarizer: utilityOrDefault(utility.summarizer, defaults.utility.summarizer),
 			commit: utilityOrDefault(utility.commit, defaults.utility.commit),
 		},
@@ -480,6 +497,10 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 			enabled: typeof classifier.enabled === "boolean" ? classifier.enabled : defaults.classifier.enabled,
 			timeoutMs: asPositive(classifier.timeoutMs) ?? defaults.classifier.timeoutMs,
 			maxPromptChars: asPositive(classifier.maxPromptChars) ?? defaults.classifier.maxPromptChars,
+		},
+		guard: {
+			judge: typeof guard.judge === "boolean" ? guard.judge : defaults.guard.judge,
+			judgeTimeoutMs: asPositive(guard.judgeTimeoutMs) ?? defaults.guard.judgeTimeoutMs,
 		},
 		health: {
 			cooldownMs: asPositive(health.cooldownMs) ?? defaults.health.cooldownMs,

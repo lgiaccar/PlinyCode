@@ -79,3 +79,43 @@ bun apps/vscode/scripts/probe-pliny-free-models.ts --runs 3
 
 Without it every model reports `unable to verify the first certificate`, which
 looks like a total outage but is purely local trust configuration.
+
+## Keeping runs going: the completion guard, the judge and `wait`
+
+The agent loop ends a run as soon as a reply carries no tool call. The free
+models use that exit far too early — real transcripts show them announcing a
+step and stopping ("Let me check the log:"), promising to "check back at 15:28",
+asking permission for something the user already asked for, reporting a failed
+command as if it were the result, or degenerating into a repeated character for
+thousands of characters. Three pieces push back, all only for free models (on
+BalanceAuto, only when the turn's last call ran on a free model — see
+[pliny-balance-auto.md](pliny-balance-auto.md)):
+
+- **Pattern rules** (`unfinished-turn-guard.ts`, applied by
+  `completion-guard.ts`) read the reply and, for the shell rule, the tool result
+  it follows. A hit sends the model a `[SYSTEM]` reminder naming the problem
+  and the chat shows `↻ … (rule: wait-bail-out, 1/3)`. A model that answers a
+  reminder with the same stall gets one firmer reminder and the rest of the turn
+  moves to the default route's lead model (`↪ switching to …`); a third stall in
+  a row is accepted. At most three reminders per run.
+- **The judge** (`router-completion-judge.ts`) runs once per run, only in act
+  mode and only when the run made at least one tool call, when no rule fired: a
+  small model is shown the request, what the run did and the final reply, and
+  answers whether the request was carried out. "Not done" sends one reminder
+  (`⚖ The task looks unfinished — …`); no verdict within `guard.judgeTimeoutMs`
+  accepts the reply. Switch it off with `guard.judge: false` in the rules file.
+- **`wait`** is a tool (`vscode-wait-tool.ts`) that pauses up to 10 minutes per
+  call, an hour per turn, so a model waiting on a build or a benchmark can wait,
+  read the log, and wait again instead of ending its turn. The free models are
+  told about it in a system-prompt addendum (`router-prompt.ts`), and a failed
+  or detached command's result carries a note telling them not to stop on it.
+
+A reply that collapses into repetition is cut off mid-stream by the routed model
+and treated like any other post-output failure: the run continues on another
+model with a prompt to redo the step.
+
+Every run appends one line to `pliny-free-auto-runs.jsonl` next to the rules
+files: how it ended, the last model and tool, which rules fired, what the judge
+said, and the reply's tail. `bun apps/vscode/scripts/summarize-free-auto-log.ts
+--tails` turns that and the call log into per-profile, per-model and per-route
+tables, including how often the classifier actually produced a verdict.
