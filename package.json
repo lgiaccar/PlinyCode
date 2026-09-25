@@ -22,6 +22,7 @@
         "format": "bun biome format sdk/ apps/vscode/",
         "lint": "bun biome lint sdk/ && bun -F plinycode-dev lint",
         "fix": "bun biome check --write --unsafe --diagnostic-level=error sdk/ apps/vscode/",
+        "check:docs": "bun sdk/scripts/check-doc-links.ts",
         "check": "bun biome check --diagnostic-level=error sdk/ apps/vscode/ && bun run build:sdk && bun -F plinycode-dev build && bun --parallel -F './sdk/packages/**' -F plinycode-dev typecheck",
         "version": "bun run types && bun sdk/scripts/version.ts"
     },
