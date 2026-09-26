@@ -40,6 +40,30 @@ describe("parseRemote", () => {
 			repo: "tool",
 		})
 	})
+
+	it("auto-detects an on-premises Azure DevOps Server (TFS) from its `_git` path, without DEVOPS_MCP_PROVIDER", () => {
+		expect(parseRemote("https://ado.internal.example.com/tfs/MyCollection/MyProject/_git/my-repo")).toEqual({
+			kind: "ado",
+			host: "ado.internal.example.com",
+			owner: "MyCollection",
+			repo: "my-repo",
+			project: "MyProject",
+			collection: "MyCollection",
+			origin: "https://ado.internal.example.com",
+		})
+	})
+
+	it("parses an on-premises ssh:// remote with a port, defaulting the API origin to https", () => {
+		expect(parseRemote("ssh://ado.internal.example.com:22/tfs/MyCollection/MyProject/_git/my-repo")).toEqual({
+			kind: "ado",
+			host: "ado.internal.example.com",
+			owner: "MyCollection",
+			repo: "my-repo",
+			project: "MyProject",
+			collection: "MyCollection",
+			origin: "https://ado.internal.example.com:22",
+		})
+	})
 })
 
 describe("setSection", () => {

@@ -73,7 +73,9 @@ configs copied to other clients, which use steps 1 and 3.
 
 GitHub Enterprise Server hosts use the editor's `github-enterprise` sign-in, and need
 `DEVOPS_MCP_PROVIDER=github` because the host name alone doesn't identify the API. Azure DevOps Server
-(on-premises) is not supported.
+(on-premises / TFS) is auto-detected from a `_git` path segment on any host that isn't `dev.azure.com` or
+`*.visualstudio.com`, so it needs no `DEVOPS_MCP_PROVIDER` setting; sign in with `AZURE_DEVOPS_PAT` (on-premises
+servers are usually PAT-only, not Azure AD).
 
 ## Settings
 

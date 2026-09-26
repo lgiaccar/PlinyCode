@@ -14,6 +14,13 @@ export interface Remote {
 	repo: string
 	/** Azure DevOps only. */
 	project?: string
+	/**
+	 * Azure DevOps Server (on-premises) only: the collection path segment (e.g. `tfs` or `DefaultCollection`)
+	 * and the scheme/port to reach it with, since an on-prem server isn't always plain `https://{host}`.
+	 */
+	collection?: string
+	/** Azure DevOps Server (on-premises) only: `{scheme}://{host}[:port]`, defaulting to `https://{host}`. */
+	origin?: string
 }
 
 export interface RepoContext {
@@ -34,36 +41,44 @@ export function remoteKey(remote: Remote): string {
 
 const stripGit = (name: string) => (name.endsWith(".git") ? name.slice(0, -4) : name)
 
-/** Returns [host, path] for https://, ssh:// and scp-style (git@host:path) URLs. */
-function splitUrl(url: string): [string, string] {
+/** Returns [scheme, host, port, path] for https://, ssh:// and scp-style (git@host:path) URLs. */
+function splitUrl(url: string): [string, string, string, string] {
 	if (url.includes("://")) {
 		const parsed = new URL(url)
-		return [parsed.hostname.toLowerCase(), parsed.pathname.replace(/^\/+|\/+$/g, "")]
+		return [
+			parsed.protocol.replace(/:$/, ""),
+			parsed.hostname.toLowerCase(),
+			parsed.port,
+			parsed.pathname.replace(/^\/+|\/+$/g, ""),
+		]
 	}
 	const match = /^(?:[^@/]+@)?([^:/]+):(.+)$/.exec(url)
 	if (!match) {
 		throw new DevOpsError(`Cannot parse git remote URL: ${url}`)
 	}
-	return [match[1].toLowerCase(), match[2].replace(/^\/+|\/+$/g, "")]
+	return ["ssh", match[1].toLowerCase(), "", match[2].replace(/^\/+|\/+$/g, "")]
 }
 
 /**
- * Parses a git remote URL. Azure DevOps is recognised from dev.azure.com /
- * visualstudio.com hosts and github.com is GitHub; any other host (e.g. GitHub
- * Enterprise Server) needs `provider` to say which API it speaks.
+ * Parses a git remote URL. Azure DevOps Services is recognised from dev.azure.com /
+ * visualstudio.com hosts, github.com is GitHub, and any other host with a `_git` path
+ * segment is treated as an on-premises Azure DevOps Server (TFS), since GitHub never
+ * uses that segment. Anything else (e.g. GitHub Enterprise Server) needs `provider` to
+ * say which API it speaks.
  */
 export function parseRemote(url: string, provider?: string): Remote {
-	const [host, rawPath] = splitUrl(url.trim())
+	const [scheme, host, port, rawPath] = splitUrl(url.trim())
 	const segments = rawPath
 		.split("/")
 		.filter(Boolean)
 		.map((s) => decodeURIComponent(s))
 
-	const isAdo = host.endsWith("dev.azure.com") || host.endsWith("visualstudio.com")
+	const isAdoCloud = host.endsWith("dev.azure.com") || host.endsWith("visualstudio.com")
+	const isAdoOnPrem = !isAdoCloud && host !== "github.com" && segments.includes("_git")
 	let kind: ProviderKind
 	if (provider === "github" || provider === "ado") {
 		kind = provider
-	} else if (isAdo) {
+	} else if (isAdoCloud || isAdoOnPrem) {
 		kind = "ado"
 	} else if (host === "github.com") {
 		kind = "github"
@@ -85,13 +100,17 @@ export function parseRemote(url: string, provider?: string): Remote {
 	//   https://{org}.visualstudio.com/[DefaultCollection/]{project}/_git/{repo}
 	//   git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
 	//   {org}@vs-ssh.visualstudio.com:v3/{org}/{project}/{repo}
-	let org: string
+	// Azure DevOps Server (on-premises / TFS) additionally inserts a collection segment:
+	//   https://{host}[:port]/{collection}/{project}/_git/{repo}
+	//   ssh://{host}[:port]/{collection}/{project}/{repo}   (git@ prefix optional)
+	let org: string | undefined
 	let project: string
 	let repo: string
+	let collection: string | undefined
 	const gitIndex = segments.indexOf("_git")
-	if (segments[0] === "v3" && segments.length >= 4) {
+	if (isAdoCloud && segments[0] === "v3" && segments.length >= 4) {
 		;[, org, project, repo] = segments
-	} else if (gitIndex >= 1 && gitIndex + 1 < segments.length) {
+	} else if (isAdoCloud && gitIndex >= 1 && gitIndex + 1 < segments.length) {
 		repo = segments[gitIndex + 1]
 		project = segments[gitIndex - 1]
 		if (host.endsWith("visualstudio.com")) {
@@ -101,8 +120,21 @@ export function parseRemote(url: string, provider?: string): Remote {
 		} else {
 			throw new DevOpsError(`Cannot find the organization in Azure DevOps remote URL: ${url}`)
 		}
+	} else if (isAdoOnPrem && gitIndex >= 2 && gitIndex + 1 < segments.length) {
+		// {collection}/{project}/_git/{repo}, with an optional leading path prefix (e.g. /tfs/).
+		repo = segments[gitIndex + 1]
+		project = segments[gitIndex - 1]
+		collection = segments[gitIndex - 2]
 	} else {
 		throw new DevOpsError(`Cannot parse Azure DevOps remote URL: ${url}`)
+	}
+
+	if (isAdoOnPrem) {
+		const origin = `${scheme === "ssh" ? "https" : scheme}://${host}${port ? `:${port}` : ""}`
+		return { kind: "ado", host, owner: collection ?? "", repo: stripGit(repo), project, collection, origin }
+	}
+	if (!org) {
+		throw new DevOpsError(`Cannot find the organization in Azure DevOps remote URL: ${url}`)
 	}
 	return { kind: "ado", host: "dev.azure.com", owner: org, repo: stripGit(repo), project }
 }

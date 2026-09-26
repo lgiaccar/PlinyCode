@@ -69,7 +69,10 @@ export class AzureDevOpsProvider implements Provider {
 		fetchImpl?: Fetch,
 		auth: Auth = adoAuth(),
 	) {
-		const orgUrl = `https://dev.azure.com/${encodeURIComponent(remote.owner)}`
+		// On-premises Azure DevOps Server: {origin}/{collection}/{project}. Cloud: https://dev.azure.com/{org}/{project}.
+		const orgUrl = remote.origin
+			? `${remote.origin}/${encodeURIComponent(remote.collection ?? "")}`
+			: `https://dev.azure.com/${encodeURIComponent(remote.owner)}`
 		this.projectUrl = `${orgUrl}/${encodeURIComponent(remote.project ?? "")}`
 		this.repoUrl = `${this.projectUrl}/_git/${encodeURIComponent(remote.repo)}`
 		this.http = new Http(auth, { Accept: "application/json" }, fetchImpl)
