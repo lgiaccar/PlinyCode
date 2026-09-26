@@ -86,6 +86,98 @@ describe("SdkTaskStartCoordinator", () => {
 		)
 	})
 
+	it("binds a new task to the window's workspace and records it as used", async () => {
+		const { coordinator, options } = makeCoordinator()
+		const windowWorkspace = { path: "/workspace", kind: "folder" as const, folders: ["/workspace"] }
+		options.getWindowWorkspace = vi.fn().mockResolvedValue(windowWorkspace)
+		options.setActiveTaskWorkspace = vi.fn()
+		options.onWorkspaceUsed = vi.fn()
+
+		const sessionId = await coordinator.initTask("hello")
+
+		expect(options.setActiveTaskWorkspace).toHaveBeenCalledWith(windowWorkspace, "/workspace")
+		expect(options.onWorkspaceUsed).toHaveBeenCalledWith(windowWorkspace)
+		expect(options.createHistoryItemFromSession).toHaveBeenCalledWith(
+			sessionId,
+			"hello",
+			"model",
+			"/workspace",
+			"/workspace",
+			windowWorkspace,
+		)
+		expect(options.sessions.startNewSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionMetadata: { workspacePath: "/workspace", workspaceKind: "folder" },
+			}),
+		)
+	})
+
+	it("starts a task in a chosen workspace: its first folder is the cwd and the session is bound to it", async () => {
+		vi.mocked(isDirectory).mockImplementation(async (folder) => folder === "/other/a")
+		const { coordinator, options } = makeCoordinator()
+		options.getWindowWorkspace = vi.fn().mockResolvedValue({ path: "/workspace", kind: "folder", folders: ["/workspace"] })
+		options.setActiveTaskWorkspace = vi.fn()
+		const chosen = { path: "/other/all.code-workspace", kind: "workspaceFile" as const, folders: ["/other/a", "/other/b"] }
+
+		await coordinator.initTask("hello", undefined, undefined, undefined, undefined, chosen)
+
+		expect(options.getWorkspaceRoot).not.toHaveBeenCalled()
+		expect(options.setActiveTaskWorkspace).toHaveBeenCalledWith(chosen, "/other/a")
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/other/a" }))
+		expect(options.createHistoryItemFromSession).toHaveBeenCalledWith(
+			expect.any(String),
+			"hello",
+			"model",
+			"/other/a",
+			"/other/a",
+			chosen,
+		)
+		expect(options.sessions.startNewSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionMetadata: { workspacePath: "/other/all.code-workspace", workspaceKind: "workspaceFile" },
+			}),
+		)
+	})
+
+	it("refuses to start in a chosen workspace whose folder is missing", async () => {
+		vi.mocked(isDirectory).mockResolvedValue(false)
+		const { coordinator, options } = makeCoordinator()
+		const chosen = { path: "/gone", kind: "folder" as const, folders: ["/gone"] }
+
+		const sessionId = await coordinator.initTask("hello", undefined, undefined, undefined, undefined, chosen)
+
+		expect(sessionId).toBeUndefined()
+		expect(options.sessions.startNewSession).not.toHaveBeenCalled()
+		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
+			[expect.objectContaining({ say: "error", text: expect.stringContaining("/gone does not exist") })],
+			expect.anything(),
+		)
+	})
+
+	it("resumes a task in its bound workspace", async () => {
+		vi.mocked(isDirectory).mockResolvedValue(true)
+		const historyItem: HistoryItem = {
+			id: "task-1",
+			task: "old task",
+			ts: 1,
+			tokensIn: 0,
+			tokensOut: 0,
+			totalCost: 0,
+			cwdOnTaskInitialization: "/other/a",
+			workspacePath: "/other/all.code-workspace",
+			workspaceKind: "workspaceFile",
+		}
+		const { coordinator, options } = makeCoordinator({ historyItem })
+		options.setActiveTaskWorkspace = vi.fn()
+
+		await coordinator.reinitExistingTaskFromId("task-1")
+
+		expect(options.setActiveTaskWorkspace).toHaveBeenCalledWith(
+			{ path: "/other/all.code-workspace", kind: "workspaceFile", folders: ["/other/a"] },
+			"/other/a",
+		)
+	})
+
 	it("omits images/files from the task message when the task has no attachments", async () => {
 		const { coordinator, options } = makeCoordinator()
 

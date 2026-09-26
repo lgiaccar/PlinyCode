@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package cline;
+
+import "cline/common.proto";
+
+option go_package = "github.com/cline/grpc-go/cline";
+option java_multiple_files = true;
+option java_package = "bot.cline.proto";
+
+// Workspaces that conversations are bound to: the window's own workspace and
+// the ones recently used to start conversations in (folders or .code-workspace
+// files). See docs/workspace-conversations.md.
+service WorkspaceService {
+  // The window's workspace plus the most recently used ones, newest first.
+  rpc listRecentWorkspaces(EmptyRequest) returns (WorkspaceList);
+  // Opens a native picker for a folder or a .code-workspace file, records the
+  // choice as recently used and returns it. An empty path means cancelled.
+  rpc pickWorkspace(PickWorkspaceRequest) returns (Workspace);
+}
+
+// A workspace a conversation can be bound to.
+message Workspace {
+  // Identity: the folder's absolute path, or the .code-workspace file's path
+  // for a multi-folder workspace. A .code-workspace file holding a single
+  // folder is identified by that folder.
+  string path = 1;
+  // "folder" or "workspaceFile".
+  string kind = 2;
+  // Absolute folder paths in the workspace. The first one is the working
+  // directory conversations run in.
+  repeated string folders = 3;
+  // When it was last used to start a conversation (ms since epoch), 0 if never.
+  int64 last_used_ts = 4;
+}
+
+message WorkspaceList {
+  // The window's workspace. Unset when no folder is open.
+  optional Workspace current = 1;
+  // Most recently used workspaces, newest first, at most ten.
+  repeated Workspace recent = 2;
+}
+
+message PickWorkspaceRequest {
+  Metadata metadata = 1;
+  // "folder" opens a folder picker, "workspaceFile" a .code-workspace file picker.
+  string kind = 2;
+}

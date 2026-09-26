@@ -1,7 +1,7 @@
 import { StringRequest } from "@shared/proto/cline/common"
-import { historyItemWorkspaceDisplayPath, workspacePathLabel } from "@shared/workspacePath"
+import { historyItemWorkspaceRef, workspaceRefLabel, workspaceRefsEqual } from "@shared/workspaceRef"
 import { FolderIcon } from "lucide-react"
-import { memo } from "react"
+import { memo, useMemo } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useUsageCostVisibility } from "@/hooks/useUsageCostVisibility"
@@ -14,7 +14,18 @@ type HistoryPreviewProps = {
 }
 
 const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
-	const { taskHistory, platform } = useExtensionState()
+	const { taskHistory, platform, currentWorkspace } = useExtensionState()
+	// Only this window's conversations; the full history view has the other workspaces.
+	const recentTasks = useMemo(
+		() =>
+			taskHistory.filter(
+				(item) =>
+					item.ts &&
+					item.task &&
+					(!currentWorkspace || workspaceRefsEqual(historyItemWorkspaceRef(item), currentWorkspace)),
+			),
+		[taskHistory, currentWorkspace],
+	)
 	const isCostVisible = useUsageCostVisibility()
 	const handleHistorySelect = (id: string) => {
 		TaskServiceClient.showTaskWithId(StringRequest.create({ value: id })).catch((error) =>
@@ -157,68 +168,63 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 
 			{
 				<div className="px-4">
-					{taskHistory.filter((item) => item.ts && item.task).length > 0 ? (
-						taskHistory
-							.filter((item) => item.ts && item.task)
-							.slice(0, 3)
-							.map((item) => {
-								const workspacePath = historyItemWorkspaceDisplayPath(item)
-								const workspaceLabel = workspacePath ? workspacePathLabel(workspacePath, platform) : undefined
-								return (
-									<div
-										className="history-preview-item"
-										key={item.id}
-										onClick={() => handleHistorySelect(item.id)}>
-										<div className="history-task-content">
-											{item.isFavorited && (
-												<span
-													aria-label="Favorited"
-													className="codicon codicon-star-full"
-													style={{
-														color: "var(--vscode-button-background)",
-														flexShrink: 0,
-													}}
-												/>
-											)}
-											<div
-												style={{
-													flex: 1,
-													minWidth: 0,
-													display: "flex",
-													flexDirection: "column",
-													gap: 4,
-												}}>
-												<div className="history-task-description ph-no-capture">{item.task}</div>
-												<BackgroundTaskBadge className="self-start" taskId={item.id} />
-												<Tooltip>
-													<TooltipContent className="max-w-xs" side="bottom">
-														{workspacePath || "Unknown workspace"}
-													</TooltipContent>
-													<TooltipTrigger asChild>
-														<div className="history-workspace-row w-fit max-w-full">
-															<FolderIcon size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
-															<span className="history-workspace-label">
-																{workspaceLabel ?? "Unknown workspace"}
-															</span>
-														</div>
-													</TooltipTrigger>
-												</Tooltip>
-											</div>
-											{item.isLegacy && <span className="history-cost-chip">Legacy</span>}
-										</div>
-										<div className="history-meta-stack">
+					{recentTasks.length > 0 ? (
+						recentTasks.slice(0, 3).map((item) => {
+							const workspaceRef = historyItemWorkspaceRef(item)
+							const workspacePath = workspaceRef?.path
+							const workspaceLabel = workspaceRef ? workspaceRefLabel(workspaceRef, platform) : undefined
+							return (
+								<div className="history-preview-item" key={item.id} onClick={() => handleHistorySelect(item.id)}>
+									<div className="history-task-content">
+										{item.isFavorited && (
 											<span
-												className="history-date"
-												title={`Started ${formatStartTime(item.startedTs || item.ts)} · last active ${formatStartTime(item.ts)}`}>
-												{formatStartTime(item.startedTs || item.ts)}
-											</span>
-											{item.totalCost != null && isCostVisible(item.apiProvider) && (
-												<span className="history-cost-chip">${item.totalCost.toFixed(2)}</span>
-											)}
+												aria-label="Favorited"
+												className="codicon codicon-star-full"
+												style={{
+													color: "var(--vscode-button-background)",
+													flexShrink: 0,
+												}}
+											/>
+										)}
+										<div
+											style={{
+												flex: 1,
+												minWidth: 0,
+												display: "flex",
+												flexDirection: "column",
+												gap: 4,
+											}}>
+											<div className="history-task-description ph-no-capture">{item.task}</div>
+											<BackgroundTaskBadge className="self-start" taskId={item.id} />
+											<Tooltip>
+												<TooltipContent className="max-w-xs" side="bottom">
+													{workspacePath || "Unknown workspace"}
+												</TooltipContent>
+												<TooltipTrigger asChild>
+													<div className="history-workspace-row w-fit max-w-full">
+														<FolderIcon size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+														<span className="history-workspace-label">
+															{workspaceLabel ?? "Unknown workspace"}
+														</span>
+													</div>
+												</TooltipTrigger>
+											</Tooltip>
 										</div>
+										{item.isLegacy && <span className="history-cost-chip">Legacy</span>}
 									</div>
-								)
-							})
+									<div className="history-meta-stack">
+										<span
+											className="history-date"
+											title={`Started ${formatStartTime(item.startedTs || item.ts)} · last active ${formatStartTime(item.ts)}`}>
+											{formatStartTime(item.startedTs || item.ts)}
+										</span>
+										{item.totalCost != null && isCostVisible(item.apiProvider) && (
+											<span className="history-cost-chip">${item.totalCost.toFixed(2)}</span>
+										)}
+									</div>
+								</div>
+							)
+						})
 					) : (
 						<div
 							style={{
@@ -227,7 +233,7 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 								fontSize: "var(--vscode-font-size)",
 								padding: "10px 0",
 							}}>
-							No recent tasks
+							{currentWorkspace ? "No recent tasks in this workspace" : "No recent tasks"}
 						</div>
 					)}
 				</div>

@@ -17,6 +17,7 @@ import { OnboardingModelGroup } from "./proto/cline/state"
 import { Mode } from "./storage/types"
 import { TelemetrySetting } from "./TelemetrySetting"
 import { UserInfo } from "./UserInfo"
+import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
 export interface ExtensionMessage {
 	type: "grpc_response" // New type for gRPC responses
@@ -139,6 +140,13 @@ export interface ExtensionState {
 	subagentsEnabled?: boolean
 	worktreesEnabled?: ClineFeatureSetting
 	favoritedModelIds: string[]
+	/**
+	 * The workspace this window is open on (folder, or .code-workspace file for
+	 * multi-folder workspaces). New conversations bind to it unless another one
+	 * is picked, and history shows its conversations by default. Unset when no
+	 * folder is open.
+	 */
+	currentWorkspace?: WorkspaceRef
 	// NEW: Add workspace information
 	workspaceRoots: WorkspaceRoot[]
 	primaryRootIndex: number

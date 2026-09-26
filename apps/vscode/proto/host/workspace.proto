@@ -56,6 +56,10 @@ message GetWorkspacePathsResponse {
   // The unique ID for the workspace/project.
   optional string id = 1;
   repeated string paths = 2;
+  // Absolute path of the .code-workspace file the window was opened from, when
+  // it was opened from one (and that file is saved on disk). Empty for a single
+  // folder window, an untitled workspace or an empty window.
+  optional string workspace_file = 3;
 }
 
 message SaveOpenDocumentIfDirtyRequest {

@@ -34,3 +34,30 @@ export function historyItemWorkspaceDisplayPath(item: {
 }): string {
 	return (item.workspaceRootOnTaskInitialization || item.cwdOnTaskInitialization || "").trim()
 }
+
+function normalizeWorkspacePathForComparison(path: string): string {
+	return path.trim().replace(/\\/g, "/").replace(/\/+$/, "")
+}
+
+/** A Windows path: drive letter (`C:/…`) or UNC (`//server/share`). */
+function isWindowsStylePath(path: string): boolean {
+	return /^[a-zA-Z]:\//.test(path) || path.startsWith("//")
+}
+
+/**
+ * Whether two workspace paths name the same location, regardless of separator
+ * style or a trailing slash. Windows-style paths compare case-insensitively,
+ * like `arePathsEqual` in the extension host, so the webview (which does not
+ * know the host platform) reaches the same verdict as the extension.
+ */
+export function workspacePathsEqual(a: string | undefined, b: string | undefined): boolean {
+	const left = normalizeWorkspacePathForComparison(a ?? "")
+	const right = normalizeWorkspacePathForComparison(b ?? "")
+	if (!left || !right) {
+		return left === right
+	}
+	if (isWindowsStylePath(left) || isWindowsStylePath(right)) {
+		return left.toLowerCase() === right.toLowerCase()
+	}
+	return left === right
+}

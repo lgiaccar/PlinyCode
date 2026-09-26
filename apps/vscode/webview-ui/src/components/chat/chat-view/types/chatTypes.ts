@@ -49,6 +49,9 @@ export interface ChatState {
 	setPendingUserMessage: React.Dispatch<React.SetStateAction<PendingUserMessage | undefined>>
 	pendingResponse: PendingResponse | undefined
 	setPendingResponse: React.Dispatch<React.SetStateAction<PendingResponse | undefined>>
+	/** Workspace the next conversation starts in; undefined means the window's own. */
+	nextTaskWorkspace: WorkspaceRef | undefined
+	setNextTaskWorkspace: React.Dispatch<React.SetStateAction<WorkspaceRef | undefined>>
 
 	// Refs
 	textAreaRef: React.RefObject<HTMLTextAreaElement>

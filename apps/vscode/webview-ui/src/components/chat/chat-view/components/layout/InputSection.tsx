@@ -1,6 +1,7 @@
 import React from "react"
 import ChatTextArea from "@/components/chat/ChatTextArea"
 import QuotedMessagePreview from "@/components/chat/QuotedMessagePreview"
+import { NewTaskWorkspacePicker } from "@/components/workspace/NewTaskWorkspacePicker"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { ChatState, MessageHandlers, ScrollBehavior } from "../../types/chatTypes"
 
@@ -40,6 +41,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		textAreaRef,
 		handleFocusChange,
 		lastMessage,
+		task,
+		nextTaskWorkspace,
+		setNextTaskWorkspace,
 	} = chatState
 
 	const { isAtBottom, scrollToBottomAuto } = scrollBehavior
@@ -52,6 +56,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 
 	return (
 		<>
+			{!task && <NewTaskWorkspacePicker onChange={setNextTaskWorkspace} value={nextTaskWorkspace} />}
 			{activeQuote && (
 				<div style={{ marginBottom: "-12px", marginTop: "10px" }}>
 					<QuotedMessagePreview
