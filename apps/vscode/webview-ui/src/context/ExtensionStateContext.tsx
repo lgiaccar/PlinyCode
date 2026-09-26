@@ -299,6 +299,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		welcomeViewCompleted: false,
 		onboardingModels: undefined,
 		mcpResponsesCollapsed: false, // Default value (expanded), will be overwritten by extension state
+		chatInputMaxRows: 10, // Default value, will be overwritten by extension state
 		useAutoCondense: true,
 		compactionStrategy: "basic",
 		webSearchEnabled: false,

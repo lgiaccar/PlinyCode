@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { historyItemWorkspaceDisplayPath, workspacePathBasename } from "../workspacePath"
+import { historyItemWorkspaceDisplayPath, workspacePathBasename, workspacePathLabel } from "../workspacePath"
 
 describe("workspacePathBasename", () => {
 	it("uses forward slashes on posix", () => {
@@ -8,6 +8,24 @@ describe("workspacePathBasename", () => {
 
 	it("splits Windows paths on backslashes", () => {
 		expect(workspacePathBasename("C:\\Users\\dev\\my-project", "win32")).toBe("my-project")
+	})
+})
+
+describe("workspacePathLabel", () => {
+	it("includes the parent folder on posix", () => {
+		expect(workspacePathLabel("/home/user/dev1/PlinyCode", "linux")).toBe("dev1/PlinyCode")
+	})
+
+	it("includes the parent folder on Windows", () => {
+		expect(workspacePathLabel("C:\\Users\\dev\\dev1\\PlinyCode", "win32")).toBe("dev1/PlinyCode")
+	})
+
+	it("falls back to the basename alone when there's no parent", () => {
+		expect(workspacePathLabel("/PlinyCode", "linux")).toBe("PlinyCode")
+	})
+
+	it("ignores a trailing slash", () => {
+		expect(workspacePathLabel("/home/user/dev1/PlinyCode/", "linux")).toBe("dev1/PlinyCode")
 	})
 })
 

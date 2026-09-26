@@ -81,6 +81,11 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 			controller.stateManager.setGlobalState("mcpResponsesCollapsed", request.mcpResponsesCollapsed)
 		}
 
+		// Update the user-dragged max height (in rows) for the chat prompt textarea
+		if (request.chatInputMaxRows !== undefined) {
+			controller.stateManager.setGlobalState("chatInputMaxRows", request.chatInputMaxRows)
+		}
+
 		// Update MCP display mode setting
 		if (request.mcpDisplayMode !== undefined) {
 			// Convert proto enum to string type

@@ -128,6 +128,7 @@ export interface ExtensionState {
 	localAgentsRulesToggles: ClineRulesToggles
 	localCopilotRulesToggles: ClineRulesToggles
 	mcpResponsesCollapsed?: boolean
+	chatInputMaxRows?: number
 	useAutoCondense?: boolean
 	compactionStrategy?: string
 	webSearchEnabled?: boolean

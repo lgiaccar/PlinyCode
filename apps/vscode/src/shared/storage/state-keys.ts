@@ -73,6 +73,8 @@ const GLOBAL_STATE_FIELDS = {
 	favoritedModelIds: { default: [] as string[] },
 	mcpMarketplaceEnabled: { default: true as boolean },
 	mcpResponsesCollapsed: { default: false as boolean },
+	// User-dragged max height for the chat prompt textarea, in rows (react-textarea-autosize's maxRows).
+	chatInputMaxRows: { default: 10 as number },
 	terminalReuseEnabled: { default: true as boolean },
 	vscodeTerminalExecutionMode: {
 		// Defaults only apply when no value is stored, so users who previously

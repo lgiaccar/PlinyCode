@@ -434,6 +434,7 @@ message UpdateSettingsRequest {
   optional string compaction_strategy = 44;
   optional bool web_search_enabled = 45;
   optional bool prerelease_updates_enabled = 46;
+  optional int32 chat_input_max_rows = 47;
 }
 
 message UpdateTerminalConnectionTimeoutRequest {

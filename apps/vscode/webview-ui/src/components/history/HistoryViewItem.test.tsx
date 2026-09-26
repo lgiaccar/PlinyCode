@@ -97,7 +97,7 @@ describe("HistoryViewItem", () => {
 		expect(screen.getByTestId("background-task-badge").textContent).toBe("Needs approval")
 	})
 
-	it("shows the workspace basename and a full-path tooltip", () => {
+	it("shows the parent-qualified workspace label and a full-path tooltip", () => {
 		render(
 			<HistoryViewItem
 				handleDeleteHistoryItem={noop}
@@ -111,11 +111,11 @@ describe("HistoryViewItem", () => {
 			/>,
 		)
 
-		expect(screen.getByText("my-project")).toBeDefined()
+		expect(screen.getByText("user/my-project")).toBeDefined()
 		expect(screen.getByText("/home/user/my-project")).toBeDefined()
 	})
 
-	it("splits the basename on backslashes for Windows paths", () => {
+	it("splits the parent-qualified label on backslashes for Windows paths", () => {
 		mocks.platform = "win32"
 		render(
 			<HistoryViewItem
@@ -130,7 +130,7 @@ describe("HistoryViewItem", () => {
 			/>,
 		)
 
-		expect(screen.getByText("my-project")).toBeDefined()
+		expect(screen.getByText("dev/my-project")).toBeDefined()
 	})
 
 	it("shows an 'Unknown workspace' fallback for legacy items with no stored root", () => {
