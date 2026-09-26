@@ -189,6 +189,30 @@ describe("AzureDevOpsProvider", () => {
 		expect(pr?.id).toBe(42)
 	})
 
+	it("targets the on-premises server's own host and collection, not dev.azure.com", async () => {
+		const onPremProj = "/MyCollection/My Project/_apis"
+		const api = new FakeApi().on("GET", `${onPremProj}/git/repositories/web-app`, {
+			id: "r-1",
+			defaultBranch: "refs/heads/main",
+			project: { id: "p-1" },
+		})
+		const provider = new AzureDevOpsProvider(
+			{
+				kind: "ado",
+				host: "ado.internal.example.com",
+				owner: "MyCollection",
+				repo: "web-app",
+				project: "My Project",
+				collection: "MyCollection",
+				origin: "https://ado.internal.example.com:22",
+			},
+			api.fetch,
+			staticAuth(),
+		)
+		expect(await provider.defaultBranch()).toBe("main")
+		expect(api.last("GET").url.href).toContain("https://ado.internal.example.com:22/MyCollection/My%20Project/_apis/")
+	})
+
 	it("limits descriptions to 4000 characters", () => {
 		const provider = azdo(new FakeApi())
 		checkBody(provider, "x".repeat(4000))
