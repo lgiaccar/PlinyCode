@@ -178,3 +178,41 @@ jobs:
                   name: playwright-recordings-${{ matrix.runner }}
                   path: |
                       apps/vscode/test-results/
+
+    # Always-reporting gate for the stage ruleset. Required checks must report on
+    # every PR, and a skipped matrix job does not report under its expanded name
+    # (e2e (ubuntu) etc.), so the ruleset requires this job instead.
+    gate:
+        needs: [detect-changes, matrix_prep, e2e]
+        if: ${{ !cancelled() }}
+        runs-on: ubuntu-latest
+        name: e2e gate
+        steps:
+            - name: Verify selected e2e jobs
+              env:
+                  DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
+                  E2E_CHANGED: ${{ needs.detect-changes.outputs.e2e }}
+                  MATRIX_PREP_RESULT: ${{ needs.matrix_prep.result }}
+                  E2E_RESULT: ${{ needs.e2e.result }}
+              run: |
+                  if [ "$DETECT_CHANGES_RESULT" != "success" ]; then
+                    echo "detect-changes did not succeed: $DETECT_CHANGES_RESULT"
+                    exit 1
+                  fi
+
+                  if [ "$E2E_CHANGED" != "true" ]; then
+                    echo "No e2e paths changed; e2e tests not required."
+                    exit 0
+                  fi
+
+                  if [ "$MATRIX_PREP_RESULT" != "success" ]; then
+                    echo "matrix_prep did not succeed: $MATRIX_PREP_RESULT"
+                    exit 1
+                  fi
+
+                  if [ "$E2E_RESULT" != "success" ]; then
+                    echo "e2e did not succeed: $E2E_RESULT"
+                    exit 1
+                  fi
+
+                  echo "E2E jobs passed."

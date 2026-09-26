@@ -8,21 +8,47 @@ on:
             - "sdk/**"
             - ".github/workflows/engine-test.yml"
     workflow_dispatch:
+    # No workflow-level path filter on pull_request: a filtered-out workflow never
+    # reports its checks, which leaves required checks pending forever. The
+    # detect-changes job below skips the real work instead, and the "engine-test
+    # gate" job always reports a result for the ruleset to require.
     pull_request:
-        paths:
-            - "sdk/**"
-            - ".github/workflows/engine-test.yml"
     workflow_call:
 
 permissions:
     contents: read
+    pull-requests: read # Needed for changed-file detection on pull requests
 
 defaults:
     run:
         working-directory: .
 
 jobs:
+    detect-changes:
+        runs-on: ubuntu-latest
+        name: Detect Changes
+        outputs:
+            sdk: ${{ steps.force.outputs.run_all == 'true' || steps.filter.outputs.sdk == 'true' }}
+        steps:
+            - id: force
+              if: github.event_name != 'pull_request'
+              run: echo "run_all=true" >> "$GITHUB_OUTPUT"
+
+            - uses: actions/checkout@v4
+              if: steps.force.outputs.run_all != 'true'
+
+            - uses: dorny/paths-filter@v3
+              if: steps.force.outputs.run_all != 'true'
+              id: filter
+              with:
+                  filters: |
+                      sdk:
+                          - 'sdk/**'
+                          - '.github/workflows/engine-test.yml'
+
     quality-checks:
+        needs: detect-changes
+        if: needs.detect-changes.outputs.sdk == 'true'
         runs-on: ubuntu-latest
         name: Quality Checks
         steps:
@@ -50,7 +76,8 @@ jobs:
                   bun run format
 
     test:
-        needs: quality-checks
+        needs: [detect-changes, quality-checks]
+        if: needs.detect-changes.outputs.sdk == 'true'
         strategy:
             fail-fast: false
             matrix:
@@ -96,3 +123,41 @@ jobs:
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               timeout-minutes: 10
               run: bun sdk/scripts/ci-node-smoke.ts
+
+    # Always-reporting gate for the stage ruleset. Required checks must report on
+    # every PR, and a skipped matrix job does not report under its expanded name,
+    # so the ruleset requires this job instead of the individual jobs above.
+    gate:
+        needs: [detect-changes, quality-checks, test]
+        if: ${{ !cancelled() }}
+        runs-on: ubuntu-latest
+        name: engine-test gate
+        steps:
+            - name: Verify selected engine jobs
+              env:
+                  DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
+                  SDK_CHANGED: ${{ needs.detect-changes.outputs.sdk }}
+                  QUALITY_CHECKS_RESULT: ${{ needs.quality-checks.result }}
+                  TEST_RESULT: ${{ needs.test.result }}
+              run: |
+                  if [ "$DETECT_CHANGES_RESULT" != "success" ]; then
+                    echo "detect-changes did not succeed: $DETECT_CHANGES_RESULT"
+                    exit 1
+                  fi
+
+                  if [ "$SDK_CHANGED" != "true" ]; then
+                    echo "No sdk/** changes; engine tests not required."
+                    exit 0
+                  fi
+
+                  if [ "$QUALITY_CHECKS_RESULT" != "success" ]; then
+                    echo "quality-checks did not succeed: $QUALITY_CHECKS_RESULT"
+                    exit 1
+                  fi
+
+                  if [ "$TEST_RESULT" != "success" ]; then
+                    echo "test did not succeed: $TEST_RESULT"
+                    exit 1
+                  fi
+
+                  echo "Engine jobs passed."
