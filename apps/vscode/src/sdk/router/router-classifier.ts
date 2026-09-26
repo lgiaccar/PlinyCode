@@ -9,6 +9,11 @@
  * raw reply travels with the failure so the reason can be logged: the first
  * weeks of the smart profile produced no verdict at all, silently.
  *
+ * The request asks for a JSON-only reply (`responseFormat: "json"`, sent to
+ * Pliny as `response_format`) as well as reasoning off. The default model
+ * reasons in its content, and on the rare call where the off-switch did not
+ * take, it spent its whole token budget on "The user wants…" before any JSON.
+ *
  * `collectModelText` and `extractJsonObjects` are shared with the completion
  * judge (`router-completion-judge.ts`), which asks the same utility model a
  * different one-shot question.
@@ -75,7 +80,7 @@ export function buildClassifierRequest(
 		messages: [{ id: "freeauto-classifier", role: "user", content: [{ type: "text", text: prompt }], createdAt: Date.now() }],
 		tools: [],
 		signal,
-		options: { thinking: false, maxTokens: CLASSIFIER_MAX_TOKENS },
+		options: { thinking: false, maxTokens: CLASSIFIER_MAX_TOKENS, responseFormat: "json" },
 	}
 }
 

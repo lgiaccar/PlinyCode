@@ -511,6 +511,22 @@ const plinyThinkingRule: ProviderOptionRule = {
 	},
 };
 
+const plinyJsonResponseRule: ProviderOptionRule = {
+	id: "provider.pliny.json-response",
+	phase: "provider",
+	description:
+		"Pliny constrains a JSON-only request with response_format, so a model that reasons in its content still answers with the object.",
+	applies: (input) =>
+		input.request.providerId === "pliny" &&
+		input.request.responseFormat === "json",
+	build: (input) =>
+		buildProviderAndAliasPatch({
+			providerId: input.request.providerId,
+			providerOptionsKey: input.providerOptionsKey,
+			bucketOptions: { response_format: { type: "json_object" } },
+		}),
+};
+
 const routedGlmReasoningRule: ProviderOptionRule = {
 	id: "family.glm.routed-reasoning",
 	phase: "model-overlay",
@@ -560,6 +576,7 @@ export const PROVIDER_OPTION_RULES: ReadonlyArray<ProviderOptionRule> = [
 	nativeZaiGlmThinkingRule,
 	miniMaxThinkingRule,
 	plinyThinkingRule,
+	plinyJsonResponseRule,
 	routedGlmReasoningRule,
 	togetherReasoningToggleRule,
 ];

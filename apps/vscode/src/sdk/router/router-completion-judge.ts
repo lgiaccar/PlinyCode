@@ -94,7 +94,7 @@ export function buildJudgeRequest(context: JudgeContext, signal: AbortSignal): A
 		messages: [{ id: "freeauto-judge", role: "user", content: [{ type: "text", text: prompt }], createdAt: Date.now() }],
 		tools: [],
 		signal,
-		options: { thinking: false, maxTokens: JUDGE_MAX_TOKENS },
+		options: { thinking: false, maxTokens: JUDGE_MAX_TOKENS, responseFormat: "json" },
 	}
 }
 
