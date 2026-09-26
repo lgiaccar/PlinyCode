@@ -1,14 +1,18 @@
+import type { ModelInfo } from "@shared/api"
+import { isPlinyRouterModelId } from "@shared/pliny"
 import { StringRequest } from "@shared/proto/cline/common"
 import type { Mode } from "@shared/storage/types"
 import { ChevronDown } from "lucide-react"
 import type React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
+import { formatCompactContext, formatRowPrice } from "@/components/settings/utils/pricingUtils"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
 import { useProviderConfig } from "@/hooks/useProviderConfig"
 import { useProviderModels } from "@/hooks/useProviderModels"
 import { StateServiceClient } from "@/services/grpc-client"
+import { ModelDetailsCard } from "./ModelDetailsCard"
 
 const PLINY_PROVIDER_ID = "pliny"
 
@@ -73,19 +77,28 @@ const TriggerLabel = styled.span`
 	white-space: nowrap;
 `
 
-const DropdownMenu = styled.div`
+// Opens upward from the chat input. The details card sits on top of the menu
+// rather than beside it: the chat panel is rarely wide enough for both side by
+// side, and a card overlapping the list would hide the rows being hovered.
+const MenuStack = styled.div`
 	position: absolute;
 	bottom: calc(100% + 4px);
 	left: 0;
-	min-width: 240px;
-	max-width: 360px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	/* Fixed, so the list does not change width when the card appears. */
+	width: min(340px, calc(100vw - 16px));
+	z-index: 1000;
+`
+
+const DropdownMenu = styled.div`
 	max-height: 320px;
 	overflow-y: auto;
 	background: var(--vscode-dropdown-background);
 	border: 1px solid var(--vscode-dropdown-border);
 	border-radius: 4px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
-	z-index: 1000;
 `
 
 const SearchInput = styled.input`
@@ -123,6 +136,13 @@ const ModelName = styled.span`
 	white-space: nowrap;
 `
 
+const ModelMeta = styled.span`
+	flex-shrink: 0;
+	font-size: 10px;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
+`
+
 const SectionLabel = styled.div`
 	padding: 4px 8px 2px;
 	font-size: 9px;
@@ -142,6 +162,12 @@ interface ConversationModelPickerProps {
 	mode: Mode
 }
 
+interface ModelEntry {
+	id: string
+	name: string
+	info: ModelInfo
+}
+
 export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = ({ mode }) => {
 	const { favoritedModelIds } = useExtensionState()
 	const { selectedModelId } = useNormalizedApiConfiguration(mode)
@@ -150,6 +176,7 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 
 	const [isOpen, setIsOpen] = useState(false)
 	const [searchTerm, setSearchTerm] = useState("")
+	const [hoveredId, setHoveredId] = useState<string>()
 	const containerRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
@@ -163,10 +190,11 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 		return () => document.removeEventListener("mousedown", handleClickOutside)
 	}, [isOpen])
 
-	const modelEntries = useMemo(() => {
+	const modelEntries = useMemo((): ModelEntry[] => {
 		return Object.entries(plinyModels).map(([id, info]) => ({
 			id,
 			name: info.name || id,
+			info,
 		}))
 	}, [plinyModels])
 
@@ -174,7 +202,7 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 		const favSet = new Set(favoritedModelIds || [])
 		const favOrdered = (favoritedModelIds || [])
 			.map((id) => modelEntries.find((m) => m.id === id))
-			.filter((m): m is { id: string; name: string } => m !== undefined)
+			.filter((m): m is ModelEntry => m !== undefined)
 		const rest = modelEntries.filter((m) => !favSet.has(m.id))
 		rest.sort((a, b) => a.name.localeCompare(b.name))
 		return { favorited: favOrdered, rest }
@@ -206,71 +234,76 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 		)
 	}
 
-	const displayName = selectedModelId || "Select model..."
+	const displayName = (selectedModelId && plinyModels[selectedModelId]?.name) || selectedModelId || "Select model..."
+	const hovered = hoveredId ? modelEntries.find((m) => m.id === hoveredId) : undefined
+
+	const renderRow = (m: ModelEntry, keyPrefix: string) => {
+		const isFavorite = (favoritedModelIds || []).includes(m.id)
+		const isSelected = m.id === selectedModelId
+		const price = formatRowPrice(m.info, isPlinyRouterModelId(m.id) ? "varies" : "price ?")
+		return (
+			<ModelRow
+				aria-selected={isSelected}
+				isSelected={isSelected}
+				key={`${keyPrefix}${m.id}`}
+				onClick={() => handleSelectModel(m.id)}
+				onMouseEnter={() => setHoveredId(m.id)}
+				role="option">
+				<StarIcon isFavorite={isFavorite} onClick={(e) => toggleFavorite(e, m.id)} />
+				<ModelName>{m.name}</ModelName>
+				<ModelMeta>
+					{formatCompactContext(m.info.contextWindow)} · {price}
+				</ModelMeta>
+			</ModelRow>
+		)
+	}
 
 	return (
 		<DropdownContainer ref={containerRef}>
-			<TriggerButton onClick={() => setIsOpen(!isOpen)} title="Select model" type="button">
+			<TriggerButton
+				onClick={() => {
+					setIsOpen(!isOpen)
+					setHoveredId(undefined)
+				}}
+				title={selectedModelId ? `Select model (current: ${selectedModelId})` : "Select model"}
+				type="button">
 				<TriggerLabel>{displayName}</TriggerLabel>
 				<ChevronDown size={10} style={{ flexShrink: 0 }} />
 			</TriggerButton>
 			{isOpen && (
-				<DropdownMenu role="listbox">
-					<SearchInput
-						autoFocus
-						onChange={(e) => setSearchTerm(e.target.value)}
-						placeholder="Search models..."
-						type="text"
-						value={searchTerm}
-					/>
-					{modelEntries.length === 0 ? (
-						<EmptyState>Loading models...</EmptyState>
-					) : (
-						<>
-							{filteredFavorites.length > 0 && (
-								<>
-									<SectionLabel>Favorites</SectionLabel>
-									{filteredFavorites.map((m) => {
-										const isFavorite = (favoritedModelIds || []).includes(m.id)
-										const isSelected = m.id === selectedModelId
-										return (
-											<ModelRow
-												isSelected={isSelected}
-												key={`fav-${m.id}`}
-												onClick={() => handleSelectModel(m.id)}
-												role="option">
-												<StarIcon isFavorite={isFavorite} onClick={(e) => toggleFavorite(e, m.id)} />
-												<ModelName title={m.id}>{m.name}</ModelName>
-											</ModelRow>
-										)
-									})}
-								</>
-							)}
-							{filteredRest.length > 0 && (
-								<>
-									{filteredFavorites.length > 0 && <SectionLabel>All Models</SectionLabel>}
-									{filteredRest.map((m) => {
-										const isFavorite = (favoritedModelIds || []).includes(m.id)
-										const isSelected = m.id === selectedModelId
-										return (
-											<ModelRow
-												isSelected={isSelected}
-												key={m.id}
-												onClick={() => handleSelectModel(m.id)}
-												role="option">
-												<StarIcon isFavorite={isFavorite} onClick={(e) => toggleFavorite(e, m.id)} />
-												<ModelName title={m.id}>{m.name}</ModelName>
-											</ModelRow>
-										)
-									})}
-								</>
-							)}
-							{filteredFavorites.length === 0 && filteredRest.length === 0 && (
-								<EmptyState>No models match &quot;{searchTerm}&quot;</EmptyState>
-							)}
-						</>
-					)}
-				</DropdownMenu>
+				<MenuStack>
+					{hovered && <ModelDetailsCard modelId={hovered.id} modelInfo={hovered.info} />}
+					<DropdownMenu onMouseLeave={() => setHoveredId(undefined)} role="listbox">
+						<SearchInput
+							autoFocus
+							onChange={(e) => setSearchTerm(e.target.value)}
+							placeholder="Search models..."
+							type="text"
+							value={searchTerm}
+						/>
+						{modelEntries.length === 0 ? (
+							<EmptyState>Loading models...</EmptyState>
+						) : (
+							<>
+								{filteredFavorites.length > 0 && (
+									<>
+										<SectionLabel>Favorites</SectionLabel>
+										{filteredFavorites.map((m) => renderRow(m, "fav-"))}
+									</>
+								)}
+								{filteredRest.length > 0 && (
+									<>
+										{filteredFavorites.length > 0 && <SectionLabel>All Models</SectionLabel>}
+										{filteredRest.map((m) => renderRow(m, ""))}
+									</>
+								)}
+								{filteredFavorites.length === 0 && filteredRest.length === 0 && (
+									<EmptyState>No models match &quot;{searchTerm}&quot;</EmptyState>
+								)}
+							</>
+						)}
+					</DropdownMenu>
+				</MenuStack>
 			)}
 		</DropdownContainer>
 	)

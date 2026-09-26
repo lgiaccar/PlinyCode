@@ -4,7 +4,15 @@ import { useState } from "react"
 import styled from "styled-components"
 import { useProviderModels } from "@/hooks/useProviderModels"
 import { ModelDescriptionMarkdown } from "../ModelDescriptionMarkdown"
-import { formatPrice, hasThinkingBudget, supportsBrowserUse, supportsImages, supportsPromptCache } from "../utils/pricingUtils"
+import {
+	formatCompactContext,
+	formatCompactPrice,
+	formatPrice,
+	hasThinkingBudget,
+	supportsBrowserUse,
+	supportsImages,
+	supportsPromptCache,
+} from "../utils/pricingUtils"
 
 // ========== Styled Components ==========
 
@@ -91,39 +99,6 @@ const ProviderRoutingLabel = styled.label`
 `
 
 // ========== Helper Functions ==========
-
-/**
- * Format price for compact display (e.g., "$5/M" for $5 per million tokens)
- * Price is already in per-million format from OpenRouter
- */
-const formatCompactPrice = (price: number | undefined): string => {
-	if (price === undefined) {
-		return "N/A"
-	}
-	if (price === 0) {
-		return "Free"
-	}
-	if (price < 0.01) {
-		return `$${price.toFixed(4)}/M`
-	}
-	if (price < 1) {
-		return `$${price.toFixed(2)}/M`
-	}
-	return `$${price % 1 === 0 ? price : price.toFixed(2)}/M`
-}
-
-/**
- * Format context window for compact display (e.g., "200K")
- */
-const formatCompactContext = (contextWindow: number | undefined): string => {
-	if (!contextWindow) {
-		return "N/A"
-	}
-	if (contextWindow >= 1_000_000) {
-		return `${(contextWindow / 1_000_000).toFixed(contextWindow % 1_000_000 === 0 ? 0 : 1)}M`
-	}
-	return `${Math.round(contextWindow / 1000)}K`
-}
 
 /**
  * Returns an array of formatted tier strings
@@ -226,13 +201,19 @@ export const ModelInfoView = ({
 						<InfoValue>{formatCompactContext(modelInfo.contextWindow)}</InfoValue>
 					</InfoItem>
 				)}
-				{!hideUsageCost && modelInfo.inputPrice !== undefined && (
+				{!hideUsageCost && modelInfo.pricingUnavailable && (
+					<InfoItem>
+						<InfoLabel>Price: </InfoLabel>
+						<InfoValue>Unknown</InfoValue>
+					</InfoItem>
+				)}
+				{!hideUsageCost && !modelInfo.pricingUnavailable && modelInfo.inputPrice !== undefined && (
 					<InfoItem>
 						<InfoLabel>Input: </InfoLabel>
 						<InfoValue>{formatCompactPrice(modelInfo.inputPrice)}</InfoValue>
 					</InfoItem>
 				)}
-				{!hideUsageCost && modelInfo.outputPrice !== undefined && (
+				{!hideUsageCost && !modelInfo.pricingUnavailable && modelInfo.outputPrice !== undefined && (
 					<InfoItem>
 						<InfoLabel>Output: </InfoLabel>
 						<InfoValue>

@@ -60,6 +60,12 @@ export function fromProtobufModelInfo(protoInfo: OpenRouterModelInfo): ModelInfo
 		tiers: protoInfo.tiers.length > 0 ? protoInfo.tiers : undefined,
 		temperature: protoInfo.temperature,
 		apiFormat: protoInfo.apiFormat,
+		parameters:
+			protoInfo.paramsTotalB !== undefined || protoInfo.paramsActiveB !== undefined
+				? { totalB: protoInfo.paramsTotalB, activeB: protoInfo.paramsActiveB }
+				: undefined,
+		pricingUnavailable: protoInfo.pricingUnavailable,
+		pricingNote: protoInfo.pricingNote,
 	}
 }
 
@@ -84,6 +90,10 @@ export function toProtobufModelInfo(modelInfo: ModelInfo): OpenRouterModelInfo {
 		tiers: modelInfo.tiers || [],
 		temperature: modelInfo.temperature,
 		apiFormat: modelInfo.apiFormat,
+		paramsTotalB: modelInfo.parameters?.totalB,
+		paramsActiveB: modelInfo.parameters?.activeB,
+		pricingUnavailable: modelInfo.pricingUnavailable,
+		pricingNote: modelInfo.pricingNote,
 	})
 }
 
