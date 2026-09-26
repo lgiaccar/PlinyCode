@@ -1,5 +1,5 @@
 import { StringRequest } from "@shared/proto/cline/common"
-import { historyItemWorkspaceDisplayPath, workspacePathBasename } from "@shared/workspacePath"
+import { historyItemWorkspaceDisplayPath, workspacePathLabel } from "@shared/workspacePath"
 import { FolderIcon } from "lucide-react"
 import { memo } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -163,7 +163,7 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 							.slice(0, 3)
 							.map((item) => {
 								const workspacePath = historyItemWorkspaceDisplayPath(item)
-								const workspaceLabel = workspacePath ? workspacePathBasename(workspacePath, platform) : undefined
+								const workspaceLabel = workspacePath ? workspacePathLabel(workspacePath, platform) : undefined
 								return (
 									<div
 										className="history-preview-item"

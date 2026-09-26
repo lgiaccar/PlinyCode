@@ -15,6 +15,7 @@ import { CHAT_CONSTANTS } from "@/components/chat/chat-view/constants"
 import SlashCommandMenu from "@/components/chat/SlashCommandMenu"
 import Thumbnails from "@/components/common/Thumbnails"
 import { getModeSpecificFields } from "@/components/settings/utils/providerUtils"
+import { updateSetting } from "@/components/settings/utils/settingsHandlers"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { usePlatform } from "@/context/PlatformContext"
@@ -70,6 +71,39 @@ const getImageDimensions = (dataUrl: string): Promise<{ width: number; height: n
 
 // Set to "File" option by default
 const DEFAULT_CONTEXT_MENU_OPTION = getContextMenuOptionIndex(ContextMenuOptionType.File)
+
+// Chat prompt textarea max-height drag handle: keeps the resize affordance's clamps
+// and default in one place so the JSX below and any tests agree on the numbers.
+const DEFAULT_CHAT_INPUT_MAX_ROWS = 10
+const MIN_CHAT_INPUT_MAX_ROWS = 3 // never below minRows
+const MAX_CHAT_INPUT_MAX_ROWS = 40 // generous upper bound so a drag can't cover the whole editor
+const DEFAULT_ROW_HEIGHT_PX = 18 // fallback if line-height can't be measured (matches ~13px font * 1.35 line-height)
+
+/**
+ * Reads the textarea's line-height in pixels, the same metric
+ * react-textarea-autosize itself uses to translate maxRows into a max-height.
+ * Falls back to a sane default when the element isn't mounted yet or the
+ * computed line-height can't be parsed (e.g. "normal" in a test environment
+ * without full layout).
+ */
+export function getRowHeightPx(element: HTMLElement | null): number {
+	if (!element) {
+		return DEFAULT_ROW_HEIGHT_PX
+	}
+	const computed = window.getComputedStyle(element)
+	const parsed = Number.parseFloat(computed.lineHeight)
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_ROW_HEIGHT_PX
+}
+
+/**
+ * Converts a vertical drag delta (in pixels, positive = dragging the handle up,
+ * which grows the textarea) into a new maxRows value, clamped to sane bounds.
+ */
+export function rowsFromDrag(startMaxRows: number, deltaYPx: number, rowHeightPx: number): number {
+	const deltaRows = Math.round(-deltaYPx / rowHeightPx)
+	const nextRows = startMaxRows + deltaRows
+	return Math.min(MAX_CHAT_INPUT_MAX_ROWS, Math.max(MIN_CHAT_INPUT_MAX_ROWS, nextRows))
+}
 
 interface ChatTextAreaProps {
 	inputValue: string
@@ -229,6 +263,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			remoteConfigSettings,
 			navigateToSettingsModelPicker,
 			mcpServers,
+			chatInputMaxRows: persistedChatInputMaxRows,
 		} = useExtensionState()
 		const [isTextAreaFocused, setIsTextAreaFocused] = useState(false)
 		const [isDraggingOver, setIsDraggingOver] = useState(false)
@@ -240,6 +275,13 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 		const [thumbnailsHeight, setThumbnailsHeight] = useState(0)
 		const [textAreaBaseHeight, setTextAreaBaseHeight] = useState<number | undefined>(undefined)
+		// User-draggable cap on the textarea's height, in rows (react-textarea-autosize's maxRows).
+		// Starts from the persisted setting and is kept in sync with it (e.g. another window
+		// changing it), except while the user is actively dragging this window's handle.
+		const [maxRows, setMaxRows] = useState<number>(persistedChatInputMaxRows ?? DEFAULT_CHAT_INPUT_MAX_ROWS)
+		const isDraggingMaxHeightRef = useRef(false)
+		const dragStartRef = useRef<{ startY: number; startMaxRows: number; rowHeightPx: number } | null>(null)
+		const [isDraggingMaxHeight, setIsDraggingMaxHeight] = useState(false)
 		const [showContextMenu, setShowContextMenu] = useState(false)
 		const [cursorPosition, setCursorPosition] = useState(0)
 		const [searchQuery, setSearchQuery] = useState("")
@@ -272,6 +314,55 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		// badge and a notice offers to switch models. Unknown capability data fails open, like core does.
 		const modelSupportsImages = selectedModelInfo.supportsImages !== false
 		const unsupportedImagesAttached = selectedImages.length > 0 && !modelSupportsImages
+
+		// Pick up external changes to the persisted setting (e.g. changed in another
+		// window), but don't fight the user's in-progress drag in this one.
+		useEffect(() => {
+			if (isDraggingMaxHeightRef.current) {
+				return
+			}
+			setMaxRows(persistedChatInputMaxRows ?? DEFAULT_CHAT_INPUT_MAX_ROWS)
+		}, [persistedChatInputMaxRows])
+
+		// Drag-to-resize for the textarea's max height. mousemove/mouseup listen on
+		// window for the duration of the drag so the drag keeps tracking even if the
+		// cursor leaves the handle; the setting is only persisted on mouseup so we
+		// don't spam writes on every tick.
+		const handleMaxHeightDragMouseDown = useCallback(
+			(e: React.MouseEvent) => {
+				e.preventDefault()
+				const rowHeightPx = getRowHeightPx(textAreaRef.current)
+				dragStartRef.current = { startY: e.clientY, startMaxRows: maxRows, rowHeightPx }
+				isDraggingMaxHeightRef.current = true
+				setIsDraggingMaxHeight(true)
+
+				const handleMouseMove = (moveEvent: MouseEvent) => {
+					const dragStart = dragStartRef.current
+					if (!dragStart) {
+						return
+					}
+					const deltaY = moveEvent.clientY - dragStart.startY
+					setMaxRows(rowsFromDrag(dragStart.startMaxRows, deltaY, dragStart.rowHeightPx))
+				}
+
+				const handleMouseUp = () => {
+					window.removeEventListener("mousemove", handleMouseMove)
+					window.removeEventListener("mouseup", handleMouseUp)
+					isDraggingMaxHeightRef.current = false
+					setIsDraggingMaxHeight(false)
+					dragStartRef.current = null
+					// Persist on release only, using the latest committed value.
+					setMaxRows((current) => {
+						updateSetting("chatInputMaxRows", current)
+						return current
+					})
+				}
+
+				window.addEventListener("mousemove", handleMouseMove)
+				window.addEventListener("mouseup", handleMouseUp)
+			},
+			[maxRows],
+		)
 
 		// Fetch git commits when Git is selected or when typing a hash
 		useEffect(() => {
@@ -1504,6 +1595,45 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						</div>
 					)}
 					<div
+						aria-label="Drag to resize the prompt box"
+						aria-orientation="horizontal"
+						aria-valuemax={MAX_CHAT_INPUT_MAX_ROWS}
+						aria-valuemin={MIN_CHAT_INPUT_MAX_ROWS}
+						aria-valuenow={maxRows}
+						className="absolute left-3.5 right-3.5 top-1 z-2 rounded-xs"
+						data-testid="chat-textarea-resize-handle"
+						onKeyDown={(e) => {
+							// Keyboard equivalent for the mouse drag: Up/Down grow/shrink by one row.
+							if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+								e.preventDefault()
+								const delta = e.key === "ArrowUp" ? 1 : -1
+								setMaxRows((current) => {
+									const next = Math.min(
+										MAX_CHAT_INPUT_MAX_ROWS,
+										Math.max(MIN_CHAT_INPUT_MAX_ROWS, current + delta),
+									)
+									updateSetting("chatInputMaxRows", next)
+									return next
+								})
+							}
+						}}
+						onMouseDown={handleMaxHeightDragMouseDown}
+						role="slider"
+						style={{
+							height: 5,
+							cursor: "row-resize",
+							// Subtle by default; only calls attention to itself on hover or while dragging,
+							// so it doesn't clutter the input when the user isn't looking to resize it.
+							backgroundColor: isDraggingMaxHeight
+								? "var(--vscode-focusBorder)"
+								: "var(--vscode-scrollbarSlider-background, transparent)",
+							opacity: isDraggingMaxHeight ? 1 : 0.6,
+							transition: isDraggingMaxHeight ? "none" : "background-color 0.1s ease-in-out",
+						}}
+						tabIndex={0}
+						title="Drag to resize the prompt box"
+					/>
+					<div
 						className={cn(
 							"absolute bottom-2.5 top-2.5 whitespace-pre-wrap break-words rounded-xs overflow-hidden",
 							isTextAreaFocused ? "left-3.5 right-3.5" : "left-3.5 right-3.5 border border-input-border",
@@ -1532,7 +1662,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<DynamicTextArea
 						autoFocus={true}
 						data-testid="chat-input"
-						maxRows={10}
+						maxRows={maxRows}
 						minRows={3}
 						onBlur={handleBlur}
 						onChange={(e) => {

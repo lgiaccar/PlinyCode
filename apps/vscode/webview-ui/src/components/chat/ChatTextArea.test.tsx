@@ -1,10 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import ChatTextArea from "./ChatTextArea"
+import ChatTextArea, { getRowHeightPx, rowsFromDrag } from "./ChatTextArea"
 
 const mocks = vi.hoisted(() => ({
 	supportsImages: true as boolean | undefined,
 	navigateToSettingsModelPicker: vi.fn(),
+	chatInputMaxRows: 10 as number | undefined,
+	updateSettings: vi.fn(async () => ({})),
 }))
 
 vi.mock("@/context/ExtensionStateContext", () => ({
@@ -19,6 +21,7 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 		remoteConfigSettings: undefined,
 		navigateToSettingsModelPicker: mocks.navigateToSettingsModelPicker,
 		mcpServers: [],
+		chatInputMaxRows: mocks.chatInputMaxRows,
 		// useProviderModels() refreshes on mount; without these the request
 		// rejects asynchronously and vitest reports an unhandled error.
 		startProviderModelsRequest: vi.fn(),
@@ -49,6 +52,7 @@ vi.mock("@/services/grpc-client", () => ({
 	},
 	StateServiceClient: {
 		togglePlanActModeProto: vi.fn(async () => ({})),
+		updateSettings: mocks.updateSettings,
 	},
 	// ConversationModelPicker -> useProviderConfig() reads the provider config on
 	// mount; without this the call rejects and vitest reports an unhandled error.
@@ -246,5 +250,157 @@ describe("ChatTextArea sticky send mode", () => {
 		localStorage.setItem("plinycode.sendMode", "bogus")
 		const { button } = renderWithSend()
 		expect(button).toHaveClass("codicon-send")
+	})
+})
+
+describe("rowsFromDrag", () => {
+	it("grows maxRows when dragging up (negative deltaY)", () => {
+		expect(rowsFromDrag(10, -36, 18)).toBe(12) // 2 rows taller, 18px per row
+	})
+
+	it("shrinks maxRows when dragging down (positive deltaY)", () => {
+		expect(rowsFromDrag(10, 36, 18)).toBe(8)
+	})
+
+	it("rounds fractional row deltas to the nearest row", () => {
+		expect(rowsFromDrag(10, -20, 18)).toBe(11) // ~1.1 rows -> rounds to 1
+	})
+
+	it("clamps to the minimum of 3 rows", () => {
+		expect(rowsFromDrag(5, 1000, 18)).toBe(3)
+	})
+
+	it("clamps to the maximum of 40 rows", () => {
+		expect(rowsFromDrag(35, -1000, 18)).toBe(40)
+	})
+
+	it("is a no-op for zero delta", () => {
+		expect(rowsFromDrag(10, 0, 18)).toBe(10)
+	})
+})
+
+describe("getRowHeightPx", () => {
+	it("falls back to a default when the element is null", () => {
+		expect(getRowHeightPx(null)).toBeGreaterThan(0)
+	})
+
+	it("reads the line-height from computed style when available", () => {
+		const el = document.createElement("textarea")
+		el.style.lineHeight = "20px"
+		document.body.appendChild(el)
+		expect(getRowHeightPx(el)).toBe(20)
+		document.body.removeChild(el)
+	})
+
+	it("falls back to the default when computed line-height isn't a parseable pixel value", () => {
+		const el = document.createElement("textarea")
+		// jsdom resolves an unset line-height to "normal", which parseFloat can't read.
+		expect(getRowHeightPx(el)).toBeGreaterThan(0)
+	})
+})
+
+describe("ChatTextArea drag-to-resize handle", () => {
+	beforeEach(() => {
+		mocks.chatInputMaxRows = 10
+		mocks.updateSettings.mockClear()
+	})
+
+	function renderTextAreaForResize() {
+		render(
+			<ChatTextArea
+				activeQuote={null}
+				inputValue=""
+				onSelectFilesAndImages={vi.fn()}
+				onSend={vi.fn()}
+				placeholderText="Type a message"
+				selectedFiles={[]}
+				selectedImages={[]}
+				sendingDisabled={false}
+				setInputValue={vi.fn()}
+				setSelectedFiles={vi.fn()}
+				setSelectedImages={vi.fn()}
+				shouldDisableFilesAndImages={false}
+			/>,
+		)
+		return screen.getByTestId("chat-textarea-resize-handle")
+	}
+
+	it("renders the resize handle with the persisted maxRows as its current value", () => {
+		mocks.chatInputMaxRows = 14
+		const handle = renderTextAreaForResize()
+		expect(handle).toHaveAttribute("aria-valuenow", "14")
+	})
+
+	it("defaults to 10 rows when no setting is persisted yet", () => {
+		mocks.chatInputMaxRows = undefined
+		const handle = renderTextAreaForResize()
+		expect(handle).toHaveAttribute("aria-valuenow", "10")
+	})
+
+	it("does not persist while dragging, only on mouseup", () => {
+		const handle = renderTextAreaForResize()
+
+		fireEvent.mouseDown(handle, { clientY: 100 })
+		fireEvent.mouseMove(window, { clientY: 50 }) // drag up: grow
+		fireEvent.mouseMove(window, { clientY: 20 }) // keep dragging
+
+		expect(mocks.updateSettings).not.toHaveBeenCalled()
+		expect(handle).toHaveAttribute("aria-valuenow", "14") // 80px up / 18px default row ~= 4 rows -> 14
+
+		fireEvent.mouseUp(window)
+
+		expect(mocks.updateSettings).toHaveBeenCalledTimes(1)
+	})
+
+	it("stops responding to mousemove after mouseup (listeners cleaned up)", () => {
+		const handle = renderTextAreaForResize()
+
+		fireEvent.mouseDown(handle, { clientY: 100 })
+		fireEvent.mouseUp(window)
+		mocks.updateSettings.mockClear()
+
+		fireEvent.mouseMove(window, { clientY: 0 })
+
+		expect(handle).toHaveAttribute("aria-valuenow", "10") // unchanged after drag ended
+		expect(mocks.updateSettings).not.toHaveBeenCalled()
+	})
+
+	it("clamps growth to the 40-row maximum while dragging", () => {
+		const handle = renderTextAreaForResize()
+
+		fireEvent.mouseDown(handle, { clientY: 10000 })
+		fireEvent.mouseMove(window, { clientY: -10000 })
+
+		expect(handle).toHaveAttribute("aria-valuenow", "40")
+	})
+
+	it("clamps shrinking to the 3-row minimum while dragging", () => {
+		const handle = renderTextAreaForResize()
+
+		fireEvent.mouseDown(handle, { clientY: 0 })
+		fireEvent.mouseMove(window, { clientY: 10000 })
+
+		expect(handle).toHaveAttribute("aria-valuenow", "3")
+	})
+
+	it("ArrowUp/ArrowDown grow and shrink by one row and persist immediately", () => {
+		const handle = renderTextAreaForResize()
+
+		fireEvent.keyDown(handle, { key: "ArrowUp" })
+		expect(handle).toHaveAttribute("aria-valuenow", "11")
+		expect(mocks.updateSettings).toHaveBeenCalledTimes(1)
+
+		fireEvent.keyDown(handle, { key: "ArrowDown" })
+		fireEvent.keyDown(handle, { key: "ArrowDown" })
+		expect(handle).toHaveAttribute("aria-valuenow", "9")
+		expect(mocks.updateSettings).toHaveBeenCalledTimes(3)
+	})
+
+	it("is focusable and exposes slider semantics for keyboard/screen-reader users", () => {
+		const handle = renderTextAreaForResize()
+		expect(handle).toHaveAttribute("role", "slider")
+		expect(handle).toHaveAttribute("tabIndex", "0")
+		expect(handle).toHaveAttribute("aria-valuemin", "3")
+		expect(handle).toHaveAttribute("aria-valuemax", "40")
 	})
 })
