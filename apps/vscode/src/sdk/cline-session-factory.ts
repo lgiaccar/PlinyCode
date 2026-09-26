@@ -37,6 +37,7 @@ import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
 import { stringifyVsCodeLmModelSelector } from "@shared/vsCodeSelectorUtils"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -1219,6 +1220,7 @@ export function createHistoryItemFromSession(
 	modelId?: string,
 	cwd?: string,
 	workspaceRoot?: string,
+	workspace?: WorkspaceRef,
 ): HistoryItem {
 	const trimmedCwd = cwd?.trim() || undefined
 	const trimmedRoot = workspaceRoot?.trim() || trimmedCwd
@@ -1232,5 +1234,6 @@ export function createHistoryItemFromSession(
 		modelId,
 		cwdOnTaskInitialization: trimmedCwd,
 		workspaceRootOnTaskInitialization: trimmedRoot,
+		...(workspace ? { workspacePath: workspace.path, workspaceKind: workspace.kind } : {}),
 	}
 }

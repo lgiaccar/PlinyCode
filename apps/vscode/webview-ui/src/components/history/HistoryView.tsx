@@ -11,6 +11,8 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { formatSize } from "@/utils/format"
 import ViewHeader from "../common/ViewHeader"
+import { useWorkspaces } from "../workspace/useWorkspaces"
+import { WorkspaceSelect, type WorkspaceSelection } from "../workspace/WorkspaceSelect"
 import HistoryViewItem from "./HistoryViewItem"
 
 type HistoryViewProps = {
@@ -31,7 +33,6 @@ const HISTORY_FILTERS = {
 	mostExpensive: "Most Expensive",
 	mostTokens: "Most Tokens",
 	mostRelevant: "Most Relevant",
-	workspaceOnly: "Workspace Only",
 	favoritesOnly: "Favorites Only",
 }
 
@@ -46,7 +47,9 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 	const [deleteAllDisabled, setDeleteAllDisabled] = useState(false)
 	const [selectedItems, setSelectedItems] = useState<string[]>([])
 	const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
-	const [showCurrentWorkspaceOnly, setShowCurrentWorkspaceOnly] = useState(false)
+	// Conversations are bound to workspaces; the window's own is shown by default.
+	const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceSelection>({ kind: "current" })
+	const workspaces = useWorkspaces()
 
 	// Keep track of pending favorite toggle operations
 	const [pendingFavoriteToggles, setPendingFavoriteToggles] = useState<Record<string, boolean>>({})
@@ -77,7 +80,8 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 						favoritesOnly: showFavoritesOnly,
 						searchQuery: searchQuery || undefined,
 						sortBy: sortOption,
-						currentWorkspaceOnly: showCurrentWorkspaceOnly,
+						currentWorkspaceOnly: workspaceFilter.kind === "current",
+						workspacePath: workspaceFilter.kind === "workspace" ? workspaceFilter.workspace.path : "",
 						limit: HISTORY_PAGE_SIZE,
 						offset,
 					}),
@@ -111,7 +115,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 				}
 			}
 		},
-		[showFavoritesOnly, showCurrentWorkspaceOnly, searchQuery, sortOption],
+		[showFavoritesOnly, workspaceFilter, searchQuery, sortOption],
 	)
 
 	const loadMoreTaskHistory = useCallback(() => {
@@ -127,7 +131,25 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 		setHasMoreTasks(false)
 		setNextHistoryOffset(0)
 		loadTaskHistory(0)
-	}, [loadTaskHistory, showFavoritesOnly, showCurrentWorkspaceOnly])
+	}, [loadTaskHistory])
+
+	// Other PlinyCode windows share the same conversations: when the extension
+	// notices a change to the set (a conversation added, renamed, favorited or
+	// deleted elsewhere) it pushes new state, and the list reloads. Keyed on
+	// membership and titles rather than the array itself, which changes on
+	// every state post (usage totals tick while a task streams).
+	const taskHistorySignature = useMemo(
+		() => taskHistory.map((item) => `${item.id}:${item.task}:${item.isFavorited ? 1 : 0}`).join("\n"),
+		[taskHistory],
+	)
+	const lastTaskHistorySignatureRef = useRef(taskHistorySignature)
+	useEffect(() => {
+		if (lastTaskHistorySignatureRef.current === taskHistorySignature) {
+			return
+		}
+		lastTaskHistorySignatureRef.current = taskHistorySignature
+		loadTaskHistory(0)
+	}, [taskHistorySignature, loadTaskHistory])
 
 	const toggleFavorite = useCallback(
 		async (taskId: string, currentValue: boolean) => {
@@ -149,7 +171,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 				)
 
 				// Refresh if either filter is active to ensure proper combined filtering
-				if (showFavoritesOnly || showCurrentWorkspaceOnly) {
+				if (showFavoritesOnly || workspaceFilter.kind !== "all") {
 					await loadTaskHistory(0)
 				}
 			} catch (err) {
@@ -171,7 +193,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 				}, 1000)
 			}
 		},
-		[showFavoritesOnly, showCurrentWorkspaceOnly, loadTaskHistory],
+		[showFavoritesOnly, workspaceFilter, loadTaskHistory],
 	)
 
 	const renameTask = useCallback((taskId: string, title: string) => {
@@ -296,7 +318,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 		const results = searchQuery
 			? fuse
 					.search(searchQuery)
-					?.filter(({ matches }) => matches && matches.length)
+					?.filter(({ matches }) => matches?.length)
 					.map(({ item }) => item)
 			: tasks
 
@@ -317,7 +339,6 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 				case "mostRelevant":
 					// NOTE: you must never sort directly on object since it will cause members to be reordered
 					return searchQuery ? 0 : b.ts - a.ts // Keep fuse order if searching, otherwise sort by newest
-				case "newest":
 				default:
 					return b.ts - a.ts
 			}
@@ -437,9 +458,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 								}
 							}
 							// Handle filter toggles
-							else if (value === "workspaceOnly") {
-								setShowCurrentWorkspaceOnly(!showCurrentWorkspaceOnly)
-							} else if (value === "favoritesOnly") {
+							else if (value === "favoritesOnly") {
 								setShowFavoritesOnly(!showFavoritesOnly)
 							}
 						}}
@@ -452,14 +471,12 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 								const isSortOption = ["newest", "oldest", "mostExpensive", "mostTokens", "mostRelevant"].includes(
 									key,
 								)
-								const isFilterOption = ["workspaceOnly", "favoritesOnly"].includes(key)
+								const isFilterOption = key === "favoritesOnly"
 								const isSelected = isSortOption
 									? sortOption === key
-									: key === "workspaceOnly"
-										? showCurrentWorkspaceOnly
-										: key === "favoritesOnly"
-											? showFavoritesOnly
-											: false
+									: key === "favoritesOnly"
+										? showFavoritesOnly
+										: false
 								const isDisabled = key === "mostRelevant" && !searchQuery
 
 								return (
@@ -471,9 +488,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 										<span className="flex items-center gap-2">
 											{isFilterOption && (
 												<span
-													className={`codicon ${
-														key === "workspaceOnly" ? "codicon-folder" : "codicon-star-full"
-													} ${isSelected ? "text-button-background" : ""}`}
+													className={`codicon codicon-star-full ${isSelected ? "text-button-background" : ""}`}
 												/>
 											)}
 											{value}
@@ -483,6 +498,18 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 							})}
 						</SelectContent>
 					</Select>
+				</div>
+				{/* WORKSPACE FILTER */}
+				<div className="flex items-center gap-1 text-xs text-description">
+					<span className="shrink-0">Workspace</span>
+					<WorkspaceSelect
+						allowAll
+						aria-label="Filter history by workspace"
+						className="min-w-0"
+						onChange={setWorkspaceFilter}
+						value={workspaceFilter}
+						workspaces={workspaces}
+					/>
 				</div>
 			</div>
 
@@ -630,7 +657,7 @@ export const highlight = (fuseSearchResult: FuseResult<any>[], highlightClassNam
 	}
 
 	return fuseSearchResult
-		.filter(({ matches }) => matches && matches.length)
+		.filter(({ matches }) => matches?.length)
 		.map(({ item, matches }) => {
 			const highlightedItem = { ...item }
 

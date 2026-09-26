@@ -59,6 +59,9 @@ message NewTaskRequest {
   repeated string images = 3;
   repeated string files = 4;
   optional Settings task_settings = 5;
+  // Workspace to start the conversation in: a folder path or a .code-workspace
+  // file path (see WorkspaceService). Empty starts it in the window's workspace.
+  string workspace_path = 6;
 }
 
 // Request message for exporting a task as a Markdown document
@@ -118,6 +121,10 @@ message GetTaskHistoryRequest {
   bool current_workspace_only = 5;
   int32 limit = 6;
   int32 offset = 7;
+  // Only conversations bound to this workspace (folder or .code-workspace
+  // path). Ignored when current_workspace_only is set. Empty with
+  // current_workspace_only false lists every workspace.
+  string workspace_path = 8;
 }
 
 // Response for task history
@@ -151,6 +158,12 @@ message TaskItem {
   int64 started_ts = 15;
   // Accumulated time the agent spent running turns (ms). 0 when unknown.
   int64 active_ms = 16;
+  // Workspace the conversation is bound to: a folder path, or the
+  // .code-workspace file for multi-folder workspaces. Falls back to
+  // workspace_root for conversations recorded before workspace binding.
+  string workspace_path = 17;
+  // "folder" or "workspaceFile". Empty when unknown (treated as folder).
+  string workspace_kind = 18;
 }
 
 // Request for ask response operation

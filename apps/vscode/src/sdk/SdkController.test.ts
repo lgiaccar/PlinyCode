@@ -52,6 +52,7 @@ describe("SDK remote-config coordination", () => {
 			isRemoteConfigAvailable: true,
 			currentRemoteConfigRevision: 7,
 			ensureWorkspaceManager: async () => undefined,
+			getWindowWorkspace: async () => undefined,
 			taskHistory: { listHistory: async () => [] },
 			sessions: { getActiveSession: () => undefined },
 			turnStateTracker: { get: () => undefined },
@@ -245,7 +246,7 @@ describe("SDK remote-config coordination", () => {
 
 		expect(taskId).toBe("task-id")
 		expect(events).toEqual(["policy", "task"])
-		expect(initTask).toHaveBeenCalledWith("start immediately", undefined, undefined, undefined, undefined)
+		expect(initTask).toHaveBeenCalledWith("start immediately", undefined, undefined, undefined, undefined, undefined)
 	})
 
 	it("waits for initial remote config before resuming an existing task", async () => {

@@ -78,6 +78,8 @@ function makeChatState(messages: ClineMessage[], overrides: Partial<ChatState> =
 		setPendingUserMessage: vi.fn(),
 		pendingResponse: undefined,
 		setPendingResponse: vi.fn(),
+		nextTaskWorkspace: undefined,
+		setNextTaskWorkspace: vi.fn(),
 		textAreaRef: { current: null },
 		lastMessage: last,
 		secondLastMessage: messages.at(-2),

@@ -10,6 +10,12 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({ turnState: mockTurnState() }),
 }))
 
+vi.mock("@/components/workspace/NewTaskWorkspacePicker", () => ({
+	NewTaskWorkspacePicker: ({ value }: { value?: { path: string } }) => (
+		<div data-testid="new-task-workspace">{value?.path ?? "current"}</div>
+	),
+}))
+
 vi.mock("@/components/chat/ChatTextArea", () => ({
 	default: React.forwardRef<HTMLTextAreaElement, { sendingDisabled: boolean; onSend: () => void }>(
 		({ sendingDisabled, onSend }, ref) => (
@@ -142,5 +148,35 @@ describe("InputSection", () => {
 
 		fireEvent.keyDown(composer, { key: "Enter" })
 		expect(handleSendMessage).not.toHaveBeenCalled()
+	})
+
+	it("offers the workspace picker only while no conversation is open", () => {
+		mockTurnState.mockReturnValue(undefined)
+		const { rerender } = render(
+			<InputSection
+				chatState={makeChatState({
+					task: undefined,
+					nextTaskWorkspace: { path: "/other", kind: "folder", folders: ["/other"] },
+				})}
+				messageHandlers={{ handleSendMessage: vi.fn() } as unknown as MessageHandlers}
+				placeholderText="Type a message"
+				scrollBehavior={makeScrollBehavior()}
+				selectFilesAndImages={vi.fn()}
+				shouldDisableFilesAndImages={false}
+			/>,
+		)
+		expect(screen.getByTestId("new-task-workspace").textContent).toBe("/other")
+
+		rerender(
+			<InputSection
+				chatState={makeChatState({ task: { ts: 1, type: "say", say: "task", text: "hi" } })}
+				messageHandlers={{ handleSendMessage: vi.fn() } as unknown as MessageHandlers}
+				placeholderText="Type a message"
+				scrollBehavior={makeScrollBehavior()}
+				selectFilesAndImages={vi.fn()}
+				shouldDisableFilesAndImages={false}
+			/>,
+		)
+		expect(screen.queryByTestId("new-task-workspace")).toBeNull()
 	})
 })

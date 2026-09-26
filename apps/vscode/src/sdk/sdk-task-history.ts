@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs"
+import { existsSync, type FSWatcher, watch } from "node:fs"
 import path from "node:path"
 import type { ClineCoreListHistoryOptions, SessionHistoryRecord } from "@plinycode/core"
 import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
@@ -7,6 +7,7 @@ import { resolveSessionDataDir } from "@plinycode/shared/storage"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
+import { parseWorkspaceKind } from "@shared/workspaceRef"
 import getFolderSize from "get-folder-size"
 import type { McpHub } from "@/services/mcp/McpHub"
 import type { TelemetryService } from "@/services/telemetry/TelemetryService"
@@ -110,7 +111,18 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.startedTs ? { startedTs: item.startedTs } : {}),
 		...(item.activeMs ? { activeMs: item.activeMs } : {}),
 		...(item.isRenamed ? { isRenamed: true } : {}),
+		// The workspace binding, kept across resumes like the fields above.
+		...(item.workspacePath ? { workspacePath: item.workspacePath, workspaceKind: item.workspaceKind ?? "folder" } : {}),
 	}
+}
+
+/**
+ * The workspace a session record is bound to: the explicit binding written by
+ * task start, or, for records from before workspace binding, the folder the
+ * session ran in.
+ */
+export function sessionRecordWorkspacePath(record: Pick<SessionHistoryRecord, "cwd" | "workspaceRoot" | "metadata">): string {
+	return metadataString(record.metadata, "workspacePath") ?? (record.workspaceRoot || record.cwd || "").trim()
 }
 
 function historyItemToSessionHistoryRecord(item: HistoryItem): SessionHistoryRecord {
@@ -208,6 +220,12 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		startedTs: sessionStartedTs(item),
 		activeMs: metadataNumber(metadata, "activeMs"),
 		isRenamed: metadataBoolean(metadata, "isRenamed") === true || undefined,
+		...(metadataString(metadata, "workspacePath")
+			? {
+					workspacePath: metadataString(metadata, "workspacePath"),
+					workspaceKind: parseWorkspaceKind(metadataString(metadata, "workspaceKind")),
+				}
+			: {}),
 	}
 }
 
@@ -233,12 +251,17 @@ export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord)
 	isLegacy: boolean
 	startedTs: number
 	activeMs: number
+	workspacePath: string
+	workspaceKind: string
 } {
 	const metadata = item.metadata
+	const workspacePath = sessionRecordWorkspacePath(item)
 	return {
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		apiProvider: item.provider ?? "",
 		workspaceRoot: (item.workspaceRoot || item.cwd || "").trim(),
+		workspacePath,
+		workspaceKind: workspacePath ? parseWorkspaceKind(metadataString(metadata, "workspaceKind")) : "",
 		isLegacy:
 			metadataBoolean(metadata, "legacyTask") === true || metadataBoolean(metadata, "migratedFromLegacyTask") === true,
 		startedTs: sessionStartedTs(item) ?? 0,
@@ -259,8 +282,60 @@ export class SdkTaskHistory {
 	private disposed = false
 	private readonly cachedHistoryHostIdleMs = 30_000
 	private readonly metadataHistoryCacheTtlMs = 10_000
+	private sessionDirWatcher?: FSWatcher
+	private sessionDirChangeTimer?: NodeJS.Timeout
 
 	constructor(private readonly options: SdkTaskHistoryOptions) {}
+
+	/**
+	 * Watch the shared sessions directory so conversations started, renamed or
+	 * deleted by another PlinyCode window show up here without a restart. Every
+	 * window reads the same directory, so this is what keeps their histories in
+	 * sync. Changes are coalesced (our own session writes fire it too), the
+	 * metadata cache is dropped and `onChange` runs. Recursive watching covers
+	 * manifest edits inside session folders; where the platform lacks it, only
+	 * session creation and deletion are seen.
+	 */
+	watchSessionChanges(onChange: () => void, debounceMs = 1_000): void {
+		if (this.disposed || this.sessionDirWatcher) {
+			return
+		}
+		const sessionsDir = resolveSessionDataDir()
+		const handleChange = () => {
+			if (this.sessionDirChangeTimer) {
+				clearTimeout(this.sessionDirChangeTimer)
+			}
+			this.sessionDirChangeTimer = setTimeout(() => {
+				this.sessionDirChangeTimer = undefined
+				this.invalidateMetadataHistoryCache()
+				onChange()
+			}, debounceMs)
+			this.sessionDirChangeTimer.unref?.()
+		}
+		for (const recursive of [true, false]) {
+			try {
+				if (!existsSync(sessionsDir)) {
+					return
+				}
+				this.sessionDirWatcher = watch(sessionsDir, { recursive, persistent: false }, handleChange)
+				this.sessionDirWatcher.on("error", (error) => {
+					Logger.warn("[SdkTaskHistory] Sessions directory watcher failed:", error)
+				})
+				return
+			} catch (error) {
+				Logger.warn(`[SdkTaskHistory] Cannot watch sessions directory (recursive=${recursive}):`, error)
+			}
+		}
+	}
+
+	private stopWatchingSessionChanges(): void {
+		if (this.sessionDirChangeTimer) {
+			clearTimeout(this.sessionDirChangeTimer)
+			this.sessionDirChangeTimer = undefined
+		}
+		this.sessionDirWatcher?.close()
+		this.sessionDirWatcher = undefined
+	}
 
 	private getLegacyDataDirs(): (string | undefined)[] {
 		const dirs: (string | undefined)[] = [undefined]
@@ -371,6 +446,7 @@ export class SdkTaskHistory {
 
 	async dispose(): Promise<void> {
 		this.disposed = true
+		this.stopWatchingSessionChanges()
 		this.invalidateMetadataHistoryCache()
 		if (this.cachedHistoryHostPromise) {
 			await this.cachedHistoryHostPromise.catch(() => undefined)
