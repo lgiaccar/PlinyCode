@@ -134,6 +134,8 @@ export interface ExtensionState {
 	webSearchEnabled?: boolean
 	/** `plinycode.updates.prerelease`: the auto-updater also installs pre-releases. */
 	prereleaseUpdatesEnabled?: boolean
+	/** `plinycode.spending.conversationLimit`: USD a conversation may spend before it pauses; 0 = no limit. */
+	conversationSpendingLimit?: number
 	subagentsEnabled?: boolean
 	worktreesEnabled?: ClineFeatureSetting
 	favoritedModelIds: string[]

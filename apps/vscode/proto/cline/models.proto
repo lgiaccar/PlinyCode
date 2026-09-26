@@ -21,6 +21,8 @@ service ModelsService {
   rpc refreshOpenRouterModelsRpc(EmptyRequest) returns (OpenRouterCompatibleModelInfo);
   // Refreshes and returns recommended and free Cline models
   rpc refreshClineRecommendedModelsRpc(EmptyRequest) returns (ClineRecommendedModelsResponse);
+  // Returns the caller's remaining Pliny gateway budget
+  rpc getPlinyBudget(EmptyRequest) returns (PlinyBudgetResponse);
   // Refreshes and returns Hugging Face models
   rpc refreshHuggingFaceModels(EmptyRequest) returns (OpenRouterCompatibleModelInfo);
   // Refreshes and returns OpenAI models
@@ -326,6 +328,21 @@ message ClineRecommendedModelsResponse {
   repeated ClineRecommendedModel recommended = 1;
   repeated ClineRecommendedModel free = 2;
   repeated ClineRecommendedModel cline_pass = 3;
+}
+
+// The binding Pliny gateway budget (the period with the least money left)
+message PlinyBudgetResponse {
+  // False when there is no API key, the gateway is unreachable or reports no budget
+  bool available = 1;
+  double limit = 2;
+  double used = 3;
+  double remaining = 4;
+  double percentage = 5;
+  // Gateway period key, e.g. "cost_per_month"
+  string period = 6;
+  int64 period_end_ms = 7;
+  bool is_blocked = 8;
+  string error = 9;
 }
 
 // Request for fetching OpenAI models

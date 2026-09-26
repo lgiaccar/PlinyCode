@@ -5,6 +5,7 @@ import { TrackWorktreeViewOpenedRequest } from "@shared/proto/cline/worktree"
 import { GitBranch } from "lucide-react"
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import BannerCarousel from "@/components/common/BannerCarousel"
+import PlinyBudgetIndicator from "@/components/common/PlinyBudgetIndicator"
 import WhatsNewModal from "@/components/common/WhatsNewModal"
 import HistoryPreview from "@/components/history/HistoryPreview"
 import { useApiConfigurationHandlers } from "@/components/settings/utils/useApiConfigurationHandlers"
@@ -257,6 +258,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 			/>
 			<div className="overflow-y-auto flex flex-col pb-2.5">
 				<HomeHeader shouldShowQuickWins={shouldShowQuickWins} />
+				<PlinyBudgetIndicator className="self-center mb-2" />
 				{!showWhatsNewModal && (
 					<>
 						<BannerCarousel banners={activeBanners} />

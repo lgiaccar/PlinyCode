@@ -2,7 +2,7 @@
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
-	"version": "0.1.5-test.6",
+	"version": "0.1.5-test.7",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -377,6 +377,12 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Also offer the PlinyCode DevOps MCP server to the editor's own AI chat: Copilot Chat agent mode in VS Code, or the agent in Cursor."
+				},
+				"plinycode.spending.conversationLimit": {
+					"type": "number",
+					"default": 5,
+					"minimum": 0,
+					"markdownDescription": "Maximum spend, in US dollars, for a single conversation. When a conversation reaches it, PlinyCode pauses before the next model call; send a message to continue, which allows another round of the same amount. Set to `0` for no limit."
 				},
 				"plinycode.updates.enabled": {
 					"type": "boolean",

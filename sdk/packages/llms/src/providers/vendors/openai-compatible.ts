@@ -12,6 +12,7 @@ import { ensureFetch, resolveApiKey } from "../http";
 import { splitToolImagesMiddleware } from "../middleware/split-tool-images";
 import { isOpenAIReasoningEraModelId } from "../model-facts";
 import { withContentBlockCacheBreakpoints } from "../routing/anthropic-compatible";
+import { withSafeToolCallIds } from "../routing/tool-call-ids";
 import type { ProviderFactoryResult } from "./types";
 
 type FetchInput = Parameters<typeof fetch>[0];
@@ -251,12 +252,12 @@ export async function createOpenAICompatibleProviderModule(
 		...(config.headers ? { headers: config.headers } : {}),
 		...(providerFetch ? { fetch: providerFetch } : {}),
 		includeUsage: true,
-		transformRequestBody: contentBlockCache
-			? (body: Record<string, unknown>) =>
-					withMaxCompletionTokensForReasoningModels(
-						withContentBlockCacheBreakpoints(body),
-					)
-			: withMaxCompletionTokensForReasoningModels,
+		transformRequestBody: (body: Record<string, unknown>) =>
+			withSafeToolCallIds(
+				withMaxCompletionTokensForReasoningModels(
+					contentBlockCache ? withContentBlockCacheBreakpoints(body) : body,
+				),
+			),
 	} as never);
 	const useOpenRouterImageTransport =
 		context.provider.metadata?.imageTransport === "openrouter" &&

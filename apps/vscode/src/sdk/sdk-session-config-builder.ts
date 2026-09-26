@@ -1,5 +1,5 @@
 import type { CoreSessionConfig } from "@plinycode/core"
-import { createSessionId } from "@plinycode/shared"
+import { type AgentStopControl, createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
@@ -25,6 +25,11 @@ export interface SdkSessionConfigBuilderOptions {
 	 * mistake-limit rows are dropped instead of landing in the displayed task.
 	 */
 	isBackgroundSession?: (sessionId: string | undefined) => boolean
+	/**
+	 * Called before every model call of a foreground session. Returning a
+	 * stop control ends the run there (the conversation spending limit).
+	 */
+	checkSpendingLimit?: () => Promise<AgentStopControl | undefined>
 }
 
 /**
@@ -61,6 +66,22 @@ export class SdkSessionConfigBuilder {
 			},
 			input.cwd,
 		)
+
+		const checkSpendingLimit = this.options.checkSpendingLimit
+		if (checkSpendingLimit) {
+			const baseBeforeModel = config.hooks?.beforeModel
+			config.hooks = {
+				...(config.hooks ?? {}),
+				beforeModel: async (context) => {
+					const baseResult = await baseBeforeModel?.(context)
+					if (baseResult?.stop || isBackground()) {
+						return baseResult
+					}
+					const limitStop = await checkSpendingLimit()
+					return limitStop?.stop ? { ...(baseResult ?? {}), ...limitStop } : baseResult
+				},
+			}
+		}
 
 		// FreeAuto routing. Installed for every session: it is a passthrough
 		// unless the selected model is the virtual router, and installing it

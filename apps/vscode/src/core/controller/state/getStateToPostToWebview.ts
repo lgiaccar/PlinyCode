@@ -9,6 +9,7 @@ import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@pli
 import type { ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
+import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { BannerService } from "@/services/banner/BannerService"
 import { featureFlagsService } from "@/services/feature-flags"
@@ -64,6 +65,7 @@ export async function getStateToPostToWebview(controller: {
 	const compactionStrategy = readCompactionStrategyGlobally()
 	const webSearchEnabled = isModelToolEnabledGlobally("web_search")
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
+	const conversationSpendingLimit = getConversationSpendingLimit()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
 	const userInfo = stateManager.getGlobalStateKey("userInfo")
 	const mcpMarketplaceEnabled = stateManager.getGlobalStateKey("mcpMarketplaceEnabled")
@@ -150,6 +152,7 @@ export async function getStateToPostToWebview(controller: {
 		compactionStrategy,
 		webSearchEnabled,
 		prereleaseUpdatesEnabled,
+		conversationSpendingLimit,
 		subagentsEnabled,
 		userInfo,
 		mcpMarketplaceEnabled,

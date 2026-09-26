@@ -2,6 +2,7 @@ import { workspaceResolver } from "@core/workspace"
 import { openFile as openFileIntegration } from "@integrations/misc/open-file"
 import { Empty, StringRequest } from "@shared/proto/cline/common"
 import { getWorkspacePath } from "@utils/path"
+import * as path from "path"
 import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
 
@@ -12,6 +13,12 @@ import { Controller } from ".."
  * @returns Empty response
  */
 export async function openFileRelativePath(_controller: Controller, request: StringRequest): Promise<Empty> {
+	// Absolute paths open as-is, even when no workspace folder is open.
+	if (request.value && path.isAbsolute(request.value)) {
+		openFileIntegration(request.value)
+		return Empty.create()
+	}
+
 	const workspacePath = await getWorkspacePath()
 
 	if (!workspacePath) {

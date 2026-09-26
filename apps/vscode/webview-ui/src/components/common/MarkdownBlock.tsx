@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
 import { FileServiceClient, StateServiceClient } from "@/services/grpc-client"
+import { isPotentialFilePath, splitTextFilePaths } from "@/utils/filePathDetection"
 import { WithCopyButton } from "./CopyButton"
 import UnsafeImage from "./UnsafeImage"
 
@@ -82,6 +83,7 @@ const MemoizedMarkdownBlock = memo(
 					remarkPreventBoldFilenames,
 					remarkUrlToLink,
 					remarkHighlightActMode,
+					remarkLinkifyTextFilePaths,
 					remarkMarkPotentialFilePaths,
 					() => {
 						return (tree: any) => {
@@ -336,8 +338,30 @@ const PreWithCopyButton = ({ children, ...preProps }: React.HTMLAttributes<HTMLP
 	)
 }
 
-// Regex to detect potential file paths (used in both remark plugin and component)
-const FILE_PATH_REGEX = /^(?!\/)[\w\-./]+(?<!\/)$/
+/**
+ * Custom remark plugin that turns absolute file paths in plain text (e.g.
+ * "The full analysis is at: d:\dev\report.md") into inline code, so
+ * remarkMarkPotentialFilePaths below can offer to open them. Text inside
+ * links is left alone.
+ */
+const remarkLinkifyTextFilePaths = () => {
+	return (tree: Node) => {
+		visit(tree, "text", (node: any, index, parent: any) => {
+			if (!parent || typeof index !== "number" || parent.type === "link" || parent.type === "linkReference") {
+				return
+			}
+			const segments = splitTextFilePaths(node.value)
+			if (!segments) {
+				return
+			}
+			const children = segments.map((segment) =>
+				segment.type === "path" ? { type: "inlineCode", value: segment.value } : { type: "text", value: segment.value },
+			)
+			parent.children.splice(index, 1, ...children)
+			return index + children.length
+		})
+	}
+}
 
 /**
  * Custom remark plugin that marks potential file paths in inline code blocks
@@ -346,7 +370,7 @@ const FILE_PATH_REGEX = /^(?!\/)[\w\-./]+(?<!\/)$/
 const remarkMarkPotentialFilePaths = () => {
 	return (tree: Node) => {
 		visit(tree, "inlineCode", (node: Node & { value: string; data?: any }) => {
-			if (FILE_PATH_REGEX.test(node.value) && !node.value.includes("\n")) {
+			if (isPotentialFilePath(node.value)) {
 				// Mark as potential file path - actual checking happens in React component
 				node.data = node.data || {}
 				node.data.hProperties = node.data.hProperties || {}

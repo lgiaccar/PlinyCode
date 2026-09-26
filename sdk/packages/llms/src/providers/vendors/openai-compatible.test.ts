@@ -153,6 +153,55 @@ describe("createOpenAICompatibleProviderModule wire format", () => {
 		expect(requestBody()).not.toHaveProperty("max_completion_tokens");
 	});
 
+	// Claude on Bedrock (via the Pliny gateway) rejects tool_use ids outside
+	// ^[a-zA-Z0-9-]+$, which ids from other routed models often are.
+	it("sends tool call ids that Bedrock accepts, keeping calls and results paired", async () => {
+		const fetchMock = createFetchMock(
+			jsonCompletionResponse("global.anthropic.claude-sonnet-5"),
+		);
+		const model = await createModel({
+			modelId: "global.anthropic.claude-sonnet-5",
+			fetchMock,
+		});
+
+		await model.doGenerate({
+			prompt: [
+				{ role: "user", content: [{ type: "text", text: "hi" }] },
+				{
+					role: "assistant",
+					content: [
+						{
+							type: "tool-call",
+							toolCallId: "call_abc.def:0",
+							toolName: "read_file",
+							input: { path: "a.txt" },
+						},
+					],
+				},
+				{
+					role: "tool",
+					content: [
+						{
+							type: "tool-result",
+							toolCallId: "call_abc.def:0",
+							toolName: "read_file",
+							output: { type: "text", value: "ok" },
+						},
+					],
+				},
+			],
+			maxOutputTokens: 8_192,
+		});
+
+		const messages = capturedBody(fetchMock).messages as Array<{
+			tool_calls?: Array<{ id: string }>;
+			tool_call_id?: string;
+		}>;
+		const callId = messages[1].tool_calls?.[0].id;
+		expect(callId).toMatch(/^[a-zA-Z0-9-]+$/);
+		expect(messages[2].tool_call_id).toBe(callId);
+	});
+
 	// Regression test for cline/cline#13119: LiteLLM's Anthropic passthrough
 	// emits tool_call deltas whose `index` mirrors the Anthropic content-block
 	// index (1 when a text block precedes the tool call). Older

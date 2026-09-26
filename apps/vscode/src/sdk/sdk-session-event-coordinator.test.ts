@@ -247,6 +247,39 @@ describe("SdkSessionEventCoordinator", () => {
 		})
 	})
 
+	it("stores the task header's conversation totals in history instead of adding deltas", async () => {
+		const transcript: ClineMessage[] = [
+			{ ts: 1, type: "say", say: "task", text: "do it" },
+			{ ts: 2, type: "say", say: "api_req_started", text: JSON.stringify({ tokensIn: 10, tokensOut: 5, cost: 0.5 }) },
+			{
+				ts: 3,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 20, tokensOut: 5, cacheReads: 7, cost: 0.25 }),
+			},
+		]
+		const { coordinator, options, event } = makeCoordinator({
+			task: { taskId: "task-1", messageStateHandler: { getClineMessages: () => transcript } },
+			translation: {
+				messages: [],
+				sessionEnded: false,
+				turnComplete: false,
+				usage: { tokensIn: 20, tokensOut: 5, totalCost: 0.25 },
+			},
+		})
+
+		await coordinator.handleSessionEvent(event)
+
+		expect(options.taskHistory.setTaskUsage).toHaveBeenCalledWith("task-1", {
+			totalCost: 0.75,
+			tokensIn: 30,
+			tokensOut: 10,
+			cacheWrites: 0,
+			cacheReads: 7,
+		})
+		expect(options.taskHistory.updateTaskUsage).not.toHaveBeenCalled()
+	})
+
 	it("zeros usage and api request message cost for free Cline models", async () => {
 		const { coordinator, options, event } = makeCoordinator({
 			isClineFreeModel: vi.fn().mockResolvedValue(true),
@@ -425,6 +458,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		},
 		taskHistory: {
 			updateTaskUsage: vi.fn(),
+			setTaskUsage: vi.fn(),
 		},
 		getTask: vi.fn(() => input.task),
 		postStateToWebview: vi.fn().mockResolvedValue(undefined),
@@ -440,7 +474,10 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 			setRunning: ReturnType<typeof vi.fn>
 		}
 		messages: SdkSessionEventCoordinatorOptions["messages"] & { appendAndEmit: ReturnType<typeof vi.fn> }
-		taskHistory: SdkSessionEventCoordinatorOptions["taskHistory"] & { updateTaskUsage: ReturnType<typeof vi.fn> }
+		taskHistory: SdkSessionEventCoordinatorOptions["taskHistory"] & {
+			updateTaskUsage: ReturnType<typeof vi.fn>
+			setTaskUsage: ReturnType<typeof vi.fn>
+		}
 		postStateToWebview: ReturnType<typeof vi.fn>
 		captureProviderApiError: ReturnType<typeof vi.fn>
 		beginProviderFailureTelemetryTurn: ReturnType<typeof vi.fn>
@@ -467,7 +504,7 @@ function makeActiveSession(input: Partial<{ isRunning: boolean }> = {}) {
 
 interface MakeCoordinatorInput {
 	activeSession: ReturnType<typeof makeActiveSession>
-	task: { taskId: string }
+	task: { taskId: string; messageStateHandler?: { getClineMessages: () => ClineMessage[] } }
 	turnPhase: "streaming" | "resumable"
 	isClineFreeModel: () => Promise<boolean>
 	translation: {

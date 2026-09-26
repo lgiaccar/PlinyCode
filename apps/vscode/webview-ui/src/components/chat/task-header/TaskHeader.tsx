@@ -1,9 +1,11 @@
 import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
 import { RenameTaskRequest } from "@shared/proto/cline/task"
+import { historyItemWorkspaceDisplayPath, workspacePathLabel } from "@shared/workspacePath"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { useCallback, useMemo, useState } from "react"
 import { canRestoreWorkspaceFromMessage, getRestoreWorkspaceDisabledReason } from "@/components/chat/chat-view/utils/messageUtils"
 import UserMessage from "@/components/chat/UserMessage"
+import PlinyBudgetIndicator from "@/components/common/PlinyBudgetIndicator"
 import TaskTitleInput from "@/components/history/TaskTitleInput"
 import { getModeSpecificFields } from "@/components/settings/utils/providerUtils"
 import { useExtensionState } from "@/context/ExtensionStateContext"
@@ -66,6 +68,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		setExpandTaskHeader: setIsTaskExpanded,
 		environment,
 		workspaceRoots,
+		primaryRootIndex,
 		platform,
 	} = useExtensionState()
 
@@ -73,6 +76,14 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 	const renamedTitle = currentTaskItem?.isRenamed ? currentTaskItem.task : undefined
 	const titleText = renamedTitle ?? task.text
 	const highlightedText = useMemo(() => highlightText(titleText, false), [titleText])
+
+	// Workspace the conversation belongs to, shown under the title. Prefers the
+	// folder recorded on the task, falling back to the open primary root.
+	const workspacePath =
+		(currentTaskItem && historyItemWorkspaceDisplayPath(currentTaskItem)) ||
+		workspaceRoots?.[primaryRootIndex ?? 0]?.path ||
+		""
+	const workspaceLabel = workspacePath ? workspacePathLabel(workspacePath, platform) : undefined
 
 	const renameTask = useCallback(
 		(title: string) => {
@@ -160,22 +171,24 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							</div>
 						)}
 					</div>
-					<div className="flex items-center select-none grow min-w-0 gap-1 justify-between">
+					{/* Conversation title, with the workspace name underneath, centred between the button groups */}
+					<div className="flex flex-col items-center justify-center select-none grow min-w-0 px-2 text-center">
 						{isRenaming ? (
 							<TaskTitleInput
 								initialTitle={titleText ?? ""}
 								onCommit={renameTask}
 								onDone={() => setIsRenaming(false)}
 							/>
-						) : isTaskExpanded ? (
-							renamedTitle && (
-								<div className="whitespace-nowrap overflow-hidden text-ellipsis grow min-w-0">
-									<span className="ph-no-capture text-base">{renamedTitle}</span>
-								</div>
-							)
 						) : (
-							<div className="whitespace-nowrap overflow-hidden text-ellipsis grow min-w-0">
-								<span className="ph-no-capture text-base">{highlightedText}</span>
+							<div className="whitespace-nowrap overflow-hidden text-ellipsis w-full min-w-0" title={titleText}>
+								<span className="ph-no-capture text-base">{isTaskExpanded ? titleText : highlightedText}</span>
+							</div>
+						)}
+						{workspaceLabel && (
+							<div
+								className="whitespace-nowrap overflow-hidden text-ellipsis w-full min-w-0 text-xs text-description"
+								title={workspacePath}>
+								{workspaceLabel}
 							</div>
 						)}
 					</div>
@@ -205,9 +218,14 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 				{/* Expand/Collapse Task Details */}
 				{isTaskExpanded && (
 					<div className="flex flex-col break-words" key={`task-details-${currentTaskItem?.id}`}>
-						{currentTaskItem?.startedTs ? (
-							<div className="text-xs text-description">Started {formatStartTime(currentTaskItem.startedTs)}</div>
-						) : null}
+						<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+							{currentTaskItem?.startedTs ? (
+								<div className="text-xs text-description">
+									Started {formatStartTime(currentTaskItem.startedTs)}
+								</div>
+							) : null}
+							<PlinyBudgetIndicator refreshKey={Math.floor(totalCost ?? 0)} />
+						</div>
 						<div className="mt-1">
 							<UserMessage
 								canRestoreWorkspace={canRestoreWorkspaceFromMessage(clineMessages, task.ts)}
