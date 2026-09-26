@@ -209,6 +209,13 @@ export interface AgentToolContext {
 	iteration: number;
 	toolCallId?: string;
 	signal?: AbortSignal;
+	/**
+	 * Aborts when the user sends a steering message while the tool runs.
+	 * Tools that only pass time (waiting, watching a long command) should
+	 * return early so the agent reads the message; tools doing real work
+	 * ignore it.
+	 */
+	userMessageSignal?: AbortSignal;
 	metadata?: Record<string, unknown>;
 	snapshot?: AgentRuntimeStateSnapshot;
 	emitUpdate?: (update: unknown) => void;
