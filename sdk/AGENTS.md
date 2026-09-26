@@ -64,9 +64,11 @@ bun run build:sdk
 Cross-package checks:
 
 ```sh
-bun run types       # typecheck the engine packages (not the extension)
+bun run types       # typecheck every package, including the extension
 bun run test        # engine and extension test suites
-bun run lint        # Biome
+bun run lint        # Biome lint
+bun run format      # Biome formatting and import order (a check; `bun run fix` applies it)
+bun run check       # lint + format + builds + types
 bun run check:docs  # relative links in every tracked markdown file resolve
 ```
 

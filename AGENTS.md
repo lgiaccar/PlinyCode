@@ -36,8 +36,8 @@ Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is
 ## Build / lint / test
 
 - Engine packages (`@plinycode/shared|llms|agents|core`) resolve each other through compiled `dist/` (their `exports` point only at `dist/`, with no `development` source condition). You **must** run `bun run build:sdk` after changing engine source before running the extension or its tests, otherwise imports fail with missing `@plinycode/*` / missing `dist/` errors. Running processes do **not** hot-reload engine source changes — rebuild and restart.
-- `bun run types` typechecks the **engine packages only**. The extension has no `typecheck` script, so it is not included: typecheck it with `cd apps/vscode && bun run check-types`.
-- `bun run lint` and `bun run format` run Biome. `bun run check:docs` checks that relative links in every tracked markdown file resolve, and that every skill in `.claude/skills/` has a valid `name` and `description`.
+- `bun run types` typechecks every package, including the extension (its `typecheck` script runs `check-types`, which regenerates the protobuf code first).
+- `bun run lint` runs Biome's linter, `bun run format` checks formatting and import order, and `bun run fix` applies Biome's fixes. Each covers `sdk/` and the extension, which has its own Biome config. `bun run check` runs lint, format, both builds and `types` in one go, like CI's quality checks. `bun run check:docs` checks that relative links in every tracked markdown file resolve, and that every skill in `.claude/skills/` has a valid `name` and `description`.
 - `bun -F plinycode-dev test:unit` runs the bun-based extension unit suite (no VS Code host needed). `bun run test` runs the engine suites plus the extension's `test` script, which also runs the VS Code integration tests, so it needs a desktop session (on Linux, `xvfb-run`).
 - Some engine tests need `bash`, `bun` and network access on PATH; they fail in environments lacking those, which is an environment artifact rather than a code bug.
 - Two tests in `sdk/packages/core/src/hub/server/index.test.ts` fail with `HubLockHeldError` while a PlinyCode editor is running on the same machine, because it holds the shared hub lock. That's environmental too: close the editor, or ignore those two.
@@ -56,7 +56,7 @@ PRs target the `stage` branch, not `master`. Each workflow in `.github/workflows
 | Workflow          | Runs when the PR changes                                  | What it checks                                                                   |
 | ----------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `docs-check`      | anything                                                  | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
-| `engine-test`     | `sdk/**`                                                  | engine build, `bun run types`, lint, engine tests on Ubuntu and Windows          |
+| `engine-test`     | `sdk/**`                                                  | engine build, `bun run types`, lint and format, engine tests on Ubuntu and Windows |
 | `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock` | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows; testing-platform specs |
 | `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | Playwright e2e on Ubuntu, Windows and macOS                                      |
 

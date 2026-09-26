@@ -14,8 +14,7 @@ export const GENERATED_CLINE_RECOMMENDED_MODELS: ClineRecommendedModelsPayload =
 			{
 				id: "snps-aws-bedrock/global.anthropic.claude-sonnet-5",
 				name: "Claude Sonnet 5",
-				description:
-					"Strongest hosted coder on Pliny; supports prompt caching",
+				description: "Strongest hosted coder on Pliny; supports prompt caching",
 				tags: ["HOSTED"],
 			},
 			{

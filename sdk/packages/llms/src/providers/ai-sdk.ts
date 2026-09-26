@@ -2023,7 +2023,10 @@ async function* emitAiSdkEvents(
 			request,
 		);
 		let outputTextForEstimate: string | undefined;
-		if (normalizedUsage.inputTokens === 0 && normalizedUsage.outputTokens === 0) {
+		if (
+			normalizedUsage.inputTokens === 0 &&
+			normalizedUsage.outputTokens === 0
+		) {
 			try {
 				outputTextForEstimate = await stream.text;
 			} catch {
@@ -2052,7 +2055,9 @@ async function* emitAiSdkEvents(
 						workflowsText: contextSources?.workflowsText,
 						messages: request.messages,
 					},
-					estimatedUsage.inputTokens > 0 ? estimatedUsage.inputTokens : undefined,
+					estimatedUsage.inputTokens > 0
+						? estimatedUsage.inputTokens
+						: undefined,
 				),
 			},
 		};

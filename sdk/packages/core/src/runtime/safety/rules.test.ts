@@ -42,9 +42,7 @@ describe("describeRuleScope", () => {
 		expect(describeRuleScope(rule("a", { applyTo: "**/*.py" }))).toBe(
 			"Applies only when working with files matching: `**/*.py`",
 		);
-		expect(
-			describeRuleScope(rule("b", { globs: "*.tsx, src/**/*.ts" })),
-		).toBe(
+		expect(describeRuleScope(rule("b", { globs: "*.tsx, src/**/*.ts" }))).toBe(
 			"Applies only when working with files matching: `*.tsx`, `src/**/*.ts`",
 		);
 		expect(describeRuleScope(rule("c", { paths: ["docs/**"] }))).toBe(
@@ -95,9 +93,10 @@ describe("listEnabledRulesFromWatcher", () => {
 		} as unknown as UserInstructionConfigWatcher;
 
 		expect(
-			listEnabledRulesFromWatcher(watcher, (filePath) => filePath !== "/w/drop.md").map(
-				(item) => item.name,
-			),
+			listEnabledRulesFromWatcher(
+				watcher,
+				(filePath) => filePath !== "/w/drop.md",
+			).map((item) => item.name),
 		).toEqual(["keep"]);
 		expect(
 			listEnabledRulesFromWatcher(watcher).map((item) => item.name),

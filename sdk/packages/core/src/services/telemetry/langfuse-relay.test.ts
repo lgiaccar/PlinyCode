@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
-import { withLangfuseTraceAttributes } from "@plinycode/llms";
 import { context, trace } from "@opentelemetry/api";
+import { withLangfuseTraceAttributes } from "@plinycode/llms";
 import { expect, it } from "vitest";
 import { OpenTelemetryProvider } from "./OpenTelemetryProvider";
 

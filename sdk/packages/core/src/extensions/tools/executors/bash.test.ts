@@ -878,36 +878,39 @@ describe("createShellExecutor", () => {
 
 	// Killing the whole process tree on abort relies on POSIX process groups.
 	// Windows has no equivalent, so a detached grandchild outlives the parent there.
-	it.skipIf(process.platform === "win32")("finishes abort cleanup before a descendant can outlive the command", async () => {
-		const tempDir = await mkdtemp(join(tmpdir(), "shell-abort-tree-"));
-		const readyPath = join(tempDir, "ready");
-		const descendantPath = join(tempDir, "descendant-survived");
-		const ac = new AbortController();
-		const shell = createShellExecutor();
-		const descendantScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(descendantPath)}, "survived"), 1_000)`;
-		const parentScript = [
-			'const { spawn } = require("node:child_process")',
-			'const { writeFileSync } = require("node:fs")',
-			`spawn(process.execPath, ["-e", ${JSON.stringify(descendantScript)}], { stdio: "ignore" })`,
-			`writeFileSync(${JSON.stringify(readyPath)}, "ready")`,
-			"setInterval(() => {}, 1_000)",
-		].join(";");
+	it.skipIf(process.platform === "win32")(
+		"finishes abort cleanup before a descendant can outlive the command",
+		async () => {
+			const tempDir = await mkdtemp(join(tmpdir(), "shell-abort-tree-"));
+			const readyPath = join(tempDir, "ready");
+			const descendantPath = join(tempDir, "descendant-survived");
+			const ac = new AbortController();
+			const shell = createShellExecutor();
+			const descendantScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(descendantPath)}, "survived"), 1_000)`;
+			const parentScript = [
+				'const { spawn } = require("node:child_process")',
+				'const { writeFileSync } = require("node:fs")',
+				`spawn(process.execPath, ["-e", ${JSON.stringify(descendantScript)}], { stdio: "ignore" })`,
+				`writeFileSync(${JSON.stringify(readyPath)}, "ready")`,
+				"setInterval(() => {}, 1_000)",
+			].join(";");
 
-		try {
-			const execution = shell(
-				{ command: process.execPath, args: ["-e", parentScript] },
-				process.cwd(),
-				{ ...ctx, signal: ac.signal },
-			);
-			await expect.poll(() => fileExists(readyPath)).toBe(true);
-			ac.abort();
-			await expect(execution).rejects.toThrow("aborted");
-			await new Promise((resolve) => setTimeout(resolve, 1_200));
-			expect(await fileExists(descendantPath)).toBe(false);
-		} finally {
-			await rm(tempDir, { recursive: true, force: true });
-		}
-	});
+			try {
+				const execution = shell(
+					{ command: process.execPath, args: ["-e", parentScript] },
+					process.cwd(),
+					{ ...ctx, signal: ac.signal },
+				);
+				await expect.poll(() => fileExists(readyPath)).toBe(true);
+				ac.abort();
+				await expect(execution).rejects.toThrow("aborted");
+				await new Promise((resolve) => setTimeout(resolve, 1_200));
+				expect(await fileExists(descendantPath)).toBe(false);
+			} finally {
+				await rm(tempDir, { recursive: true, force: true });
+			}
+		},
+	);
 
 	it("flushes a trailing incomplete multibyte sequence instead of dropping it", async () => {
 		const shell = createShellExecutor();

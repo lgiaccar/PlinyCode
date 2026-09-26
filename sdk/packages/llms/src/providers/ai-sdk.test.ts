@@ -563,7 +563,8 @@ describe("ai-sdk usage normalization", () => {
 				prompt_tokens: 20000,
 				completion_tokens: 300,
 			});
-			(usage.raw as Record<string, unknown>).cache_creation_input_tokens = 15000;
+			(usage.raw as Record<string, unknown>).cache_creation_input_tokens =
+				15000;
 
 			const normalized = normalizeUsage(usage, undefined, {
 				input: 3,
@@ -590,7 +591,12 @@ describe("ai-sdk usage normalization", () => {
 
 	describe("applyUsageEstimateFallback", () => {
 		it("leaves real provider usage untouched", () => {
-			const usage = { inputTokens: 500, outputTokens: 40, cacheReadTokens: 0, cacheWriteTokens: 0 };
+			const usage = {
+				inputTokens: 500,
+				outputTokens: 40,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+			};
 			const result = applyUsageEstimateFallback(
 				usage,
 				{ systemPrompt: "sys", messages: [], tools: [] },
@@ -601,7 +607,12 @@ describe("ai-sdk usage normalization", () => {
 		});
 
 		it("estimates input and output tokens when the gateway reports all zeros", () => {
-			const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+			const usage = {
+				inputTokens: 0,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+			};
 			const result = applyUsageEstimateFallback(
 				usage,
 				{
@@ -618,7 +629,12 @@ describe("ai-sdk usage normalization", () => {
 		});
 
 		it("estimates zero output tokens when no output text is available", () => {
-			const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+			const usage = {
+				inputTokens: 0,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+			};
 			const result = applyUsageEstimateFallback(
 				usage,
 				{ systemPrompt: "sys", messages: [], tools: [] },
@@ -629,7 +645,12 @@ describe("ai-sdk usage normalization", () => {
 		});
 
 		it("does not treat cache-only usage as missing", () => {
-			const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 500, cacheWriteTokens: 0 };
+			const usage = {
+				inputTokens: 0,
+				outputTokens: 0,
+				cacheReadTokens: 500,
+				cacheWriteTokens: 0,
+			};
 			const result = applyUsageEstimateFallback(
 				usage,
 				{ systemPrompt: "sys", messages: [], tools: [] },
