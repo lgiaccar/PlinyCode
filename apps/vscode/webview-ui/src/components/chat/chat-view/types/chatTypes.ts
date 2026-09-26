@@ -3,6 +3,7 @@
  */
 
 import { ClineAsk, ClineMessage } from "@shared/ExtensionMessage"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import { ListRange, VirtuosoHandle } from "react-virtuoso"
 import { ButtonActionType } from "../shared/buttonConfig"
 
