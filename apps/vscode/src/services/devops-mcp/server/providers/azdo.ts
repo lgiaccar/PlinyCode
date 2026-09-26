@@ -69,9 +69,11 @@ export class AzureDevOpsProvider implements Provider {
 		fetchImpl?: Fetch,
 		auth: Auth = adoAuth(),
 	) {
-		// On-premises Azure DevOps Server: {origin}/{collection}/{project}. Cloud: https://dev.azure.com/{org}/{project}.
+		// On-premises Azure DevOps Server: {origin}/{collection path}/{project}, where the collection path may
+		// itself have multiple segments (e.g. "tfs/ANSYS_Development") that must stay separate path segments,
+		// not one encoded blob. Cloud: https://dev.azure.com/{org}/{project}.
 		const orgUrl = remote.origin
-			? `${remote.origin}/${encodeURIComponent(remote.collection ?? "")}`
+			? `${remote.origin}/${(remote.collection ?? "").split("/").map(encodeURIComponent).join("/")}`
 			: `https://dev.azure.com/${encodeURIComponent(remote.owner)}`
 		this.projectUrl = `${orgUrl}/${encodeURIComponent(remote.project ?? "")}`
 		this.repoUrl = `${this.projectUrl}/_git/${encodeURIComponent(remote.repo)}`
