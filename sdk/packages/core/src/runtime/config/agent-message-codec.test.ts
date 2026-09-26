@@ -1,4 +1,7 @@
-import { EMPTY_CONTENT_TEXT, type MessageWithMetadata } from "@plinycode/shared";
+import {
+	EMPTY_CONTENT_TEXT,
+	type MessageWithMetadata,
+} from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { projectSessionMessagesForDisplay } from "../../session/display-messages";
 import {

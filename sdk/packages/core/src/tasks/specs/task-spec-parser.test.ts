@@ -253,17 +253,20 @@ describe("AgendaTaskSpecFileStore", () => {
 	});
 
 	// Creating a directory symlink on Windows needs elevation (EPERM otherwise).
-	it.skipIf(process.platform === "win32")("rejects a workspace task directory that escapes through a symlink", () => {
-		const root = mkdtempSync(join(tmpdir(), "cline-task-specs-"));
-		const outside = mkdtempSync(join(tmpdir(), "cline-task-specs-outside-"));
-		roots.push(root, outside);
-		mkdirSync(join(root, ".cline"));
-		symlinkSync(outside, join(root, ".cline", "tasks"), "dir");
-		const store = new AgendaTaskSpecFileStore({
-			scope: "workspace",
-			workspaceRoot: root,
-		});
+	it.skipIf(process.platform === "win32")(
+		"rejects a workspace task directory that escapes through a symlink",
+		() => {
+			const root = mkdtempSync(join(tmpdir(), "cline-task-specs-"));
+			const outside = mkdtempSync(join(tmpdir(), "cline-task-specs-outside-"));
+			roots.push(root, outside);
+			mkdirSync(join(root, ".cline"));
+			symlinkSync(outside, join(root, ".cline", "tasks"), "dir");
+			const store = new AgendaTaskSpecFileStore({
+				scope: "workspace",
+				workspaceRoot: root,
+			});
 
-		expect(() => store.ensureSpecsDir()).toThrow("symbolic link");
-	});
+			expect(() => store.ensureSpecsDir()).toThrow("symbolic link");
+		},
+	);
 });

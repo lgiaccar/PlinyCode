@@ -8,6 +8,7 @@ on:
     pull_request:
         branches:
             - master
+            - stage
     workflow_call:
 
 # Set default permissions for all jobs

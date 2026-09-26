@@ -4,7 +4,8 @@ PlinyCode is not on the VS Code Marketplace or Open VSX. It updates itself from 
 <https://github.com/lgiaccar/PlinyCode/releases>. That needs no login or setup, and works on Windows, macOS, Linux
 and Remote-SSH hosts.
 
-In Claude Code, the `/release` skill walks through the steps below.
+In Claude Code, the `/release` skill walks through the steps below. The `/prerelease` skill ticks the `-test.N`
+version on a PR branch and publishes pre-releases (see [Testing a release before users get it](#testing-a-release-before-users-get-it)).
 
 > **The repository is public**, so GitHub releases (and the `.vsix` files) can be downloaded by anyone.
 

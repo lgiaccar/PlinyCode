@@ -54,7 +54,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Duck-typed against `AgentMessagePart` rather than importing the type, to
  * keep this module free of a dependency on `../agent`.
  */
-function splitMessageChars(message: unknown): { conversation: number; other: number } {
+function splitMessageChars(message: unknown): {
+	conversation: number;
+	other: number;
+} {
 	if (!isRecord(message)) {
 		return { conversation: safeStringify(message).length, other: 0 };
 	}
@@ -114,7 +117,10 @@ export function estimateContextBreakdown(
 		conversationChars += split.conversation;
 		otherChars += split.other;
 	}
-	conversationChars = Math.max(0, conversationChars - skillsChars - workflowsChars);
+	conversationChars = Math.max(
+		0,
+		conversationChars - skillsChars - workflowsChars,
+	);
 
 	const raw: ContextBreakdownTokens = {
 		systemPrompt: estimateTokens(systemPromptChars),

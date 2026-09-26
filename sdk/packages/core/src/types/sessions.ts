@@ -1,4 +1,7 @@
-import type { SessionLineage, SessionRuntimeRecordShape } from "@plinycode/shared";
+import type {
+	SessionLineage,
+	SessionRuntimeRecordShape,
+} from "@plinycode/shared";
 import type { SessionSource, SessionStatus } from "./common";
 
 export interface SessionUsageMetadata {

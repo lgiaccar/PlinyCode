@@ -1,6 +1,9 @@
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ToolApprovalRequest, ToolApprovalResult } from "@plinycode/shared";
+import type {
+	ToolApprovalRequest,
+	ToolApprovalResult,
+} from "@plinycode/shared";
 
 export type DesktopToolApprovalOptions = {
 	approvalDir?: string;

@@ -134,6 +134,8 @@
 			"!!**/webview-ui/build",
 			"!!**/generated",
 			"!!**/proto",
+			"!!webview-ui/src/services/grpc-client.ts",
+			"!!tsconfig.test.generated.json",
 			"!!**/tests/specs",
 			"!!**/.kilo",
 			"!!assets/icons/*.svg"

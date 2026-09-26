@@ -31,7 +31,9 @@
 			"@plinycode/llms": ["./packages/llms/src/index.ts"],
 			"@plinycode/llms/browser": ["./packages/llms/src/index.browser.ts"],
 			"@plinycode/shared": ["./packages/shared/src/index.ts"],
-			"@plinycode/shared/automation": ["./packages/shared/src/automation/index.ts"],
+			"@plinycode/shared/automation": [
+				"./packages/shared/src/automation/index.ts"
+			],
 			"@plinycode/shared/browser": ["./packages/shared/src/index.browser.ts"],
 			"@plinycode/shared/db": ["./packages/shared/src/db/index.ts"],
 			"@plinycode/shared/storage": ["./packages/shared/src/storage/index.ts"],

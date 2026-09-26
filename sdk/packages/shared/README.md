@@ -1,9 +1,6 @@
 # [experimental] @plinycode/shared
 
-Package-level docs are centralized:
-
-- Overview: [`packages/README.md`](../README.md)
-- Architecture and interactions: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+For how the engine packages fit together, see [`sdk/AGENTS.md`](../../AGENTS.md).
 
 `@plinycode/shared` owns shared cross-package primitives (session common types/utilities).
 

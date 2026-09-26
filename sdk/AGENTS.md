@@ -1,27 +1,26 @@
 ---
-description: Development reference for the Cline SDK workspace.
+description: Development reference for the PlinyCode engine packages under sdk/.
 globs: "*.ts,*.tsx,*.js,*.jsx,*.json,*.md"
 alwaysApply: true
 ---
 
-# Cline SDK — Development Reference
+# PlinyCode Engine Packages — Development Reference
 
-Quick-reference for active development. For onboarding, workspace setup, publishing, and detailed workflow see [CONTRIBUTING.md](./CONTRIBUTING.md). For architecture and runtime flows see [ARCHITECTURE.md](./ARCHITECTURE.md). For API details see [DOC.md](./DOC.md).
+The packages under `sdk/packages/` are the engine the VS Code extension (`apps/vscode`) runs on. They are not a distributable SDK. Toolchain, repo layout and naming rules are in the root [AGENTS.md](../AGENTS.md); this file covers package boundaries and how to verify engine changes.
 
-## Repository Scope
+## Where to run commands
 
-This file applies to the SDK workspace rooted at this directory (`sdk/`). In this repo, "root" means the SDK workspace root unless explicitly stated otherwise. Ignore the legacy repository root for SDK development except for Git operations or repo-wide searches that are explicitly needed.
-
-Run SDK commands from `sdk/`, not from the legacy repository root. Do not run direct root-level commands such as `bun test sdk/...`; they bypass the SDK workspace setup and can fail to resolve `workspace:*` packages correctly.
+The repo root is the Bun workspace root: `sdk/` has no `package.json`. Run every command below from the repo root.
 
 ## Package Boundaries
 
-### Published SDK Packages
+### Engine Packages
 
 - `@plinycode/shared`: shared contracts, schemas, path helpers, hook engine, extension registry, low-level utilities
 - `@plinycode/llms`: provider settings/config, model catalogs, provider manifests, gateway contracts, handler creation
 - `@plinycode/agents`: stateless agent loop, tool orchestration, hook/extension runtime, event streaming
 - `@plinycode/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools, telemetry. Exposes `@plinycode/core/hub` for discovery, the detached daemon entry, WebSocket clients, and session/UI client adapters, plus `@plinycode/core/hub/daemon-entry` for launching the shared daemon
+- `@plinycode/ui`: shared webview theme and React components. It depends only on `shared` and sits outside the runtime chain below
 
 ### Dependency Direction
 
@@ -30,7 +29,7 @@ flowchart TD
   shared["@plinycode/shared"] --> llms["@plinycode/llms"] & agents["@plinycode/agents"] & core["@plinycode/core"]
   llms --> agents & core
   agents --> core
-  core --> apps["CLI / VS Code / Desktop App"]
+  core --> apps["VS Code extension (apps/vscode)"]
 ```
 
 Rules:
@@ -46,44 +45,44 @@ Route changes to the package that owns the concern:
 - stateless loop, tool orchestration, streaming, hook/extension runtime: `@plinycode/agents`
 - session lifecycle, storage, config watching, default tools, plugin loading, telemetry, hub runtime services, hub discovery, hub daemon spawn, and session-oriented client helpers (`HubSessionClient`, `HubUIClient`, `connectToHub`): `@plinycode/core` (hub pieces live under `src/hub/`)
 - remote-config schemas, managed instruction materialization, blob upload metadata, and OpenTelemetry config normalization: `@plinycode/shared/src/remote-config`
-- host-specific UX or shell behavior: app package
+- host-specific UX or shell behavior: the extension, `apps/vscode`
 
 ## Verifying Changes
 
-Before testing in a fresh worktree, install SDK dependencies from the SDK workspace root:
+In a fresh clone or worktree, install dependencies first:
 
 ```sh
-cd sdk
 bun install --frozen-lockfile
 ```
 
-SDK package exports resolve sibling packages through compiled `dist/` files. If `dist/` is missing, build the SDK packages before running package tests:
+Engine packages resolve each other through their compiled `dist/` output, so build them before running tests or the extension, and again after every engine source change:
 
 ```sh
 bun run build:sdk
 ```
 
-SDK-root commands for cross-package confidence:
+Cross-package checks:
 
 ```sh
-bun run types       # typecheck all packages
-bun run test        # run all tests
-bun run check       # lint + build + typecheck + check-publish
+bun run types       # typecheck every package, including the extension
+bun run test        # engine and extension test suites
+bun run lint        # Biome lint
+bun run format      # Biome formatting and import order (a check; `bun run fix` applies it)
+bun run check       # lint + format + builds + types
+bun run check:docs  # relative links in every tracked markdown file resolve
 ```
 
-For focused verification, prefer workspace package scripts from the SDK root:
+For focused verification, run one package's tests:
 
 ```sh
 bun -F @plinycode/shared test
 bun -F @plinycode/llms test
 bun -F @plinycode/agents test
 bun -F @plinycode/core test:unit
-bun -F @plinycode/cli test:unit
+bun -F @plinycode/ui test
 ```
 
 If a focused test command fails with a missing `@plinycode/*` export or missing `dist/` file, build the relevant dependency package or run `bun run build:sdk`, then rerun the same test command. Treat that as a workspace setup issue, not as evidence of a source-code bug.
-
-If you touch hub/bootstrap/session flows, please update `ARCHITECTURE.md`.
 
 ## Practical Guidance
 
@@ -100,10 +99,8 @@ If you touch hub/bootstrap/session flows, please update `ARCHITECTURE.md`.
 - Move code to the layer that owns the concern and update all call sites
 - If a helper just projects watcher state, keep it with the config layer instead of creating thin runtime wrappers
 
-## Documentation Responsibilities
+## Documentation
 
-- `README.md`: visitor-facing overview. Update when the repo story or package inventory changes.
-- `CONTRIBUTING.md`: onboarding, workflow, publishing. Update when contributor setup or release process changes.
-- `AGENTS.md` (this file): development reference. Update when package boundaries, dependency rules, or change routing changes.
-- `ARCHITECTURE.md`: design, boundaries, runtime flows. Update when system design or architectural constraints change.
-- `DOC.md`: API and behavior reference. Update when exported surfaces, lifecycle semantics, or runtime behavior changes.
+- Each package's `README.md` describes what it exports. Update it when that surface changes.
+- `@plinycode/core`'s message persistence contract is in [packages/core/docs/messages-contract-v1.md](./packages/core/docs/messages-contract-v1.md).
+- This file owns package boundaries, dependency rules and change routing. Update it when those change.

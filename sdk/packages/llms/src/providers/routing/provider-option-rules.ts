@@ -9,6 +9,7 @@ import {
 	isMoonshotKimiModelIdFallback,
 	providerReasoningRouteMatches,
 } from "../model-facts";
+import { plinyThinkingControls } from "../pliny-models";
 import { buildGatewayReasoningOptions } from "./anthropic-compatible";
 import { buildOpenAINativeProviderOptions } from "./generic-compatible";
 import {
@@ -16,7 +17,6 @@ import {
 	buildRoutedGlmReasoningProviderOptionsPatch,
 } from "./glm-thinking";
 import { buildMiniMaxThinkingProviderOptionsPatch } from "./minimax-thinking";
-import { plinyThinkingControls } from "../pliny-models";
 import {
 	hasPlinyThinkingControls,
 	plinyThinkingFields,

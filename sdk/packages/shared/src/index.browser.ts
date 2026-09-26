@@ -128,6 +128,11 @@ export {
 	sanitizeSurrogates,
 	toAiSdkToolResultOutput,
 } from "./llms/ai-sdk-format";
+export {
+	type ContextBreakdownInput,
+	type ContextBreakdownTokens,
+	estimateContextBreakdown,
+} from "./llms/context-breakdown";
 export * from "./llms/gateway";
 export {
 	type Base64MediaValidationFailure,
@@ -235,11 +240,6 @@ export {
 	ReasoningLevelSchema,
 } from "./llms/reasoning-options";
 export { serializeAbortReason } from "./llms/requests";
-export {
-	type ContextBreakdownInput,
-	type ContextBreakdownTokens,
-	estimateContextBreakdown,
-} from "./llms/context-breakdown";
 export {
 	CHARS_PER_TOKEN,
 	estimateRequestInputTokens,

@@ -19,7 +19,6 @@ import type {
 	ProviderErrorClass,
 } from "../agent";
 import type { ExtensionContext } from "../extensions/context";
-import type { ContextBreakdownTokens } from "../llms/context-breakdown";
 import type {
 	AgentExtensionApi,
 	AgentExtensionHooks,
@@ -29,6 +28,7 @@ import type {
 	PluginSetupContext,
 } from "../extensions/contribution-registry";
 import type { HookControl } from "../hooks/contracts";
+import type { ContextBreakdownTokens } from "../llms/context-breakdown";
 import type { GeneratedMedia } from "../llms/media";
 import type { Message, MessageWithMetadata } from "../llms/messages";
 import type { ModelInfo } from "../llms/model-info";

@@ -1,4 +1,8 @@
-import type { AgentConfig, AgentModel, ITelemetryService } from "@plinycode/shared";
+import type {
+	AgentConfig,
+	AgentModel,
+	ITelemetryService,
+} from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const gatewayMock = vi.hoisted(() => {

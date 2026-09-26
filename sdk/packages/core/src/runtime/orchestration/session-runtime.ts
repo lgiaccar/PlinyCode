@@ -16,7 +16,6 @@ import type {
 	AgentPluginPackageSkill,
 } from "../../extensions/agent-plugin";
 import type { UserInstructionConfigService } from "../../extensions/config";
-import type { RuleFileFilter } from "../safety/rules";
 import type {
 	RunCommandExecutionController,
 	ToolExecutors,
@@ -30,6 +29,7 @@ import type {
 } from "../../extensions/tools/team";
 import type { WorkspaceManager } from "../../services/workspace/workspace-manager";
 import type { CoreSessionConfig } from "../../types/config";
+import type { RuleFileFilter } from "../safety/rules";
 
 /**
  * Internal structural alias for the lead-agent handle that

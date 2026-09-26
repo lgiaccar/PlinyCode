@@ -32,6 +32,10 @@ const longRunningCommand = {
 	args: ["-e", "setInterval(() => {}, 1_000)"],
 };
 
+// Log directories are removed on a timer, and on Windows the rm itself may
+// retry for up to 1.5s; expect.poll's 1s default is too tight on busy runners.
+const LOG_REMOVAL_POLL = { timeout: 5_000 };
+
 async function fileExists(path: string): Promise<boolean> {
 	try {
 		await access(path);
@@ -227,7 +231,9 @@ describe("createShellExecutor", () => {
 			});
 			await new Promise((resolve) => setTimeout(resolve, 350));
 			expect(await fileExists(logPath)).toBe(true);
-			await expect.poll(() => fileExists(dirname(logPath))).toBe(false);
+			await expect
+				.poll(() => fileExists(dirname(logPath)), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(dirname(logPath), { recursive: true, force: true });
 		}
@@ -301,7 +307,9 @@ describe("createShellExecutor", () => {
 			expect(await fileExists(staleDirectory)).toBe(false);
 			expect(await fileExists(freshDirectory)).toBe(true);
 			expect(await fileExists(unrelatedDirectory)).toBe(true);
-			await expect.poll(() => fileExists(freshDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(freshDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(tempDirectory, { recursive: true, force: true });
 		}
@@ -352,7 +360,9 @@ describe("createShellExecutor", () => {
 			expect(await fileExists(join(completedDirectory, "completed-at"))).toBe(
 				true,
 			);
-			await expect.poll(() => fileExists(completedDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(completedDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 			expect(await fileExists(liveDirectory)).toBe(true);
 
 			liveCommandExists = false;
@@ -360,7 +370,9 @@ describe("createShellExecutor", () => {
 				.poll(() => fileExists(join(liveDirectory, "active-command.json")))
 				.toBe(false);
 			expect(await fileExists(join(liveDirectory, "completed-at"))).toBe(true);
-			await expect.poll(() => fileExists(liveDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(liveDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(tempDirectory, { recursive: true, force: true });
 		}
@@ -399,7 +411,9 @@ describe("createShellExecutor", () => {
 			expect(await fileExists(join(reusedPidDirectory, "completed-at"))).toBe(
 				true,
 			);
-			await expect.poll(() => fileExists(reusedPidDirectory)).toBe(false);
+			await expect
+				.poll(() => fileExists(reusedPidDirectory), LOG_REMOVAL_POLL)
+				.toBe(false);
 		} finally {
 			await rm(tempDirectory, { recursive: true, force: true });
 		}
@@ -864,36 +878,39 @@ describe("createShellExecutor", () => {
 
 	// Killing the whole process tree on abort relies on POSIX process groups.
 	// Windows has no equivalent, so a detached grandchild outlives the parent there.
-	it.skipIf(process.platform === "win32")("finishes abort cleanup before a descendant can outlive the command", async () => {
-		const tempDir = await mkdtemp(join(tmpdir(), "shell-abort-tree-"));
-		const readyPath = join(tempDir, "ready");
-		const descendantPath = join(tempDir, "descendant-survived");
-		const ac = new AbortController();
-		const shell = createShellExecutor();
-		const descendantScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(descendantPath)}, "survived"), 1_000)`;
-		const parentScript = [
-			'const { spawn } = require("node:child_process")',
-			'const { writeFileSync } = require("node:fs")',
-			`spawn(process.execPath, ["-e", ${JSON.stringify(descendantScript)}], { stdio: "ignore" })`,
-			`writeFileSync(${JSON.stringify(readyPath)}, "ready")`,
-			"setInterval(() => {}, 1_000)",
-		].join(";");
+	it.skipIf(process.platform === "win32")(
+		"finishes abort cleanup before a descendant can outlive the command",
+		async () => {
+			const tempDir = await mkdtemp(join(tmpdir(), "shell-abort-tree-"));
+			const readyPath = join(tempDir, "ready");
+			const descendantPath = join(tempDir, "descendant-survived");
+			const ac = new AbortController();
+			const shell = createShellExecutor();
+			const descendantScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(descendantPath)}, "survived"), 1_000)`;
+			const parentScript = [
+				'const { spawn } = require("node:child_process")',
+				'const { writeFileSync } = require("node:fs")',
+				`spawn(process.execPath, ["-e", ${JSON.stringify(descendantScript)}], { stdio: "ignore" })`,
+				`writeFileSync(${JSON.stringify(readyPath)}, "ready")`,
+				"setInterval(() => {}, 1_000)",
+			].join(";");
 
-		try {
-			const execution = shell(
-				{ command: process.execPath, args: ["-e", parentScript] },
-				process.cwd(),
-				{ ...ctx, signal: ac.signal },
-			);
-			await expect.poll(() => fileExists(readyPath)).toBe(true);
-			ac.abort();
-			await expect(execution).rejects.toThrow("aborted");
-			await new Promise((resolve) => setTimeout(resolve, 1_200));
-			expect(await fileExists(descendantPath)).toBe(false);
-		} finally {
-			await rm(tempDir, { recursive: true, force: true });
-		}
-	});
+			try {
+				const execution = shell(
+					{ command: process.execPath, args: ["-e", parentScript] },
+					process.cwd(),
+					{ ...ctx, signal: ac.signal },
+				);
+				await expect.poll(() => fileExists(readyPath)).toBe(true);
+				ac.abort();
+				await expect(execution).rejects.toThrow("aborted");
+				await new Promise((resolve) => setTimeout(resolve, 1_200));
+				expect(await fileExists(descendantPath)).toBe(false);
+			} finally {
+				await rm(tempDir, { recursive: true, force: true });
+			}
+		},
+	);
 
 	it("flushes a trailing incomplete multibyte sequence instead of dropping it", async () => {
 		const shell = createShellExecutor();
