@@ -5,6 +5,7 @@ import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import type { StateManager } from "@/core/storage/StateManager"
 import { Logger } from "@/shared/services/Logger"
 import { isDirectory } from "@/utils/fs"
@@ -49,6 +50,7 @@ export interface SdkTaskStartCoordinatorOptions {
 		modelId?: string,
 		cwd?: string,
 		workspaceRoot?: string,
+		workspace?: WorkspaceRef,
 	) => HistoryItem
 	/** detachRunning keeps a running task going in the background. */
 	clearTask: (options?: { detachRunning?: boolean }) => Promise<void>
@@ -56,6 +58,20 @@ export interface SdkTaskStartCoordinatorOptions {
 	onAskResponse: (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
 	onCancelTask: () => Promise<void>
 	getWorkspaceRoot: () => Promise<string>
+	/**
+	 * The workspace the window is open on, which new tasks bind to unless the
+	 * caller passes another one. Undefined in an empty window.
+	 */
+	getWindowWorkspace?: () => Promise<WorkspaceRef | undefined>
+	/**
+	 * Tells the controller which workspace the task it is about to run lives in,
+	 * so workspace-root lookups made on the task's behalf (mentions, edits,
+	 * mode rebuilds) resolve there rather than in the window's folder. Called
+	 * after clearTask, with undefined folders when the task runs in the window.
+	 */
+	setActiveTaskWorkspace?: (workspace: WorkspaceRef | undefined, cwd: string) => void
+	/** A task is starting in this workspace; the controller records it as recently used. */
+	onWorkspaceUsed?: (workspace: WorkspaceRef | undefined) => void
 	createTempSessionHost: () => Promise<SdkSessionHost>
 	loadInitialMessages: (reader: SdkSessionHost, taskId: string) => Promise<unknown[] | undefined>
 	resolveContextMentions: (text: string) => Promise<string>
@@ -74,6 +90,7 @@ export class SdkTaskStartCoordinator {
 		files?: string[],
 		historyItem?: HistoryItem,
 		taskSettings?: Partial<Settings>,
+		workspace?: WorkspaceRef,
 	): Promise<string | undefined> {
 		Logger.log(`[SdkController] initTask called: "${prompt?.substring(0, 50)}"`)
 		let taskSessionId: string | undefined
@@ -82,7 +99,9 @@ export class SdkTaskStartCoordinator {
 		try {
 			await this.options.clearTask({ detachRunning: true })
 
-			const cwd = await this.options.getWorkspaceRoot()
+			const { cwd, workspace: boundWorkspace } = await this.resolveTaskWorkspace(workspace)
+			this.options.setActiveTaskWorkspace?.(boundWorkspace, cwd)
+			this.options.onWorkspaceUsed?.(boundWorkspace)
 			const mode = this.getCurrentMode()
 			Logger.log(`[SdkController] Building session config: mode=${mode}, cwd=${cwd}`)
 			const config = await this.options.sessionConfigBuilder.build({
@@ -117,15 +136,23 @@ export class SdkTaskStartCoordinator {
 				sessionId: taskSessionId,
 			}
 
-			const startInput = this.options.buildStartSessionInput(configWithSessionId, {
-				prompt: prompt,
-				images,
-				files,
-				historyItem,
-				taskSettings,
-				cwd,
-				mode,
-			})
+			const startInput = {
+				...this.options.buildStartSessionInput(configWithSessionId, {
+					prompt: prompt,
+					images,
+					files,
+					historyItem,
+					taskSettings,
+					cwd,
+					mode,
+				}),
+				// Bind the session record to its workspace from the first write, so
+				// another window listing history sees the binding before the first
+				// history update lands.
+				...(boundWorkspace
+					? { sessionMetadata: { workspacePath: boundWorkspace.path, workspaceKind: boundWorkspace.kind } }
+					: {}),
+			}
 
 			const task = this.createAndSetTask(taskSessionId)
 			this.emitInitialTaskMessage(taskSessionId, prompt ?? "", images, files)
@@ -153,6 +180,7 @@ export class SdkTaskStartCoordinator {
 				configWithSessionId.modelId,
 				cwd,
 				configWithSessionId.workspaceRoot ?? cwd,
+				boundWorkspace,
 			)
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 			await this.options.postStateToWebview()
@@ -198,6 +226,12 @@ export class SdkTaskStartCoordinator {
 			// workspace root instead.
 			const storedCwd = historyItem.cwdOnTaskInitialization
 			const cwd = storedCwd && (await isDirectory(storedCwd)) ? storedCwd : await this.options.getWorkspaceRoot()
+			this.options.setActiveTaskWorkspace?.(
+				historyItem.workspacePath
+					? { path: historyItem.workspacePath, kind: historyItem.workspaceKind ?? "folder", folders: [cwd] }
+					: undefined,
+				cwd,
+			)
 			const config = await this.options.sessionConfigBuilder.build({
 				cwd,
 				mode: "act",
@@ -221,6 +255,28 @@ export class SdkTaskStartCoordinator {
 		} catch (error) {
 			this.handleReinitError(taskId, error)
 		}
+	}
+
+	/**
+	 * Where a new task runs and which workspace it is bound to. An explicitly
+	 * chosen workspace runs in its first folder, which must exist; otherwise the
+	 * task runs in the window's workspace root and binds to the window's
+	 * workspace (when the window has one).
+	 */
+	private async resolveTaskWorkspace(
+		requested: WorkspaceRef | undefined,
+	): Promise<{ cwd: string; workspace: WorkspaceRef | undefined }> {
+		if (requested) {
+			const folder = requested.folders.find((entry) => entry.trim().length > 0)
+			if (!folder || !(await isDirectory(folder))) {
+				throw new Error(
+					`The workspace folder ${folder ?? requested.path} does not exist. Pick another workspace to start the conversation in.`,
+				)
+			}
+			return { cwd: folder, workspace: requested }
+		}
+		const cwd = await this.options.getWorkspaceRoot()
+		return { cwd, workspace: await this.options.getWindowWorkspace?.() }
 	}
 
 	private getCurrentMode(): Mode {

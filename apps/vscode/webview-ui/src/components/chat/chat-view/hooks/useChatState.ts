@@ -1,4 +1,5 @@
 import { ClineMessage } from "@shared/ExtensionMessage"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChatState, PendingResponse, PendingUserMessage } from "../types/chatTypes"
 
@@ -22,6 +23,8 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 	const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})
 	const [pendingUserMessage, setPendingUserMessage] = useState<PendingUserMessage | undefined>(undefined)
 	const [pendingResponse, setPendingResponse] = useState<PendingResponse | undefined>(undefined)
+	// Where the next conversation starts when it is not the window's workspace.
+	const [nextTaskWorkspace, setNextTaskWorkspace] = useState<WorkspaceRef | undefined>(undefined)
 
 	// Refs
 	const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -81,6 +84,8 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 		setPendingUserMessage,
 		pendingResponse,
 		setPendingResponse,
+		nextTaskWorkspace,
+		setNextTaskWorkspace,
 
 		// Refs
 		textAreaRef,

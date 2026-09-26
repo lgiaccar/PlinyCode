@@ -33,6 +33,7 @@ import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import type { TelemetrySetting } from "@shared/TelemetrySetting"
 import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import { sendChatButtonClickedEvent } from "@/core/controller/ui/subscribeToChatButtonClicked"
 import { renderConversationMarkdown } from "@/core/export/markdown"
 import { defaultMarkdownExportFilename, saveMarkdownExport } from "@/core/export/save-markdown"
@@ -40,7 +41,9 @@ import { parseMentions } from "@/core/mentions"
 import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { clearSdkRemoteConfig, refreshSdkRemoteConfig } from "@/core/storage/remote-config/sdk-refresh"
 import { StateManager } from "@/core/storage/StateManager"
+import { RecentWorkspacesStore } from "@/core/workspace/recent-workspaces-store"
 import { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
+import { workspaceRefFromWindow } from "@/core/workspace/workspace-identity"
 import { HostProvider } from "@/hosts/host-provider"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
@@ -96,7 +99,12 @@ import { SdkSessionHistoryLoader } from "./sdk-session-history-loader"
 import { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
 import { type ClearTaskOptions, SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
-import { SdkTaskHistory, sessionHistoryRecordToHistoryItem, sessionHistoryRecordToTaskItemFields } from "./sdk-task-history"
+import {
+	SdkTaskHistory,
+	sessionHistoryRecordToHistoryItem,
+	sessionHistoryRecordToTaskItemFields,
+	sessionRecordWorkspacePath,
+} from "./sdk-task-history"
 import { SdkTaskStartCoordinator } from "./sdk-task-start-coordinator"
 import { createVscodeSdkTelemetryHandle, type VscodeSdkTelemetryHandle } from "./sdk-telemetry"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
@@ -284,6 +292,16 @@ export class Controller {
 	// translator (which runs synchronously and relativizes the tool paths shown in
 	// the chat view). Warmed in the constructor and refreshed on every call.
 	private lastKnownWorkspaceRoot?: string
+	/**
+	 * The workspace the displayed task runs in, set by task start and resume and
+	 * cleared with the task. While set, getWorkspaceRoot() resolves here, so a
+	 * conversation started in another workspace than the window's keeps its
+	 * mentions, edits and session rebuilds in that workspace.
+	 */
+	private activeTaskWorkspace?: { workspace?: WorkspaceRef; cwd: string }
+	/** Most recently used workspaces, shared with the other windows through a file. */
+	readonly recentWorkspaces = new RecentWorkspacesStore()
+	private windowWorkspaceRecorded = false
 
 	get remoteConfig(): RemoteConfig | undefined {
 		return this.remoteConfigCoreIntegration?.prepared.bundle?.remoteConfig
@@ -565,6 +583,13 @@ export class Controller {
 			// never overlap live-session ids.
 			getMinter: () => this.messageTranslatorState.getMinter(),
 		})
+		// Every window reads the same sessions directory; when another one adds,
+		// renames or deletes a conversation, refresh this window's history too.
+		this.taskHistory.watchSessionChanges(() => {
+			this.postStateToWebview().catch((error) => {
+				Logger.warn("[SdkController] Failed to refresh state after a sessions change:", error)
+			})
+		})
 		this.mode = new SdkModeCoordinator({
 			stateManager: this.stateManager,
 			sessions: this.sessions,
@@ -702,6 +727,7 @@ export class Controller {
 			createHistoryItemFromSession,
 			clearTask: async (options) => {
 				this.pendingClineAuthRetryPrompt = undefined
+				this.activeTaskWorkspace = undefined
 				await this.taskControl.clearTask(options)
 			},
 			setTask: (task) => {
@@ -710,6 +736,16 @@ export class Controller {
 			onAskResponse: (text, images, files, delivery) => this.askResponse(text, images, files, delivery),
 			onCancelTask: () => this.cancelTask(),
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
+			getWindowWorkspace: () => this.getWindowWorkspace(),
+			setActiveTaskWorkspace: (workspace, cwd) => {
+				this.activeTaskWorkspace = { workspace, cwd }
+				this.lastKnownWorkspaceRoot = cwd
+			},
+			onWorkspaceUsed: (workspace) => {
+				if (workspace) {
+					void this.recentWorkspaces.touch(workspace)
+				}
+			},
 			createTempSessionHost: () => this.createRemoteConfigAwareSessionHost(),
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
@@ -1205,6 +1241,10 @@ export class Controller {
 	 * which produces invalid SDK workspace metadata with an empty hint.
 	 */
 	private async getWorkspaceRoot(): Promise<string> {
+		if (this.activeTaskWorkspace) {
+			this.lastKnownWorkspaceRoot = this.activeTaskWorkspace.cwd
+			return this.activeTaskWorkspace.cwd
+		}
 		try {
 			const { paths } = await HostProvider.workspace.getWorkspacePaths({})
 			const workspaceRoot = paths?.find((workspacePath) => workspacePath.trim().length > 0)
@@ -1220,6 +1260,27 @@ export class Controller {
 	}
 
 	private noWorkspaceFallbackPromise?: Promise<string>
+
+	/**
+	 * The workspace this window is open on: its folder, or its .code-workspace
+	 * file when that lists several folders. Undefined in an empty window. The
+	 * first resolution also records it as recently used, so the other windows
+	 * offer it in their pickers.
+	 */
+	async getWindowWorkspace(): Promise<WorkspaceRef | undefined> {
+		try {
+			const { paths, workspaceFile } = await HostProvider.workspace.getWorkspacePaths({})
+			const workspace = workspaceRefFromWindow({ paths: paths ?? [], workspaceFile })
+			if (workspace && !this.windowWorkspaceRecorded) {
+				this.windowWorkspaceRecorded = true
+				void this.recentWorkspaces.touch(workspace)
+			}
+			return workspace
+		} catch (error) {
+			Logger.warn("[SdkController] Failed to resolve the window workspace:", error)
+			return undefined
+		}
+	}
 
 	/**
 	 * Directory used when no workspace folder is open: the SDK's shared chat
@@ -1526,13 +1587,14 @@ export class Controller {
 		files?: string[],
 		historyItem?: HistoryItem,
 		taskSettings?: Partial<Settings>,
+		workspace?: WorkspaceRef,
 	): Promise<string | undefined> {
 		await this.waitForInitialRemoteConfig()
 		// A new task is starting — the agent is about to stream.
 		this.turnStateTracker.set("streaming")
 		// Clear the previous turn's completion signal so this turn's phase is computed fresh.
 		this.messageTranslatorState.clearTurnOutcome()
-		return this.taskStart.initTask(prompt, images, files, historyItem, taskSettings)
+		return this.taskStart.initTask(prompt, images, files, historyItem, taskSettings, workspace)
 	}
 
 	async reinitExistingTaskFromId(taskId: string): Promise<void> {
@@ -1607,6 +1669,7 @@ export class Controller {
 	 */
 	async clearTask(options: ClearTaskOptions = {}): Promise<void> {
 		this.pendingClineAuthRetryPrompt = undefined
+		this.activeTaskWorkspace = undefined
 		// No active task — UI returns to idle (input enabled, no buttons/thinking).
 		this.turnStateTracker.set("idle")
 		await this.taskControl.clearTask(options)
@@ -2292,7 +2355,12 @@ export class Controller {
 		const { favoritesOnly, currentWorkspaceOnly, searchQuery, sortBy } = request
 		const limit = request.limit > 0 ? Math.min(request.limit, 100) : 50
 		const offset = request.offset > 0 ? request.offset : 0
-		const workspacePath = currentWorkspaceOnly ? await this.getWorkspaceRoot() : undefined
+		// Conversations are bound to a workspace identity (docs/workspace-conversations.md).
+		// "Current" is the window's; in an empty window it is the no-workspace chat
+		// folder, which tasks started there record as their root.
+		const workspacePath = currentWorkspaceOnly
+			? ((await this.getWindowWorkspace())?.path ?? (await this.getNoWorkspaceFallback()))
+			: request.workspacePath?.trim() || undefined
 		const sessionHistory = await this.taskHistory.listHistory({
 			hydrate: false,
 			limit: limit + 1,
@@ -2313,8 +2381,8 @@ export class Controller {
 				return false
 			}
 
-			if (currentWorkspaceOnly && workspacePath) {
-				const sessionWorkspacePath = item.workspaceRoot || item.cwd
+			if (workspacePath) {
+				const sessionWorkspacePath = sessionRecordWorkspacePath(item)
 				if (!sessionWorkspacePath || !arePathsEqual(sessionWorkspacePath, workspacePath)) {
 					return false
 				}
@@ -2382,7 +2450,10 @@ export class Controller {
 				.getClineMessages()
 				.find((message) => message.type === "say" && message.say === "task" && message.text)
 			const matchesSearch = !searchQuery || taskMessage?.text?.toLowerCase().includes(searchQuery.toLowerCase())
-			if (taskMessage?.text && matchesSearch) {
+			const activeWorkspace = this.activeTaskWorkspace?.workspace
+			const activeWorkspacePath = activeWorkspace?.path ?? (await this.getWorkspaceRoot())
+			const matchesWorkspace = !workspacePath || arePathsEqual(activeWorkspacePath, workspacePath)
+			if (taskMessage?.text && matchesSearch && matchesWorkspace) {
 				tasks.unshift({
 					id: this.task.taskId,
 					task: formatDisplayUserInput(taskMessage.text),
@@ -2397,6 +2468,8 @@ export class Controller {
 					modelId: this.task.api?.getModel?.().id ?? "",
 					apiProvider: "",
 					workspaceRoot: await this.getWorkspaceRoot(),
+					workspacePath: activeWorkspacePath,
+					workspaceKind: activeWorkspace?.kind ?? "folder",
 					isLegacy: false,
 					startedTs: taskMessage.ts || 0,
 					activeMs: 0,
@@ -2670,6 +2743,12 @@ export class Controller {
 						totalCost: 0,
 						modelId: this.task.api?.getModel?.().id,
 						cwdOnTaskInitialization: await this.getWorkspaceRoot(),
+						...(this.activeTaskWorkspace?.workspace
+							? {
+									workspacePath: this.activeTaskWorkspace.workspace.path,
+									workspaceKind: this.activeTaskWorkspace.workspace.kind,
+								}
+							: {}),
 					})
 				}
 			}
@@ -2700,6 +2779,7 @@ export class Controller {
 			const runningSince = activeSession?.sessionId === currentHistoryItem?.id ? activeSession?.runningSince : undefined
 			return {
 				...state,
+				currentWorkspace: await this.getWindowWorkspace(),
 				currentTaskItem:
 					currentHistoryItem && runningSince !== undefined
 						? { ...currentHistoryItem, runningSinceTs: runningSince }
@@ -2761,7 +2841,10 @@ export class Controller {
 
 	async ensureWorkspaceManager(): Promise<WorkspaceRootManager | undefined> {
 		try {
-			const { paths } = await HostProvider.workspace.getWorkspacePaths({})
+			// A task started in another workspace than the window's searches and
+			// resolves @-mentions in that workspace's folders, not the window's.
+			const taskFolders = this.activeTaskWorkspace?.workspace?.folders.filter((folder) => folder.trim()) ?? []
+			const { paths } = taskFolders.length > 0 ? { paths: taskFolders } : await HostProvider.workspace.getWorkspacePaths({})
 			// When no workspace folder is open, fall back to the active session's
 			// working directory (if known) or the shared chat workspace, the same
 			// root getWorkspaceRoot() gives sessions. The legacy Controller always

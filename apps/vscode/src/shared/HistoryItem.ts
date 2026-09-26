@@ -1,3 +1,5 @@
+import type { WorkspaceKind } from "./workspaceRef"
+
 export type HistoryItem = {
 	id: string
 	ulid?: string // ULID for better tracking and metrics
@@ -13,6 +15,13 @@ export type HistoryItem = {
 	cwdOnTaskInitialization?: string
 	/** VS Code workspace root when the task started; used for history context when it differs from cwd. */
 	workspaceRootOnTaskInitialization?: string
+	/**
+	 * Workspace the conversation is bound to: a folder path, or the
+	 * .code-workspace file of a multi-folder workspace. Absent for conversations
+	 * recorded before workspace binding, which are bound to their workspace root.
+	 */
+	workspacePath?: string
+	workspaceKind?: WorkspaceKind
 	conversationHistoryDeletedRange?: [number, number]
 	isFavorited?: boolean
 

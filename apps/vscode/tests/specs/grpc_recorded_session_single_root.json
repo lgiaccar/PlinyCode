@@ -58,7 +58,8 @@
 				"message": {
 					"text": "Hello, Cline!",
 					"images": [],
-					"files": []
+					"files": [],
+					"workspacePath": ""
 				}
 			},
 			"status": "completed",

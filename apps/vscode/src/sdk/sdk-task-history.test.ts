@@ -7,7 +7,13 @@ import type { TelemetryService } from "@/services/telemetry/TelemetryService"
 import { deleteLegacyTask, readApiConversationHistory, readTaskHistory, readUiMessages } from "./legacy-state-reader"
 import { sdkMessagesToClineMessages } from "./message-translator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
-import { SdkTaskHistory, sessionHistoryRecordToHistoryItem, sessionHistoryRecordToTaskItemFields } from "./sdk-task-history"
+import {
+	historyItemToSessionMetadata,
+	SdkTaskHistory,
+	sessionHistoryRecordToHistoryItem,
+	sessionHistoryRecordToTaskItemFields,
+	sessionRecordWorkspacePath,
+} from "./sdk-task-history"
 import type { VscodeSessionHost } from "./vscode-session-host"
 
 vi.mock("@/core/storage/disk", () => ({
@@ -137,6 +143,38 @@ describe("SdkTaskHistory", () => {
 		// onto each TaskItem row; workspaceRoot prefers the session workspace root over cwd.
 		const taskItemFields = sessionHistoryRecordToTaskItemFields(record)
 		expect(taskItemFields.workspaceRoot).toBe("/repo")
+	})
+
+	it("carries the workspace binding through metadata, HistoryItem and TaskItem, and defaults older records to their root", () => {
+		const bound = makeSessionRecord("task-bound", {
+			cwd: "/repo/a",
+			workspaceRoot: "/repo/a",
+			metadata: { title: "Bound", workspacePath: "/repo/all.code-workspace", workspaceKind: "workspaceFile" },
+		})
+		const boundItem = sessionHistoryRecordToHistoryItem(bound)
+		expect(boundItem.workspacePath).toBe("/repo/all.code-workspace")
+		expect(boundItem.workspaceKind).toBe("workspaceFile")
+		expect(sessionHistoryRecordToTaskItemFields(bound)).toMatchObject({
+			workspaceRoot: "/repo/a",
+			workspacePath: "/repo/all.code-workspace",
+			workspaceKind: "workspaceFile",
+		})
+		expect(sessionRecordWorkspacePath(bound)).toBe("/repo/all.code-workspace")
+		// Writing the item back keeps the binding on the record.
+		expect(historyItemToSessionMetadata(boundItem)).toMatchObject({
+			workspacePath: "/repo/all.code-workspace",
+			workspaceKind: "workspaceFile",
+		})
+
+		const unbound = makeSessionRecord("task-unbound", { cwd: "/repo/b", workspaceRoot: "/repo" })
+		const unboundItem = sessionHistoryRecordToHistoryItem(unbound)
+		expect(unboundItem.workspacePath).toBeUndefined()
+		expect(sessionHistoryRecordToTaskItemFields(unbound)).toMatchObject({
+			workspacePath: "/repo",
+			workspaceKind: "folder",
+		})
+		expect(sessionRecordWorkspacePath(unbound)).toBe("/repo")
+		expect(historyItemToSessionMetadata(unboundItem)).not.toHaveProperty("workspacePath")
 	})
 
 	it("falls back to workspaceRoot for the TaskItem workspace field when cwd is unset", () => {

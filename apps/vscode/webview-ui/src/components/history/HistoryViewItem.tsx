@@ -1,6 +1,6 @@
 import { StringRequest } from "@shared/proto/cline/common"
 import { ExportTaskRequest, type TaskItem } from "@shared/proto/cline/task"
-import { workspacePathLabel } from "@shared/workspacePath"
+import { parseWorkspaceKind, workspaceRefLabel } from "@shared/workspaceRef"
 import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import {
 	ArrowDownIcon,
@@ -52,8 +52,11 @@ const HistoryViewItem = ({
 	const isCostVisible = useUsageCostVisibility()
 	const { platform } = useExtensionState()
 
-	const workspaceRoot = item.workspaceRoot?.trim()
-	const workspaceLabel = workspaceRoot ? workspacePathLabel(workspaceRoot, platform) : undefined
+	// The bound workspace (folder or .code-workspace file); older items only have a root.
+	const workspaceRoot = item.workspacePath?.trim() || item.workspaceRoot?.trim()
+	const workspaceLabel = workspaceRoot
+		? workspaceRefLabel({ path: workspaceRoot, kind: parseWorkspaceKind(item.workspaceKind) }, platform)
+		: undefined
 
 	const isFavoritedItem = useMemo(
 		() => pendingFavoriteToggles[item.id] ?? item.isFavorited,

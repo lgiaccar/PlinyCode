@@ -3,6 +3,7 @@
  */
 
 import { ClineAsk, ClineMessage } from "@shared/ExtensionMessage"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import { ListRange, VirtuosoHandle } from "react-virtuoso"
 import { ButtonActionType } from "../shared/buttonConfig"
 
@@ -49,6 +50,9 @@ export interface ChatState {
 	setPendingUserMessage: React.Dispatch<React.SetStateAction<PendingUserMessage | undefined>>
 	pendingResponse: PendingResponse | undefined
 	setPendingResponse: React.Dispatch<React.SetStateAction<PendingResponse | undefined>>
+	/** Workspace the next conversation starts in; undefined means the window's own. */
+	nextTaskWorkspace: WorkspaceRef | undefined
+	setNextTaskWorkspace: React.Dispatch<React.SetStateAction<WorkspaceRef | undefined>>
 
 	// Refs
 	textAreaRef: React.RefObject<HTMLTextAreaElement>

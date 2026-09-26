@@ -2,6 +2,7 @@ import { String } from "@shared/proto/cline/common"
 import { PlanActMode } from "@shared/proto/cline/state"
 import { NewTaskRequest } from "@shared/proto/cline/task"
 import { Settings } from "@shared/storage/state-keys"
+import { resolveWorkspaceRef } from "@/core/workspace/workspace-identity"
 import { convertProtoToApiProvider } from "@/shared/proto-conversions/models/api-configuration-conversion"
 import { DEFAULT_BROWSER_SETTINGS } from "../../../shared/BrowserSettings"
 import { Controller } from ".."
@@ -69,6 +70,17 @@ export async function newTask(controller: Controller, request: NewTaskRequest): 
 		}).filter(([_, value]) => value !== undefined),
 	)
 
-	const taskId = await controller.initTask(request.text, request.images, request.files, undefined, filteredTaskSettings)
+	// A workspace other than the window's: the conversation runs in its first
+	// folder and is bound to it (docs/workspace-conversations.md).
+	const workspacePath = request.workspacePath?.trim()
+	const workspace = workspacePath ? await resolveWorkspaceRef(workspacePath) : undefined
+	const taskId = await controller.initTask(
+		request.text,
+		request.images,
+		request.files,
+		undefined,
+		filteredTaskSettings,
+		workspace,
+	)
 	return String.create({ value: taskId || "" })
 }
