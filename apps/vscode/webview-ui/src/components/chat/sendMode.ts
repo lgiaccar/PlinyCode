@@ -22,7 +22,8 @@ export const SEND_MODE_META: Record<SendMode, { icon: string; label: string; too
 	steer: {
 		icon: "codicon-zap",
 		label: "Send now (steering)",
-		tooltip: "Send now (steering): the agent reads your message at its next step, without stopping the current turn",
+		tooltip:
+			"Send now (steering): the agent reads your message right away, without stopping the task. A reply in progress, a wait or a long command stops holding it back.",
 	},
 	schedule: {
 		icon: "codicon-watch",

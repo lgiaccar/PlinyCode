@@ -628,6 +628,11 @@ export class AgentRuntime {
 	private initialization?: Promise<void>;
 	private abortController?: AbortController;
 	private modelSteerController?: AbortController;
+	/**
+	 * Aborted when a steering message arrives; handed to tools as
+	 * `userMessageSignal`. Replaced whenever pending messages are consumed.
+	 */
+	private userMessageController = new AbortController();
 	private readonly telemetryProviderId?: string;
 	private readonly telemetryModelId?: string;
 
@@ -657,9 +662,14 @@ export class AgentRuntime {
 		return this.execute(input);
 	}
 
-	/** Interrupt only the current model request; running tools finish normally. */
+	/**
+	 * Interrupt the current model request and signal running tools, so the
+	 * message is read at once. Tools that only pass time (wait, a long command)
+	 * return early; other tools finish normally.
+	 */
 	notifyPendingUserMessage(): void {
 		this.modelSteerController?.abort();
+		this.userMessageController.abort();
 	}
 
 	abort(reason?: unknown): void {
@@ -826,6 +836,9 @@ export class AgentRuntime {
 		}
 
 		this.abortController = new AbortController();
+		// A steer notified during the previous run was consumed or drained as
+		// this run's prompt; it must not cut this run's tools short.
+		this.userMessageController = new AbortController();
 		this.state.runId = createUID("run");
 		this.state.status = "running";
 		this.state.iteration = 0;
@@ -1368,6 +1381,8 @@ export class AgentRuntime {
 			Date.now() - taskLifecycleStartedAt;
 
 		if (this.state.iteration > 1) {
+			// Messages that arrive from here on belong to the next step's tools.
+			this.userMessageController = new AbortController();
 			const pendingUserMessage = await this.consumePendingUserMessage();
 			if (pendingUserMessage) {
 				request = {
@@ -2219,6 +2234,7 @@ export class AgentRuntime {
 					iteration: this.state.iteration,
 					toolCallId: prepared.toolCall.toolCallId,
 					signal: this.abortController?.signal,
+					userMessageSignal: this.userMessageController.signal,
 					metadata: this.config.toolContextMetadata,
 					snapshot: this.snapshot(),
 					emitUpdate: (update: unknown) => {

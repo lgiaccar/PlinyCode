@@ -140,7 +140,9 @@ export class SdkFollowupCoordinator {
 		delivery?: "queue" | "steer",
 	): Promise<void> {
 		const { sdkHost, sessionId } = activeSession
-		Logger.log(`[SdkController] Session is running - queuing follow-up message for session: ${sessionId}`)
+		Logger.log(
+			`[SdkController] Session is running - queuing follow-up message (delivery=${delivery ?? "queue"}) for session: ${sessionId}`,
+		)
 
 		this.options.sessions.setRunning(true)
 		const resolvedPrompt = prompt ? await this.options.resolveContextMentions(prompt) : ""

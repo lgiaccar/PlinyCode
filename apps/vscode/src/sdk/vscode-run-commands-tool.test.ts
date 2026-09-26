@@ -607,6 +607,41 @@ describe("executeForeground — Proceed While Running", () => {
 		fs.rmSync(logFilePath!, { force: true })
 	})
 
+	it("a steering message detaches the command so the agent reads it now", async () => {
+		const { process, emitLine, complete } = createControllableTerminalProcess()
+		const steer = new AbortController()
+		const resultPromise = executeForeground(
+			"nsys profile ./bench",
+			"/workspace",
+			createFakeTerminalManager(process),
+			100_000,
+			new AbortController().signal,
+			undefined,
+			undefined,
+			undefined,
+			steer.signal,
+		)
+
+		await waitFor(() => process.listenerCount("line") > 0)
+		emitLine("profiling started")
+		steer.abort()
+		const result = await resultPromise
+
+		expect(result).toContain("The user sent a new message")
+		expect(result).toContain("profiling started")
+		const logFilePath = /redirected to this file[^:]*: (.+)$/m.exec(result)?.[1]?.trim()
+		expect(logFilePath).toBeTruthy()
+		complete({ exitCode: 0 })
+		await waitFor(() => {
+			try {
+				return fs.readFileSync(logFilePath!, "utf8").includes("[Command completed with exit code 0]")
+			} catch {
+				return false
+			}
+		})
+		fs.rmSync(logFilePath!, { force: true })
+	})
+
 	it("detach returns the partial output with the log file path, and later output lands in the log", async () => {
 		const coordinator = new SdkForegroundCommandCoordinator()
 		const { process, emitLine, complete } = createControllableTerminalProcess()
