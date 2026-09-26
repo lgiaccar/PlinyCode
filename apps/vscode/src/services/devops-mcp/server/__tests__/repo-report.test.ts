@@ -42,7 +42,7 @@ describe("parseRemote", () => {
 	})
 
 	it("auto-detects an on-premises Azure DevOps Server (TFS) from its `_git` path, without DEVOPS_MCP_PROVIDER", () => {
-		expect(parseRemote("https://ado.internal.example.com/tfs/MyCollection/MyProject/_git/my-repo")).toEqual({
+		expect(parseRemote("https://ado.internal.example.com/MyCollection/MyProject/_git/my-repo")).toEqual({
 			kind: "ado",
 			host: "ado.internal.example.com",
 			owner: "MyCollection",
@@ -53,15 +53,33 @@ describe("parseRemote", () => {
 		})
 	})
 
-	it("parses an on-premises ssh:// remote with a port, defaulting the API origin to https", () => {
-		expect(parseRemote("ssh://ado.internal.example.com:22/tfs/MyCollection/MyProject/_git/my-repo")).toEqual({
+	it("keeps a multi-segment collection path (app virtual directory + collection) intact, not just the last segment", () => {
+		// Real-world shape: https://ado.internal.synopsys.com/tfs/ANSYS_Development/Meshing/_git/GPUSurfer.
+		// "tfs" here is the server's application path, "ANSYS_Development" the actual collection; both must
+		// survive into `collection` and the rebuilt API URL, not just whichever segment sits next to `project`.
+		expect(parseRemote("https://ado.internal.synopsys.com/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")).toEqual({
 			kind: "ado",
-			host: "ado.internal.example.com",
-			owner: "MyCollection",
-			repo: "my-repo",
-			project: "MyProject",
-			collection: "MyCollection",
-			origin: "https://ado.internal.example.com:22",
+			host: "ado.internal.synopsys.com",
+			owner: "tfs/ANSYS_Development",
+			repo: "GPUSurfer",
+			project: "Meshing",
+			collection: "tfs/ANSYS_Development",
+			origin: "https://ado.internal.synopsys.com",
+		})
+	})
+
+	it("parses an on-premises ssh:// remote, ignoring its git SSH port for the REST API origin", () => {
+		// The real GPUSurfer remote: `git remote -v` on D:\dev0\GPUSurfer shows exactly this URL. Port 22 is
+		// the SSH port for `git clone`/`git push`; the server's REST API is plain HTTPS on its own port, so
+		// this must NOT become `https://tfs.ansys.com:22`.
+		expect(parseRemote("ssh://tfs.ansys.com:22/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")).toEqual({
+			kind: "ado",
+			host: "tfs.ansys.com",
+			owner: "tfs/ANSYS_Development",
+			repo: "GPUSurfer",
+			project: "Meshing",
+			collection: "tfs/ANSYS_Development",
+			origin: "https://tfs.ansys.com",
 		})
 	})
 })
