@@ -15,11 +15,18 @@ export interface Remote {
 	/** Azure DevOps only. */
 	project?: string
 	/**
-	 * Azure DevOps Server (on-premises) only: the collection path segment (e.g. `tfs` or `DefaultCollection`)
-	 * and the scheme/port to reach it with, since an on-prem server isn't always plain `https://{host}`.
+	 * Azure DevOps Server (on-premises) only: the full path prefix before `{project}/_git/{repo}` — e.g.
+	 * `tfs/ANSYS_Development` for `https://host/tfs/ANSYS_Development/{project}/_git/{repo}`. This can be a
+	 * bare collection, or an application virtual directory (`tfs`) followed by the collection; either way it
+	 * must be re-inserted verbatim ahead of `{project}` when building the REST API base URL.
 	 */
 	collection?: string
-	/** Azure DevOps Server (on-premises) only: `{scheme}://{host}[:port]`, defaulting to `https://{host}`. */
+	/**
+	 * Azure DevOps Server (on-premises) only: `{scheme}://{host}[:port]` for its web/REST API, defaulting to
+	 * `https://{host}` on port 443. The git remote's own scheme/port (e.g. `ssh://host:22`) is for the git
+	 * protocol only and must never be reused here — Azure DevOps Server serves its REST API over HTTPS on its
+	 * own port, which is unrelated to the SSH port used for `git clone`.
+	 */
 	origin?: string
 }
 
@@ -120,17 +127,23 @@ export function parseRemote(url: string, provider?: string): Remote {
 		} else {
 			throw new DevOpsError(`Cannot find the organization in Azure DevOps remote URL: ${url}`)
 		}
-	} else if (isAdoOnPrem && gitIndex >= 2 && gitIndex + 1 < segments.length) {
-		// {collection}/{project}/_git/{repo}, with an optional leading path prefix (e.g. /tfs/).
+	} else if (isAdoOnPrem && gitIndex >= 1 && gitIndex + 1 < segments.length) {
+		// {virtual-directory-and-collection}/{project}/_git/{repo}, e.g. tfs/ANSYS_Development/Meshing/_git/repo.
+		// Everything between the host and {project} (the app path, if any, plus the collection) must be kept
+		// together and re-inserted as-is; only the host identifies the server, not this prefix's shape.
 		repo = segments[gitIndex + 1]
 		project = segments[gitIndex - 1]
-		collection = segments[gitIndex - 2]
+		collection = segments.slice(0, gitIndex - 1).join("/")
 	} else {
 		throw new DevOpsError(`Cannot parse Azure DevOps remote URL: ${url}`)
 	}
 
 	if (isAdoOnPrem) {
-		const origin = `${scheme === "ssh" ? "https" : scheme}://${host}${port ? `:${port}` : ""}`
+		// The git remote's scheme/port (e.g. ssh://host:22 for `git clone`) is unrelated to the server's REST
+		// API, which Azure DevOps Server always serves over HTTPS on its own port (443 unless the URL says
+		// otherwise) — so an ssh:// remote's port must never carry over here.
+		const origin =
+			scheme === "https" || scheme === "http" ? `${scheme}://${host}${port ? `:${port}` : ""}` : `https://${host}`
 		return { kind: "ado", host, owner: collection ?? "", repo: stripGit(repo), project, collection, origin }
 	}
 	if (!org) {

@@ -3,6 +3,7 @@ import { DevOpsError } from "../errors"
 import { AzureDevOpsProvider } from "../providers/azdo"
 import { GitHubProvider } from "../providers/github"
 import { checkBody, type PullRequest } from "../providers/types"
+import { parseRemote } from "../repo"
 import { FakeApi, staticAuth } from "./fake-api"
 
 const GH = "/repos/octo/hello"
@@ -189,28 +190,19 @@ describe("AzureDevOpsProvider", () => {
 		expect(pr?.id).toBe(42)
 	})
 
-	it("targets the on-premises server's own host and collection, not dev.azure.com", async () => {
-		const onPremProj = "/MyCollection/My Project/_apis"
-		const api = new FakeApi().on("GET", `${onPremProj}/git/repositories/web-app`, {
+	it("targets the on-premises server's own host and full collection path, not dev.azure.com or the git SSH port", async () => {
+		// Parse the real GPUSurfer remote (`git remote -v` on D:\dev0\GPUSurfer) end-to-end, rather than
+		// hand-building a Remote, so this catches both the dropped "tfs" app-path segment and the port-22
+		// carrying over from the ssh:// git URL into the HTTPS REST API base.
+		const remote = parseRemote("ssh://tfs.ansys.com:22/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")
+		const api = new FakeApi().on("GET", "/tfs/ANSYS_Development/Meshing/_apis/git/repositories/GPUSurfer", {
 			id: "r-1",
 			defaultBranch: "refs/heads/main",
 			project: { id: "p-1" },
 		})
-		const provider = new AzureDevOpsProvider(
-			{
-				kind: "ado",
-				host: "ado.internal.example.com",
-				owner: "MyCollection",
-				repo: "web-app",
-				project: "My Project",
-				collection: "MyCollection",
-				origin: "https://ado.internal.example.com:22",
-			},
-			api.fetch,
-			staticAuth(),
-		)
+		const provider = new AzureDevOpsProvider(remote, api.fetch, staticAuth())
 		expect(await provider.defaultBranch()).toBe("main")
-		expect(api.last("GET").url.href).toContain("https://ado.internal.example.com:22/MyCollection/My%20Project/_apis/")
+		expect(api.last("GET").url.href).toContain("https://tfs.ansys.com/tfs/ANSYS_Development/Meshing/_apis/")
 	})
 
 	it("limits descriptions to 4000 characters", () => {
