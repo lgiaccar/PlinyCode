@@ -1,10 +1,11 @@
-import type { ConsecutiveMistakeLimitContext, ConsecutiveMistakeLimitDecision } from "@plinycode/shared"
+import type { AgentStopControl, ConsecutiveMistakeLimitContext, ConsecutiveMistakeLimitDecision } from "@plinycode/shared"
 import type { ClineAskQuestion, ClineMessage, TurnPhase } from "@shared/ExtensionMessage"
 import type { ClineAskResponse } from "@shared/WebviewMessage"
 import { Logger } from "@/shared/services/Logger"
 import { MessageIdMinter } from "./message-id-minter"
 import { buildToolApprovalAskMessage } from "./message-translator"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
+import { formatSpendingLimitMessage, type SpendingLimitHit } from "./spending-limit"
 import { buildToolApprovalDenialReason } from "./tool-approval-denial"
 
 export interface ToolApprovalRequest {
@@ -121,6 +122,27 @@ export class SdkInteractionCoordinator {
 		await this.options.postStateToWebview()
 
 		return { action: "stop", reason: `mistake_limit_reached: ${latest}` }
+	}
+
+	/**
+	 * Conversation spending limit reached: same non-blocking shape as the
+	 * mistake limit. Shows why the run stopped and how to go on; the next
+	 * user message continues the task.
+	 */
+	async handleSpendingLimitReached(hit: SpendingLimitHit): Promise<AgentStopControl> {
+		const errorMessage: ClineMessage = {
+			ts: this.nextMessageTs(),
+			type: "say",
+			say: "error",
+			text: formatSpendingLimitMessage(hit),
+			partial: false,
+		}
+		this.options.messages.appendAndEmit([errorMessage], {
+			type: "status",
+			payload: { sessionId: this.options.getSessionId(), status: "running" },
+		})
+		await this.options.postStateToWebview()
+		return { stop: true, reason: `spending_limit_reached: $${hit.spent.toFixed(2)} of $${hit.limit.toFixed(2)}` }
 	}
 
 	async handleRequestToolApproval(request: ToolApprovalRequest): Promise<{ approved: boolean; reason?: string }> {

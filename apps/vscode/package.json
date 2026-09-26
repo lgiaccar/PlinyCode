@@ -378,6 +378,12 @@
 					"default": true,
 					"description": "Also offer the PlinyCode DevOps MCP server to the editor's own AI chat: Copilot Chat agent mode in VS Code, or the agent in Cursor."
 				},
+				"plinycode.spending.conversationLimit": {
+					"type": "number",
+					"default": 5,
+					"minimum": 0,
+					"markdownDescription": "Maximum spend, in US dollars, for a single conversation. When a conversation reaches it, PlinyCode pauses before the next model call; send a message to continue, which allows another round of the same amount. Set to `0` for no limit."
+				},
 				"plinycode.updates.enabled": {
 					"type": "boolean",
 					"default": true,

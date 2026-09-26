@@ -2,6 +2,7 @@ import { workspaceResolver } from "@core/workspace"
 import { BooleanResponse, StringRequest } from "@shared/proto/cline/common"
 import { getWorkspacePath } from "@utils/path"
 import * as fs from "fs"
+import * as path from "path"
 import { Controller } from ".."
 
 /**
@@ -11,6 +12,15 @@ import { Controller } from ".."
  * @returns BooleanResponse indicating whether the file exists
  */
 export async function ifFileExistsRelativePath(_controller: Controller, request: StringRequest): Promise<BooleanResponse> {
+	// Absolute paths (e.g. ones the model prints in prose) need no workspace to resolve.
+	if (request.value && path.isAbsolute(request.value)) {
+		try {
+			return BooleanResponse.create({ value: fs.statSync(request.value).isFile() })
+		} catch {
+			return BooleanResponse.create({ value: false })
+		}
+	}
+
 	const workspacePath = await getWorkspacePath()
 
 	if (!workspacePath) {

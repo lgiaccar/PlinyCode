@@ -46,7 +46,9 @@ import {
 import ClineRulesToggleModal from "../cline-rules/ClineRulesToggleModal"
 import { ConversationModelPicker } from "./ConversationModelPicker"
 import { getModeToggleDraftAction } from "./chat-textarea-mode-toggle"
+import ScheduleTimeInput from "./ScheduleTimeInput"
 import ServersToggleModal from "./ServersToggleModal"
+import { defaultScheduleTime } from "./scheduleTime"
 import { deliveryFor, loadSendMode, SEND_MODE_META, SEND_MODES, type SendMode, saveSendMode } from "./sendMode"
 
 const { MAX_IMAGES_AND_FILES_PER_MESSAGE } = CHAT_CONSTANTS
@@ -589,6 +591,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				if (showSchedulePicker && scheduleTime) {
 					confirmSchedule()
 				} else {
+					setScheduleTime((current) => current || defaultScheduleTime())
 					setShowSchedulePicker(true)
 				}
 				return
@@ -1814,16 +1817,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							)}
 							{showSchedulePicker && (
 								<div className="flex items-center gap-1">
-									<input
-										className="h-5 w-36 rounded-[3px] border border-editor-group-border px-1 text-[10px] focus:outline-none"
-										onChange={(e) => setScheduleTime(e.target.value)}
-										style={{
-											backgroundColor: "var(--vscode-input-background, var(--vscode-sideBar-background))",
-											color: "var(--vscode-input-foreground, var(--vscode-foreground))",
-										}}
-										type="datetime-local"
-										value={scheduleTime}
-									/>
+									<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
 									<button
 										className="flex h-5 items-center rounded-[3px] bg-primary px-1.5 text-[10px] text-primary-foreground disabled:opacity-50"
 										disabled={!scheduleTime || sendingDisabled}

@@ -19,12 +19,13 @@ import {
 	setTelemetryOptOutGlobally,
 	type UserInstructionConfigService,
 } from "@plinycode/core"
-import { formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@plinycode/shared"
+import { type AgentStopControl, formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import type { ChatContent } from "@shared/ChatContent"
 import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import type { ClineApiReqInfo, ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
+import { getConversationApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
@@ -41,6 +42,7 @@ import { clearSdkRemoteConfig, refreshSdkRemoteConfig } from "@/core/storage/rem
 import { StateManager } from "@/core/storage/StateManager"
 import { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
 import { OcaAuthService } from "@/services/auth/oca/OcaAuthService"
@@ -107,6 +109,7 @@ import {
 	type SdkUserMessage,
 } from "./sdk-user-message-mapping"
 import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command-expansion"
+import { ConversationSpendingGuard } from "./spending-limit"
 import { StatePostDebouncer } from "./state-post-debouncer"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
 import { syncTelemetrySettingFromSharedGlobalSettings } from "./telemetry-settings-sync"
@@ -181,6 +184,7 @@ export class Controller {
 	private interactions: SdkInteractionCoordinator
 	private diffEdits: SdkDiffEditCoordinator
 	private sessionConfigBuilder: SdkSessionConfigBuilder
+	private readonly spendingGuard = new ConversationSpendingGuard()
 	private taskHistory: SdkTaskHistory
 	private mode: SdkModeCoordinator
 	private mcpTools: SdkMcpCoordinator
@@ -409,6 +413,7 @@ export class Controller {
 			emitRow: (msg) => this.messages.emitHookMessage(msg),
 			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
+			checkSpendingLimit: () => this.checkSpendingLimit(),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
@@ -813,6 +818,25 @@ export class Controller {
 
 	private handleSessionBecameIdle(): void {
 		this.sessionRebuilds?.sessionBecameIdle()
+	}
+
+	/**
+	 * Runs before every foreground model call: pauses the conversation once it
+	 * has spent `plinycode.spending.conversationLimit` (see spending-limit.ts).
+	 * Spend is measured the way the task header shows it.
+	 */
+	private async checkSpendingLimit(): Promise<AgentStopControl | undefined> {
+		const task = this.task
+		if (!task) {
+			return undefined
+		}
+		const spent = getConversationApiMetrics(task.messageStateHandler.getClineMessages()).totalCost
+		const hit = this.spendingGuard.check(task.taskId, spent, getConversationSpendingLimit())
+		if (!hit) {
+			return undefined
+		}
+		Logger.log(`[SdkController] Spending limit reached for ${task.taskId}: $${spent.toFixed(4)} of $${hit.limit}`)
+		return this.interactions.handleSpendingLimitReached(hit)
 	}
 
 	private isSelectionForActiveModeProvider(event: Extract<ProviderConfigChange, { kind: "selection" }>): boolean {

@@ -3,6 +3,7 @@ import { refreshClineRecommendedModels } from "@/core/controller/models/refreshC
 import type { StateManager } from "@/core/storage/StateManager"
 import { CLINE_RECOMMENDED_MODELS_FALLBACK } from "@/shared/cline/recommended-models"
 import type { ClineApiReqInfo, TurnPhase } from "@/shared/ExtensionMessage"
+import { getConversationApiMetrics } from "@/shared/getApiMetrics"
 import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import type { MessageTranslatorState, TranslationResult } from "./message-translator"
@@ -10,7 +11,7 @@ import { translateSessionEvent } from "./message-translator"
 import { PROVIDER_FAILURE_ERROR_TYPE, PROVIDER_FAILURE_PHASE, type ProviderFailureTelemetry } from "./provider-failure-telemetry"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
-import type { SdkTaskHistory } from "./sdk-task-history"
+import type { SdkTaskHistory, TaskUsage } from "./sdk-task-history"
 import type { TaskProxy } from "./task-proxy"
 
 function normalizeModelId(modelId: string): string {
@@ -51,6 +52,31 @@ export class SdkSessionEventCoordinator {
 
 	constructor(private readonly options: SdkSessionEventCoordinatorOptions) {
 		this.translateSessionEvent = options.translateSessionEvent ?? translateSessionEvent
+	}
+
+	/**
+	 * Stores the open task's usage in its history record as the totals the
+	 * task header shows (every usage row in the transcript), rather than
+	 * adding each event's delta: deltas raced with other history writes and
+	 * with the engine's own end-of-turn total, so the history list's cost
+	 * drifted from the header. Without the transcript, falls back to adding
+	 * the delta.
+	 */
+	private persistTaskUsage(usage: TaskUsage | undefined): Promise<void> {
+		const task = this.options.getTask()
+		const taskId = task?.taskId ?? this.options.sessions.getActiveSession()?.sessionId
+		const messages = task?.messageStateHandler?.getClineMessages() ?? []
+		if (task && messages.length > 0) {
+			const metrics = getConversationApiMetrics(messages)
+			return this.options.taskHistory.setTaskUsage(taskId, {
+				totalCost: metrics.totalCost,
+				tokensIn: metrics.totalTokensIn,
+				tokensOut: metrics.totalTokensOut,
+				cacheWrites: metrics.totalCacheWrites ?? 0,
+				cacheReads: metrics.totalCacheReads ?? 0,
+			})
+		}
+		return usage ? this.options.taskHistory.updateTaskUsage(taskId, usage) : Promise.resolve()
 	}
 
 	async handleSessionEvent(event: CoreSessionEvent): Promise<void> {
@@ -137,13 +163,8 @@ export class SdkSessionEventCoordinator {
 				this.options.sessions.setRunning(false)
 			}
 
-			if (result.usage && activeSession.startResult) {
-				Promise.resolve(
-					this.options.taskHistory.updateTaskUsage(
-						this.options.getTask()?.taskId ?? this.options.sessions.getActiveSession()?.sessionId,
-						result.usage,
-					),
-				).catch((error) => {
+			if ((result.usage || result.turnComplete) && activeSession.startResult) {
+				Promise.resolve(this.persistTaskUsage(result.usage)).catch((error) => {
 					Logger.error("[SdkController] Failed to persist task usage:", error)
 				})
 			}

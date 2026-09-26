@@ -573,8 +573,28 @@ describe("SdkTaskHistory", () => {
 		expect((await history.findHistoryItem("task-1"))?.activeMs).toBe(2000)
 
 		// A concurrent usage update holding the pre-run item must not reset it.
-		await history.updateTaskHistoryItem({ ...stale!, tokensIn: 10 })
+		await history.updateTaskUsage("task-1", { tokensIn: 10, tokensOut: 0 })
+		await history.updateTaskHistoryItem({ ...stale! })
 		expect(await history.findHistoryItem("task-1")).toMatchObject({ activeMs: 2000, tokensIn: 10 })
+	})
+
+	it("keeps usage totals out of reach of stale non-usage writes", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1")])
+		const stale = await history.findHistoryItem("task-1")
+
+		await history.setTaskUsage("task-1", { totalCost: 1.25, tokensIn: 100, tokensOut: 20, cacheReads: 5, cacheWrites: 3 })
+		await history.updateTaskUsage("task-1", { tokensIn: 10, tokensOut: 2, totalCost: 0.25 })
+		// A rename or favorite toggle carrying the pre-run item (cost 0) must not roll the totals back.
+		await history.updateTaskHistoryItem({ ...stale!, totalCost: 0, tokensIn: 0, isFavorited: true })
+
+		expect(await history.findHistoryItem("task-1")).toMatchObject({
+			totalCost: 1.5,
+			tokensIn: 110,
+			tokensOut: 22,
+			cacheReads: 5,
+			cacheWrites: 3,
+			isFavorited: true,
+		})
 	})
 
 	it("keeps cached SDK task size when updating history without measuring artifacts", async () => {

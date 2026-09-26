@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { formatScheduledAt } from "@/components/chat/scheduleTime"
 
 export interface ScheduledPrompt {
 	id: string
@@ -33,12 +34,7 @@ export function ScheduledPrompts({ items, onCancel }: ScheduledPromptsProps) {
 			</div>
 			<div className="flex max-h-28 flex-col gap-1.5 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
 				{items.map((item) => {
-					const scheduledTime = new Date(item.scheduledAt).toLocaleString(undefined, {
-						month: "short",
-						day: "numeric",
-						hour: "2-digit",
-						minute: "2-digit",
-					})
+					const scheduledTime = formatScheduledAt(item.scheduledAt)
 					const isCancelling = cancellingIds.has(item.id)
 					return (
 						<div

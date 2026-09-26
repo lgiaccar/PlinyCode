@@ -30,6 +30,12 @@ export interface TaskUsage {
 	cacheWrites?: number
 }
 
+/** History metadata fields that hold usage totals. */
+const USAGE_METADATA_KEYS = ["totalCost", "tokensIn", "tokensOut", "cacheWrites", "cacheReads"] as const
+
+/** Stored usage totals of a task, as kept in its history metadata. */
+export type TaskUsageTotals = Record<(typeof USAGE_METADATA_KEYS)[number], number>
+
 export interface SdkTaskHistoryOptions {
 	mcpHub: McpHub
 	sessions: SdkSessionLifecycle
@@ -593,7 +599,18 @@ export class SdkTaskHistory {
 		return appendLegacyResumeWarning(fallbackMessages as { role: string; content: unknown }[])
 	}
 
-	private async updateSession(sessionId: string, item: HistoryItem): Promise<void> {
+	/**
+	 * Writes `item` over the session's history record. Usage totals are only
+	 * changed through `nextUsage`, which gets the totals stored right now;
+	 * every other write keeps the stored ones. Callers such as rename, favorite
+	 * and active-time pass a HistoryItem read earlier, and letting its stale
+	 * totals through made the history list's cost drift from the task header.
+	 */
+	private async updateSession(
+		sessionId: string,
+		item: HistoryItem,
+		nextUsage?: (stored: TaskUsageTotals) => TaskUsageTotals,
+	): Promise<void> {
 		const {
 			metadata: writtenMetadata,
 			title: writtenTitle,
@@ -603,6 +620,17 @@ export class SdkTaskHistory {
 			const metadata: Record<string, unknown> = {
 				...(existing?.metadata ?? {}),
 				...historyItemToSessionMetadata(item, existing?.model),
+			}
+			if (existing) {
+				const stored = Object.fromEntries(
+					USAGE_METADATA_KEYS.map((key) => [key, metadataNumber(existing.metadata, key) ?? (item[key] || 0)]),
+				) as TaskUsageTotals
+				Object.assign(metadata, nextUsage ? nextUsage(stored) : stored)
+			} else if (nextUsage) {
+				Object.assign(
+					metadata,
+					nextUsage(Object.fromEntries(USAGE_METADATA_KEYS.map((key) => [key, item[key] || 0])) as TaskUsageTotals),
+				)
 			}
 			if (item.size === undefined) {
 				const existingSize = existing?.metadata?.size
@@ -783,14 +811,29 @@ export class SdkTaskHistory {
 			return
 		}
 
-		historyItem.tokensIn = (historyItem.tokensIn || 0) + usage.tokensIn
-		historyItem.tokensOut = (historyItem.tokensOut || 0) + usage.tokensOut
-		historyItem.cacheReads = (historyItem.cacheReads || 0) + (usage.cacheReads ?? 0)
-		historyItem.cacheWrites = (historyItem.cacheWrites || 0) + (usage.cacheWrites ?? 0)
-		historyItem.totalCost = (historyItem.totalCost || 0) + (usage.totalCost ?? 0)
-		historyItem.ts = Date.now()
+		// Added to the totals stored at write time, not to this possibly stale item's.
+		await this.updateSession(taskId, { ...historyItem, ts: Date.now() }, (stored) => ({
+			tokensIn: stored.tokensIn + usage.tokensIn,
+			tokensOut: stored.tokensOut + usage.tokensOut,
+			cacheReads: stored.cacheReads + (usage.cacheReads ?? 0),
+			cacheWrites: stored.cacheWrites + (usage.cacheWrites ?? 0),
+			totalCost: stored.totalCost + (usage.totalCost ?? 0),
+		}))
+	}
 
-		await this.updateTaskHistoryItem(historyItem)
+	/**
+	 * Replaces the task's usage totals, e.g. with what the task header shows
+	 * at the end of a turn, so the history list and the open task agree.
+	 */
+	async setTaskUsage(taskId: string | undefined, totals: TaskUsageTotals): Promise<void> {
+		if (!taskId) {
+			return
+		}
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return
+		}
+		await this.updateSession(taskId, { ...historyItem, ts: Date.now() }, () => totals)
 	}
 
 	private async getCachedTaskSize(host: VscodeSessionHost, record: SessionHistoryRecord): Promise<number | undefined> {

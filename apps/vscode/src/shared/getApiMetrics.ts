@@ -1,3 +1,4 @@
+import { combineApiRequests } from "./combineApiRequests"
 import { ClineContextBreakdown, ClineMessage } from "./ExtensionMessage"
 
 interface ApiMetrics {
@@ -74,6 +75,16 @@ export function getApiMetrics(messages: ClineMessage[]): ApiMetrics {
 	})
 
 	return result
+}
+
+/**
+ * Usage totals for a whole conversation, computed the way the chat's task
+ * header computes them: every row after the task message, with each
+ * api_req_started merged with its api_req_finished. The spending limit and
+ * the history list use this so they agree with what the header shows.
+ */
+export function getConversationApiMetrics(messages: ClineMessage[]): ApiMetrics {
+	return getApiMetrics(combineApiRequests(messages.slice(1)))
 }
 
 /**
