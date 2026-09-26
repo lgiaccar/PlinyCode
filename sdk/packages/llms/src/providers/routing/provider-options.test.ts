@@ -119,6 +119,7 @@ function makeRequest(overrides: RequestOverrides): GatewayStreamRequest {
 		temperature: overrides.temperature,
 		maxTokens: overrides.maxTokens,
 		reasoning: overrides.reasoning,
+		responseFormat: overrides.responseFormat,
 		signal: overrides.signal,
 		tools: overrides.tools,
 	};
@@ -2590,5 +2591,47 @@ describe("composeAiSdkProviderOptions: Pliny measured thinking switches", () => 
 	it("leaves a model's reasoning alone when the request does not ask", () => {
 		const result = compose("snps-provider/GLM-5.2", undefined);
 		expect(result.pliny).not.toHaveProperty("chat_template_kwargs");
+	});
+});
+
+describe("composeAiSdkProviderOptions: Pliny JSON replies", () => {
+	const modelId = "snps-provider/qwen3-6-35b-a3b-1-28dd3";
+
+	it("sends response_format next to the thinking switch for a JSON request", () => {
+		const result = composeAiSdkProviderOptions(
+			makeRequest({
+				providerId: "pliny",
+				modelId,
+				reasoning: { enabled: false },
+				responseFormat: "json",
+			}),
+			makeContext({ providerId: "pliny", modelId }),
+		);
+		expect(result.pliny).toEqual(
+			expect.objectContaining({
+				response_format: { type: "json_object" },
+				chat_template_kwargs: { enable_thinking: false },
+			}),
+		);
+	});
+
+	it("sends no response_format unless the request asks for JSON", () => {
+		const result = composeAiSdkProviderOptions(
+			makeRequest({ providerId: "pliny", modelId }),
+			makeContext({ providerId: "pliny", modelId }),
+		);
+		expect(result.pliny ?? {}).not.toHaveProperty("response_format");
+	});
+
+	it("leaves other providers alone", () => {
+		const result = composeAiSdkProviderOptions(
+			makeRequest({
+				providerId: "openai-compatible",
+				modelId: "some-model",
+				responseFormat: "json",
+			}),
+			makeContext({ providerId: "openai-compatible", modelId: "some-model" }),
+		);
+		expect(JSON.stringify(result)).not.toContain("response_format");
 	});
 });

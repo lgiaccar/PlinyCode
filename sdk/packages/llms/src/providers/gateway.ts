@@ -175,6 +175,9 @@ class GatewayModelAdapter implements AgentModel {
 				legacyReasoning,
 				requestedReasoning,
 			),
+			...(request.options?.responseFormat === "json"
+				? { responseFormat: "json" as const }
+				: {}),
 			signal: request.signal ?? this.defaults?.signal,
 		});
 	}

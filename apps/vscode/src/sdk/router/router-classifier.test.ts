@@ -90,10 +90,10 @@ describe("parseClassification", () => {
 })
 
 describe("buildClassifierRequest", () => {
-	it("sends a short tool-free request with reasoning off", () => {
+	it("sends a short tool-free request with reasoning off and a JSON-only reply", () => {
 		const built = buildClassifierRequest(request([["user", "hello"]]), features(), rules(), new AbortController().signal)
 		expect(built.tools).toEqual([])
-		expect(built.options).toMatchObject({ thinking: false })
+		expect(built.options).toMatchObject({ thinking: false, responseFormat: "json" })
 		expect(built.messages).toHaveLength(1)
 	})
 

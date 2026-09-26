@@ -264,6 +264,12 @@ export interface GatewayStreamRequest {
 		effort?: ReasoningEffort;
 		budgetTokens?: number;
 	};
+	/**
+	 * Ask for the reply to be a single JSON object. Honoured only where a
+	 * provider rule maps it onto the wire (Pliny sends `response_format`);
+	 * elsewhere the prompt alone has to ask for JSON.
+	 */
+	responseFormat?: "json";
 	signal?: AbortSignal;
 }
 

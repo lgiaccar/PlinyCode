@@ -144,6 +144,15 @@ Existing rules files keep their own route order: they are only written when
 missing, so move `~/.cline/data/pliny-free-auto*.md` aside to pick up the new
 defaults.
 
+The off-switch alone still let a few classifier calls through (5 in two days
+of heavy use): the reply was the same "The user wants to …" paragraph, cut off at the 512-token
+cap. Replaying those prompts with the switch on always produced a verdict, so
+the switch did not take effect on those calls. The classifier and the judge
+now also ask for a JSON-only reply (`responseFormat: "json"` on the request,
+sent to Pliny as `response_format: {"type": "json_object"}`). With it the 35B
+answers with the object in about 300 ms even with thinking left on, and the
+other free models and Haiku accept the field without error.
+
 ## Reading the call log
 
 Each line of `pliny-free-auto-calls.jsonl` now records what the call produced
