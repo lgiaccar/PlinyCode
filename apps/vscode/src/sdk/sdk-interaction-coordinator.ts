@@ -125,7 +125,7 @@ export class SdkInteractionCoordinator {
 	}
 
 	/**
-	 * Conversation spending limit reached: same non-blocking shape as the
+	 * Conversation budget reached: same non-blocking shape as the
 	 * mistake limit. Shows why the run stopped and how to go on; the next
 	 * user message continues the task.
 	 */
@@ -142,7 +142,7 @@ export class SdkInteractionCoordinator {
 			payload: { sessionId: this.options.getSessionId(), status: "running" },
 		})
 		await this.options.postStateToWebview()
-		return { stop: true, reason: `spending_limit_reached: $${hit.spent.toFixed(2)} of $${hit.limit.toFixed(2)}` }
+		return { stop: true, reason: `spending_limit_reached: $${hit.spent.toFixed(2)} of $${hit.budget.toFixed(2)}` }
 	}
 
 	async handleRequestToolApproval(request: ToolApprovalRequest): Promise<{ approved: boolean; reason?: string }> {

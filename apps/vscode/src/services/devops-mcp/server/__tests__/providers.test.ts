@@ -51,6 +51,40 @@ describe("GitHubProvider", () => {
 		expect(pr.state).toBe("merged")
 	})
 
+	it("publishes a draft through the GraphQL mutation, which the REST API does not offer", async () => {
+		const api = new FakeApi()
+			.on("GET", `${GH}/pulls/7`, ghPr({ node_id: "PR_node7" }))
+			.on("POST", "/graphql", { data: { markPullRequestReadyForReview: { clientMutationId: null } } })
+		const pr = await github(api).updatePr(7, undefined, undefined, false)
+		const request = api.lastJson("POST") as { query: string; variables: unknown }
+		expect(api.last("POST").url.href).toBe("https://api.github.com/graphql")
+		expect(request.query).toContain("markPullRequestReadyForReview")
+		expect(request.variables).toEqual({ id: "PR_node7" })
+		expect(api.requests.filter((r) => r.method === "PATCH")).toHaveLength(0)
+		expect(pr.draft).toBe(false)
+	})
+
+	it("converts a PR back to a draft only when it is not one already", async () => {
+		const api = new FakeApi()
+			.on("PATCH", `${GH}/pulls/7`, ghPr({ draft: false, node_id: "PR_node7" }))
+			.on("POST", "/graphql", { data: {} })
+		expect((await github(api).updatePr(7, "New title", undefined, true)).draft).toBe(true)
+		expect((api.lastJson("POST") as { query: string }).query).toContain("convertPullRequestToDraft")
+
+		const unchanged = new FakeApi().on("GET", `${GH}/pulls/7`, ghPr())
+		expect((await github(unchanged).updatePr(7, undefined, undefined, true)).draft).toBe(true)
+		expect(unchanged.requests.filter((r) => r.method === "POST")).toHaveLength(0)
+	})
+
+	it("reports GraphQL errors returned with a 200 status", async () => {
+		const api = new FakeApi()
+			.on("GET", `${GH}/pulls/7`, ghPr({ node_id: "PR_node7" }))
+			.on("POST", "/graphql", { errors: [{ message: "Resource not accessible by integration" }] })
+		await expect(github(api).updatePr(7, undefined, undefined, false)).rejects.toThrow(
+			"GitHub GraphQL: Resource not accessible by integration",
+		)
+	})
+
 	it("passes API error details to the model", async () => {
 		const api = new FakeApi().on(
 			"POST",
@@ -203,6 +237,13 @@ describe("AzureDevOpsProvider", () => {
 		const provider = new AzureDevOpsProvider(remote, api.fetch, staticAuth())
 		expect(await provider.defaultBranch()).toBe("main")
 		expect(api.last("GET").url.href).toContain("https://tfs.ansys.com/tfs/ANSYS_Development/Meshing/_apis/")
+	})
+
+	it("publishes a draft by patching isDraft", async () => {
+		const api = new FakeApi().on("PATCH", `${PRS}/42`, { ...adoPr, isDraft: false })
+		const pr = await azdo(api).updatePr(42, undefined, undefined, false)
+		expect(api.lastJson("PATCH")).toEqual({ isDraft: false })
+		expect(pr.draft).toBe(false)
 	})
 
 	it("limits descriptions to 4000 characters", () => {

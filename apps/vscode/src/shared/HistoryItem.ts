@@ -41,6 +41,12 @@ export type HistoryItem = {
 	/** True once the user renamed the task, so regenerating from an edited first message keeps the title. */
 	isRenamed?: boolean
 	/**
+	 * This conversation's budget in USD (0 = no limit). Absent until the user
+	 * sets one or a budget stop raises it; until then the default
+	 * `plinycode.spending.conversationLimit` applies. See sdk/spending-limit.ts.
+	 */
+	spendingLimit?: number
+	/**
 	 * Transient, never persisted: when the current turn started running (ms since
 	 * epoch). Set only on the webview's `currentTaskItem` while a turn runs, so the
 	 * task header can tick the running time live.

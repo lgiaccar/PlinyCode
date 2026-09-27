@@ -38,6 +38,8 @@ service TaskService {
   rpc toggleTaskFavorite(TaskFavoriteRequest) returns (Empty);
   // Renames a task (its history title). A blank title is ignored.
   rpc renameTask(RenameTaskRequest) returns (Empty);
+  // Sets a conversation's budget in USD (0 = no limit). A negative amount is ignored.
+  rpc setTaskSpendingLimit(SetTaskSpendingLimitRequest) returns (Empty);
   // Gets filtered task history
   rpc getTaskHistory(GetTaskHistoryRequest) returns (TaskHistoryArray);
   // Sends a response to a previous ask operation
@@ -94,6 +96,14 @@ message RenameTaskRequest {
   Metadata metadata = 1;
   string task_id = 2;
   string title = 3;
+}
+
+// Request message for setting a conversation's budget
+message SetTaskSpendingLimitRequest {
+  Metadata metadata = 1;
+  string task_id = 2;
+  // USD; 0 turns the limit off for this conversation
+  double limit = 3;
 }
 
 // Response for task details

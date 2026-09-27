@@ -15,6 +15,8 @@ for GitHub (Actions) and Azure DevOps (Repos + Pipelines); the backend is chosen
 - PR descriptions are Markdown. Azure DevOps limits them to 4000 characters, GitHub to 65536.
 - To keep generated content (e.g. CI results) current without overwriting hand-written text,
   use pr_update with a \`section\` name; only that section is replaced.
+- pr_create opens drafts by default. To publish one (mark it ready for review), call pr_update with
+  \`draft: false\`; \`draft: true\` turns a PR back into a draft.
 - Pipeline runs take minutes. Do not loop on pipeline_runs; check again later when asked.`
 
 export type ProviderFactory = (remote: Remote) => Provider
@@ -155,7 +157,7 @@ export function createTools(providerFor: ProviderFactory = defaultProviderFactor
 			name: "pr_update",
 			title: "Update pull request",
 			description:
-				"Update a pull request's title and/or Markdown description: the whole description, or only one named section.",
+				"Update a pull request's title, Markdown description (the whole description, or only one named section) and/or draft status.",
 			readOnly: false,
 			inputSchema: {
 				pr_id: prId,
@@ -170,11 +172,17 @@ export function createTools(providerFor: ProviderFactory = defaultProviderFactor
 					.describe(
 						"Name of a generated section (letters, digits, '-', '_'), e.g. 'ci'. Only that section is replaced; it is appended if missing.",
 					),
+				draft: z
+					.boolean()
+					.optional()
+					.describe(
+						"false publishes a draft PR (marks it ready for review); true converts it back to a draft. Omit to leave it as is.",
+					),
 				workspace,
 			},
 			run: async (args) => {
-				if (args.title === undefined && args.body === undefined) {
-					throw new DevOpsError("Nothing to update: pass `title` and/or `body`.")
+				if (args.title === undefined && args.body === undefined && args.draft === undefined) {
+					throw new DevOpsError("Nothing to update: pass `title`, `body` and/or `draft`.")
 				}
 				if (args.section !== undefined && args.body === undefined) {
 					throw new DevOpsError("`section` needs `body` (the new section content).")
@@ -186,7 +194,7 @@ export function createTools(providerFor: ProviderFactory = defaultProviderFactor
 				if (body !== undefined) {
 					checkBody(provider, body)
 				}
-				return prSummary(await provider.updatePr(pr.id, args.title, body), "Updated pull request")
+				return prSummary(await provider.updatePr(pr.id, args.title, body, args.draft), "Updated pull request")
 			},
 		},
 		{

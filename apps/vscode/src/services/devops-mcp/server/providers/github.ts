@@ -62,6 +62,7 @@ export class GitHubProvider implements Provider {
 	readonly maxBodyLength = 65536
 	readonly repoUrl: string
 	private readonly api: string
+	private readonly graphqlUrl: string
 	private readonly http: Http
 
 	constructor(
@@ -71,6 +72,7 @@ export class GitHubProvider implements Provider {
 	) {
 		const base = remote.host === "github.com" ? "https://api.github.com" : `https://${remote.host}/api/v3`
 		this.api = `${base}/repos/${remote.owner}/${remote.repo}`
+		this.graphqlUrl = remote.host === "github.com" ? `${base}/graphql` : `https://${remote.host}/api/graphql`
 		this.repoUrl = `https://${remote.host}/${remote.owner}/${remote.repo}`
 		this.http = new Http(auth, { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, fetchImpl)
 	}
@@ -127,11 +129,32 @@ export class GitHubProvider implements Provider {
 		return this.pr(await this.http.json("POST", `${this.api}/pulls`, { json }))
 	}
 
-	async updatePr(id: number, title: string | undefined, body: string | undefined): Promise<PullRequest> {
+	async updatePr(id: number, title: string | undefined, body: string | undefined, draft?: boolean): Promise<PullRequest> {
 		const json: Record<string, string> = {}
 		if (title !== undefined) json.title = title
 		if (body !== undefined) json.body = body
-		return this.pr(await this.http.json("PATCH", `${this.api}/pulls/${id}`, { json }))
+		let data = Object.keys(json).length
+			? await this.http.json("PATCH", `${this.api}/pulls/${id}`, { json })
+			: await this.get(`/pulls/${id}`)
+		// The REST API ignores `draft` on update; only these GraphQL mutations change it.
+		if (draft !== undefined && Boolean(data.draft) !== draft) {
+			const mutation = draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview"
+			await this.graphql(`mutation($id: ID!) { ${mutation}(input: { pullRequestId: $id }) { clientMutationId } }`, {
+				id: data.node_id,
+			})
+			data = { ...data, draft }
+		}
+		return this.pr(data)
+	}
+
+	/** GraphQL reports errors in a 200 response, so check the body as well as the status. */
+	private async graphql(query: string, variables: Record<string, unknown>): Promise<any> {
+		const response = await this.http.json("POST", this.graphqlUrl, { json: { query, variables } })
+		const errors: any[] = response?.errors ?? []
+		if (errors.length) {
+			throw new DevOpsError(`GitHub GraphQL: ${errors.map((e) => e?.message ?? JSON.stringify(e)).join("; ")}`)
+		}
+		return response?.data
 	}
 
 	async listRuns(branch: string | undefined, pr: PullRequest | undefined, limit: number): Promise<PipelineRun[]> {

@@ -165,10 +165,11 @@ export class AzureDevOpsProvider implements Provider {
 		return this.pr(await this.api("POST", await this.prPath(), {}, json))
 	}
 
-	async updatePr(id: number, title: string | undefined, body: string | undefined): Promise<PullRequest> {
-		const json: Record<string, string> = {}
+	async updatePr(id: number, title: string | undefined, body: string | undefined, draft?: boolean): Promise<PullRequest> {
+		const json: Record<string, string | boolean> = {}
 		if (title !== undefined) json.title = title
 		if (body !== undefined) json.description = body
+		if (draft !== undefined) json.isDraft = draft
 		return this.pr(await this.api("PATCH", await this.prPath(`/${id}`), {}, json))
 	}
 

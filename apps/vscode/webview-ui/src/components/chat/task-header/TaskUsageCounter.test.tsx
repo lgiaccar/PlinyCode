@@ -1,6 +1,6 @@
-import { act, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import TaskUsageCounter, { totalTaskTokens } from "./TaskUsageCounter"
+import TaskUsageCounter, { parseBudget, totalTaskTokens } from "./TaskUsageCounter"
 
 describe("TaskUsageCounter", () => {
 	beforeEach(() => {
@@ -55,9 +55,49 @@ describe("TaskUsageCounter", () => {
 		expect(screen.getByTestId("task-usage-counter").getAttribute("title")).toContain("Started Today, 5:53 PM")
 	})
 
+	it("shows the cost against the conversation's budget", () => {
+		render(<TaskUsageCounter budget={5} tokensIn={1_000} tokensOut={200} totalCost={1.25} />)
+		expect(screen.getByTestId("task-usage-counter").textContent).toContain("$1.2500/$5.00")
+		expect(screen.getByTestId("task-usage-counter").getAttribute("title")).toContain("Budget $5.00")
+	})
+
+	it("shows no budget for free models, and 'no limit' for a budget of 0", () => {
+		const { rerender } = render(<TaskUsageCounter tokensIn={1_000} tokensOut={200} totalCost={0} />)
+		expect(screen.queryByTestId("task-budget")).toBeNull()
+		rerender(<TaskUsageCounter budget={0} tokensIn={1_000} tokensOut={200} totalCost={0} />)
+		expect(screen.getByTestId("task-budget").textContent).toBe("no limit")
+	})
+
+	it("edits the budget inline: Enter saves, Escape cancels", () => {
+		const onBudgetChange = vi.fn()
+		render(<TaskUsageCounter budget={5} onBudgetChange={onBudgetChange} tokensIn={1} tokensOut={1} totalCost={1} />)
+
+		fireEvent.click(screen.getByTestId("task-budget"))
+		const input = screen.getByLabelText("Conversation budget in USD (0 = no limit)")
+		fireEvent.change(input, { target: { value: "$12.5" } })
+		fireEvent.keyDown(input, { key: "Enter" })
+		expect(onBudgetChange).toHaveBeenCalledWith(12.5)
+
+		fireEvent.click(screen.getByTestId("task-budget"))
+		const again = screen.getByLabelText("Conversation budget in USD (0 = no limit)")
+		fireEvent.change(again, { target: { value: "99" } })
+		fireEvent.keyDown(again, { key: "Escape" })
+		expect(onBudgetChange).toHaveBeenCalledTimes(1)
+	})
+
 	it("renders nothing for an empty conversation", () => {
 		const { container } = render(<TaskUsageCounter tokensIn={0} tokensOut={0} />)
 		expect(container.firstChild).toBeNull()
+	})
+})
+
+describe("parseBudget", () => {
+	it("reads dollars with or without a sign, and a blank as no limit", () => {
+		expect(parseBudget("7.5")).toBe(7.5)
+		expect(parseBudget(" $10 ")).toBe(10)
+		expect(parseBudget("")).toBe(0)
+		expect(parseBudget("-1")).toBeUndefined()
+		expect(parseBudget("ten")).toBeUndefined()
 	})
 })
 
