@@ -111,6 +111,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.startedTs ? { startedTs: item.startedTs } : {}),
 		...(item.activeMs ? { activeMs: item.activeMs } : {}),
 		...(item.isRenamed ? { isRenamed: true } : {}),
+		...(item.spendingLimit !== undefined ? { spendingLimit: item.spendingLimit } : {}),
 		// The workspace binding, kept across resumes like the fields above.
 		...(item.workspacePath ? { workspacePath: item.workspacePath, workspaceKind: item.workspaceKind ?? "folder" } : {}),
 	}
@@ -220,6 +221,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		startedTs: sessionStartedTs(item),
 		activeMs: metadataNumber(metadata, "activeMs"),
 		isRenamed: metadataBoolean(metadata, "isRenamed") === true || undefined,
+		spendingLimit: metadataNumber(metadata, "spendingLimit"),
 		...(metadataString(metadata, "workspacePath")
 			? {
 					workspacePath: metadataString(metadata, "workspacePath"),
@@ -785,6 +787,19 @@ export class SdkTaskHistory {
 			return false
 		}
 		await this.updateTaskHistoryItem({ ...historyItem, task: trimmed, isRenamed: true })
+		return true
+	}
+
+	/** Sets the conversation's budget in USD (0 = no limit). Returns false when the task is unknown or the amount invalid. */
+	async setTaskSpendingLimit(taskId: string, limit: number): Promise<boolean> {
+		if (!Number.isFinite(limit) || limit < 0) {
+			return false
+		}
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateTaskHistoryItem({ ...historyItem, spendingLimit: limit })
 		return true
 	}
 

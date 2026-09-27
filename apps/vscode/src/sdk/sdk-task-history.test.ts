@@ -580,6 +580,28 @@ describe("SdkTaskHistory", () => {
 		expect((await history.findHistoryItem("task-1"))?.task).toBe("Renamed again")
 	})
 
+	it("stores a conversation's budget and keeps it through writes that do not set one", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1")])
+		expect((await history.findHistoryItem("task-1"))?.spendingLimit).toBeUndefined()
+
+		await expect(history.setTaskSpendingLimit("task-1", 12.5)).resolves.toBe(true)
+		expect((await history.findHistoryItem("task-1"))?.spendingLimit).toBe(12.5)
+
+		await history.updateTaskHistoryItem(makeHistoryItem("task-1", { task: "later write" }))
+		expect((await history.findHistoryItem("task-1"))?.spendingLimit).toBe(12.5)
+
+		await history.setTaskSpendingLimit("task-1", 0)
+		expect((await history.findHistoryItem("task-1"))?.spendingLimit).toBe(0)
+	})
+
+	it("refuses a negative budget and unknown tasks", async () => {
+		const { history, updateSession } = makeHistory([makeSessionRecord("task-1")])
+
+		await expect(history.setTaskSpendingLimit("task-1", -1)).resolves.toBe(false)
+		await expect(history.setTaskSpendingLimit("missing", 5)).resolves.toBe(false)
+		expect(updateSession).not.toHaveBeenCalled()
+	})
+
 	it("ignores blank renames and unknown tasks", async () => {
 		const { history, updateSession } = makeHistory([makeSessionRecord("task-1")])
 

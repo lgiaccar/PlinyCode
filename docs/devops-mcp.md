@@ -18,7 +18,7 @@ The same server is available to:
 | `repo_context`    | Provider, repository, current and default branch, push state, open PR for the branch.         |
 | `pr_create`       | Creates a PR (draft by default) from a pushed branch, with a Markdown description.            |
 | `pr_get`          | Shows a PR with its full description.                                                         |
-| `pr_update`       | Changes the title or description, or only one named section of the description.              |
+| `pr_update`       | Changes the title, the description (or one named section of it), or the draft status.       |
 | `pipeline_runs`   | Recent GitHub Actions runs or Azure Pipelines builds, for a branch or a PR.                   |
 | `pipeline_report` | One run: job results, failed steps, error messages and the log lines around the failure.     |
 | `pr_checks`       | GitHub check runs and statuses, or Azure DevOps branch policies and PR statuses.             |
@@ -29,6 +29,11 @@ with the repository's absolute path.
 `pr_update(section="ci", body=…)` rewrites only the text between `<!-- devops-mcp:ci -->` and
 `<!-- /devops-mcp:ci -->`, which don't render, so an agent can keep a generated section current without
 touching the hand-written part of the description.
+
+`pr_update(draft=false)` publishes a draft PR (marks it ready for review), and `draft=true` turns it back into a
+draft. Azure DevOps takes this as an `isDraft` update. GitHub's REST API can't change the draft status, so on
+GitHub the server calls the GraphQL `markPullRequestReadyForReview` or `convertPullRequestToDraft` mutation,
+which uses the same token.
 
 Azure DevOps limits PR descriptions to 4000 characters (GitHub: 65536). Longer ones are refused with a message
 telling the agent to shorten them; they are never truncated silently.

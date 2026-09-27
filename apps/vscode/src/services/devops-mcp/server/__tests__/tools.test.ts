@@ -71,6 +71,14 @@ describe("tools against a temporary checkout", () => {
 		})
 	})
 
+	it("refuses an update with nothing to change, and accepts a draft change alone", async () => {
+		await expect(tools.pr_update.run({ workspace })).rejects.toThrow("Nothing to update")
+		api.on("GET", `${REPO}/pulls`, [pr("B")]).on("GET", `${REPO}/pulls/7`, pr("B"))
+		const out = await tools.pr_update.run({ draft: false, workspace })
+		expect(out).toContain("Updated pull request #7")
+		expect(api.requests.filter((r) => r.method === "POST")).toHaveLength(0) // already ready for review
+	})
+
 	it("explains when the branch has no open PR", async () => {
 		api.on("GET", `${REPO}/pulls`, [])
 		await expect(tools.pr_get.run({ workspace })).rejects.toThrow("No open pull request for branch 'feature'")

@@ -1,5 +1,6 @@
 import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
-import { RenameTaskRequest } from "@shared/proto/cline/task"
+import { isPlinyFreeModelId } from "@shared/pliny"
+import { RenameTaskRequest, SetTaskSpendingLimitRequest } from "@shared/proto/cline/task"
 import { historyItemWorkspaceDisplayPath, workspacePathLabel } from "@shared/workspacePath"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { useCallback, useMemo, useState } from "react"
@@ -70,6 +71,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		workspaceRoots,
 		primaryRootIndex,
 		platform,
+		conversationSpendingLimit,
 	} = useExtensionState()
 
 	const [isRenaming, setIsRenaming] = useState(false)
@@ -98,8 +100,21 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		[currentTaskItem?.id],
 	)
 
+	const setBudget = useCallback(
+		(limit: number) => {
+			const taskId = currentTaskItem?.id
+			if (!taskId) {
+				return
+			}
+			TaskServiceClient.setTaskSpendingLimit(SetTaskSpendingLimitRequest.create({ taskId, limit })).catch((err) =>
+				console.error("Failed to set the conversation budget:", err),
+			)
+		},
+		[currentTaskItem?.id],
+	)
+
 	// Simplified computed values
-	const { selectedModelInfo } = useNormalizedApiConfiguration(mode)
+	const { selectedModelId, selectedModelInfo } = useNormalizedApiConfiguration(mode)
 	const modeFields = getModeSpecificFields(apiConfiguration, mode)
 
 	// Local providers report no cost; the openai-compatible provider can
@@ -121,6 +136,12 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 			modeFields.apiProvider !== "ollama" &&
 			modeFields.apiProvider !== "lmstudio" &&
 			usageCostDisplay === "show")
+
+	// The conversation's own budget, else the default for new conversations.
+	// Free models are never limited, so no budget is shown while one is selected.
+	const budget = isPlinyFreeModelId(selectedModelId)
+		? undefined
+		: (currentTaskItem?.spendingLimit ?? conversationSpendingLimit ?? 5)
 
 	// Event handlers
 	const toggleTaskExpanded = useCallback(() => setIsTaskExpanded(!isTaskExpanded), [setIsTaskExpanded, isTaskExpanded])
@@ -152,8 +173,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							e.stopPropagation()
 							toggleTaskExpanded()
 						}
-					}}
-					tabIndex={0}>
+					}}>
 					<div className="flex justify-between items-center">
 						{isTaskExpanded ? <ChevronDownIcon size="16" /> : <ChevronRightIcon size="16" />}
 						{isTaskExpanded && (
@@ -195,9 +215,11 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 					<div className="inline-flex items-center justify-end select-none shrink-0">
 						<TaskUsageCounter
 							activeMs={currentTaskItem?.activeMs}
+							budget={budget}
 							cacheReads={cacheReads}
 							cacheWrites={cacheWrites}
 							hasEstimatedUsage={hasEstimatedUsage}
+							onBudgetChange={currentTaskItem?.id ? setBudget : undefined}
 							runningSinceTs={currentTaskItem?.runningSinceTs}
 							startedTs={currentTaskItem?.startedTs}
 							tokensIn={tokensIn}

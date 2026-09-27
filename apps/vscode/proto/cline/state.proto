@@ -435,7 +435,7 @@ message UpdateSettingsRequest {
   optional bool web_search_enabled = 45;
   optional bool prerelease_updates_enabled = 46;
   optional int32 chat_input_max_rows = 47;
-  // plinycode.spending.conversationLimit, in USD; 0 turns the limit off
+  // plinycode.spending.conversationLimit: the default conversation budget, in USD; 0 turns the limit off
   optional double conversation_spending_limit = 48;
 }
 

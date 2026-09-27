@@ -382,7 +382,7 @@
 					"type": "number",
 					"default": 5,
 					"minimum": 0,
-					"markdownDescription": "Maximum spend, in US dollars, for a single conversation. When a conversation reaches it, PlinyCode pauses before the next model call; send a message to continue, which allows another round of the same amount. Set to `0` for no limit."
+					"markdownDescription": "The budget, in US dollars, that each new conversation starts with. The task header shows a conversation's cost against its budget, and you can change one conversation's budget there. When a conversation reaches its budget, PlinyCode pauses before the next model call; send a message to continue, which raises that conversation's budget by this amount. Free models and the auto-free routers are never limited. Set to `0` for no limit."
 				},
 				"plinycode.updates.enabled": {
 					"type": "boolean",

@@ -68,7 +68,8 @@ export interface Provider {
 	findOpenPr(branch: string): Promise<PullRequest | undefined>
 	getPr(id: number): Promise<PullRequest>
 	createPr(title: string, body: string, source: string, target: string, draft: boolean): Promise<PullRequest>
-	updatePr(id: number, title: string | undefined, body: string | undefined): Promise<PullRequest>
+	/** Changes only the fields given. `draft` false publishes a draft PR (ready for review); true makes it a draft again. */
+	updatePr(id: number, title: string | undefined, body: string | undefined, draft?: boolean): Promise<PullRequest>
 	listRuns(branch: string | undefined, pr: PullRequest | undefined, limit: number): Promise<PipelineRun[]>
 	runReport(runId: number, logLines: number): Promise<RunReport>
 	prChecks(pr: PullRequest): Promise<Check[]>

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { updateSetting } from "./utils/settingsHandlers"
 
-/** `plinycode.spending.conversationLimit`: USD per conversation before PlinyCode pauses; 0 = no limit. */
+/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 const SpendingLimitSetting: React.FC = () => {
 	const { conversationSpendingLimit } = useExtensionState()
 	const limit = conversationSpendingLimit ?? 5
@@ -31,7 +31,7 @@ const SpendingLimitSetting: React.FC = () => {
 	return (
 		<div className="mb-[15px]">
 			<label className="font-medium block mb-1" htmlFor="conversation-spending-limit">
-				Conversation spending limit (USD)
+				Default conversation budget (USD)
 			</label>
 			<VSCodeTextField
 				className="w-full"
@@ -48,8 +48,10 @@ const SpendingLimitSetting: React.FC = () => {
 			/>
 			{inputError && <div className="text-error text-xs mt-1">{inputError}</div>}
 			<p className="text-sm mt-[5px] text-description">
-				When a conversation has spent this much, PlinyCode pauses before the next model call. Send a message to keep going
-				for another round of the same amount. Set to 0 for no limit.
+				The budget each new conversation starts with. The task header shows a conversation's cost against its budget, and
+				you can change a single conversation's budget there. When a conversation reaches its budget, PlinyCode pauses
+				before the next model call; send a message to continue, which raises its budget by this amount. Free models are
+				never limited. Set to 0 for no limit.
 			</p>
 		</div>
 	)

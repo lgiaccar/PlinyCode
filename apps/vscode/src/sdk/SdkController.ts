@@ -27,6 +27,7 @@ import { mentionRegexGlobal } from "@shared/context-mentions"
 import type { ClineApiReqInfo, ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem } from "@shared/HistoryItem"
+import { isPlinyFreeModelId } from "@shared/pliny"
 import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
 import type { Settings } from "@shared/storage/state-keys"
@@ -117,7 +118,7 @@ import {
 	type SdkUserMessage,
 } from "./sdk-user-message-mapping"
 import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command-expansion"
-import { ConversationSpendingGuard } from "./spending-limit"
+import { checkConversationBudget } from "./spending-limit"
 import { StatePostDebouncer } from "./state-post-debouncer"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
 import { syncTelemetrySettingFromSharedGlobalSettings } from "./telemetry-settings-sync"
@@ -192,7 +193,6 @@ export class Controller {
 	private interactions: SdkInteractionCoordinator
 	private diffEdits: SdkDiffEditCoordinator
 	private sessionConfigBuilder: SdkSessionConfigBuilder
-	private readonly spendingGuard = new ConversationSpendingGuard()
 	private taskHistory: SdkTaskHistory
 	private mode: SdkModeCoordinator
 	private mcpTools: SdkMcpCoordinator
@@ -858,21 +858,34 @@ export class Controller {
 
 	/**
 	 * Runs before every foreground model call: pauses the conversation once it
-	 * has spent `plinycode.spending.conversationLimit` (see spending-limit.ts).
-	 * Spend is measured the way the task header shows it.
+	 * has spent its budget (see spending-limit.ts), and raises the budget by one
+	 * step so the user can continue. Free models are never limited. Spend is
+	 * measured the way the task header shows it.
 	 */
 	private async checkSpendingLimit(): Promise<AgentStopControl | undefined> {
 		const task = this.task
-		if (!task) {
+		if (!task || this.isFreeModelSelected()) {
 			return undefined
 		}
 		const spent = getConversationApiMetrics(task.messageStateHandler.getClineMessages()).totalCost
-		const hit = this.spendingGuard.check(task.taskId, spent, getConversationSpendingLimit())
+		const defaultBudget = getConversationSpendingLimit()
+		const historyItem = await this.taskHistory.findHistoryItem(task.taskId)
+		const hit = checkConversationBudget(spent, historyItem?.spendingLimit ?? defaultBudget, defaultBudget)
 		if (!hit) {
 			return undefined
 		}
-		Logger.log(`[SdkController] Spending limit reached for ${task.taskId}: $${spent.toFixed(4)} of $${hit.limit}`)
+		Logger.log(`[SdkController] Budget reached for ${task.taskId}: $${spent.toFixed(4)} of $${hit.budget}`)
+		if (!(await this.taskHistory.setTaskSpendingLimit(task.taskId, hit.nextBudget))) {
+			Logger.warn(`[SdkController] Could not raise the budget of ${task.taskId}; it is not in the task history`)
+		}
 		return this.interactions.handleSpendingLimitReached(hit)
+	}
+
+	/** True when the active mode's model costs nothing: a free self-hosted model or a FreeAuto router. */
+	private isFreeModelSelected(): boolean {
+		const mode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
+		const apiConfig = this.stateManager.getApiConfiguration()
+		return isPlinyFreeModelId(mode === "plan" ? apiConfig.planModeApiModelId : apiConfig.actModeApiModelId)
 	}
 
 	private isSelectionForActiveModeProvider(event: Extract<ProviderConfigChange, { kind: "selection" }>): boolean {
@@ -1806,6 +1819,7 @@ export class Controller {
 				startedTs: historyItem?.startedTs,
 				activeMs: historyItem?.activeMs,
 				isRenamed: historyItem?.isRenamed,
+				spendingLimit: historyItem?.spendingLimit,
 			}
 			const startInput = {
 				...buildStartSessionInput(config, { prompt: historyTitle, cwd, mode }),
@@ -1816,6 +1830,9 @@ export class Controller {
 					...(carriedHistoryFields.startedTs ? { startedTs: carriedHistoryFields.startedTs } : {}),
 					...(carriedHistoryFields.activeMs ? { activeMs: carriedHistoryFields.activeMs } : {}),
 					...(carriedHistoryFields.isRenamed ? { isRenamed: true } : {}),
+					...(carriedHistoryFields.spendingLimit !== undefined
+						? { spendingLimit: carriedHistoryFields.spendingLimit }
+						: {}),
 					...(checkpointRunCount
 						? { checkpoint: createRestoredCheckpointMetadata(sessionRecord, checkpointRunCount) }
 						: {}),
@@ -2634,6 +2651,15 @@ export class Controller {
 	async renameTask(taskId: string, title: string): Promise<void> {
 		if (!(await this.taskHistory.renameTask(taskId, title))) {
 			Logger.log(`[renameTask] Task not found in history or blank title: ${taskId}`)
+			return
+		}
+		await this.postStateToWebview()
+	}
+
+	/** Sets a conversation's budget in USD (0 = no limit); the next model call checks against it. */
+	async setTaskSpendingLimit(taskId: string, limit: number): Promise<void> {
+		if (!(await this.taskHistory.setTaskSpendingLimit(taskId, limit))) {
+			Logger.log(`[setTaskSpendingLimit] Task not found in history or invalid amount: ${taskId} ${limit}`)
 			return
 		}
 		await this.postStateToWebview()
