@@ -12,7 +12,6 @@ import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-se
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { BannerService } from "@/services/banner/BannerService"
-import { featureFlagsService } from "@/services/feature-flags"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { getExtensionVariant } from "@/services/telemetry/rollout-metadata"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
@@ -199,7 +198,7 @@ export async function getStateToPostToWebview(controller: {
 		},
 		worktreesEnabled: {
 			user: stateManager.getGlobalSettingsKey("worktreesEnabled"),
-			featureFlag: featureFlagsService.getWorktreesEnabled(),
+			featureFlag: true,
 		},
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
 		lastDismissedInfoBannerVersion,
