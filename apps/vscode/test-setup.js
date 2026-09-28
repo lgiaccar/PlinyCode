@@ -222,7 +222,6 @@ Module.prototype.require = function (id) {
 			fetchClineRecommendedModels: async () => ({ recommended: [], free: [] }),
 			readGlobalSettings: () => ({ telemetryOptOut: false }),
 			setTelemetryOptOutGlobally: () => undefined,
-			prepareRemoteConfigCoreIntegration: () => undefined,
 			createDefaultExecutors: () => ({}),
 			createMcpTools: () => ({}),
 			createOAuthClientCallbacks: () => ({}),

@@ -122,7 +122,6 @@ function getPrimitive(type: PrimitiveType): PrimitiveConfig {
 function sourceLabel(entry: MarketplaceLocalInstalledEntry): string | undefined {
 	if (entry.source === "global") return "Global"
 	if (entry.source === "workspace") return "Workspace"
-	if (entry.source === "remote") return "Remote"
 	return undefined
 }
 
@@ -583,18 +582,6 @@ const MarketplaceStyles = () => (
 			gap: 10px;
 		}
 
-		.marketplace-mcp-managed {
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			padding: 8px 10px;
-			border-left: 3px solid var(--vscode-textLink-foreground);
-			background: var(--vscode-textBlockQuote-background);
-			color: var(--vscode-foreground);
-			font-size: calc(var(--vscode-font-size) * 0.92);
-			line-height: 1.35;
-		}
-
 		.marketplace-mcp-settings {
 			display: grid;
 			gap: 8px;
@@ -761,10 +748,8 @@ const McpManagementPanel = ({
 	showHeader?: boolean
 	showServerList?: boolean
 }) => {
-	const { mcpServers, navigateToSettings, remoteConfigSettings } = useExtensionState()
+	const { mcpServers, navigateToSettings } = useExtensionState()
 	const [showAddRemote, setShowAddRemote] = useState(false)
-	const showRemoteServers = remoteConfigSettings?.blockPersonalRemoteMCPServers !== true
-	const hasRemoteMCPServers = remoteConfigSettings?.remoteMCPServers && remoteConfigSettings.remoteMCPServers.length > 0
 
 	return (
 		<section className="marketplace-section">
@@ -773,33 +758,25 @@ const McpManagementPanel = ({
 					<h3 className="marketplace-section-title">Installed MCP Servers</h3>
 				</div>
 			)}
-			{(showServerList || hasRemoteMCPServers) && (
+			{showServerList && (
 				<div className="marketplace-mcp-panel">
-					{hasRemoteMCPServers && (
-						<div className="marketplace-mcp-managed">
-							<span className="codicon codicon-lock" />
-							<span>Your organization manages some MCP servers</span>
-						</div>
-					)}
-					{showServerList && (
-						<ServersToggleList
-							hasTrashIcon={true}
-							isExpandable={true}
-							listGap="small"
-							marketplaceMetadataByServerName={marketplaceMetadataByServerName}
-							servers={mcpServers}
-						/>
-					)}
+					<ServersToggleList
+						hasTrashIcon={true}
+						isExpandable={true}
+						listGap="small"
+						marketplaceMetadataByServerName={marketplaceMetadataByServerName}
+						servers={mcpServers}
+					/>
 				</div>
 			)}
 			<div className="marketplace-mcp-settings">
-				{showRemoteServers && !showAddRemote && (
+				{!showAddRemote && (
 					<VSCodeButton appearance="primary" onClick={() => setShowAddRemote(true)}>
 						<span className="codicon codicon-add" style={{ marginRight: "6px" }} />
 						Add Remote Server
 					</VSCodeButton>
 				)}
-				{showRemoteServers && showAddRemote && (
+				{showAddRemote && (
 					<div className="marketplace-mcp-form">
 						<AddRemoteServerForm
 							onCancel={() => setShowAddRemote(false)}
@@ -840,7 +817,6 @@ const LocalInstalledRow = ({
 	uninstalling: boolean
 }) => {
 	const origin = sourceLabel(entry)
-	const canUninstall = !(entry.type === "skill" && entry.path?.startsWith("remote:"))
 	return (
 		<div className="marketplace-row">
 			<div className="marketplace-row-main">
@@ -864,11 +840,9 @@ const LocalInstalledRow = ({
 				<button
 					aria-label={`Uninstall ${entry.name || entry.id}`}
 					className="marketplace-icon-button marketplace-icon-button-danger"
-					disabled={uninstalling || !canUninstall}
+					disabled={uninstalling}
 					onClick={() => onUninstall(entry)}
-					title={
-						canUninstall ? `Uninstall ${entry.name || entry.id}` : "Remote-managed skills cannot be uninstalled here"
-					}
+					title={`Uninstall ${entry.name || entry.id}`}
 					type="button">
 					{uninstalling ? (
 						<LoaderCircleIcon aria-hidden className="marketplace-icon-spin" />
@@ -995,7 +969,7 @@ const CatalogEntryRow = ({
 }
 
 const MarketplaceView = ({ initialType = "skill", onDone }: MarketplaceViewProps) => {
-	const { environment, remoteConfigSettings } = useExtensionState()
+	const { environment } = useExtensionState()
 	const [activeType, setActiveType] = useState<PrimitiveType>(initialType)
 	const [activeSection, setActiveSection] = useState<MarketplaceSectionType>("installed")
 	const [catalogEntries, setCatalogEntries] = useState<MarketplaceEntry[]>([])
@@ -1041,15 +1015,6 @@ const MarketplaceView = ({ initialType = "skill", onDone }: MarketplaceViewProps
 		setSelectedTag(null)
 		setActiveSection("installed")
 	}, [initialType])
-
-	const mcpMarketplaceDisabled = activeType === "mcp" && remoteConfigSettings?.mcpMarketplaceEnabled === false
-	const currentSection = mcpMarketplaceDisabled ? "installed" : activeSection
-
-	useEffect(() => {
-		if (mcpMarketplaceDisabled && activeSection === "marketplace") {
-			setActiveSection("installed")
-		}
-	}, [activeSection, mcpMarketplaceDisabled])
 
 	const primitive = getPrimitive(activeType)
 	const searchedCatalogEntries = useMemo(() => {
@@ -1213,13 +1178,9 @@ const MarketplaceView = ({ initialType = "skill", onDone }: MarketplaceViewProps
 		setActiveSection("installed")
 	}, [])
 
-	const handleSectionTabChange = useCallback(
-		(value: string) => {
-			if (mcpMarketplaceDisabled && value === "marketplace") return
-			setActiveSection(value as MarketplaceSectionType)
-		},
-		[mcpMarketplaceDisabled],
-	)
+	const handleSectionTabChange = useCallback((value: string) => {
+		setActiveSection(value as MarketplaceSectionType)
+	}, [])
 
 	return (
 		<Tab className="marketplace-view">
@@ -1242,13 +1203,9 @@ const MarketplaceView = ({ initialType = "skill", onDone }: MarketplaceViewProps
 							aria-label={`${primitive.title} sections`}
 							className="marketplace-subnav"
 							onValueChange={handleSectionTabChange}
-							value={currentSection}>
+							value={activeSection}>
 							{MARKETPLACE_SECTIONS.map((section) => (
-								<TabTrigger
-									className="marketplace-subtab"
-									disabled={mcpMarketplaceDisabled && section.type === "marketplace"}
-									key={section.type}
-									value={section.type}>
+								<TabTrigger className="marketplace-subtab" key={section.type} value={section.type}>
 									{section.label}
 								</TabTrigger>
 							))}
@@ -1264,7 +1221,7 @@ const MarketplaceView = ({ initialType = "skill", onDone }: MarketplaceViewProps
 							</div>
 						) : (
 							<>
-								{currentSection === "installed" &&
+								{activeSection === "installed" &&
 									(activeType === "mcp" ? (
 										<McpManagementPanel
 											marketplaceMetadataByServerName={marketplaceMcpMetadataByServerName}
@@ -1303,7 +1260,7 @@ const MarketplaceView = ({ initialType = "skill", onDone }: MarketplaceViewProps
 										</Section>
 									))}
 
-								{currentSection === "marketplace" && (
+								{activeSection === "marketplace" && (
 									<MarketplaceCatalogSection
 										count={visibleCatalogEntries.length}
 										empty={

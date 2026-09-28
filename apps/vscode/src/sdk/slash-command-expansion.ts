@@ -19,65 +19,16 @@ const WORKFLOW_FILE_EXTENSION_REGEX = /\.(md|markdown|txt)$/i
 /**
  * Canonical form used to compare workflow names across the places they appear:
  * typed slash commands and toggle paths keep the file extension, while SDK
- * command names and remote workflow names do not.
+ * command names do not.
  */
 function canonicalWorkflowName(value: string): string {
 	const stripped = value.replace(WORKFLOW_FILE_EXTENSION_REGEX, "").toLowerCase()
 	return stripped || value.toLowerCase()
 }
 
-/**
- * Verbatim port of @plinycode/shared's private `sanitizeSegment`
- * (src/remote-config/materializer.ts), which names the files that remote
- * workflows materialize to — lower-cased, disallowed character runs collapsed
- * to `-`, capped at 80 characters. Keep in sync with the original.
- */
-function sanitizeRemoteSegment(value: string): string {
-	let result = ""
-	let pendingSeparator = false
-	for (const char of value.trim().toLowerCase()) {
-		const code = char.charCodeAt(0)
-		const isAllowed =
-			(code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === "." || char === "_" || char === "-"
-		if (isAllowed) {
-			if (pendingSeparator && result && result[result.length - 1] !== "-") {
-				result += "-"
-			}
-			pendingSeparator = false
-			result += char
-		} else {
-			pendingSeparator = true
-		}
-		if (result.length >= 80) {
-			break
-		}
-	}
-	while (result.endsWith("-")) {
-		result = result.slice(0, -1)
-	}
-	while (result.startsWith("-")) {
-		result = result.slice(1)
-	}
-	return result || "item"
-}
-
-/**
- * Comparison key for remote workflow names. The discovered record is named
- * after the sanitized file basename, while remote toggles are keyed by the
- * original config name (e.g. "Org Standards"), so apply the materializer's
- * exact transformation to both sides before comparing (it is idempotent on
- * already-sanitized names).
- */
-function remoteWorkflowNameKey(value: string): string {
-	return sanitizeRemoteSegment(value.replace(WORKFLOW_FILE_EXTENSION_REGEX, ""))
-}
-
 function fileBasename(filePath: string): string {
 	return filePath.replace(/^.*[/\\]/, "")
 }
-
-/** Matches files materialized from remote config (`.cline/remote-config/…`). */
-const REMOTE_CONFIG_PATH_REGEX = /[/\\]\.cline[/\\]remote-config[/\\]/
 
 /** The discovered workflow files toggle filtering and matching operate on. */
 export interface WorkflowRecordRef {
@@ -212,15 +163,11 @@ export interface BuildDisabledWorkflowNamesOptions {
 	globalToggles?: Record<string, boolean>
 	/** Workspace `workflowToggles` — keyed by absolute file path. */
 	workspaceToggles?: Record<string, boolean>
-	/** `remoteWorkflowToggles` (global state) — keyed by remote workflow name. */
-	remoteToggles?: Record<string, boolean>
-	/** Names of remote workflows the organization locks on (`alwaysEnabled`). */
-	remoteAlwaysEnabledNames?: Iterable<string>
 }
 
 /**
  * Build the set of exact command names whose workflows the user disabled via
- * the Workflows toggles (local, global, and enterprise/remote scopes).
+ * the Workflows toggles (local and global scopes).
  *
  * Each command is governed by the toggle state of its own record — the file
  * whose body would actually expand — so a disabled workflow in one scope can
@@ -234,9 +181,7 @@ export interface BuildDisabledWorkflowNamesOptions {
  * scope has it enabled: those files collapse into a single record, and legacy
  * expansion only searched enabled workflows across scopes, so a disabled
  * workspace file must not shadow a same-named enabled global one (or vice
- * versa). Files materialized from remote config are governed by the
- * name-keyed remote toggles instead, and locked (`alwaysEnabled`) remote
- * workflows always count as enabled.
+ * versa).
  */
 export function buildDisabledWorkflowNames(options: BuildDisabledWorkflowNamesOptions): Set<string> {
 	const enabledByBasename = new Map<string, boolean>()
@@ -249,31 +194,12 @@ export function buildDisabledWorkflowNames(options: BuildDisabledWorkflowNamesOp
 			enabledByBasename.set(key, (enabledByBasename.get(key) ?? false) || enabled)
 		}
 	}
-	// Distinct config names can sanitize to the same materialized name (case,
-	// punctuation, or the 80-char cap); merge collisions as enabled-if-any-
-	// enabled rather than letting the last entry win arbitrarily.
-	const remoteToggles = new Map<string, boolean>()
-	for (const [name, enabled] of Object.entries(options.remoteToggles ?? {})) {
-		const key = remoteWorkflowNameKey(name)
-		remoteToggles.set(key, (remoteToggles.get(key) ?? false) || enabled)
-	}
-	const remoteAlwaysEnabled = new Set([...(options.remoteAlwaysEnabledNames ?? [])].map(remoteWorkflowNameKey))
-
 	const disabled = new Set<string>()
 	for (const record of options.records) {
 		if (!record.name) {
 			continue
 		}
-		let enabled: boolean
-		if (REMOTE_CONFIG_PATH_REGEX.test(record.filePath)) {
-			// Key off the materialized file basename — the materializer derives it
-			// from the remote config name, so it stays correct even when the file's
-			// frontmatter aliases the command name to something else.
-			const remoteKey = remoteWorkflowNameKey(fileBasename(record.filePath))
-			enabled = remoteAlwaysEnabled.has(remoteKey) || remoteToggles.get(remoteKey) !== false
-		} else {
-			enabled = enabledByBasename.get(canonicalWorkflowName(fileBasename(record.filePath))) ?? true
-		}
+		const enabled = enabledByBasename.get(canonicalWorkflowName(fileBasename(record.filePath))) ?? true
 		if (!enabled) {
 			disabled.add(record.name)
 		}

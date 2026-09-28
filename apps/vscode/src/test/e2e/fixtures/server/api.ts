@@ -7,7 +7,6 @@ export const E2E_REGISTERED_MOCK_ENDPOINTS = {
 			"/organizations/{orgId}/balance",
 			"/organizations/{orgId}/members/{memberId}/usages",
 			"/organizations/{orgId}/api-keys",
-			"/organizations/{orgId}/remote-config",
 			"/users/me",
 			"/users/me/featurebase-token",
 			"/users/{userId}/balance",

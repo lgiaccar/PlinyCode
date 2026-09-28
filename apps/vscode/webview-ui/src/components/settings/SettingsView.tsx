@@ -2,16 +2,7 @@ import type { ExtensionMessage } from "@shared/ExtensionMessage"
 import { isClineInternalTester } from "@shared/internal/account"
 import { ResetStateRequest } from "@shared/proto/cline/state"
 import type { UserOrganization } from "@shared/proto/index.cline"
-import {
-	CheckCheck,
-	FlaskConical,
-	HardDriveDownload,
-	Info,
-	type LucideIcon,
-	SlidersHorizontal,
-	SquareTerminal,
-	Wrench,
-} from "lucide-react"
+import { CheckCheck, FlaskConical, Info, type LucideIcon, SlidersHorizontal, SquareTerminal, Wrench } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useEvent } from "react-use"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -19,7 +10,6 @@ import { type ClineUser, useClineAuth } from "@/context/ClineAuthContext"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
 import { StateServiceClient } from "@/services/grpc-client"
-import { isAdminOrOwner } from "../account/helpers"
 import { Tab, TabContent, TabList, TabTrigger } from "../common/Tab"
 import ViewHeader from "../common/ViewHeader"
 import SectionHeader from "./SectionHeader"
@@ -28,13 +18,12 @@ import ApiConfigurationSection from "./sections/ApiConfigurationSection"
 import DebugSection from "./sections/DebugSection"
 import FeatureSettingsSection from "./sections/FeatureSettingsSection"
 import GeneralSettingsSection from "./sections/GeneralSettingsSection"
-import { RemoteConfigSection } from "./sections/RemoteConfigSection"
 import TerminalSettingsSection from "./sections/TerminalSettingsSection"
 
 const IS_DEV = process.env.IS_DEV
 
 // Tab definitions
-type SettingsTabID = "api-config" | "features" | "terminal" | "general" | "about" | "debug" | "remote-config"
+type SettingsTabID = "api-config" | "features" | "terminal" | "general" | "about" | "debug"
 interface SettingsTab {
 	id: SettingsTabID
 	name: string
@@ -72,15 +61,6 @@ const SETTINGS_TABS: SettingsTab[] = [
 		tooltipText: "General Settings",
 		headerText: "General Settings",
 		icon: Wrench,
-	},
-	{
-		id: "remote-config",
-		name: "Remote Config",
-		tooltipText: "Remotely configured fields",
-		headerText: "Remote Config",
-		icon: HardDriveDownload,
-		hidden: ({ activeOrganization } = { user: null, activeOrganization: null }) =>
-			!activeOrganization || !isAdminOrOwner(activeOrganization),
 	},
 	{
 		id: "about",
@@ -130,7 +110,6 @@ const SettingsView = ({ onDone, targetSection }: SettingsViewProps) => {
 			general: GeneralSettingsSection,
 			features: FeatureSettingsSection,
 			terminal: TerminalSettingsSection,
-			"remote-config": RemoteConfigSection,
 			about: AboutSection,
 			debug: DebugSection,
 		}),

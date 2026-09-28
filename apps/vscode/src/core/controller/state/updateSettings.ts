@@ -229,19 +229,6 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 			controller.stateManager.setGlobalState("multiRootEnabled", !!request.multiRootEnabled)
 		}
 
-		if (request.optOutOfRemoteConfig !== undefined) {
-			const hadOptedOut = !!controller.stateManager.getGlobalSettingsKey("optOutOfRemoteConfig")
-			const isOptingOut = !!request.optOutOfRemoteConfig
-
-			// Update first so the authoritative refresh evaluates the new preference.
-			controller.stateManager.setGlobalState("optOutOfRemoteConfig", isOptingOut)
-			if (isOptingOut !== hadOptedOut) {
-				// force: never coalesce onto an in-flight refresh that already
-				// evaluated the pre-change opt-out preference.
-				await controller.refreshRemoteConfig({ force: true })
-			}
-		}
-
 		if (request.showFeatureTips !== undefined) {
 			controller.stateManager.setGlobalState("showFeatureTips", request.showFeatureTips)
 		}

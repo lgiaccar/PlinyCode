@@ -21,7 +21,7 @@ export async function toggleClineRule(controller: Controller, request: ToggleCli
 		throw new Error("Missing or invalid parameters for toggleClineRule")
 	}
 
-	// Handle the three different scopes
+	// Handle the two scopes
 	switch (scope) {
 		case RuleScope.GLOBAL: {
 			const toggles = controller.stateManager.getGlobalSettingsKey("globalClineRulesToggles")
@@ -35,12 +35,6 @@ export async function toggleClineRule(controller: Controller, request: ToggleCli
 			controller.stateManager.setWorkspaceState("localClineRulesToggles", toggles)
 			break
 		}
-		case RuleScope.REMOTE: {
-			const toggles = controller.stateManager.getGlobalStateKey("remoteRulesToggles")
-			toggles[rulePath] = enabled
-			controller.stateManager.setGlobalState("remoteRulesToggles", toggles)
-			break
-		}
 		default:
 			throw new Error(`Invalid scope: ${scope}`)
 	}
@@ -48,11 +42,9 @@ export async function toggleClineRule(controller: Controller, request: ToggleCli
 	// Get the current state to return in the response
 	const globalToggles = controller.stateManager.getGlobalSettingsKey("globalClineRulesToggles")
 	const localToggles = controller.stateManager.getWorkspaceStateKey("localClineRulesToggles")
-	const remoteToggles = controller.stateManager.getGlobalStateKey("remoteRulesToggles")
 
 	return ToggleClineRules.create({
 		globalClineRulesToggles: { toggles: globalToggles },
 		localClineRulesToggles: { toggles: localToggles },
-		remoteRulesToggles: { toggles: remoteToggles },
 	})
 }

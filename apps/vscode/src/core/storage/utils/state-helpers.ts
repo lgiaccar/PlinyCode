@@ -28,6 +28,8 @@ export const REMOVED_SECRET_KEYS: readonly string[] = [
 	"ocaRefreshToken",
 	"ocaAccessToken",
 	"ocaTokenSet",
+	// Remote config (organization-managed LiteLLM key)
+	"remoteLiteLlmApiKey",
 ]
 
 /**

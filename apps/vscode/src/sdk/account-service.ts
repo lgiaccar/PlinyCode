@@ -9,7 +9,6 @@ import type {
 	OrganizationUsageTransaction,
 	PaymentTransaction,
 	UsageTransaction,
-	UserRemoteConfigDiscoveryResponse,
 	UserResponse,
 } from "@shared/ClineAccount"
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios"
@@ -220,25 +219,6 @@ export class ClineAccountService {
 			Logger.error("Failed to fetch organization transactions (RPC):", error)
 			return undefined
 		}
-	}
-
-	/**
-	 * Returns undefined when no auth token is available (signed out or token
-	 * refresh failed), and null when the server answered but distributes no
-	 * remote config for this user. Callers rely on the distinction: only the
-	 * server's answer may be treated as "explicitly no config".
-	 */
-	async fetchUserRemoteConfig(): Promise<UserRemoteConfigDiscoveryResponse | null | undefined> {
-		const token = await this._authService.getAuthToken()
-		if (!token) {
-			return undefined
-		}
-
-		return await this.authenticatedRequest<UserRemoteConfigDiscoveryResponse | null>(
-			CLINE_API_ENDPOINT.USER_REMOTE_CONFIG,
-			{},
-			{ allowNullData: true, authToken: token },
-		)
 	}
 
 	/**

@@ -137,17 +137,6 @@ describe("SdkSessionLifecycle", () => {
 		expect(lifecycle.getActiveSession()).toBeUndefined()
 	})
 
-	it("passes the policy readiness gate to the shared session host", async () => {
-		const beforeStartSession = vi.fn().mockResolvedValue(undefined)
-		const sdkHost = makeSdkHost({ startResult: { sessionId: "session-123" } })
-		mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
-		const lifecycle = makeLifecycle({ beforeStartSession })
-
-		await lifecycle.startNewSession({} as StartInput)
-
-		expect(mockCreateSessionHost).toHaveBeenCalledWith(expect.objectContaining({ beforeStartSession }))
-	})
-
 	it("marks the active session idle after a non-queued send completes", async () => {
 		const onSendComplete = vi.fn()
 		const sdkHost = makeSdkHost({ send: vi.fn().mockResolvedValue(undefined) })

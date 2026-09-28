@@ -2,7 +2,6 @@
 
 import type { GeneratedMedia } from "@plinycode/shared"
 import { WorkspaceRoot } from "@shared/multi-root/types"
-import { RemoteConfigFields } from "@shared/storage/state-keys"
 import type { Environment } from "../config"
 import { AutoApprovalSettings } from "./AutoApprovalSettings"
 import { ApiConfiguration } from "./api"
@@ -115,8 +114,6 @@ export interface ExtensionState {
 	globalWorkflowToggles: ClineRulesToggles
 	localCursorRulesToggles: ClineRulesToggles
 	localWindsurfRulesToggles: ClineRulesToggles
-	remoteRulesToggles?: ClineRulesToggles
-	remoteWorkflowToggles?: ClineRulesToggles
 	localAgentsRulesToggles: ClineRulesToggles
 	localCopilotRulesToggles: ClineRulesToggles
 	mcpResponsesCollapsed?: boolean
@@ -144,13 +141,9 @@ export interface ExtensionState {
 	isMultiRootWorkspace: boolean
 	multiRootSetting: ClineFeatureSetting
 	hooksEnabled?: boolean
-	remoteConfigSettings?: Partial<RemoteConfigFields>
-	remoteConfigRevision?: number
 	globalSkillsToggles?: Record<string, boolean>
 	localSkillsToggles?: Record<string, boolean>
 	backgroundEditEnabled?: boolean
-	optOutOfRemoteConfig?: boolean
-	remoteConfigAvailable?: boolean
 	showFeatureTips?: boolean
 	openAiCodexIsAuthenticated?: boolean
 }

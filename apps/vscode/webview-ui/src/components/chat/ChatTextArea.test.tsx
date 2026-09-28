@@ -17,8 +17,6 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 		platform: "darwin",
 		localWorkflowToggles: {},
 		globalWorkflowToggles: {},
-		remoteWorkflowToggles: {},
-		remoteConfigSettings: undefined,
 		navigateToSettingsModelPicker: mocks.navigateToSettingsModelPicker,
 		mcpServers: [],
 		chatInputMaxRows: mocks.chatInputMaxRows,

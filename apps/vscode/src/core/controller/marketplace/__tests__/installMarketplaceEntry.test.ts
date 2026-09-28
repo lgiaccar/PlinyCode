@@ -6,7 +6,6 @@ import type { Controller } from "../../index"
 const installMarketplaceEntryFromCatalogStub: sinon.SinonStub = sinon.stub()
 const marketplaceHelpersMock = () => ({
 	installMarketplaceEntryFromCatalog: installMarketplaceEntryFromCatalogStub,
-	isMcpEntryAllowedByPolicy: () => true,
 })
 
 mock.module("../marketplace-helpers", marketplaceHelpersMock)
@@ -24,7 +23,6 @@ describe("installMarketplaceEntry", () => {
 		const controller = {
 			mcpHub: { reconcileMcpServersFromSettingsRPC },
 			invalidateUserInstructionService,
-			stateManager: { getRemoteConfigSettings: () => ({}) },
 		} as unknown as Controller
 		installMarketplaceEntryFromCatalogStub.resolves({
 			id: "chrome-devtools",

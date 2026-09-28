@@ -14,7 +14,6 @@ const mockExtensionState = vi.hoisted(() => ({
 		subagentsEnabled: false,
 		worktreesEnabled: { user: true, featureFlag: true },
 		focusChainSettings: { enabled: false, remindClineInterval: 6 },
-		remoteConfigSettings: {},
 		backgroundEditEnabled: false,
 	},
 }))

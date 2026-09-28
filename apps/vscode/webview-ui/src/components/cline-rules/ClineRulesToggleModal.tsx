@@ -18,7 +18,6 @@ import styled from "styled-components"
 import PopupModalContainer from "@/components/common/PopupModalContainer"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
-import useRemoteConfigSettings from "@/hooks/useRemoteConfigSettings"
 import { FileServiceClient } from "@/services/grpc-client"
 import { isMacOSOrLinux } from "@/utils/platformUtils"
 import HookRow from "./HookRow"
@@ -44,7 +43,6 @@ const ClineRulesToggleModal: React.FC = () => {
 		setLocalCopilotRulesToggles,
 		setGlobalSkillsToggles,
 		setLocalSkillsToggles,
-		setRemoteRulesToggles,
 	} = useExtensionState()
 	const [globalHooks, setGlobalHooks] = useState<Array<{ name: string; enabled: boolean; absolutePath: string }>>([])
 	const [workspaceHooks, setWorkspaceHooks] = useState<
@@ -211,28 +209,17 @@ const ClineRulesToggleModal: React.FC = () => {
 		.sort(([a], [b]) => a.localeCompare(b))
 
 	// Skills cost their name + description on every request; the full file only when used.
-	// globalSkills also carries the remote (enterprise) skills under "remote:<name>" paths.
 	const allSkills = [...globalSkills, ...localSkills]
-	const enabledSkills = allSkills.filter((skill) => skill.enabled || skill.alwaysEnabled)
+	const enabledSkills = allSkills.filter((skill) => skill.enabled)
 	const enabledSkillListingTokens = enabledSkills.reduce((total, skill) => total + estimateSkillListingTokens(skill), 0)
 	const enabledSkillFileTokens = enabledSkills.reduce((total, skill) => total + (skill.tokens ?? 0), 0)
 	const skillTokensByPath = Object.fromEntries(allSkills.map((skill) => [skill.path, skill.tokens ?? 0]))
 
-	// Context budget of the file-based rules (remote rules are managed and not counted).
+	// Context budget of the file-based rules.
 	const allFileRules = [...globalRules, ...localRules, ...agentsRules, ...copilotRules, ...cursorRules, ...windsurfRules]
 	const enabledRuleCount = allFileRules.filter(([, enabled]) => enabled).length
 	const enabledRuleTokens = sumEnabledTokens(allFileRules, ruleTokenCounts)
 	const totalRuleTokens = allFileRules.reduce((total, [rulePath]) => total + (ruleTokenCounts[rulePath] ?? 0), 0)
-
-	const {
-		settings: remoteConfigSettings,
-		isLoading: isRemoteConfigLoading,
-		error: remoteConfigError,
-	} = useRemoteConfigSettings(isVisible)
-	const remoteRules = remoteConfigSettings.filter((s) => s.type === "rule")
-	const remoteSkills = remoteConfigSettings.filter((s) => s.type === "skill")
-	const hasRemoteRules = remoteRules.length > 0
-	const hasRemoteSkills = remoteSkills.length > 0
 
 	// Handle toggle rule using gRPC
 	const toggleRule = (isGlobal: boolean, rulePath: string, enabled: boolean) => {
@@ -250,9 +237,6 @@ const ClineRulesToggleModal: React.FC = () => {
 				}
 				if (response.localClineRulesToggles?.toggles) {
 					setLocalClineRulesToggles(response.localClineRulesToggles.toggles)
-				}
-				if (response.remoteRulesToggles?.toggles) {
-					setRemoteRulesToggles(response.remoteRulesToggles.toggles)
 				}
 			})
 			.catch((error) => {
@@ -364,9 +348,7 @@ const ClineRulesToggleModal: React.FC = () => {
 					setLocalSkillsToggles(response.localSkillsToggles)
 				}
 				// Update local skills state
-				if (skillPath.startsWith("remote:")) {
-					setGlobalSkills((prev) => prev.map((s) => (s.path === skillPath ? { ...s, enabled } : s)))
-				} else if (isGlobal) {
+				if (isGlobal) {
 					setGlobalSkills((prev) => prev.map((s) => (s.path === skillPath ? { ...s, enabled } : s)))
 				} else {
 					setLocalSkills((prev) => prev.map((s) => (s.path === skillPath ? { ...s, enabled } : s)))
@@ -444,18 +426,6 @@ const ClineRulesToggleModal: React.FC = () => {
 							</div>
 						</div>
 
-						{/* Remote config banner */}
-						{(currentView === "rules" && hasRemoteRules) || (currentView === "skills" && hasRemoteSkills) ? (
-							<div className="flex items-center gap-2 px-3 py-3 mb-4 bg-vscode-textBlockQuote-background border-l-[3px] border-vscode-textLink-foreground">
-								<i className="codicon codicon-lock text-sm" />
-								<span className="text-base">
-									{currentView === "rules"
-										? "Your organization manages some rules"
-										: "Your organization manages some skills"}
-								</span>
-							</div>
-						) : null}
-
 						{/* Description text */}
 						<div className="text-xs text-description mb-4">
 							{currentView === "rules" ? (
@@ -489,17 +459,6 @@ const ClineRulesToggleModal: React.FC = () => {
 
 					{/* Scrollable content area */}
 					<div className="flex-1 overflow-y-auto px-3 pb-3" style={{ minHeight: 0 }}>
-						{isRemoteConfigLoading && remoteConfigSettings.length === 0 && (
-							<div className="text-xs text-description mb-3" role="status">
-								Loading managed configuration…
-							</div>
-						)}
-						{remoteConfigError && (
-							<div className="text-xs text-vscode-errorForeground mb-3" role="alert">
-								Could not refresh managed configuration: {remoteConfigError}
-								{remoteConfigSettings.length > 0 ? " Showing the last loaded configuration." : ""}
-							</div>
-						)}
 						{currentView === "rules" ? (
 							<>
 								<ContextBudget
@@ -507,30 +466,6 @@ const ClineRulesToggleModal: React.FC = () => {
 									label="Rules added to every request"
 									tokens={enabledRuleTokens}
 								/>
-
-								{/* Remote Rules Section */}
-								{hasRemoteRules && (
-									<div className="mb-3">
-										<div className="text-sm font-normal mb-2">Enterprise Rules</div>
-										<div className="flex flex-col gap-0">
-											{remoteRules.map((rule) => {
-												const enabled = rule.locked || rule.enabled
-												return (
-													<RuleRow
-														alwaysEnabled={rule.locked}
-														enabled={enabled}
-														isGlobal={false}
-														isRemote={true}
-														key={rule.name}
-														rulePath={rule.name}
-														ruleType="cline"
-														toggleRule={(_path, enabled) => rule.toggle(enabled)}
-													/>
-												)
-											})}
-										</div>
-									</div>
-								)}
 
 								{/* Global Rules Section */}
 								<div className="mb-3">
@@ -713,40 +648,11 @@ const ClineRulesToggleModal: React.FC = () => {
 									tokens={enabledSkillListingTokens}
 								/>
 
-								{/* Enterprise Skills Section (remote) */}
-								{hasRemoteSkills && (
-									<div className="mb-3">
-										<div className="text-sm font-normal mb-2">Enterprise Skills</div>
-										<div className="flex flex-col gap-0">
-											{remoteSkills
-												.sort((a, b) => a.name.localeCompare(b.name))
-												.map((skill) => {
-													const enabled = skill.locked || skill.enabled
-													return (
-														<RuleRow
-															alwaysEnabled={skill.locked}
-															enabled={enabled}
-															isGlobal={true}
-															isRemote={true}
-															key={skill.name}
-															rulePath={skill.name}
-															ruleType="skill"
-															toggleRule={(_path, enabled) => skill.toggle(enabled)}
-															tokens={skillTokensByPath[`remote:${skill.name}`]}
-															tokensTitle={SKILL_TOKENS_TITLE}
-														/>
-													)
-												})}
-										</div>
-									</div>
-								)}
-
 								{/* Global Skills Section */}
 								<div className="mb-3">
 									<div className="text-sm font-normal mb-2">Global Skills</div>
 									<div className="flex flex-col gap-0">
 										{globalSkills
-											.filter((s) => !s.path.startsWith("remote:"))
 											.sort((a, b) => a.name.localeCompare(b.name))
 											.map((skill) => (
 												<RuleRow

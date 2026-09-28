@@ -3,7 +3,6 @@ import { memo, type ReactNode } from "react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import Section from "../Section"
 import { updateSetting } from "../utils/settingsHandlers"
@@ -15,8 +14,6 @@ interface FeatureCheckboxProps {
 	label: string
 	description: ReactNode
 	disabled?: boolean
-	isRemoteLocked?: boolean
-	remoteTooltip?: string
 	isVisible?: boolean
 }
 
@@ -87,57 +84,34 @@ const advancedFeatures: FeatureToggle[] = [
 	},
 ]
 
-const FeatureRow = memo(
-	({
-		checked = false,
-		onChange,
-		label,
-		description,
-		disabled,
-		isRemoteLocked,
-		isVisible = true,
-		remoteTooltip,
-	}: FeatureCheckboxProps) => {
-		if (!isVisible) {
-			return null
-		}
+const FeatureRow = memo(({ checked = false, onChange, label, description, disabled, isVisible = true }: FeatureCheckboxProps) => {
+	if (!isVisible) {
+		return null
+	}
 
-		const checkbox = (
-			<div className="flex items-center justify-between w-full">
-				<div>{label}</div>
-				<div>
-					<Switch
-						checked={checked}
-						className="shrink-0"
-						disabled={disabled || isRemoteLocked}
-						id={label}
-						onCheckedChange={onChange}
-						size="lg"
-					/>
-					{isRemoteLocked && <i className="codicon codicon-lock text-description text-sm" />}
-				</div>
+	const checkbox = (
+		<div className="flex items-center justify-between w-full">
+			<div>{label}</div>
+			<div>
+				<Switch
+					checked={checked}
+					className="shrink-0"
+					disabled={disabled}
+					id={label}
+					onCheckedChange={onChange}
+					size="lg"
+				/>
 			</div>
-		)
+		</div>
+	)
 
-		return (
-			<div className="flex flex-col items-start justify-between gap-4 py-3 w-full">
-				<div className="space-y-0.5 flex-1 w-full">
-					{isRemoteLocked ? (
-						<Tooltip>
-							<TooltipTrigger asChild>{checkbox}</TooltipTrigger>
-							<TooltipContent className="max-w-xs" side="top">
-								{remoteTooltip}
-							</TooltipContent>
-						</Tooltip>
-					) : (
-						checkbox
-					)}
-				</div>
-				<div className="text-xs text-description">{description}</div>
-			</div>
-		)
-	},
-)
+	return (
+		<div className="flex flex-col items-start justify-between gap-4 py-3 w-full">
+			<div className="space-y-0.5 flex-1 w-full">{checkbox}</div>
+			<div className="text-xs text-description">{description}</div>
+		</div>
+	)
+})
 
 interface FeatureSettingsSectionProps {
 	renderSectionHeader: (tabId: string) => JSX.Element | null

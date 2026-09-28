@@ -3,6 +3,10 @@ import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
 import { homedir, platform } from "node:os"
 import { isAbsolute, join, relative, resolve } from "node:path"
+import { deleteSkillFile } from "@core/controller/file/deleteSkillFile"
+import { refreshSkills } from "@core/controller/file/refreshSkills"
+import { toggleSkill } from "@core/controller/file/toggleSkill"
+import { resolveActiveModelIdFromApiConfiguration } from "@core/controller/models/taskApiModel"
 import {
 	disablePluginMcpServersInSettings,
 	discoverPluginModulePaths,
@@ -21,10 +25,6 @@ import {
 	uninstallMarketplaceEntry as uninstallCoreMarketplaceEntry,
 	uninstallPlugin,
 } from "@plinycode/core"
-import { deleteSkillFile } from "@core/controller/file/deleteSkillFile"
-import { refreshSkills } from "@core/controller/file/refreshSkills"
-import { toggleSkill } from "@core/controller/file/toggleSkill"
-import { resolveActiveModelIdFromApiConfiguration } from "@core/controller/models/taskApiModel"
 import { DeleteSkillRequest, ToggleSkillRequest } from "@shared/proto/cline/file"
 import {
 	MarketplaceCatalog,
@@ -141,31 +141,6 @@ function normalizeMatchValue(value: string | undefined): string {
 
 function marketplaceKey(entry: MarketplaceEntry): string {
 	return `${entry.type}:${entry.id}`
-}
-
-/** Normalizes an allowlist id or entry identifier; legacy allowlist ids may be GitHub repo URLs. */
-function normalizePolicyValue(value: string | undefined): string {
-	return normalizeMatchValue((value ?? "").replace(/^https?:\/\//i, "").replace(/\/+$/, ""))
-}
-
-/**
- * Enterprise remote config can disable the MCP marketplace (`mcpMarketplaceEnabled: false`)
- * or restrict it to an allowlist (`allowedMCPServers`). Non-MCP entries are not governed
- * by these controls. Allowlist ids match the entry id, display name, installed server
- * name, or source/homepage URL.
- */
-export function isMcpEntryAllowedByPolicy(
-	entry: MarketplaceEntry,
-	policy: { mcpMarketplaceEnabled?: boolean; allowedMCPServers?: Array<{ id: string }> },
-): boolean {
-	if (entry.type !== "mcp") return true
-	if (policy.mcpMarketplaceEnabled === false) return false
-	if (!policy.allowedMCPServers?.length) return true
-	const candidates = new Set(
-		[entry.id, entry.name, getEntryArgs(entry)[0], entry.sourceUrl, entry.homepageUrl].map(normalizePolicyValue),
-	)
-	candidates.delete("")
-	return policy.allowedMCPServers.some((server) => candidates.has(normalizePolicyValue(server.id)))
 }
 
 function getEntryArgs(entry: MarketplaceEntry): string[] {
@@ -447,7 +422,7 @@ function isPathWithin(parentPath: string, childPath: string): boolean {
 }
 
 function isGlobalClinePath(filePath: string | undefined): boolean {
-	if (!filePath || filePath.startsWith("remote:")) return false
+	if (!filePath) return false
 	return [resolveClineHome(), join(homedir(), ".agents", "skills")].some((root) => isPathWithin(root, filePath))
 }
 
@@ -492,7 +467,7 @@ export async function listLocalMarketplaceInstalledEntries(controller: Controlle
 				name: skill.name,
 				description: skill.description,
 				path: skill.path,
-				source: skill.path.startsWith("remote:") ? "remote" : "global",
+				source: "global",
 				enabled: skill.enabled,
 			}),
 		),
@@ -605,9 +580,6 @@ export async function uninstallLocalMarketplaceInstalledEntry(
 		})
 	}
 	if (entry.type === "skill") {
-		if (entry.path?.startsWith("remote:")) {
-			throw new Error("Remote-managed skills cannot be uninstalled from Customize.")
-		}
 		if (!entry.path) throw new Error("Skill path is required for uninstall.")
 		await deleteSkillFile(
 			controller,

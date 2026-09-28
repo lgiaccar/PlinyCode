@@ -15,11 +15,8 @@ import { registerVsCodeLmHandler } from "./sdk/vscode-lm/register-vscode-lm"
 import { registerClineClientIdentity } from "./services/ClineClientIdentity"
 import { ErrorService } from "./services/error"
 import { featureFlagsService } from "./services/feature-flags"
-import { getDistinctId } from "./services/logging/distinctId"
 import { ClineTempManager } from "./services/temp"
 import { ShowMessageType } from "./shared/proto/host/window"
-import { syncWorker } from "./shared/services/worker/sync"
-import { getBlobStoreSettingsFromEnv } from "./shared/services/worker/worker"
 import { getLatestAnnouncementId } from "./utils/announcements"
 import { arePathsEqual } from "./utils/path"
 
@@ -81,10 +78,7 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	// Check if this workspace was opened from worktree quick launch
 	await checkWorktreeAutoOpen(stateManager)
 
-	// =============== Background sync and cleanup tasks ===============
-	// Use remote config blobStoreConfig if available, otherwise fall back to env vars
-	const blobStoreSettings = stateManager.getRemoteConfigSettings()?.blobStoreConfig ?? getBlobStoreSettingsFromEnv()
-	syncWorker().init({ ...blobStoreSettings, userDistinctId: getDistinctId() })
+	// =============== Background cleanup tasks ===============
 	// Clean up old temp files in background (non-blocking) and start periodic cleanup every 24 hours
 	ClineTempManager.startPeriodicCleanup()
 	return webview
@@ -166,7 +160,6 @@ export async function tearDown(): Promise<void> {
 		featureFlagsService.dispose()
 		// Dispose all webview instances
 		await WebviewProvider.disposeAllInstances()
-		syncWorker().dispose()
 		clearOnboardingModelsCache()
 
 		// Kill any running hook processes to prevent zombies

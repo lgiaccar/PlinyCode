@@ -91,8 +91,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	setGlobalWorkflowToggles: (toggles: Record<string, boolean>) => void
 	setGlobalSkillsToggles: (toggles: Record<string, boolean>) => void
 	setLocalSkillsToggles: (toggles: Record<string, boolean>) => void
-	setRemoteRulesToggles: (toggles: Record<string, boolean>) => void
-	setRemoteWorkflowToggles: (toggles: Record<string, boolean>) => void
 	setTotalTasksSize: (value: number | null) => void
 	setExpandTaskHeader: (value: boolean) => void
 	setShowWelcome: (value: boolean) => void
@@ -298,9 +296,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		subagentsEnabled: true,
 		worktreesEnabled: { user: true, featureFlag: false },
 		favoritedModelIds: [],
-		optOutOfRemoteConfig: false,
-		remoteConfigAvailable: false,
-		remoteConfigSettings: {},
 		backgroundCommandRunning: false,
 		backgroundCommandTaskId: undefined,
 		foregroundCommandRunning: false,
@@ -894,8 +889,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		localCopilotRulesToggles: state.localCopilotRulesToggles || {},
 		localWorkflowToggles: state.localWorkflowToggles || {},
 		globalWorkflowToggles: state.globalWorkflowToggles || {},
-		remoteRulesToggles: state.remoteRulesToggles || {},
-		remoteWorkflowToggles: state.remoteWorkflowToggles || {},
 		enableCheckpointsSetting: state.enableCheckpointsSetting,
 
 		// Navigation functions
@@ -975,16 +968,6 @@ export const ExtensionStateContextProvider: React.FC<{
 			setState((prevState) => ({
 				...prevState,
 				localSkillsToggles: toggles,
-			})),
-		setRemoteRulesToggles: (toggles) =>
-			setState((prevState) => ({
-				...prevState,
-				remoteRulesToggles: toggles,
-			})),
-		setRemoteWorkflowToggles: (toggles) =>
-			setState((prevState) => ({
-				...prevState,
-				remoteWorkflowToggles: toggles,
 			})),
 		setMcpTab,
 		setTotalTasksSize,
