@@ -205,17 +205,6 @@ export type {
 } from "./auth/types";
 export { ClineCore } from "./ClineCore";
 export type {
-	ClineAutomationEventIngressResult,
-	ClineAutomationEventLog,
-	ClineAutomationEventSuppression,
-	ClineAutomationListEventsOptions,
-	ClineAutomationListRunsOptions,
-	ClineAutomationListSpecsOptions,
-	ClineAutomationRun,
-	ClineAutomationRunStatus,
-	ClineAutomationSpec,
-	ClineCoreAutomationApi,
-	ClineCoreAutomationOptions,
 	ClineCoreListHistoryOptions,
 	ClineCoreOptions,
 	ClineCoreSettingsApi,
