@@ -41,7 +41,6 @@ jobs:
                           - 'apps/vscode/proto/**'
                           - 'apps/vscode/tests/**'
                           - 'apps/vscode/scripts/**'
-                          - 'apps/vscode/standalone/**'
                           - 'apps/vscode/assets/**'
                           - 'apps/vscode/walkthrough/**'
                           - 'apps/vscode/package.json'

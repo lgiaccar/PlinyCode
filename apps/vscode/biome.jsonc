@@ -136,7 +136,6 @@
 			"!!**/proto",
 			"!!webview-ui/src/services/grpc-client.ts",
 			"!!tsconfig.test.generated.json",
-			"!!**/tests/specs",
 			"!!**/.kilo",
 			"!!assets/icons/*.svg"
 		]
@@ -174,7 +173,6 @@
 				"!!**/*.mts",
 				"!!**/webview-ui/**",
 				"!!**/evals/**",
-				"!!**/standalone/**",
 				"!!**/cli/**",
 				"!!**/e2e/**",
 				"!!**/test/**",
@@ -185,8 +183,7 @@
 				"!!**/*.mjs",
 				"!!**/*.js",
 				"!!**/scripts/**",
-				"!!**/*.tsx",
-				"!!**/testing-platform/**"
+				"!!**/*.tsx"
 			]
 		},
 		{
