@@ -50,7 +50,6 @@ export type {
 	ChatStartSessionArtifacts,
 	ChatStartSessionRequest,
 	ChatTurnResult,
-	ClineAccountActionRequest,
 	ConnectorHookEvent,
 	ContentBlock,
 	FileContent,
@@ -60,7 +59,6 @@ export type {
 	ListProvidersActionRequest,
 	Message,
 	MessageWithMetadata,
-	ProviderActionRequest,
 	ProviderCatalogResponse,
 	ProviderListItem,
 	ProviderModel,
@@ -98,48 +96,14 @@ export {
 } from "@plinycode/shared";
 export * from "@plinycode/shared/storage";
 export {
-	type ClineAccountBalance,
-	type ClineAccountOperations,
-	type ClineAccountOrganization,
-	type ClineAccountOrganizationBalance,
-	type ClineAccountOrganizationUsageTransaction,
-	type ClineAccountPaymentTransaction,
-	ClineAccountService,
-	type ClineAccountServiceOptions,
-	type ClineAccountUsageTransaction,
-	type ClineAccountUser,
-	type ClineOrganization,
-	type ClineSubscriptionPlan,
-	executeClineAccountAction,
-	type FeaturebaseTokenResponse,
-	isClineAccountActionRequest,
-	type ProviderActionExecutor,
-	RpcClineAccountService,
-	type UserCurrentPlan,
-	type UserRemoteConfigOrganization,
-	type UserRemoteConfigResponse,
-} from "./account";
-export {
 	createOAuthClientCallbacks,
 	type OAuthClientCallbacksOptions,
 } from "./auth/client";
-export {
-	completeClineDeviceAuth,
-	getValidClineCredentials,
-	loginClineOAuth,
-	refreshClineToken,
-	startClineDeviceAuth,
-} from "./auth/cline";
 export {
 	getValidOpenAICodexCredentials,
 	loginOpenAICodex,
 	refreshOpenAICodexToken,
 } from "./auth/codex";
-export {
-	getValidOcaCredentials,
-	loginOcaOAuth,
-	refreshOcaToken,
-} from "./auth/oca";
 export {
 	formatProviderOAuthApiKey,
 	getPersistedProviderApiKey,
@@ -169,12 +133,6 @@ export type {
 	OAuthLoginCallbacks,
 	OAuthPrompt,
 	OAuthProviderInterface,
-	OcaClientMetadata,
-	OcaMode,
-	OcaOAuthConfig,
-	OcaOAuthEnvironmentConfig,
-	OcaOAuthProviderOptions,
-	OcaTokenResolution,
 } from "./auth/types";
 export { ClineCore } from "./ClineCore";
 export type {
@@ -458,16 +416,6 @@ export {
 	sdkDebug,
 	setSdkLogger,
 } from "./logging/early-logger";
-export {
-	buildRemoteConfigSessionBlobUploadMetadata,
-	createRemoteConfigSessionMessagesArtifactUploader,
-	type PreparedRemoteConfigCoreIntegration,
-	type PrepareRemoteConfigCoreIntegrationOptions,
-	prepareRemoteConfigCoreIntegration,
-	REMOTE_CONFIG_SESSION_BLOB_UPLOAD_METADATA_KEY,
-	readRemoteConfigSessionBlobUploadMetadata,
-	registerRemoteConfigSessionBlobUpload,
-} from "./remote-config/integration";
 export { Agent, createAgentRuntime } from "./runtime/agent";
 export type { RuntimeCapabilities } from "./runtime/capabilities";
 export { normalizeRuntimeCapabilities } from "./runtime/capabilities";
@@ -588,17 +536,6 @@ export {
 	writeGlobalSettings,
 } from "./services/global-settings";
 export {
-	applyClineFeaturedModels,
-	type ClineRecommendedModel,
-	type ClineRecommendedModelsData,
-	FALLBACK_CLINE_RECOMMENDED_MODELS,
-	type FetchClineRecommendedModelsOptions,
-	fetchClineRecommendedModels,
-	getCachedClineRecommendedModels,
-	peekClineRecommendedModels,
-	resetClineRecommendedModelsCacheForTests,
-} from "./services/llms/cline-recommended-models";
-export {
 	clearLiveModelsCatalogCache,
 	clearPrivateModelsCatalogCache,
 	DEFAULT_MODELS_CATALOG_URL,
@@ -704,7 +641,6 @@ export {
 	markLocalProviderEnabled,
 	normalizeOAuthProvider,
 	refreshProviderModelsFromSource,
-	resolveLocalClineAuthToken,
 	saveLocalProviderOAuthCredentials,
 	saveLocalProviderSettings,
 	saveVoiceInputSettings,
@@ -900,7 +836,6 @@ export {
 	StoredProviderSettingsEntrySchema,
 	StoredProviderSettingsSchema,
 } from "./types/provider-settings";
-export type { SessionMessagesArtifactUploader } from "./types/session";
 export type {
 	SessionHistoryMetadata,
 	SessionHistoryRecord,

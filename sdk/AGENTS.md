@@ -41,7 +41,6 @@ Route changes to the package that owns the concern:
 - model/provider schemas or handler behavior: `@plinycode/llms`
 - stateless loop, tool orchestration, streaming, hook/extension runtime: `@plinycode/core` (`src/runtime/agent`)
 - session lifecycle, storage, config watching, default tools, plugin loading: `@plinycode/core`
-- remote-config schemas, managed instruction materialization, blob upload metadata, and OpenTelemetry config normalization: `@plinycode/shared/src/remote-config`
 - host-specific UX or shell behavior: the extension, `apps/vscode`
 
 ## Verifying Changes
@@ -86,7 +85,6 @@ If a focused test command fails with a missing `@plinycode/*` export or missing 
 - Don't move stateful logic into the agent loop (`core/src/runtime/agent`)
 - For `@plinycode/llms` provider/model routing rules, follow [packages/llms/AGENTS.md](./packages/llms/AGENTS.md).
 - Don't put app-specific behavior into `core` unless it is truly shared host behavior
-- Keep remote-config primitives generic in `shared`; host-facing session integration belongs in `core`
 
 ### Refactor Standard
 

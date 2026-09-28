@@ -17,7 +17,6 @@ import {
 	writeEmptyMessagesFile,
 } from "../../services/session-data";
 import type {
-	SessionMessagesArtifactUploader,
 	SessionPersistenceAdapter,
 	StoredMessageWithMetadata,
 } from "../../types/session";
@@ -79,7 +78,6 @@ export class SessionManifestStore {
 
 	constructor(
 		private readonly adapter: SessionPersistenceAdapter,
-		private readonly messagesArtifactUploader?: SessionMessagesArtifactUploader,
 		private readonly logger?: BasicLogger,
 	) {
 		this.artifacts = new SessionArtifacts(() => this.ensureSessionsDir());
@@ -214,22 +212,6 @@ export class SessionManifestStore {
 		const contents = `${JSON.stringify(payload, null, 2)}\n`;
 		mkdirSync(dirname(path), { recursive: true });
 		writeFileSync(path, contents, "utf8");
-		if (!this.messagesArtifactUploader) {
-			return;
-		}
-		try {
-			await this.messagesArtifactUploader.uploadMessagesFile({
-				sessionId,
-				path,
-				contents,
-				row,
-			});
-		} catch (error) {
-			this.logger?.debug("Failed to upload persisted session messages", {
-				sessionId,
-				error,
-			});
-		}
 	}
 
 	private resolveCompactionPath(sessionId: string): string {

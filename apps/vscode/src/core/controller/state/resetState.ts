@@ -29,9 +29,9 @@ export async function resetState(controller: Controller, request: ResetStateRequ
 			await resetWorkspaceState()
 		}
 
-		if (controller.task) {
-			controller.task.abortTask()
-			controller.task = undefined
+		if (controller.activeTaskId) {
+			controller.abortActiveTask()
+			controller.clearActiveTask()
 		}
 
 		HostProvider.window.showMessage({

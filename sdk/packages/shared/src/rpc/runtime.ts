@@ -100,76 +100,10 @@ export interface ChatTurnResult {
 	toolCalls: ChatToolCallResult[];
 }
 
-export interface EnterpriseContext {
-	projectId?: string;
-	workspaceId?: string;
-	organizationId?: string;
-}
-
-export interface EnterpriseAuthenticateRequest extends EnterpriseContext {
-	providerId: string;
-	workspacePath: string;
-	rootPath?: string;
-}
-
-export interface EnterpriseAuthenticateResponse {
-	providerId: string;
-	authenticated: boolean;
-	roles: string[];
-	claims?: Record<string, unknown>;
-	metadata?: Record<string, unknown>;
-}
-
-export interface EnterpriseSyncRequest extends EnterpriseContext {
-	providerId: string;
-	workspacePath: string;
-	rootPath?: string;
-	useCachedBundle?: boolean;
-}
-
-export interface EnterpriseSyncResponse {
-	providerId: string;
-	authenticated: boolean;
-	hasCachedBundle: boolean;
-	appliedConfigVersion?: string;
-	roles: string[];
-	hasTelemetryOverrides: boolean;
-	rulesCount: number;
-	workflowsCount: number;
-	skillsCount: number;
-	claims?: Record<string, unknown>;
-	metadata?: Record<string, unknown>;
-}
-
-export interface EnterpriseStatusRequest {
-	providerId: string;
-	workspacePath: string;
-	rootPath?: string;
-}
-
-export type EnterpriseStatusResponse = EnterpriseSyncResponse;
-
-/** Which tier of the Cline recommended-models feed featured a model. */
-export type ProviderModelFeaturedTier = "recommended" | "free" | "subscribed";
-
-export interface ProviderModelFeatured {
-	tier: ProviderModelFeaturedTier;
-	/** Position within the tier, preserving the feed's intentional order. */
-	rank: number;
-	/** Feed marketing tags, e.g. "NEW" or "BEST". */
-	tags: string[];
-}
-
 export interface ProviderModel {
 	id: string;
 	name: string;
 	description?: string;
-	/**
-	 * Present when the Cline recommended-models feed features this model
-	 * (cline / cline-pass providers only), so pickers can lead with the
-	 * feed's tiers without fetching and joining the feed themselves.
-	 */
-	featured?: ProviderModelFeatured;
 	operation?: ModelOperation;
 	contextWindow?: number;
 	supportsAttachments?: boolean;
@@ -414,55 +348,6 @@ export type ProviderSettingsActionRequest =
 	| GetProviderModelsActionRequest
 	| SaveProviderSettingsActionRequest
 	| AddProviderActionRequest;
-
-export type ClineAccountActionRequest =
-	| {
-			action: "clineAccount";
-			operation: "fetchMe";
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchBalance";
-			userId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchUsageTransactions";
-			userId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchPaymentTransactions";
-			userId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchUserOrganizations";
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchOrganizationBalance";
-			organizationId: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchOrganizationUsageTransactions";
-			organizationId: string;
-			memberId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "switchAccount";
-			organizationId?: string | null;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchFeaturebaseToken";
-	  };
-
-export type ProviderActionRequest =
-	| ProviderSettingsActionRequest
-	| ClineAccountActionRequest;
 
 export interface ProviderOAuthLoginResponse {
 	provider: string;

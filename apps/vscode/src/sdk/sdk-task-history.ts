@@ -4,9 +4,10 @@ import type { ClineCoreListHistoryOptions, SessionHistoryRecord } from "@plinyco
 import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
 import { formatDisplayUserInput, parseUserInputMode } from "@plinycode/shared"
 import { resolveSessionDataDir } from "@plinycode/shared/storage"
-import type { ClineMessage } from "@shared/ExtensionMessage"
+import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
+import type { WorkspaceRef } from "@shared/workspaceRef"
 import { parseWorkspaceKind } from "@shared/workspaceRef"
 import getFolderSize from "get-folder-size"
 import type { McpHub } from "@/services/mcp/McpHub"
@@ -55,27 +56,113 @@ type SdkTaskHistoryListOptions = ClineCoreListHistoryOptions & {
 	offset?: number
 }
 
-function metadataNumber(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): number | undefined {
+/** Reads a numeric field out of a session history record's metadata bag. */
+export function metadataNumber(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): number | undefined {
 	const value = metadata?.[key]
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
-function metadataBoolean(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): boolean | undefined {
+/** Reads a boolean field out of a session history record's metadata bag. */
+export function metadataBoolean(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): boolean | undefined {
 	const value = metadata?.[key]
 	return typeof value === "boolean" ? value : undefined
 }
 
-function metadataString(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): string | undefined {
+/** Reads a non-blank string field out of a session history record's metadata bag. */
+export function metadataString(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): string | undefined {
 	const value = metadata?.[key]
 	return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
 }
 
-function dateStringToTimestamp(value: string | null | undefined): number {
+/** Parses an ISO date string into epoch ms, or 0 when blank/unparseable. */
+export function dateStringToTimestamp(value: string | null | undefined): number {
 	if (!value) {
 		return 0
 	}
 	const timestamp = Date.parse(value)
 	return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+/**
+ * Get a HistoryItem by ID from the task history.
+ */
+export function getHistoryItemById(taskId: string, dataDir?: string): HistoryItem | undefined {
+	const history = readTaskHistory(dataDir)
+	return history.find((item) => item.id === taskId)
+}
+
+/**
+ * Update a HistoryItem in the task history.
+ * Returns the updated history array.
+ */
+export function updateHistoryItem(item: HistoryItem, dataDir?: string): HistoryItem[] {
+	const history = readTaskHistory(dataDir)
+	const index = history.findIndex((h) => h.id === item.id)
+	if (index >= 0) {
+		history[index] = item
+	} else {
+		history.unshift(item)
+	}
+	return history
+}
+
+/**
+ * Create a new HistoryItem from a session start result.
+ */
+export function createHistoryItemFromSession(
+	sessionId: string,
+	prompt: string,
+	modelId?: string,
+	cwd?: string,
+	workspaceRoot?: string,
+	workspace?: WorkspaceRef,
+): HistoryItem {
+	const trimmedCwd = cwd?.trim() || undefined
+	const trimmedRoot = workspaceRoot?.trim() || trimmedCwd
+	return {
+		id: sessionId,
+		ts: Date.now(),
+		task: prompt,
+		tokensIn: 0,
+		tokensOut: 0,
+		totalCost: 0,
+		modelId,
+		cwdOnTaskInitialization: trimmedCwd,
+		workspaceRootOnTaskInitialization: trimmedRoot,
+		...(workspace ? { workspacePath: workspace.path, workspaceKind: workspace.kind } : {}),
+	}
+}
+
+/**
+ * Map a HistoryItem (classic format) to a partial SessionRecord-like object.
+ * Used when loading tasks from legacy storage.
+ */
+export function historyItemToSessionFields(item: {
+	id: string
+	task: string
+	ts: number
+	tokensIn: number
+	tokensOut: number
+	totalCost: number
+	modelId?: string
+}): {
+	sessionId: string
+	prompt: string
+	startedAt: string
+	usage: { tokensIn: number; tokensOut: number; totalCost: number }
+	modelId?: string
+} {
+	return {
+		sessionId: item.id,
+		prompt: item.task,
+		startedAt: new Date(item.ts).toISOString(),
+		usage: {
+			tokensIn: item.tokensIn,
+			tokensOut: item.tokensOut,
+			totalCost: item.totalCost,
+		},
+		modelId: item.modelId,
+	}
 }
 
 /**
@@ -951,5 +1038,116 @@ export class SdkTaskHistory {
 			},
 		})
 		this.invalidateMetadataHistoryCache()
+	}
+}
+
+/** A live TaskProxy, reduced to the fields {@link mergeTaskHistoryIntoState} needs. */
+type TaskProxyLike = {
+	taskId: string
+	api?: { getModel?: () => { id: string } }
+	messageStateHandler: { getClineMessages(): ClineMessage[] }
+}
+
+interface MergeTaskHistoryIntoStateOptions {
+	/** The base ExtensionState, built by core/controller/state/getStateToPostToWebview.ts. */
+	baseState: ExtensionState
+	taskHistory: SdkTaskHistory
+	/** The task currently displayed in the webview, if any. */
+	task?: TaskProxyLike
+	getWorkspaceRoot: () => Promise<string>
+	getWindowWorkspace: () => Promise<WorkspaceRef | undefined>
+	activeTaskWorkspace?: { workspace?: WorkspaceRef }
+	turnState: ExtensionState["turnState"]
+	queuedPrompts: ExtensionState["queuedPrompts"]
+	backgroundTasks: ExtensionState["backgroundTasks"]
+	/** The active session, when the currently displayed task is running one. */
+	activeSession?: { sessionId: string; runningSince?: number }
+	stateVersion: number
+	epoch: number
+}
+
+/**
+ * Layers the SDK's task history on top of the base ExtensionState: merges the
+ * SDK's persisted session history with the legacy history the base state
+ * carries, folds in the currently displayed task (which may not be visible in
+ * persisted history yet), and stamps the snapshot with its turn state, queued
+ * prompts, background tasks and fence (stateVersion/epoch).
+ *
+ * Single owner for what was previously split between SdkController's
+ * getStateToPostToWebview() (this merge) and the base builder (settings,
+ * toggles, and — for pre-SDK-migration records only — the raw legacy history
+ * list this function reads from `baseState.taskHistory`).
+ */
+export async function mergeTaskHistoryIntoState(options: MergeTaskHistoryIntoStateOptions): Promise<ExtensionState> {
+	const { baseState, taskHistory, task, activeSession } = options
+
+	const sdkTaskHistory = (await taskHistory.listHistory({ limit: 100, hydrate: false }))
+		.map(sessionHistoryRecordToHistoryItem)
+		.filter((item) => item.ts && item.task)
+		.sort((a, b) => b.ts - a.ts)
+	const legacyTaskHistory = baseState.taskHistory ?? []
+	const mergedTaskHistoryById = new Map<string, HistoryItem>()
+
+	// Keep the SDK records authoritative for migrated/new tasks, but append
+	// legacy persisted history so pre-migration tasks still appear in the UI.
+	for (const item of legacyTaskHistory) {
+		mergedTaskHistoryById.set(item.id, item)
+	}
+	for (const item of sdkTaskHistory) {
+		mergedTaskHistoryById.set(item.id, item)
+	}
+
+	// A just-started task may not be visible in SDK persisted history yet (the
+	// history adapter can lag behind the active in-memory TaskProxy). Classic
+	// state included the current task immediately, and the testing platform
+	// asserts that taskHistory reflects newTask before the model turn completes.
+	if (task?.taskId && !mergedTaskHistoryById.has(task.taskId)) {
+		const taskMessage = task.messageStateHandler
+			.getClineMessages()
+			.find((message) => message.type === "say" && message.say === "task" && message.text)
+		if (taskMessage?.text) {
+			mergedTaskHistoryById.set(task.taskId, {
+				id: task.taskId,
+				ts: taskMessage.ts || Date.now(),
+				startedTs: taskMessage.ts || undefined,
+				task: taskMessage.text,
+				tokensIn: 0,
+				tokensOut: 0,
+				cacheWrites: 0,
+				cacheReads: 0,
+				totalCost: 0,
+				modelId: task.api?.getModel?.().id,
+				cwdOnTaskInitialization: await options.getWorkspaceRoot(),
+				...(options.activeTaskWorkspace?.workspace
+					? {
+							workspacePath: options.activeTaskWorkspace.workspace.path,
+							workspaceKind: options.activeTaskWorkspace.workspace.kind,
+						}
+					: {}),
+			})
+		}
+	}
+
+	const processedTaskHistory = Array.from(mergedTaskHistoryById.values())
+		.filter((item) => item.ts && item.task)
+		.sort((a, b) => b.ts - a.ts)
+		.slice(0, 100)
+
+	const currentHistoryItem = task?.taskId ? processedTaskHistory.find((item) => item.id === task.taskId) : undefined
+	const runningSince = activeSession?.sessionId === currentHistoryItem?.id ? activeSession?.runningSince : undefined
+
+	return {
+		...baseState,
+		currentWorkspace: await options.getWindowWorkspace(),
+		currentTaskItem:
+			currentHistoryItem && runningSince !== undefined
+				? { ...currentHistoryItem, runningSinceTs: runningSince }
+				: currentHistoryItem,
+		taskHistory: processedTaskHistory,
+		turnState: options.turnState,
+		queuedPrompts: options.queuedPrompts,
+		backgroundTasks: options.backgroundTasks,
+		stateVersion: options.stateVersion,
+		epoch: options.epoch,
 	}
 }

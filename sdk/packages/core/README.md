@@ -7,7 +7,7 @@ session lifecycle into a host-ready runtime.
 ## What You Get
 
 - session lifecycle and orchestration primitives
-- provider settings and account services
+- provider settings services
 - default runtime tools and MCP integration
 - storage-backed session and team state helpers
 - host-facing Node helpers through `@plinycode/core`

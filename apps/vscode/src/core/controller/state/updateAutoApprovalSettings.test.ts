@@ -7,7 +7,7 @@ import { updateAutoApprovalSettings } from "./updateAutoApprovalSettings"
 
 function makeController(currentSettings = DEFAULT_AUTO_APPROVAL_SETTINGS, taskId?: string) {
 	const controller = {
-		task: taskId ? { taskId } : undefined,
+		activeTaskId: taskId,
 		getStateToPostToWebview: vi.fn(async () => ({
 			autoApprovalSettings: currentSettings,
 		})),

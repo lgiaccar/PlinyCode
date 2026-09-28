@@ -4,7 +4,7 @@ import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-
 import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { Logger } from "@/shared/services/Logger"
 import type { Controller } from "../index"
-import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "./taskApiModel"
+import { resolveActiveModelIdFromApiConfiguration } from "./taskApiModel"
 
 /**
  * Updates API configuration
@@ -44,10 +44,10 @@ export async function updateApiConfigurationProto(
 		controller.stateManager.setApiConfiguration(convertedApiConfigurationFromProto)
 
 		// Update the task's API handler if there's an active task
-		if (controller.task) {
+		if (controller.activeTaskId) {
 			const currentMode = controller.stateManager.getGlobalSettingsKey("mode")
 			const modelId = resolveActiveModelIdFromApiConfiguration(convertedApiConfigurationFromProto, currentMode)
-			controller.task.api = createTaskApiModelShim(modelId)
+			controller.setActiveTaskModelId(modelId)
 		}
 
 		// Post updated state to webview

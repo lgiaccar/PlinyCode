@@ -9,7 +9,6 @@ import { getDesktopDir } from "@/utils/path"
 import {
 	buildToolApprovalAskMessage,
 	extractToolOutputText,
-	historyItemToSessionFields,
 	MessageTranslatorState,
 	sdkMessagesToClineMessages,
 	translateSessionEvent,
@@ -2451,46 +2450,6 @@ describe("translateSessionEvent — agent_event usage", () => {
 		const parsed = JSON.parse(result.messages[0].text ?? "{}")
 		expect(parsed.estimated).toBeUndefined()
 		expect(result.usage?.estimated).toBeUndefined()
-	})
-})
-
-// ---------------------------------------------------------------------------
-// historyItemToSessionFields
-// ---------------------------------------------------------------------------
-
-describe("historyItemToSessionFields", () => {
-	it("maps HistoryItem to session fields", () => {
-		const result = historyItemToSessionFields({
-			id: "task-123",
-			task: "Fix the bug",
-			ts: 1700000000000,
-			tokensIn: 500,
-			tokensOut: 250,
-			totalCost: 0.05,
-			modelId: "claude-sonnet-4-6",
-		})
-
-		expect(result.sessionId).toBe("task-123")
-		expect(result.prompt).toBe("Fix the bug")
-		expect(result.usage.tokensIn).toBe(500)
-		expect(result.usage.tokensOut).toBe(250)
-		expect(result.usage.totalCost).toBe(0.05)
-		expect(result.modelId).toBe("claude-sonnet-4-6")
-		expect(result.startedAt).toBe(new Date(1700000000000).toISOString())
-	})
-
-	it("handles missing optional fields", () => {
-		const result = historyItemToSessionFields({
-			id: "task-456",
-			task: "Simple task",
-			ts: 1700000000000,
-			tokensIn: 0,
-			tokensOut: 0,
-			totalCost: 0,
-		})
-
-		expect(result.sessionId).toBe("task-456")
-		expect(result.modelId).toBeUndefined()
 	})
 })
 

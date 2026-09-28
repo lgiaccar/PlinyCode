@@ -29,8 +29,8 @@ export async function updateAutoApprovalSettings(controller: Controller, request
 		}
 
 		controller.stateManager.setGlobalState("autoApprovalSettings", settings)
-		if (controller.task?.taskId) {
-			controller.stateManager.setTaskSettings(controller.task.taskId, "autoApprovalSettings", settings)
+		if (controller.activeTaskId) {
+			controller.stateManager.setTaskSettings(controller.activeTaskId, "autoApprovalSettings", settings)
 		}
 
 		await controller.postStateToWebview()

@@ -2611,42 +2611,6 @@ export function sdkMessagesToClineMessages(
 	return clineMessages
 }
 
-// ---------------------------------------------------------------------------
-// HistoryItem ↔ SessionRecord mapping
-// ---------------------------------------------------------------------------
-
-/**
- * Map a HistoryItem (classic format) to a partial SessionRecord-like object.
- * Used when loading tasks from legacy storage.
- */
-export function historyItemToSessionFields(item: {
-	id: string
-	task: string
-	ts: number
-	tokensIn: number
-	tokensOut: number
-	totalCost: number
-	modelId?: string
-}): {
-	sessionId: string
-	prompt: string
-	startedAt: string
-	usage: { tokensIn: number; tokensOut: number; totalCost: number }
-	modelId?: string
-} {
-	return {
-		sessionId: item.id,
-		prompt: item.task,
-		startedAt: new Date(item.ts).toISOString(),
-		usage: {
-			tokensIn: item.tokensIn,
-			tokensOut: item.tokensOut,
-			totalCost: item.totalCost,
-		},
-		modelId: item.modelId,
-	}
-}
-
 const MODEL_NOT_FOUND_GUIDANCE =
 	"This model may be retired or unavailable on your account. Switch to a different model in API Configuration settings, then retry."
 
