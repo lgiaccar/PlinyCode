@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixtures from "../../fixtures/usage.json";
-import { applyUsageEstimateFallback, normalizeUsage } from "./ai-sdk";
+import { applyUsageEstimateFallback, normalizeUsage } from "./ai-sdk-usage";
 
 /**
  * These tests validate usage normalization across different AI SDK stream result shapes.
@@ -11,7 +11,7 @@ import { applyUsageEstimateFallback, normalizeUsage } from "./ai-sdk";
  * - Cost extraction works when available in raw provider response
  */
 
-// Import normalizeUsage - would need to export this from ai-sdk.ts for testing
+// Import normalizeUsage - would need to export this from ai-sdk-usage.ts for testing
 // For now, documenting what we'd test when exported
 const testCases = [
 	{
