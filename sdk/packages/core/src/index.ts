@@ -527,32 +527,6 @@ export {
 	type DesktopToolApprovalOptions,
 	requestDesktopToolApproval,
 } from "./runtime/tools/tool-approval";
-export { listActiveConnectors } from "./services/connectors/active-connectors";
-export {
-	disableConnectorAutostart,
-	getPersistedConnectorConnection,
-	persistConnectorConnection,
-	type ReconnectAttempt,
-	type ReconnectPersistedConnectorsOptions,
-	type ReconnectTarget,
-	reconnectPersistedConnectors,
-	removePersistedConnectorConnection,
-} from "./services/connectors/connector-autostart";
-export { buildConnectorChildEnv } from "./services/connectors/connector-child-env";
-export { cleanupConnectorInstanceViaCli } from "./services/connectors/connector-cleanup";
-export {
-	ADOPTED_POLL_INTERVAL_MS,
-	ConnectorSupervisor,
-	type ConnectorSupervisorDeps,
-	getActiveConnectorSupervisor,
-	RESTART_BASE_DELAY_MS,
-	RESTART_COUNTER_RESET_MS,
-	RESTART_GIVE_UP_AFTER,
-	RESTART_MAX_DELAY_MS,
-	STOP_SIGKILL_TIMEOUT_MS,
-	STOP_SIGTERM_TIMEOUT_MS,
-	setActiveConnectorSupervisor,
-} from "./services/connectors/connector-supervisor";
 export {
 	FeatureFlagsService,
 	type FeatureFlagsServiceOptions,
@@ -712,7 +686,6 @@ export {
 	type ProviderConfigFields,
 } from "./services/providers/provider-config-fields";
 export { isProviderSettingsUsable } from "./services/providers/provider-readiness";
-export * from "./services/session-import";
 export {
 	type MigrateLegacyProviderSettingsOptions,
 	type MigrateLegacyProviderSettingsResult,
@@ -922,7 +895,6 @@ export async function loadOpenTelemetryAdapter() {
 	return import("./services/telemetry/index.js");
 }
 export { Agent, createAgentRuntime } from "@plinycode/agents";
-export { resolveComposioToolsStatePath } from "./extensions/composio/composio-tools-extension";
 export {
 	createCompactionStateAwarePrepareTurn,
 	createContextCompactionPrepareTurn,
