@@ -13,18 +13,7 @@ import type {
 } from "../catalog/types";
 import {
 	createAnthropicProvider,
-	createBedrockProvider,
-	createClaudeCodeProvider,
-	createDifyProvider,
-	createGoogleProvider,
-	createMistralProvider,
-	createOllamaProvider,
-	createOpenAICodexProvider,
 	createOpenAICompatibleProvider,
-	createOpenAIProvider,
-	createOpenCodeProvider,
-	createSapAiCoreProvider,
-	createVertexProvider,
 } from "./ai-sdk";
 import { BUILTIN_PROVIDER_REGISTRATIONS } from "./builtins-runtime";
 import { createGateway } from "./gateway";
@@ -88,56 +77,17 @@ function resolveFactory(
 		protocol?: ProviderProtocol;
 	},
 ): GatewayProviderFactory {
-	if (
-		transport?.client === "openai" ||
-		transport?.protocol === "openai-responses"
-	) {
-		return createOpenAIProvider;
+	// PlinyCode ships only the Anthropic and OpenAI-compatible adapters.
+	if (transport?.client === "anthropic") {
+		return createAnthropicProvider;
 	}
-	switch (transport?.client) {
-		case "anthropic":
-			return createAnthropicProvider;
-		case "gemini":
-			return createGoogleProvider;
-		case "vertex":
-			return createVertexProvider;
-		case "bedrock":
-			return createBedrockProvider;
-		case "openai-compatible":
-			return createOpenAICompatibleProvider;
+	if (transport?.client === "openai-compatible") {
+		return createOpenAICompatibleProvider;
 	}
-
 	const normalized = normalizeProviderId(providerId);
-	switch (normalized) {
-		case "openai-codex":
-		case "openai-native":
-			return createOpenAIProvider;
-		case "anthropic":
-		case "minimax":
-			return createAnthropicProvider;
-		case "gemini":
-			return createGoogleProvider;
-		case "vertex":
-			return createVertexProvider;
-		case "bedrock":
-			return createBedrockProvider;
-		case "mistral":
-			return createMistralProvider;
-		case "claude-code":
-			return createClaudeCodeProvider;
-		case "openai-codex-cli":
-			return createOpenAICodexProvider;
-		case "opencode":
-			return createOpenCodeProvider;
-		case "dify":
-			return createDifyProvider;
-		case "ollama":
-			return createOllamaProvider;
-		case "sapaicore":
-			return createSapAiCoreProvider;
-		default:
-			return createOpenAICompatibleProvider;
-	}
+	return normalized === "anthropic" || normalized === "minimax"
+		? createAnthropicProvider
+		: createOpenAICompatibleProvider;
 }
 
 async function resolveProviderRegistration(

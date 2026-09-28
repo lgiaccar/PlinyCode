@@ -12,11 +12,9 @@ export type {
 	ProviderProtocol,
 } from "./models";
 export {
-	CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	fetchLiveProviderModels,
 	fetchModelsDevProviderModels,
 	filterImageOutputModels,
-	filterOpenAICodexModels,
 	GENERATED_CLINE_RECOMMENDED_MODELS,
 	getAllProviders,
 	getGeneratedModelsForProvider,
@@ -109,10 +107,6 @@ export {
 export { buildClineClientHeaders } from "./providers/cline-client-headers";
 export type * from "./providers/gateway";
 export { createGateway, DefaultGateway } from "./providers/gateway";
-export {
-	type ProviderLocalCli,
-	resolveProviderLocalCli,
-} from "./providers/local-cli";
 export { toGatewayModelCapabilities } from "./providers/model-capabilities";
 export {
 	BUILTIN_MODEL_OPERATION_CAPABILITIES,

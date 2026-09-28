@@ -43,32 +43,6 @@ describe("provider readiness", () => {
 		).toBe(true);
 	});
 
-	it("accepts saved local auth providers without an API key", () => {
-		expect(
-			isProviderSettingsUsable("openai-codex-cli", {
-				provider: "openai-codex-cli",
-			} satisfies ProviderSettings),
-		).toBe(true);
-		expect(
-			isProviderSettingsUsable("claude-code", {
-				provider: "claude-code",
-			} satisfies ProviderSettings),
-		).toBe(true);
-	});
-
-	it("keeps local auth providers usable when a stale API key is stored", () => {
-		// The CLIs authenticate from their own credential stores and never read
-		// this value; entries written before local-auth existed carry a
-		// placeholder key that must stay usable.
-		expect(
-			isProviderSettingsUsable("claude-code", {
-				provider: "claude-code",
-				apiKey: "unused-placeholder",
-				model: "sonnet",
-			} satisfies ProviderSettings),
-		).toBe(true);
-	});
-
 	it("accepts keyless local providers with a resolved endpoint and model", () => {
 		expect(
 			isProviderSettingsUsable(

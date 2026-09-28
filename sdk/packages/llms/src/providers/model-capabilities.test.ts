@@ -168,10 +168,16 @@ describe("gateway capability producers", () => {
 	});
 
 	it("leaves tool calling enabled for builtin models that declare no capabilities", () => {
-		// A handful of builtin language models (dify, sapaicore, opencode, and
-		// the Codex CLI) carry no capability list in the generated catalog.
-		// Emitting `["text"]` for them made `modelSupportsToolCalling` read an
-		// authoritative denial and strip every tool definition from the request.
+		// Builtin language models can carry no capability list in the generated
+		// catalog. Emitting `["text"]` for them made `modelSupportsToolCalling`
+		// read an authoritative denial and strip every tool definition from the
+		// request.
+		expect(
+			modelSupportsToolCalling({
+				capabilities: toGatewayModelCapabilities(undefined),
+			}),
+		).toBe(true);
+
 		const languageModelsWithoutCapabilities = Object.values(
 			BUILTIN_PROVIDER_COLLECTIONS_BY_ID,
 		).flatMap((collection) =>
@@ -183,7 +189,6 @@ describe("gateway capability producers", () => {
 				)
 				.map(([modelId]) => ({ collection, modelId })),
 		);
-		expect(languageModelsWithoutCapabilities.length).toBeGreaterThan(0);
 
 		for (const { collection, modelId } of languageModelsWithoutCapabilities) {
 			const manifest = BUILTIN_PROVIDER_MANIFESTS_BY_ID[collection.provider.id];

@@ -153,15 +153,9 @@ function makeBaseConfig(overrides: Partial<CoreSessionConfig> = {}): CoreSession
 // ---------------------------------------------------------------------------
 
 describe("getDefaultModelIdForProvider", () => {
-	it("uses the SDK provider catalog for the Cline default model", () => {
-		expect(getDefaultModelIdForProvider("cline")).toBe(
-			LlmsModels.MODEL_COLLECTIONS_BY_PROVIDER_ID.cline.provider.defaultModelId,
-		)
-	})
-
-	it("uses the generated Gemini provider default", () => {
-		expect(getDefaultModelIdForProvider("gemini")).toBe(
-			LlmsModels.MODEL_COLLECTIONS_BY_PROVIDER_ID.gemini.provider.defaultModelId,
+	it("uses the SDK provider catalog default", () => {
+		expect(getDefaultModelIdForProvider("anthropic")).toBe(
+			LlmsModels.MODEL_COLLECTIONS_BY_PROVIDER_ID.anthropic.provider.defaultModelId,
 		)
 	})
 
@@ -170,7 +164,6 @@ describe("getDefaultModelIdForProvider", () => {
 	})
 
 	it("returns no default for local-model-source providers so a cloud-catalog model is never silently selected", () => {
-		expect(getDefaultModelIdForProvider("ollama")).toBeUndefined()
 		expect(getDefaultModelIdForProvider("lmstudio")).toBeUndefined()
 	})
 
@@ -267,14 +260,6 @@ describe("normalizeSdkBaseUrl", () => {
 	it("treats blank base URLs as unset so SDK provider defaults can apply", () => {
 		expect(normalizeSdkBaseUrl("openai-compatible", "")).toBeUndefined()
 		expect(normalizeSdkBaseUrl("openai-compatible", "   ")).toBeUndefined()
-	})
-
-	it("passes Ollama origins through unchanged (the native-API vendor appends /api itself)", () => {
-		expect(normalizeSdkBaseUrl("ollama", "http://localhost:11434")).toBe("http://localhost:11434")
-		expect(normalizeSdkBaseUrl("ollama", "http://localhost:11434/")).toBe("http://localhost:11434/")
-		// Legacy 4.0.x configs may carry the OpenAI-compat /v1 suffix; it is
-		// preserved here and rewritten to /api by the vendor.
-		expect(normalizeSdkBaseUrl("ollama", "http://localhost:11434/v1")).toBe("http://localhost:11434/v1")
 	})
 
 	it("preserves explicit user paths", () => {

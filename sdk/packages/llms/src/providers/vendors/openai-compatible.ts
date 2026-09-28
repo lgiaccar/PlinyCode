@@ -1,14 +1,11 @@
-import { createGateway } from "@ai-sdk/gateway";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type {
 	GatewayProviderContext,
 	GatewayResolvedProviderConfig,
 } from "@plinycode/shared";
-import { modelProducesImages } from "@plinycode/shared";
 import { wrapLanguageModel } from "ai";
-import { ensureFetch, resolveApiKey } from "../http";
+import { resolveApiKey } from "../http";
 import { splitToolImagesMiddleware } from "../middleware/split-tool-images";
 import { isOpenAIReasoningEraModelId } from "../model-facts";
 import { withContentBlockCacheBreakpoints } from "../routing/anthropic-compatible";
@@ -19,14 +16,6 @@ type FetchInput = Parameters<typeof fetch>[0];
 type FetchWithOptionalPreconnect = typeof fetch & {
 	preconnect?: (...args: unknown[]) => unknown;
 };
-
-function trimTrailingSlashes(value: string): string {
-	let end = value.length;
-	while (end > 0 && value.charCodeAt(end - 1) === 47) {
-		end -= 1;
-	}
-	return value.slice(0, end);
-}
 
 function readAzureApiVersion(
 	config: GatewayResolvedProviderConfig,
@@ -87,58 +76,6 @@ function createAzureApiVersionFetch(
 	return azureFetch;
 }
 
-type ResponseErrorHandler = (response: Response) => Promise<void> | void;
-
-function resolveVercelGatewayImageBaseUrl(
-	baseUrl: string | undefined,
-): string | undefined {
-	if (!baseUrl) return undefined;
-	try {
-		const url = new URL(baseUrl);
-		if (
-			url.hostname === "ai-gateway.vercel.sh" &&
-			trimTrailingSlashes(url.pathname) === "/v1"
-		) {
-			// The provider's generic OpenAI-compatible endpoint is not the AI SDK
-			// Gateway endpoint. Let @ai-sdk/gateway select its current versioned
-			// `/ai` base instead of producing `/v1/image-model`.
-			return undefined;
-		}
-		return trimTrailingSlashes(url.toString());
-	} catch {
-		return baseUrl;
-	}
-}
-
-function readResponseErrorHandler(
-	config: GatewayResolvedProviderConfig,
-): ResponseErrorHandler | undefined {
-	const handler = config.options?.onResponseError;
-	return typeof handler === "function"
-		? (handler as ResponseErrorHandler)
-		: undefined;
-}
-
-function createResponseErrorFetch(input: {
-	fetch: typeof fetch;
-	onResponseError: ResponseErrorHandler;
-}): typeof fetch {
-	const responseErrorFetch = (async (requestInput, init) => {
-		const response = await input.fetch(requestInput, init);
-
-		await input.onResponseError(response);
-
-		return response;
-	}) as typeof fetch;
-
-	const baseFetchWithPreconnect = input.fetch as FetchWithOptionalPreconnect;
-	(responseErrorFetch as FetchWithOptionalPreconnect).preconnect =
-		typeof baseFetchWithPreconnect.preconnect === "function"
-			? baseFetchWithPreconnect.preconnect.bind(input.fetch)
-			: () => undefined;
-	return responseErrorFetch;
-}
-
 /**
  * OpenAI's chat-completions API rejects `max_tokens` for reasoning-era
  * models ("Unsupported parameter: 'max_tokens' is not supported with this
@@ -168,63 +105,6 @@ export function withMaxCompletionTokensForReasoningModels(
 	};
 }
 
-function isOpenRouterImageGenerationRequest(input: FetchInput): boolean {
-	try {
-		const url = new URL(
-			input instanceof Request ? input.url : input.toString(),
-		);
-		return trimTrailingSlashes(url.pathname).endsWith("/images");
-	} catch {
-		return false;
-	}
-}
-
-export function createSuccessDataResponseFetch(
-	baseFetch: typeof fetch,
-): typeof fetch {
-	const responseEnvelopeFetch = (async (requestInput, init) => {
-		const response = await baseFetch(requestInput, init);
-		if (!response.ok || !isOpenRouterImageGenerationRequest(requestInput)) {
-			return response;
-		}
-
-		const text = await response.text();
-		let unwrapped = text;
-		try {
-			const payload = JSON.parse(text) as unknown;
-			if (
-				payload &&
-				typeof payload === "object" &&
-				!Array.isArray(payload) &&
-				"success" in payload &&
-				payload.success === true &&
-				"data" in payload
-			) {
-				unwrapped = JSON.stringify(payload.data);
-			}
-		} catch {
-			// Recreate the original response below so consuming it for envelope
-			// detection never changes provider behavior.
-		}
-
-		const headers = new Headers(response.headers);
-		headers.delete("content-encoding");
-		headers.delete("content-length");
-		return new Response(unwrapped, {
-			status: response.status,
-			statusText: response.statusText,
-			headers,
-		});
-	}) as typeof fetch;
-
-	const baseFetchWithPreconnect = baseFetch as FetchWithOptionalPreconnect;
-	(responseEnvelopeFetch as FetchWithOptionalPreconnect).preconnect =
-		typeof baseFetchWithPreconnect.preconnect === "function"
-			? baseFetchWithPreconnect.preconnect.bind(baseFetch)
-			: () => undefined;
-	return responseEnvelopeFetch;
-}
-
 export async function createOpenAICompatibleProviderModule(
 	config: GatewayResolvedProviderConfig,
 	context: GatewayProviderContext,
@@ -234,14 +114,7 @@ export async function createOpenAICompatibleProviderModule(
 	// authoritative error and is surfaced to the user as-is. This keeps
 	// `llms` unopinionated about which providers do or don't need a key.
 	const apiKey = await resolveApiKey(config);
-	const fetch = createAzureApiVersionFetch(config);
-	const onResponseError = readResponseErrorHandler(config);
-	const providerFetch = onResponseError
-		? createResponseErrorFetch({
-				fetch: ensureFetch(fetch),
-				onResponseError,
-			})
-		: fetch;
+	const providerFetch = createAzureApiVersionFetch(config);
 	const contentBlockCache =
 		context.provider.metadata?.routing?.promptCache?.wirePlacement ===
 		"content-blocks";
@@ -259,32 +132,6 @@ export async function createOpenAICompatibleProviderModule(
 				),
 			),
 	} as never);
-	const useOpenRouterImageTransport =
-		context.provider.metadata?.imageTransport === "openrouter" &&
-		modelProducesImages(context.model);
-	const openRouterFetch =
-		context.provider.metadata?.responseEnvelope === "success-data"
-			? createSuccessDataResponseFetch(ensureFetch(providerFetch))
-			: providerFetch;
-	const openRouterImageProvider = useOpenRouterImageTransport
-		? createOpenRouter({
-				apiKey,
-				baseURL: config.baseUrl,
-				headers: config.headers,
-				fetch: openRouterFetch,
-				compatibility:
-					context.provider.id === "openrouter" ? "strict" : "compatible",
-			})
-		: undefined;
-	const vercelGateway =
-		context.provider.id === "vercel-ai-gateway"
-			? createGateway({
-					apiKey,
-					baseURL: resolveVercelGatewayImageBaseUrl(config.baseUrl),
-					headers: config.headers,
-					fetch: providerFetch,
-				})
-			: undefined;
 	return {
 		// Wrap each constructed model with `splitToolImagesMiddleware` so
 		// `role:"tool"` messages whose `output.type === 'content'` carries
@@ -302,16 +149,10 @@ export async function createOpenAICompatibleProviderModule(
 		operations: {
 			language: (modelId) =>
 				wrapLanguageModel({
-					model: (openRouterImageProvider?.chat(modelId) ??
-						provider(modelId)) as LanguageModelV4,
+					model: provider(modelId) as LanguageModelV4,
 					middleware: splitToolImagesMiddleware,
 				}),
-			imageGeneration: (modelId) =>
-				vercelGateway
-					? vercelGateway.imageModel(modelId)
-					: openRouterImageProvider
-						? openRouterImageProvider.imageModel(modelId)
-						: provider.imageModel(modelId),
+			imageGeneration: (modelId) => provider.imageModel(modelId),
 		},
 	};
 }

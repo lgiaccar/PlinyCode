@@ -141,22 +141,11 @@ export interface GatewayProviderMetadata {
 	usageCostDisplay?: GatewayUsageCostDisplay;
 	routing?: GatewayProviderRouting;
 	stickySession?: GatewayStickySessionMetadata;
-	/**
-	 * Provider-specific transport used for models whose output includes images.
-	 * OpenRouter-compatible image responses require a richer schema than the
-	 * generic OpenAI-compatible adapter exposes.
-	 */
-	imageTransport?: "openrouter";
 	/** Provider-owned implementation used for the transcription operation. */
 	transcriptionTransport?:
 		| "openai-compatible"
 		| "vercel-ai-gateway"
 		| "elevenlabs";
-	/**
-	 * Successful JSON responses are wrapped by the provider before reaching
-	 * the protocol adapter. `success-data` represents `{ success, data }`.
-	 */
-	responseEnvelope?: "success-data";
 	configFields?: readonly ProviderConfigField[];
 	[key: string]:
 		| JsonValue

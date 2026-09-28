@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-	createClineProvider,
-	createOpenAICompatibleProvider,
-	createOpenAIProvider,
-	createSapAiCoreProvider,
-} from "./ai-sdk";
+import { createOpenAICompatibleProvider } from "./ai-sdk";
+import { BUILTIN_SPECS } from "./builtins";
 import { BUILTIN_PROVIDER_REGISTRATIONS } from "./builtins-runtime";
 import { createGateway } from "./gateway";
 import { BUILT_IN_PROVIDER_IDS, normalizeProviderId } from "./ids";
@@ -27,9 +23,12 @@ function generatedProviderDefault(providerId: string): string {
 
 describe("provider-ids", () => {
 	it("keeps built-in provider ids aligned with model registry loaders", () => {
+		// BUILT_IN_PROVIDER_IDS still recognises ids whose runtime PlinyCode no
+		// longer ships (so persisted settings keep parsing); only the built-in
+		// specs get a registry loader.
 		const registryProviderIds = new Set(getProviderIds());
-		for (const providerId of BUILT_IN_PROVIDER_IDS) {
-			expect(registryProviderIds.has(providerId)).toBe(true);
+		for (const spec of BUILTIN_SPECS) {
+			expect(registryProviderIds.has(spec.id), spec.id).toBe(true);
 		}
 		for (const providerId of registryProviderIds) {
 			expect(BUILT_IN_PROVIDER_IDS).toContain(providerId);
@@ -106,28 +105,6 @@ describe("provider-ids", () => {
 		);
 	});
 
-	it("registers ClinePass as a distinct Cline-compatible built-in provider", async () => {
-		expect(BUILT_IN_PROVIDER_IDS).toContain("cline-pass");
-		const models = await getModelsForProvider("cline-pass");
-		const provider = await getProvider("cline-pass");
-
-		expect(provider).toMatchObject({
-			id: "cline-pass",
-			name: "ClinePass",
-			client: "openai-compatible",
-		});
-		expect(models).toHaveProperty(provider?.defaultModelId ?? "");
-
-		for (const providerId of ["cline", "cline-pass"]) {
-			const registration = BUILTIN_PROVIDER_REGISTRATIONS.find(
-				(item) => item.manifest.id === providerId,
-			);
-			await expect(registration?.loadProvider?.()).resolves.toMatchObject({
-				createProvider: createClineProvider,
-			});
-		}
-	});
-
 	it("registers Poolside as an OpenAI-compatible built-in provider", async () => {
 		expect(BUILT_IN_PROVIDER_IDS).toContain("poolside");
 		const defaultModelId = generatedProviderDefault("poolside");
@@ -147,22 +124,6 @@ describe("provider-ids", () => {
 		);
 		await expect(registration?.loadProvider?.()).resolves.toMatchObject({
 			createProvider: createOpenAICompatibleProvider,
-		});
-	});
-
-	it("routes Responses API built-ins through the OpenAI provider factory", async () => {
-		const provider = await getProvider("kilo");
-		expect(provider).toMatchObject({
-			id: "kilo",
-			protocol: "openai-responses",
-			client: "openai",
-		});
-
-		const registration = BUILTIN_PROVIDER_REGISTRATIONS.find(
-			(item) => item.manifest.id === "kilo",
-		);
-		await expect(registration?.loadProvider?.()).resolves.toMatchObject({
-			createProvider: createOpenAIProvider,
 		});
 	});
 
@@ -237,21 +198,5 @@ describe("provider-ids", () => {
 
 		const models = await getModelsForProvider("zai-coding-plan");
 		expect(Object.hasOwn(models, "glm-5.2")).toBe(true);
-	});
-
-	it("routes SAP AI Core through the SAP AI SDK provider factory", async () => {
-		await expect(getProvider("sapaicore")).resolves.toMatchObject({
-			id: "sapaicore",
-			name: "SAP AI Core",
-			client: "ai-sdk-community",
-			defaultModelId: "anthropic--claude-3.5-sonnet",
-		});
-
-		const registration = BUILTIN_PROVIDER_REGISTRATIONS.find(
-			(item) => item.manifest.id === "sapaicore",
-		);
-		await expect(registration?.loadProvider?.()).resolves.toMatchObject({
-			createProvider: createSapAiCoreProvider,
-		});
 	});
 });

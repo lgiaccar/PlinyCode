@@ -507,7 +507,11 @@ describe("migrateLegacyProviderSettings", () => {
 		expect(manager.read().providers.cline?.tokenSource).toBe("migration");
 	});
 
-	it("falls back to the default Cline model when the legacy model id is unknown", () => {
+	it("keeps an unverifiable legacy Cline model id when no Cline catalog is registered", () => {
+		// PlinyCode no longer ships the Cline provider, so there is no catalog
+		// to validate against: the entry migrates under its own id, unchanged.
+		expect(LlmsModels.getProviderCollectionSync("cline")).toBeUndefined();
+
 		const tempDir = mkdtempSync(
 			path.join(os.tmpdir(), "core-legacy-provider-"),
 		);
@@ -537,10 +541,11 @@ describe("migrateLegacyProviderSettings", () => {
 			dataDir: tempDir,
 		});
 
-		const expectedDefault =
-			LlmsModels.getProviderCollectionSync("cline")?.provider.defaultModelId;
-		expect(expectedDefault).toBeTruthy();
-		expect(manager.getProviderSettings("cline")?.model).toBe(expectedDefault);
+		expect(manager.getProviderSettings("cline")).toMatchObject({
+			provider: "cline",
+			apiKey: "legacy-cline-key",
+			model: "some-model/that-no-longer-exists",
+		});
 	});
 
 	it("keeps a legacy Cline model id the catalog knows", () => {
@@ -574,86 +579,6 @@ describe("migrateLegacyProviderSettings", () => {
 		});
 
 		expect(manager.getProviderSettings("cline")?.model).toBe("openai/gpt-5.5");
-	});
-
-	it("falls back to the default Cline model for suffixed variant ids like :1m", () => {
-		const tempDir = mkdtempSync(
-			path.join(os.tmpdir(), "core-legacy-provider-"),
-		);
-		tempDirs.push(tempDir);
-		const providersPath = path.join(tempDir, "provider-settings.json");
-		const manager = new ProviderSettingsManager({ filePath: providersPath });
-
-		writeFileSync(
-			path.join(tempDir, "globalState.json"),
-			JSON.stringify(
-				{
-					mode: "act",
-					actModeApiProvider: "cline",
-					actModeClineModelId: "anthropic/claude-sonnet-4.5:1m",
-				},
-				null,
-				2,
-			),
-		);
-		writeFileSync(
-			path.join(tempDir, "secrets.json"),
-			JSON.stringify({ clineApiKey: "legacy-cline-key" }, null, 2),
-		);
-
-		migrateLegacyProviderSettings({
-			providerSettingsManager: manager,
-			dataDir: tempDir,
-		});
-
-		expect(manager.getProviderSettings("cline")?.model).toBe(
-			LlmsModels.getProviderCollectionSync("cline")?.provider.defaultModelId,
-		);
-	});
-
-	it("folds legacy alias Cline model ids onto their canonical catalog ids", () => {
-		// Legacy state stores OpenRouter spellings (e.g. `z-ai/...`) that the
-		// runtime catalog canonicalizes (to `zai/...`). Migration must keep the
-		// user's model under the canonical id instead of defaulting it away.
-		const catalogModels =
-			LlmsModels.getProviderCollectionSync("cline")?.models ?? {};
-		const canonicalModelId = Object.keys(catalogModels).find((modelId) =>
-			modelId.startsWith("zai/"),
-		);
-		expect(canonicalModelId).toBeTruthy();
-		const aliasModelId = `z-ai/${canonicalModelId?.slice("zai/".length)}`;
-		expect(catalogModels[aliasModelId]).toBeUndefined();
-
-		const tempDir = mkdtempSync(
-			path.join(os.tmpdir(), "core-legacy-provider-"),
-		);
-		tempDirs.push(tempDir);
-		const providersPath = path.join(tempDir, "provider-settings.json");
-		const manager = new ProviderSettingsManager({ filePath: providersPath });
-
-		writeFileSync(
-			path.join(tempDir, "globalState.json"),
-			JSON.stringify(
-				{
-					mode: "act",
-					actModeApiProvider: "cline",
-					actModeClineModelId: aliasModelId,
-				},
-				null,
-				2,
-			),
-		);
-		writeFileSync(
-			path.join(tempDir, "secrets.json"),
-			JSON.stringify({ clineApiKey: "legacy-cline-key" }, null, 2),
-		);
-
-		migrateLegacyProviderSettings({
-			providerSettingsManager: manager,
-			dataDir: tempDir,
-		});
-
-		expect(manager.getProviderSettings("cline")?.model).toBe(canonicalModelId);
 	});
 
 	it("migrates legacy OpenAI-compatible config into the openai-compatible provider", () => {

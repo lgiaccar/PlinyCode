@@ -194,24 +194,6 @@ function buildCases(): LiveCase[] {
 		expectedBody: { reasoning: { exclude: true } },
 		unexpectedBodyKeys: ["thinking"],
 	});
-	addCase({
-		label: "Cline Gateway MiniMax M3 reasoning enabled",
-		providerId: "cline",
-		modelId: "minimax/minimax-m3",
-		apiKeyEnv: "CLINE_API_KEY",
-		reasoning: { enabled: true },
-		expectedBody: { reasoning: { enabled: true } },
-		unexpectedBodyKeys: ["thinking"],
-	});
-	addCase({
-		label: "Cline Gateway MiniMax M3 reasoning disabled",
-		providerId: "cline",
-		modelId: "minimax/minimax-m3",
-		apiKeyEnv: "CLINE_API_KEY",
-		reasoning: { enabled: false },
-		expectedBody: { reasoning: { enabled: false } },
-		unexpectedBodyKeys: ["thinking"],
-	});
 
 	return cases;
 }
