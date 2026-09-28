@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest"
-import { telemetryService } from "@/services/telemetry"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import { Controller as SdkController } from "./SdkController"
 import { resolveWorkspaceManagerPaths, resolveWorkspaceRootPath } from "./workspace-root"
@@ -22,13 +21,6 @@ describe("resolveWorkspaceRootPath", () => {
 		expect(resolveWorkspaceRootPath([], "/Users/tester/Desktop")).toBe("/Users/tester/Desktop")
 	})
 })
-
-vi.mock("@/services/telemetry", () => ({
-	telemetryService: {
-		captureRemoteConfigSessionGate: vi.fn(),
-		captureEditMessageRestart: vi.fn(),
-	},
-}))
 
 const { buildBaseStateMock } = vi.hoisted(() => ({
 	buildBaseStateMock: vi.fn(async () => ({ taskHistory: [] })),
@@ -144,9 +136,6 @@ describe("SDK remote-config coordination", () => {
 		await expect(
 			SdkController.prototype["ensureRemoteConfigForSessionStart"].call(controller as never),
 		).resolves.toBeUndefined()
-		expect(telemetryService.captureRemoteConfigSessionGate).toHaveBeenCalledWith(
-			expect.objectContaining({ outcome: "last_known_good", managed: true }),
-		)
 	})
 
 	it("does not block session start for users without an active organization when refresh fails", async () => {
@@ -161,9 +150,6 @@ describe("SDK remote-config coordination", () => {
 		await expect(
 			SdkController.prototype["ensureRemoteConfigForSessionStart"].call(controller as never),
 		).resolves.toBeUndefined()
-		expect(telemetryService.captureRemoteConfigSessionGate).toHaveBeenCalledWith(
-			expect.objectContaining({ outcome: "unmanaged", managed: false }),
-		)
 	})
 
 	it("does not block unmanaged session start when the refresh rejects instead of returning false", async () => {
@@ -178,9 +164,6 @@ describe("SDK remote-config coordination", () => {
 		await expect(
 			SdkController.prototype["ensureRemoteConfigForSessionStart"].call(controller as never),
 		).resolves.toBeUndefined()
-		expect(telemetryService.captureRemoteConfigSessionGate).toHaveBeenCalledWith(
-			expect.objectContaining({ outcome: "unmanaged", managed: false }),
-		)
 	})
 
 	it("blocks session start when the install was managed but the identity cannot be resolved", async () => {
@@ -195,9 +178,6 @@ describe("SDK remote-config coordination", () => {
 		await expect(SdkController.prototype["ensureRemoteConfigForSessionStart"].call(controller as never)).rejects.toThrow(
 			"Could not verify organization policy",
 		)
-		expect(telemetryService.captureRemoteConfigSessionGate).toHaveBeenCalledWith(
-			expect.objectContaining({ outcome: "blocked", managed: true }),
-		)
 	})
 
 	it("blocks session start when current organization policy cannot be verified", async () => {
@@ -210,9 +190,6 @@ describe("SDK remote-config coordination", () => {
 
 		await expect(SdkController.prototype["ensureRemoteConfigForSessionStart"].call(controller as never)).rejects.toThrow(
 			"Could not verify organization policy",
-		)
-		expect(telemetryService.captureRemoteConfigSessionGate).toHaveBeenCalledWith(
-			expect.objectContaining({ outcome: "blocked", managed: true }),
 		)
 	})
 

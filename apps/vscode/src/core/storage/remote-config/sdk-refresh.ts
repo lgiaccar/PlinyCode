@@ -4,7 +4,6 @@ import * as path from "node:path"
 import { prepareRemoteConfigCoreIntegration } from "@plinycode/core"
 import { clearMaterializedRemoteConfigRuntime } from "@plinycode/shared"
 import { Controller } from "@/sdk/SdkController"
-import { telemetryService } from "@/services/telemetry"
 import { Logger } from "@/shared/services/Logger"
 import type { ConfiguredAPIKeys } from "@/shared/storage/state-keys"
 import { SdkRemoteConfigControlPlane } from "./sdk-control-plane"
@@ -93,106 +92,84 @@ export async function refreshSdkRemoteConfig(
 	const workspacePath = await getRemoteConfigWorkspacePath(options.workspacePath)
 	let candidateIntegration: Awaited<ReturnType<typeof prepareRemoteConfigCoreIntegration>> | undefined
 	let shouldPostState = false
-	let outcome: "applied" | "cleared" | "failed" | "superseded" = "failed"
-	let configVersion: string | undefined
-	const startedAt = Date.now()
 	const isCurrent = options.isCurrent ?? (() => true)
 
 	try {
-		try {
-			candidateIntegration = await prepareRemoteConfigCoreIntegration({
-				workspacePath,
-				rootPath: options.rootPath,
-				controlPlane,
-				useCachedBundle: false,
-			})
+		candidateIntegration = await prepareRemoteConfigCoreIntegration({
+			workspacePath,
+			rootPath: options.rootPath,
+			controlPlane,
+			useCachedBundle: false,
+		})
 
+		if (!isCurrent()) {
+			await candidateIntegration.dispose()
+			return false
+		}
+
+		const remoteConfig = controlPlane.getLastRemoteConfig()
+		await withPublicationLock(controller, async () => {
 			if (!isCurrent()) {
-				await candidateIntegration.dispose()
-				outcome = "superseded"
-				return false
+				await candidateIntegration?.dispose()
+				candidateIntegration = undefined
+				return
+			}
+			controller.setRemoteConfigAvailable(controlPlane.isRemoteConfigAvailable())
+
+			if (!remoteConfig) {
+				await candidateIntegration?.dispose()
+				candidateIntegration = undefined
+				await clearMaterializedRuntimeBestEffort(workspacePath)
+				await clearRemoteConfig()
+				await controller.setRemoteConfigCoreIntegration(undefined)
+				shouldPostState = true
+				return
 			}
 
-			const remoteConfig = controlPlane.getLastRemoteConfig()
+			// Compatibility application and SDK publication are serialized. If this
+			// generation becomes stale during application, the newer generation runs
+			// next and is guaranteed to leave the final shared state authoritative.
+			const configuredKeys: ConfiguredAPIKeys = controlPlane.getLastConfiguredKeys()
+			await applyRemoteConfig(remoteConfig, configuredKeys, controller.mcpHub)
+			if (!isCurrent()) {
+				await candidateIntegration?.dispose()
+				candidateIntegration = undefined
+				return
+			}
+			const publishedOrganizationId = candidateIntegration?.prepared.bundle?.metadata?.organizationId as string | undefined
+			await controller.setRemoteConfigCoreIntegration(candidateIntegration)
+			candidateIntegration = undefined // Ownership transferred to the controller.
+			controller.stateManager.setGlobalState(
+				"lastManagedOrganizationId",
+				publishedOrganizationId ?? controller.authService.getActiveOrganizationId() ?? undefined,
+			)
+			shouldPostState = true
+		})
+	} catch (error) {
+		if (candidateIntegration) {
+			await candidateIntegration.dispose().catch((disposeError) => {
+				Logger.error("[RemoteConfig] Failed to dispose unpublished SDK remote config integration:", disposeError)
+			})
+		}
+		if (controlPlane.wasExplicitNoConfig()) {
 			await withPublicationLock(controller, async () => {
 				if (!isCurrent()) {
-					await candidateIntegration?.dispose()
-					candidateIntegration = undefined
-					outcome = "superseded"
 					return
 				}
 				controller.setRemoteConfigAvailable(controlPlane.isRemoteConfigAvailable())
-
-				if (!remoteConfig) {
-					await candidateIntegration?.dispose()
-					candidateIntegration = undefined
-					await clearMaterializedRuntimeBestEffort(workspacePath)
-					await clearRemoteConfig()
-					await controller.setRemoteConfigCoreIntegration(undefined)
-					shouldPostState = true
-					outcome = "cleared"
-					return
-				}
-
-				// Compatibility application and SDK publication are serialized. If this
-				// generation becomes stale during application, the newer generation runs
-				// next and is guaranteed to leave the final shared state authoritative.
-				const configuredKeys: ConfiguredAPIKeys = controlPlane.getLastConfiguredKeys()
-				await applyRemoteConfig(remoteConfig, configuredKeys, controller.mcpHub)
-				if (!isCurrent()) {
-					await candidateIntegration?.dispose()
-					candidateIntegration = undefined
-					outcome = "superseded"
-					return
-				}
-				const publishedOrganizationId = candidateIntegration?.prepared.bundle?.metadata?.organizationId as
-					| string
-					| undefined
-				await controller.setRemoteConfigCoreIntegration(candidateIntegration)
-				candidateIntegration = undefined // Ownership transferred to the controller.
-				controller.stateManager.setGlobalState(
-					"lastManagedOrganizationId",
-					publishedOrganizationId ?? controller.authService.getActiveOrganizationId() ?? undefined,
-				)
+				await clearMaterializedRuntimeBestEffort(workspacePath)
+				await clearRemoteConfig()
+				await controller.setRemoteConfigCoreIntegration(undefined)
 				shouldPostState = true
-				outcome = "applied"
-				configVersion = remoteConfig.version
 			})
-		} catch (error) {
-			if (candidateIntegration) {
-				await candidateIntegration.dispose().catch((disposeError) => {
-					Logger.error("[RemoteConfig] Failed to dispose unpublished SDK remote config integration:", disposeError)
-				})
-			}
-			if (controlPlane.wasExplicitNoConfig()) {
-				await withPublicationLock(controller, async () => {
-					if (!isCurrent()) {
-						outcome = "superseded"
-						return
-					}
-					controller.setRemoteConfigAvailable(controlPlane.isRemoteConfigAvailable())
-					await clearMaterializedRuntimeBestEffort(workspacePath)
-					await clearRemoteConfig()
-					await controller.setRemoteConfigCoreIntegration(undefined)
-					shouldPostState = true
-					outcome = "cleared"
-				})
-			} else {
-				Logger.error("[RemoteConfig] Failed to refresh SDK remote config; keeping previous config:", error)
-				return false
-			}
+		} else {
+			Logger.error("[RemoteConfig] Failed to refresh SDK remote config; keeping previous config:", error)
+			return false
 		}
-
-		if (shouldPostState) {
-			await controller.postStateToWebview()
-		}
-		return isCurrent()
-	} finally {
-		void telemetryService.captureRemoteConfigRefresh({
-			outcome,
-			durationMs: Date.now() - startedAt,
-			managed: Boolean(controller.authService.getActiveOrganizationId()),
-			configVersion,
-		})
 	}
+
+	if (shouldPostState) {
+		await controller.postStateToWebview()
+	}
+	return isCurrent()
 }

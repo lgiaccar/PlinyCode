@@ -40,7 +40,6 @@ import { fetch } from "@/shared/net"
 import { ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { expandEnvironmentVariables } from "@/utils/envExpansion"
-import type { TelemetryService } from "../telemetry/TelemetryService"
 import { McpOAuthManager } from "./McpOAuthManager"
 import { StreamableHttpReconnectHandler } from "./StreamableHttpReconnectHandler"
 import { McpSettingsSchema, McpTimeoutSecondsSchema, ServerConfigSchema } from "./schemas"
@@ -77,7 +76,6 @@ export class McpHub {
 	getMcpServersPath: () => Promise<string>
 	private getSettingsDirectoryPath: () => Promise<string>
 	private clientVersion: string
-	private telemetryService: TelemetryService
 	private mcpOAuthManager: McpOAuthManager
 
 	private settingsWatcher?: FSWatcher
@@ -153,12 +151,10 @@ export class McpHub {
 		getMcpServersPath: () => Promise<string>,
 		getSettingsDirectoryPath: () => Promise<string>,
 		clientVersion: string,
-		telemetryService: TelemetryService,
 	) {
 		this.getMcpServersPath = getMcpServersPath
 		this.getSettingsDirectoryPath = getSettingsDirectoryPath
 		this.clientVersion = clientVersion
-		this.telemetryService = telemetryService
 		this.mcpOAuthManager = new McpOAuthManager(() => this.getMcpSettingsFilePath())
 		this.watchMcpSettingsFile()
 		this.initializeMcpServers()
@@ -1700,15 +1696,6 @@ export class McpHub {
 		// effect on the next request.
 		const timeout = resolveMcpServerTimeoutMs(connection.server.config) // sdk expects ms
 
-		this.telemetryService.captureMcpToolCall(
-			ulid,
-			serverName,
-			toolName,
-			"started",
-			undefined,
-			toolArguments ? Object.keys(toolArguments) : undefined,
-		)
-
 		try {
 			const result = await connection.client.request(
 				{
@@ -1725,28 +1712,11 @@ export class McpHub {
 				},
 			)
 
-			this.telemetryService.captureMcpToolCall(
-				ulid,
-				serverName,
-				toolName,
-				"success",
-				undefined,
-				toolArguments ? Object.keys(toolArguments) : undefined,
-			)
-
 			return {
 				...result,
 				content: result.content ?? [],
 			}
 		} catch (error) {
-			this.telemetryService.captureMcpToolCall(
-				ulid,
-				serverName,
-				toolName,
-				"error",
-				error instanceof Error ? error.message : String(error),
-				toolArguments ? Object.keys(toolArguments) : undefined,
-			)
 			throw augmentMcpTimeoutError(error, serverName, timeout)
 		}
 	}

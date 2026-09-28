@@ -6,7 +6,6 @@ import { TelemetrySetting } from "@shared/TelemetrySetting"
 import { ClineEnv } from "@/config"
 import { Logger } from "@/shared/services/Logger"
 import { Mode } from "@/shared/storage/types"
-import { telemetryService } from "../../../services/telemetry"
 import { Controller } from ".."
 import { accountLogoutClicked } from "../account/accountLogoutClicked"
 import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
@@ -115,15 +114,8 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			await controller.updateTelemetrySetting(telemetrySetting as TelemetrySetting)
 		}
 
-		// Update auto-condense setting (requires telemetry)
+		// Update auto-condense setting
 		if (useAutoCondense !== undefined) {
-			if (controller.task) {
-				telemetryService.captureAutoCondenseToggle(
-					controller.task.ulid,
-					useAutoCondense,
-					controller.task.api.getModel().id,
-				)
-			}
 			controller.stateManager.setGlobalState("useAutoCondense", useAutoCondense)
 		}
 
@@ -132,15 +124,9 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			controller.stateManager.setGlobalState("worktreesEnabled", worktreesEnabled)
 		}
 
-		// Update subagents setting (requires telemetry on state change)
+		// Update subagents setting
 		if (subagentsEnabled !== undefined) {
-			const wasEnabled = controller.stateManager.getGlobalSettingsKey("subagentsEnabled") ?? true
-			const isEnabled = !!subagentsEnabled
-			controller.stateManager.setGlobalState("subagentsEnabled", isEnabled)
-
-			if (wasEnabled !== isEnabled) {
-				telemetryService.captureSubagentToggle(isEnabled)
-			}
+			controller.stateManager.setGlobalState("subagentsEnabled", !!subagentsEnabled)
 		}
 
 		// Update browser settings (requires careful merging to avoid protobuf defaults)

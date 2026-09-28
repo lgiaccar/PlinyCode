@@ -12,19 +12,16 @@ const {
 	clearMaterializedRemoteConfigRuntime,
 	applyRemoteConfig,
 	clearRemoteConfig,
-	captureRemoteConfigRefresh,
 } = vi.hoisted(() => ({
 	scenarios: [] as Scenario[],
 	prepareRemoteConfigCoreIntegration: vi.fn(),
 	clearMaterializedRemoteConfigRuntime: vi.fn(),
 	applyRemoteConfig: vi.fn(),
 	clearRemoteConfig: vi.fn(),
-	captureRemoteConfigRefresh: vi.fn(),
 }))
 
 vi.mock("@plinycode/core", () => ({ prepareRemoteConfigCoreIntegration }))
 vi.mock("@plinycode/shared", () => ({ clearMaterializedRemoteConfigRuntime }))
-vi.mock("@/services/telemetry", () => ({ telemetryService: { captureRemoteConfigRefresh } }))
 vi.mock("./utils", () => ({ applyRemoteConfig, clearRemoteConfig }))
 vi.mock("./sdk-control-plane", () => ({
 	SdkRemoteConfigControlPlane: class {
@@ -93,10 +90,9 @@ describe("refreshSdkRemoteConfig", () => {
 		applyRemoteConfig.mockReset().mockResolvedValue(undefined)
 		clearRemoteConfig.mockReset()
 		clearMaterializedRemoteConfigRuntime.mockReset().mockResolvedValue(undefined)
-		captureRemoteConfigRefresh.mockReset()
 	})
 
-	it("awaits telemetry cleanup before publishing a cleared integration", async () => {
+	it("awaits cleanup before publishing a cleared integration", async () => {
 		const cleanup = deferred<void>()
 		const started = deferred<void>()
 		clearRemoteConfig.mockImplementation(() => {
@@ -153,9 +149,6 @@ describe("refreshSdkRemoteConfig", () => {
 		expect(setRemoteConfigCoreIntegration).toHaveBeenCalledWith(candidate)
 		expect(applyRemoteConfig.mock.invocationCallOrder[0]).toBeLessThan(
 			setRemoteConfigCoreIntegration.mock.invocationCallOrder[0],
-		)
-		expect(captureRemoteConfigRefresh).toHaveBeenCalledWith(
-			expect.objectContaining({ outcome: "applied", managed: true, configVersion: "current" }),
 		)
 		expect(controller.stateManager.setGlobalState).toHaveBeenCalledWith("lastManagedOrganizationId", "org-current")
 	})
