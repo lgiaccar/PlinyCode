@@ -2,7 +2,6 @@ import type { ClineMessage, TurnPhase } from "@shared/ExtensionMessage"
 import type { Mode } from "@shared/storage/types"
 import type { ClineAskResponse } from "@shared/WebviewMessage"
 import type { StateManager } from "@/core/storage/StateManager"
-import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@/services/error/ClineError"
 import { Logger } from "@/shared/services/Logger"
 import type { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
@@ -39,8 +38,6 @@ export interface SdkFollowupCoordinatorOptions {
 	loadInitialMessages: (sessionHost: SdkSessionHost, taskId: string) => Promise<unknown[] | undefined>
 	buildStartSessionInput: (config: SessionConfig, input: { cwd: string; mode: Mode }) => StartInput
 	resolveContextMentions: (text: string) => Promise<string>
-	isClineManagedProviderActive: () => boolean
-	emitClineAuthError: () => void
 	resetMessageTranslator: () => void
 	postStateToWebview: () => Promise<void>
 	/** Resolves once no session rebuild is in flight. */
@@ -190,28 +187,18 @@ export class SdkFollowupCoordinator {
 			Logger.error("[SdkController] Failed to resume session from task:", error)
 
 			const errorMsg = error instanceof Error ? error.message : String(error)
-			const isClineAuth =
-				this.options.isClineManagedProviderActive() &&
-				(errorMsg.includes(CLINE_ACCOUNT_AUTH_ERROR_MESSAGE) ||
-					errorMsg.toLowerCase().includes("missing api key") ||
-					errorMsg.toLowerCase().includes("unauthorized"))
-
-			if (isClineAuth) {
-				this.options.emitClineAuthError()
-			} else {
-				this.options.messages.emitSessionEvents(
-					[
-						{
-							ts: Date.now(),
-							type: "say",
-							say: "error",
-							text: `Failed to resume task: ${errorMsg}`,
-							partial: false,
-						},
-					],
-					{ type: "status", payload: { sessionId: task.taskId, status: "error" } },
-				)
-			}
+			this.options.messages.emitSessionEvents(
+				[
+					{
+						ts: Date.now(),
+						type: "say",
+						say: "error",
+						text: `Failed to resume task: ${errorMsg}`,
+						partial: false,
+					},
+				],
+				{ type: "status", payload: { sessionId: task.taskId, status: "error" } },
+			)
 			this.options.onResumeFailed()
 			await this.options.postStateToWebview()
 		}
