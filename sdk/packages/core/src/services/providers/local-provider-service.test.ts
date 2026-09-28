@@ -2,12 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as LlmsModels from "@plinycode/llms";
-import { CLINE_DEFAULT_MODEL_ID } from "@plinycode/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-	getCachedClineRecommendedModels,
-	resetClineRecommendedModelsCacheForTests,
-} from "../llms/cline-recommended-models";
+import { resetClineRecommendedModelsCacheForTests } from "../llms/cline-recommended-models";
 import {
 	clearLiveModelsCatalogCache,
 	clearPrivateModelsCatalogCache,
@@ -107,7 +103,7 @@ describe("live provider model loading", () => {
 	});
 
 	it("shares one live fetch across providers and reuses it on subsequent loads", async () => {
-		const providerIds = ["opencode", "opencode-go", "anthropic", "openai"];
+		const providerIds = ["deepseek", "opencode-go", "anthropic", "openrouter"];
 		const fetchMock = vi.fn(async (url: string) =>
 			Response.json(
 				url.includes("models.dev")
@@ -127,9 +123,7 @@ describe("live provider model loading", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 		const results = await Promise.all(
-			providerIds.map((id) =>
-				getLocalProviderModels(id === "openai" ? "openai-native" : id),
-			),
+			providerIds.map((id) => getLocalProviderModels(id)),
 		);
 		for (const result of results) {
 			expect(result.models).toContainEqual(
@@ -137,7 +131,7 @@ describe("live provider model loading", () => {
 			);
 			expect(result.models.length).toBeGreaterThan(1);
 		}
-		await getLocalProviderModels("opencode");
+		await getLocalProviderModels("deepseek");
 		expect(
 			fetchMock.mock.calls.filter(([url]) => url.includes("models.dev")),
 		).toHaveLength(1);
@@ -528,69 +522,6 @@ describe("addLocalProvider – model ID parsing via modelsSourceUrl", () => {
 		expect(models.map((m) => m.id).sort()).toEqual(["llama3.1", "qwen3:8b"]);
 	});
 
-	it("merges live Cline models into the registered catalog", async () => {
-		const liveModelId = "vendor/live-cline-model";
-		const fetchMock = vi.fn(async (url: string) => {
-			if (url === "https://models.dev/api.json") {
-				return new Response(
-					JSON.stringify({
-						openrouter: {
-							models: {
-								[liveModelId]: {
-									name: "Live Cline Model",
-									tool_call: true,
-									reasoning: true,
-									limit: {
-										context: 256_000,
-										input: 200_000,
-										output: 32_000,
-									},
-								},
-							},
-						},
-					}),
-					{
-						status: 200,
-						headers: { "content-type": "application/json" },
-					},
-				);
-			}
-
-			return new Response(
-				JSON.stringify({
-					recommended: [
-						{
-							id: liveModelId,
-							name: liveModelId,
-							description: "Fresh from the live catalog",
-							tags: ["NEW"],
-						},
-					],
-					free: [],
-					clinePass: [],
-				}),
-				{
-					status: 200,
-					headers: { "content-type": "application/json" },
-				},
-			);
-		});
-		vi.stubGlobal("fetch", fetchMock);
-
-		const { models } = await getLocalProviderModels("cline");
-
-		// models.dev and the recommended feed populate the live catalog; the
-		// recommended feed is fetched once more for the featured-tier overlay.
-		expect(fetchMock).toHaveBeenCalledTimes(3);
-		expect(models.find((model) => model.id === liveModelId)).toMatchObject({
-			id: liveModelId,
-			name: "Live Cline Model",
-			supportsReasoning: true,
-			description: "Fresh from the live catalog",
-			featured: { tier: "recommended", rank: 0, tags: ["NEW"] },
-		});
-	});
-
 	it("uses only live ClinePass models when live models are found", async () => {
 		const fetchMock = vi.fn(async (url: string) => {
 			if (url === "https://models.dev/api.json") {
@@ -664,51 +595,6 @@ describe("addLocalProvider – model ID parsing via modelsSourceUrl", () => {
 			name: "Live Free Model (free)",
 			supportsReasoning: true,
 		});
-	});
-
-	it("adds live Cline Cloud models to the Cline provider", async () => {
-		const fetchMock = vi.fn(async (url: string) => {
-			if (url === "https://models.dev/api.json") {
-				return new Response(JSON.stringify({}), { status: 200 });
-			}
-
-			return new Response(
-				JSON.stringify({
-					free: [
-						{
-							id: "cline-free/live-free-model",
-							name: "Live Free Model",
-						},
-					],
-					clineCloud: [
-						{
-							id: "cline-cloud/claude-sonnet-4.6",
-							name: "Claude Sonnet 4.6",
-						},
-					],
-				}),
-				{ status: 200 },
-			);
-		});
-		vi.stubGlobal("fetch", fetchMock);
-
-		const { models } = await getLocalProviderModels("cline", undefined, {
-			loadLatest: true,
-		});
-
-		expect(fetchMock).toHaveBeenCalledTimes(3);
-		expect(models).toContainEqual(
-			expect.objectContaining({
-				id: "cline-cloud/claude-sonnet-4.6",
-				name: "Claude Sonnet 4.6",
-			}),
-		);
-		expect(models).toContainEqual(
-			expect.objectContaining({
-				id: "cline-free/live-free-model",
-				featured: expect.objectContaining({ tier: "free" }),
-			}),
-		);
 	});
 
 	it("falls back to generated ClinePass models when no live ClinePass models are found", async () => {
@@ -1461,11 +1347,11 @@ describe("models.json model overlays", () => {
 					{
 						version: 1,
 						providers: {
-							cline: {
+							openrouter: {
 								models: {
-									"openai/gpt-5.5": {
-										id: "openai/gpt-5.5",
-										name: "OpenAI GPT-5.5",
+									"vendor/overlay-only-model": {
+										id: "vendor/overlay-only-model",
+										name: "Overlay Only Model",
 									},
 								},
 							},
@@ -1480,19 +1366,18 @@ describe("models.json model overlays", () => {
 				filePath: path.join(settingsDir, "providers.json"),
 			});
 
-			const provider = await LlmsModels.getProvider("cline");
+			const provider = await LlmsModels.getProvider("openrouter");
 			expect(provider).toMatchObject({
-				id: "cline",
-				baseUrl: "https://api.cline.bot/api/v1",
-				defaultModelId: CLINE_DEFAULT_MODEL_ID,
+				id: "openrouter",
+				baseUrl: "https://openrouter.ai/api/v1",
 			});
 
-			const { models } = await getLocalProviderModels("cline");
+			const { models } = await getLocalProviderModels("openrouter");
 			expect(
-				models.find((model) => model.id === "openai/gpt-5.5"),
+				models.find((model) => model.id === "vendor/overlay-only-model"),
 			).toMatchObject({
-				id: "openai/gpt-5.5",
-				name: "OpenAI GPT-5.5",
+				id: "vendor/overlay-only-model",
+				name: "Overlay Only Model",
 			});
 			expect(manager.getFilePath()).toBe(
 				path.join(settingsDir, "providers.json"),
@@ -1911,46 +1796,6 @@ describe("listLocalProviders", () => {
 		expect(providers.map((p) => p.id)).toContain("cline-pass");
 	});
 
-	it("stamps featured tiers from the cached live feed once warmed", async () => {
-		const clineModelIds = Object.keys(
-			await LlmsModels.getModelsForProvider("cline"),
-		);
-		const [recommendedId, freeId] = clineModelIds;
-		await getCachedClineRecommendedModels({
-			baseUrl: "https://api.example.test",
-			fetchImpl: async () =>
-				new Response(
-					JSON.stringify({
-						recommended: [
-							{
-								id: recommendedId,
-								name: "Live Pick",
-								description: "Live description",
-								tags: ["NEW"],
-							},
-						],
-						free: [{ id: freeId, name: "Live Free", description: "" }],
-						clinePass: [],
-					}),
-					{ status: 200, headers: { "Content-Type": "application/json" } },
-				),
-			catalogLoader: async () => ({}),
-		});
-
-		const { providers } = await listLocalProviders(manager);
-		const modelList =
-			providers.find((provider) => provider.id === "cline")?.modelList ?? [];
-
-		expect(
-			modelList.find((model) => model.id === recommendedId)?.featured,
-		).toEqual({ tier: "recommended", rank: 0, tags: ["NEW"] });
-		expect(modelList.find((model) => model.id === freeId)?.featured).toEqual({
-			tier: "free",
-			rank: 0,
-			tags: [],
-		});
-	});
-
 	it("marks enabled providers correctly", async () => {
 		await addLocalProvider(manager, {
 			providerId: "enabled-check-provider",
@@ -2108,77 +1953,46 @@ describe("listLocalProviders", () => {
 	it("includes built-in model lists in the provider catalog path", async () => {
 		manager.saveProviderSettings(
 			{
-				provider: "openai-native",
+				provider: "anthropic",
 				apiKey: "test-key",
-				baseUrl: "https://api.openai.com/v1",
-				model: "gpt-5.3-codex",
+				baseUrl: "https://api.anthropic.com/v1",
+				model: "claude-sonnet-5",
 			},
 			{ setLastUsed: false },
 		);
 
 		const { providers } = await listLocalProviders(manager);
-		const openai = providers.find(
-			(provider) => provider.id === "openai-native",
-		);
+		const anthropic = providers.find((provider) => provider.id === "anthropic");
 
-		expect(openai?.modelList?.length).toBeGreaterThan(0);
+		expect(anthropic?.modelList?.length).toBeGreaterThan(0);
 		expect(
-			openai?.modelList?.some((model) => model.id === "gpt-5.3-codex"),
+			anthropic?.modelList?.some((model) => model.id === "claude-sonnet-5"),
 		).toBe(true);
 	});
 
-	it("exposes provider-specific config fields for Vertex", async () => {
+	it("exposes provider-specific config fields for OCA", async () => {
 		manager.saveProviderSettings(
 			{
-				provider: "vertex",
-				gcp: { projectId: "gcp-project", region: "us-west1" },
-				model: "claude-sonnet-4-6@default",
+				provider: "oca",
+				oca: { mode: "internal", usePromptCache: true },
+				model: "anthropic/claude-3-7-sonnet-20250219",
 			},
 			{ setLastUsed: false },
 		);
 
 		const { providers } = await listLocalProviders(manager);
-		const vertex = providers.find((provider) => provider.id === "vertex");
+		const oca = providers.find((provider) => provider.id === "oca");
 
-		expect(vertex?.configFields?.map((field) => field.path)).toEqual([
-			"gcp.projectId",
-			"gcp.region",
+		expect(oca?.configFields?.map((field) => field.path)).toEqual([
+			"oca.mode",
 			"apiKey",
+			"oca.usePromptCache",
 		]);
-		expect(vertex?.configValues?.["gcp.projectId"]).toBe("gcp-project");
-		expect(vertex?.configValues?.["gcp.region"]).toBe("us-west1");
-		expect(
-			vertex?.configFields?.some((field) => field.path === "baseUrl"),
-		).toBe(false);
-	});
-
-	it("uses Cline-specific Z.ai aliases in the built-in model list", async () => {
-		manager.saveProviderSettings(
-			{
-				provider: "cline",
-				apiKey: "test-key",
-				baseUrl: "https://api.cline.bot/api/v1",
-				model: "anthropic/claude-sonnet-4.6",
-			},
-			{ setLastUsed: false },
+		expect(oca?.configValues?.["oca.mode"]).toBe("internal");
+		expect(oca?.configValues?.["oca.usePromptCache"]).toBe(true);
+		expect(oca?.configFields?.some((field) => field.path === "baseUrl")).toBe(
+			false,
 		);
-
-		const { providers } = await listLocalProviders(manager);
-		const cline = providers.find((provider) => provider.id === "cline");
-		const openrouter = providers.find(
-			(provider) => provider.id === "openrouter",
-		);
-		const clineModelIds = new Set(
-			cline?.modelList?.map((model) => model.id) ?? [],
-		);
-		const openrouterModelIds = new Set(
-			openrouter?.modelList?.map((model) => model.id) ?? [],
-		);
-
-		expect(cline?.modelList?.length).toBeGreaterThan(0);
-		expect(clineModelIds).toContain("zai/glm-5.2");
-		expect(clineModelIds).not.toContain("z-ai/glm-5.2");
-		expect(openrouterModelIds).toContain("z-ai/glm-5.2");
 	});
 
 	it("does not eagerly fetch LiteLLM private models while listing providers", async () => {
@@ -2308,22 +2122,22 @@ describe("refreshProviderModelsFromSource", () => {
 
 	afterEach(() => cleanup());
 
-	it("refreshes built-in Ollama models through modelsSourceUrl using the saved base URL", async () => {
+	it("refreshes built-in LM Studio models through modelsSourceUrl using the saved base URL", async () => {
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,
-			json: async () => ({ models: [{ name: "remote-llama" }] }),
+			json: async () => ({ data: [{ id: "remote-llama" }] }),
 		});
 		vi.stubGlobal("fetch", fetchMock);
 		saveLocalProviderSettings(manager, {
-			providerId: "ollama",
-			baseUrl: "http://tailscale-host:11434/v1",
+			providerId: "lmstudio",
+			baseUrl: "http://tailscale-host:1234/v1",
 		});
 
-		const result = await refreshProviderModelsFromSource(manager, "ollama");
+		const result = await refreshProviderModelsFromSource(manager, "lmstudio");
 
-		expect(result).toMatchObject({ providerId: "ollama", refreshed: true });
+		expect(result).toMatchObject({ providerId: "lmstudio", refreshed: true });
 		expect(fetchMock).toHaveBeenCalledWith(
-			"http://tailscale-host:11434/api/tags",
+			"http://tailscale-host:1234/v1/models",
 			{
 				method: "GET",
 				signal: expect.any(AbortSignal),
@@ -2332,10 +2146,10 @@ describe("refreshProviderModelsFromSource", () => {
 		const modelsState = await readModelsFile(
 			resolveModelsRegistryPath(manager),
 		);
-		expect(modelsState.providers.ollama?.provider?.modelsSourceUrl).toBe(
-			"http://tailscale-host:11434/api/tags",
+		expect(modelsState.providers.lmstudio?.provider?.modelsSourceUrl).toBe(
+			"http://tailscale-host:1234/v1/models",
 		);
-		const { models } = await getLocalProviderModels("ollama");
+		const { models } = await getLocalProviderModels("lmstudio");
 		expect(models.map((model) => model.id)).toContain("remote-llama");
 	});
 });

@@ -137,23 +137,6 @@ describe("DefaultRuntimeBuilder", () => {
 		expect(runtime.modelTools).not.toContainEqual({ name: "web_search" });
 	});
 
-	it("requests provider image generation for supported language models", async () => {
-		const runtime = await new DefaultRuntimeBuilder().build({
-			config: makeBaseConfig({
-				providerId: "openai-native",
-				modelId: "gpt-5.4",
-			}),
-		});
-
-		expect(runtime.modelTools).toContainEqual({
-			name: "image_generation",
-			outputFormat: "png",
-		});
-		expect(runtime.tools.some((tool) => tool.name === "image_generation")).toBe(
-			false,
-		);
-	});
-
 	it("forwards runtime logger for downstream agent creation", async () => {
 		const logger = {
 			debug: () => {},

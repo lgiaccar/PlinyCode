@@ -4,7 +4,6 @@ import {
 	createGatewayApiHandler,
 	toGatewayRequestMessages,
 } from "./compat";
-import { ClineNotSubscribedError } from "./errors";
 import { DEFAULT_GATEWAY_MAX_OUTPUT_TOKENS } from "./gateway";
 import type { Message } from "./types";
 
@@ -29,33 +28,6 @@ vi.mock("@ai-sdk/openai-compatible", () => ({
 		openaiCompatibleFactorySpy(config);
 		return (modelId: string) => openaiCompatibleSpy(modelId);
 	},
-}));
-
-vi.mock("@ai-sdk/openai", () => ({
-	createOpenAI: () => ({
-		responses: (modelId: string) => ({ modelId, family: "openai" }),
-	}),
-}));
-
-vi.mock("@ai-sdk/anthropic", () => ({
-	createAnthropic: () => (modelId: string) => ({
-		modelId,
-		family: "anthropic",
-	}),
-}));
-
-vi.mock("@ai-sdk/google", () => ({
-	createGoogleGenerativeAI: () => (modelId: string) => ({
-		modelId,
-		family: "google",
-	}),
-}));
-
-vi.mock("ai-sdk-provider-codex-cli", () => ({
-	createCodexExec: () => (modelId: string) => ({
-		modelId,
-		family: "openai-codex",
-	}),
 }));
 
 describe("createGatewayApiHandler.getMessages", () => {
@@ -362,34 +334,6 @@ describe("createGatewayApiHandler.createMessage", () => {
 		openaiCompatibleSpy.mockClear();
 	});
 
-	it.each([
-		// "openai-responses" is not wired to the Pliny gateway in PlinyCode.
-		["anthropic", "anthropic"],
-	])("retains live model protocol %s through the handler", async (apiProtocol, family) => {
-		streamTextSpy.mockReturnValue({
-			fullStream: (async function* () {
-				yield { type: "finish", finishReason: "stop" };
-			})(),
-		});
-		const handler = createGatewayApiHandler({
-			providerId: "opencode-go",
-			modelId: "new-live-model",
-			apiKey: "test-key",
-			knownModels: {
-				"new-live-model": { id: "new-live-model", metadata: { apiProtocol } },
-			},
-		});
-		for await (const _chunk of handler.createMessage("", [
-			{ role: "user", content: "Hello" },
-		])) {
-			// Exercise the live catalog -> handler -> gateway projection.
-		}
-		expect(streamTextSpy.mock.calls.at(-1)?.[0].model).toMatchObject({
-			modelId: "new-live-model",
-			family,
-		});
-	});
-
 	it("uses the default maxOutputTokens without expanding to catalog maxTokens", async () => {
 		streamTextSpy.mockReturnValue({
 			fullStream: (async function* () {
@@ -665,50 +609,6 @@ describe("createGatewayApiHandler.createMessage", () => {
 			"https://example.openai.azure.com/openai/v1/chat/completions",
 			{ method: "POST" },
 		);
-	});
-
-	it.skip("throws ClineNotSubscribedError for ClinePass required-plan 403 responses", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: (async function* () {
-				yield { type: "finish", finishReason: "stop" };
-			})(),
-			usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
-		});
-		const providerFetch = vi.fn(
-			async () =>
-				new Response(
-					JSON.stringify({
-						error: {
-							message: "the user is not subscribed to required model plan",
-						},
-					}),
-					{ status: 403 },
-				),
-		) as unknown as typeof fetch;
-
-		const handler = createGatewayApiHandler({
-			providerId: "cline-pass",
-			clientType: "openai-compatible",
-			modelId: "premium-model",
-			apiKey: "test-key",
-			fetch: providerFetch,
-		});
-
-		for await (const _chunk of handler.createMessage("", [
-			{ role: "user", content: "Hello" },
-		])) {
-			// Drain the stream so the provider is constructed.
-		}
-
-		const factoryConfig = openaiCompatibleFactorySpy.mock.calls.at(-1)?.[0] as
-			| { fetch?: typeof fetch }
-			| undefined;
-
-		await expect(
-			factoryConfig?.fetch?.("https://api.cline.bot/api/v1/chat/completions", {
-				method: "POST",
-			}),
-		).rejects.toBeInstanceOf(ClineNotSubscribedError);
 	});
 });
 

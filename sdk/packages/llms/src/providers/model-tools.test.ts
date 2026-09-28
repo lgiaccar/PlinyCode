@@ -8,13 +8,8 @@ import {
 
 describe("supportsModelTool", () => {
 	it.each([
-		["cline", undefined],
-		["cline-pass", undefined],
 		["anthropic", undefined],
-		["openai-native", undefined],
-		["openai-codex", undefined],
-		["gemini", undefined],
-		["vertex", "gemini-3.1-pro-preview"],
+		["anthropic", "claude-sonnet-5"],
 	])("supports native web search for %s / %s", (providerId, modelId) => {
 		expect(supportsModelTool({ providerId, modelId }, "web_search")).toBe(true);
 	});
@@ -32,42 +27,6 @@ describe("supportsModelTool", () => {
 		);
 	});
 
-	it("offers OpenAI image generation to language models, not dedicated image operations", () => {
-		expect(
-			supportsModelTool(
-				{ providerId: "openai-native", modelId: "gpt-5.4" },
-				"image_generation",
-			),
-		).toBe(true);
-		expect(
-			supportsModelTool(
-				{ providerId: "openai-native", modelId: "gpt-image-2" },
-				"image_generation",
-			),
-		).toBe(false);
-		expect(
-			supportsModelTool(
-				{ providerId: "openai", modelId: "gpt-5.4" },
-				"image_generation",
-			),
-		).toBe(false);
-	});
-
-	it("excludes known and unregistered Claude routes from Vertex", () => {
-		expect(
-			supportsModelTool(
-				{ providerId: "vertex", modelId: "claude-sonnet-4-6" },
-				"web_search",
-			),
-		).toBe(false);
-		expect(
-			supportsModelTool(
-				{ providerId: "vertex", modelId: "claude-custom" },
-				"web_search",
-			),
-		).toBe(false);
-	});
-
 	it("resolves custom provider support from manifest metadata", () => {
 		const manifest = {
 			id: "custom",
@@ -83,8 +42,6 @@ describe("supportsModelTool", () => {
 	});
 
 	it("reports provider-level availability independent of model routes", () => {
-		// Vertex excludes Claude routes per model but still offers web search.
-		expect(providerOffersModelTool("vertex", "web_search")).toBe(true);
 		expect(providerOffersModelTool("anthropic", "web_search")).toBe(true);
 		expect(providerOffersModelTool("openrouter", "web_search")).toBe(false);
 		expect(providerOffersModelTool("unknown-custom", "web_search")).toBe(false);

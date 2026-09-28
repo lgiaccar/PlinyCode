@@ -70,7 +70,7 @@ describe("transcribeAudio", () => {
 		expect(
 			resolveAudioTranscriptionRoute({
 				providerId: "custom-audio",
-				routingProviderId: "openai-native",
+				routingProviderId: "scaleway",
 				baseUrl: "https://audio.example/v1/",
 			}),
 		).toMatchObject({

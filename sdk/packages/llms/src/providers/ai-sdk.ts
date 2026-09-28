@@ -27,7 +27,6 @@ import {
 	formatMessagesForAiSdk,
 	GeneratedMediaSchema,
 	generatedMediaModalityFromMediaType,
-	modelProducesImages,
 	modelSupportsToolCalling,
 	parseJsonStream,
 	sanitizeSurrogates,
@@ -72,10 +71,7 @@ import {
 	shouldApplyBedrockCachePoint,
 } from "./routing/bedrock-cache-point";
 import { resolvePortableReasoning } from "./routing/portable-reasoning";
-import {
-	type AiSdkProviderOptionsTarget,
-	composeAiSdkProviderOptions,
-} from "./routing/provider-options";
+import { composeAiSdkProviderOptions } from "./routing/provider-options";
 import type {
 	AiSdkStreamPart,
 	AiSdkStreamResult,
@@ -98,7 +94,7 @@ interface GatewayNormalizedUsage {
 	/** Where this request's input tokens came from (system prompt, rules, conversation, ...). */
 	contextBreakdown?: ContextBreakdownTokens;
 }
-type ProviderModuleKind = AiSdkProviderOptionsTarget;
+type ProviderModuleKind = "openai-compatible" | "anthropic";
 type ImageGenerationInput = string | Uint8Array | ArrayBuffer;
 type ImageGenerationPrompt =
 	| string
@@ -916,14 +912,6 @@ function buildRecoverableToolErrorMetadata(input: {
 	});
 }
 
-function resolveAiSdkSystemPrompt(
-	request: GatewayStreamRequest,
-): string | undefined {
-	return request.providerId === "openai-codex"
-		? undefined
-		: request.systemPrompt;
-}
-
 function mapFinishReason(
 	value: unknown,
 	sawToolCalls: boolean,
@@ -1113,7 +1101,6 @@ export function normalizeUsage(
 		| undefined,
 	providerMetadata?: unknown,
 	pricingValue?: unknown,
-	selection?: Pick<GatewayStreamRequest, "providerId" | "modelId">,
 ): GatewayNormalizedUsage {
 	const usage =
 		usageValue && typeof usageValue === "object"
@@ -1238,22 +1225,8 @@ export function normalizeUsage(
 		[usage, rawUsage, providerUsage ?? {}],
 		REASONING_TOKEN_PATHS,
 	);
-	const pricing = pricingValue as Record<string, unknown> | undefined;
-	// Cline's included models have no per-request charge, even when the
-	// response includes the upstream inference or market cost.
-	const includedClineUsage =
-		selection?.providerId === "cline-pass" ||
-		(selection?.providerId === "cline" &&
-			(selection.modelId.startsWith("cline-pass/") ||
-				selection.modelId.startsWith("cline-free/") ||
-				selection.modelId.endsWith(":free") ||
-				(pricing?.input === 0 &&
-					pricing?.output === 0 &&
-					(pricing.cacheRead ?? 0) === 0 &&
-					(pricing.cacheWrite ?? 0) === 0)));
-	const resolvedTotalCost = includedClineUsage
-		? 0
-		: totalCost !== undefined
+	const resolvedTotalCost =
+		totalCost !== undefined
 			? totalCost
 			: hasExplicitCost
 				? undefined
@@ -1938,7 +1911,6 @@ async function* emitAiSdkEvents(
 			usageToEmit,
 			metadataToUse,
 			pricingValue,
-			request,
 		);
 		let outputTextForEstimate: string | undefined;
 		if (
@@ -2009,25 +1981,6 @@ async function createProviderModule(
 			);
 			return createAnthropicProviderModule(config, context);
 		}
-		// PlinyCode is Pliny-only: only the openai-compatible and anthropic vendor
-		// adapters were kept when this fork was stripped (see FINDINGS.md). All other
-		// upstream Cline vendors (cline, openai, google, vertex, bedrock, mistral,
-		// claude-code, openai-codex, opencode, dify, ollama, sapaicore) are unsupported.
-		case "cline":
-		case "openai":
-		case "google":
-		case "vertex":
-		case "bedrock":
-		case "mistral":
-		case "claude-code":
-		case "openai-codex":
-		case "opencode":
-		case "dify":
-		case "ollama":
-		case "sapaicore":
-			throw new Error(
-				`Provider "${kind}" is not supported in PlinyCode; only "openai-compatible" and "anthropic" are wired to the Pliny gateway.`,
-			);
 	}
 }
 
@@ -2075,9 +2028,7 @@ function createAiSdkProvider(
 ): GatewayProviderFactory {
 	return async (config) => ({
 		async *stream(request, context) {
-			// Multi-protocol HTTP gateways declare model adapters in models.dev.
-			// Keep native and local CLI transports authoritative for their models.
-			const kind = resolveModelProviderKind(defaultKind, context);
+			const kind = defaultKind;
 			const log = context.logger;
 			let stream: AiSdkStreamResult | undefined;
 			const capturedError: { current: CapturedStreamError | undefined } = {
@@ -2096,46 +2047,11 @@ function createAiSdkProvider(
 					},
 					context,
 				);
-				const composedProviderOptions = composeAiSdkProviderOptions(
+				const providerOptions = composeAiSdkProviderOptions(
 					request,
 					context,
 					kind,
 				);
-				const googleImageProviderKey =
-					kind === "google"
-						? "google"
-						: kind === "vertex"
-							? "vertex"
-							: undefined;
-				const providerOptions =
-					context.provider.metadata?.imageTransport === "openrouter" &&
-					modelProducesImages(context.model)
-						? {
-								...composedProviderOptions,
-								openrouter: {
-									...((composedProviderOptions[
-										request.providerId as keyof typeof composedProviderOptions
-									] ??
-										composedProviderOptions.openaiCompatible ??
-										{}) as Record<string, unknown>),
-									// OpenRouter-compatible image generation uses chat
-									// completions under the hood and requires explicit output
-									// modalities.
-									modalities: ["image", "text"],
-								},
-							}
-						: googleImageProviderKey !== undefined &&
-								modelProducesImages(context.model) &&
-								!usesImageGenerationOperation(context.model)
-							? {
-									...composedProviderOptions,
-									[googleImageProviderKey]: {
-										...((composedProviderOptions[googleImageProviderKey] ??
-											{}) as Record<string, unknown>),
-										responseModalities: ["TEXT", "IMAGE"],
-									},
-								}
-							: composedProviderOptions;
 				const modelOperation = context.model.operation ?? "language";
 				if (
 					modelOperation !== "language" &&
@@ -2203,7 +2119,6 @@ function createAiSdkProvider(
 								result.usage as Record<string, unknown>,
 								result.providerMetadata,
 								context.model.metadata?.pricing,
-								request,
 							),
 						};
 					}
@@ -2234,7 +2149,7 @@ function createAiSdkProvider(
 				);
 				const modelTools = toAiSdkModelToolSet(modelToolAdapters);
 				const tools = mergeAiSdkTools(runtimeTools, modelTools);
-				const systemPrompt = resolveAiSdkSystemPrompt(request);
+				const systemPrompt = request.systemPrompt;
 				const useSystemOption =
 					typeof systemPrompt === "string" && systemPrompt.trim().length > 0;
 				const messagesSystemPrompt = useSystemOption ? undefined : systemPrompt;
@@ -2368,39 +2283,6 @@ function createAiSdkProvider(
 	});
 }
 
-function resolveModelProviderKind(
-	defaultKind: ProviderModuleKind,
-	context: GatewayProviderContext,
-): ProviderModuleKind {
-	if (
-		defaultKind !== "openai-compatible" ||
-		!context.provider.metadata?.routing?.modelApiProtocol
-	)
-		return defaultKind;
-	switch (context.model.metadata?.apiProtocol) {
-		case "openai-responses":
-			return "openai";
-		case "anthropic":
-			return "anthropic";
-		case "gemini":
-			return "google";
-		default:
-			return defaultKind;
-	}
-}
-
-export const createOpenAIProvider = createAiSdkProvider("openai");
-export const createClineProvider = createAiSdkProvider("cline");
 export const createOpenAICompatibleProvider =
 	createAiSdkProvider("openai-compatible");
 export const createAnthropicProvider = createAiSdkProvider("anthropic");
-export const createGoogleProvider = createAiSdkProvider("google");
-export const createVertexProvider = createAiSdkProvider("vertex");
-export const createBedrockProvider = createAiSdkProvider("bedrock");
-export const createMistralProvider = createAiSdkProvider("mistral");
-export const createClaudeCodeProvider = createAiSdkProvider("claude-code");
-export const createOpenAICodexProvider = createAiSdkProvider("openai-codex");
-export const createOpenCodeProvider = createAiSdkProvider("opencode");
-export const createDifyProvider = createAiSdkProvider("dify");
-export const createOllamaProvider = createAiSdkProvider("ollama");
-export const createSapAiCoreProvider = createAiSdkProvider("sapaicore");

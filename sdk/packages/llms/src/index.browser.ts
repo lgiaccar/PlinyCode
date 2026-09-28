@@ -10,9 +10,7 @@ export type {
 	ProviderModelFilter,
 } from "./models";
 export {
-	CODEX_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
 	filterImageOutputModels,
-	filterOpenAICodexModels,
 	GENERATED_CLINE_RECOMMENDED_MODELS,
 	getAllProviders,
 	getGeneratedModelsForProvider,
@@ -38,10 +36,6 @@ export {
 	shouldShowProviderUsageCost,
 } from "./providers/billing";
 export { buildClineClientHeaders } from "./providers/cline-client-headers";
-export {
-	type ProviderLocalCli,
-	resolveProviderLocalCli,
-} from "./providers/local-cli";
 export { toGatewayModelCapabilities } from "./providers/model-capabilities";
 export {
 	BUILTIN_MODEL_OPERATION_CAPABILITIES,

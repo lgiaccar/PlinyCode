@@ -31,11 +31,6 @@ import {
 
 const streamTextSpy = vi.fn();
 const generateImageSpy = vi.fn();
-const vercelGatewayFactorySpy = vi.fn();
-const vercelGatewayImageSpy = vi.fn((modelId: string) => ({
-	modelId,
-	family: "vercel-gateway-image",
-}));
 const openaiCompatibleFactorySpy = vi.fn();
 const openaiCompatibleSpy = vi.fn((modelId: string) => ({
 	modelId,
@@ -123,15 +118,6 @@ vi.mock("@ai-sdk/openai", () => ({
 				openaiImageGenerationToolSpy(options),
 		},
 	}),
-}));
-
-vi.mock("@ai-sdk/gateway", () => ({
-	createGateway: (config: unknown) => {
-		vercelGatewayFactorySpy(config);
-		return {
-			imageModel: (modelId: string) => vercelGatewayImageSpy(modelId),
-		};
-	},
 }));
 
 vi.mock("@ai-sdk/openai-compatible", () => ({
@@ -325,8 +311,6 @@ describe("sdk-gateway", () => {
 		resetSdkErrorRateLimiterForTests();
 		streamTextSpy.mockReset();
 		generateImageSpy.mockReset();
-		vercelGatewayFactorySpy.mockReset();
-		vercelGatewayImageSpy.mockReset();
 		openaiCompatibleFactorySpy.mockReset();
 		openaiCompatibleSpy.mockReset();
 		openaiResponsesSpy.mockReset();
@@ -368,10 +352,6 @@ describe("sdk-gateway", () => {
 		openRouterImageSpy.mockImplementation((modelId: string) => ({
 			modelId,
 			family: "openrouter-image",
-		}));
-		vercelGatewayImageSpy.mockImplementation((modelId: string) => ({
-			modelId,
-			family: "vercel-gateway-image",
 		}));
 		anthropicSpy.mockImplementation((modelId: string) => ({
 			modelId,
@@ -1062,16 +1042,11 @@ describe("sdk-gateway", () => {
 		const gateway = createGateway();
 		const providerIds = gateway.listProviders().map((provider) => provider.id);
 
+		expect(providerIds).toContain("pliny");
 		expect(providerIds).toContain("openai-compatible");
-		expect(providerIds).toContain("openai-native");
 		expect(providerIds).toContain("anthropic");
-		expect(providerIds).toContain("gemini");
-		expect(providerIds).toContain("vertex");
-		expect(providerIds).toContain("bedrock");
 		expect(providerIds).toContain("openrouter");
 		expect(providerIds).toContain("aihubmix");
-		expect(providerIds).toContain("claude-code");
-		expect(providerIds).toContain("openai-codex");
 
 		const aihubmix = gateway
 			.listProviders()
@@ -1119,21 +1094,6 @@ describe("sdk-gateway", () => {
 			"vercel-ai-gateway",
 			"vertex",
 		]);
-	});
-
-	it("routes Bedrock prompt caching through Converse cachePoint markers", () => {
-		const gateway = createGateway();
-		const cachePointProviders = gateway
-			.listProviders()
-			.filter(
-				(provider) =>
-					provider.metadata?.routing?.promptCache?.format ===
-					"bedrock-cache-point",
-			)
-			.map((provider) => provider.id)
-			.sort();
-
-		expect(cachePointProviders).toEqual(["bedrock"]);
 	});
 
 	it("routes Qwen cache controls by model family instead of exact model ids", () => {
@@ -1834,42 +1794,6 @@ describe("sdk-gateway", () => {
 		expect(generateImageSpy).toHaveBeenCalledWith(
 			expect.objectContaining({ prompt: "Draw a mountain" }),
 		);
-	});
-
-	it("uses the versioned AI SDK endpoint for Vercel image generation", async () => {
-		generateImageSpy.mockResolvedValue({
-			images: [{ mediaType: "image/png", base64: "aGVsbG8=" }],
-		});
-		const gateway = createGateway({
-			providerConfigs: [
-				{
-					providerId: "vercel-ai-gateway",
-					apiKey: "test",
-					models: [
-						{
-							id: "openai/gpt-image-test",
-							name: "Gateway Image Test",
-							operation: "image-generation",
-							modalities: { input: ["text"], output: ["image"] },
-						},
-					],
-				},
-			],
-		});
-
-		const events = await collect(
-			await gateway.stream({
-				providerId: "vercel-ai-gateway",
-				modelId: "openai/gpt-image-test",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(vercelGatewayFactorySpy).toHaveBeenCalledWith(
-			expect.objectContaining({ apiKey: "test", baseURL: undefined }),
-		);
-		expect(vercelGatewayImageSpy).toHaveBeenCalledWith("openai/gpt-image-test");
-		expect(events[0]).toEqual(generatedImageEvent("image/png", "aGVsbG8="));
 	});
 
 	it.skip("uses the OpenRouter image transport for dedicated Cline image models", async () => {
@@ -2736,13 +2660,13 @@ describe("sdk-gateway", () => {
 			},
 		);
 		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-native", apiKey: "test" }],
+			providerConfigs: [{ providerId: "openai-compatible", apiKey: "test" }],
 		});
 
 		const events = await collect(
 			await gateway.stream({
-				providerId: "openai-native",
-				modelId: "gpt-5-mini",
+				providerId: "openai-compatible",
+				modelId: "gpt-4o",
 				messages: baseMessages,
 			}),
 		);
@@ -2755,7 +2679,7 @@ describe("sdk-gateway", () => {
 		const { telemetry, capture } = createTelemetryMock();
 		const gateway = createGateway({
 			telemetry,
-			providerConfigs: [{ providerId: "openai-native", apiKey: "test" }],
+			providerConfigs: [{ providerId: "openai-compatible", apiKey: "test" }],
 		});
 
 		for (let i = 0; i < 20; i++) {
@@ -2772,8 +2696,8 @@ describe("sdk-gateway", () => {
 			);
 			await collect(
 				await gateway.stream({
-					providerId: "openai-native",
-					modelId: "gpt-5-mini",
+					providerId: "openai-compatible",
+					modelId: "gpt-4o",
 					messages: baseMessages,
 				}),
 			);

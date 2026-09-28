@@ -177,14 +177,6 @@ async function mergeKnownModels(
 			...userKnownModels,
 		});
 	}
-	if (providerId === "openai-codex") {
-		return Llms.sortModelsByReleaseDate({
-			...defaultKnownModels,
-			...Llms.filterOpenAICodexModels(liveModels),
-			...publicModels,
-			...userKnownModels,
-		});
-	}
 	if (providerId === "cline-pass" && Object.keys(liveModels).length > 0) {
 		// Keep the catalog's intentional order (pass models first, free models
 		// after) instead of re-sorting by release date: the first live model is

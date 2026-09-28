@@ -218,42 +218,12 @@ describe("ai-sdk usage normalization", () => {
 	});
 
 	describe("cost extraction with pricing fallback", () => {
-		it.each([
-			["cline-pass", "included-model", { input: 3, output: 15 }],
-			["cline", "cline-pass/included-model", undefined],
-			["cline", "cline-free/free-model", undefined],
-			["cline", "vendor/model:free", undefined],
-			["cline", "vendor/promotional-model", { input: 0, output: 0 }],
-		])("zeros included usage for %s/%s", (providerId, modelId, pricing) => {
-			for (const raw of [
-				undefined,
-				{
-					cost: 0.5,
-					market_cost: 1,
-					cost_details: { upstream_inference_cost: 2 },
-				},
-			]) {
-				expect(
-					normalizeUsage(
-						{ inputTokens: 1000, outputTokens: 100, raw },
-						undefined,
-						pricing,
-						{ providerId, modelId },
-					),
-				).toMatchObject({ inputTokens: 1000, outputTokens: 100, totalCost: 0 });
-			}
-		});
-
-		it.each([
-			"cline",
-			"openrouter",
-		])("preserves paid usage for %s", (providerId) => {
+		it("preserves reported paid usage over the pricing fallback", () => {
 			expect(
 				normalizeUsage(
 					{ inputTokens: 1000, outputTokens: 100, cost: 0.5 },
 					undefined,
 					{ input: 3, output: 15 },
-					{ providerId, modelId: "vendor/paid-model" },
 				).totalCost,
 			).toBe(0.5);
 		});

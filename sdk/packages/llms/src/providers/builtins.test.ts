@@ -1,115 +1,13 @@
-import {
-	CLINE_DEFAULT_MODEL_ID,
-	CLINE_ENVIRONMENT_ENV,
-	CLINE_ENVIRONMENTS,
-	type GatewayProviderContext,
-} from "@plinycode/shared";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { GatewayProviderContext } from "@plinycode/shared";
+import { describe, expect, it } from "vitest";
 import {
 	BUILTIN_PROVIDER_MANIFESTS_BY_ID,
 	BUILTIN_SPECS,
-	getGeneratedModelsForRuntimeProvider,
 	resolveProviderApiLineBaseUrl,
 } from "./builtins";
 import { getModelsForProvider, getProvider } from "./model-registry";
 import { GENERATED_PROVIDER_SPECS } from "./providers.generated";
 import { resolveAnthropicReasoningRequestPolicy } from "./routing/anthropic-compatible";
-
-function findClineSpec() {
-	const spec = BUILTIN_SPECS.find((s) => s.id === "cline");
-	if (!spec) {
-		throw new Error("cline builtin spec not found");
-	}
-	return spec;
-}
-
-describe("cline builtin spec defaults.baseUrl", () => {
-	const originalEnvironment = process.env[CLINE_ENVIRONMENT_ENV];
-
-	beforeEach(() => {
-		delete process.env[CLINE_ENVIRONMENT_ENV];
-	});
-
-	afterEach(() => {
-		if (originalEnvironment === undefined) {
-			delete process.env[CLINE_ENVIRONMENT_ENV];
-		} else {
-			process.env[CLINE_ENVIRONMENT_ENV] = originalEnvironment;
-		}
-	});
-
-	it("re-resolves baseUrl when CLINE_ENVIRONMENT changes between reads", () => {
-		const spec = findClineSpec();
-
-		expect(spec.defaults?.baseUrl).toBe(
-			`${CLINE_ENVIRONMENTS.production.apiBaseUrl}/api/v1`,
-		);
-
-		process.env[CLINE_ENVIRONMENT_ENV] = "staging";
-		expect(spec.defaults?.baseUrl).toBe(
-			`${CLINE_ENVIRONMENTS.staging.apiBaseUrl}/api/v1`,
-		);
-
-		process.env[CLINE_ENVIRONMENT_ENV] = "local";
-		expect(spec.defaults?.baseUrl).toBe(
-			`${CLINE_ENVIRONMENTS.local.apiBaseUrl}/api/v1`,
-		);
-
-		delete process.env[CLINE_ENVIRONMENT_ENV];
-		expect(spec.defaults?.baseUrl).toBe(
-			`${CLINE_ENVIRONMENTS.production.apiBaseUrl}/api/v1`,
-		);
-	});
-});
-
-describe("cline builtin models", () => {
-	it("exposes its canonical default model ID", () => {
-		expect(findClineSpec().defaultModelId).toBe(CLINE_DEFAULT_MODEL_ID);
-	});
-
-	it("prefers Vercel-style Z.ai model ids over equivalent OpenRouter ids", async () => {
-		const models = await getModelsForProvider("cline");
-
-		expect(models["zai/glm-5.2"]).toMatchObject({
-			id: "zai/glm-5.2",
-			name: "GLM 5.2",
-			contextWindow: 1_000_000,
-			maxInputTokens: 1_000_000,
-		});
-		expect(models["zai/glm-5.1"]).toMatchObject({
-			id: "zai/glm-5.1",
-		});
-		expect(models["z-ai/glm-5.2"]).toBeUndefined();
-	});
-
-	it("includes Vercel-only allowlisted models the OpenRouter catalog lacks", async () => {
-		const models = await getModelsForProvider("cline");
-
-		expect(models["meta/muse-spark-1.2-contributor"]).toMatchObject({
-			id: "meta/muse-spark-1.2-contributor",
-			contextWindow: 1_048_576,
-			pricing: expect.objectContaining({ input: 0.1, output: 0.2 }),
-		});
-	});
-
-	it("excludes image-output models without changing upstream catalogs", async () => {
-		const modelId = "google/gemini-3-pro-image";
-		const [clineModels, openRouterModels, vercelModels] = await Promise.all([
-			getModelsForProvider("cline"),
-			getModelsForProvider("openrouter"),
-			getModelsForProvider("vercel-ai-gateway"),
-		]);
-
-		expect(clineModels[modelId]).toBeUndefined();
-		expect(
-			Object.values(clineModels).some(
-				(model) => model.modalities?.output.includes("image") === true,
-			),
-		).toBe(false);
-		expect(openRouterModels[modelId]?.modalities?.output).toContain("image");
-		expect(vercelModels[modelId]?.modalities?.output).toContain("image");
-	});
-});
 
 describe("baked anthropic catalog reasoning options", () => {
 	// Regression guard for the offline fallback: when the live models.dev
@@ -177,108 +75,7 @@ describe("baked anthropic catalog reasoning options", () => {
 	});
 });
 
-describe("vertex builtin models", () => {
-	it("adds Claude Fable 5 without changing existing Vertex models", async () => {
-		const models = await getModelsForProvider("vertex");
-		expect(models["claude-fable-5"]).toMatchObject({
-			id: "claude-fable-5",
-			contextWindow: 1_000_000,
-			maxInputTokens: 1_000_000,
-			maxTokens: 128_000,
-		});
-
-		expect(models["claude-sonnet-5@default"]).toBeDefined();
-		// The default comes from the generated (models.dev-derived) provider
-		// spec and rotates as the upstream catalog changes — assert it resolves
-		// to a model in the list rather than pinning a specific id.
-		const provider = await getProvider("vertex");
-		expect(provider.defaultModelId).toBeTruthy();
-		expect(models[provider.defaultModelId ?? ""]).toBeDefined();
-		expect(
-			(await getModelsForProvider("gemini"))["claude-fable-5"],
-		).toBeUndefined();
-	});
-
-	it("drops Anthropic's universal pricing from the Vertex Fable 5 record", async () => {
-		// Vertex bills region-dependently and its US/EU multi-region rates
-		// exceed Anthropic's list price; the overlay must not present a
-		// misleading universal price. No pricing beats wrong pricing.
-		const anthropicFable = (await getModelsForProvider("anthropic"))[
-			"claude-fable-5"
-		];
-		expect(anthropicFable?.pricing).toBeDefined();
-
-		const vertexFable = (await getModelsForProvider("vertex"))[
-			"claude-fable-5"
-		];
-		expect(vertexFable).toBeDefined();
-		expect(vertexFable.pricing).toBeUndefined();
-		// Non-pricing metadata still carries over.
-		expect(vertexFable.capabilities).toEqual(anthropicFable.capabilities);
-		expect(vertexFable.reasoningOptions).toEqual(
-			anthropicFable.reasoningOptions,
-		);
-	});
-});
-
-describe("cline-pass builtin spec", () => {
-	it("registers a distinct Cline-compatible provider with a custom model list", async () => {
-		const models = await getModelsForProvider("cline-pass");
-		const provider = await getProvider("cline-pass");
-
-		expect(provider).toMatchObject({
-			id: "cline-pass",
-			name: "ClinePass",
-			baseUrl: `${CLINE_ENVIRONMENTS.production.apiBaseUrl}/api/v1`,
-			client: "openai-compatible",
-			capabilities: expect.arrayContaining([
-				"oauth",
-				"tools",
-				"reasoning",
-				"prompt-cache",
-			]),
-		});
-		expect(models).toHaveProperty(provider?.defaultModelId ?? "");
-		expect(Object.keys(models).length).toBeGreaterThan(0);
-		for (const model of Object.values(models)) {
-			expect(model.contextWindow).toBeGreaterThan(0);
-			expect(model.maxInputTokens).toBeGreaterThan(0);
-			expect(model.maxTokens).toBeGreaterThan(0);
-			expect(model.capabilities).toEqual(expect.arrayContaining(["tools"]));
-			expect(model.pricing).toBeDefined();
-		}
-	});
-
-	it("defaults to a subscribed-tier model, not a free one", async () => {
-		const models = await getModelsForProvider("cline-pass");
-		const provider = await getProvider("cline-pass");
-
-		expect(provider?.defaultModelId).toMatch(/^cline-pass\//);
-		expect(
-			Object.keys(models).some((id) => !id.startsWith("cline-pass/")),
-		).toBe(true);
-	});
-});
-
 describe("built-in provider metadata", () => {
-	it("declares OpenRouter image transport for Cline-compatible gateways", async () => {
-		await expect(getProvider("cline")).resolves.toMatchObject({
-			metadata: {
-				imageTransport: "openrouter",
-				responseEnvelope: "success-data",
-			},
-		});
-		await expect(getProvider("cline-pass")).resolves.toMatchObject({
-			metadata: {
-				imageTransport: "openrouter",
-				responseEnvelope: "success-data",
-			},
-		});
-		await expect(getProvider("openrouter")).resolves.toMatchObject({
-			metadata: { imageTransport: "openrouter" },
-		});
-	});
-
 	it("registers ElevenLabs Scribe v2 as a dedicated transcription provider", async () => {
 		await expect(getProvider("elevenlabs")).resolves.toMatchObject({
 			id: "elevenlabs",
@@ -326,8 +123,14 @@ describe("built-in provider metadata", () => {
 		);
 		const builtinIds = new Set(BUILTIN_SPECS.map((spec) => spec.id));
 
-		for (const generatedId of generatedIds) {
-			expect(builtinIds.has(generatedId)).toBe(true);
+		// Only generated providers served by a shipped adapter (Anthropic or
+		// OpenAI-compatible chat completions) become built-ins.
+		for (const spec of GENERATED_PROVIDER_SPECS) {
+			const shipped =
+				(spec.family === "openai-compatible" || spec.family === "anthropic") &&
+				spec.protocol !== "openai-responses" &&
+				spec.client !== "openai";
+			expect(builtinIds.has(spec.id), spec.id).toBe(shipped);
 		}
 		expect(generatedIds.has("alibaba")).toBe(true);
 		expect(generatedIds.has("cohere")).toBe(false);
@@ -341,19 +144,9 @@ describe("built-in provider metadata", () => {
 			"qwen3.7-plus",
 		);
 
-		const generatedMistral = GENERATED_PROVIDER_SPECS.find(
-			(spec) => spec.id === "mistral",
-		);
-		expect(generatedMistral).toBeDefined();
-		await expect(getProvider("mistral")).resolves.toMatchObject({
-			id: "mistral",
-			baseUrl: "https://api.mistral.ai/v1",
-			defaultModelId: generatedMistral?.defaultModelId,
-			client: "ai-sdk-community",
-		});
-		await expect(getModelsForProvider("mistral")).resolves.toHaveProperty(
-			generatedMistral?.defaultModelId ?? "",
-		);
+		// Mistral needs its own AI SDK adapter, which PlinyCode does not ship.
+		expect(generatedIds.has("mistral")).toBe(true);
+		expect(builtinIds.has("mistral")).toBe(false);
 	});
 
 	it("uses generated specs directly when no runtime override is required", () => {
@@ -394,8 +187,8 @@ describe("built-in provider metadata", () => {
 	});
 
 	it("marks popular providers with a provider capability and rank", async () => {
-		await expect(getProvider("cline")).resolves.toMatchObject({
-			name: "PlinyCode Usage-Billing",
+		await expect(getProvider("pliny")).resolves.toMatchObject({
+			name: "Pliny",
 			capabilities: expect.arrayContaining(["popular"]),
 			metadata: { popularRank: 1 },
 		});
@@ -408,68 +201,6 @@ describe("built-in provider metadata", () => {
 		await expect(getProvider("huggingface")).resolves.toMatchObject({
 			baseUrl: "https://router.huggingface.co/v1",
 		});
-	});
-
-	it("derives ChatGPT subscription models from the generated OpenAI catalog", async () => {
-		const chatGptModels = await getModelsForProvider("openai-codex");
-		const openAiModels = await getModelsForProvider("openai-native");
-		const modelIds = Object.keys(chatGptModels);
-
-		expect(modelIds).toEqual(
-			expect.arrayContaining([
-				"gpt-5.5",
-				"gpt-5.3-codex-spark",
-				"gpt-5.6-terra",
-				"gpt-5.6-luna",
-				"gpt-5.6-sol",
-				"gpt-6-astra",
-			]),
-		);
-		expect(modelIds).not.toContain("gpt-5.5-pro");
-		expect(modelIds).not.toContain("gpt-5.1-codex-max");
-		expect(modelIds).not.toContain("gpt-5.2");
-		expect(modelIds).not.toContain("gpt-5.2-codex");
-		expect(modelIds).not.toContain("gpt-5.3-codex");
-		// Retired for ChatGPT accounts on 2026-08-31
-		expect(modelIds).not.toContain("gpt-5.4");
-		expect(modelIds).not.toContain("gpt-5.4-mini");
-		expect(modelIds).not.toContain("gpt-5.4-nano");
-		// Bare alias of gpt-5.6-sol
-		expect(modelIds).not.toContain("gpt-5.6");
-		expect(modelIds).not.toContain("o3");
-		expect(chatGptModels["gpt-5.5"]).toEqual(
-			expect.objectContaining({
-				...openAiModels["gpt-5.5"],
-				// ChatGPT/Codex backend caps: 272K input at the 95% effective budget
-				maxInputTokens: 272_000 * 0.95,
-				contextWindow: 400_000,
-				maxTokens: 128_000,
-			}),
-		);
-		expect(chatGptModels["gpt-5.6-terra"]).toEqual(
-			expect.objectContaining({
-				name: "GPT-5.6 Terra",
-				maxInputTokens: 272_000 * 0.95,
-				contextWindow: 400_000,
-				maxTokens: 128_000,
-			}),
-		);
-	});
-
-	it("applies the ChatGPT subscription filter to the shared OpenAI catalog", () => {
-		const openAiModelIds = Object.keys(
-			getGeneratedModelsForRuntimeProvider("openai-native"),
-		);
-		const chatGptModelIds = Object.keys(
-			getGeneratedModelsForRuntimeProvider("openai-codex"),
-		);
-
-		expect(openAiModelIds).toEqual(
-			expect.arrayContaining(["gpt-4o", "gpt-5.5", "o3"]),
-		);
-		expect(chatGptModelIds).toContain("gpt-5.5");
-		expect(chatGptModelIds).not.toContain("gpt-4o");
-		expect(chatGptModelIds).not.toContain("o3");
 	});
 
 	it("routes native Z.AI providers through GLM thinking metadata", async () => {

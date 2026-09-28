@@ -6,26 +6,10 @@ import {
 import { getProviderCollectionSync } from "./model-registry";
 
 describe("provider usage cost display", () => {
-	it("hides usage cost for subscription-backed Codex providers", () => {
-		expect(resolveProviderUsageCostDisplay("openai-codex")).toBe(
-			"subscription",
-		);
-		expect(resolveProviderUsageCostDisplay("openai-codex-cli")).toBe(
-			"subscription",
-		);
-		expect(shouldShowProviderUsageCost("openai-codex")).toBe(false);
-		expect(shouldShowProviderUsageCost("openai-codex-cli")).toBe(false);
-	});
-
-	it("hides usage cost for the Claude Code subscription provider", () => {
-		expect(resolveProviderUsageCostDisplay("claude-code")).toBe("subscription");
-		expect(shouldShowProviderUsageCost("claude-code")).toBe(false);
-	});
-
 	it("shows usage cost by default for usage-billed providers", () => {
-		expect(resolveProviderUsageCostDisplay("openai-native")).toBe("show");
+		expect(resolveProviderUsageCostDisplay("openrouter")).toBe("show");
 		expect(resolveProviderUsageCostDisplay("anthropic")).toBe("show");
-		expect(resolveProviderUsageCostDisplay("cline")).toBe("show");
+		expect(resolveProviderUsageCostDisplay("deepseek")).toBe("show");
 		expect(shouldShowProviderUsageCost("anthropic")).toBe(true);
 	});
 
@@ -35,8 +19,8 @@ describe("provider usage cost display", () => {
 	});
 
 	it("stores the display policy on provider metadata", () => {
-		expect(
-			getProviderCollectionSync("openai-codex")?.provider.metadata,
-		).toMatchObject({ usageCostDisplay: "subscription" });
+		expect(getProviderCollectionSync("pliny")?.provider.metadata).toMatchObject(
+			{ usageCostDisplay: "show" },
+		);
 	});
 });
