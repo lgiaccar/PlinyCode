@@ -38,17 +38,6 @@
 		"test:watch": "vitest",
 		"generate:models": "bun run scripts/generate-models.ts"
 	},
-	"peerDependenciesMeta": {
-		"@aws-sdk/client-bedrock-runtime": {
-			"optional": true
-		},
-		"ai-sdk-provider-claude-code": {
-			"optional": true
-		},
-		"ai-sdk-provider-codex-cli": {
-			"optional": true
-		}
-	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.36",
 		"@ai-sdk/openai": "^4.0.36",
@@ -58,14 +47,5 @@
 		"ai": "^7.0.58",
 		"nanoid": "^5.1.7",
 		"zod": "^4.3.6"
-	},
-	"peerDependencies": {
-		"@aws-sdk/client-bedrock-runtime": "^3.0.0",
-		"ai-sdk-provider-claude-code": "^4",
-		"ai-sdk-provider-codex-cli": "^2"
-	},
-	"devDependencies": {
-		"ai-sdk-provider-claude-code": "^4",
-		"ai-sdk-provider-codex-cli": "^2"
 	}
 }
