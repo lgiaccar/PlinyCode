@@ -434,9 +434,6 @@ export type {
 	CheckpointEntry,
 	CheckpointMetadata,
 } from "./hooks/checkpoint-hooks";
-export * from "./hub";
-export { HubRuntimeHost } from "./hub/runtime-host/hub-runtime-host";
-export { RemoteRuntimeHost } from "./hub/runtime-host/remote-runtime-host";
 export {
 	hashSecret,
 	sdkDebug,
@@ -902,7 +899,6 @@ export {
 	CoreSettingsService,
 	createCoreSettingsService,
 } from "./settings";
-export * from "./tasks";
 export type {
 	ChatMessage,
 	ChatMessageImage,
@@ -984,8 +980,6 @@ export {
 	ToolPresets,
 	truncateCommandOutput,
 } from "./extensions/tools";
-export * from "./remote/remote-environments";
-export { ensureLoginShellPath } from "./remote/shell-path";
 export { isClineAccountFeatureEnabled } from "./services/feature-flags/cline-account-feature-flags";
 export {
 	applyClineFeaturedModels,

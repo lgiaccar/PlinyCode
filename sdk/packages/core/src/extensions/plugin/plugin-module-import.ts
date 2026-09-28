@@ -13,8 +13,6 @@ const WORKSPACE_ALIASES = collectWorkspaceAliases(WORKSPACE_ROOT);
 const HOST_PROVIDED_SDK_SPECIFIERS = [
 	"@plinycode/agents",
 	"@plinycode/core",
-	"@plinycode/core/hub",
-	"@plinycode/core/hub/daemon-entry",
 	"@plinycode/core/telemetry",
 	"@plinycode/llms",
 	"@plinycode/llms/browser",

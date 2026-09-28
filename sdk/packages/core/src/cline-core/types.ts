@@ -213,14 +213,6 @@ export interface ClineCoreOptions {
 	 * Per-session or per-provider overrides still win: an explicit
 	 * `config.fetch` on `CoreSessionConfig` or a stored provider-level `fetch`
 	 * takes precedence over this default.
-	 *
-	 * Applies only to sessions executed in this process (local and fallback-
-	 * to-local auto mode). For hub and remote runtimes the HTTP call happens
-	 * inside the process that owns the gateway, so configure `fetch` there:
-	 *   - `startHubServer({ fetch })` / `ensureHubServer({ fetch })` from
-	 *     `@plinycode/hub`
-	 *   - `createLocalHubScheduleRuntimeHandlers({ fetch })` from
-	 *     `@plinycode/core/hub` for the scheduler
 	 */
 	fetch?: typeof fetch;
 	/**
