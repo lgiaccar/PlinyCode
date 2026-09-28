@@ -16,7 +16,7 @@ export interface Remote {
 	project?: string
 	/**
 	 * Azure DevOps Server (on-premises) only: the full path prefix before `{project}/_git/{repo}` — e.g.
-	 * `tfs/ANSYS_Development` for `https://host/tfs/ANSYS_Development/{project}/_git/{repo}`. This can be a
+	 * `tfs/Some_Collection` for `https://host/tfs/Some_Collection/{project}/_git/{repo}`. This can be a
 	 * bare collection, or an application virtual directory (`tfs`) followed by the collection; either way it
 	 * must be re-inserted verbatim ahead of `{project}` when building the REST API base URL.
 	 */
@@ -128,7 +128,7 @@ export function parseRemote(url: string, provider?: string): Remote {
 			throw new DevOpsError(`Cannot find the organization in Azure DevOps remote URL: ${url}`)
 		}
 	} else if (isAdoOnPrem && gitIndex >= 1 && gitIndex + 1 < segments.length) {
-		// {virtual-directory-and-collection}/{project}/_git/{repo}, e.g. tfs/ANSYS_Development/Meshing/_git/repo.
+		// {virtual-directory-and-collection}/{project}/_git/{repo}, e.g. tfs/Some_Collection/Meshing/_git/repo.
 		// Everything between the host and {project} (the app path, if any, plus the collection) must be kept
 		// together and re-inserted as-is; only the host identifies the server, not this prefix's shape.
 		repo = segments[gitIndex + 1]

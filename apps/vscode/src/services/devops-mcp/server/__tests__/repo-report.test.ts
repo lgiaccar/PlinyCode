@@ -54,32 +54,31 @@ describe("parseRemote", () => {
 	})
 
 	it("keeps a multi-segment collection path (app virtual directory + collection) intact, not just the last segment", () => {
-		// Real-world shape: https://ado.internal.synopsys.com/tfs/ANSYS_Development/Meshing/_git/GPUSurfer.
-		// "tfs" here is the server's application path, "ANSYS_Development" the actual collection; both must
+		// Real-world shape: https://ado.internal.example.com/tfs/Some_Collection/Meshing/_git/SomeRepo.
+		// "tfs" here is the server's application path, "Some_Collection" the actual collection; both must
 		// survive into `collection` and the rebuilt API URL, not just whichever segment sits next to `project`.
-		expect(parseRemote("https://ado.internal.synopsys.com/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")).toEqual({
+		expect(parseRemote("https://ado.internal.example.com/tfs/Some_Collection/Meshing/_git/SomeRepo")).toEqual({
 			kind: "ado",
-			host: "ado.internal.synopsys.com",
-			owner: "tfs/ANSYS_Development",
-			repo: "GPUSurfer",
+			host: "ado.internal.example.com",
+			owner: "tfs/Some_Collection",
+			repo: "SomeRepo",
 			project: "Meshing",
-			collection: "tfs/ANSYS_Development",
-			origin: "https://ado.internal.synopsys.com",
+			collection: "tfs/Some_Collection",
+			origin: "https://ado.internal.example.com",
 		})
 	})
 
 	it("parses an on-premises ssh:// remote, ignoring its git SSH port for the REST API origin", () => {
-		// The real GPUSurfer remote: `git remote -v` on D:\dev0\GPUSurfer shows exactly this URL. Port 22 is
-		// the SSH port for `git clone`/`git push`; the server's REST API is plain HTTPS on its own port, so
-		// this must NOT become `https://tfs.ansys.com:22`.
-		expect(parseRemote("ssh://tfs.ansys.com:22/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")).toEqual({
+		// Port 22 is the SSH port for `git clone`/`git push`; the server's REST API is plain HTTPS on its
+		// own port, so this must NOT become `https://tfs.internal.example.com:22`.
+		expect(parseRemote("ssh://tfs.internal.example.com:22/tfs/Some_Collection/Meshing/_git/SomeRepo")).toEqual({
 			kind: "ado",
-			host: "tfs.ansys.com",
-			owner: "tfs/ANSYS_Development",
-			repo: "GPUSurfer",
+			host: "tfs.internal.example.com",
+			owner: "tfs/Some_Collection",
+			repo: "SomeRepo",
 			project: "Meshing",
-			collection: "tfs/ANSYS_Development",
-			origin: "https://tfs.ansys.com",
+			collection: "tfs/Some_Collection",
+			origin: "https://tfs.internal.example.com",
 		})
 	})
 })
