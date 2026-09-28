@@ -382,7 +382,7 @@ When you build your own host with `ClineCore`, pass the plugin object directly:
 import plugin from "./my-plugin";
 import { ClineCore } from "@plinycode/core";
 
-const host = await ClineCore.create({ backendMode: "local" });
+const host = await ClineCore.create({});
 await host.start({
   config: {
     providerId: "anthropic",
@@ -485,7 +485,7 @@ const plugin: AgentPlugin = {
 
 // Optional: a runnable demo so users can `bun run` this file directly.
 async function runDemo(): Promise<void> {
-  const host = await ClineCore.create({ backendMode: "local" });
+  const host = await ClineCore.create({});
   try {
     const result = await host.start({
       config: {

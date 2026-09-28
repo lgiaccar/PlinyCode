@@ -17,7 +17,6 @@ import type { SessionHistoryListOptions } from "../runtime/host/history";
 import type { SessionBackend } from "../runtime/host/host";
 import type {
 	LocalRuntimeStartOptions,
-	RuntimeHostMode,
 	StartSessionInput,
 	StartSessionResult,
 } from "../runtime/host/runtime-host";
@@ -26,27 +25,7 @@ import type { CheckpointWorkspaceCompareResult } from "../session/checkpoint-dif
 import type { ClineCoreStartConfig } from "../types/config";
 import type { SessionMessagesArtifactUploader } from "../types/session";
 
-export type { RuntimeHostMode } from "../runtime/host/runtime-host";
 export type { ClineCoreSettingsApi } from "../settings";
-
-export interface HubOptions {
-	endpoint?: string;
-	authToken?: string;
-	strategy?: "prefer-hub" | "require-hub";
-	clientType?: string;
-	displayName?: string;
-	workspaceRoot?: string;
-	cwd?: string;
-}
-
-export interface RemoteOptions {
-	endpoint: string;
-	authToken?: string;
-	clientType?: string;
-	displayName?: string;
-	workspaceRoot?: string;
-	cwd?: string;
-}
 
 export interface ClineCoreAutomationOptions {
 	/** @deprecated Use `cronSpecsDir`. */
@@ -187,24 +166,6 @@ export interface ClineCoreOptions {
 	 * at `~/.cline/data/machine-id`.
 	 */
 	distinctId?: string;
-	/**
-	 * Controls how the runtime host is selected:
-	 * - `"auto"` (default) — prefers a compatible local hub when one is available and falls
-	 *   back to local in-process execution when not.
-	 * - `"hub"` — requires a compatible websocket hub runtime; throws if one is not reachable.
-	 * - `"remote"` — requires an explicit remote websocket hub endpoint.
-	 * - `"local"` — always uses local in-process execution and local SQLite/file storage.
-	 */
-	backendMode?: RuntimeHostMode;
-	/**
-	 * Hub runtime connection options. Used when `backendMode` is `"hub"` or when `"auto"`
-	 * should prefer a shared local hub if available.
-	 */
-	hub?: HubOptions;
-	/**
-	 * Remote hub connection options. Only relevant when `backendMode` is `"remote"`.
-	 */
-	remote?: RemoteOptions;
 	/**
 	 * Client-owned runtime capabilities. Core adapts these handlers to the
 	 * selected runtime backend so apps implement interactive behavior once.

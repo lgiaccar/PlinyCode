@@ -19,8 +19,6 @@ export type {
 	ClineCoreListHistoryOptions,
 	ClineCoreOptions,
 	ClineCoreStartInput,
-	HubOptions,
-	RemoteOptions,
 } from "./cline-core/types";
 export type {
 	AgentPluginPackageDiagnostic,
@@ -111,7 +109,6 @@ export type {
 	PendingPromptsUpdateInput,
 	RuntimeHost,
 	RuntimeHost as SessionHost,
-	RuntimeHostMode,
 	SendSessionInput,
 	SessionAccumulatedUsage,
 	SessionUsageSummary,

@@ -430,5 +430,3 @@ export interface RuntimeHost {
 	 */
 	hasSessionSubscription?(sessionId: string): boolean;
 }
-
-export type RuntimeHostMode = "auto" | "local" | "hub" | "remote";

@@ -76,12 +76,9 @@ export type {
 	ClineCoreStartInput,
 	CompareCheckpointInput,
 	CompareCheckpointResult,
-	HubOptions,
-	RemoteOptions,
 	RestoreInput,
 	RestoreOptions,
 	RestoreResult,
-	RuntimeHostMode,
 	StartSessionBootstrap,
 } from "./cline-core/types";
 
@@ -201,7 +198,6 @@ export class ClineCore {
 	 * ```ts
 	 * const cline = await ClineCore.create({
 	 *   clientName: "my-app",
-	 *   backendMode: "local",
 	 * });
 	 * ```
 	 */
