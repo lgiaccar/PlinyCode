@@ -127,15 +127,6 @@ export async function getStateToPostToWebview(controller: {
 	const banners = BannerService.get().getActiveBanners() ?? []
 	const welcomeBanners = BannerService.get().getWelcomeBanners() ?? []
 
-	// Check OpenAI Codex authentication status
-	let openAiCodexIsAuthenticated = false
-	try {
-		const { openAiCodexOAuthManager } = await import("@/integrations/openai-codex/oauth")
-		openAiCodexIsAuthenticated = await openAiCodexOAuthManager.isAuthenticated()
-	} catch {
-		// Codex OAuth not available
-	}
-
 	return {
 		version,
 		extensionVariant: getExtensionVariant(),
@@ -214,6 +205,5 @@ export async function getStateToPostToWebview(controller: {
 		showFeatureTips,
 		banners,
 		welcomeBanners,
-		openAiCodexIsAuthenticated,
 	} as ExtensionState
 }

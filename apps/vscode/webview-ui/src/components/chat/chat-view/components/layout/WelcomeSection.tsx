@@ -44,8 +44,16 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 	const [isGitRepo, setIsGitRepo] = useState<boolean | null>(null)
 	const [currentWorktree, setCurrentWorktree] = useState<Worktree | null>(null)
 
-	// Check if we're in a git repo and get current worktree info on mount
+	const { navigateToSettings, navigateToSettingsModelPicker, navigateToWorktrees, worktreesEnabled, banners, welcomeBanners } =
+		useExtensionState()
+	const showWorktrees = Boolean(worktreesEnabled?.featureFlag && worktreesEnabled?.user)
+
+	// Check if we're in a git repo and get current worktree info. Only when the
+	// worktree element can show: listing worktrees runs git.
 	useEffect(() => {
+		if (!showWorktrees) {
+			return
+		}
 		WorktreeServiceClient.listWorktrees(EmptyRequest.create({}))
 			.then((result) => {
 				const canUseWorktrees = result.isGitRepo && !result.isMultiRoot && !result.isSubfolder
@@ -56,10 +64,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 				}
 			})
 			.catch(() => setIsGitRepo(false))
-	}, [])
-
-	const { navigateToSettings, navigateToSettingsModelPicker, navigateToWorktrees, worktreesEnabled, banners, welcomeBanners } =
-		useExtensionState()
+	}, [showWorktrees])
 	const { handleFieldsChange } = useApiConfigurationHandlers()
 	// Seeded from the session-scoped record so dismissals survive unmounts.
 	const [dismissedLocalBanners, setDismissedLocalBanners] = useState<Set<string>>(() => getSessionDismissedBannerIds())
@@ -264,7 +269,7 @@ export const WelcomeSection: React.FC<WelcomeSectionProps> = ({
 						<BannerCarousel banners={activeBanners} />
 						{!shouldShowQuickWins && taskHistory.length > 0 && <HistoryPreview showHistoryView={showHistoryView} />}
 						{/* Quick launch worktree button */}
-						{isGitRepo && worktreesEnabled?.featureFlag && worktreesEnabled?.user && (
+						{isGitRepo && showWorktrees && (
 							<div className="flex flex-col items-center gap-3 mt-2 mb-4 px-5">
 								{/* TODO: Re-enable once worktree creation is stable
 								<Tooltip>
