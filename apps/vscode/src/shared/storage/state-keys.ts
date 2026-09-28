@@ -271,7 +271,6 @@ const SECRETS_KEYS = [
 	"apiKey",
 	"clineApiKey",
 	"clineAccountId", // Cline Account ID for Firebase
-	"cline:clineAccountId",
 	"openRouterApiKey",
 	"awsAccessKey",
 	"awsSecretKey",
@@ -311,7 +310,6 @@ const SECRETS_KEYS = [
 	"nousResearchApiKey",
 	"ocaApiKey",
 	"mcpOAuthSecrets",
-	"openai-codex-oauth-credentials", // JSON blob containing OAuth tokens for OpenAI Codex (ChatGPT subscription)
 	"wandbApiKey",
 ] as const
 

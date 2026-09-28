@@ -30,6 +30,12 @@ export const REMOVED_SECRET_KEYS: readonly string[] = [
 	"ocaTokenSet",
 	// Remote config (organization-managed LiteLLM key)
 	"remoteLiteLlmApiKey",
+	// Cline account sign-in
+	"clineApiKey",
+	"clineAccountId",
+	"cline:clineAccountId",
+	// OpenAI Codex (ChatGPT subscription) sign-in
+	"openai-codex-oauth-credentials",
 ]
 
 /**

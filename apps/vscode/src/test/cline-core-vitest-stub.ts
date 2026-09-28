@@ -3,12 +3,6 @@ import { getGeneratedModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from 
 import type { CoreSpawnReason } from "@plinycode/shared"
 import { createFileReadExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/file-read"
 
-export interface OAuthCredentials {
-	accessToken?: string
-	refreshToken?: string
-	accountId?: string
-}
-
 export interface StartSessionResult {
 	sessionId: string
 }
@@ -451,20 +445,4 @@ export async function fetchClineRecommendedModels(_options?: {
 	fetchImpl?: typeof fetch
 }): Promise<ClineRecommendedModelsData> {
 	return { recommended: [], free: [] }
-}
-
-export function createOAuthClientCallbacks() {
-	return {}
-}
-
-export async function getValidClineCredentials(): Promise<OAuthCredentials | undefined> {
-	return undefined
-}
-
-export async function loginClineOAuth(): Promise<OAuthCredentials> {
-	return {}
-}
-
-export async function loginOpenAICodex(): Promise<OAuthCredentials> {
-	return {}
 }

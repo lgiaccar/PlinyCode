@@ -20,7 +20,6 @@ import {
 import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import type { ChatContent } from "@shared/ChatContent"
-import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import type { ClineApiReqInfo, ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
@@ -47,7 +46,7 @@ import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalMan
 import { ExtensionRegistryInfo } from "@/registry"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
-import { ClineError } from "@/services/error/ClineError"
+import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE, ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
@@ -56,14 +55,11 @@ import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
-import { ClineAccountService } from "./account-service"
-import { AuthService, LogoutReason } from "./auth-service"
 import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
 import { buildStartSessionInput, createHistoryItemFromSession } from "./cline-session-factory"
 import { MessageTranslatorState, normalizeUsageEvent, reshapeErrorForWebview } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
-import { parseProviderId } from "./model-catalog/provider-id"
 import { createProviderConfigStore } from "./model-catalog/store"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
@@ -206,8 +202,6 @@ export class Controller {
 	task?: TaskProxy
 
 	mcpHub: McpHub
-	accountService: ClineAccountService
-	authService: AuthService
 	readonly stateManager: StateManager
 
 	// Lazy terminal manager for foreground (VS Code terminal) command execution.
@@ -299,10 +293,6 @@ export class Controller {
 			},
 			ExtensionRegistryInfo.version,
 		)
-
-		// Initialize SDK-backed auth and account services.
-		this.authService = AuthService.getInstance(this)
-		this.accountService = ClineAccountService.getInstance()
 
 		// Initialize message translator state. The mode getter styles the inferred turn-final
 		// completion row (plan → yellow plan box, act → green completion box).
@@ -716,12 +706,7 @@ export class Controller {
 		// Register the bridge as a session event listener
 		this.onSessionEvent(this.grpcBridge.createListener())
 
-		// Restore auth state from secrets on startup.
-		this.authService.restoreRefreshTokenAndRetrieveAuthInfo().catch((err) => {
-			Logger.error("[SdkController] Failed to restore auth state:", err)
-		})
-
-		Logger.log("[SdkController] Initialized with SDK adapter layer + gRPC bridge + auth services")
+		Logger.log("[SdkController] Initialized with SDK adapter layer + gRPC bridge")
 	}
 
 	getProviderConfigStore(): ProviderConfigStore {
@@ -1958,52 +1943,6 @@ export class Controller {
 
 	async togglePlanActMode(modeToSwitchTo: Mode, chatContent?: ChatContent): Promise<boolean> {
 		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent)
-	}
-
-	// ---- Auth callbacks ----
-
-	async handleSignOut(): Promise<void> {
-		const sessionProviderId = this.getSessionProviderId() ?? this.getActiveProviderId()
-		await this.taskControl.cancelClineTaskOnSignOut(isClineManagedProvider(sessionProviderId))
-		await this.authService.handleDeauth(LogoutReason.USER_INITIATED)
-		await this.postStateToWebview()
-	}
-
-	async handleAuthCallback(customToken: string, provider: string | null = null): Promise<void> {
-		await this.authService.handleAuthCallback(customToken, provider ?? "cline")
-		await this.postStateToWebview()
-	}
-
-	// ---- Provider auth callbacks ----
-
-	private persistProviderApiKeyFromState(provider: string): void {
-		const providerId = parseProviderId(provider)
-		const apiKey = this.providerConfigStore.read(providerId).apiKey
-
-		if (!apiKey) {
-			Logger.warn(`[SdkController] No API key found after ${provider} auth callback`)
-			return
-		}
-
-		this.providerConfigStore.write(providerId, { apiKey })
-	}
-
-	async handleOpenRouterCallback(code: string): Promise<void> {
-		await this.authService.handleOpenRouterCallback(code)
-		this.persistProviderApiKeyFromState("openrouter")
-		await this.postStateToWebview()
-	}
-
-	async handleRequestyCallback(code: string): Promise<void> {
-		await this.authService.handleRequestyCallback(code)
-		this.persistProviderApiKeyFromState("requesty")
-		await this.postStateToWebview()
-	}
-
-	async handleHicapCallback(code: string): Promise<void> {
-		await this.authService.handleHicapCallback(code)
-		this.persistProviderApiKeyFromState("hicap")
-		await this.postStateToWebview()
 	}
 
 	async getTaskHistory(request: GetTaskHistoryRequest): Promise<TaskHistoryArray> {

@@ -35,7 +35,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 | `services/` | VS Code–specific services (auth, telemetry, MCP, browser, search, …) |
 | `shared/` | Proto conversions, model catalog, providers, storage, utils |
 | `hosts/` | Host abstractions: `vscode/`, plus `external/AuthHandler.ts` (used by OCA sign-in) |
-| `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `openai-codex/`, `terminal/`) |
+| `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `terminal/`) |
 | `sdk/` | The controller (`SdkController.ts`) and the bridge to the engine: per-concern coordinators, message translator, webview gRPC bridge, `router/` (FreeAuto/BalanceAuto), `model-catalog/`, `vscode-lm/` |
 | `types/`, `utils/` | Declarations & helpers |
 | `exports/` | Public API |
@@ -46,7 +46,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 | Path | Role |
 |------|------|
-| `controller/` | One directory per RPC service, one file per RPC: account, browser, checkpoints, commands, file, marketplace, MCP, models, slash commands, state, task, UI, web, worktree. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
+| `controller/` | One directory per RPC service, one file per RPC: browser, checkpoints, commands, file, marketplace, MCP, models, slash commands, state, task, UI, web, worktree. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
 | `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
 | `storage/` | Persistence (`utils/`) |
@@ -55,11 +55,11 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 ### `src/services/`
 
-`auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
+`banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 
-`clients/`, `cline/`, `internal/`, `messages/`, `model-catalog/`, `multi-root/`, `proto/`, `proto-conversions/`, `providers/`, `services/`, `storage/` (`state-keys.ts`; `StateManager` itself is in `src/core/storage/`), `utils/`.
+`clients/`, `cline/`, `messages/`, `model-catalog/`, `multi-root/`, `proto/`, `proto-conversions/`, `providers/`, `services/`, `storage/` (`state-keys.ts`; `StateManager` itself is in `src/core/storage/`), `utils/`.
 
 ### `webview-ui/`
 

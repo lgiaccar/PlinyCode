@@ -6,7 +6,9 @@ import {
 	isClinePassLimitMessage,
 } from "@plinycode/llms"
 import { serializeError } from "serialize-error"
-import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "../../shared/ClineAccount"
+
+/** Error message shown when the Cline provider is used without a Cline account sign-in. */
+export const CLINE_ACCOUNT_AUTH_ERROR_MESSAGE = "Unauthorized: Please sign in to Cline before trying again."
 
 export enum ClineErrorType {
 	Auth = "auth",

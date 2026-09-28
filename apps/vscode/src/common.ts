@@ -11,6 +11,7 @@ import { HookProcessRegistry } from "./core/hooks/HookProcessRegistry"
 import { StateManager } from "./core/storage/StateManager"
 import { AgentConfigLoader } from "./core/task/tools/subagent/AgentConfigLoader"
 import { ExtensionRegistryInfo } from "./registry"
+import { purgeRemovedProviderSignIns } from "./sdk/provider-migration"
 import { registerVsCodeLmHandler } from "./sdk/vscode-lm/register-vscode-lm"
 import { registerClineClientIdentity } from "./services/ClineClientIdentity"
 import { ErrorService } from "./services/error"
@@ -57,6 +58,14 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 			type: ShowMessageType.ERROR,
 			message: "Failed to initialize storage. Please check logs for details or try restarting the client.",
 		})
+	}
+
+	// Drop the stored tokens of sign-ins PlinyCode no longer has (Cline account,
+	// OpenAI Codex, OCA). Their secrets-store copies are purged by StateManager.
+	try {
+		purgeRemovedProviderSignIns()
+	} catch (error) {
+		Logger.error("[PlinyCode] Failed to clear removed provider sign-ins:", error)
 	}
 
 	void registerClineClientIdentity()

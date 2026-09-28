@@ -1,11 +1,4 @@
-import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
-import React, { useEffect, useState } from "react"
-import { AccountServiceClient } from "@/services/grpc-client"
-
-const COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
-const COOLDOWN_KEY = "cline:spendLimitRequestCooldown"
-
-type RequestButtonState = "idle" | "sending" | "sent"
+import React from "react"
 
 function formatResetsAt(resetsAt?: string): string | null {
 	if (!resetsAt) return null
@@ -40,49 +33,6 @@ const SpendLimitError: React.FC<SpendLimitErrorProps> = ({ message, budgetPeriod
 	const displayMessage =
 		limitUsd != null && budgetPeriod ? `$${limitUsd.toFixed(2)} ${budgetPeriod} limit has been reached.` : message
 
-	const [buttonState, setButtonState] = useState<RequestButtonState>(() => {
-		try {
-			const ts = localStorage.getItem(COOLDOWN_KEY)
-			if (ts && Date.now() - Number(ts) < COOLDOWN_MS) return "sent"
-		} catch {
-			// localStorage may not be available in some environments
-		}
-		return "idle"
-	})
-
-	// Reset button to idle once cooldown expires
-	useEffect(() => {
-		if (buttonState !== "sent") return
-		try {
-			const ts = localStorage.getItem(COOLDOWN_KEY)
-			if (!ts) {
-				setButtonState("idle")
-				return
-			}
-			const remaining = COOLDOWN_MS - (Date.now() - Number(ts))
-			if (remaining <= 0) {
-				setButtonState("idle")
-				return
-			}
-			const timer = setTimeout(() => setButtonState("idle"), remaining)
-			return () => clearTimeout(timer)
-		} catch {
-			// Ignore localStorage errors
-		}
-	}, [buttonState])
-
-	const handleRequestIncrease = async () => {
-		setButtonState("sending")
-		try {
-			await AccountServiceClient.submitLimitIncreaseRequest({})
-			localStorage.setItem(COOLDOWN_KEY, String(Date.now()))
-			setButtonState("sent")
-		} catch (error) {
-			console.error("Failed to submit limit increase request:", error)
-			setButtonState("idle")
-		}
-	}
-
 	const periodLabel = budgetPeriod ? budgetPeriod.charAt(0).toUpperCase() + budgetPeriod.slice(1) : ""
 	const resetsAtFormatted = formatResetsAt(resetsAt)
 
@@ -115,29 +65,6 @@ const SpendLimitError: React.FC<SpendLimitErrorProps> = ({ message, budgetPeriod
 					</div>
 				</div>
 			</div>
-
-			<VSCodeButton
-				appearance="primary"
-				className="w-full"
-				disabled={buttonState !== "idle"}
-				onClick={handleRequestIncrease}>
-				{buttonState === "sending" ? (
-					<>
-						<span className="codicon codicon-loading codicon-modifier-spin mr-1.5" />
-						Sending…
-					</>
-				) : buttonState === "sent" ? (
-					<>
-						<span className="codicon codicon-check mr-1.5" />
-						Request Sent
-					</>
-				) : (
-					<>
-						<span className="codicon codicon-arrow-up mr-1.5" />
-						Request Increase
-					</>
-				)}
-			</VSCodeButton>
 		</div>
 	)
 }

@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import type { Socket } from "node:net"
 import { v4 as uuidv4 } from "uuid"
-import type { BalanceResponse, OrganizationBalanceResponse, UserResponse } from "../../../../shared/ClineAccount"
 import {
 	E2E_MOCK_API_RESPONSES,
 	E2E_MOCK_CLINE_MODELS,
@@ -10,7 +9,6 @@ import {
 	E2E_MOCK_POWERSHELL_TOOL_CALL,
 	E2E_REGISTERED_MOCK_ENDPOINTS,
 } from "./api"
-import { ClineDataMock } from "./data"
 
 const E2E_API_SERVER_PORT = 7777
 
@@ -27,50 +25,9 @@ export class ClineApiServerMock {
 	static globalSharedServer: ClineApiServerMock | null = null
 	static globalSockets: Set<Socket> = new Set()
 
-	private currentUser: UserResponse | null = null
-	private userBalance = 100.5 // Default sufficient balance
-	private orgBalance = 500.0
-	private userHasOrganization = false
-	private spendLimitExceeded = false
 	public generationCounter = 0
 
-	public readonly API_USER = new ClineDataMock("personal")
-
 	constructor(public readonly server: Server) {}
-
-	// Test helper methods
-	public setUserBalance(balance: number) {
-		this.userBalance = balance
-	}
-
-	public setUserHasOrganization(hasOrg: boolean) {
-		this.userHasOrganization = hasOrg
-		const user = this.currentUser
-		if (!user) {
-			return
-		}
-		user.organizations[0].active = hasOrg
-		this.setCurrentUser(user)
-	}
-
-	public setOrgBalance(balance: number) {
-		this.orgBalance = balance
-	}
-
-	/**
-	 * Puts the mock server into "spend limit exceeded" mode.
-	 * While true, POST /api/v1/chat/completions returns 429 SPEND_LIMIT_EXCEEDED
-	 * instead of a normal streaming response.
-	 * Toggle off to resume normal behaviour.
-	 */
-	public setSpendLimitExceeded(exceeded: boolean) {
-		this.spendLimitExceeded = exceeded
-	}
-
-	public setCurrentUser(user: UserResponse | null) {
-		this.API_USER.setCurrentUser(user)
-		this.currentUser = user
-	}
 
 	// Helper to match routes against registered endpoints and extract parameters
 	private static matchRoute(
@@ -161,45 +118,17 @@ export class ClineApiServerMock {
 				res.end(JSON.stringify(data))
 			}
 
-			// Helper to send API response
-			const sendApiResponse = (data: unknown, status = 200) => {
-				log(`API Response: ${JSON.stringify(data)}`)
-				sendJson({ success: true, data }, status)
-			}
-
 			const sendApiError = (error: string, status = 400) => {
 				sendJson({ success: false, error }, status)
 			}
 
-			// Authentication middleware
+			// The /api/v1 paths expect a bearer token. The /api/llm path is the Pliny
+			// gateway surface: the openVSCode fixture seeds a dummy key for it, which
+			// any bearer check would accept anyway.
 			const authHeader = req.headers.authorization
-			// The /api/llm path is the Pliny gateway surface: it is OpenAI-compatible
-			// and has NO Cline account — do not gate it behind the Cline-user token
-			// lookup (which would 401 the dummy `e2e-mock-pliny-key` bearer the
-			// openVSCode fixture seeds in providers.json). The /api/v1 paths below
-			// still require a real Cline account token.
-			const isAuthRequired =
-				!path.startsWith("/.test/") &&
-				!path.startsWith("/api/llm") &&
-				path !== "/health" &&
-				path !== "/api/v1/auth/token" &&
-				path !== "/api/v1/auth/register"
-
+			const isAuthRequired = path.startsWith("/api/v1/")
 			if (isAuthRequired && (!authHeader || !authHeader.startsWith("Bearer "))) {
 				return sendApiError("Unauthorized", 401)
-			}
-
-			const authToken = authHeader?.substring(7) // Remove "Bearer " prefix
-
-			// Authenticate the token and set current user
-			if (isAuthRequired && authToken) {
-				log(`Authenticating token: ${authToken}`)
-				const normalizedAuthToken = authToken.replace(/^workos:/i, "")
-				const user = ClineApiServerMock.globalSharedServer!.API_USER.getUserByToken(normalizedAuthToken)
-				if (!user) {
-					return sendApiError("Invalid token", 401)
-				}
-				ClineApiServerMock.globalSharedServer!.setCurrentUser(user)
 			}
 
 			log("=== MOCK SERVER REQUEST ===")
@@ -218,7 +147,7 @@ export class ClineApiServerMock {
 					return sendJson({ error: "Not found" }, 404)
 				}
 
-				const { baseRoute, endpoint, params = {} } = routeMatch
+				const { baseRoute, endpoint } = routeMatch
 				const controller = ClineApiServerMock.globalSharedServer!
 
 				// Health check endpoints
@@ -241,243 +170,8 @@ export class ClineApiServerMock {
 						return sendJson({ data: E2E_MOCK_CLINE_MODELS })
 					}
 
-					// User endpoints
-					if (endpoint === "/users/me" && method === "GET") {
-						const currentUser = controller.currentUser
-						if (!currentUser) {
-							return sendApiError("Unauthorized", 401)
-						}
-						return sendApiResponse(currentUser)
-					}
-
-					if (endpoint === "/users/me/featurebase-token" && method === "GET") {
-						const currentUser = controller.currentUser
-						if (!currentUser) {
-							return sendApiError("Unauthorized", 401)
-						}
-						return sendApiResponse({
-							featurebaseJwt: `mock-featurebase-jwt-${currentUser.id}`,
-						})
-					}
-
-					if (endpoint === "/users/{userId}/balance" && method === "GET") {
-						const { userId } = params
-						const balance: BalanceResponse = {
-							balance: controller.userBalance,
-							userId,
-						}
-						return sendApiResponse(balance)
-					}
-
-					if (endpoint === "/users/{userId}/usages" && method === "GET") {
-						const { userId } = params
-						const currentUser = controller.currentUser
-						if (currentUser?.id !== userId) {
-							return sendApiError("Unauthorized", 401)
-						}
-						return sendApiResponse({
-							items: controller.API_USER.getMockUsageTransactions(userId),
-						})
-					}
-
-					if (endpoint === "/users/{userId}/payments" && method === "GET") {
-						const { userId } = params
-						const currentUser = controller.currentUser
-						if (currentUser?.id !== userId) {
-							return sendApiError("Unauthorized", 401)
-						}
-						return sendApiResponse({
-							paymentTransactions: controller.API_USER.getMockPaymentTransactions(userId),
-						})
-					}
-
-					// Organization endpoints
-					if (endpoint === "/organizations/{orgId}/balance" && method === "GET") {
-						const { orgId } = params
-						const balance: OrganizationBalanceResponse = {
-							balance: controller.orgBalance,
-							organizationId: orgId,
-						}
-						return sendApiResponse(balance)
-					}
-
-					if (endpoint === "/organizations/{orgId}/members/{memberId}/usages" && method === "GET") {
-						const currentUser = controller.currentUser
-						if (!currentUser) {
-							return sendApiError("Unauthorized", 401)
-						}
-						const body = await readBody()
-						const { orgId } = params
-						log("Fetching organization usage transactions for", {
-							orgId,
-							body,
-						})
-						return sendApiResponse({
-							items: controller.API_USER.getMockUsageTransactions(currentUser.id, orgId),
-						})
-					}
-
-					if (endpoint === "/users/active-account" && method === "PUT") {
-						const body = await readBody()
-						log("Switching active account")
-						const { organizationId } = JSON.parse(body)
-						controller.setUserHasOrganization(!!organizationId)
-						const currentUser = controller.API_USER.getCurrentUser()
-						if (!currentUser) {
-							return sendApiError("No current user found", 400)
-						}
-						if (organizationId === null) {
-							for (const org of currentUser.organizations) {
-								org.active = false
-							}
-						} else {
-							const orgIndex = currentUser.organizations.findIndex((org) => org.organizationId === organizationId)
-							if (orgIndex === -1) {
-								return sendApiError("Organization not found", 404)
-							}
-							currentUser.organizations[orgIndex].active = controller.userHasOrganization
-						}
-						controller.setCurrentUser(currentUser)
-						return sendApiResponse("Account switched successfully")
-					}
-
-					// Auth token registration endpoint used by WorkOS device auth.
-					if (endpoint === "/auth/register" && method === "POST") {
-						const body = await readBody()
-						const parsed = JSON.parse(body)
-						const { accessToken, refreshToken } = parsed
-
-						if (!accessToken || !refreshToken) {
-							return sendApiError("Invalid request", 400)
-						}
-
-						const user = controller.API_USER.getUserByToken(accessToken)
-						if (!user) {
-							return sendApiError("Invalid WorkOS token", 400)
-						}
-
-						return sendApiResponse({
-							accessToken: accessToken + "_access",
-							refreshToken,
-							tokenType: "Bearer",
-							expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-							userInfo: {
-								subject: user.id,
-								email: user.email,
-								name: user.displayName,
-								clineUserId: user.id,
-								accounts: null,
-								organizations: user.organizations,
-							},
-						})
-					}
-
-					// Auth token exchange endpoint
-					if (endpoint === "/auth/token" && method === "POST") {
-						const body = await readBody()
-						const parsed = JSON.parse(body)
-						const { code } = parsed
-						const grantType = parsed.grantType ?? parsed.grant_type
-
-						if (grantType !== "authorization_code" || !code) {
-							return sendApiError("Invalid request", 400)
-						}
-
-						const user = controller.API_USER.getUserByToken(code)
-						if (!user) {
-							return sendApiError("Invalid or expired authorization code", 400)
-						}
-
-						// Return format matching ClineAuthProvider expectations
-						return sendApiResponse({
-							accessToken: code + "_access",
-							refreshToken: code + "_refresh",
-							tokenType: "Bearer",
-							expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour from now
-							userInfo: {
-								subject: user.id,
-								email: user.email,
-								name: user.displayName,
-								clineUserId: user.id,
-								accounts: null,
-								organizations: user.organizations,
-							},
-						})
-					}
-
-					// Auth refresh token endpoint
-					if (endpoint === "/auth/refresh" && method === "POST") {
-						const body = await readBody()
-						const parsed = JSON.parse(body)
-						const { refreshToken, grantType } = parsed
-
-						if (grantType !== "refresh_token" || !refreshToken) {
-							return sendApiError("Invalid request", 400)
-						}
-
-						// Extract original token from refresh token
-						const originalToken = refreshToken.replace("_refresh", "")
-						const user = controller.API_USER.getUserByToken(originalToken)
-						if (!user) {
-							return sendApiError("Invalid or expired refresh token", 400)
-						}
-
-						// Return format matching ClineAuthProvider expectations
-						return sendApiResponse({
-							accessToken: originalToken + "_access_refreshed",
-							refreshToken: refreshToken, // Keep same refresh token
-							tokenType: "Bearer",
-							expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour from now
-							userInfo: {
-								subject: user.id,
-								email: user.email,
-								name: user.displayName,
-								clineUserId: user.id,
-								accounts: null,
-							},
-						})
-					}
-
-					// Budget limit increase request endpoint
-					if (endpoint === "/users/me/budget/request" && method === "POST") {
-						log("Spend limit increase request received — recording and notifying admin")
-						res.writeHead(204)
-						res.end()
-						return
-					}
-
 					// Chat completions endpoint
 					if (endpoint === "/chat/completions" && method === "POST") {
-						// Spend limit check takes priority — org-enforced budget cap (429)
-						if (controller.spendLimitExceeded) {
-							log("Returning SPEND_LIMIT_EXCEEDED (429)")
-							return sendJson(
-								{
-									error: {
-										code: "SPEND_LIMIT_EXCEEDED",
-										limit_scope: "user",
-										budget_period: "daily",
-										limit_usd: 20.0,
-										spent_usd: 20.5,
-										resets_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
-										message: "Your daily spend limit of $20.00 has been reached.",
-									},
-								},
-								429,
-							)
-						}
-
-						if (!controller.userHasOrganization && controller.userBalance <= 0) {
-							return sendApiError(
-								JSON.stringify({
-									code: "insufficient_credits",
-									current_balance: controller.userBalance,
-									message: "Not enough credits available",
-								}),
-								402,
-							)
-						}
-
 						const body = await readBody()
 						const parsed = JSON.parse(body)
 						const { messages, model = "claude-3-5-sonnet-20241022", stream = true } = parsed
@@ -659,14 +353,7 @@ export class ClineApiServerMock {
 
 					// Generation details endpoint
 					if (endpoint === "/generation" && method === "GET") {
-						const generationId = parsedUrl.searchParams.get("id") || ""
-						const generation = controller.API_USER.getGeneration(generationId)
-
-						if (!generation) {
-							return sendJson({ error: "Generation not found" }, 404)
-						}
-
-						return sendJson(generation)
+						return sendJson({ error: "Generation not found" }, 404)
 					}
 				}
 
@@ -835,54 +522,6 @@ export class ClineApiServerMock {
 								],
 							})
 						}
-						return
-					}
-				}
-
-				// Test helper endpoints
-				if (baseRoute === "/.test") {
-					if (endpoint === "/auth" && method === "POST") {
-						const user = controller.API_USER.getUserByToken()
-						if (!user) {
-							return sendApiError("Invalid token", 401)
-						}
-						controller.setCurrentUser(user)
-						return
-					}
-
-					if (endpoint === "/setUserBalance" && method === "POST") {
-						const body = await readBody()
-						const { balance } = JSON.parse(body)
-						controller.setUserBalance(balance)
-						res.writeHead(200)
-						res.end()
-						return
-					}
-
-					if (endpoint === "/setUserHasOrganization" && method === "POST") {
-						const body = await readBody()
-						const { hasOrg } = JSON.parse(body)
-						controller.setUserHasOrganization(hasOrg)
-						res.writeHead(200)
-						res.end()
-						return
-					}
-
-					if (endpoint === "/setOrgBalance" && method === "POST") {
-						const body = await readBody()
-						const { balance } = JSON.parse(body)
-						controller.setOrgBalance(balance)
-						res.writeHead(200)
-						res.end()
-						return
-					}
-
-					if (endpoint === "/setSpendLimitExceeded" && method === "POST") {
-						const body = await readBody()
-						const { exceeded } = JSON.parse(body)
-						controller.setSpendLimitExceeded(!!exceeded)
-						res.writeHead(200)
-						res.end()
 						return
 					}
 				}

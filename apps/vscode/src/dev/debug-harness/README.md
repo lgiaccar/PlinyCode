@@ -83,45 +83,6 @@ opening a real browser, URLs are:
 | `oauth.simulate_callback` | `{path, code?, state?, provider?, token?}` | Build a vscode:// callback URI (for MCP/provider OAuth) |
 | `oauth.read_captured_urls_file` | | Read the on-disk JSONL file of captured URLs |
 
-### Testing Cline OAuth (login flow)
-
-The Cline OAuth flow uses the SDK's local callback server. When the user
-clicks "Login", the SDK:
-
-1. Starts a local HTTP server on a random port
-2. Calls `openExternal(authorizationUrl)` — which we capture
-3. The user authenticates in the browser — which we need to simulate
-4. The provider redirects to the local callback server with `?code=...`
-5. The SDK captures the code and exchanges it for tokens
-
-**To test this flow:**
-
-```bash
-# 1. Click "Login" in the debugee's sidebar
-curl localhost:19229/api -d '{"method":"ui.open_sidebar"}'
-# Dismiss overlays first (see "Dismissing Promotional Overlays" below)
-curl localhost:19229/api -d '{"method":"ui.locator","params":{"text":"Login to Cline","frame":"sidebar","action":"click"}}'
-
-# 2. Check captured URLs to find the authorization URL
-curl localhost:19229/api -d '{"method":"oauth.captured_urls"}'
-# → { "urls": [{ "url": "https://api.cline.bot/auth/authorize?callback_url=http://127.0.0.1:PORT/..." }] }
-
-# 3. The authorization URL has a callback_url pointing to the SDK's local server.
-#    To complete the flow, you need to either:
-#    a. Open the authorization URL in a real browser (it will redirect back
-#       to the SDK's local callback server automatically)
-#    b. Simulate the redirect by extracting the callback_url and making
-#       a curl request to it with a code parameter:
-curl "http://127.0.0.1:PORT/auth/callback?code=TEST_CODE" 2>/dev/null
-
-# 4. Verify the token was stored
-curl localhost:19229/api -d '{"method":"oauth.read_stored_token"}'
-# → { "found": true, "hasAccountId": true, "keys": ["cline:clineAccountId"] }
-
-# 5. Take a screenshot to verify the UI shows authenticated state
-curl localhost:19229/api -d '{"method":"ui.screenshot"}'
-```
-
 ### Testing MCP OAuth
 
 MCP servers that require OAuth use a different flow: the browser redirects
@@ -163,22 +124,9 @@ curl localhost:19229/api -d '{"method":"oauth.read_stored_token"}'
 > ships in production. It calls the same `SharedUriHandler.handleUri(url)` that
 > VSCode's real `registerUriHandler` invokes, returning a `Promise<boolean>`
 > (pass `awaitPromise: true`). Use it for any `vscode://` callback — MCP,
-> OpenRouter, `/auth`, etc. `oauth.simulate_callback` only *builds* the URI; this
+> `/task`, etc. `oauth.simulate_callback` only *builds* the URI; this
 > hook actually *delivers* it.
 
-
-### Testing Provider OAuth (OpenRouter, etc.)
-
-```bash
-# 1. Trigger provider login (e.g., "Get OpenRouter API Key" button)
-# 2. Check captured URLs
-curl localhost:19229/api -d '{"method":"oauth.captured_urls"}'
-# 3. Simulate the redirect callback
-curl localhost:19229/api -d '{
-  "method": "oauth.simulate_callback",
-  "params": {"path": "/openrouter", "code": "TEST_CODE"}
-}'
-```
 
 ## Practical Tips
 
@@ -203,7 +151,6 @@ use VSCode commands via the command palette. These are registered in
 
 | Command | What it opens |
 |---------|--------------|
-| `cline.accountButtonClicked` | Account / sign-in view |
 | `cline.historyButtonClicked` | Task history view |
 | `cline.settingsButtonClicked` | Settings view |
 | `cline.mcpButtonClicked` | MCP servers view |
@@ -211,9 +158,6 @@ use VSCode commands via the command palette. These are registered in
 | `cline.worktreesButtonClicked` | Worktrees view |
 
 ```bash
-# Navigate to account view
-curl localhost:19229/api -d '{"method":"ui.command_palette","params":{"command":"cline.accountButtonClicked"}}'
-
 # Navigate to history view
 curl localhost:19229/api -d '{"method":"ui.command_palette","params":{"command":"cline.historyButtonClicked"}}'
 
@@ -241,7 +185,7 @@ curl localhost:19229/api -d '{"method":"web.evaluate","params":{"expression":"do
 curl localhost:19229/api -d '{"method":"status"}'
 
 # 4. Navigate to the view you need
-curl localhost:19229/api -d '{"method":"ui.command_palette","params":{"command":"cline.accountButtonClicked"}}'
+curl localhost:19229/api -d '{"method":"ui.command_palette","params":{"command":"cline.settingsButtonClicked"}}'
 
 # 5. Interact and verify
 curl localhost:19229/api -d '{"method":"ui.screenshot"}'
@@ -362,33 +306,6 @@ curl localhost:19229/api -d '{"method":"ext.call_stack"}'
 curl localhost:19229/api -d '{"method":"ext.resume"}'
 ```
 
-### 2. Test OAuth login flow
-
-```bash
-# Dismiss overlays, then click Login
-curl localhost:19229/api -d '{"method":"ui.open_sidebar"}'
-curl localhost:19229/api -d '{"method":"web.evaluate","params":{"expression":"document.querySelectorAll(\".sr-only\").forEach(el => el.parentElement?.click())"}}'
-curl localhost:19229/api -d '{"method":"ui.locator","params":{"text":"Login to Cline","frame":"sidebar","action":"click"}}'
-
-# Check what URL was captured
-curl localhost:19229/api -d '{"method":"oauth.captured_urls"}'
-
-# The URL contains callback_url=http://127.0.0.1:PORT/...
-# Open it in a real browser to complete auth, or simulate:
-# (extract the port from the captured URL first)
-curl "http://127.0.0.1:PORT/callback?code=real_or_test_code"
-
-# Verify token stored
-curl localhost:19229/api -d '{"method":"oauth.read_stored_token"}'
-```
-
-### 3. Navigate to Account view and check auth state
-
-```bash
-curl localhost:19229/api -d '{"method":"ui.command_palette","params":{"command":"cline.accountButtonClicked"}}'
-curl localhost:19229/api -d '{"method":"ui.screenshot"}'
-```
-
 ## How It Works
 
 1. **Build**: esbuild bundles `src/extension.ts` → `dist/extension.js` (unminified, with
@@ -443,14 +360,8 @@ and return `{path}` in the response. **Do NOT `open` the file** — on macOS thi
 which covers the VSCode window. Use `read_file` on the returned path to examine the image.
 
 **OAuth with real providers**: The browser capture only intercepts the URL that the debugee tries
-to open. For Cline OAuth, the SDK's local callback server is still running and will accept
-redirects. For provider OAuth (OpenRouter, MCP), you need to simulate the `vscode://` callback
-URI — see the OAuth testing section above.
-
-**Cline OAuth with invalid codes**: If you simulate the OAuth callback with a fake code, the
-SDK's token exchange will fail (the provider won't recognize the code). You need either a real
-authorization code (obtained by completing the flow in a browser) or a way to mock the token
-exchange endpoint.
+to open. For MCP OAuth you need to simulate the `vscode://` callback URI — see the OAuth testing
+section above.
 
 ## Troubleshooting
 

@@ -145,7 +145,6 @@ export interface ExtensionState {
 	localSkillsToggles?: Record<string, boolean>
 	backgroundEditEnabled?: boolean
 	showFeatureTips?: boolean
-	openAiCodexIsAuthenticated?: boolean
 }
 
 /**

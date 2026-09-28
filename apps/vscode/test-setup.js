@@ -224,13 +224,9 @@ Module.prototype.require = function (id) {
 			setTelemetryOptOutGlobally: () => undefined,
 			createDefaultExecutors: () => ({}),
 			createMcpTools: () => ({}),
-			createOAuthClientCallbacks: () => ({}),
 			getProviderAuthHandler,
 			getProviderAuthStorageId,
 			resolveProviderApiKeyFromSettings,
-			getValidClineCredentials: async () => undefined,
-			loginClineOAuth: async () => undefined,
-			loginOpenAICodex: async () => undefined,
 		}
 	}
 
