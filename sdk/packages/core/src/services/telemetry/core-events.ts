@@ -105,9 +105,6 @@ export const CORE_TELEMETRY_EVENTS = {
 		TOOL_TIMEOUT: "sdk.tool_timeout",
 		PLAN_MODE_COMMAND_BLOCKED: "sdk.plan_mode_command_blocked",
 	},
-	FEATURE_FLAGS: {
-		FLAG_CALLED: "$feature_flag_called",
-	},
 } as const;
 
 export interface RunCommandsTimeoutTelemetryProperties {

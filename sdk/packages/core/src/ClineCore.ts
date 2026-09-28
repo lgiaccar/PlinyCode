@@ -36,10 +36,6 @@ import type {
 	StartSessionInput,
 	StartSessionResult,
 } from "./runtime/host/runtime-host";
-import {
-	FeatureFlagsService,
-	NoOpFeatureFlagsProvider,
-} from "./services/feature-flags";
 import { resolveCoreDistinctId } from "./services/telemetry/distinct-id";
 import { compareCheckpointToWorkspace } from "./session/checkpoint-diff";
 import {
@@ -77,7 +73,6 @@ export class ClineCore {
 	readonly clientName: string | undefined;
 	readonly runtimeAddress: string | undefined;
 	readonly settings: ClineCoreSettingsApi;
-	readonly featureFlags: FeatureFlagsService;
 	readonly pendingPrompts: PendingPromptsServiceApi;
 	private readonly host: RuntimeHost;
 	private readonly prepare: ClineCoreOptions["prepare"] | undefined;
@@ -100,7 +95,6 @@ export class ClineCore {
 		logger: BasicLogger | undefined,
 		telemetry: ITelemetryService | undefined,
 		distinctId: string | undefined,
-		featureFlags: FeatureFlagsService,
 	) {
 		this.clientName = clientName;
 		this.runtimeAddress = runtimeAddress;
@@ -110,7 +104,6 @@ export class ClineCore {
 		this.logger = logger;
 		this.telemetry = telemetry;
 		this.distinctId = distinctId;
-		this.featureFlags = featureFlags;
 		this.settings = createClineCoreSettingsApi(host);
 		this.pendingPrompts = createClineCorePendingPromptsApi(host);
 		this.unsubscribeBootstrapCleanup = this.host.subscribe((event) => {
@@ -143,17 +136,6 @@ export class ClineCore {
 		const capabilities = normalizeRuntimeCapabilities(options.capabilities);
 		const normalizedOptions = { ...options, capabilities, distinctId };
 		const host = await createRuntimeHost(normalizedOptions);
-		const featureFlags =
-			options.featureFlags ||
-			new FeatureFlagsService({
-				provider: new NoOpFeatureFlagsProvider(),
-				telemetry: options.telemetry,
-				logger: options.logger,
-				context: {
-					distinctId,
-					clientName: options.clientName,
-				},
-			});
 		const core = new ClineCore(
 			host,
 			options.clientName,
@@ -163,7 +145,6 @@ export class ClineCore {
 			options.logger,
 			options.telemetry,
 			distinctId,
-			featureFlags,
 		);
 		return core;
 	}

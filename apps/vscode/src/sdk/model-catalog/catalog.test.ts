@@ -14,8 +14,6 @@ import { parseProviderId } from "./provider-id"
 const mocks = vi.hoisted(() => ({
 	resolveProviderConfig: vi.fn(),
 	listLocalProviders: vi.fn(),
-	getBooleanFlagEnabled: vi.fn(() => false),
-	pollFeatureFlags: vi.fn(async (): Promise<void> => undefined),
 	getProviderSettings: vi.fn((): any => undefined),
 }))
 
@@ -27,13 +25,6 @@ vi.mock("@plinycode/core", async (importOriginal: any) => {
 		listLocalProviders: mocks.listLocalProviders,
 	}
 })
-
-vi.mock("@/services/feature-flags", () => ({
-	getFeatureFlagsService: () => ({
-		getBooleanFlagEnabled: mocks.getBooleanFlagEnabled,
-		poll: mocks.pollFeatureFlags,
-	}),
-}))
 
 vi.mock("@/services/logging/distinctId", () => ({
 	setDistinctId: vi.fn(),
@@ -66,10 +57,6 @@ beforeAll(async () => {
 beforeEach(() => {
 	mocks.resolveProviderConfig.mockReset()
 	mocks.listLocalProviders.mockReset()
-	mocks.getBooleanFlagEnabled.mockReset()
-	mocks.getBooleanFlagEnabled.mockReturnValue(false)
-	mocks.pollFeatureFlags.mockReset()
-	mocks.pollFeatureFlags.mockResolvedValue(undefined)
 	mocks.getProviderSettings.mockReset()
 	mocks.getProviderSettings.mockReturnValue(undefined)
 })

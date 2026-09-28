@@ -40,9 +40,6 @@ export function transformRemoteConfigToStateShape(remoteConfig: RemoteConfig): P
 	const transformed: Partial<RemoteConfigFields> = {}
 
 	// Map top-level settings
-	if (remoteConfig.mcpMarketplaceEnabled !== undefined) {
-		transformed.mcpMarketplaceEnabled = remoteConfig.mcpMarketplaceEnabled
-	}
 	if (remoteConfig.allowedMCPServers !== undefined) {
 		transformed.allowedMCPServers = remoteConfig.allowedMCPServers
 	}

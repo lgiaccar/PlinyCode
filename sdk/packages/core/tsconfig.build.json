@@ -9,5 +9,5 @@
 		"rootDir": "./src",
 		"incremental": false
 	},
-	"include": ["src/index.ts", "src/services/feature-flags/posthog.ts"]
+	"include": ["src/index.ts"]
 }

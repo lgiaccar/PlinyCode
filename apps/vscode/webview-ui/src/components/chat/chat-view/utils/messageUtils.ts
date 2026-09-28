@@ -2,13 +2,7 @@
  * Utility functions for message filtering, grouping, and manipulation
  */
 
-import type {
-	ClineAskQuestion,
-	ClineMessage,
-	ClinePlanModeResponse,
-	ClineSayBrowserAction,
-	ClineSayTool,
-} from "@shared/ExtensionMessage"
+import type { ClineAskQuestion, ClineMessage, ClinePlanModeResponse, ClineSayTool } from "@shared/ExtensionMessage"
 import { FileIcon, FolderOpenDotIcon, FolderOpenIcon, SearchIcon, ShapesIcon, WrenchIcon } from "lucide-react"
 
 /**
@@ -192,93 +186,6 @@ export function filterVisibleMessages(messages: ClineMessage[]): ClineMessage[] 
 		}
 		return true
 	})
-}
-
-/**
- * Check if a message is part of a browser session
- */
-function isBrowserSessionMessage(message: ClineMessage): boolean {
-	if (message.type === "ask") {
-		return message.ask === "browser_action_launch"
-	}
-	if (message.type === "say") {
-		return [
-			"browser_action_launch",
-			"api_req_started",
-			"text",
-			"browser_action",
-			"browser_action_result",
-			"reasoning",
-		].includes(message.say ?? "")
-	}
-	return false
-}
-
-/**
- * Group messages, combining browser session messages into arrays
- */
-export function groupMessages(visibleMessages: ClineMessage[]): (ClineMessage | ClineMessage[])[] {
-	const result: (ClineMessage | ClineMessage[])[] = []
-	let currentGroup: ClineMessage[] = []
-	let isInBrowserSession = false
-
-	const endBrowserSession = () => {
-		if (currentGroup.length > 0) {
-			result.push([...currentGroup])
-			currentGroup = []
-			isInBrowserSession = false
-		}
-	}
-
-	for (const message of visibleMessages) {
-		if (message.ask === "browser_action_launch" || message.say === "browser_action_launch") {
-			// complete existing browser session if any
-			endBrowserSession()
-			// start new
-			isInBrowserSession = true
-			currentGroup.push(message)
-		} else if (isInBrowserSession) {
-			// end session if api_req_started is cancelled
-			if (message.say === "api_req_started") {
-				// get last api_req_started in currentGroup to check if it's cancelled
-				const lastApiReqStarted = [...currentGroup].reverse().find((m) => m.say === "api_req_started")
-				if (lastApiReqStarted?.text != null) {
-					const info = JSON.parse(lastApiReqStarted.text)
-					const isCancelled = info.cancelReason != null
-					if (isCancelled) {
-						endBrowserSession()
-						result.push(message)
-						continue
-					}
-				}
-			}
-
-			if (isBrowserSessionMessage(message)) {
-				currentGroup.push(message)
-
-				// Check if this is a close action
-				if (message.say === "browser_action") {
-					const browserAction = JSON.parse(message.text || "{}") as ClineSayBrowserAction
-					if (browserAction.action === "close") {
-						endBrowserSession()
-					}
-				}
-			} else {
-				// complete existing browser session if any
-				endBrowserSession()
-				result.push(message)
-			}
-		} else {
-			result.push(message)
-		}
-	}
-
-	// Handle case where browser session is the last group
-	if (currentGroup.length > 0) {
-		result.push([...currentGroup])
-	}
-
-	return result
 }
 
 /**
@@ -504,16 +411,11 @@ export function isApiReqAbsorbable(apiReqTs: number, allMessages: ClineMessage[]
  * If so, it should be absorbed into the tool group rather than rendered separately.
  * The key is: no HIGH-stakes tools (write, edit, command, etc.) AND no reasoning
  */
-function isApiReqFollowedOnlyByLowStakesTools(index: number, messages: (ClineMessage | ClineMessage[])[]): boolean {
+function isApiReqFollowedOnlyByLowStakesTools(index: number, messages: ClineMessage[]): boolean {
 	let hasLowStakesTool = false
 	let hasReasoning = false
 	for (let i = index + 1; i < messages.length; i++) {
-		const item = messages[i]
-		if (Array.isArray(item)) {
-			// Browser session - this ends the low-stakes run
-			break
-		}
-		const msg = item
+		const msg = messages[i]
 		// Another api_req_started - stop checking
 		if (msg.say === "api_req_started") {
 			break
@@ -546,9 +448,8 @@ function isApiReqFollowedOnlyByLowStakesTools(index: number, messages: (ClineMes
  * Also filters out checkpoints that follow low-stakes tool groups.
  * Absorbs api_req_started messages that are followed only by low-stakes tools.
  * Only creates tool groups when there's at least one actual tool - reasoning-only groups are dropped.
- * Should be called after groupMessages.
  */
-export function groupLowStakesTools(groupedMessages: (ClineMessage | ClineMessage[])[]): (ClineMessage | ClineMessage[])[] {
+export function groupLowStakesTools(messages: ClineMessage[]): (ClineMessage | ClineMessage[])[] {
 	const result: (ClineMessage | ClineMessage[])[] = []
 	let toolGroup: ClineMessage[] = []
 	let pendingReasoning: ClineMessage[] = []
@@ -586,20 +487,10 @@ export function groupLowStakesTools(groupedMessages: (ClineMessage | ClineMessag
 		}
 	}
 
-	for (let i = 0; i < groupedMessages.length; i++) {
-		const item = groupedMessages[i]
-
-		// Browser session group - commit current work and pass through
-		if (Array.isArray(item)) {
-			commitToolGroup()
-			flushPending()
-			result.push(item)
-			continue
-		}
-
-		const message = item
+	for (let i = 0; i < messages.length; i++) {
+		const message = messages[i]
 		const messageType = message.say
-		const isLast = i === groupedMessages.length - 1
+		const isLast = i === messages.length - 1
 
 		// Low-stakes tool - absorb pending and add to group
 		if (isLowStakesTool(message)) {
@@ -631,7 +522,7 @@ export function groupLowStakesTools(groupedMessages: (ClineMessage | ClineMessag
 
 		// API request - absorb if followed by low-stakes tools, otherwise render
 		if (messageType === "api_req_started") {
-			if (isApiReqFollowedOnlyByLowStakesTools(i, groupedMessages)) {
+			if (isApiReqFollowedOnlyByLowStakesTools(i, messages)) {
 				absorbPending()
 				pendingApiReq.push(message)
 			} else {

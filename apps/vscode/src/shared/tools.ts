@@ -9,7 +9,6 @@ export enum ClineDefaultTool {
 	SEARCH = "search_files",
 	LIST_FILES = "list_files",
 	LIST_CODE_DEF = "list_code_definition_names",
-	BROWSER = "browser_action",
 	MCP_USE = "use_mcp_tool",
 	MCP_ACCESS = "access_mcp_resource",
 	MCP_DOCS = "load_mcp_documentation",

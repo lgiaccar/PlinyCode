@@ -16,8 +16,6 @@ import { AuthService, type ClineAuthInfo, LogoutReason } from "./auth-service"
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockFeatureFlagsPoll = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
-
 // Mock StateManager
 const mockSecrets = new Map<string, string>()
 const mockGlobalState = vi.hoisted(() => new Map<string, unknown>())
@@ -80,13 +78,6 @@ vi.mock("@/shared/net", () => ({
 // Mock buildBasicClineHeaders
 vi.mock("@/services/EnvUtils", () => ({
 	buildBasicClineHeaders: async () => ({}),
-}))
-
-// Mock feature flags
-vi.mock("@/services/feature-flags", () => ({
-	featureFlagsService: {
-		poll: mockFeatureFlagsPoll,
-	},
 }))
 
 // Mock axios
@@ -755,7 +746,7 @@ describe("AuthService", () => {
 			expect(authState.user).toBeUndefined() // Not authenticated in this test
 		})
 
-		it("polls feature flags with the authenticated user before posting state", async () => {
+		it("posts state to the subscribing controller", async () => {
 			const authInfo = createTestAuthInfo()
 			testAccess(authService)._clineAuthInfo = authInfo
 			testAccess(authService)._authenticated = true
@@ -771,14 +762,7 @@ describe("AuthService", () => {
 				mockResponseStream as any,
 			)
 
-			expect(mockFeatureFlagsPoll).toHaveBeenCalledWith("user-123")
 			expect(mockController.postStateToWebview).toHaveBeenCalled()
-		})
-
-		it("polls feature flags with null when unauthenticated", async () => {
-			await authService.sendAuthStatusUpdate()
-
-			expect(mockFeatureFlagsPoll).toHaveBeenCalledWith(null)
 		})
 
 		it("removes subscription on cleanup", async () => {

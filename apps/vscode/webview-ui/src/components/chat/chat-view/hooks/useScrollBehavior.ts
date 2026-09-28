@@ -290,7 +290,7 @@ export function useScrollBehavior(
 
 			const isLastCollapsedApiReq =
 				isLast &&
-				!Array.isArray(lastGroup) && // Make sure it's not a browser session group
+				!Array.isArray(lastGroup) && // Make sure it's not a tool group
 				lastGroup?.say === "api_req_started" &&
 				!expandedRows[lastGroup.ts]
 

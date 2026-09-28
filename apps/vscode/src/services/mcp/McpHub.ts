@@ -414,11 +414,6 @@ export class McpHub {
 			} else {
 				// Enterprise restrictions apply
 
-				// If the legacy marketplace policy is explicitly disabled by enterprise config, block all local servers
-				if (remoteConfig.mcpMarketplaceEnabled === false) {
-					return
-				}
-
 				// If allowlist exists, only servers on the allowlist are allowed
 				const hasAllowlist = remoteConfig.allowedMCPServers && remoteConfig.allowedMCPServers.length > 0
 				if (hasAllowlist) {

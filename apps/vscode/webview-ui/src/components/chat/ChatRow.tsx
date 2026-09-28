@@ -1,10 +1,12 @@
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import {
+	BrowserActionResult,
 	ClineApiReqInfo,
 	ClineAskQuestion,
 	ClineAskUseMcpServer,
 	ClineMessage,
 	ClinePlanModeResponse,
+	ClineSayBrowserAction,
 	ClineSayTool,
 	COMPLETION_RESULT_CHANGES_FLAG,
 } from "@shared/ExtensionMessage"
@@ -66,6 +68,31 @@ import UserMessage from "./UserMessage"
 
 const HEADER_CLASSNAMES = "flex items-center gap-2.5 mb-3"
 
+/** One-line summary of a browser-tool message from an old conversation. */
+function describeLegacyBrowserMessage(message: ClineMessage): string {
+	if (message.say === "browser_action_launch" || message.ask === "browser_action_launch") {
+		return `Browser launched: ${message.text ?? ""}`
+	}
+	try {
+		if (message.say === "browser_action") {
+			const action = JSON.parse(message.text || "{}") as ClineSayBrowserAction
+			const detail = action.text ?? action.coordinate
+			return `Browser action: ${action.action ?? "unknown"}${detail ? ` (${detail})` : ""}`
+		}
+		const result = JSON.parse(message.text || "{}") as BrowserActionResult
+		return result.currentUrl ? `Browser result: ${result.currentUrl}` : "Browser result"
+	} catch {
+		return "Browser action"
+	}
+}
+
+const LegacyBrowserRow = ({ message }: { message: ClineMessage }) => (
+	<div className="text-foreground flex items-center opacity-70 text-[12px] py-1 px-0">
+		<i className="codicon codicon-globe mr-1.5" />
+		<span className="ph-no-capture break-all">{describeLegacyBrowserMessage(message)}</span>
+	</div>
+)
+
 interface ChatRowProps {
 	message: ClineMessage
 	isExpanded: boolean
@@ -94,7 +121,7 @@ interface ChatRowContentProps extends Omit<ChatRowProps, "onHeightChange" | "onL
 	onLastRowContentChange?: () => void
 }
 
-export const ProgressIndicator = () => <LoaderCircleIcon className="size-2 mr-2 animate-spin" />
+const ProgressIndicator = () => <LoaderCircleIcon className="size-2 mr-2 animate-spin" />
 const InvisibleSpacer = () => <div aria-hidden className="h-px" />
 
 const ChatRow = memo(
@@ -132,7 +159,7 @@ const ChatRow = memo(
 
 export default ChatRow
 
-export const ChatRowContent = memo(
+const ChatRowContent = memo(
 	({
 		message,
 		isExpanded,
@@ -1023,6 +1050,11 @@ export const ChatRowContent = memo(
 								</button>
 							</div>
 						)
+					// The browser tool is gone; these rows only appear in old conversations.
+					case "browser_action_launch":
+					case "browser_action":
+					case "browser_action_result":
+						return <LegacyBrowserRow message={message} />
 					case "task_progress":
 						return <InvisibleSpacer /> // task_progress messages should be displayed in TaskHeader only, not in chat
 					case "compaction":
@@ -1134,6 +1166,8 @@ export const ChatRowContent = memo(
 								<NewTaskPreview context={message.text || ""} />
 							</div>
 						)
+					case "browser_action_launch":
+						return <LegacyBrowserRow message={message} />
 					case "report_bug":
 						return (
 							<div>

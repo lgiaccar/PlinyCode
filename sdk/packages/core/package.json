@@ -18,10 +18,6 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
-		},
-		"./services/feature-flags/posthog": {
-			"types": "./dist/services/feature-flags/posthog.d.ts",
-			"import": "./dist/services/feature-flags/posthog.js"
 		}
 	},
 	"scripts": {

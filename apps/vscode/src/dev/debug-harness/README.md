@@ -208,7 +208,6 @@ use VSCode commands via the command palette. These are registered in
 | `cline.settingsButtonClicked` | Settings view |
 | `cline.mcpButtonClicked` | MCP servers view |
 | `cline.plusButtonClicked` | New task (chat view) |
-| `cline.worktreesButtonClicked` | Worktrees view |
 
 ```bash
 # Navigate to account view
