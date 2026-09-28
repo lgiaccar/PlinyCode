@@ -69,7 +69,6 @@ vi.mock("../../../../src/services/error/ClineError", () => ({
 		OrgClinePassRestriction: "orgClinePassRestriction",
 		ClinePassLimit: "clinePassLimit",
 		ClineFreeModelLimit: "clineFreeModelLimit",
-		ClineFreePromotionEnded: "clineFreePromotionEnded",
 		QuotaExceeded: "quotaExceeded",
 	},
 }))
@@ -336,31 +335,6 @@ describe("ErrorRow", () => {
 			expect(screen.queryByText(limitMessage)).not.toBeInTheDocument()
 			expect(screen.queryByText(/deepseek-v4-flash/i)).not.toBeInTheDocument()
 			expect(screen.queryByText(/Switch to Usage-Based billing/i)).not.toBeInTheDocument()
-		})
-
-		it("renders the promotion-ended card with a route into the model picker", async () => {
-			const rawMessage = "Error 404: Model not found"
-			const mockClineError = {
-				message: rawMessage,
-				isErrorType: vi.fn((type) => type === "clineFreePromotionEnded"),
-				providerId: "cline",
-				modelId: "cline-free/glm-5",
-				_error: { message: rawMessage },
-			}
-
-			const { ClineError } = await import("../../../../src/services/error/ClineError")
-			vi.mocked(ClineError.parse).mockReturnValue(mockClineError as any)
-
-			render(<ErrorRow apiRequestFailedMessage={rawMessage} errorType="error" message={mockMessage} />)
-
-			expect(screen.getByTestId("cline-free-promotion-ended-error")).toBeInTheDocument()
-			expect(screen.getByText("Free model promotion ended")).toBeInTheDocument()
-			expect(screen.getByText(/no longer available/)).toBeInTheDocument()
-			// The raw backend message is replaced by the dedicated copy.
-			expect(screen.queryByText(rawMessage)).not.toBeInTheDocument()
-
-			fireEvent.click(screen.getByText("Select a Model"))
-			expect(mockNavigateToSettingsModelPicker).toHaveBeenCalledWith({ targetSection: "api-config" })
 		})
 
 		it("renders friendly logged-out message and sign in button when user is not signed in", async () => {
