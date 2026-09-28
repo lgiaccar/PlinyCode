@@ -7,7 +7,6 @@ import type {
 	BasicLogger,
 	ClientContext,
 	ExtensionContext,
-	ITelemetryService,
 	RuntimeConfigExtensionKind,
 	ToolApprovalRequest,
 	ToolApprovalResult,
@@ -48,7 +47,6 @@ import type {
 	ResolvedStartSessionInput,
 } from "../runtime/host/runtime-host";
 import type { RuntimeBuilderInput } from "../runtime/orchestration/session-runtime";
-import type { SessionHistoryOriginMetadata } from "../session/history-origin";
 import { SessionSource } from "../types/common";
 import type { CoreSessionConfig } from "../types/config";
 import {
@@ -63,14 +61,9 @@ import {
 } from "./global-settings";
 import { hasRuntimeHooks, mergeAgentExtensions } from "./session-data";
 import type { ProviderSettingsManager } from "./storage/provider-settings-manager";
-import {
-	createClientScopedTelemetryService,
-	createScopedTelemetryService,
-} from "./telemetry/scoped-telemetry";
 import { InMemoryWorkspaceManager } from "./workspace/workspace-manager";
 import type { GitWorkspaceState } from "./workspace/workspace-manifest";
 import { buildWorkspaceMetadataWithInfo } from "./workspace/workspace-manifest";
-import { emitWorkspaceLifecycleTelemetry } from "./workspace/workspace-telemetry";
 
 function formatPluginFailure(failure: PluginInitializationFailure): string {
 	const label = failure.pluginName ?? failure.pluginPath;
@@ -267,14 +260,7 @@ export interface PrepareLocalRuntimeBootstrapOptions {
 	input: ResolvedStartSessionInput;
 	localRuntime?: LocalRuntimeStartOptions;
 	sessionId: string;
-	/**
-	 * How the session was initiated (user, automation, import, ...). Stamped
-	 * on every telemetry event the session emits so errors can be filtered by
-	 * provenance, e.g. transcripts imported from another agent.
-	 */
-	sessionOrigin?: SessionHistoryOriginMetadata;
 	providerSettingsManager: ProviderSettingsManager;
-	defaultTelemetry?: ITelemetryService;
 	defaultLogger?: BasicLogger;
 	defaultCapabilities?: RuntimeCapabilities;
 	defaultToolPolicies?: AgentConfig["toolPolicies"];
@@ -321,9 +307,7 @@ export async function prepareLocalRuntimeBootstrap(
 	const {
 		input,
 		sessionId,
-		sessionOrigin,
 		providerSettingsManager,
-		defaultTelemetry,
 		defaultLogger,
 		defaultCapabilities,
 		defaultToolPolicies,
@@ -353,42 +337,12 @@ export async function prepareLocalRuntimeBootstrap(
 	// Generate workspace + git metadata once, early, so it can be forwarded to
 	// hooks and extensions. The serialized string goes into CoreSessionConfig
 	// as workspaceMetadata; the structured object is kept as workspaceInfo.
-	const {
-		workspaceInfo,
-		workspaceMetadata,
-		gitState,
-		durationMs,
-		vcsType,
-		initError,
-	} = await buildWorkspaceMetadataWithInfo(workspacePath);
+	const { workspaceInfo, workspaceMetadata, gitState } =
+		await buildWorkspaceMetadataWithInfo(workspacePath);
 	const configuredExtensionContext = localConfig?.extensionContext;
 	const headerClientContext = configuredExtensionContext?.client
 		? undefined
 		: resolveClientContextFromHeaders(input.config.headers);
-	const clientContext =
-		configuredExtensionContext?.client ?? headerClientContext;
-	const configuredTelemetry =
-		configuredExtensionContext?.telemetry ?? localConfig?.telemetry;
-	// Hub-backed sessions execute inside a shared daemon and therefore inherit
-	// its process telemetry service. Scope that singleton to the serialized
-	// client identity without mutating it; local clients already carry their
-	// own telemetry instance and keep using it directly.
-	const clientTelemetry =
-		configuredTelemetry ??
-		(defaultTelemetry && clientContext
-			? createClientScopedTelemetryService(defaultTelemetry, {
-					client: clientContext,
-					source: input.source,
-					user: configuredExtensionContext?.user,
-				})
-			: defaultTelemetry);
-	const telemetry =
-		clientTelemetry && sessionOrigin
-			? createScopedTelemetryService(clientTelemetry, {
-					session_origin: sessionOrigin.mode,
-					session_origin_trigger: sessionOrigin.trigger,
-				})
-			: clientTelemetry;
 	const extensionContext: ExtensionContext = {
 		...(configuredExtensionContext ?? {}),
 		...(headerClientContext ? { client: headerClientContext } : {}),
@@ -404,19 +358,7 @@ export async function prepareLocalRuntimeBootstrap(
 			configuredExtensionContext?.logger ??
 			localConfig?.logger ??
 			defaultLogger,
-		telemetry,
 	};
-	emitWorkspaceLifecycleTelemetry({
-		telemetry: extensionContext.telemetry,
-		rootPath: workspaceInfo.rootPath,
-		dedupeScope: extensionContext.client?.name ?? input.source,
-		workspaceInfo,
-		rootCount: 1,
-		vcsType,
-		durationMs,
-		initError,
-		featureFlagEnabled: true,
-	});
 
 	// Hosts with their own hook execution layer (the VS Code extension's
 	// hooks adapter) exclude "hooks" so file hooks run exactly once.
@@ -455,7 +397,6 @@ export async function prepareLocalRuntimeBootstrap(
 				client: extensionContext.client,
 				user: extensionContext.user,
 				logger: extensionContext.logger,
-				telemetry: extensionContext.telemetry,
 				automation: extensionContext.automation,
 			});
 			logPluginDiagnostics(
@@ -512,7 +453,6 @@ export async function prepareLocalRuntimeBootstrap(
 		hooks: baseHooks,
 		extensions,
 		extensionContext,
-		telemetry: extensionContext.telemetry,
 		logger: extensionContext.logger,
 	};
 	const providerConfig = buildProviderConfig(
@@ -531,7 +471,6 @@ export async function prepareLocalRuntimeBootstrap(
 					sessionId,
 					logger: baseConfig.logger,
 					createCheckpoint: baseConfig.checkpoint?.createCheckpoint,
-					telemetry: baseConfig.telemetry,
 					readSessionMetadata,
 					writeSessionMetadata,
 				})
@@ -596,7 +535,6 @@ export async function prepareLocalRuntimeBootstrap(
 			toolPolicies,
 			workspaceManager,
 			logger: config.logger,
-			telemetry: config.telemetry,
 			requestToolApproval,
 		},
 	};

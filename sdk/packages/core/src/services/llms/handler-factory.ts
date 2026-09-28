@@ -11,7 +11,6 @@ import type {
 	AgentModel,
 	BasicLogger,
 	GatewayModelDefinition,
-	ITelemetryService,
 	ModelInfo,
 } from "@plinycode/shared";
 import { createAgentModelFromApiHandler } from "./apihandler-agent-model-adapter";
@@ -168,7 +167,6 @@ function toGatewayConfiguredModel(
 export function createAgentModelFromConfig(
 	config: AgentConfig,
 	logger: BasicLogger | undefined,
-	telemetry?: ITelemetryService,
 ): AgentModel {
 	const pc = config.providerConfig as ProviderConfig | undefined;
 	const baseProviderConfig =
@@ -229,8 +227,6 @@ export function createAgentModelFromConfig(
 			},
 		],
 		logger,
-		telemetry:
-			telemetry ?? config.telemetry ?? config.extensionContext?.telemetry,
 	}).createAgentModel(
 		{
 			providerId: normalizedProviderConfig.providerId,

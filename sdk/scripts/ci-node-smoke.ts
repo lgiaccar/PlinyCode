@@ -53,7 +53,7 @@ async function runCommand(
 }
 
 async function packWorkspace(
-	workspace: "core" | "agents" | "llms" | "shared",
+	workspace: "core" | "llms" | "shared",
 	packDir: string,
 ): Promise<string> {
 	const destination = await mkdtemp(join(packDir, `${workspace}-`));
@@ -117,7 +117,6 @@ async function main(): Promise<void> {
 		console.log("Packing smoke-test tarballs with Bun...");
 		const tarballs = {
 			core: await packWorkspace("core", packDir),
-			agents: await packWorkspace("agents", packDir),
 			llms: await packWorkspace("llms", packDir),
 			shared: await packWorkspace("shared", packDir),
 		};
@@ -138,7 +137,6 @@ async function main(): Promise<void> {
 					type: "module",
 					dependencies: {
 						"@plinycode/core": `file:${tarballs.core}`,
-						"@plinycode/agents": `file:${tarballs.agents}`,
 						"@plinycode/llms": `file:${tarballs.llms}`,
 						"@plinycode/shared": `file:${tarballs.shared}`,
 					},

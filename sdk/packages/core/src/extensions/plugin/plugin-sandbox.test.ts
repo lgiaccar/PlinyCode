@@ -213,32 +213,6 @@ describe("plugin-sandbox", () => {
 		);
 
 		await writeFile(
-			join(dir, "plugin-telemetry.mjs"),
-			[
-				"export default {",
-				"  name: 'sandbox-telemetry',",
-				"  manifest: { capabilities: ['tools'] },",
-				"  setup(api, ctx) {",
-				"    api.registerTool({",
-				"      name: 'emit_plugin_telemetry',",
-				"      description: 'emit plugin telemetry',",
-				"      inputSchema: { type: 'object', properties: { topic: { type: 'string' } }, required: ['topic'] },",
-				"      execute: async (input) => {",
-				"        ctx.telemetry?.capture({",
-				"          event: 'sandbox_topic_used',",
-				"          properties: { topic: input.topic },",
-				"        });",
-				"        ctx.telemetry?.recordCounter('sandbox_topics', 1, { topic: input.topic });",
-				"        return { enabled: ctx.telemetry?.isEnabled() ?? false };",
-				"      },",
-				"    });",
-				"  },",
-				"};",
-			].join("\n"),
-			"utf8",
-		);
-
-		await writeFile(
 			join(dir, "plugin-ts.ts"),
 			[
 				"const TOOL_NAME: string = 'sandbox_ts_echo';",
@@ -330,14 +304,14 @@ describe("plugin-sandbox", () => {
 		await writeFile(
 			join(dir, "plugin-create-tool.ts"),
 			[
-				"import { createTool } from '@plinycode/agents';",
+				"import { createTool } from '@plinycode/core';",
 				"export default {",
 				"  name: 'sandbox-create-tool',",
 				"  manifest: { capabilities: ['tools'] },",
 				"  setup(api) {",
 				"    api.registerTool(createTool({",
 				"      name: 'created_tool',",
-				"      description: 'created via agents export',",
+				"      description: 'created via the core createTool export',",
 				"      inputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },",
 				"      execute: async (input) => ({ echoed: input.value }),",
 				"    }));",
@@ -388,7 +362,6 @@ describe("plugin-sandbox", () => {
 				join(dir, "plugin-events.mjs"),
 				join(dir, "plugin-run-end.mjs"),
 				join(dir, "plugin-automation-events.mjs"),
-				join(dir, "plugin-telemetry.mjs"),
 				join(dir, "plugin-message-builder.mjs"),
 				join(dir, "plugin-rules.mjs"),
 				join(dir, "plugin-ts.ts"),
@@ -400,7 +373,6 @@ describe("plugin-sandbox", () => {
 			// CI environments are significantly slower for jiti transpilation;
 			// the default 4 000 ms is too tight for 7 plugins.
 			importTimeoutMs: 30_000,
-			telemetryAvailable: true,
 			onEvent: (event) => {
 				forwardedEvents.push(event);
 			},
@@ -453,11 +425,10 @@ describe("plugin-sandbox", () => {
 		const echoTool = tools.find((tool) => tool.name === "sandbox_echo");
 		expect(echoTool).toBeDefined();
 
-		// The production orchestrator attaches the live telemetry service
-		// (cyclic: PostHog client) under this metadata key. Without
-		// sanitization, child.send() throws and every plugin tool call fails.
-		const cyclicTelemetry: Record<string, unknown> = { capture: () => {} };
-		cyclicTelemetry.self = cyclicTelemetry;
+		// A live host object with cyclic internals on the metadata would make
+		// child.send() throw without sanitization, failing every plugin tool call.
+		const cyclicValue: Record<string, unknown> = { capture: () => {} };
+		cyclicValue.self = cyclicValue;
 		const result = await echoTool?.execute({ value: "ok" }, {
 			agentId: "agent-1",
 			conversationId: "conv-1",
@@ -466,96 +437,11 @@ describe("plugin-sandbox", () => {
 			emitUpdate: () => {},
 			metadata: {
 				modelSupportsImages: true,
-				__clineInternalTelemetry: cyclicTelemetry,
+				__cyclicHostValue: cyclicValue,
 			},
 		} as unknown as AgentToolContext);
 		expect(result).toEqual({ echoed: "ok" });
 	});
-
-	it("bridges ctx.telemetry calls to the host as plugin_telemetry events", async () => {
-		const extension = sharedExtensions.get("sandbox-telemetry");
-		const { tools, api } = createApiCapture();
-		await extension?.setup?.(api, {});
-		const tool = tools.find((t) => t.name === "emit_plugin_telemetry");
-		expect(tool).toBeDefined();
-
-		const result = await tool?.execute({ topic: "weather" }, {
-			agentId: "agent-1",
-			conversationId: "conv-1",
-			iteration: 1,
-		} as AgentToolContext);
-		expect(result).toEqual({ enabled: true });
-
-		const telemetryEvents = forwardedEvents.filter(
-			(event) => event.name === "plugin_telemetry",
-		);
-		expect(telemetryEvents).toHaveLength(2);
-		expect(telemetryEvents[0]?.payload).toMatchObject({
-			pluginName: "sandbox-telemetry",
-			kind: "event",
-			event: "sandbox_topic_used",
-			properties: { topic: "weather" },
-		});
-		expect(telemetryEvents[1]?.payload).toMatchObject({
-			pluginName: "sandbox-telemetry",
-			kind: "metric",
-			metric: "counter",
-			name: "sandbox_topics",
-			value: 1,
-			attributes: { topic: "weather" },
-		});
-	});
-
-	it("omits ctx.telemetry when the host reports no telemetry service", async () => {
-		const noTelemetryDir = await mkdtemp(
-			join(tmpdir(), "core-plugin-sandbox-no-telemetry-"),
-		);
-		try {
-			const pluginPath = join(noTelemetryDir, "plugin-telemetry.mjs");
-			await writeFile(
-				pluginPath,
-				[
-					"export default {",
-					"  name: 'sandbox-no-telemetry',",
-					"  manifest: { capabilities: ['tools'] },",
-					"  setup(api, ctx) {",
-					"    api.registerTool({",
-					"      name: 'probe_telemetry',",
-					"      description: 'probe telemetry availability',",
-					"      inputSchema: { type: 'object', properties: {}, required: [] },",
-					"      execute: async () => ({ present: ctx.telemetry !== undefined }),",
-					"    });",
-					"  },",
-					"};",
-				].join("\n"),
-				"utf8",
-			);
-			const events: Array<{ name: string; payload?: unknown }> = [];
-			const sandbox = await loadSandboxedPlugins({
-				pluginPaths: [pluginPath],
-				importTimeoutMs: 30_000,
-				// telemetryAvailable intentionally omitted: no host service.
-				onEvent: (event) => events.push(event),
-			});
-			try {
-				const { tools, api } = createApiCapture();
-				await sandbox.extensions?.[0]?.setup?.(api, {});
-				const tool = tools.find((t) => t.name === "probe_telemetry");
-				const result = await tool?.execute({}, {
-					agentId: "agent-1",
-					iteration: 1,
-				} as AgentToolContext);
-				expect(result).toEqual({ present: false });
-				expect(
-					events.filter((event) => event.name === "plugin_telemetry"),
-				).toHaveLength(0);
-			} finally {
-				await sandbox.shutdown();
-			}
-		} finally {
-			await rm(noTelemetryDir, { recursive: true, force: true });
-		}
-	}, 60_000);
 
 	it("strips non-serializable tool input via the same fallback", async () => {
 		const extension = sharedExtensions.get("sandbox-test");
@@ -1043,7 +929,7 @@ describe("plugin-sandbox", () => {
 		expect(sharedExtensions.get("host: true")?.name).toBe("host: true");
 	});
 
-	it("supports createTool through the agents package export in the sandbox", async () => {
+	it("supports createTool through the core package export in the sandbox", async () => {
 		const extension = sharedExtensions.get("sandbox-create-tool");
 		const { tools, api } = createApiCapture();
 		await extension?.setup?.(api, {});

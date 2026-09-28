@@ -316,7 +316,7 @@ export interface ProviderConfig
 	/** Capabilities this provider/model supports */
 	capabilities?: ProviderCapability[];
 
-	/** Task/session ID for telemetry */
+	/** Task/session ID */
 	taskId?: string;
 
 	/** AbortSignal for cancelling requests */
@@ -327,8 +327,8 @@ export interface ProviderConfig
 
 	/**
 	 * Ambient runtime context: user identity, client surface, workspace info,
-	 * logger, and telemetry service. Prefer reading logger and telemetry from
-	 * here when available; the top-level logger field is kept for compatibility.
+	 * and logger. Prefer reading the logger from here when available; the
+	 * top-level logger field is kept for compatibility.
 	 */
 	extensionContext?: ExtensionContext;
 

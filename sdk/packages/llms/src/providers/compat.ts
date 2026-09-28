@@ -578,7 +578,6 @@ class GatewayApiHandler implements ApiHandler {
 			providerConfigs: [buildGatewayConfig(this.config)],
 			fetch: this.config.fetch,
 			logger: this.config.logger ?? this.config.extensionContext?.logger,
-			telemetry: this.config.extensionContext?.telemetry,
 		});
 		const registration = resolveProviderRegistrationSync(this.config);
 		if (registration) {
@@ -632,7 +631,6 @@ export async function createGatewayApiHandlerAsync(
 		providerConfigs: [buildGatewayConfig(config)],
 		fetch: config.fetch,
 		logger: config.logger ?? config.extensionContext?.logger,
-		telemetry: config.extensionContext?.telemetry,
 	});
 	const registration = await resolveProviderRegistration(config);
 	if (registration) {

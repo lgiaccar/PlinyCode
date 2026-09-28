@@ -55,7 +55,6 @@ import type {
 } from "../llms/tools";
 import { ToolCallRecordSchema } from "../llms/tools";
 import type { BasicLogger } from "../logging/logger";
-import type { ITelemetryService } from "../services/telemetry";
 import type { WorkspaceInfo } from "../session/workspace";
 
 // =============================================================================
@@ -933,12 +932,8 @@ export interface AgentConfig {
 		| AgentPrepareTurnResult
 		| undefined;
 	/**
-	 * Optional Telemetry service for emitting structured events about agent execution to configured telemetry backends.
-	 */
-	telemetry?: ITelemetryService;
-	/**
-	 * Ambient runtime context: user identity, client surface, workspace, logger,
-	 * and telemetry. Threaded through to ProviderConfig so handlers can access it.
+	 * Ambient runtime context: user identity, client surface, workspace and
+	 * logger. Threaded through to ProviderConfig so handlers can access it.
 	 */
 	extensionContext?: ExtensionContext;
 

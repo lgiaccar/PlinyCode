@@ -9,11 +9,6 @@ export {
 	type ProviderActionExecutor,
 	RpcClineAccountService,
 } from "./rpc";
-export {
-	type ClineAccountTelemetryIdentity,
-	persistClineAccountTelemetryIdentity,
-	resolveClineAccountTelemetryIdentity,
-} from "./telemetry";
 export type {
 	ClineAccountBalance,
 	ClineAccountOrganization,

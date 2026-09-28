@@ -8,9 +8,7 @@ import {
 	type AgentResult,
 	type BasicLogger,
 	type CompletionGuard,
-	captureSdkError,
 	createSessionId,
-	type ITelemetryService,
 	isLikelyAuthError,
 	normalizeUserInput,
 } from "@plinycode/shared";
@@ -22,34 +20,19 @@ import {
 	createImportedHistoryCompactionPrepareTurn,
 } from "../../extensions/context/compaction";
 import type { ToolExecutors } from "../../extensions/tools";
-import {
-	DefaultToolNames,
-	RunCommandExecutionController,
-} from "../../extensions/tools";
+import { RunCommandExecutionController } from "../../extensions/tools";
 import { cleanupStaleDetachedCommandLogs } from "../../extensions/tools/executors/bash";
 import type { TeamEvent } from "../../extensions/tools/team";
 import type { HookEventPayload } from "../../hooks";
-import { buildTelemetryAgentIdentity } from "../../services/agent-events";
 import { resolveWorkspacePath } from "../../services/config";
+import { resolveCoreDistinctId } from "../../services/distinct-id";
 import { prepareLocalRuntimeBootstrap } from "../../services/local-runtime-bootstrap";
 import { nowIso } from "../../services/session-artifacts";
 import {
 	toSessionRecord,
 	withLatestAssistantTurnMetadata,
 } from "../../services/session-data";
-import {
-	emitMentionTelemetry,
-	emitSessionCreationTelemetry,
-} from "../../services/session-telemetry";
 import { ProviderSettingsManager } from "../../services/storage/provider-settings-manager";
-import {
-	captureAgentCreated,
-	captureAgentTeamCreated,
-	captureConversationTurnEvent,
-	captureModeSwitch,
-	captureTaskCompleted,
-} from "../../services/telemetry/core-events";
-import { resolveCoreDistinctId } from "../../services/telemetry/distinct-id";
 import {
 	accumulateUsageTotals,
 	createInitialAccumulatedUsage,
@@ -123,7 +106,6 @@ import {
 import {
 	createSessionSpawnTool,
 	createSessionSubAgentLifecycleCallbacks,
-	type SubAgentStartTracker,
 } from "./local/spawn-tool";
 import { loadUserFileContent } from "./local/user-files";
 import type {
@@ -157,23 +139,13 @@ const MAX_SCAN_LIMIT = 5000;
 // cleared so a later host construction can retry it.
 let detachedCommandLogRecovery: Promise<void> | undefined;
 
-function recoverDetachedCommandLogsOnce(
-	logger?: BasicLogger,
-	telemetry?: ITelemetryService,
-): void {
+function recoverDetachedCommandLogsOnce(logger?: BasicLogger): void {
 	if (detachedCommandLogRecovery) return;
 	detachedCommandLogRecovery = cleanupStaleDetachedCommandLogs()
 		.then(() => undefined)
 		.catch((error) => {
 			detachedCommandLogRecovery = undefined;
 			logger?.error?.("Detached command log recovery failed", { error });
-			captureSdkError(telemetry, {
-				component: "core",
-				operation: "command.detached_log_recovery",
-				error,
-				severity: "warn",
-				handled: true,
-			});
 		});
 }
 
@@ -267,7 +239,6 @@ export interface LocalRuntimeHostOptions {
 	toolPolicies?: AgentConfig["toolPolicies"];
 	providerSettingsManager?: ProviderSettingsManager;
 	oauthTokenManager?: RuntimeOAuthTokenManager;
-	telemetry?: ITelemetryService;
 	logger?: BasicLogger;
 	/**
 	 * Default custom `fetch` implementation threaded into every
@@ -288,7 +259,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 	private readonly defaultToolPolicies?: AgentConfig["toolPolicies"];
 	private readonly providerSettingsManager: ProviderSettingsManager;
 	private readonly oauthTokenManager: RuntimeOAuthTokenManager;
-	private readonly defaultTelemetry?: ITelemetryService;
 	private readonly distinctId: string;
 	private readonly defaultLogger?: BasicLogger;
 	private readonly defaultFetch?: typeof fetch;
@@ -301,7 +271,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		string,
 		SessionAccumulatedUsage
 	>();
-	private readonly subAgentStarts: SubAgentStartTracker = new Map();
 	private readonly pendingPromptsController: PendingPromptsController;
 	private readonly eventBridge: AgentEventBridge;
 	private readonly sessionVersioning = new SessionVersioningService();
@@ -328,19 +297,10 @@ export class LocalRuntimeHost implements RuntimeHost {
 			options.oauthTokenManager ??
 			new RuntimeOAuthTokenManager({
 				providerSettingsManager: this.providerSettingsManager,
-				telemetry: options.telemetry,
 			});
-		this.defaultTelemetry = options.telemetry;
 		this.defaultLogger = options.logger;
-		// A caller-owned telemetry service may already be identified to an
-		// authenticated account (the long-lived Hub daemon is one example).
-		// Only replace that identity when the caller explicitly supplied the
-		// runtime distinct id. ClineCore always does so through host.ts.
-		if (options.distinctId !== undefined) {
-			this.defaultTelemetry?.setDistinctId(distinctId);
-		}
 		this.defaultFetch = options.fetch;
-		recoverDetachedCommandLogsOnce(this.defaultLogger, this.defaultTelemetry);
+		recoverDetachedCommandLogsOnce(this.defaultLogger);
 
 		this.pendingPromptsController = new PendingPromptsController({
 			getSession: (sid) => this.sessions.get(sid),
@@ -378,18 +338,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 							error,
 						},
 					);
-					captureSdkError(session?.config.telemetry ?? this.defaultTelemetry, {
-						component: "core",
-						operation: "session.persist_messages_on_agent_event",
-						error,
-						severity: "warn",
-						handled: true,
-						context: {
-							sessionId: sid,
-							providerId: session?.config.providerId,
-							modelId: session?.config.modelId,
-						},
-					});
 				});
 			},
 			enqueuePendingPrompt: (sid, entry) =>
@@ -564,14 +512,9 @@ export class LocalRuntimeHost implements RuntimeHost {
 			inputLocalConfig?.extensionContext?.logger ?? inputLocalConfig?.logger;
 		const pluginEventFallbackAutomation =
 			inputLocalConfig?.extensionContext?.automation;
-		const pluginEventFallbackTelemetry =
-			inputLocalConfig?.extensionContext?.telemetry ??
-			inputLocalConfig?.telemetry ??
-			this.defaultTelemetry;
 		let bootstrap!: Awaited<ReturnType<typeof prepareLocalRuntimeBootstrap>>;
 		const subAgentDeps = {
 			getSession: (sid: string) => this.sessions.get(sid),
-			subAgentStarts: this.subAgentStarts,
 			onAgentEvent: (
 				rootSessionId: string,
 				config: CoreSessionConfig,
@@ -598,9 +541,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 			input: startInput,
 			localRuntime: input.localRuntime,
 			sessionId,
-			sessionOrigin,
 			providerSettingsManager: this.providerSettingsManager,
-			defaultTelemetry: this.defaultTelemetry,
 			defaultLogger: this.defaultLogger,
 			defaultCapabilities: capabilities,
 			defaultToolPolicies: this.defaultToolPolicies,
@@ -618,7 +559,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 					sessionId,
 					event,
 					pluginEventFallbackAutomation,
-					pluginEventFallbackTelemetry,
 				);
 			},
 			onTeamEvent: (event: TeamEvent) => {
@@ -764,18 +704,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 						"Failed to persist session compaction state",
 						{ sessionId: activeSession.sessionId, error },
 					);
-					captureSdkError(configWithProvider.telemetry, {
-						component: "core",
-						operation: "session.persist_compaction_state",
-						severity: "warn",
-						handled: true,
-						error,
-						context: {
-							sessionId: activeSession.sessionId,
-							providerId: configWithProvider.providerId,
-							modelId: configWithProvider.modelId,
-						},
-					});
 				}
 			},
 		});
@@ -836,7 +764,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 						}
 					}
 				: undefined,
-			telemetry: configWithProvider.telemetry,
 			onConsecutiveMistakeLimitReached:
 				configWithProvider.onConsecutiveMistakeLimitReached,
 			completionPolicy: withHostCompletionGuard(
@@ -881,18 +808,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 						"Failed to persist session messages after assistant response",
 						{ sessionId, error },
 					);
-					captureSdkError(configWithProvider.telemetry, {
-						component: "core",
-						operation: "session.persist_messages_after_assistant_response",
-						error,
-						severity: "warn",
-						handled: true,
-						context: {
-							sessionId,
-							providerId: configWithProvider.providerId,
-							modelId: configWithProvider.modelId,
-						},
-					});
 				}
 			},
 		};
@@ -901,37 +816,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			agent.subscribeEvents(agentConfig.onEvent);
 		}
 		runtime.registerLeadAgent?.(agent);
-		const rootAgentIdentity = buildTelemetryAgentIdentity({
-			agentId: agent.getAgentId(),
-			conversationId: agent.getConversationId(),
-			teamId: runtime.teamRuntime?.getTeamId(),
-			teamName: runtime.teamRuntime?.getTeamName(),
-			teamRole: runtime.teamRuntime ? "lead" : undefined,
-		});
-		emitSessionCreationTelemetry(
-			configWithProvider,
-			sessionId,
-			wasSessionIdRequested,
-			workspacePath,
-			rootAgentIdentity,
-		);
-		if (rootAgentIdentity) {
-			captureAgentCreated(configWithProvider.telemetry, {
-				ulid: sessionId,
-				modelId: configWithProvider.modelId,
-				provider: configWithProvider.providerId,
-				...rootAgentIdentity,
-			});
-		}
-		if (runtime.teamRuntime) {
-			captureAgentTeamCreated(configWithProvider.telemetry, {
-				ulid: sessionId,
-				teamId: runtime.teamRuntime.getTeamId(),
-				teamName: runtime.teamRuntime.getTeamName(),
-				leadAgentId: agent.getAgentId(),
-				restoredFromPersistence: runtime.teamRestoredFromPersistence === true,
-			});
-		}
 
 		const active: ActiveSession = {
 			sessionId,
@@ -961,8 +845,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			pendingPrompts: [],
 			drainingPendingPrompts: false,
 			pluginSandboxShutdown: bootstrap.pluginSandboxShutdown,
-			submitAndExitObserved: false,
-			taskCompletedEmitted: false,
 			lastInteractiveTurnFinishReason: undefined,
 		};
 		activeSessionRef = active;
@@ -1008,18 +890,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 					"Failed to persist seeded session messages at start",
 					{ sessionId, error },
 				);
-				captureSdkError(active.config.telemetry, {
-					component: "core",
-					operation: "session.persist_seeded_messages",
-					error,
-					severity: "warn",
-					handled: true,
-					context: {
-						sessionId,
-						providerId: active.config.providerId,
-						modelId: active.config.modelId,
-					},
-				});
 			}
 		}
 		this.emitStatus(sessionId, active.status);
@@ -1042,18 +912,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			if (active.interactive && active.aborting) {
 				result = await this.completeAbortedInteractiveTurn(active);
 			} else {
-				captureSdkError(active.config.telemetry, {
-					component: "core",
-					operation: "session.start",
-					error,
-					severity: "error",
-					handled: false,
-					context: {
-						sessionId: active.sessionId,
-						providerId: active.config.providerId,
-						modelId: active.config.modelId,
-					},
-				});
 				try {
 					await this.failSession(active);
 				} catch (cleanupError) {
@@ -1082,7 +940,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 	): Promise<RestoreSessionResult> {
 		return this.sessionVersioning.restoreCheckpoint({
 			...input,
-			telemetry: this.defaultTelemetry,
 			getSession: (sessionId) => this.getSession(sessionId),
 			readMessages: (sessionId) => this.readSessionMessages(sessionId),
 			buildStartInput: (context, startInput) => {
@@ -1117,16 +974,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		const delivery =
 			input.delivery ??
 			(session.interactive && !canStartRun ? ("queue" as const) : undefined);
-		session.config.telemetry?.capture({
-			event: "session.input_sent",
-			properties: {
-				sessionId: input.sessionId,
-				promptLength: input.prompt.length,
-				userImageCount: input.userImages?.length ?? 0,
-				userFileCount: input.userFiles?.length ?? 0,
-				delivery: delivery ?? "immediate",
-			},
-		});
 		if (delivery === "queue" || delivery === "steer") {
 			this.pendingPromptsController.enqueue(input.sessionId, {
 				prompt: input.prompt,
@@ -1166,18 +1013,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			if (session.interactive && session.aborting) {
 				return await this.completeAbortedInteractiveTurn(session);
 			}
-			captureSdkError(session.config.telemetry, {
-				component: "core",
-				operation: "session.submit",
-				error,
-				severity: "error",
-				handled: false,
-				context: {
-					sessionId: session.sessionId,
-					providerId: session.config.providerId,
-					modelId: session.config.modelId,
-				},
-			});
 			await this.failSession(session);
 			throw error;
 		}
@@ -1196,10 +1031,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 	async abort(sessionId: string, reason?: unknown): Promise<void> {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
-		session.config.telemetry?.capture({
-			event: "session.aborted",
-			properties: { sessionId },
-		});
 		// Aborting a user-initiated turn leaves pendingPrompts untouched:
 		// clearing here would silently destroy prompts the user already typed
 		// and queued — they drain once the abort completes. Aborting a
@@ -1238,10 +1069,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 	async stopSession(sessionId: string): Promise<void> {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
-		session.config.telemetry?.capture({
-			event: "session.stopped",
-			properties: { sessionId },
-		});
 		if (session.interactive && !isNonTerminalSessionStatus(session.status)) {
 			await this.releaseSessionRuntime(session, "session_stop");
 			return;
@@ -1880,18 +1707,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 					"Failed to persist session messages after abort",
 					{ sessionId: session.sessionId, error },
 				);
-				captureSdkError(session.config.telemetry, {
-					component: "core",
-					operation: "session.persist_messages_after_abort",
-					error,
-					severity: "warn",
-					handled: true,
-					context: {
-						sessionId: session.sessionId,
-						providerId: session.config.providerId,
-						modelId: session.config.modelId,
-					},
-				});
 			}
 		}
 		this.eventBridge.dispatchAgentEvent(session.sessionId, session.config, {
@@ -1946,20 +1761,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		session.turnPrimaryUsage = createInitialAccumulatedUsage();
 		session.turnUsageByAgent = new Map<string, SessionAccumulatedUsage>();
 
-		captureModeSwitch(
-			session.config.telemetry,
-			session.sessionId,
-			session.config.mode,
-		);
-		captureConversationTurnEvent(session.config.telemetry, {
-			ulid: session.sessionId,
-			provider: session.config.providerId,
-			model: session.config.modelId,
-			source: "user",
-			mode: session.config.mode,
-			...this.getSessionAgentTelemetryIdentity(session),
-		});
-
 		try {
 			const runFn = shouldContinue
 				? () => session.agent.continue(prompt, userImages, userFiles)
@@ -2007,21 +1808,8 @@ export class LocalRuntimeHost implements RuntimeHost {
 				persistedMessages,
 				session.config.systemPrompt,
 			);
-			this.observeTaskCompletionTool(session, result);
 			return result;
 		} catch (error) {
-			captureSdkError(session.config.telemetry, {
-				component: "core",
-				operation: "session.turn",
-				error,
-				severity: "error",
-				handled: false,
-				context: {
-					sessionId: session.sessionId,
-					providerId: session.config.providerId,
-					modelId: session.config.modelId,
-				},
-			});
 			try {
 				await this.invoke<void>(
 					"persistSessionMessages",
@@ -2044,93 +1832,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			session.turnPrimaryUsage = undefined;
 			session.turnUsageByAgent = undefined;
 		}
-	}
-
-	/**
-	 * Anchor `task.completed` telemetry to the assistant's explicit
-	 * completion declaration. We emit at most once per session, the moment
-	 * a successful `submit_and_exit` tool call is observed in the run
-	 * result. This is the SDK analog of original Cline's
-	 * `attempt_completion`-driven emission and works for both interactive
-	 * and non-interactive sessions.
-	 *
-	 * `emitTaskCompletedOnTeardown(...)` retains a fallback emission for
-	 * completed sessions that finish without an explicit completion-tool
-	 * observation (e.g., non-interactive runs not using the yolo preset,
-	 * or hosts that disable `submit_and_exit` entirely). This helper sets
-	 * `taskCompletedEmitted` so the teardown fallback can suppress a
-	 * duplicate emission for the same logical completion.
-	 */
-	private observeTaskCompletionTool(
-		session: ActiveSession,
-		result: AgentResult,
-	): void {
-		if (session.submitAndExitObserved) return;
-		const completedWithSubmitAndExit = result.toolCalls.some(
-			(call) =>
-				call.name === DefaultToolNames.SUBMIT_AND_EXIT &&
-				call.error === undefined,
-		);
-		if (!completedWithSubmitAndExit) return;
-		session.submitAndExitObserved = true;
-		session.taskCompletedEmitted = true;
-		captureTaskCompleted(session.config.telemetry, {
-			ulid: session.sessionId,
-			provider: session.config.providerId,
-			model: session.config.modelId,
-			mode: session.config.mode,
-			durationMs: Date.now() - Date.parse(session.startedAt),
-			source: "submit_and_exit",
-			...this.getSessionAgentTelemetryIdentity(session),
-		});
-	}
-
-	/**
-	 * Single choke point for the fallback `task.completed` emission on
-	 * session teardown. Every path a session can end through funnels into
-	 * `shutdownSession(...)` or `releaseSessionRuntime(...)`, and BOTH must
-	 * call this helper — the emission must never depend on which teardown
-	 * branch a stop happens to route through. (The 4.1.11 regression:
-	 * truthful session-status reporting re-routed many interactive stops
-	 * onto the release branch, and the fallback that lived only inside
-	 * `shutdownSession` silently stopped firing for them.)
-	 *
-	 * Emits at most once per session (`taskCompletedEmitted`), and never
-	 * after the `submit_and_exit` observer already reported the completion.
-	 * The completion criterion deliberately does not read `session.status`
-	 * (whose lifecycle is what changed in 4.1.11):
-	 *
-	 * - Interactive sessions use the recorded final-turn outcome,
-	 *   `lastInteractiveTurnFinishReason === "completed"`. The extra guards
-	 *   suppress emission when teardown arrives mid-run (the in-flight turn
-	 *   being aborted is the real final turn, and it did not complete).
-	 * - Non-interactive sessions use the terminal status their run result
-	 *   resolved to (`finalStatus`, from `finalizeSingleRun`), preserving
-	 *   the pre-existing `input.status === "completed"` semantics.
-	 *
-	 * Sessions whose final turn errored or aborted emit nothing.
-	 */
-	private emitTaskCompletedOnTeardown(
-		session: ActiveSession,
-		finalStatus?: SessionStatus,
-	): void {
-		if (session.taskCompletedEmitted || session.submitAndExitObserved) return;
-		const completedCleanly = session.interactive
-			? session.lastInteractiveTurnFinishReason === "completed" &&
-				!session.aborting &&
-				session.agent.canStartRun()
-			: finalStatus === "completed";
-		if (!completedCleanly) return;
-		session.taskCompletedEmitted = true;
-		captureTaskCompleted(session.config.telemetry, {
-			ulid: session.sessionId,
-			provider: session.config.providerId,
-			model: session.config.modelId,
-			mode: session.config.mode,
-			durationMs: Date.now() - Date.parse(session.startedAt),
-			source: "shutdown",
-			...this.getSessionAgentTelemetryIdentity(session),
-		});
 	}
 
 	private async prepareTurnInput(
@@ -2159,7 +1860,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			normalizedPrompt,
 			mentionBaseDir,
 		);
-		emitMentionTelemetry(session.config.telemetry, enriched);
 
 		const prompt = formatModePrompt(
 			enriched.prompt,
@@ -2316,10 +2016,9 @@ export class LocalRuntimeHost implements RuntimeHost {
 	}
 
 	private async failSession(session: ActiveSession): Promise<void> {
-		// The failing turn is this session's final turn. Record it so the
-		// teardown completion criterion (`lastInteractiveTurnFinishReason`)
-		// cannot read a stale "completed" left over from an earlier
-		// successful turn and emit `task.completed` for an errored session.
+		// The failing turn is this session's final turn. Record it so a later
+		// stop cannot read a stale "completed" left over from an earlier
+		// successful turn and report the errored session as completed.
 		session.lastInteractiveTurnFinishReason = "error";
 		await this.shutdownSession(session, {
 			status: "failed",
@@ -2338,11 +2037,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			endReason: string;
 		},
 	): Promise<void> {
-		// Fallback `task.completed` emission for completed sessions that did
-		// not observe an explicit `submit_and_exit` tool call, routed through
-		// the shared teardown choke point so it can neither double-fire nor
-		// be skipped by teardown routing.
-		this.emitTaskCompletedOnTeardown(session, input.status);
 		notifyTeamRunWaiters(session);
 
 		// Drain an in-flight run before tearing anything down. `stopSession` aborts
@@ -2365,21 +2059,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 				stage,
 				error,
 				severity: "warn",
-			});
-			captureSdkError(session.config.telemetry, {
-				component: "core",
-				operation: "session.shutdown_cleanup",
-				error,
-				severity: "warn",
-				handled: true,
-				context: {
-					sessionId: session.sessionId,
-					stage,
-					status: input.status,
-					shutdownReason: input.shutdownReason,
-					providerId: session.config.providerId,
-					modelId: session.config.modelId,
-				},
 			});
 		};
 
@@ -2424,12 +2103,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		session: ActiveSession,
 		reason: string,
 	): Promise<void> {
-		// Releasing is a full session exit too: interactive sessions whose
-		// reported status is already terminal are stopped/disposed through
-		// this branch. The completion emission must happen here as well —
-		// this is the branch that silently dropped `task.completed` when
-		// truthful status reporting re-routed interactive stops onto it.
-		this.emitTaskCompletedOnTeardown(session);
 		const cleanupErrors: unknown[] = [];
 		const recordCleanupError = (stage: string, error: unknown) => {
 			cleanupErrors.push(error);
@@ -2438,20 +2111,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 				stage,
 				error,
 				severity: "warn",
-			});
-			captureSdkError(session.config.telemetry, {
-				component: "core",
-				operation: "session.runtime_cleanup",
-				error,
-				severity: "warn",
-				handled: true,
-				context: {
-					sessionId: session.sessionId,
-					stage,
-					reason,
-					providerId: session.config.providerId,
-					modelId: session.config.modelId,
-				},
 			});
 		};
 
@@ -2579,19 +2238,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 	private getSessionOrThrow(sessionId: string): ActiveSession {
 		const session = this.sessions.get(sessionId);
 		if (!session) {
-			const error = new SessionNotFoundError(sessionId);
-			captureSdkError(this.defaultTelemetry, {
-				component: "core",
-				operation: "session.active_lookup",
-				error,
-				severity: "warn",
-				handled: true,
-				context: {
-					sessionId,
-					activeSessionCount: this.sessions.size,
-				},
-			});
-			throw error;
+			throw new SessionNotFoundError(sessionId);
 		}
 		return session;
 	}
@@ -2603,16 +2250,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			.filter((p) => p.length > 0)
 			.map((p) => (isAbsolute(p) ? p : resolve(cwd, p)));
 		return Array.from(new Set(resolved));
-	}
-
-	private getSessionAgentTelemetryIdentity(session: ActiveSession) {
-		return buildTelemetryAgentIdentity({
-			agentId: session.agent.getAgentId(),
-			conversationId: session.agent.getConversationId(),
-			teamId: session.runtime.teamRuntime?.getTeamId(),
-			teamName: session.runtime.teamRuntime?.getTeamName(),
-			teamRole: session.runtime.teamRuntime ? "lead" : undefined,
-		});
 	}
 
 	private async seedAggregateUsageFromArtifacts(input: {

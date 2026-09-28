@@ -1,20 +1,15 @@
-import type {
-	BasicLogger,
-	ExtensionContext,
-	ITelemetryService,
-} from "@plinycode/shared";
+import type { BasicLogger, ExtensionContext } from "@plinycode/shared";
 
 export interface ClineCoreExtensionContextInput {
 	context?: ExtensionContext;
 	clientName?: string;
 	distinctId?: string;
 	logger?: BasicLogger;
-	telemetry?: ITelemetryService;
 }
 
 /**
  * Fills the session's extension context with the ClineCore instance's client,
- * user, logger and telemetry, keeping any value the caller already set.
+ * user and logger, keeping any value the caller already set.
  */
 export function createClineCoreExtensionContext(
 	input: ClineCoreExtensionContextInput,
@@ -26,8 +21,7 @@ export function createClineCoreExtensionContext(
 		input.context?.user ??
 		(input.distinctId ? { distinctId: input.distinctId } : undefined);
 	const logger = input.context?.logger ?? input.logger;
-	const telemetry = input.context?.telemetry ?? input.telemetry;
-	if (!client && !user && !logger && !telemetry) {
+	if (!client && !user && !logger) {
 		return input.context;
 	}
 	return {
@@ -35,6 +29,5 @@ export function createClineCoreExtensionContext(
 		...(client ? { client } : {}),
 		...(user ? { user } : {}),
 		...(logger ? { logger } : {}),
-		...(telemetry ? { telemetry } : {}),
 	};
 }

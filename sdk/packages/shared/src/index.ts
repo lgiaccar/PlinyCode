@@ -519,41 +519,7 @@ export {
 	disableCurrentDirectoryExecutableSearch,
 	NO_DEFAULT_CURRENT_DIRECTORY_IN_EXE_PATH_ENV,
 } from "./runtime/windows-exe-path";
-export type {
-	CaptureAgentUnexpectedReasoningTokensInput,
-	CaptureSdkErrorInput,
-	CaptureTaskLifecycleEventInput,
-	CoreSpawnReason,
-	ITelemetryService,
-	OpenTelemetryClientConfig,
-	SdkTelemetryErrorComponent,
-	SdkTelemetryErrorSeverity,
-	TelemetryArray,
-	TelemetryMetadata,
-	TelemetryObject,
-	TelemetryPrimitive,
-	TelemetryProperties,
-	TelemetryValue,
-} from "./services/telemetry";
-export {
-	AGENT_UNEXPECTED_REASONING_TOKENS_EVENT,
-	buildSdkErrorProperties,
-	CORE_SPAWN_REASONS,
-	captureAgentUnexpectedReasoningTokens,
-	captureSdkError,
-	captureTaskLifecycleEvent,
-	isOtlpTraceRelayProvider,
-	markOtlpTraceRelayProvider,
-	normalizeSdkError,
-	OTLP_TRACE_RELAY_MARKER,
-	resetSdkErrorRateLimiterForTests,
-	SDK_ERROR_TELEMETRY_EVENT,
-	TASK_CANCELLED_EVENT,
-	TASK_FIRST_CHUNK_RECEIVED_EVENT,
-	TASK_PROVIDER_REQUEST_STARTED_EVENT,
-	TASK_PROVIDER_STREAM_FAILED_EVENT,
-	TASK_PROVIDER_STREAM_STARTED_EVENT,
-} from "./services/telemetry";
+export type { OpenTelemetryClientConfig } from "./services/telemetry";
 export type {
 	HookSessionContext,
 	HookSessionContextLookup,

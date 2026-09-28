@@ -124,8 +124,7 @@ Batch models continue to use `transcribeAudio`.
 
 ## Related Packages
 
-- `@plinycode/agents`: agent loop and tool execution
-- `@plinycode/core`: stateful runtime assembly and provider settings storage
+- `@plinycode/core`: agent loop, stateful runtime assembly and provider settings storage
 
 ## More Examples
 

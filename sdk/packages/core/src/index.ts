@@ -4,7 +4,6 @@
  * Core contracts, shared state utilities, and Node runtime services.
  */
 
-export { Agent, createAgentRuntime } from "@plinycode/agents";
 export * as Llms from "@plinycode/llms";
 export {
 	buildClineClientHeaders,
@@ -46,7 +45,6 @@ export type {
 	AutomationEventEnvelope,
 	BasicLogger,
 	BasicLogger as Logger,
-	CaptureSdkErrorInput,
 	ChatRunTurnRequest,
 	ChatRuntimeConfig,
 	ChatStartSessionArtifacts,
@@ -59,7 +57,6 @@ export type {
 	GetProviderModelsActionRequest,
 	HookSessionContext,
 	ImageContent,
-	ITelemetryService,
 	ListProvidersActionRequest,
 	Message,
 	MessageWithMetadata,
@@ -70,18 +67,10 @@ export type {
 	ProviderOAuthLoginResponse,
 	RuntimeLoggerConfig,
 	SaveProviderSettingsActionRequest,
-	SdkTelemetryErrorComponent,
-	SdkTelemetryErrorSeverity,
 	SessionLineage,
 	TEAM_LIFECYCLE_EVENT_TYPE,
 	TEAM_PROGRESS_EVENT_TYPE,
 	TeamProgressProjectionEvent,
-	TelemetryArray,
-	TelemetryMetadata,
-	TelemetryObject,
-	TelemetryPrimitive,
-	TelemetryProperties,
-	TelemetryValue,
 	TextContent,
 	ThinkingContent,
 	ToolApprovalRequest,
@@ -96,19 +85,15 @@ export type {
 } from "@plinycode/shared";
 export {
 	buildClineSystemPrompt as getClineDefaultSystemPrompt,
-	buildSdkErrorProperties,
 	ContributionRegistry,
-	captureSdkError,
 	createContributionRegistry,
 	createTool,
 	emptyWorkspaceManifest,
 	formatDisplayUserInput,
 	noopBasicLogger,
-	normalizeSdkError,
 	normalizeUserInput,
 	parseUserCommandEnvelope,
 	registerDisposable,
-	SDK_ERROR_TELEMETRY_EVENT,
 	stripUtf8Bom,
 } from "@plinycode/shared";
 export * from "@plinycode/shared/storage";
@@ -121,7 +106,6 @@ export {
 	type ClineAccountPaymentTransaction,
 	ClineAccountService,
 	type ClineAccountServiceOptions,
-	type ClineAccountTelemetryIdentity,
 	type ClineAccountUsageTransaction,
 	type ClineAccountUser,
 	type ClineOrganization,
@@ -130,9 +114,7 @@ export {
 	type FeaturebaseTokenResponse,
 	isClineAccountActionRequest,
 	type ProviderActionExecutor,
-	persistClineAccountTelemetryIdentity,
 	RpcClineAccountService,
-	resolveClineAccountTelemetryIdentity,
 	type UserCurrentPlan,
 	type UserRemoteConfigOrganization,
 	type UserRemoteConfigResponse,
@@ -486,6 +468,7 @@ export {
 	readRemoteConfigSessionBlobUploadMetadata,
 	registerRemoteConfigSessionBlobUpload,
 } from "./remote-config/integration";
+export { Agent, createAgentRuntime } from "./runtime/agent";
 export type { RuntimeCapabilities } from "./runtime/capabilities";
 export { normalizeRuntimeCapabilities } from "./runtime/capabilities";
 export type {
@@ -564,6 +547,7 @@ export {
 	type DesktopToolApprovalOptions,
 	requestDesktopToolApproval,
 } from "./runtime/tools/tool-approval";
+export { resolveCoreDistinctId } from "./services/distinct-id";
 export type {
 	GlobalCompactionMode,
 	GlobalCompactionStrategy,
@@ -579,7 +563,6 @@ export {
 	isAutoUpdateEnabledGlobally,
 	isModelToolEnabledGlobally,
 	isPluginDisabledGlobally,
-	isTelemetryOptedOutGlobally,
 	isToolDisabledGlobally,
 	readCompactionModeGlobally,
 	readCompactionStrategyGlobally,
@@ -599,7 +582,6 @@ export {
 	setDisabledTools,
 	setModelToolEnabledGlobally,
 	setPlanActModeGlobally,
-	setTelemetryOptOutGlobally,
 	setToolAutoApproveGlobally,
 	setTuiThemeGlobally,
 	toggleDisabledTool,
@@ -752,73 +734,6 @@ export {
 	SqliteTeamStore,
 	type SqliteTeamStoreOptions,
 } from "./services/storage/team-store";
-export type {
-	CaptureAgentUnexpectedReasoningTokensInput,
-	CaptureCompactionExecutedProperties,
-	CaptureCompactionSkippedProperties,
-	TelemetryAgentIdentityProperties,
-	TelemetryAgentKind,
-	TelemetryCompactionMode,
-	TelemetryCompactionStrategy,
-	WorkspaceInitErrorProperties,
-	WorkspaceInitializedProperties,
-	WorkspacePathResolvedProperties,
-} from "./services/telemetry/core-events";
-export {
-	CORE_TELEMETRY_EVENTS,
-	captureAgentCreated,
-	captureAgentTeamCreated,
-	captureAgentUnexpectedReasoningTokens,
-	captureAuthFailed,
-	captureAuthLoggedOut,
-	captureAuthRefreshSoftFailure,
-	captureAuthStarted,
-	captureAuthSucceeded,
-	captureCompactionExecuted,
-	captureCompactionSkipped,
-	captureConversationTurnEvent,
-	captureDiffEditFailure,
-	captureExtensionActivated,
-	captureHookDiscovery,
-	captureMentionFailed,
-	captureMentionSearchResults,
-	captureMentionUsed,
-	captureMistakeLimitReached,
-	captureModeSwitch,
-	captureProviderApiError,
-	captureProviderConfigured,
-	captureSkillUsed,
-	captureSubagentExecution,
-	captureTaskCompleted,
-	captureTaskCreated,
-	captureTaskRestarted,
-	captureTokenUsage,
-	captureToolUsage,
-	captureWorkspaceInitError,
-	captureWorkspaceInitialized,
-	captureWorkspacePathResolved,
-	clearAccountTelemetryIdentity,
-	identifyAccount,
-} from "./services/telemetry/core-events";
-export {
-	resolveCoreDeviceId,
-	resolveCoreDistinctId,
-} from "./services/telemetry/distinct-id";
-export type { ITelemetryAdapter } from "./services/telemetry/ITelemetryAdapter";
-export {
-	type ClientTelemetryContext,
-	createClientScopedTelemetryService,
-	createScopedTelemetryService,
-	resolveClientTelemetryProperties,
-} from "./services/telemetry/scoped-telemetry";
-export {
-	TelemetryLoggerSink,
-	type TelemetryLoggerSinkOptions,
-} from "./services/telemetry/TelemetryLoggerSink";
-export {
-	TelemetryService,
-	type TelemetryServiceOptions,
-} from "./services/telemetry/TelemetryService";
 export {
 	accumulateUsageTotals,
 	createInitialAccumulatedUsage,

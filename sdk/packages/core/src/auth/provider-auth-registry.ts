@@ -1,8 +1,4 @@
-import {
-	decodeJwtPayload,
-	getClineEnvironmentConfig,
-	type ITelemetryService,
-} from "@plinycode/shared";
+import { decodeJwtPayload, getClineEnvironmentConfig } from "@plinycode/shared";
 import type { ProviderSettingsManager } from "../services/storage/provider-settings-manager";
 import type { ProviderSettings } from "../types/provider-settings";
 import {
@@ -21,14 +17,12 @@ export type ProviderOAuthCredentials = OAuthCredentials;
 export interface ProviderAuthLoginInput {
 	settings?: ProviderSettings;
 	callbacks: OAuthLoginCallbacks;
-	telemetry?: ITelemetryService;
 }
 
 export interface ProviderAuthRefreshInput {
 	settings: ProviderSettings;
 	credentials: ProviderOAuthCredentials;
 	forceRefresh?: boolean;
-	telemetry?: ITelemetryService;
 }
 
 export interface ProviderAuthSaveCredentialsInput {
@@ -219,21 +213,19 @@ function createClineAuthHandler(input: {
 		storageProviderId: input.storageProviderId,
 		formatAccessToken: formatClineApiKey,
 		normalizeStoredAccessToken: stripClineApiKeyPrefix,
-		login: ({ settings, callbacks, telemetry }) =>
+		login: ({ settings, callbacks }) =>
 			loginClineOAuth({
 				apiBaseUrl:
 					settings?.baseUrl?.trim() || getClineEnvironmentConfig().apiBaseUrl,
 				useWorkOSDeviceAuth: true,
 				callbacks,
-				telemetry,
 			}),
-		refresh: ({ settings, credentials, forceRefresh, telemetry }) =>
+		refresh: ({ settings, credentials, forceRefresh }) =>
 			getValidClineCredentials(
 				credentials as ClineOAuthCredentials,
 				{
 					apiBaseUrl:
 						settings.baseUrl?.trim() || getClineEnvironmentConfig().apiBaseUrl,
-					telemetry,
 				},
 				{ forceRefresh },
 			),
@@ -248,27 +240,26 @@ const providerAuthHandlers = [
 	}),
 	createOAuthHandler({
 		providerId: "oca",
-		login: ({ settings, callbacks, telemetry }) =>
-			loginOcaOAuth({ mode: settings?.oca?.mode, callbacks, telemetry }),
-		refresh: ({ settings, credentials, forceRefresh, telemetry }) =>
+		login: ({ settings, callbacks }) =>
+			loginOcaOAuth({ mode: settings?.oca?.mode, callbacks }),
+		refresh: ({ settings, credentials, forceRefresh }) =>
 			getValidOcaCredentials(
 				credentials,
-				{ forceRefresh, telemetry },
-				{ mode: settings.oca?.mode, telemetry },
+				{ forceRefresh },
+				{ mode: settings.oca?.mode },
 			),
 	}),
 	createOAuthHandler({
 		providerId: "openai-codex",
-		login: ({ callbacks, telemetry }) =>
+		login: ({ callbacks }) =>
 			loginOpenAICodex({
 				onAuth: callbacks.onAuth,
 				onPrompt: callbacks.onPrompt,
 				onProgress: callbacks.onProgress,
 				onManualCodeInput: callbacks.onManualCodeInput,
-				telemetry,
 			}),
-		refresh: ({ credentials, forceRefresh, telemetry }) =>
-			getValidOpenAICodexCredentials(credentials, { forceRefresh, telemetry }),
+		refresh: ({ credentials, forceRefresh }) =>
+			getValidOpenAICodexCredentials(credentials, { forceRefresh }),
 	}),
 ] as const satisfies readonly ProviderAuthHandler[];
 
@@ -310,7 +301,6 @@ export async function loginAndSaveProviderOAuthCredentials(
 	providerId: string,
 	input: {
 		callbacks: OAuthLoginCallbacks;
-		telemetry?: ITelemetryService;
 	},
 ): Promise<ProviderSettings> {
 	const handler = getProviderAuthHandler(providerId);
@@ -321,7 +311,6 @@ export async function loginAndSaveProviderOAuthCredentials(
 	const credentials = await handler.login({
 		settings: existing,
 		callbacks: input.callbacks,
-		telemetry: input.telemetry,
 	});
 	return handler.saveCredentials({ manager, settings: existing, credentials });
 }
