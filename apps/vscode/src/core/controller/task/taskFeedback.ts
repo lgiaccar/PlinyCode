@@ -1,29 +1,10 @@
 import { Empty, StringRequest } from "@shared/proto/cline/common"
-import { telemetryService } from "@/services/telemetry"
-import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
 
 /**
- * Handles task feedback submission (thumbs up/down)
- * @param controller The controller instance
- * @param request The StringRequest containing the feedback type ("thumbs_up" or "thumbs_down") in the value field
- * @returns Empty response
+ * Handles task feedback (thumbs up/down). Feedback only went to telemetry,
+ * which PlinyCode doesn't send, so there is nothing to record.
  */
-export async function taskFeedback(controller: Controller, request: StringRequest): Promise<Empty> {
-	if (!request.value) {
-		Logger.warn("taskFeedback: Missing feedback type value")
-		return Empty.create()
-	}
-
-	try {
-		if (controller.task?.ulid) {
-			telemetryService.captureTaskFeedback(controller.task.ulid, request.value as any)
-		} else {
-			Logger.warn("taskFeedback: No active task to receive feedback")
-		}
-	} catch (error) {
-		Logger.error("Error in taskFeedback handler:", error)
-	}
-
+export async function taskFeedback(_controller: Controller, _request: StringRequest): Promise<Empty> {
 	return Empty.create()
 }
