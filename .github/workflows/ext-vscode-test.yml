@@ -123,6 +123,27 @@ jobs:
             - name: Run Quality Checks (Parallel)
               run: bun run ci:check-all
 
+            # Report only, never blocks: code size and what the shipped extension
+            # and webview don't use (tests don't count as users), written to the
+            # job summary to track the cleanup. knip exits 1 when it finds
+            # something and 2 when it fails; only a failure marks the step.
+            - name: Unused code and size report (non-blocking)
+              continue-on-error: true
+              run: |
+                  set +e
+                  bun run analyze:unused:prod --no-progress --reporter markdown > knip-report.md
+                  status=$?
+                  {
+                    echo "## Code size"
+                    echo
+                    bun run --cwd "$GITHUB_WORKSPACE" metrics
+                    echo
+                    echo "## Unused code in the shipped extension and webview (knip, non-blocking)"
+                    echo
+                    sed -n '/^# Knip report/,$p' knip-report.md | tail -n +2 | sed 's/^## /### /'
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  if [ "$status" -gt 1 ]; then exit "$status"; fi
+
     vscode-test:
         needs: [detect-changes, quality-checks]
         if: needs.detect-changes.outputs.vscode == 'true'

@@ -3,30 +3,43 @@
 	"workspaces": {
 		".": {
 			"entry": [
-				"src/extension.ts",
+				"src/extension.ts!",
+				"src/services/devops-mcp/server/main.ts!",
+				"src/generated/hosts/vscode/protobus-services.ts!",
+				"src/generated/hosts/vscode/hostbridge-grpc-service-config.ts!",
 				"src/standalone/cline-core.ts",
 				"src/generated/hosts/standalone/protobus-server-setup.ts",
 				"src/generated/hosts/standalone/host-bridge-clients.ts",
-				"src/generated/hosts/vscode/protobus-services.ts",
-				"src/generated/hosts/vscode/hostbridge-grpc-service-config.ts",
+				"src/dev/debug-harness/server.ts",
+				"src/dev/mcp-oauth-test-server/server.ts",
 				"src/**/*.test.ts",
 				"src/**/__tests__/**/*.ts",
 				"src/test/**/*.ts"
 			],
 			"project": [
-				"src/**/*.ts"
+				"src/**/*.ts!"
+			],
+			"ignoreDependencies": [
+				"@plinycode/core",
+				"@plinycode/llms",
+				"@plinycode/shared"
 			]
 		},
 		"webview-ui": {
 			"entry": [
-				"src/services/grpc-client.ts",
+				"src/main.tsx!",
+				"src/services/grpc-client.ts!",
 				"src/**/*.test.{ts,tsx}",
 				"src/**/*.spec.{ts,tsx}",
 				"src/**/__tests__/**/*.{ts,tsx}"
 			],
 			"project": [
-				"src/**/*.{ts,tsx}",
+				"src/**/*.{ts,tsx}!",
 				"*.ts"
+			],
+			"ignoreDependencies": [
+				"@plinycode/shared",
+				"@plinycode/ui"
 			],
 			"vite": true
 		}
