@@ -19,7 +19,7 @@ The repo root is the Bun workspace root: `sdk/` has no `package.json`. Run every
 - `@plinycode/shared`: shared contracts, schemas, path helpers, hook engine, extension registry, low-level utilities
 - `@plinycode/llms`: provider settings/config, model catalogs, provider manifests, gateway contracts, handler creation
 - `@plinycode/agents`: stateless agent loop, tool orchestration, hook/extension runtime, event streaming
-- `@plinycode/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools, telemetry. Exposes `@plinycode/core/hub` for discovery, the detached daemon entry, WebSocket clients, and session/UI client adapters, plus `@plinycode/core/hub/daemon-entry` for launching the shared daemon
+- `@plinycode/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools, telemetry. Sessions always run in-process, in the local runtime host
 - `@plinycode/ui`: shared webview theme and React components. It depends only on `shared` and sits outside the runtime chain below
 
 ### Dependency Direction
@@ -35,7 +35,7 @@ flowchart TD
 Rules:
 - `shared` stays low-level and reusable
 - `agents` stays stateless — no session/storage/config concerns
-- `core` owns stateful orchestration, including the shared-hub daemon, server, and client adapters under `src/hub/`
+- `core` owns stateful orchestration
 
 ## Change Routing
 
@@ -43,7 +43,7 @@ Route changes to the package that owns the concern:
 
 - model/provider schemas or handler behavior: `@plinycode/llms`
 - stateless loop, tool orchestration, streaming, hook/extension runtime: `@plinycode/agents`
-- session lifecycle, storage, config watching, default tools, plugin loading, telemetry, hub runtime services, hub discovery, hub daemon spawn, and session-oriented client helpers (`HubSessionClient`, `HubUIClient`, `connectToHub`): `@plinycode/core` (hub pieces live under `src/hub/`)
+- session lifecycle, storage, config watching, default tools, plugin loading, telemetry: `@plinycode/core`
 - remote-config schemas, managed instruction materialization, blob upload metadata, and OpenTelemetry config normalization: `@plinycode/shared/src/remote-config`
 - host-specific UX or shell behavior: the extension, `apps/vscode`
 

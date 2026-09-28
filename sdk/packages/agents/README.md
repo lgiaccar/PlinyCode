@@ -2,7 +2,7 @@
 
 `@plinycode/agents` is the runtime-agnostic agent loop package in the Cline SDK.
 It gives you the core primitives for building tool-using LLM agents without
-bringing in session storage, hub transport, or host-specific default tools.
+bringing in session storage or host-specific default tools.
 
 ## What You Get
 
@@ -21,7 +21,6 @@ bringing in session storage, hub transport, or host-specific default tools.
 
 - Default host tools like filesystem access, shell execution, or web fetching live in `@plinycode/core`
 - Session persistence and stateful orchestration live in `@plinycode/core`
-- Shared hub runtime/session transport lives in `@plinycode/core` (see `@plinycode/core/hub`)
 - Sub-agent and team coordination primitives live in `@plinycode/core`
 
 That split keeps this package usable in Node, browser, and custom host
@@ -296,7 +295,7 @@ mailboxes, task management, and outcome convergence.
 - `@plinycode/llms`: provider settings, model catalogs, and gateway/handler
   creation
 - `@plinycode/core`: stateful runtime assembly, storage, default tools,
-  subprocess hooks, hub transport, and MCP integration
+  subprocess hooks, and MCP integration
 
 ## More Examples
 

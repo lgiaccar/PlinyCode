@@ -19,14 +19,6 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
-		"./hub": {
-			"types": "./dist/hub/index.d.ts",
-			"import": "./dist/hub/index.js"
-		},
-		"./hub/daemon-entry": {
-			"types": "./dist/hub/daemon/entry.d.ts",
-			"import": "./dist/hub/daemon/entry.js"
-		},
 		"./telemetry": {
 			"types": "./dist/services/telemetry/index.d.ts",
 			"import": "./dist/services/telemetry/index.js"
@@ -34,18 +26,10 @@
 		"./services/feature-flags/posthog": {
 			"types": "./dist/services/feature-flags/posthog.d.ts",
 			"import": "./dist/services/feature-flags/posthog.js"
-		},
-		"./remote/helper-entry": {
-			"types": "./dist/remote/remote-helper-entry.d.ts",
-			"import": "./dist/remote/remote-helper-entry.js"
-		},
-		"./remote/helper": {
-			"types": "./dist/remote/remote-helper.d.ts",
-			"import": "./dist/remote/remote-helper.js"
 		}
 	},
 	"scripts": {
-		"build": "bun run ./bun.mts && bun tsc -p tsconfig.build.json && bun run ./scripts/verify-runtime-build-id.ts",
+		"build": "bun run ./bun.mts && bun tsc -p tsconfig.build.json && bun run ./scripts/verify-exports.ts",
 		"typecheck": "bun tsc -p tsconfig.dev.json --noEmit && bun run typecheck:smoke",
 		"typecheck:smoke": "bun tsc -p tsconfig.smoke.json --noEmit",
 		"test": "bun run test:unit && bun run test:e2e",

@@ -1,5 +1,6 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
+	HubClientRegistration,
 	HubCommandEnvelope,
 	HubReplyEnvelope,
 	HubScheduleCreateInput,
@@ -7,8 +8,19 @@ import type {
 	ScheduleRecord,
 } from "@plinycode/shared";
 import { createSessionId, readHubScheduleMode } from "@plinycode/shared";
-import type { HubConnectionAuthority } from "../../hub/server/command-transport";
 import type { HubScheduleService } from "./schedule-service";
+
+/** Authority captured once by an authenticated transport connection. */
+export interface HubConnectionAuthority {
+	clientId: string;
+	workspaceContext?: HubClientRegistration["workspaceContext"];
+	/**
+	 * Token-authenticated connections may already bind any workspace at
+	 * registration time, so they are also allowed to explicitly request
+	 * cross-workspace schedule access (`allWorkspaces` command payloads).
+	 */
+	crossWorkspace?: boolean;
+}
 
 interface ScheduleCommandScope {
 	workspaceRoot: string;

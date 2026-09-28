@@ -42,7 +42,6 @@ Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is
 - `bun -F plinycode-dev analyze:unused:prod` runs knip and lists the files, exports and dependencies that the shipped extension and webview don't use; tests don't count as users. `bun run metrics` prints source and test lines per package and the files over 800 lines. CI's Quality Checks job writes both to its summary without failing on them.
 - `bun -F plinycode-dev test:unit` runs the bun-based extension unit suite (no VS Code host needed). `bun run test` runs the engine suites plus the extension's `test` script, which also runs the VS Code integration tests, so it needs a desktop session (on Linux, `xvfb-run`).
 - Some engine tests need `bash`, `bun` and network access on PATH; they fail in environments lacking those, which is an environment artifact rather than a code bug.
-- Two tests in `sdk/packages/core/src/hub/server/index.test.ts` fail with `HubLockHeldError` while a PlinyCode editor is running on the same machine, because it holds the shared hub lock. That's environmental too: close the editor, or ignore those two.
 
 ## VS Code extension (`apps/vscode`, package `plinycode-dev`)
 
