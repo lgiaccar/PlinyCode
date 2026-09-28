@@ -1,15 +1,16 @@
 import * as Llms from "@plinycode/llms";
 import { ReasoningLevelSchema } from "@plinycode/shared";
 import { z } from "zod";
-import {
-	DEFAULT_EXTERNAL_OCA_BASE_URL,
-	DEFAULT_INTERNAL_OCA_BASE_URL,
-} from "../../auth/oca";
 import { getPersistedProviderApiKey } from "../../auth/provider-auth-registry";
 import {
 	OPENAI_COMPATIBLE_PROVIDERS,
 	type ProviderDefaults,
 } from "./provider-defaults";
+
+const DEFAULT_INTERNAL_OCA_BASE_URL =
+	"https://code-internal.aiservice.us-chicago-1.oci.oraclecloud.com/20250206/app/litellm";
+const DEFAULT_EXTERNAL_OCA_BASE_URL =
+	"https://code.aiservice.us-chicago-1.oci.oraclecloud.com/20250206/app/litellm";
 
 export type ModelInfo = Llms.ModelInfo;
 export type ProviderClient = Llms.ProviderClient;

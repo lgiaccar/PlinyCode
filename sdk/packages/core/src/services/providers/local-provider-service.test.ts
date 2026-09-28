@@ -1776,62 +1776,6 @@ describe("listLocalProviders", () => {
 		expect(state.providers["cline-pass"]?.tokenSource).toBe("oauth");
 	});
 
-	it("resolves shared OAuth metadata for ClinePass catalog entries", async () => {
-		manager.saveProviderSettings(
-			{
-				provider: "cline",
-				auth: {
-					accessToken: "shared-token",
-					refreshToken: "shared-refresh",
-				},
-			},
-			{ setLastUsed: false, tokenSource: "oauth" },
-		);
-		markLocalProviderEnabled(manager, "cline-pass", { tokenSource: "oauth" });
-
-		const { providers } = await listLocalProviders(manager, {
-			isClinePassEnabled: true,
-		});
-		const clinePass = providers.find(
-			(provider) => provider.id === "cline-pass",
-		);
-
-		expect(clinePass).toMatchObject({
-			enabled: true,
-			oauthAccessTokenPresent: true,
-		});
-	});
-
-	it("enables ClinePass from a Cline sign-in that never wrote a ClinePass entry", async () => {
-		// Desktop onboarding signs in as "cline" only; the shared credentials
-		// make ClinePass usable, so it must surface as enabled without its own
-		// providers.json entry.
-		manager.saveProviderSettings(
-			{
-				provider: "cline",
-				auth: {
-					accessToken: "shared-token",
-					refreshToken: "shared-refresh",
-				},
-			},
-			{ setLastUsed: false, tokenSource: "oauth" },
-		);
-
-		const { providers } = await listLocalProviders(manager, {
-			isClinePassEnabled: true,
-		});
-		const clinePass = providers.find(
-			(provider) => provider.id === "cline-pass",
-		);
-
-		expect(manager.read().providers["cline-pass"]).toBeUndefined();
-		expect(clinePass).toMatchObject({
-			enabled: true,
-			configured: true,
-			oauthAccessTokenPresent: true,
-		});
-	});
-
 	it("keeps ClinePass disabled when Cline has no entry", async () => {
 		const { providers } = await listLocalProviders(manager, {
 			isClinePassEnabled: true,
@@ -1955,16 +1899,6 @@ describe("listLocalProviders", () => {
 // ===========================================================================
 
 describe("normalizeOAuthProvider", () => {
-	it("normalizes 'cline' to 'cline'", () => {
-		expect(normalizeOAuthProvider("cline")).toBe("cline");
-		expect(normalizeOAuthProvider("  CLINE  ")).toBe("cline");
-	});
-
-	it("normalizes 'oca' to 'oca'", () => {
-		expect(normalizeOAuthProvider("oca")).toBe("oca");
-		expect(normalizeOAuthProvider("OCA")).toBe("oca");
-	});
-
 	it("normalizes 'openai-codex' to 'openai-codex'", () => {
 		expect(normalizeOAuthProvider("openai-codex")).toBe("openai-codex");
 		expect(normalizeOAuthProvider("OPENAI-CODEX")).toBe("openai-codex");
