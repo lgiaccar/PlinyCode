@@ -40,10 +40,6 @@
 		"./automation": {
 			"types": "./dist/automation/index.d.ts",
 			"import": "./dist/automation/index.js"
-		},
-		"./remote-config": {
-			"types": "./dist/remote-config/index.d.ts",
-			"import": "./dist/remote-config/index.js"
 		}
 	},
 	"files": [

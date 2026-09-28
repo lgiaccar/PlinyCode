@@ -100,55 +100,6 @@ export interface ChatTurnResult {
 	toolCalls: ChatToolCallResult[];
 }
 
-export interface EnterpriseContext {
-	projectId?: string;
-	workspaceId?: string;
-	organizationId?: string;
-}
-
-export interface EnterpriseAuthenticateRequest extends EnterpriseContext {
-	providerId: string;
-	workspacePath: string;
-	rootPath?: string;
-}
-
-export interface EnterpriseAuthenticateResponse {
-	providerId: string;
-	authenticated: boolean;
-	roles: string[];
-	claims?: Record<string, unknown>;
-	metadata?: Record<string, unknown>;
-}
-
-export interface EnterpriseSyncRequest extends EnterpriseContext {
-	providerId: string;
-	workspacePath: string;
-	rootPath?: string;
-	useCachedBundle?: boolean;
-}
-
-export interface EnterpriseSyncResponse {
-	providerId: string;
-	authenticated: boolean;
-	hasCachedBundle: boolean;
-	appliedConfigVersion?: string;
-	roles: string[];
-	hasTelemetryOverrides: boolean;
-	rulesCount: number;
-	workflowsCount: number;
-	skillsCount: number;
-	claims?: Record<string, unknown>;
-	metadata?: Record<string, unknown>;
-}
-
-export interface EnterpriseStatusRequest {
-	providerId: string;
-	workspacePath: string;
-	rootPath?: string;
-}
-
-export type EnterpriseStatusResponse = EnterpriseSyncResponse;
-
 /** Which tier of the Cline recommended-models feed featured a model. */
 export type ProviderModelFeaturedTier = "recommended" | "free" | "subscribed";
 

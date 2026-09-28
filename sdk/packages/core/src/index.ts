@@ -458,16 +458,6 @@ export {
 	sdkDebug,
 	setSdkLogger,
 } from "./logging/early-logger";
-export {
-	buildRemoteConfigSessionBlobUploadMetadata,
-	createRemoteConfigSessionMessagesArtifactUploader,
-	type PreparedRemoteConfigCoreIntegration,
-	type PrepareRemoteConfigCoreIntegrationOptions,
-	prepareRemoteConfigCoreIntegration,
-	REMOTE_CONFIG_SESSION_BLOB_UPLOAD_METADATA_KEY,
-	readRemoteConfigSessionBlobUploadMetadata,
-	registerRemoteConfigSessionBlobUpload,
-} from "./remote-config/integration";
 export { Agent, createAgentRuntime } from "./runtime/agent";
 export type { RuntimeCapabilities } from "./runtime/capabilities";
 export { normalizeRuntimeCapabilities } from "./runtime/capabilities";

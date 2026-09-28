@@ -85,13 +85,13 @@ Not published externally; consumed by the extension through compiled `dist/`.
 
 Agent engine — tasks, sessions, auth, providers, hooks, runtime.
 
-`src/account/`, `src/auth/`, `src/cline-core/`, `src/extensions/`, `src/hooks/`, `src/logging/`, `src/remote-config/`, `src/runtime/`, `src/services/`, `src/session/`, `src/settings/`, `src/types/`.
+`src/account/`, `src/auth/`, `src/cline-core/`, `src/extensions/`, `src/hooks/`, `src/logging/`, `src/runtime/`, `src/services/`, `src/session/`, `src/settings/`, `src/types/`.
 
 ### `sdk/packages/shared`
 
 Shared types & utilities.
 
-`src/agents/`, `src/automation/`, `src/connectors/`, `src/cron/`, `src/db/`, `src/extensions/`, `src/hooks/`, `src/llms/`, `src/logging/`, `src/parse/`, `src/prompt/` (`system/`), `src/providers/`, `src/remote-config/`, `src/rpc/`, `src/runtime/`, `src/services/`, `src/session/`, `src/storage/`, `src/team/`, `src/tools/`, `src/types/`.
+`src/agents/`, `src/automation/`, `src/connectors/`, `src/cron/`, `src/db/`, `src/extensions/`, `src/hooks/`, `src/llms/`, `src/logging/`, `src/parse/`, `src/prompt/` (`system/`), `src/providers/`, `src/rpc/`, `src/runtime/`, `src/session/`, `src/storage/`, `src/team/`, `src/tools/`, `src/types/`.
 
 ### `sdk/packages/llms`
 

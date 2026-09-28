@@ -309,52 +309,6 @@ export {
 } from "./prompt/format";
 export { CLINE_DEFAULT_MODEL_ID } from "./providers/defaults";
 export { isClineProvider } from "./providers/utils";
-export { REMOTE_URI_SCHEME } from "./remote-config/constants";
-export type {
-	AnthropicModel,
-	AnthropicSettings,
-	APIKeySettings,
-	AwsBedrockCustomModel,
-	AwsBedrockModel,
-	AwsBedrockSettings,
-	EnterpriseTelemetry,
-	GlobalInstructionsFile,
-	LiteLLMModel,
-	LiteLLMSettings,
-	MCPServer,
-	OpenAiCompatible,
-	OpenAiCompatibleModel,
-	PromptUploading,
-	ProviderSettings,
-	RemoteConfig,
-	RemoteMCPServer,
-	S3AccessKeySettings,
-	VertexModel,
-	VertexSettings,
-} from "./remote-config/schema";
-export {
-	AllowedMCPServerSchema,
-	AnthropicModelSchema,
-	AnthropicSchema,
-	APIKeySchema,
-	AwsBedrockCustomModelSchema,
-	AwsBedrockModelSchema,
-	AwsBedrockSettingsSchema,
-	ClineModelSchema,
-	ClineSettingsSchema,
-	EnterpriseTelemetrySchema,
-	GlobalInstructionsFileSchema,
-	LiteLLMModelSchema,
-	LiteLLMSchema,
-	OpenAiCompatibleModelSchema,
-	OpenAiCompatibleSchema,
-	PromptUploadingSchema,
-	RemoteConfigSchema,
-	RemoteMCPServerSchema,
-	S3AccessKeySettingsSchema,
-	VertexModelSchema,
-	VertexSettingsSchema,
-} from "./remote-config/schema";
 export { CLINE_DEFAULT_RPC_ADDRESS, CLINE_DEFAULT_RPC_PORT } from "./rpc";
 export type {
 	AddProviderActionRequest,
@@ -368,12 +322,6 @@ export type {
 	ChatToolCallResult,
 	ChatTurnResult,
 	ClineAccountActionRequest,
-	EnterpriseAuthenticateRequest,
-	EnterpriseAuthenticateResponse,
-	EnterpriseStatusRequest,
-	EnterpriseStatusResponse,
-	EnterpriseSyncRequest,
-	EnterpriseSyncResponse,
 	GetProviderModelsActionRequest,
 	ListProvidersActionRequest,
 	ProviderActionRequest,
@@ -435,7 +383,6 @@ export {
 	getClineEnvironmentConfig,
 	resolveClineEnvironment,
 } from "./runtime/cline-environment";
-export type { OpenTelemetryClientConfig } from "./services/telemetry";
 export type {
 	HookSessionContext,
 	HookSessionContextLookup,
