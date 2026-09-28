@@ -554,17 +554,6 @@ export {
 	writeGlobalSettings,
 } from "./services/global-settings";
 export {
-	applyClineFeaturedModels,
-	type ClineRecommendedModel,
-	type ClineRecommendedModelsData,
-	FALLBACK_CLINE_RECOMMENDED_MODELS,
-	type FetchClineRecommendedModelsOptions,
-	fetchClineRecommendedModels,
-	getCachedClineRecommendedModels,
-	peekClineRecommendedModels,
-	resetClineRecommendedModelsCacheForTests,
-} from "./services/llms/cline-recommended-models";
-export {
 	clearLiveModelsCatalogCache,
 	clearPrivateModelsCatalogCache,
 	DEFAULT_MODELS_CATALOG_URL,
@@ -670,7 +659,6 @@ export {
 	markLocalProviderEnabled,
 	normalizeOAuthProvider,
 	refreshProviderModelsFromSource,
-	resolveLocalClineAuthToken,
 	saveLocalProviderOAuthCredentials,
 	saveLocalProviderSettings,
 	saveVoiceInputSettings,

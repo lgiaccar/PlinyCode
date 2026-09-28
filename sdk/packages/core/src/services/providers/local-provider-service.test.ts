@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import * as LlmsModels from "@plinycode/llms";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetClineRecommendedModelsCacheForTests } from "../llms/cline-recommended-models";
 import {
 	clearLiveModelsCatalogCache,
 	clearPrivateModelsCatalogCache,
@@ -26,7 +25,6 @@ import {
 	markLocalProviderEnabled,
 	normalizeOAuthProvider,
 	refreshProviderModelsFromSource,
-	resolveLocalClineAuthToken,
 	saveLocalProviderSettings,
 	saveVoiceInputSettings,
 	transcribeConfiguredVoiceInput,
@@ -61,7 +59,6 @@ function makeTempManager(): {
 afterEach(() => {
 	clearLiveModelsCatalogCache();
 	clearPrivateModelsCatalogCache();
-	resetClineRecommendedModelsCacheForTests();
 	LlmsModels.resetRegistry();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
@@ -522,81 +519,6 @@ describe("addLocalProvider – model ID parsing via modelsSourceUrl", () => {
 		expect(models.map((m) => m.id).sort()).toEqual(["llama3.1", "qwen3:8b"]);
 	});
 
-	it("uses only live ClinePass models when live models are found", async () => {
-		const fetchMock = vi.fn(async (url: string) => {
-			if (url === "https://models.dev/api.json") {
-				return new Response(
-					JSON.stringify({
-						openrouter: {
-							models: {
-								"vendor/live-pass-model": {
-									name: "Live Pass Model",
-									tool_call: true,
-									reasoning: true,
-									limit: { context: 256_000, input: 200_000, output: 32_000 },
-								},
-								"vendor/live-free-model": {
-									name: "Live Free Model",
-									tool_call: true,
-									reasoning: true,
-									limit: { context: 512_000, input: 400_000, output: 64_000 },
-								},
-							},
-						},
-					}),
-					{
-						status: 200,
-						headers: { "content-type": "application/json" },
-					},
-				);
-			}
-
-			return new Response(
-				JSON.stringify({
-					clinePass: [
-						{
-							id: "cline-pass/live-pass-model",
-							name: "vendor/live-pass-model",
-						},
-					],
-					free: [{ id: "cline-free/live-free-model" }],
-				}),
-				{
-					status: 200,
-					headers: { "content-type": "application/json" },
-				},
-			);
-		});
-		vi.stubGlobal("fetch", fetchMock);
-
-		const { models } = await getLocalProviderModels("cline-pass");
-
-		// models.dev, the recommended-models feed via the live catalog, and
-		// the recommended-models feed again for the featured-tier overlay
-		// (separately cached; both caches are cold here).
-		expect(fetchMock).toHaveBeenCalledTimes(3);
-		expect(models.map((model) => model.id)).toEqual(
-			expect.arrayContaining([
-				"cline-pass/live-pass-model",
-				"cline-free/live-free-model",
-			]),
-		);
-		expect(
-			models.find((model) => model.id === "cline-pass/live-pass-model"),
-		).toMatchObject({
-			id: "cline-pass/live-pass-model",
-			name: "Live Pass Model",
-			supportsReasoning: true,
-		});
-		expect(
-			models.find((model) => model.id === "cline-free/live-free-model"),
-		).toMatchObject({
-			id: "cline-free/live-free-model",
-			name: "Live Free Model (free)",
-			supportsReasoning: true,
-		});
-	});
-
 	it("falls back to generated ClinePass models when no live ClinePass models are found", async () => {
 		const fetchMock = vi.fn(async (url: string) => {
 			if (url === "https://models.dev/api.json") {
@@ -627,10 +549,8 @@ describe("addLocalProvider – model ID parsing via modelsSourceUrl", () => {
 
 		const { models } = await getLocalProviderModels("cline-pass");
 
-		// models.dev, the recommended-models feed via the live catalog, and
-		// the recommended-models feed again for the featured-tier overlay
-		// (separately cached; both caches are cold here).
-		expect(fetchMock).toHaveBeenCalledTimes(3);
+		// models.dev and the recommended-models feed via the live catalog.
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 		expect(models.map((model) => model.id)).toContain(
 			"cline-pass/mimo-v2.5-pro",
 		);
@@ -2055,60 +1975,6 @@ describe("normalizeOAuthProvider", () => {
 			"does not support OAuth login",
 		);
 		expect(() => normalizeOAuthProvider("")).toThrow();
-	});
-});
-
-// ===========================================================================
-// resolveLocalClineAuthToken
-// ===========================================================================
-
-describe("resolveLocalClineAuthToken", () => {
-	it("returns undefined when settings is undefined", () => {
-		expect(resolveLocalClineAuthToken(undefined)).toBeUndefined();
-	});
-
-	it("returns accessToken when present", () => {
-		expect(
-			resolveLocalClineAuthToken({
-				provider: "cline" as never,
-				auth: { accessToken: "tok123" },
-			}),
-		).toBe("tok123");
-	});
-
-	it("falls back to apiKey when accessToken is absent", () => {
-		expect(
-			resolveLocalClineAuthToken({
-				provider: "cline" as never,
-				apiKey: "api-key-456",
-			}),
-		).toBe("api-key-456");
-	});
-
-	it("prefers accessToken over apiKey", () => {
-		expect(
-			resolveLocalClineAuthToken({
-				provider: "cline" as never,
-				apiKey: "api-key",
-				auth: { accessToken: "access-token" },
-			}),
-		).toBe("access-token");
-	});
-
-	it("returns undefined when both accessToken and apiKey are empty strings", () => {
-		expect(
-			resolveLocalClineAuthToken({
-				provider: "cline" as never,
-				apiKey: "   ",
-				auth: { accessToken: "  " },
-			}),
-		).toBeUndefined();
-	});
-
-	it("returns undefined when both fields are absent", () => {
-		expect(
-			resolveLocalClineAuthToken({ provider: "cline" as never }),
-		).toBeUndefined();
 	});
 });
 
