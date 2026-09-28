@@ -46,7 +46,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 | Path | Role |
 |------|------|
-| `controller/` | One directory per RPC service, one file per RPC: account, browser, checkpoints, commands, file, marketplace, MCP, models, OCA account, remote config, slash commands, state, task, UI, web. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
+| `controller/` | One directory per RPC service, one file per RPC: account, checkpoints, commands, file, marketplace, MCP, models, OCA account, remote config, slash commands, state, task, UI, web. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
 | `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
 | `storage/` | Persistence (`remote-config/`, `utils/`) |
@@ -55,7 +55,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 ### `src/services/`
 
-`auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
+`auth/`, `banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 

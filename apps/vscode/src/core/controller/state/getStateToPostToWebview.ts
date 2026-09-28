@@ -53,7 +53,6 @@ export async function getStateToPostToWebview(controller: {
 	}
 	const taskHistory = stateManager.getGlobalStateKey("taskHistory")
 	const autoApprovalSettings = stateManager.getGlobalSettingsKey("autoApprovalSettings")
-	const browserSettings = stateManager.getGlobalSettingsKey("browserSettings")
 	const preferredLanguage = stateManager.getGlobalSettingsKey("preferredLanguage")
 	const mode = stateManager.getGlobalSettingsKey("mode")
 	const useAutoCondense = stateManager.getGlobalSettingsKey("useAutoCondense")
@@ -121,7 +120,6 @@ export async function getStateToPostToWebview(controller: {
 		checkpointRestoreInput,
 		editMessageRestartFocus,
 		autoApprovalSettings,
-		browserSettings,
 		preferredLanguage,
 		mode,
 		useAutoCondense,

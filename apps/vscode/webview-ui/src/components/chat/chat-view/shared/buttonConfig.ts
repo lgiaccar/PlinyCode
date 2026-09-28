@@ -85,15 +85,7 @@ export const BUTTON_CONFIGS: Record<string, ButtonConfig> = {
 		secondaryAction: undefined,
 	},
 
-	// Browser and external tool states
-	browser_action_launch: {
-		sendingDisabled: false,
-		enableButtons: true,
-		primaryText: "Approve",
-		secondaryText: "Reject",
-		primaryAction: "approve",
-		secondaryAction: "reject",
-	},
+	// External tool states
 	use_mcp_server: {
 		sendingDisabled: false,
 		enableButtons: true,
@@ -277,8 +269,6 @@ export function getButtonConfig(message: ClineMessage | undefined, _mode: Mode =
 			// Standard approvals
 			case "followup":
 				return BUTTON_CONFIGS.followup
-			case "browser_action_launch":
-				return BUTTON_CONFIGS.browser_action_launch
 			case "use_mcp_server":
 				return BUTTON_CONFIGS.use_mcp_server
 			case "use_subagents":

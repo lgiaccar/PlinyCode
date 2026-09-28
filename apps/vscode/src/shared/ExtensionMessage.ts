@@ -6,7 +6,6 @@ import { RemoteConfigFields } from "@shared/storage/state-keys"
 import type { Environment } from "../config"
 import { AutoApprovalSettings } from "./AutoApprovalSettings"
 import { ApiConfiguration } from "./api"
-import { BrowserSettings } from "./BrowserSettings"
 import { ClineFeatureSetting } from "./ClineFeatureSetting"
 import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
@@ -41,8 +40,6 @@ export interface ExtensionState {
 	onboardingModels: OnboardingModelGroup | undefined
 	apiConfiguration?: ApiConfiguration
 	autoApprovalSettings: AutoApprovalSettings
-	browserSettings: BrowserSettings
-	remoteBrowserHost?: string
 	preferredLanguage?: string
 	mode: Mode
 	clineMessages: ClineMessage[]
@@ -300,12 +297,9 @@ export interface ClineSayTool {
 	readLineEnd?: number
 }
 
-// must keep in sync with system prompt
-const browserActions = ["launch", "click", "type", "scroll_down", "scroll_up", "close"] as const
-export type BrowserAction = (typeof browserActions)[number]
-
+// The browser tool was removed; these shapes remain so old conversations still render.
 export interface ClineSayBrowserAction {
-	action: BrowserAction
+	action: "launch" | "click" | "type" | "scroll_down" | "scroll_up" | "close"
 	coordinate?: string
 	text?: string
 }
