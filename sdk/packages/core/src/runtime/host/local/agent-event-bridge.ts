@@ -89,8 +89,8 @@ export class AgentEventBridge {
 		handleAgentEvent(ctx, event, {
 			// Session-map miss: the session was already deregistered but its
 			// agent is still emitting. Reuse the identity captured while it was
-			// live so task.tool_used and friends keep their agentId/agentKind
-			// attributes. When the session IS live this is a non-root
+			// live so late events keep their agent and team role. When the
+			// session IS live this is a non-root
 			// (sub-agent) event carrying its own metadata, so no fallback is
 			// applied.
 			...(liveSession ? {} : this.lastKnownIdentityBySession.get(sessionId)),
