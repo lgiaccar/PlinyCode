@@ -46,22 +46,6 @@ export class E2ETestHelper {
 	}
 
 	/**
-	 * Generates a filename for gRPC recorder logs based on test information
-	 * @param testTitle The title of the test
-	 * @param projectName The name of the test project (optional)
-	 * @returns A sanitized filename suitable for gRPC recorder logs
-	 */
-	public static generateTestFileName(testTitle: string, projectName?: string): string {
-		// Create a base name from the test title
-		const baseName = E2ETestHelper.escapeToPath(testTitle)
-
-		// Add project name if provided and different from default
-		const projectSuffix = projectName && projectName !== "e2e tests" ? `_${E2ETestHelper.escapeToPath(projectName)}` : ""
-
-		return `${baseName}${projectSuffix}`
-	}
-
-	/**
 	 * Resolves the real VS Code executable for `_electron.launch()`.
 	 *
 	 * `@vscode/test-electron` hardcodes the macOS entry point as
@@ -467,9 +451,6 @@ export const e2e = test
 						// 2. apps/vscode/src/sdk/cline-session-factory.ts (resolveBaseUrl short-circuit)
 						// Belt-and-suspenders with the providers.json pre-seeding above.
 						PLINY_BASE_URL: `${MOCK_CLINE_API_SERVER_URL}/api/llm`,
-						GRPC_RECORDER_FILE_NAME: E2ETestHelper.generateTestFileName(testInfo.title, testInfo.project.name),
-						// GRPC_RECORDER_ENABLED: "true",
-						// GRPC_RECORDER_TESTS_FILTERS_ENABLED: "true"
 						// IS_DEV: "true",
 						// DEV_WORKSPACE_FOLDER: E2ETestHelper.CODEBASE_ROOT_DIR,
 					},

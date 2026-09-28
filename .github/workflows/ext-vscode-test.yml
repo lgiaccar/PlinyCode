@@ -22,7 +22,6 @@ jobs:
         name: Detect Changes
         outputs:
             vscode: ${{ steps.force.outputs.run_all == 'true' || steps.filter.outputs.vscode == 'true' }}
-            testing_platform: ${{ steps.force.outputs.run_all == 'true' || steps.filter.outputs.testing_platform == 'true' }}
         steps:
             - id: force
               if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
@@ -40,9 +39,7 @@ jobs:
                           - 'apps/vscode/src/**'
                           - 'apps/vscode/webview-ui/**'
                           - 'apps/vscode/proto/**'
-                          - 'apps/vscode/tests/**'
                           - 'apps/vscode/scripts/**'
-                          - 'apps/vscode/standalone/**'
                           - 'apps/vscode/assets/**'
                           - 'apps/vscode/walkthrough/**'
                           - 'apps/vscode/package.json'
@@ -59,28 +56,10 @@ jobs:
                           - 'apps/vscode/.vscode-test.mjs'
                           - 'apps/vscode/test-setup.js'
                           - '.github/workflows/ext-vscode-test.yml'
-                      testing_platform:
-                          - 'apps/vscode/src/**'
-                          - 'apps/vscode/proto/**'
-                          - 'apps/vscode/standalone/**'
-                          - 'apps/vscode/testing-platform/**'
-                          - 'apps/vscode/testing-platform/package.json'
-                          - 'apps/vscode/tests/specs/**'
-                          - 'apps/vscode/package.json'
-                          # Root bun lockfile is authoritative for the whole workspace (incl. apps/vscode).
-                          - 'bun.lock'
-                          # SDK source packages are local workspace symlinks (@plinycode/*), so SDK changes affect the build.
-                          - 'sdk/packages/**'
-                          - 'apps/vscode/buf.yaml'
-                          - 'apps/vscode/tsconfig*.json'
-                          - 'apps/vscode/esbuild.mjs'
-                          - 'apps/vscode/.vscodeignore'
-                          - 'apps/vscode/scripts/**'
-                          - '.github/workflows/ext-vscode-test.yml'
 
     quality-checks:
         needs: detect-changes
-        if: needs.detect-changes.outputs.vscode == 'true' || needs.detect-changes.outputs.testing_platform == 'true'
+        if: needs.detect-changes.outputs.vscode == 'true'
         runs-on: ubuntu-latest
         name: Quality Checks
         defaults:
@@ -196,7 +175,7 @@ jobs:
             # removed. Scripts are now launched with `bun run`, which uses Bun's own
             # built-in cross-platform shell rather than npm's configured script-shell,
             # so that npm-specific Windows workaround no longer applies. Bash-dependent
-            # scripts (e.g. scripts/proto-lint.sh, standalone/runclinecore.sh) are
+            # scripts (e.g. scripts/proto-lint.sh) are
             # invoked explicitly via `bash ...` from within the package scripts, and
             # this job's `defaults.run.shell: bash` (Git Bash on Windows) still covers
             # the workflow `run:` blocks below.
@@ -292,83 +271,12 @@ jobs:
                   path: |
                       apps/vscode/webview-ui/coverage/lcov.info
 
-    test-platform-integration:
-        needs: [detect-changes, quality-checks]
-        if: needs.detect-changes.outputs.testing_platform == 'true'
-        runs-on: ubuntu-latest
-        defaults:
-          run:
-            working-directory: apps/vscode
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: 1.3.14
-
-            # Single root install resolves the whole bun workspace, including the
-            # testing-platform package, so the separate per-package `npm ci` steps
-            # (extension + webview-ui + testing-platform) collapse into one.
-            - name: Install workspace dependencies
-              working-directory: ${{ github.workspace }}
-              run: bun install --frozen-lockfile
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            # @plinycode/* are local workspace symlinks to source packages; build dist/
-            # before compiling the standalone core.
-            - name: Build SDK packages
-              working-directory: ${{ github.workspace }}
-              run: bun run build:sdk
-
-            - name: Assert better-sqlite3 native binary present
-              run: |
-                  NODE_FILE="node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-                  if [ ! -f "$NODE_FILE" ]; then
-                    echo "ERROR: better-sqlite3 native binary missing at apps/vscode/$NODE_FILE"
-                    echo "(bun trustedDependencies postinstall likely did not run)"
-                    exit 1
-                  fi
-                  echo "Found better-sqlite3 native binary: $NODE_FILE"
-
-            # Pulls five archives from GitHub releases; a transient network error on
-            # any one of them fails the job, so retry the whole step a few times.
-            - name: Download ripgrep binaries
-              shell: bash
-              run: |
-                  for attempt in 1 2 3; do
-                    if bun run download-ripgrep; then
-                      exit 0
-                    fi
-                    if [ "$attempt" -eq 3 ]; then
-                      echo "ripgrep download failed after 3 attempts"
-                      exit 1
-                    fi
-                    echo "ripgrep download failed; retrying after short delay"
-                    sleep 10
-                  done
-
-            - name: Compile Standalone
-              run: bun run compile-standalone
-
-            - name: Running testing platform integration spec tests
-              timeout-minutes: 7
-              run: bun run test:tp-orchestrator -- tests/specs/ --count=1 --coverage
-
-            - name: Save Coverage Reports
-              uses: actions/upload-artifact@v4
-              with:
-                name: test-platform-integration-core-coverage
-                path: apps/vscode/coverage/**/lcov.info
-
     # Keep the required "test" check as a tiny aggregate gate instead of the conditional
     # VS Code matrix. GitHub treats conditionally skipped jobs as successful required
     # checks, so the gate below preserves the old required check name while making sure
     # whichever filtered test jobs were selected actually passed.
     test:
-        needs: [detect-changes, quality-checks, vscode-test, test-platform-integration]
+        needs: [detect-changes, quality-checks, vscode-test]
         if: ${{ !cancelled() }}
         runs-on: ubuntu-latest
         name: test
@@ -378,16 +286,14 @@ jobs:
                   DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
                   QUALITY_CHECKS_RESULT: ${{ needs.quality-checks.result }}
                   VSCODE_CHANGED: ${{ needs.detect-changes.outputs.vscode }}
-                  TESTING_PLATFORM_CHANGED: ${{ needs.detect-changes.outputs.testing_platform }}
                   VSCODE_TEST_RESULT: ${{ needs.vscode-test.result }}
-                  TEST_PLATFORM_RESULT: ${{ needs.test-platform-integration.result }}
               run: |
                   if [ "$DETECT_CHANGES_RESULT" != "success" ]; then
                     echo "detect-changes did not succeed: $DETECT_CHANGES_RESULT"
                     exit 1
                   fi
 
-                  if [ "$VSCODE_CHANGED" != "true" ] && [ "$TESTING_PLATFORM_CHANGED" != "true" ]; then
+                  if [ "$VSCODE_CHANGED" != "true" ]; then
                     echo "No root test paths changed; skipping root test requirements."
                     exit 0
                   fi
@@ -397,21 +303,16 @@ jobs:
                     exit 1
                   fi
 
-                  if [ "$VSCODE_CHANGED" = "true" ] && [ "$VSCODE_TEST_RESULT" != "success" ]; then
+                  if [ "$VSCODE_TEST_RESULT" != "success" ]; then
                     echo "vscode-test did not succeed: $VSCODE_TEST_RESULT"
-                    exit 1
-                  fi
-
-                  if [ "$TESTING_PLATFORM_CHANGED" = "true" ] && [ "$TEST_PLATFORM_RESULT" != "success" ]; then
-                    echo "test-platform-integration did not succeed: $TEST_PLATFORM_RESULT"
                     exit 1
                   fi
 
                   echo "Selected root test jobs passed."
 
     qlty:
-        needs: [detect-changes, quality-checks, vscode-test, test-platform-integration]
-        if: ${{ !cancelled() && needs.quality-checks.result == 'success' && (needs.vscode-test.result == 'success' || needs.vscode-test.result == 'skipped') && (needs.test-platform-integration.result == 'success' || needs.test-platform-integration.result == 'skipped') && (needs.detect-changes.outputs.vscode == 'true' || needs.detect-changes.outputs.testing_platform == 'true') }}
+        needs: [detect-changes, quality-checks, vscode-test]
+        if: ${{ !cancelled() && needs.quality-checks.result == 'success' && (needs.vscode-test.result == 'success' || needs.vscode-test.result == 'skipped') && needs.detect-changes.outputs.vscode == 'true' }}
         runs-on: ubuntu-latest
         # Run on PRs to main, pushes to main, and manual dispatches
         steps:
@@ -446,19 +347,3 @@ jobs:
                   tag: unit:webview-ui
                   add-prefix: webview-ui/
 
-            - name: Download test platform integration core coverage artifact
-              if: needs.detect-changes.outputs.testing_platform == 'true'
-              uses: actions/download-artifact@v4
-              continue-on-error: true
-              id: download-integration-coverage
-              with:
-                name: test-platform-integration-core-coverage
-                path: apps/vscode/integration-core-coverage-reports
-
-            - name: Upload core integration tests coverage to Qlty
-              if: needs.detect-changes.outputs.testing_platform == 'true' && steps.download-integration-coverage.outcome == 'success'
-              uses: qltysh/qlty-action/coverage@v2
-              with:
-                token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
-                files: apps/vscode/integration-core-coverage-reports/**/lcov.info
-                tag: integration:core

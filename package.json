@@ -4,8 +4,7 @@
     "workspaces": [
         "sdk/packages/*",
         "apps/*",
-        "apps/vscode/webview-ui",
-        "apps/vscode/testing-platform"
+        "apps/vscode/webview-ui"
     ],
     "scripts": {
         "prepare": "husky",

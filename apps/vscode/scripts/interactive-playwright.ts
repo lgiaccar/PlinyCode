@@ -49,8 +49,6 @@ async function main() {
 			TEMP_PROFILE: "true",
 			E2E_TEST: "true",
 			CLINE_ENVIRONMENT: "local",
-			GRPC_RECORDER_ENABLED: "true",
-			GRPC_RECORDER_TESTS_FILTERS_ENABLED: "true",
 			// Redirect the Pliny provider to the local mock server (same as the e2e
 			// harness in helpers.ts). Remove this line to test against the real gateway.
 			PLINY_BASE_URL: MOCK_CLINE_API_SERVER_URL + "/api/llm",

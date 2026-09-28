@@ -4,19 +4,6 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "compile-standalone",
-			"type": "shell",
-			"command": "bun run compile-standalone",
-			"group": "build",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always"
-			},
-			"options": {
-				"cwd": "${workspaceFolder}/apps/vscode"
-			}
-		},
-		{
 			"label": "npm: protos",
 			"type": "shell",
 			"command": "bun run protos",

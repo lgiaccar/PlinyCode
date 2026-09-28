@@ -58,7 +58,7 @@ PRs target the `stage` branch, not `master`. Each workflow in `.github/workflows
 | ----------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `docs-check`      | anything                                                  | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
 | `engine-test`     | `sdk/**`                                                  | engine build, `bun run types`, lint and format, engine tests on Ubuntu and Windows |
-| `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock` | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows; testing-platform specs |
+| `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock` | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
 | `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | Playwright e2e on Ubuntu, Windows and macOS                                      |
 
 A path filter can skip a workflow's heavy jobs while it still reports success, so check which jobs actually ran. A docs-only PR, for example, runs only `docs-check`.
