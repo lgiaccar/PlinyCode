@@ -53,7 +53,6 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 		version,
 		clineMessages: messages,
 		taskHistory,
-		telemetrySetting,
 		mode,
 		userInfo,
 		hooksEnabled,
@@ -442,7 +441,6 @@ const ChatView = ({ isHidden, showAnnouncement, hideAnnouncement, showHistoryVie
 						showAnnouncement={showAnnouncement}
 						showHistoryView={showHistoryView}
 						taskHistory={taskHistory}
-						telemetrySetting={telemetrySetting}
 						version={version}
 					/>
 				)}

@@ -110,14 +110,14 @@ describe("readGlobalState", () => {
 			mode: "act",
 			actModeApiProvider: "anthropic",
 			actModeApiModelId: "claude-sonnet-4-6",
-			telemetrySetting: "enabled",
+			preferredLanguage: "English",
 		})
 
 		const state = readGlobalState(tempDir)
 		expect(state.mode).toBe("act")
 		expect(state.actModeApiProvider).toBe("anthropic")
 		expect(state.actModeApiModelId).toBe("claude-sonnet-4-6")
-		expect(state.telemetrySetting).toBe("enabled")
+		expect(state.preferredLanguage).toBe("English")
 	})
 
 	it("returns empty object for corrupt JSON", () => {
@@ -150,7 +150,7 @@ describe("readGlobalState", () => {
 describe("readGlobalStateKey", () => {
 	it("returns undefined for missing key", () => {
 		writeJson(path.join(tempDir, "globalState.json"), { mode: "act" })
-		expect(readGlobalStateKey("telemetrySetting", tempDir)).toBeUndefined()
+		expect(readGlobalStateKey("preferredLanguage", tempDir)).toBeUndefined()
 	})
 
 	it("returns value for present key", () => {

@@ -2,7 +2,6 @@ import { Empty } from "@shared/proto/cline/common"
 import { PlanActMode, UpdateSettingsRequestCli } from "@shared/proto/cline/state"
 import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-configuration-conversion"
 import type { Settings } from "@shared/storage/state-keys"
-import { TelemetrySetting } from "@shared/TelemetrySetting"
 import { ClineEnv } from "@/config"
 import { Logger } from "@/shared/services/Logger"
 import { Mode } from "@/shared/storage/types"
@@ -38,8 +37,7 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			mode,
 			planModeApiProvider,
 			actModeApiProvider,
-			// Fields requiring special logic (telemetry, merging, etc.)
-			telemetrySetting,
+			// Fields requiring special logic (merging, etc.)
 			useAutoCondense,
 			worktreesEnabled,
 			subagentsEnabled,
@@ -107,11 +105,6 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			const currentMode = controller.stateManager.getGlobalSettingsKey("mode")
 			const modelId = resolveActiveModelIdFromApiConfiguration(controller.stateManager.getApiConfiguration(), currentMode)
 			controller.task.api = createTaskApiModelShim(modelId)
-		}
-
-		// Update telemetry setting
-		if (telemetrySetting) {
-			await controller.updateTelemetrySetting(telemetrySetting as TelemetrySetting)
 		}
 
 		// Update auto-condense setting

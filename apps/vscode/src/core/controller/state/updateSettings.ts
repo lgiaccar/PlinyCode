@@ -3,7 +3,6 @@ import { Empty } from "@shared/proto/cline/common"
 import { PlanActMode, McpDisplayMode as ProtoMcpDisplayMode, UpdateSettingsRequest } from "@shared/proto/cline/state"
 import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-configuration-conversion"
 import { OpenaiReasoningEffort } from "@shared/storage/types"
-import { TelemetrySetting } from "@shared/TelemetrySetting"
 import { ClineEnv } from "@/config"
 import { setPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
@@ -59,11 +58,6 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 				controller.task.api = createTaskApiModelShim(modelId)
 			}
 			controller.handleApiConfigurationChanged(previousApiConfiguration, normalizedApiConfiguration)
-		}
-
-		// Update telemetry setting
-		if (request.telemetrySetting) {
-			await controller.updateTelemetrySetting(request.telemetrySetting as TelemetrySetting)
 		}
 
 		// Update plan/act separate models setting
