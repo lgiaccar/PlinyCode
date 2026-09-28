@@ -23,6 +23,7 @@
         "lint": "bun biome lint sdk/ && bun -F plinycode-dev lint",
         "fix": "bun biome check --write --unsafe --diagnostic-level=error sdk/ && bun -F plinycode-dev fix:all",
         "check:docs": "bun sdk/scripts/check-doc-links.ts",
+        "metrics": "bun sdk/scripts/code-metrics.ts",
         "check": "bun run lint && bun run format && bun run build:sdk && bun -F plinycode-dev build && bun run types",
         "version": "bun run types && bun sdk/scripts/version.ts"
     },
