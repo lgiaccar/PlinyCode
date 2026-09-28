@@ -14,7 +14,6 @@ This is a directory map. Commands, workflows and rules are in the `AGENTS.md` fi
 | `sdk/` | Internal engine packages |
 | `docs/` | Design and operations docs (releasing, FreeAuto/BalanceAuto routing, DevOps MCP) |
 | `assets/` | Shared product icons |
-| `patches/` | Bun dependency patches |
 | `ai_output/` | Git-ignored scratch dir for ephemeral artifacts |
 
 ## Workspaces
