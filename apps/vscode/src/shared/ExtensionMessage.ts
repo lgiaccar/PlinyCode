@@ -8,7 +8,6 @@ import { AutoApprovalSettings } from "./AutoApprovalSettings"
 import { ApiConfiguration } from "./api"
 import { BrowserSettings } from "./BrowserSettings"
 import { ClineFeatureSetting } from "./ClineFeatureSetting"
-import { BannerCardData } from "./cline/banner"
 import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
@@ -89,7 +88,6 @@ export interface ExtensionState {
 	enableCheckpointsSetting?: boolean
 	platform: Platform
 	environment?: Environment
-	shouldShowAnnouncement: boolean
 	taskHistory: HistoryItem[]
 	shellIntegrationTimeout: number
 	terminalReuseEnabled?: boolean
@@ -145,10 +143,6 @@ export interface ExtensionState {
 	primaryRootIndex: number
 	isMultiRootWorkspace: boolean
 	multiRootSetting: ClineFeatureSetting
-	lastDismissedInfoBannerVersion: number
-	lastDismissedModelBannerVersion: number
-	lastDismissedCliBannerVersion: number
-	dismissedBanners?: Array<{ bannerId: string; dismissedAt: number }>
 	hooksEnabled?: boolean
 	remoteConfigSettings?: Partial<RemoteConfigFields>
 	remoteConfigRevision?: number
@@ -158,8 +152,6 @@ export interface ExtensionState {
 	optOutOfRemoteConfig?: boolean
 	remoteConfigAvailable?: boolean
 	showFeatureTips?: boolean
-	banners?: BannerCardData[]
-	welcomeBanners?: BannerCardData[]
 	openAiCodexIsAuthenticated?: boolean
 }
 

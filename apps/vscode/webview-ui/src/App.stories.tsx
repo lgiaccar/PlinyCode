@@ -9,20 +9,11 @@ import { ExtensionStateContext, useExtensionState } from "@/context/ExtensionSta
 import ChatView from "./components/chat/ChatView"
 
 // Mock component that mimics App behavior but works in Storybook
-const MockApp = () => {
-	const { showAnnouncement } = useExtensionState()
-
-	return (
-		<HeroUIProvider>
-			<ChatView
-				hideAnnouncement={() => {}}
-				isHidden={false}
-				showAnnouncement={showAnnouncement}
-				showHistoryView={() => {}}
-			/>
-		</HeroUIProvider>
-	)
-}
+const MockApp = () => (
+	<HeroUIProvider>
+		<ChatView isHidden={false} showHistoryView={() => {}} />
+	</HeroUIProvider>
+)
 
 // Constants
 const SIDEBAR_CLASS = "flex flex-col justify-center h-[60%] w-[80%] overflow-hidden"
@@ -249,7 +240,6 @@ const createMockState = (overrides: any = {}) => ({
 	apiConfiguration: mockApiConfiguration,
 	onboardingModels: undefined,
 	openRouterModels: STORYBOOK_OPENROUTER_MODELS,
-	showAnnouncement: false,
 	backgroundEditEnabled: false,
 	...overrides,
 })
@@ -270,7 +260,7 @@ const createStoryDecorator =
 	}
 
 export const EmptyState: Story = {
-	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: [], isNewUser: true, showAnnouncement: true })],
+	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: [], isNewUser: true })],
 	parameters: {
 		docs: {
 			description: {
@@ -281,9 +271,7 @@ export const EmptyState: Story = {
 }
 
 export const ReturnUser: Story = {
-	decorators: [
-		createStoryDecorator({ clineMessages: [], taskHistory: mockTaskHistory, isNewUser: true, showAnnouncement: false }),
-	],
+	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: mockTaskHistory, isNewUser: true })],
 	parameters: {
 		docs: {
 			description: {

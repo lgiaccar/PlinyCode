@@ -11,11 +11,9 @@ import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
-import { BannerService } from "@/services/banner/BannerService"
 import { featureFlagsService } from "@/services/feature-flags"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
-import { getLatestAnnouncementId } from "@/utils/announcements"
 import { getClineOnboardingModels } from "../models/getClineOnboardingModels"
 
 /**
@@ -54,7 +52,6 @@ export async function getStateToPostToWebview(controller: {
 	) {
 		stateManager.setApiConfiguration(apiConfiguration)
 	}
-	const lastShownAnnouncementId = stateManager.getGlobalStateKey("lastShownAnnouncementId")
 	const taskHistory = stateManager.getGlobalStateKey("taskHistory")
 	const autoApprovalSettings = stateManager.getGlobalSettingsKey("autoApprovalSettings")
 	const browserSettings = stateManager.getGlobalSettingsKey("browserSettings")
@@ -90,10 +87,6 @@ export async function getStateToPostToWebview(controller: {
 	const mcpResponsesCollapsed = stateManager.getGlobalStateKey("mcpResponsesCollapsed")
 	const chatInputMaxRows = stateManager.getGlobalStateKey("chatInputMaxRows")
 	const favoritedModelIds = stateManager.getGlobalStateKey("favoritedModelIds")
-	const lastDismissedInfoBannerVersion = stateManager.getGlobalStateKey("lastDismissedInfoBannerVersion") || 0
-	const lastDismissedModelBannerVersion = stateManager.getGlobalStateKey("lastDismissedModelBannerVersion") || 0
-	const lastDismissedCliBannerVersion = stateManager.getGlobalStateKey("lastDismissedCliBannerVersion") || 0
-	const dismissedBanners = stateManager.getGlobalStateKey("dismissedBanners")
 	const showFeatureTips = stateManager.getGlobalSettingsKey("showFeatureTips")
 
 	const localClineRulesToggles = stateManager.getWorkspaceStateKey("localClineRulesToggles")
@@ -115,15 +108,11 @@ export async function getStateToPostToWebview(controller: {
 		.sort((a: any, b: any) => b.ts - a.ts)
 		.slice(0, 100)
 
-	const latestAnnouncementId = getLatestAnnouncementId()
-	const shouldShowAnnouncement = lastShownAnnouncementId !== latestAnnouncementId
 	const platform = process.platform as Platform
 	const distinctId = getDistinctId()
 	const version = ExtensionRegistryInfo.version
 	const clineConfig = ClineEnv.config()
 	const environment = clineConfig.environment
-	const banners = BannerService.get().getActiveBanners() ?? []
-	const welcomeBanners = BannerService.get().getWelcomeBanners() ?? []
 
 	return {
 		version,
@@ -172,7 +161,6 @@ export async function getStateToPostToWebview(controller: {
 		mcpResponsesCollapsed,
 		chatInputMaxRows,
 		taskHistory: processedTaskHistory,
-		shouldShowAnnouncement,
 		favoritedModelIds,
 		backgroundCommandRunning: controller.backgroundCommandRunning ?? false,
 		backgroundCommandTaskId: controller.backgroundCommandTaskId,
@@ -189,17 +177,11 @@ export async function getStateToPostToWebview(controller: {
 			featureFlag: featureFlagsService.getWorktreesEnabled(),
 		},
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
-		lastDismissedInfoBannerVersion,
-		lastDismissedModelBannerVersion,
 		remoteConfigSettings: stateManager.getRemoteConfigSettings?.(),
 		remoteConfigRevision: controller.currentRemoteConfigRevision ?? 0,
-		lastDismissedCliBannerVersion,
-		dismissedBanners,
 		backgroundEditEnabled: stateManager.getGlobalSettingsKey("backgroundEditEnabled"),
 		optOutOfRemoteConfig: stateManager.getGlobalSettingsKey("optOutOfRemoteConfig"),
 		remoteConfigAvailable: controller.isRemoteConfigAvailable ?? false,
 		showFeatureTips,
-		banners,
-		welcomeBanners,
 	} as ExtensionState
 }

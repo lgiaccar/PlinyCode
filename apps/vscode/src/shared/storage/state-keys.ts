@@ -84,9 +84,6 @@ const GLOBAL_STATE_FIELDS = {
 	welcomeViewCompleted: { default: undefined as boolean | undefined },
 	mcpDisplayMode: { default: DEFAULT_MCP_DISPLAY_MODE as McpDisplayMode },
 	multiRootEnabled: { default: true as boolean },
-	lastDismissedInfoBannerVersion: { default: 0 as number },
-	lastDismissedModelBannerVersion: { default: 0 as number },
-	lastDismissedCliBannerVersion: { default: 0 as number },
 	// Organization id of the last successful managed remote-config publish.
 	// Persistent evidence that this install is managed: the session gate uses it
 	// to fail closed when the user's identity cannot be resolved (API unreachable)
@@ -95,7 +92,6 @@ const GLOBAL_STATE_FIELDS = {
 	remoteRulesToggles: { default: {} as ClineRulesToggles },
 	remoteWorkflowToggles: { default: {} as ClineRulesToggles },
 	remoteSkillsToggles: { default: {} as ClineRulesToggles },
-	dismissedBanners: { default: [] as Array<{ bannerId: string; dismissedAt: number }> },
 	// Path to worktree that should auto-open Cline sidebar when launched
 	worktreeAutoOpenPath: { default: undefined as string | undefined },
 } satisfies FieldDefinitions

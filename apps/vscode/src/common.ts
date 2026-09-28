@@ -112,6 +112,7 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 					type: ShowMessageType.INFORMATION,
 					message,
 				})
+				stateManager.setGlobalState("lastShownAnnouncementId", latestAnnouncementId)
 			}
 			// Always update the main version tracker for the next launch.
 			stateManager.setGlobalState("clineVersion", currentVersion)

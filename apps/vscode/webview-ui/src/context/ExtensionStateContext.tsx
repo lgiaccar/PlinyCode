@@ -60,8 +60,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	latestModelRequestIdByProvider: Partial<Record<ProviderId, string>>
 	mcpServers: McpServer[]
 	totalTasksSize: number | null
-	lastDismissedCliBannerVersion: number
-	dismissedBanners?: Array<{ bannerId: string; dismissedAt: number }>
 
 	availableTerminalProfiles: TerminalProfile[]
 
@@ -75,12 +73,9 @@ export interface ExtensionStateContextType extends ExtensionState {
 	showHistory: boolean
 	showAccount: boolean
 	showWorktrees: boolean
-	showAnnouncement: boolean
 	expandTaskHeader: boolean
 
 	// Setters
-	setShowAnnouncement: (value: boolean) => void
-	setShouldShowAnnouncement: (value: boolean) => void
 	setMcpServers: (value: McpServer[]) => void
 	setRequestyModels: (value: Record<string, ModelInfo>) => void
 	setGroqModels: (value: Record<string, ModelInfo>) => void
@@ -132,7 +127,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	hideHistory: () => void
 	hideAccount: () => void
 	hideWorktrees: () => void
-	hideAnnouncement: () => void
 	closeMarketplaceView: () => void
 	closeMcpView: () => void
 
@@ -155,7 +149,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	const [showHistory, setShowHistory] = useState(false)
 	const [showAccount, setShowAccount] = useState(false)
 	const [showWorktrees, setShowWorktrees] = useState(false)
-	const [showAnnouncement, setShowAnnouncement] = useState(false)
 
 	// Helper for MCP view
 	const closeMcpView = useCallback(() => {
@@ -175,7 +168,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
 	const hideAccount = useCallback(() => setShowAccount(false), [setShowAccount])
 	const hideWorktrees = useCallback(() => setShowWorktrees(false), [setShowWorktrees])
-	const hideAnnouncement = useCallback(() => setShowAnnouncement(false), [setShowAnnouncement])
 
 	// Navigation functions
 	const navigateToMcp = useCallback(
@@ -271,7 +263,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		clineMessages: [],
 		queuedPrompts: [],
 		taskHistory: [],
-		shouldShowAnnouncement: false,
 		autoApprovalSettings: DEFAULT_AUTO_APPROVAL_SETTINGS,
 		browserSettings: DEFAULT_BROWSER_SETTINGS,
 		preferredLanguage: "English",
@@ -307,8 +298,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		subagentsEnabled: true,
 		worktreesEnabled: { user: true, featureFlag: false },
 		favoritedModelIds: [],
-		lastDismissedInfoBannerVersion: 0,
-		lastDismissedModelBannerVersion: 0,
 		optOutOfRemoteConfig: false,
 		remoteConfigAvailable: false,
 		remoteConfigSettings: {},
@@ -316,7 +305,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		backgroundCommandTaskId: undefined,
 		foregroundCommandRunning: false,
 		backgroundTasks: [],
-		lastDismissedCliBannerVersion: 0,
 		backgroundEditEnabled: false,
 		showFeatureTips: false,
 		globalSkillsToggles: {},
@@ -898,7 +886,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		showHistory,
 		showAccount,
 		showWorktrees,
-		showAnnouncement,
 		globalClineRulesToggles: state.globalClineRulesToggles || {},
 		localClineRulesToggles: state.localClineRulesToggles || {},
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
@@ -926,18 +913,11 @@ export const ExtensionStateContextProvider: React.FC<{
 		hideHistory,
 		hideAccount,
 		hideWorktrees,
-		hideAnnouncement,
 		closeMarketplaceView,
-		setShowAnnouncement,
 		setShowWelcome,
 		setOnboardingModels,
 		startProviderModelsRequest,
 		applyProviderModelsResponse,
-		setShouldShowAnnouncement: (value) =>
-			setState((prevState) => ({
-				...prevState,
-				shouldShowAnnouncement: value,
-			})),
 		setMcpServers,
 		setRequestyModels,
 		setGroqModels,

@@ -31,7 +31,6 @@ import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
 import { openAiCodexOAuthManager } from "@/integrations/openai-codex/oauth"
 import { LogoutReason } from "@/services/auth/types"
-import { BannerService } from "@/services/banner/BannerService"
 import { buildBasicClineHeaders } from "@/services/EnvUtils"
 import { featureFlagsService } from "@/services/feature-flags"
 import { CLINE_API_ENDPOINT } from "@/shared/cline/api"
@@ -249,20 +248,10 @@ export class AuthService {
 
 	/**
 	 * Gets the singleton instance of AuthService.
-	 * On first call with a controller, initializes BannerService.
 	 */
-	public static getInstance(controller?: Controller): AuthService {
+	public static getInstance(_controller?: Controller): AuthService {
 		if (!AuthService.instance) {
 			AuthService.instance = new AuthService()
-		}
-		// Initialize BannerService on first call with a controller
-		// (mirrors classic AuthService behavior)
-		if (controller) {
-			try {
-				BannerService.initialize(controller)
-			} catch {
-				// BannerService may already be initialized — that's fine
-			}
 		}
 		return AuthService.instance
 	}
@@ -611,11 +600,6 @@ export class AuthService {
 
 				// Push auth state update
 				await this.sendAuthStatusUpdate()
-
-				// Notify BannerService of auth change (mirrors classic AuthService)
-				BannerService.onAuthUpdate(authInfo.userInfo?.id || null).catch((error) => {
-					Logger.error("[SdkAuthService] Banner update failed after login", error)
-				})
 			} catch (error) {
 				rejectAuthMessage(error)
 				Logger.error("[SdkAuthService] Cline OAuth login failed:", error)
@@ -847,11 +831,6 @@ export class AuthService {
 			this._authenticated = false
 			clearClineCredentials()
 			await this.sendAuthStatusUpdate()
-
-			// Notify BannerService of auth change (mirrors classic AuthService)
-			BannerService.onAuthUpdate(null).catch((error) => {
-				Logger.error("[SdkAuthService] Banner update failed after logout", error)
-			})
 		} catch (error) {
 			Logger.error("[SdkAuthService] Error signing out:", error)
 			throw error
@@ -1044,11 +1023,6 @@ export class AuthService {
 			}
 
 			await this.sendAuthStatusUpdate()
-
-			// Notify BannerService of auth change (mirrors classic AuthService)
-			BannerService.onAuthUpdate(this._clineAuthInfo?.userInfo?.id || null).catch((error) => {
-				Logger.error("[SdkAuthService] Banner update failed after restore", error)
-			})
 		} catch (error) {
 			// Unexpected failure outside the credential refresh (reading or
 			// writing providers.json, pushing auth state, …). Transient refresh
@@ -1117,7 +1091,7 @@ export class AuthService {
 		await Promise.all(streamSends)
 
 		// Poll feature flags immediately for the current auth context so cache-only
-		// consumers (for example BannerService) see the latest remote config.
+		// consumers see the latest remote config.
 		const authInfo = this._clineAuthInfo
 		const userId = authInfo?.userInfo?.id || null
 		await featureFlagsService.poll(userId)
