@@ -57,7 +57,6 @@ export async function getStateToPostToWebview(controller: {
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
-	const userInfo = stateManager.getGlobalStateKey("userInfo")
 	const mcpDisplayMode = stateManager.getGlobalStateKey("mcpDisplayMode")
 	const planActSeparateModelsSetting = stateManager.getGlobalSettingsKey("planActSeparateModelsSetting")
 	const enableCheckpointsSetting = stateManager.getGlobalSettingsKey("enableCheckpointsSetting")
@@ -69,7 +68,6 @@ export async function getStateToPostToWebview(controller: {
 	const terminalReuseEnabled = stateManager.getGlobalStateKey("terminalReuseEnabled")
 	const vscodeTerminalExecutionMode = stateManager.getGlobalStateKey("vscodeTerminalExecutionMode")
 	const defaultTerminalProfile = stateManager.getGlobalSettingsKey("defaultTerminalProfile")
-	const isNewUser = stateManager.getGlobalStateKey("isNewUser")
 	// PlinyCode: no Cline account/onboarding — always treat welcome as completed.
 	const welcomeViewCompleted = true
 	if (!stateManager.getGlobalStateKey("welcomeViewCompleted")) {
@@ -121,7 +119,6 @@ export async function getStateToPostToWebview(controller: {
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,
 		subagentsEnabled,
-		userInfo,
 		mcpDisplayMode,
 		planActSeparateModelsSetting,
 		enableCheckpointsSetting: enableCheckpointsSetting ?? true,
@@ -142,7 +139,6 @@ export async function getStateToPostToWebview(controller: {
 		terminalReuseEnabled,
 		vscodeTerminalExecutionMode,
 		defaultTerminalProfile,
-		isNewUser,
 		welcomeViewCompleted,
 		mcpResponsesCollapsed,
 		chatInputMaxRows,

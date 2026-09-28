@@ -9,9 +9,7 @@ option java_multiple_files = true;
 option java_package = "bot.cline.proto";
 
 service StateService {
-  rpc getLatestState(EmptyRequest) returns (State);
   rpc updateTerminalConnectionTimeout(UpdateTerminalConnectionTimeoutRequest) returns (UpdateTerminalConnectionTimeoutResponse);
-  rpc updateTerminalReuseEnabled(BooleanRequest) returns (Empty);
   rpc getAvailableTerminalProfiles(EmptyRequest) returns (TerminalProfiles);
   rpc subscribeToState(EmptyRequest) returns (stream State);
   rpc toggleFavoriteModel(StringRequest) returns (Empty);
@@ -19,12 +17,7 @@ service StateService {
   rpc togglePlanActModeProto(TogglePlanActModeRequest) returns (Boolean);
   rpc updateAutoApprovalSettings(AutoApprovalSettingsRequest) returns (Empty);
   rpc updateSettings(UpdateSettingsRequest) returns (Empty);
-  rpc updateSettingsCli(UpdateSettingsRequestCli) returns (Empty);
-  rpc updateTaskSettings(UpdateTaskSettingsRequest) returns (Empty);
-  rpc captureOnboardingProgress(OnboardingProgressRequest) returns (Empty);
   rpc setWelcomeViewCompleted(BooleanRequest) returns (Empty);
-  rpc checkCliInstallation(EmptyRequest) returns (Boolean);
-  rpc getProcessInfo(EmptyRequest) returns (ProcessInfo);
   rpc flushPendingState(EmptyRequest) returns (Empty);
 }
 
@@ -152,6 +145,7 @@ message Settings {
   reserved 139; // was max_consecutive_mistakes (removed; the SDK owns the mistake limit)
   reserved "max_consecutive_mistakes";
   reserved 142; // was yolo_mode_toggled (removed; migrated into auto_approval_settings)
+  reserved 149; // was focus_chain_settings (unread; no UI ever wrote or read it)
   reserved 187, 188; // were plinycode_context_folders_enabled / plinycode_context_folders (context-folder import removed)
   reserved "plinycode_context_folders_enabled", "plinycode_context_folders";
   reserved 157; // was opt_out_of_remote_config (remote config removed)
@@ -435,7 +429,6 @@ message Settings {
   optional bool use_auto_condense = 143;
   optional string preferred_language = 145;
   optional PlanActMode mode = 147;
-  optional FocusChainSettings focus_chain_settings = 149;
   optional bool hooks_enabled = 152;
   optional bool subagents_enabled = 153;
   optional bool background_edit_enabled = 155;
@@ -506,19 +499,6 @@ message AutoApprovalSettingsRequest {
   bool enable_notifications = 4;
 }
 
-message UpdateSettingsRequestCli {
-  Metadata metadata = 1;
-  optional Settings settings = 2;
-  optional Secrets secrets = 3;
-  optional string environment = 4;
-}
-
-message UpdateTaskSettingsRequest {
-  Metadata metadata = 1;
-  optional Settings settings = 2;
-  optional string task_id = 3;
-}
-
 // Message for updating settings
 message UpdateSettingsRequest {
   reserved 15; // was openai_reasoning_effort (moved to mode-scoped reasoning effort)
@@ -548,11 +528,11 @@ message UpdateSettingsRequest {
   optional PlanActMode mode = 13;
   optional string preferred_language = 14;
   reserved 16; // was strict_plan_mode_enabled (removed)
-  optional FocusChainSettings focus_chain_settings = 17;
+  reserved 17; // was focus_chain_settings (unread; no UI ever wrote or read it)
   optional bool use_auto_condense = 18;
   optional string default_terminal_profile = 21;
   reserved 22; // was yolo_mode_toggled (removed; migrated into auto_approval_settings)
-  optional bool multi_root_enabled = 25;
+  reserved 25; // was multi_root_enabled (unread; no UI ever read it)
   optional bool hooks_enabled = 26;
   optional string vscode_terminal_execution_mode = 27;
   reserved 28; // was max_consecutive_mistakes (removed; the SDK owns the mistake limit)
@@ -574,29 +554,6 @@ message UpdateTerminalConnectionTimeoutRequest {
   optional int32 timeout_ms = 1;
 }
 
-message FocusChainSettings {
-  bool enabled = 1;
-  int32 remind_cline_interval = 2;
-}
-
 message UpdateTerminalConnectionTimeoutResponse {
   optional int32 timeout_ms = 1;
-}
-
-message ProcessInfo {
-  int32 process_id = 1;
-  optional string version = 2;
-  optional int64 uptime_ms = 3;
-}
-
-message OnboardingProgressRequest {
-  int32 step = 1;
-  optional string action = 2;
-  optional bool completed = 3;
-  optional string model_selected = 4;
-  optional string page = 5;
-  optional string page_variant = 6;
-  optional string user_type = 7;
-  optional int32 destination_step = 8;
-  optional string destination_page = 9;
 }

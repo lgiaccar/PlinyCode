@@ -116,5 +116,4 @@ export interface ScrollBehavior {
 export interface WelcomeSectionProps {
 	showHistoryView: () => void
 	taskHistory: any[]
-	shouldShowQuickWins: boolean
 }

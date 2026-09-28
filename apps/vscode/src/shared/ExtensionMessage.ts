@@ -10,7 +10,6 @@ import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
 import { Mode } from "./storage/types"
-import { UserInfo } from "./UserInfo"
 import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
 export interface ExtensionMessage {
@@ -32,7 +31,6 @@ export const DEFAULT_PLATFORM = "unknown"
 
 export const COMMAND_CANCEL_TOKEN = "__cline_command_cancel__"
 export interface ExtensionState {
-	isNewUser: boolean
 	welcomeViewCompleted: boolean
 	apiConfiguration?: ApiConfiguration
 	autoApprovalSettings: AutoApprovalSettings
@@ -98,7 +96,6 @@ export interface ExtensionState {
 	 */
 	backgroundTasks?: { id: string; status: "running" | "needs_attention" }[]
 	lastCompletedCommandTs?: number
-	userInfo?: UserInfo
 	version: string
 	distinctId: string
 	globalClineRulesToggles: ClineRulesToggles

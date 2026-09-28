@@ -396,10 +396,10 @@ describe("State Keys Type Safety", () => {
 		it("should export usable GlobalState type", () => {
 			// This is a compile-time check - if GlobalState is broken, this won't compile
 			const partialState: Partial<GlobalState> = {
-				isNewUser: true,
+				terminalReuseEnabled: true,
 				favoritedModelIds: [],
 			}
-			expect(partialState.isNewUser).to.equal(true)
+			expect(partialState.terminalReuseEnabled).to.equal(true)
 		})
 
 		it("should export usable Settings type", () => {
@@ -412,7 +412,7 @@ describe("State Keys Type Safety", () => {
 
 		it("should export usable key types", () => {
 			// These assignments verify the key types are correctly narrowed
-			const globalKey: GlobalStateKey = "isNewUser"
+			const globalKey: GlobalStateKey = "terminalReuseEnabled"
 			const settingsKey: SettingsKey = "preferredLanguage"
 			const secretKey: SecretKey = "authNonce"
 			const localKey: LocalStateKey = "localClineRulesToggles"
@@ -426,11 +426,11 @@ describe("State Keys Type Safety", () => {
 		it("should have GlobalStateAndSettings include both GlobalState and Settings", () => {
 			const combined: Partial<GlobalStateAndSettings> = {
 				// From GlobalState
-				isNewUser: true,
+				terminalReuseEnabled: true,
 				// From Settings
 				preferredLanguage: "English",
 			}
-			expect(combined.isNewUser).to.equal(true)
+			expect(combined.terminalReuseEnabled).to.equal(true)
 			expect(combined.preferredLanguage).to.equal("English")
 		})
 

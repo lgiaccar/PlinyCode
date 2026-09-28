@@ -42,7 +42,6 @@ interface ChatViewProps {
 
 // Use constants from the imported module
 const MAX_IMAGES_AND_FILES_PER_MESSAGE = CHAT_CONSTANTS.MAX_IMAGES_AND_FILES_PER_MESSAGE
-const QUICK_WINS_HISTORY_THRESHOLD = 3
 
 const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 	const showNavbar = useShowNavbar()
@@ -50,15 +49,12 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		clineMessages: messages,
 		taskHistory,
 		mode,
-		userInfo,
 		hooksEnabled,
 		checkpointRestoreInput,
 		editMessageRestartFocus,
 		queuedPrompts,
 		turnState,
 	} = useExtensionState()
-	const isProdHostedApp = userInfo?.apiBaseUrl === "https://app.cline.bot"
-	const shouldShowQuickWins = isProdHostedApp && (!taskHistory || taskHistory.length < QUICK_WINS_HISTORY_THRESHOLD)
 
 	// Use custom hooks for state management
 	const chatState = useChatState(messages)
@@ -431,11 +427,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 						task={task}
 					/>
 				) : (
-					<WelcomeSection
-						shouldShowQuickWins={shouldShowQuickWins}
-						showHistoryView={showHistoryView}
-						taskHistory={taskHistory}
-					/>
+					<WelcomeSection showHistoryView={showHistoryView} taskHistory={taskHistory} />
 				)}
 				{task && (
 					<MessagesArea
