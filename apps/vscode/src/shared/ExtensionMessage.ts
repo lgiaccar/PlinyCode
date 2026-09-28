@@ -14,7 +14,6 @@ import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
 import { OnboardingModelGroup } from "./proto/cline/state"
 import { Mode } from "./storage/types"
-import { TelemetrySetting } from "./TelemetrySetting"
 import { UserInfo } from "./UserInfo"
 import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
@@ -90,7 +89,6 @@ export interface ExtensionState {
 	platform: Platform
 	environment?: Environment
 	taskHistory: HistoryItem[]
-	telemetrySetting: TelemetrySetting
 	shellIntegrationTimeout: number
 	terminalReuseEnabled?: boolean
 	defaultTerminalProfile?: string

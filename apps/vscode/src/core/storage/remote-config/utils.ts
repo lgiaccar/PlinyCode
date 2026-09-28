@@ -40,9 +40,6 @@ export function transformRemoteConfigToStateShape(remoteConfig: RemoteConfig): P
 	const transformed: Partial<RemoteConfigFields> = {}
 
 	// Map top-level settings
-	if (remoteConfig.telemetryEnabled !== undefined) {
-		transformed.telemetrySetting = remoteConfig.telemetryEnabled ? "enabled" : "disabled"
-	}
 	if (remoteConfig.mcpMarketplaceEnabled !== undefined) {
 		transformed.mcpMarketplaceEnabled = remoteConfig.mcpMarketplaceEnabled
 	}

@@ -16,7 +16,6 @@ import {
 	readSessionCheckpointHistory,
 	resolveDefaultMcpSettingsPath,
 	type SessionHistoryRecord,
-	setTelemetryOptOutGlobally,
 	type UserInstructionConfigService,
 } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@plinycode/shared"
@@ -32,7 +31,6 @@ import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/ch
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
-import type { TelemetrySetting } from "@shared/TelemetrySetting"
 import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { sendChatButtonClickedEvent } from "@/core/controller/ui/subscribeToChatButtonClicked"
@@ -113,7 +111,6 @@ import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command
 import { checkConversationBudget } from "./spending-limit"
 import { StatePostDebouncer } from "./state-post-debouncer"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
-import { syncTelemetrySettingFromSharedGlobalSettings } from "./telemetry-settings-sync"
 import { TurnStateTracker } from "./turn-state-tracker"
 import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
@@ -312,7 +309,6 @@ export class Controller {
 	constructor(readonly context: ClineExtensionContext) {
 		// StateManager must be initialized before creating the Controller
 		this.stateManager = StateManager.get()
-		syncTelemetrySettingFromSharedGlobalSettings(this.stateManager)
 		this.statePostDebouncer = new StatePostDebouncer({
 			debounceMs: Controller.STATE_POST_DEBOUNCE_MS,
 			flush: () => this.flushStateToWebview(),
@@ -2170,15 +2166,6 @@ export class Controller {
 		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent)
 	}
 
-	// ---- Telemetry ----
-
-	async updateTelemetrySetting(telemetrySetting: TelemetrySetting): Promise<void> {
-		setTelemetryOptOutGlobally(telemetrySetting === "disabled")
-		// Mirror to StateManager for existing VS Code services during the transition.
-		this.stateManager.setGlobalState("telemetrySetting", telemetrySetting)
-		await this.postStateToWebview()
-	}
-
 	// ---- Auth callbacks ----
 
 	async handleSignOut(): Promise<void> {
@@ -2597,7 +2584,6 @@ export class Controller {
 		// Build the base ExtensionState from StateManager, then layer the SDK's
 		// task history on top.
 		try {
-			syncTelemetrySettingFromSharedGlobalSettings(this.stateManager)
 			const { getStateToPostToWebview: buildBaseState } = await import("@core/controller/state/getStateToPostToWebview")
 			const state = await buildBaseState({
 				task: this.task,

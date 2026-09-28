@@ -50,7 +50,6 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 	const {
 		clineMessages: messages,
 		taskHistory,
-		telemetrySetting,
 		mode,
 		userInfo,
 		hooksEnabled,
@@ -437,7 +436,6 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 						shouldShowQuickWins={shouldShowQuickWins}
 						showHistoryView={showHistoryView}
 						taskHistory={taskHistory}
-						telemetrySetting={telemetrySetting}
 					/>
 				)}
 				{task && (
