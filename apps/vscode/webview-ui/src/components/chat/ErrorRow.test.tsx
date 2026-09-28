@@ -1,15 +1,14 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import ErrorRow from "./ErrorRow"
 
-const mockUpdateApiConfigurationProto = vi.hoisted(() => vi.fn())
 const mockNavigateToSettingsModelPicker = vi.hoisted(() => vi.fn())
 const mockApiConfiguration = vi.hoisted(() => ({
-	planModeApiProvider: "cline-pass",
-	actModeApiProvider: "cline-pass",
-	planModeClinePassModelId: "cline-pass/test-plan-model",
-	actModeClinePassModelId: "cline-pass/test-act-model",
+	planModeApiProvider: "pliny",
+	actModeApiProvider: "pliny",
+	planModeApiModelId: "snps-provider/kimi-k2.6",
+	actModeApiModelId: "snps-provider/kimi-k2.6",
 }))
 
 vi.mock("@/context/ExtensionStateContext", () => ({
@@ -26,14 +25,6 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 // Mock EntitlementError component
 vi.mock("@/components/chat/EntitlementError", () => ({
 	default: ({ message }: { message: string }) => <div data-testid="entitlement-error">{message}</div>,
-}))
-
-vi.mock("@/services/grpc-client", () => ({
-	ModelsServiceClient: {
-		updateApiConfigurationProto: mockUpdateApiConfigurationProto,
-		commitModelSelection: vi.fn().mockResolvedValue({}),
-		resolveProviderModels: vi.fn().mockResolvedValue({ providerId: "cline", models: {} }),
-	},
 }))
 
 // Mock ClineError
@@ -63,7 +54,6 @@ describe("ErrorRow", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
-		mockUpdateApiConfigurationProto.mockResolvedValue({})
 	})
 
 	it("renders basic error message", () => {
@@ -190,58 +180,6 @@ describe("ErrorRow", () => {
 
 			expect(screen.getByTestId("entitlement-error")).toBeInTheDocument()
 			expect(screen.getByText(rawMessage)).toBeInTheDocument()
-		})
-
-		it("renders ClinePass limit error and switches to PlinyCode usage-based billing", async () => {
-			const limitMessage = "You have reached your weekly Clinepass limit. The limit resets in 7d, please try again later."
-			const mockClineError = {
-				message: limitMessage,
-				isErrorType: vi.fn((type) => type === "clinePassLimit"),
-				providerId: "cline-pass",
-				_error: {
-					message: limitMessage,
-				},
-			}
-
-			const { ClineError } = await import("../../../../src/services/error/ClineError")
-			vi.mocked(ClineError.parse).mockReturnValue(mockClineError as any)
-
-			render(<ErrorRow apiRequestFailedMessage={limitMessage} errorType="error" message={mockMessage} />)
-
-			expect(screen.getByTestId("cline-pass-limit-error")).toBeInTheDocument()
-			expect(screen.getByText(limitMessage)).toBeInTheDocument()
-
-			fireEvent.click(screen.getByText("Switch to Usage-Based billing"))
-
-			await waitFor(() => expect(mockUpdateApiConfigurationProto).toHaveBeenCalledTimes(1))
-			const request = mockUpdateApiConfigurationProto.mock.calls[0][0]
-			expect(request.apiConfiguration.planModeApiProvider).toBe("cline")
-			expect(request.apiConfiguration.actModeApiProvider).toBe("cline")
-			expect(request.apiConfiguration.planModeClineModelId).toBeUndefined()
-			expect(request.apiConfiguration.actModeClineModelId).toBeUndefined()
-			expect(screen.getByText("Switched to Usage-Based billing")).toBeInTheDocument()
-		})
-
-		it("renders a daily free model limit without usage-billing guidance", async () => {
-			const limitMessage = "Daily free limit reached on model deepseek/deepseek-v4-flash. Try again in 23h 59m"
-			const mockClineError = {
-				message: limitMessage,
-				isErrorType: vi.fn((type) => type === "clineFreeModelLimit"),
-				providerId: "cline",
-				_error: { message: limitMessage },
-			}
-
-			const { ClineError } = await import("../../../../src/services/error/ClineError")
-			vi.mocked(ClineError.parse).mockReturnValue(mockClineError as any)
-
-			render(<ErrorRow apiRequestFailedMessage={limitMessage} errorType="error" message={mockMessage} />)
-
-			expect(screen.getByTestId("cline-free-model-limit-error")).toBeInTheDocument()
-			expect(screen.getByText(/You've reached today's free usage limit for this model/)).toBeInTheDocument()
-			expect(screen.getByText(/Try again in 23h 59m/)).toBeInTheDocument()
-			expect(screen.queryByText(limitMessage)).not.toBeInTheDocument()
-			expect(screen.queryByText(/deepseek-v4-flash/i)).not.toBeInTheDocument()
-			expect(screen.queryByText(/Switch to Usage-Based billing/i)).not.toBeInTheDocument()
 		})
 
 		it("shows a Cline sign-in error as a plain provider error", async () => {

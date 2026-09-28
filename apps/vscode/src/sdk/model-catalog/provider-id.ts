@@ -12,9 +12,6 @@ import type { KnownProviderId, ProviderId } from "./contracts"
  */
 const KNOWN_API_PROVIDERS = {
 	pliny: true,
-	cline: true,
-	"cline-pass": true,
-	oca: true,
 } satisfies Record<ApiProvider, true>
 
 const normalizeProviderId = (raw: string): string => raw.trim().toLowerCase()

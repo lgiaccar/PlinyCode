@@ -3,12 +3,11 @@ import { ApiFormat } from "./proto/cline/models"
 import type { ApiHandlerSettings } from "./storage/state-keys"
 
 /**
- * PlinyCode only talks to the Pliny gateway. The other ids remain until the
- * Cline account and OCA plumbing that still names them is gone; stored
- * configurations with any other provider id are read as `pliny` (see
- * `coerceToPlinyProvider` in `@shared/pliny`).
+ * PlinyCode only talks to the Pliny gateway. Stored configurations with any
+ * other provider id are read as `pliny` (see `coerceToPlinyProvider` in
+ * `@shared/pliny`).
  */
-export type ApiProvider = "pliny" | "cline" | "cline-pass" | "oca"
+export type ApiProvider = "pliny"
 
 export const DEFAULT_API_PROVIDER = "pliny" as ApiProvider
 
@@ -87,15 +86,6 @@ export interface OpenAiCompatibleModelInfo extends ModelInfo {
 	supportsReasoningEffort?: boolean
 	supportsTools?: boolean
 	supportsStreaming?: boolean
-}
-
-export interface OcaModelInfo extends OpenAiCompatibleModelInfo {
-	modelName: string
-	surveyId?: string
-	banner?: string
-	surveyContent?: string
-	supportsReasoning?: boolean
-	reasoningEffortOptions: string[]
 }
 
 export const openAiModelInfoSafeDefaults: OpenAiCompatibleModelInfo = {

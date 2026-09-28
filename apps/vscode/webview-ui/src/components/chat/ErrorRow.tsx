@@ -1,7 +1,5 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { memo } from "react"
-import ClineFreeModelLimitError from "@/components/chat/ClineFreeModelLimitError"
-import ClinePassLimitError from "@/components/chat/ClinePassLimitError"
 import EntitlementError from "@/components/chat/EntitlementError"
 import SpendLimitError from "@/components/chat/SpendLimitError"
 import { ClineError, ClineErrorType } from "../../../../src/services/error/ClineError"
@@ -47,16 +45,6 @@ const ErrorRow = memo(({ message, errorType, apiRequestFailedMessage, apiReqStre
 					if (clineError?.isErrorType(ClineErrorType.Entitlement)) {
 						const detailMessage = clineError?._error?.details?.message || errorMessage
 						return <EntitlementError message={detailMessage} />
-					}
-
-					if (clineError?.isErrorType(ClineErrorType.ClinePassLimit)) {
-						const detailMessage = clineError?._error?.details?.message || errorMessage
-						return <ClinePassLimitError message={detailMessage} />
-					}
-
-					if (clineError?.isErrorType(ClineErrorType.ClineFreeModelLimit)) {
-						const detailMessage = clineError?._error?.details?.message || errorMessage
-						return <ClineFreeModelLimitError message={detailMessage} />
 					}
 
 					if (clineError?.isErrorType(ClineErrorType.RateLimit)) {

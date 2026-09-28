@@ -1,5 +1,4 @@
 import {
-	isPrivateModelCatalogProvider,
 	readModelsFileSync,
 	resolveModelsRegistryPath,
 	type StoredModelEntry,
@@ -10,7 +9,7 @@ import { getGeneratedModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from 
 import { ModelCapabilitySchema } from "@plinycode/shared"
 import { type ApiConfiguration, type ApiProvider, type ModelInfo, openAiModelInfoSafeDefaults } from "@shared/api"
 import { getProviderModelIdKey } from "@shared/storage/provider-keys"
-import { isSecretKey, isSettingsKey, type SecretKey, type SettingsKey } from "@shared/storage/state-keys"
+import type { SettingsKey } from "@shared/storage/state-keys"
 import { StateManager } from "@/core/storage/StateManager"
 import { getProviderSettingsManager } from "../provider-migration"
 import type {
@@ -32,37 +31,6 @@ import { toSdkProviderId } from "./sdk-provider-id"
 import { adaptSdkModelInfo } from "./shape-adapter"
 
 type ProviderSettingsRecord = Record<string, unknown>
-type ProviderSettingsPatchKey = "apiKey" | "baseUrl" | "apiLine" | "headers" | "region" | "auth" | "extras" | "aws" | "gcp"
-
-type ModelInfoKeys = {
-	readonly plan: keyof ApiConfiguration & SettingsKey
-	readonly act: keyof ApiConfiguration & SettingsKey
-}
-
-// Legacy StateManager fields that mirror provider configuration. The Pliny
-// provider keeps everything in providers.json; only the Cline account and OCA
-// sign-in still keep credentials in StateManager.
-const providerConfigStateKeys: Record<ProviderSettingsPatchKey, Partial<Record<string, SecretKey | SettingsKey>>> = {
-	apiKey: {
-		oca: "ocaApiKey",
-		cline: "clineApiKey",
-	},
-	baseUrl: {
-		oca: "ocaBaseUrl",
-	},
-	apiLine: {},
-	headers: {},
-	region: {},
-	auth: {},
-	extras: {},
-	aws: {},
-	gcp: {},
-}
-
-const modelInfoKeysByProvider: Partial<Record<string, ModelInfoKeys>> = {
-	cline: { plan: "planModeClineModelInfo", act: "actModeClineModelInfo" },
-	oca: { plan: "planModeOcaModelInfo", act: "actModeOcaModelInfo" },
-}
 
 // In-memory selection envelope for providers that have a mode-specific model
 // id key but no durable `*ModelInfo` key in the StateManager schema (for
@@ -86,10 +54,6 @@ function providerSettingsProviderId(providerId: ProviderId): string {
 
 function memoryKey(providerId: ProviderId, mode: Mode): string {
 	return `${providerId}:${mode}`
-}
-
-function modePair<T>(mode: Mode, plan: T, act: T): T {
-	return mode === "plan" ? plan : act
 }
 
 function patchValue<T>(value: T | null | undefined): T | undefined {
@@ -368,50 +332,29 @@ function readBaseModelInfoForProvider(providerId: ProviderId, modelId: string): 
 	return undefined
 }
 
-interface BaseModelInfoHint {
-	modelInfo: ModelInfo
-	source: "catalog" | "state"
-}
-
 interface BaseModelInfoCandidate {
 	modelInfo: ModelInfo
-	source: "catalog" | "state" | "fallback"
+	source: "catalog" | "fallback"
 }
 
-function resolveSelection(selection: ModelSelection, baseModelInfoHint?: BaseModelInfoHint): ResolvedModelSelection {
+/**
+ * Resolve a selection's metadata. `liveCatalogHint` is the exact live entry
+ * the user picked in the catalog, so it wins over the static SDK catalog.
+ */
+function resolveSelection(selection: ModelSelection, liveCatalogHint?: ModelInfo): ResolvedModelSelection {
 	const overrides = normalizeModelSelectionOverrides(
 		selection.overrides ?? readModelOverrides(selection.providerId, selection.modelId),
 	)
-	// A host catalog hint is the exact live entry the user selected, so it must
-	// win even when a private/dynamic provider reuses an id from the static SDK
-	// catalog. Persisted state is weaker by default; the private-catalog
-	// exception is applied below.
 	const catalogModelInfo = readBaseModelInfoForProvider(selection.providerId, selection.modelId)
-	const liveCatalogHint = baseModelInfoHint?.source === "catalog" ? baseModelInfoHint.modelInfo : undefined
-	const stateModelInfoHint = baseModelInfoHint?.source === "state" ? baseModelInfoHint.modelInfo : undefined
 	const liveCatalogCandidate: BaseModelInfoCandidate | undefined = liveCatalogHint
 		? { modelInfo: liveCatalogHint, source: "catalog" }
 		: undefined
 	const staticCatalogCandidate: BaseModelInfoCandidate | undefined = catalogModelInfo
 		? { modelInfo: catalogModelInfo, source: "catalog" }
 		: undefined
-	const stateCandidate: BaseModelInfoCandidate | undefined = stateModelInfoHint
-		? { modelInfo: stateModelInfoHint, source: "state" }
-		: undefined
-
-	// Private catalogs belong to the customer's configured endpoint. Their
-	// persisted snapshot therefore remains authoritative after the live cache
-	// is gone, including when that endpoint reuses an id from the static SDK
-	// catalog. Public providers retain static-catalog-over-snapshot semantics so
-	// SDK catalog updates can refresh an existing selection.
-	const authoritativeStateCandidate = isPrivateModelCatalogProvider(providerKey(selection.providerId))
-		? stateCandidate
-		: undefined
 	const base =
 		liveCatalogCandidate ??
-		authoritativeStateCandidate ??
 		staticCatalogCandidate ??
-		stateCandidate ??
 		({ modelInfo: fallbackModelInfo(selection.modelId), source: "fallback" } satisfies BaseModelInfoCandidate)
 	return {
 		...selection,
@@ -433,36 +376,6 @@ function readSelectionFromProviderSettings(providerId: ProviderId): ResolvedMode
 	}
 
 	return resolveSelection({ providerId, modelId })
-}
-
-function writeStateKey(key: SecretKey | SettingsKey, value: unknown): void {
-	const stateManager = StateManager.get()
-	if (isSecretKey(key)) {
-		stateManager.setSecret(key, typeof value === "string" ? value : undefined)
-		return
-	}
-	if (isSettingsKey(key)) {
-		stateManager.setGlobalState(key, value as never)
-	}
-}
-
-function writeStateFields(providerId: ProviderId, patch: ProviderConfigPatch): void {
-	const provider = providerKey(providerId)
-	for (const key of ["apiKey", "baseUrl", "apiLine", "headers", "region"] as const) {
-		if (!(key in patch)) {
-			continue
-		}
-		const stateKey = providerConfigStateKeys[key][provider]
-		if (stateKey) {
-			const value = typeof patch[key] === "string" ? patchStringValue(patch[key]) : patchValue(patch[key])
-			writeStateKey(stateKey, value)
-		}
-	}
-
-	if (provider === "cline" && "auth" in patch) {
-		writeStateKey("clineApiKey", patch.auth?.accessToken)
-		writeStateKey("clineAccountId", patch.auth?.accountId)
-	}
 }
 
 function getProviderSettings(providerId: ProviderId): ProviderSettingsRecord {
@@ -571,11 +484,6 @@ function getModelIdKey(providerId: ProviderId, mode: Mode): keyof ApiConfigurati
 	return getProviderModelIdKey(providerForStorage(providerId) ?? "anthropic", mode) as keyof ApiConfiguration & SettingsKey
 }
 
-function getModelInfoKey(providerId: ProviderId, mode: Mode): (keyof ApiConfiguration & SettingsKey) | undefined {
-	const keys = modelInfoKeysByProvider[providerKey(providerId)]
-	return keys ? modePair(mode, keys.plan, keys.act) : undefined
-}
-
 function syncedModes(mode: Mode): Mode[] {
 	return StateManager.get().getGlobalSettingsKey("planActSeparateModelsSetting") ? [mode] : ["plan", "act"]
 }
@@ -584,17 +492,6 @@ function writeSelectionToState(providerId: ProviderId, mode: Mode, selection: Re
 	const updates: Partial<Record<SettingsKey, unknown>> = {}
 	for (const targetMode of syncedModes(mode)) {
 		updates[getModelIdKey(providerId, targetMode)] = selection.modelId
-		const modelInfoKey = getModelInfoKey(providerId, targetMode)
-		if (modelInfoKey) {
-			// The snapshot must stay genuine base metadata: never persist
-			// fabricated fallback data (later reads would treat it as
-			// authoritative "state" data and shadow live catalog lookups), and
-			// persist the pre-override base rather than the resolved value (a
-			// deleted override must not be resurrected from a snapshot it was
-			// baked into).
-			updates[modelInfoKey] =
-				selection.modelInfoSource === "fallback" ? undefined : (selection.baseModelInfo ?? selection.modelInfo)
-		}
 		selectionMemory.set(memoryKey(providerId, targetMode), { ...selection, providerId })
 	}
 	StateManager.get().setGlobalStateBatch(updates as never)
@@ -610,64 +507,10 @@ function writeSelectionToProviderSettings(providerId: ProviderId, selection: Mod
 	saveProviderSettings(providerId, next)
 }
 
-/**
- * The host persists live model metadata to the mode-specific `*ModeModelInfo`
- * state key when a selection is committed. When the state still refers to the
- * model being resolved, that snapshot is the best available base for
- * dynamic-list models the static catalog does not know. Pre-existing snapshots
- * from older picker flows remain valid inputs here.
- */
-
-/**
- * Pickers write `{ ...openAiModelInfoSafeDefaults, name: modelId }` to the
- * state key when the user selects an id the live model list does not (yet)
- * contain. Such a snapshot carries no real information and must not be
- * treated as authoritative "state" metadata.
- */
-function isSafeDefaultsSnapshot(modelInfo: ModelInfo, modelId: string): boolean {
-	const fabricated: Record<string, unknown> = { ...openAiModelInfoSafeDefaults, name: modelId }
-	const snapshot = modelInfo as unknown as Record<string, unknown>
-	for (const key of new Set([...Object.keys(fabricated), ...Object.keys(snapshot)])) {
-		if (fabricated[key] !== snapshot[key]) {
-			return false
-		}
-	}
-	return true
-}
-
-function readStateModelInfoHint(providerId: ProviderId, mode: Mode, modelId: string): ModelInfo | undefined {
-	const modelInfoKey = getModelInfoKey(providerId, mode)
-	if (!modelInfoKey) {
-		return undefined
-	}
-	const apiConfiguration = StateManager.get().getApiConfiguration()
-	const stateModelId = apiConfiguration[getModelIdKey(providerId, mode)]
-	const stateModelInfo = apiConfiguration[modelInfoKey]
-	return stateModelId === modelId && isModelInfo(stateModelInfo) && !isSafeDefaultsSnapshot(stateModelInfo, modelId)
-		? stateModelInfo
-		: undefined
-}
-
 function readSelectionFromState(providerId: ProviderId, mode: Mode): ResolvedModelSelection | undefined {
 	const apiConfiguration = StateManager.get().getApiConfiguration()
 	const modelId = apiConfiguration[getModelIdKey(providerId, mode)]
-	const modelInfoKey = getModelInfoKey(providerId, mode)
 	const rememberedSelection = selectionMemory.get(memoryKey(providerId, mode))
-
-	if (modelInfoKey) {
-		if (typeof modelId !== "string" || modelId.length === 0) {
-			return readSelectionFromProviderSettings(providerId)
-		}
-		// The mode-specific model id alone identifies the selection; the state
-		// modelInfo snapshot is the optional base-metadata hint. Fallback-tier
-		// commits intentionally leave it unset.
-		const stateModelInfoHint = readStateModelInfoHint(providerId, mode, modelId)
-		return resolveSelection(
-			{ providerId, modelId },
-			stateModelInfoHint ? { modelInfo: stateModelInfoHint, source: "state" } : undefined,
-		)
-	}
-
 	const providerSettingsSelection = readSelectionFromProviderSettings(providerId)
 	const activeProvider = mode === "plan" ? apiConfiguration.planModeApiProvider : apiConfiguration.actModeApiProvider
 	const provider = providerForStorage(providerId)
@@ -718,7 +561,6 @@ export function createProviderConfigStore(): ProviderConfigStore {
 
 		write(providerId: ProviderId, patch: ProviderConfigPatch): EffectiveProviderConfig {
 			const sanitizedPatch = sanitizeApiKeyPatch(patch)
-			writeStateFields(providerId, sanitizedPatch)
 			writeProviderSettingsFields(providerId, sanitizedPatch)
 			const config = this.read(providerId)
 			emit({ kind: "fields", providerId, config })
@@ -730,18 +572,8 @@ export function createProviderConfigStore(): ProviderConfigStore {
 			if (selection.overrides !== undefined) {
 				writeModelOverrides(providerId, selection.modelId, selection.overrides)
 			}
-			// Prefer metadata resolved by the host catalog for this commit. Fall
-			// back to an existing state snapshot for legacy callers, then persist
-			// the genuine base so dynamic-list models survive future reads.
-			const stateModelInfoHint = readStateModelInfoHint(providerId, mode, selection.modelId)
-			const resolvedSelection = resolveSelection(
-				{ providerId, modelId: selection.modelId },
-				baseModelInfoHint
-					? { modelInfo: baseModelInfoHint, source: "catalog" }
-					: stateModelInfoHint
-						? { modelInfo: stateModelInfoHint, source: "state" }
-						: undefined,
-			)
+			// Prefer metadata resolved by the host catalog for this commit.
+			const resolvedSelection = resolveSelection({ providerId, modelId: selection.modelId }, baseModelInfoHint)
 			writeSelectionToState(providerId, mode, resolvedSelection)
 			emit({ kind: "selection", providerId, mode, selection: resolvedSelection })
 		},

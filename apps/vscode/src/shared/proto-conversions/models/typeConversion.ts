@@ -1,5 +1,5 @@
-import { ModelInfo, OcaModelInfo } from "@shared/api"
-import { OpenRouterModelInfo, OcaModelInfo as ProtoOcaModelInfo, ThinkingConfig } from "@shared/proto/cline/models"
+import { ModelInfo } from "@shared/api"
+import { OpenRouterModelInfo, ThinkingConfig } from "@shared/proto/cline/models"
 
 /**
  * Convert protobuf ThinkingConfig to application ThinkingConfig
@@ -89,32 +89,6 @@ export function toProtobufModelInfo(modelInfo: ModelInfo): OpenRouterModelInfo {
 		pricingUnavailable: modelInfo.pricingUnavailable,
 		pricingNote: modelInfo.pricingNote,
 	})
-}
-
-/**
- * Convert protobuf OcaModelInfo to application OcaModelInfo
- */
-export function fromProtobufOcaModelInfo(protoInfo: ProtoOcaModelInfo): OcaModelInfo {
-	return {
-		maxTokens: protoInfo.maxTokens,
-		contextWindow: protoInfo.contextWindow,
-		supportsImages: protoInfo.supportsImages,
-		supportsPromptCache: protoInfo.supportsPromptCache,
-		inputPrice: protoInfo.inputPrice,
-		outputPrice: protoInfo.outputPrice,
-		cacheWritesPrice: protoInfo.cacheWritesPrice,
-		cacheReadsPrice: protoInfo.cacheReadsPrice,
-		description: protoInfo.description,
-		thinkingConfig: convertThinkingConfig(protoInfo.thinkingConfig),
-		temperature: protoInfo.temperature,
-		modelName: protoInfo.modelName,
-		surveyId: protoInfo.surveyId,
-		banner: protoInfo.banner,
-		surveyContent: protoInfo.surveyContent,
-		apiFormat: protoInfo.apiFormat,
-		supportsReasoning: protoInfo.supportsReasoning,
-		reasoningEffortOptions: protoInfo.reasoningEffortOptions,
-	}
 }
 
 /**

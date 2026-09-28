@@ -131,11 +131,14 @@ message Secrets {
   reserved "nous_research_api_key";
   reserved 50; // was wandb_api_key (non-Pliny provider removed)
   reserved "wandb_api_key";
-  optional string cline_account_id = 2;
+  reserved 2; // was cline_account_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "cline_account_id";
+  reserved 41; // was oca_api_key (Cline, ClinePass and OCA provider settings removed)
+  reserved "oca_api_key";
+  reserved 44; // was cline_api_key (Cline, ClinePass and OCA provider settings removed)
+  reserved "cline_api_key";
   optional string auth_nonce = 20;
-  optional string oca_api_key = 41;
   optional string mcp_o_auth_secrets = 43;
-  optional string cline_api_key = 44;
 }
 
 // NOTE: Add new fields under API_HANDLER_SETTINGS_FIELDS or USER_SETTINGS_FIELDS
@@ -381,20 +384,44 @@ message Settings {
   reserved "lm_studio_model_id";
   reserved 177; // was open_ai_headers (non-Pliny provider removed)
   reserved "open_ai_headers";
-  optional string oca_base_url = 39;
-  optional string oca_mode = 41;
+  reserved 39; // was oca_base_url (Cline, ClinePass and OCA provider settings removed)
+  reserved "oca_base_url";
+  reserved 41; // was oca_mode (Cline, ClinePass and OCA provider settings removed)
+  reserved "oca_mode";
+  reserved 74; // was plan_mode_oca_model_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_oca_model_id";
+  reserved 75; // was plan_mode_oca_model_info (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_oca_model_info";
+  reserved 76; // was plan_mode_oca_reasoning_effort (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_oca_reasoning_effort";
+  reserved 114; // was act_mode_oca_model_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_oca_model_id";
+  reserved 115; // was act_mode_oca_model_info (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_oca_model_info";
+  reserved 116; // was act_mode_oca_reasoning_effort (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_oca_reasoning_effort";
+  reserved 178; // was plan_mode_cline_model_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_cline_model_id";
+  reserved 179; // was plan_mode_cline_model_info (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_cline_model_info";
+  reserved 180; // was act_mode_cline_model_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_cline_model_id";
+  reserved 181; // was act_mode_cline_model_info (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_cline_model_info";
+  reserved 183; // was plan_mode_cline_pass_model_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_cline_pass_model_id";
+  reserved 184; // was plan_mode_cline_pass_model_info (Cline, ClinePass and OCA provider settings removed)
+  reserved "plan_mode_cline_pass_model_info";
+  reserved 185; // was act_mode_cline_pass_model_id (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_cline_pass_model_id";
+  reserved 186; // was act_mode_cline_pass_model_info (Cline, ClinePass and OCA provider settings removed)
+  reserved "act_mode_cline_pass_model_info";
   optional string plan_mode_api_model_id = 44;
   optional int64 plan_mode_thinking_budget_tokens = 45;
   optional string plan_mode_reasoning_effort = 47;
-  optional string plan_mode_oca_model_id = 74;
-  optional OcaModelInfo plan_mode_oca_model_info = 75;
-  optional string plan_mode_oca_reasoning_effort = 76;
   optional string act_mode_api_model_id = 84;
   optional int64 act_mode_thinking_budget_tokens = 85;
   optional string act_mode_reasoning_effort = 87;
-  optional string act_mode_oca_model_id = 114;
-  optional OcaModelInfo act_mode_oca_model_info = 115;
-  optional string act_mode_oca_reasoning_effort = 116;
   optional string plan_mode_api_provider = 124;
   optional string act_mode_api_provider = 125;
   optional AutoApprovalSettings auto_approval_settings = 128;
@@ -412,15 +439,7 @@ message Settings {
   optional bool hooks_enabled = 152;
   optional bool subagents_enabled = 153;
   optional bool background_edit_enabled = 155;
-  optional string plan_mode_cline_model_id = 178;
-  optional OpenRouterModelInfo plan_mode_cline_model_info = 179;
-  optional string act_mode_cline_model_id = 180;
-  optional OpenRouterModelInfo act_mode_cline_model_info = 181;
   optional bool show_feature_tips = 182;
-  optional string plan_mode_cline_pass_model_id = 183;
-  optional OpenRouterModelInfo plan_mode_cline_pass_model_info = 184;
-  optional string act_mode_cline_pass_model_id = 185;
-  optional OpenRouterModelInfo act_mode_cline_pass_model_info = 186;
   optional bool pliny_free_auto_migrated_v1 = 190;
 }
 

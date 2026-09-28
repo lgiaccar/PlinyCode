@@ -21,9 +21,4 @@ describe("Provider key mapping", () => {
 	it("uses the generic model key for a removed provider", () => {
 		expect(getProviderModelIdKey("openrouter", "act")).to.equal("actModeApiModelId")
 	})
-
-	it("uses provider-specific model keys for Cline and ClinePass", () => {
-		expect(getProviderModelIdKey("cline", "act")).to.equal("actModeClineModelId")
-		expect(getProviderModelIdKey("cline-pass", "plan")).to.equal("planModeClinePassModelId")
-	})
 })

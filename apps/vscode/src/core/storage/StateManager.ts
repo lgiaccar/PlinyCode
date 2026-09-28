@@ -168,7 +168,7 @@ export class StateManager {
 	 */
 	private migratePlinyRouterModelIds(): void {
 		try {
-			const keys = ["planModeApiModelId", "actModeApiModelId", "planModeClineModelId", "actModeClineModelId"] as const
+			const keys = ["planModeApiModelId", "actModeApiModelId"] as const
 			const updates: Partial<GlobalStateAndSettings> = {}
 			for (const key of keys) {
 				const modelId = this.getGlobalSettingsKey(key)

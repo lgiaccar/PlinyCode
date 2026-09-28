@@ -1,7 +1,6 @@
 import { Empty } from "@shared/proto/cline/common"
 import type { UpdateApiConfigurationRequest } from "@shared/proto/cline/models"
 import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-configuration-conversion"
-import { fromProtobufModelInfo, fromProtobufOcaModelInfo } from "@shared/proto-conversions/models/typeConversion"
 import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { Logger } from "@/shared/services/Logger"
 import type { Controller } from "../index"
@@ -37,25 +36,6 @@ export async function updateApiConfigurationProto(
 					? convertProtoToApiProvider(protoApiConfiguration.actModeApiProvider)
 					: undefined,
 
-			// Convert ModelInfo objects (empty arrays → undefined)
-			planModeClineModelInfo: protoApiConfiguration.planModeClineModelInfo
-				? fromProtobufModelInfo(protoApiConfiguration.planModeClineModelInfo)
-				: undefined,
-			planModeClinePassModelInfo: protoApiConfiguration.planModeClinePassModelInfo
-				? fromProtobufModelInfo(protoApiConfiguration.planModeClinePassModelInfo)
-				: undefined,
-			planModeOcaModelInfo: protoApiConfiguration.planModeOcaModelInfo
-				? fromProtobufOcaModelInfo(protoApiConfiguration.planModeOcaModelInfo)
-				: undefined,
-			actModeClineModelInfo: protoApiConfiguration.actModeClineModelInfo
-				? fromProtobufModelInfo(protoApiConfiguration.actModeClineModelInfo)
-				: undefined,
-			actModeClinePassModelInfo: protoApiConfiguration.actModeClinePassModelInfo
-				? fromProtobufModelInfo(protoApiConfiguration.actModeClinePassModelInfo)
-				: undefined,
-			actModeOcaModelInfo: protoApiConfiguration.actModeOcaModelInfo
-				? fromProtobufOcaModelInfo(protoApiConfiguration.actModeOcaModelInfo)
-				: undefined,
 			planModeReasoningEffort: protoApiConfiguration.planModeReasoningEffort as OpenaiReasoningEffort | undefined,
 			actModeReasoningEffort: protoApiConfiguration.actModeReasoningEffort as OpenaiReasoningEffort | undefined,
 		}

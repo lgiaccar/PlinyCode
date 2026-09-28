@@ -1,5 +1,5 @@
 import { AutoApprovalSettings, DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
-import { ApiProvider, DEFAULT_API_PROVIDER, ModelInfo, type OcaModelInfo } from "@shared/api"
+import { ApiProvider, DEFAULT_API_PROVIDER } from "@shared/api"
 import { ClineRulesToggles } from "@shared/cline-rules"
 import { DEFAULT_FOCUS_CHAIN_SETTINGS, FocusChainSettings } from "@shared/FocusChainSettings"
 import { HistoryItem } from "@shared/HistoryItem"
@@ -59,33 +59,15 @@ const GLOBAL_STATE_FIELDS = {
 
 // Fields that map directly to ApiHandlerOptions in @shared/api.ts
 const API_HANDLER_SETTINGS_FIELDS = {
-	// Global configuration (not mode-specific)
-	ocaBaseUrl: { default: undefined as string | undefined },
-	ocaMode: { default: "internal" as string },
-
 	// Plan mode configurations
 	planModeApiModelId: { default: undefined as string | undefined },
 	planModeThinkingBudgetTokens: { default: undefined as number | undefined },
 	planModeReasoningEffort: { default: undefined as string | undefined },
-	planModeClineModelId: { default: undefined as string | undefined },
-	planModeClineModelInfo: { default: undefined as ModelInfo | undefined },
-	planModeClinePassModelId: { default: undefined as string | undefined },
-	planModeClinePassModelInfo: { default: undefined as ModelInfo | undefined },
-	planModeOcaModelId: { default: undefined as string | undefined },
-	planModeOcaModelInfo: { default: undefined as OcaModelInfo | undefined },
-	planModeOcaReasoningEffort: { default: undefined as string | undefined },
 
 	// Act mode configurations
 	actModeApiModelId: { default: undefined as string | undefined },
 	actModeThinkingBudgetTokens: { default: undefined as number | undefined },
 	actModeReasoningEffort: { default: undefined as string | undefined },
-	actModeClineModelId: { default: undefined as string | undefined },
-	actModeClineModelInfo: { default: undefined as ModelInfo | undefined },
-	actModeClinePassModelId: { default: undefined as string | undefined },
-	actModeClinePassModelInfo: { default: undefined as ModelInfo | undefined },
-	actModeOcaModelId: { default: undefined as string | undefined },
-	actModeOcaModelInfo: { default: undefined as OcaModelInfo | undefined },
-	actModeOcaReasoningEffort: { default: undefined as string | undefined },
 
 	// PlinyCode only runs on Pliny: a provider id stored by an older version
 	// (or by upstream Cline) reads back as `pliny` rather than naming a
@@ -136,13 +118,7 @@ const GLOBAL_STATE_AND_SETTINGS_FIELDS = { ...GLOBAL_STATE_FIELDS, ...SETTINGS_F
 // ============================================================================
 
 // Secret keys used in Api Configuration
-const SECRETS_KEYS = [
-	"clineApiKey",
-	"clineAccountId", // Cline Account ID for Firebase
-	"authNonce",
-	"ocaApiKey",
-	"mcpOAuthSecrets",
-] as const
+const SECRETS_KEYS = ["authNonce", "mcpOAuthSecrets"] as const
 
 // WARNING, these are not ALL of the local state keys in practice. For example, FileContextTracker
 // uses dynamic keys like pendingFileContextWarning_${taskId}.

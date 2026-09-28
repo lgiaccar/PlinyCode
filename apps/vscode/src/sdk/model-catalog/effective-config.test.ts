@@ -1,20 +1,12 @@
-import type { ApiConfiguration } from "@shared/api"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { parseProviderId } from "./provider-id"
 
 const mocks = vi.hoisted(() => {
-	let apiConfiguration: ApiConfiguration = {}
 	let providerSettingsById: Record<string, unknown> = {}
 
 	return {
-		setApiConfiguration(value: ApiConfiguration): void {
-			apiConfiguration = value
-		},
 		setProviderSettings(value: Record<string, unknown>): void {
 			providerSettingsById = value
-		},
-		getStateManager() {
-			return { getApiConfiguration: () => apiConfiguration }
 		},
 		getProviderSettingsManager() {
 			return { getProviderSettings: (providerId: string) => providerSettingsById[providerId] }
@@ -22,17 +14,12 @@ const mocks = vi.hoisted(() => {
 	}
 })
 
-vi.mock("@/core/storage/StateManager", () => ({
-	StateManager: { get: mocks.getStateManager },
-}))
-
 vi.mock("../provider-migration", () => ({
 	getProviderSettingsManager: mocks.getProviderSettingsManager,
 }))
 
 describe("buildEffectiveProviderConfig", () => {
 	beforeEach(() => {
-		mocks.setApiConfiguration({})
 		mocks.setProviderSettings({})
 	})
 
@@ -59,10 +46,9 @@ describe("buildEffectiveProviderConfig", () => {
 		})
 	})
 
-	it("does not overlay StateManager fields onto the Pliny config", async () => {
+	it("drops fields providers.json doesn't set", async () => {
 		const { buildEffectiveProviderConfig } = await import("./effective-config")
-		mocks.setProviderSettings({ pliny: { provider: "pliny", apiKey: "pliny-key" } })
-		mocks.setApiConfiguration({ clineApiKey: "cline-access-token", ocaBaseUrl: "https://oca.example" })
+		mocks.setProviderSettings({ pliny: { provider: "pliny", apiKey: "pliny-key", baseUrl: "" } })
 
 		expect(buildEffectiveProviderConfig(parseProviderId("pliny"))).toEqual({
 			providerId: parseProviderId("pliny"),
@@ -75,17 +61,6 @@ describe("buildEffectiveProviderConfig", () => {
 
 		expect(buildEffectiveProviderConfig(parseProviderId("pliny"))).toEqual({
 			providerId: parseProviderId("pliny"),
-		})
-	})
-
-	it("keeps Cline account auth in the auth envelope", async () => {
-		const { buildEffectiveProviderConfig } = await import("./effective-config")
-		mocks.setApiConfiguration({ clineApiKey: "cline-access-token", clineAccountId: "account-123" })
-
-		expect(buildEffectiveProviderConfig(parseProviderId("cline"))).toEqual({
-			providerId: parseProviderId("cline"),
-			apiKey: "cline-access-token",
-			auth: { accessToken: "cline-access-token", accountId: "account-123" },
 		})
 	})
 })

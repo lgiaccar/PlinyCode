@@ -35,8 +35,6 @@ export function getModeSpecificFields(apiConfiguration: ApiConfiguration | undef
 		return {
 			apiProvider: undefined,
 			apiModelId: undefined,
-			clineModelId: undefined,
-			clinePassModelId: undefined,
 			thinkingBudgetTokens: undefined,
 			reasoningEffort: undefined,
 		}
@@ -47,10 +45,6 @@ export function getModeSpecificFields(apiConfiguration: ApiConfiguration | undef
 			mode === "plan" ? apiConfiguration.planModeApiProvider : apiConfiguration.actModeApiProvider,
 		),
 		apiModelId: mode === "plan" ? apiConfiguration.planModeApiModelId : apiConfiguration.actModeApiModelId,
-		// Read by the Cline free-model limit error, which goes with the Cline
-		// account plumbing.
-		clineModelId: mode === "plan" ? apiConfiguration.planModeClineModelId : apiConfiguration.actModeClineModelId,
-		clinePassModelId: mode === "plan" ? apiConfiguration.planModeClinePassModelId : apiConfiguration.actModeClinePassModelId,
 		thinkingBudgetTokens:
 			mode === "plan" ? apiConfiguration.planModeThinkingBudgetTokens : apiConfiguration.actModeThinkingBudgetTokens,
 		reasoningEffort: mode === "plan" ? apiConfiguration.planModeReasoningEffort : apiConfiguration.actModeReasoningEffort,

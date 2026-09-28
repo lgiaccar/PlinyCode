@@ -1,5 +1,3 @@
-import type { ApiConfiguration } from "@shared/api"
-import { StateManager } from "@/core/storage/StateManager"
 import { getProviderSettingsManager } from "../provider-migration"
 import type { AwsProviderConfig, EffectiveProviderConfig, GcpProviderConfig, ProviderId } from "./contracts"
 import { toSdkProviderId } from "./sdk-provider-id"
@@ -21,18 +19,6 @@ type ProviderSettingsLike = {
 	readonly contextWindow?: number
 	readonly auth?: AuthConfig
 	readonly extras?: ExtrasConfig
-}
-
-// Legacy StateManager fields that still overlay providers.json. The Pliny
-// provider keeps everything in providers.json; only the Cline account and OCA
-// sign-in still write their credentials to StateManager.
-const apiKeyFields: Partial<Record<string, keyof ApiConfiguration>> = {
-	oca: "ocaApiKey",
-	cline: "clineApiKey",
-}
-
-const baseUrlFields: Partial<Record<string, keyof ApiConfiguration>> = {
-	oca: "ocaBaseUrl",
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -143,33 +129,6 @@ function readProviderSettings(providerId: ProviderId): ConfigParts {
 	}
 }
 
-function readStringFromConfig(config: ApiConfiguration, field: keyof ApiConfiguration | undefined): string | undefined {
-	if (!field) {
-		return undefined
-	}
-	const value = config[field]
-	return typeof value === "string" && value.length > 0 ? value : undefined
-}
-
-function readStateAuth(provider: string, config: ApiConfiguration): AuthConfig | undefined {
-	if (provider !== "cline") {
-		return undefined
-	}
-
-	const accessToken = readStringFromConfig(config, "clineApiKey")
-	const accountId = readStringFromConfig(config, "clineAccountId")
-	return accessToken || accountId ? { accessToken, accountId } : undefined
-}
-
-function readStateConfig(providerId: ProviderId, config: ApiConfiguration): ConfigParts {
-	const provider = providerId.toString()
-	return {
-		apiKey: readStringFromConfig(config, apiKeyFields[provider]),
-		baseUrl: readStringFromConfig(config, baseUrlFields[provider]),
-		auth: readStateAuth(provider, config),
-	}
-}
-
 function assignIfDefined<T extends ConfigKey>(target: Partial<ConfigParts>, key: T, value: ConfigParts[T] | undefined): void {
 	if (value !== undefined) {
 		target[key] = value
@@ -177,29 +136,18 @@ function assignIfDefined<T extends ConfigKey>(target: Partial<ConfigParts>, key:
 }
 
 /**
- * Build an {@link EffectiveProviderConfig} by merging provider-owned settings
- * from SDK `providers.json` with the current StateManager effective API
- * configuration. StateManager's `getApiConfiguration()` already applies
- * task/session overlays for legacy fields, so those values win.
+ * Build an {@link EffectiveProviderConfig} from the provider's SDK
+ * `providers.json` entry. Pliny, the only provider, keeps all of its
+ * configuration there.
  *
  * Mode-dependent model selection is intentionally excluded; callers use
  * `ProviderConfigStore.readSelection(providerId, mode)` for that.
  */
 export function buildEffectiveProviderConfig(providerId: ProviderId): EffectiveProviderConfig {
 	const providerSettings = readProviderSettings(providerId)
-	const stateConfig = readStateConfig(providerId, StateManager.get().getApiConfiguration())
 	const merged: Partial<ConfigParts> = {}
-
-	assignIfDefined(merged, "apiKey", stateConfig.apiKey ?? providerSettings.apiKey)
-	assignIfDefined(merged, "baseUrl", stateConfig.baseUrl ?? providerSettings.baseUrl)
-	assignIfDefined(merged, "apiLine", providerSettings.apiLine)
-	assignIfDefined(merged, "headers", providerSettings.headers)
-	assignIfDefined(merged, "region", providerSettings.region)
-	assignIfDefined(merged, "aws", providerSettings.aws)
-	assignIfDefined(merged, "gcp", providerSettings.gcp)
-	assignIfDefined(merged, "contextWindow", providerSettings.contextWindow)
-	assignIfDefined(merged, "auth", stateConfig.auth ?? providerSettings.auth)
-	assignIfDefined(merged, "extras", providerSettings.extras)
-
+	for (const key of Object.keys(providerSettings) as ConfigKey[]) {
+		assignIfDefined(merged, key, providerSettings[key])
+	}
 	return { providerId, ...merged }
 }
