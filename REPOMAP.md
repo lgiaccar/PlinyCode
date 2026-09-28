@@ -48,15 +48,14 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 |------|------|
 | `controller/` | One directory per RPC service, one file per RPC: account, browser, checkpoints, commands, file, gRPC recorder, marketplace, MCP, models, OCA account, remote config, slash commands, state, task, UI, web, worktree. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
 | `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
-| `prompts/` | Prompt formatting (`responses.ts`) and tests |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
 | `storage/` | Persistence (`remote-config/`, `utils/`) |
 | `workspace/` | Workspace logic (`utils/`) |
-| `api/`, `hooks/`, `locks/`, `mentions/`, `ignore/`, `export/`, `webview/` | Supporting primitives |
+| `hooks/`, `locks/`, `mentions/`, `export/`, `webview/` | Supporting primitives |
 
 ### `src/services/`
 
-`account/`, `auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `glob/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
+`auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 

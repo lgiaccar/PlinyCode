@@ -59,7 +59,6 @@ export default defineConfig({
 			"@plinycode/shared": path.resolve(__dirname, "node_modules/@plinycode/shared/dist/index.js"),
 			vscode: path.resolve(__dirname, "src/test/vscode-vitest-stub.ts"),
 			"@": path.resolve(__dirname, "src"),
-			"@api": path.resolve(__dirname, "src/core/api"),
 			"@core": path.resolve(__dirname, "src/core"),
 			"@generated": path.resolve(__dirname, "src/generated"),
 			"@hosts": path.resolve(__dirname, "src/hosts"),
