@@ -106,12 +106,6 @@ Browser-safe agent runtime loop.
 
 `src/agent-runtime.ts`, `src/index.ts`, `*.test.ts`.
 
-### `sdk/packages/ui`
-
-Shared webview theme and components. Source lives at package root rather than under `src/`.
-
-`components/`, `theme/`, `stories/`, `tests/`, `dist/`.
-
 ## Key files
 
 | File | Why it matters |
