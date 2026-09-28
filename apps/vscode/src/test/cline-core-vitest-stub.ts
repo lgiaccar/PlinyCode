@@ -256,55 +256,6 @@ export interface ITelemetryService {
 	dispose(): Promise<void>
 }
 
-export interface ConfiguredTelemetryHandle {
-	readonly telemetry: ITelemetryService
-	flush(): Promise<void>
-	dispose(): Promise<void>
-	emitProviderCreated?(): void
-}
-
-function createNoopTelemetry(): ITelemetryService {
-	return {
-		setDistinctId() {},
-		setMetadata() {},
-		updateMetadata() {},
-		setCommonProperties() {},
-		updateCommonProperties() {},
-		isEnabled: () => false,
-		capture() {},
-		captureRequired() {},
-		recordCounter() {},
-		recordHistogram() {},
-		recordGauge() {},
-		flush: async () => {},
-		dispose: async () => {},
-	}
-}
-
-export function createClineTelemetryServiceConfig(config: Record<string, unknown> = {}) {
-	return {
-		enabled: false,
-		metadata: {
-			extension_version: "test",
-			cline_type: "test",
-			platform: "test",
-			platform_version: "test",
-			os_type: "test",
-			os_version: "test",
-		},
-		...config,
-	}
-}
-
-export function createConfiguredTelemetryHandle(): ConfiguredTelemetryHandle {
-	const telemetry = createNoopTelemetry()
-	return {
-		telemetry,
-		flush: async () => {},
-		dispose: async () => {},
-	}
-}
-
 interface ProviderSettingsState {
 	providers: Record<string, Record<string, unknown>>
 	lastUsedProvider?: string

@@ -4,6 +4,7 @@
  * Core contracts, shared state utilities, and Node runtime services.
  */
 
+export { Agent, createAgentRuntime } from "@plinycode/agents";
 export * as Llms from "@plinycode/llms";
 export {
 	buildClineClientHeaders,
@@ -103,8 +104,6 @@ export {
 	buildSdkErrorProperties,
 	ContributionRegistry,
 	captureSdkError,
-	createClineTelemetryServiceConfig,
-	createClineTelemetryServiceMetadata,
 	createContributionRegistry,
 	createTool,
 	emptyWorkspaceManifest,
@@ -288,6 +287,10 @@ export {
 	WORKFLOWS_CONFIG_DIRECTORY_NAME,
 } from "./extensions/config";
 export {
+	createCompactionStateAwarePrepareTurn,
+	createContextCompactionPrepareTurn,
+} from "./extensions/context/compaction";
+export {
 	type AuthorizeMcpServerOAuthOptions,
 	type AuthorizeMcpServerOAuthResult,
 	augmentMcpTimeoutError,
@@ -351,6 +354,59 @@ export {
 	updateMcpSettingsFile,
 	updateMcpSettingsFileSync,
 } from "./extensions/mcp";
+export {
+	ALL_DEFAULT_TOOL_NAMES,
+	type ApplyPatchExecutor,
+	type ApplyPatchInput,
+	type AskQuestionExecutor,
+	type BuiltinToolAvailabilityContext,
+	CommandAbortedError,
+	CommandExitError,
+	type CreateBuiltinToolsOptions,
+	type CreateDefaultToolsOptions,
+	computePatchChanges,
+	createApplyPatchExecutor,
+	createBuiltinTools,
+	createDefaultExecutors,
+	createDefaultShellExecutor,
+	createDefaultTools,
+	createDefaultToolsWithPreset,
+	createEditorExecutor,
+	createShellExecutor,
+	createShellTool,
+	createToolPoliciesWithPreset,
+	type DefaultExecutorsOptions,
+	type DefaultToolName,
+	DefaultToolNames,
+	type DefaultToolsConfig,
+	type EditFileInput,
+	type EditorExecutor,
+	type EditorExecutorOptions,
+	getCoreAcpToolNames,
+	getCoreBuiltinToolCatalog,
+	getCoreDefaultEnabledToolIds,
+	getCoreHeadlessToolNames,
+	isCoreBuiltinToolAvailable,
+	isSkillsToolAvailable,
+	MAX_COMMAND_OUTPUT_CHARS,
+	PATCH_MARKERS,
+	PatchActionType,
+	type PatchFileChange,
+	resolveCoreSelectedToolIds,
+	resolveToolClientType,
+	type ShellExecutor,
+	type ShellExecutorOptions,
+	type StructuredCommandInput,
+	StructuredCommandInputSchema,
+	TEAM_TOOL_NAMES,
+	type ToolCatalogEntry,
+	type ToolClientType,
+	type ToolExecutors,
+	type ToolPolicyPresetName,
+	type ToolPresetName,
+	ToolPresets,
+	truncateCommandOutput,
+} from "./extensions/tools";
 export {
 	type AgentTask,
 	AgentTeam,
@@ -521,6 +577,7 @@ export {
 	type FeatureFlagsServiceOptions,
 	NoOpFeatureFlagsProvider,
 } from "./services/feature-flags";
+export { isClineAccountFeatureEnabled } from "./services/feature-flags/cline-account-feature-flags";
 export type {
 	GlobalCompactionMode,
 	GlobalCompactionStrategy,
@@ -562,6 +619,90 @@ export {
 	toggleDisabledTool,
 	writeGlobalSettings,
 } from "./services/global-settings";
+export {
+	applyClineFeaturedModels,
+	type ClineRecommendedModel,
+	type ClineRecommendedModelsData,
+	FALLBACK_CLINE_RECOMMENDED_MODELS,
+	type FetchClineRecommendedModelsOptions,
+	fetchClineRecommendedModels,
+	getCachedClineRecommendedModels,
+	peekClineRecommendedModels,
+	resetClineRecommendedModelsCacheForTests,
+} from "./services/llms/cline-recommended-models";
+export {
+	clearLiveModelsCatalogCache,
+	clearPrivateModelsCatalogCache,
+	DEFAULT_MODELS_CATALOG_URL,
+	getLiveModelsCatalog,
+	getProviderConfig,
+	isPrivateModelCatalogProvider,
+	OPENAI_COMPATIBLE_PROVIDERS,
+	resolveProviderConfig,
+} from "./services/llms/provider-defaults";
+export type {
+	AuthSettings,
+	AwsSettings,
+	AzureSettings,
+	BuiltInProviderId,
+	GcpSettings,
+	ModelCatalogConfig,
+	ModelCatalogSettings,
+	OcaSettings,
+	ProviderCapability,
+	ProviderClient,
+	ProviderConfig,
+	ProviderDefaultsConfig,
+	ProviderId,
+	ProviderProtocol,
+	ProviderSettings,
+	ReasoningSettings,
+	SapSettings,
+	ToProviderConfigOptions,
+} from "./services/llms/provider-settings";
+export {
+	AuthSettingsSchema,
+	AwsSettingsSchema,
+	AzureSettingsSchema,
+	BUILT_IN_PROVIDER,
+	BUILT_IN_PROVIDER_IDS,
+	createProviderConfig,
+	GcpSettingsSchema,
+	isBuiltInProviderId,
+	ModelCatalogSettingsSchema,
+	normalizeProviderId,
+	OcaSettingsSchema,
+	ProviderClientSchema,
+	ProviderIdSchema,
+	ProviderProtocolSchema,
+	ProviderSettingsSchema,
+	parseSettings,
+	ReasoningSettingsSchema,
+	SapSettingsSchema,
+	safeCreateProviderConfig,
+	safeParseSettings,
+	toProviderConfig,
+} from "./services/llms/provider-settings";
+export {
+	defineLlmsConfig,
+	loadLlmsConfigFromFile,
+} from "./services/llms/runtime-config";
+export {
+	createLlmsSdk,
+	DefaultLlmsSdk,
+} from "./services/llms/runtime-registry";
+export type {
+	BuiltInProviderSummary,
+	CreateHandlerInput,
+	LlmsConfig,
+	LlmsSdk,
+	ProviderConfigDefaults,
+	ProviderSelectionConfig,
+	RegisterBuiltinProviderInput,
+	RegisteredProviderSummary,
+	RegisterModelInput,
+	RegisterProviderInput,
+} from "./services/llms/runtime-types";
 export type {
 	MarketplaceActionResult,
 	MarketplaceEntryInput,
@@ -686,10 +827,6 @@ export {
 	SqliteTeamStore,
 	type SqliteTeamStoreOptions,
 } from "./services/storage/team-store";
-export {
-	resolveCoreDeviceId,
-	resolveCoreDistinctId,
-} from "./services/telemetry";
 export type {
 	CaptureAgentUnexpectedReasoningTokensInput,
 	CaptureCompactionExecutedProperties,
@@ -738,16 +875,11 @@ export {
 	clearAccountTelemetryIdentity,
 	identifyAccount,
 } from "./services/telemetry/core-events";
-export type { ITelemetryAdapter } from "./services/telemetry/ITelemetryAdapter";
 export {
-	type ConfiguredTelemetryHandle,
-	type CreateOpenTelemetryTelemetryServiceOptions,
-	createConfiguredTelemetryHandle,
-	createConfiguredTelemetryService,
-	createOpenTelemetryTelemetryService,
-	OpenTelemetryProvider,
-	type OpenTelemetryProviderOptions,
-} from "./services/telemetry/OpenTelemetryProvider";
+	resolveCoreDeviceId,
+	resolveCoreDistinctId,
+} from "./services/telemetry/distinct-id";
+export type { ITelemetryAdapter } from "./services/telemetry/ITelemetryAdapter";
 export {
 	type ClientTelemetryContext,
 	createClientScopedTelemetryService,
@@ -758,6 +890,10 @@ export {
 	TelemetryLoggerSink,
 	type TelemetryLoggerSinkOptions,
 } from "./services/telemetry/TelemetryLoggerSink";
+export {
+	TelemetryService,
+	type TelemetryServiceOptions,
+} from "./services/telemetry/TelemetryService";
 export {
 	accumulateUsageTotals,
 	createInitialAccumulatedUsage,
@@ -804,6 +940,12 @@ export {
 	projectSessionMessagesForDisplay,
 	type SessionDisplayMessage,
 } from "./session/display-messages";
+export {
+	createSessionCompactionState,
+	parseSessionCompactionState,
+	projectSessionCompactionState,
+	type SessionCompactionState,
+} from "./session/models/session-compaction";
 export {
 	deriveSubsessionStatus,
 	makeSubSessionId,
@@ -861,6 +1003,8 @@ export {
 	CoreSettingsService,
 	createCoreSettingsService,
 } from "./settings";
+// Compatibility barrel (legacy imports).
+export type { RuntimeEnvironment } from "./types";
 export type {
 	ChatMessage,
 	ChatMessageImage,
@@ -878,166 +1022,6 @@ export {
 	ChatSummarySchema,
 	ChatViewStateSchema,
 } from "./types/chat-schema";
-export type { SessionMessagesArtifactUploader } from "./types/session";
-export { CORE_BUILD_VERSION } from "./version";
-export async function loadOpenTelemetryAdapter() {
-	return import("./services/telemetry/index.js");
-}
-export { Agent, createAgentRuntime } from "@plinycode/agents";
-export {
-	createCompactionStateAwarePrepareTurn,
-	createContextCompactionPrepareTurn,
-} from "./extensions/context/compaction";
-export {
-	ALL_DEFAULT_TOOL_NAMES,
-	type ApplyPatchExecutor,
-	type ApplyPatchInput,
-	type AskQuestionExecutor,
-	type BuiltinToolAvailabilityContext,
-	CommandAbortedError,
-	CommandExitError,
-	type CreateBuiltinToolsOptions,
-	type CreateDefaultToolsOptions,
-	computePatchChanges,
-	createApplyPatchExecutor,
-	createBuiltinTools,
-	createDefaultExecutors,
-	createDefaultShellExecutor,
-	createDefaultTools,
-	createDefaultToolsWithPreset,
-	createEditorExecutor,
-	createShellExecutor,
-	createShellTool,
-	createToolPoliciesWithPreset,
-	type DefaultExecutorsOptions,
-	type DefaultToolName,
-	DefaultToolNames,
-	type DefaultToolsConfig,
-	type EditFileInput,
-	type EditorExecutor,
-	type EditorExecutorOptions,
-	getCoreAcpToolNames,
-	getCoreBuiltinToolCatalog,
-	getCoreDefaultEnabledToolIds,
-	getCoreHeadlessToolNames,
-	isCoreBuiltinToolAvailable,
-	isSkillsToolAvailable,
-	MAX_COMMAND_OUTPUT_CHARS,
-	PATCH_MARKERS,
-	PatchActionType,
-	type PatchFileChange,
-	resolveCoreSelectedToolIds,
-	resolveToolClientType,
-	type ShellExecutor,
-	type ShellExecutorOptions,
-	type StructuredCommandInput,
-	StructuredCommandInputSchema,
-	TEAM_TOOL_NAMES,
-	type ToolCatalogEntry,
-	type ToolClientType,
-	type ToolExecutors,
-	type ToolPolicyPresetName,
-	type ToolPresetName,
-	ToolPresets,
-	truncateCommandOutput,
-} from "./extensions/tools";
-export { isClineAccountFeatureEnabled } from "./services/feature-flags/cline-account-feature-flags";
-export {
-	applyClineFeaturedModels,
-	type ClineRecommendedModel,
-	type ClineRecommendedModelsData,
-	FALLBACK_CLINE_RECOMMENDED_MODELS,
-	type FetchClineRecommendedModelsOptions,
-	fetchClineRecommendedModels,
-	getCachedClineRecommendedModels,
-	peekClineRecommendedModels,
-	resetClineRecommendedModelsCacheForTests,
-} from "./services/llms/cline-recommended-models";
-export {
-	clearLiveModelsCatalogCache,
-	clearPrivateModelsCatalogCache,
-	DEFAULT_MODELS_CATALOG_URL,
-	getLiveModelsCatalog,
-	getProviderConfig,
-	isPrivateModelCatalogProvider,
-	OPENAI_COMPATIBLE_PROVIDERS,
-	resolveProviderConfig,
-} from "./services/llms/provider-defaults";
-export type {
-	AuthSettings,
-	AwsSettings,
-	AzureSettings,
-	BuiltInProviderId,
-	GcpSettings,
-	ModelCatalogConfig,
-	ModelCatalogSettings,
-	OcaSettings,
-	ProviderCapability,
-	ProviderClient,
-	ProviderConfig,
-	ProviderDefaultsConfig,
-	ProviderId,
-	ProviderProtocol,
-	ProviderSettings,
-	ReasoningSettings,
-	SapSettings,
-	ToProviderConfigOptions,
-} from "./services/llms/provider-settings";
-export {
-	AuthSettingsSchema,
-	AwsSettingsSchema,
-	AzureSettingsSchema,
-	BUILT_IN_PROVIDER,
-	BUILT_IN_PROVIDER_IDS,
-	createProviderConfig,
-	GcpSettingsSchema,
-	isBuiltInProviderId,
-	ModelCatalogSettingsSchema,
-	normalizeProviderId,
-	OcaSettingsSchema,
-	ProviderClientSchema,
-	ProviderIdSchema,
-	ProviderProtocolSchema,
-	ProviderSettingsSchema,
-	parseSettings,
-	ReasoningSettingsSchema,
-	SapSettingsSchema,
-	safeCreateProviderConfig,
-	safeParseSettings,
-	toProviderConfig,
-} from "./services/llms/provider-settings";
-export {
-	defineLlmsConfig,
-	loadLlmsConfigFromFile,
-} from "./services/llms/runtime-config";
-export {
-	createLlmsSdk,
-	DefaultLlmsSdk,
-} from "./services/llms/runtime-registry";
-export type {
-	BuiltInProviderSummary,
-	CreateHandlerInput,
-	LlmsConfig,
-	LlmsSdk,
-	ProviderConfigDefaults,
-	ProviderSelectionConfig,
-	RegisterBuiltinProviderInput,
-	RegisteredProviderSummary,
-	RegisterModelInput,
-	RegisterProviderInput,
-} from "./services/llms/runtime-types";
-export {
-	TelemetryService,
-	type TelemetryServiceOptions,
-} from "./services/telemetry/TelemetryService";
-export {
-	createSessionCompactionState,
-	parseSessionCompactionState,
-	projectSessionCompactionState,
-	type SessionCompactionState,
-} from "./session/models/session-compaction";
-// Compatibility barrel (legacy imports).
-export type { RuntimeEnvironment } from "./types";
 export type { SessionStatus } from "./types/common";
 export { SESSION_STATUSES, SessionSource } from "./types/common";
 export type {
@@ -1076,6 +1060,7 @@ export {
 	StoredProviderSettingsEntrySchema,
 	StoredProviderSettingsSchema,
 } from "./types/provider-settings";
+export type { SessionMessagesArtifactUploader } from "./types/session";
 export type {
 	SessionHistoryMetadata,
 	SessionHistoryRecord,
@@ -1083,3 +1068,4 @@ export type {
 	SessionRef,
 } from "./types/sessions";
 export type { ArtifactStore, SessionStore, TeamStore } from "./types/storage";
+export { CORE_BUILD_VERSION } from "./version";
