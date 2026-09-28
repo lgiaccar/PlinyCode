@@ -74,6 +74,7 @@ describe("auto-approve settings after New Task (#13260)", () => {
 	const makeController = () =>
 		({
 			task,
+			activeTaskId: task?.taskId,
 			getStateToPostToWebview: async () => ({ autoApprovalSettings: resolveSettings() }),
 			postStateToWebview,
 			stateManager,

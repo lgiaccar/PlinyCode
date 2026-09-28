@@ -23,10 +23,10 @@ export async function updateTaskSettings(controller: Controller, request: Update
 			taskId = request.taskId
 		} else {
 			// Use current task if no taskId is provided
-			if (!controller.task) {
+			if (!controller.activeTaskId) {
 				throw new Error("No active task to update settings for")
 			}
-			taskId = controller.task.taskId
+			taskId = controller.activeTaskId
 		}
 
 		if (request.settings) {

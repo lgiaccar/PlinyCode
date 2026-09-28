@@ -16,19 +16,15 @@ export async function openFocusChainFile(controller: Controller, request: String
 
 	// Get the current focus chain list from the task's most recent task_progress message
 	let initialFocusChainContent: string | undefined
-	const currentTask = controller.task
-	if (currentTask) {
-		// Get the task's message history and find the most recent task_progress message
-		// TODO - can we decouple this from ClineMessages?
-		const clineMessages = currentTask.messageStateHandler.getClineMessages()
-		const lastProgressMessage = clineMessages
-			.slice()
-			.reverse()
-			.find((m: any) => m.say === "task_progress")
+	// TODO - can we decouple this from ClineMessages?
+	const clineMessages = controller.getActiveTaskMessages()
+	const lastProgressMessage = clineMessages
+		.slice()
+		.reverse()
+		.find((m: any) => m.say === "task_progress")
 
-		if (lastProgressMessage && lastProgressMessage.text) {
-			initialFocusChainContent = extractFocusChainListFromText(lastProgressMessage.text) || undefined
-		}
+	if (lastProgressMessage && lastProgressMessage.text) {
+		initialFocusChainContent = extractFocusChainListFromText(lastProgressMessage.text) || undefined
 	}
 
 	const focusChainFilePath = await ensureFocusChainFile(taskId, initialFocusChainContent)

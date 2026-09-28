@@ -9,7 +9,7 @@ import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { McpDisplayMode } from "@/shared/McpDisplayMode"
 import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
-import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
+import { resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
 
 /**
  * Updates multiple extension settings in a single request
@@ -41,10 +41,10 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 
 			controller.stateManager.setApiConfiguration(convertedApiConfigurationFromProto)
 
-			if (controller.task) {
+			if (controller.activeTaskId) {
 				const currentMode = controller.stateManager.getGlobalSettingsKey("mode")
 				const modelId = resolveActiveModelIdFromApiConfiguration(convertedApiConfigurationFromProto, currentMode)
-				controller.task.api = createTaskApiModelShim(modelId)
+				controller.setActiveTaskModelId(modelId)
 			}
 		}
 

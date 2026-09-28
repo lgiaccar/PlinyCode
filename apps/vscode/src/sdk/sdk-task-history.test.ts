@@ -7,11 +7,15 @@ import { deleteLegacyTask, readApiConversationHistory, readTaskHistory, readUiMe
 import { sdkMessagesToClineMessages } from "./message-translator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import {
+	createHistoryItemFromSession,
+	getHistoryItemById,
+	historyItemToSessionFields,
 	historyItemToSessionMetadata,
 	SdkTaskHistory,
 	sessionHistoryRecordToHistoryItem,
 	sessionHistoryRecordToTaskItemFields,
 	sessionRecordWorkspacePath,
+	updateHistoryItem,
 } from "./sdk-task-history"
 import type { VscodeSessionHost } from "./vscode-session-host"
 
@@ -1116,3 +1120,203 @@ function makeHistory(records: SessionHistoryRecord[], legacyExtensionStorageDir?
 		startSession,
 	}
 }
+
+// ---------------------------------------------------------------------------
+// createHistoryItemFromSession
+// ---------------------------------------------------------------------------
+
+describe("createHistoryItemFromSession", () => {
+	it("creates a HistoryItem from session data", () => {
+		const item = createHistoryItemFromSession(
+			"session-abc",
+			"Fix the bug in main.ts",
+			"claude-sonnet-4-6",
+			"/home/user/project",
+		)
+
+		expect(item.id).toBe("session-abc")
+		expect(item.task).toBe("Fix the bug in main.ts")
+		expect(item.modelId).toBe("claude-sonnet-4-6")
+		expect(item.cwdOnTaskInitialization).toBe("/home/user/project")
+		expect(item.workspaceRootOnTaskInitialization).toBe("/home/user/project")
+		expect(item.tokensIn).toBe(0)
+		expect(item.tokensOut).toBe(0)
+		expect(item.totalCost).toBe(0)
+		expect(item.ts).toBeGreaterThan(0)
+	})
+
+	it("handles missing optional fields", () => {
+		const item = createHistoryItemFromSession("session-xyz", "Simple task")
+
+		expect(item.modelId).toBeUndefined()
+		expect(item.cwdOnTaskInitialization).toBeUndefined()
+		expect(item.workspaceRootOnTaskInitialization).toBeUndefined()
+	})
+
+	it("stores workspace root separately from task cwd when provided", () => {
+		const item = createHistoryItemFromSession("session-abc", "Fix build", "claude-test", "/repo/apps/web", "/repo")
+		expect(item.cwdOnTaskInitialization).toBe("/repo/apps/web")
+		expect(item.workspaceRootOnTaskInitialization).toBe("/repo")
+	})
+
+	it("creates unique timestamps for different calls", () => {
+		const item1 = createHistoryItemFromSession("s1", "Task 1")
+		const item2 = createHistoryItemFromSession("s2", "Task 2")
+
+		// Timestamps should be at least as large (may be same if called in same ms)
+		expect(item2.ts).toBeGreaterThanOrEqual(item1.ts)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// getHistoryItemById
+// ---------------------------------------------------------------------------
+
+describe("getHistoryItemById", () => {
+	beforeEach(() => {
+		legacyStateReaderMock.taskHistory = []
+		legacyStateReaderMock.taskHistoryByDataDir.clear()
+	})
+
+	it("returns undefined when task is not found", () => {
+		const result = getHistoryItemById("nonexistent")
+		expect(result).toBeUndefined()
+	})
+
+	it("finds a task by ID", () => {
+		legacyStateReaderMock.taskHistory = [
+			{ id: "task-1", ts: Date.now(), task: "First task", tokensIn: 0, tokensOut: 0, totalCost: 0 },
+			{ id: "task-2", ts: Date.now(), task: "Second task", tokensIn: 0, tokensOut: 0, totalCost: 0 },
+		]
+
+		const result = getHistoryItemById("task-2")
+		expect(result).toBeDefined()
+		expect(result?.id).toBe("task-2")
+		expect(result?.task).toBe("Second task")
+	})
+
+	it("returns undefined for empty history", () => {
+		legacyStateReaderMock.taskHistory = []
+
+		const result = getHistoryItemById("task-1")
+		expect(result).toBeUndefined()
+	})
+})
+
+// ---------------------------------------------------------------------------
+// updateHistoryItem
+// ---------------------------------------------------------------------------
+
+describe("updateHistoryItem", () => {
+	beforeEach(() => {
+		legacyStateReaderMock.taskHistory = []
+		legacyStateReaderMock.taskHistoryByDataDir.clear()
+	})
+
+	it("adds a new item to history", () => {
+		legacyStateReaderMock.taskHistory = []
+
+		const newItem: HistoryItem = {
+			id: "task-new",
+			ts: Date.now(),
+			task: "New task",
+			tokensIn: 100,
+			tokensOut: 50,
+			totalCost: 0.01,
+		}
+
+		const result = updateHistoryItem(newItem)
+		expect(result).toHaveLength(1)
+		expect(result[0].id).toBe("task-new")
+	})
+
+	it("updates an existing item in history", () => {
+		const existingItem = {
+			id: "task-1",
+			ts: Date.now(),
+			task: "Original task",
+			tokensIn: 0,
+			tokensOut: 0,
+			totalCost: 0,
+		}
+		legacyStateReaderMock.taskHistory = [existingItem]
+
+		const updatedItem = {
+			...existingItem,
+			tokensIn: 500,
+			tokensOut: 250,
+			totalCost: 0.05,
+		}
+
+		const result = updateHistoryItem(updatedItem)
+		expect(result).toHaveLength(1)
+		expect(result[0].tokensIn).toBe(500)
+		expect(result[0].totalCost).toBe(0.05)
+	})
+
+	it("prepends new items to the beginning of history", () => {
+		const existingItem = {
+			id: "task-old",
+			ts: Date.now() - 1000,
+			task: "Old task",
+			tokensIn: 0,
+			tokensOut: 0,
+			totalCost: 0,
+		}
+		legacyStateReaderMock.taskHistory = [existingItem]
+
+		const newItem = {
+			id: "task-new",
+			ts: Date.now(),
+			task: "New task",
+			tokensIn: 0,
+			tokensOut: 0,
+			totalCost: 0,
+		}
+
+		const result = updateHistoryItem(newItem)
+		expect(result).toHaveLength(2)
+		expect(result[0].id).toBe("task-new")
+		expect(result[1].id).toBe("task-old")
+	})
+})
+
+// ---------------------------------------------------------------------------
+// historyItemToSessionFields
+// ---------------------------------------------------------------------------
+
+describe("historyItemToSessionFields", () => {
+	it("maps HistoryItem to session fields", () => {
+		const result = historyItemToSessionFields({
+			id: "task-123",
+			task: "Fix the bug",
+			ts: 1700000000000,
+			tokensIn: 500,
+			tokensOut: 250,
+			totalCost: 0.05,
+			modelId: "claude-sonnet-4-6",
+		})
+
+		expect(result.sessionId).toBe("task-123")
+		expect(result.prompt).toBe("Fix the bug")
+		expect(result.usage.tokensIn).toBe(500)
+		expect(result.usage.tokensOut).toBe(250)
+		expect(result.usage.totalCost).toBe(0.05)
+		expect(result.modelId).toBe("claude-sonnet-4-6")
+		expect(result.startedAt).toBe(new Date(1700000000000).toISOString())
+	})
+
+	it("handles missing optional fields", () => {
+		const result = historyItemToSessionFields({
+			id: "task-456",
+			task: "Simple task",
+			ts: 1700000000000,
+			tokensIn: 0,
+			tokensOut: 0,
+			totalCost: 0,
+		})
+
+		expect(result.sessionId).toBe("task-456")
+		expect(result.modelId).toBeUndefined()
+	})
+})
