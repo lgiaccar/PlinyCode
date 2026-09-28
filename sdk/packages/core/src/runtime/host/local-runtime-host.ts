@@ -1,6 +1,5 @@
-import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
 import type * as LlmsProviders from "@plinycode/llms";
 import {
 	type AgentConfig,
@@ -9,8 +8,6 @@ import {
 	type BasicLogger,
 	type CompletionGuard,
 	createSessionId,
-	isLikelyAuthError,
-	normalizeUserInput,
 } from "@plinycode/shared";
 import { setHomeDirIfUnset } from "@plinycode/shared/storage";
 import { isOAuthProvider } from "../../auth/provider-auth-registry";
@@ -28,18 +25,12 @@ import { resolveWorkspacePath } from "../../services/config";
 import { resolveCoreDistinctId } from "../../services/distinct-id";
 import { prepareLocalRuntimeBootstrap } from "../../services/local-runtime-bootstrap";
 import { nowIso } from "../../services/session-artifacts";
-import {
-	toSessionRecord,
-	withLatestAssistantTurnMetadata,
-} from "../../services/session-data";
+import { toSessionRecord } from "../../services/session-data";
 import { ProviderSettingsManager } from "../../services/storage/provider-settings-manager";
 import {
-	accumulateUsageTotals,
 	createInitialAccumulatedUsage,
 	summarizeUsageFromMessages,
-	sumUsageTotals,
 } from "../../services/usage";
-import { enrichPromptWithMentions } from "../../services/workspace";
 import { resolveStartSessionWorkspace } from "../../services/workspace/chat-workspace";
 import {
 	type GitWorkspaceState,
@@ -51,10 +42,7 @@ import {
 	readSessionHistoryOriginMetadata,
 	withSessionHistoryOriginMetadata,
 } from "../../session/history-origin";
-import {
-	projectSessionCompactionState,
-	type SessionCompactionState,
-} from "../../session/models/session-compaction";
+import type { SessionCompactionState } from "../../session/models/session-compaction";
 import {
 	type SessionManifest,
 	SessionManifestSchema,
@@ -64,12 +52,9 @@ import type { RootSessionArtifacts } from "../../session/services/session-servic
 import { createCoreSessionSnapshot } from "../../session/session-snapshot";
 import { SessionVersioningService } from "../../session/session-versioning-service";
 import {
-	buildTeamRunContinuationPrompt,
 	formatModePrompt,
 	hasPendingTeamRunWork,
 	notifyTeamRunWaiters,
-	shouldAutoContinueTeamRuns,
-	waitForTeamRunUpdates,
 } from "../../session/team";
 import {
 	isNonTerminalSessionStatus,
@@ -78,7 +63,7 @@ import {
 } from "../../types/common";
 import type { CoreSessionConfig } from "../../types/config";
 import type { CoreSessionEvent } from "../../types/events";
-import type { ActiveSession, PreparedTurnInput } from "../../types/session";
+import type { ActiveSession } from "../../types/session";
 import type { SessionRecord } from "../../types/sessions";
 import type { RuntimeCapabilities } from "../capabilities";
 import { normalizeRuntimeCapabilities } from "../capabilities";
@@ -94,6 +79,7 @@ import { SessionRuntime } from "../orchestration/session-runtime-orchestrator";
 import { PendingPromptsController } from "../turn-queue/pending-prompt-service";
 import { manifestToSessionRecord } from "./history";
 import { AgentEventBridge } from "./local/agent-event-bridge";
+import { SessionCompactionStateStore } from "./local/compaction-state-store";
 import {
 	type SessionBackend,
 	toActiveSessionRecord,
@@ -107,6 +93,15 @@ import {
 	createSessionSpawnTool,
 	createSessionSubAgentLifecycleCallbacks,
 } from "./local/spawn-tool";
+import {
+	completeAbortedInteractiveTurn,
+	completeInteractiveTurn,
+	executeTurn,
+	resolveInteractiveStopExitCode,
+	resolveInteractiveStopStatus,
+	type TurnExecutionHost,
+} from "./local/turn-execution";
+import { seedAggregateUsageFromArtifacts } from "./local/usage-aggregation";
 import { loadUserFileContent } from "./local/user-files";
 import type {
 	ListSessionsOptions,
@@ -147,68 +142,6 @@ function recoverDetachedCommandLogsOnce(logger?: BasicLogger): void {
 			detachedCommandLogRecovery = undefined;
 			logger?.error?.("Detached command log recovery failed", { error });
 		});
-}
-
-function asFiniteUsageNumber(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isFinite(value)
-		? value
-		: undefined;
-}
-
-function parseAccumulatedUsage(
-	value: unknown,
-): SessionAccumulatedUsage | undefined {
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		return undefined;
-	}
-	const record = value as Record<string, unknown>;
-	const inputTokens = asFiniteUsageNumber(record.inputTokens);
-	const outputTokens = asFiniteUsageNumber(record.outputTokens);
-	const cacheReadTokens = asFiniteUsageNumber(record.cacheReadTokens);
-	const cacheWriteTokens = asFiniteUsageNumber(record.cacheWriteTokens);
-	const totalCost = asFiniteUsageNumber(record.totalCost);
-	if (
-		inputTokens === undefined ||
-		outputTokens === undefined ||
-		cacheReadTokens === undefined ||
-		cacheWriteTokens === undefined ||
-		totalCost === undefined
-	) {
-		return undefined;
-	}
-	return {
-		inputTokens,
-		outputTokens,
-		cacheReadTokens,
-		cacheWriteTokens,
-		totalCost,
-	};
-}
-
-function maxAccumulatedUsage(
-	left: SessionAccumulatedUsage,
-	right: SessionAccumulatedUsage,
-): SessionAccumulatedUsage {
-	return {
-		inputTokens: Math.max(left.inputTokens, right.inputTokens),
-		outputTokens: Math.max(left.outputTokens, right.outputTokens),
-		cacheReadTokens: Math.max(left.cacheReadTokens, right.cacheReadTokens),
-		cacheWriteTokens: Math.max(left.cacheWriteTokens, right.cacheWriteTokens),
-		totalCost: Math.max(left.totalCost, right.totalCost),
-	};
-}
-
-function isIncomingCompactionStateStale(
-	incoming: SessionCompactionState,
-	current: SessionCompactionState | undefined,
-): boolean {
-	if (!current) {
-		return false;
-	}
-	if (incoming.source_message_count !== current.source_message_count) {
-		return incoming.source_message_count < current.source_message_count;
-	}
-	return Date.parse(incoming.updated_at) < Date.parse(current.updated_at);
 }
 
 /**
@@ -276,6 +209,9 @@ export class LocalRuntimeHost implements RuntimeHost {
 	private readonly sessionVersioning = new SessionVersioningService();
 	private readonly runCommandExecutionController =
 		new RunCommandExecutionController();
+	private readonly compactionStateStore: SessionCompactionStateStore;
+	/** The view of this host that the turn-execution functions use. */
+	private readonly turnHost: TurnExecutionHost;
 
 	constructor(options: LocalRuntimeHostOptions) {
 		const homeDir = homedir();
@@ -345,6 +281,34 @@ export class LocalRuntimeHost implements RuntimeHost {
 			invokeBackendOptional: (method, ...args) =>
 				this.invokeOptional(method, ...args),
 		});
+		this.compactionStateStore = new SessionCompactionStateStore({
+			sessions: this.sessions,
+			getSession: (sessionId) => this.getSession(sessionId),
+			readSessionMessages: (sessionId) => this.readSessionMessages(sessionId),
+			invoke: <T>(method: string, ...args: unknown[]) =>
+				this.invoke<T>(method, ...args),
+			invokeOptionalValue: <T>(method: string, ...args: unknown[]) =>
+				this.invokeOptionalValue<T>(method, ...args),
+		});
+		this.turnHost = {
+			usageBySession: this.usageBySession,
+			aggregateUsageBySession: this.aggregateUsageBySession,
+			eventBridge: this.eventBridge,
+			pendingPromptsController: this.pendingPromptsController,
+			ensureSessionPersisted: (session) => this.ensureSessionPersisted(session),
+			refreshActiveSessionGitMetadata: (session) =>
+				this.refreshActiveSessionGitMetadata(session),
+			syncOAuthCredentials: (session, options) =>
+				this.syncOAuthCredentials(session, options),
+			markTurnRunning: (session) => this.markTurnRunning(session),
+			markTurnIdle: (session) => this.markTurnIdle(session),
+			persistSessionMetadata: (sessionId, resolveMetadata) =>
+				this.persistSessionMetadata(sessionId, resolveMetadata),
+			invoke: <T>(method: string, ...args: unknown[]) =>
+				this.invoke<T>(method, ...args),
+			invokeOptionalValue: <T>(method: string, ...args: unknown[]) =>
+				this.invokeOptionalValue<T>(method, ...args),
+		};
 	}
 
 	private async applyInitialOAuthCredentials(
@@ -490,7 +454,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 					);
 			}
 		}
-		const initialAggregateUsage = await this.seedAggregateUsageFromArtifacts({
+		const initialAggregateUsage = await seedAggregateUsageFromArtifacts({
 			initialUsage,
 			sessionDir,
 			rootMessagesPath: resumedArtifacts?.messagesPath ?? messagesPath,
@@ -685,11 +649,12 @@ export class LocalRuntimeHost implements RuntimeHost {
 					// conversation store) can legally differ from the runtime's
 					// working transcript, so validating against the store would
 					// spuriously reject the write.
-					const result = await this.persistActiveSessionCompactionState(
-						activeSession,
-						stateForSession,
-						sourceMessages,
-					);
+					const result =
+						await this.compactionStateStore.persistActiveSessionCompactionState(
+							activeSession,
+							stateForSession,
+							sourceMessages,
+						);
 					if (!result.updated) {
 						configWithProvider.logger?.debug?.(
 							"Skipped stale session compaction state",
@@ -850,7 +815,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 		activeSessionRef = active;
 		if (
 			active.compactionState &&
-			!this.isCompactionStateForSession(
+			!this.compactionStateStore.isCompactionStateForSession(
 				active.sessionId,
 				active.compactionState,
 				active,
@@ -897,7 +862,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 		let result: AgentResult | undefined;
 		try {
 			if (startInput.prompt?.trim()) {
-				result = await this.executeTurn(active, {
+				result = await executeTurn(this.turnHost, active, {
 					prompt: startInput.prompt,
 					userImages: startInput.userImages,
 					userFiles: startInput.userFiles,
@@ -905,12 +870,16 @@ export class LocalRuntimeHost implements RuntimeHost {
 				if (!active.interactive) {
 					await this.finalizeSingleRun(active, result.finishReason);
 				} else {
-					await this.completeInteractiveTurn(active, result.finishReason);
+					await completeInteractiveTurn(
+						this.turnHost,
+						active,
+						result.finishReason,
+					);
 				}
 			}
 		} catch (error) {
 			if (active.interactive && active.aborting) {
-				result = await this.completeAbortedInteractiveTurn(active);
+				result = await completeAbortedInteractiveTurn(this.turnHost, active);
 			} else {
 				try {
 					await this.failSession(active);
@@ -985,7 +954,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 			return undefined;
 		}
 		try {
-			const result = await this.executeTurn(session, {
+			const result = await executeTurn(this.turnHost, session, {
 				prompt: input.prompt,
 				mode: input.mode,
 				userImages: input.userImages,
@@ -994,7 +963,11 @@ export class LocalRuntimeHost implements RuntimeHost {
 			if (!session.interactive) {
 				await this.finalizeSingleRun(session, result.finishReason);
 			} else {
-				await this.completeInteractiveTurn(session, result.finishReason);
+				await completeInteractiveTurn(
+					this.turnHost,
+					session,
+					result.finishReason,
+				);
 			}
 			// Drain after "aborted" finishes too: both internal stops (loop
 			// detector / mistake limit) and user-initiated aborts keep the
@@ -1011,7 +984,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 			return result;
 		} catch (error) {
 			if (session.interactive && session.aborting) {
-				return await this.completeAbortedInteractiveTurn(session);
+				return await completeAbortedInteractiveTurn(this.turnHost, session);
 			}
 			await this.failSession(session);
 			throw error;
@@ -1075,8 +1048,8 @@ export class LocalRuntimeHost implements RuntimeHost {
 		}
 		if (session.interactive && session.agent.canStartRun()) {
 			await this.shutdownSession(session, {
-				status: this.resolveInteractiveStopStatus(session),
-				exitCode: this.resolveInteractiveStopExitCode(session),
+				status: resolveInteractiveStopStatus(session),
+				exitCode: resolveInteractiveStopExitCode(session),
 				shutdownReason: "session_stop",
 				endReason: "stopped",
 			});
@@ -1102,8 +1075,8 @@ export class LocalRuntimeHost implements RuntimeHost {
 					? this.releaseSessionRuntime(session, reason)
 					: session.interactive && session.agent.canStartRun()
 						? this.shutdownSession(session, {
-								status: this.resolveInteractiveStopStatus(session),
-								exitCode: this.resolveInteractiveStopExitCode(session),
+								status: resolveInteractiveStopStatus(session),
+								exitCode: resolveInteractiveStopExitCode(session),
 								shutdownReason: reason,
 								endReason: "disposed",
 							})
@@ -1187,200 +1160,16 @@ export class LocalRuntimeHost implements RuntimeHost {
 		sessionId: string,
 		state: SessionCompactionState,
 	): Promise<{ updated: boolean }> {
-		const target = sessionId.trim();
-		if (!target) return { updated: false };
-		const activeSession = this.sessions.get(target);
-		const sessionRecord = activeSession
-			? undefined
-			: await this.getSession(target);
-		const existing = activeSession ?? sessionRecord;
-		if (!existing) return { updated: false };
-		if (activeSession) {
-			const persistedMessages = await this.readSessionMessages(target);
-			const hasPersistedSource =
-				state.source_message_count > 0 &&
-				persistedMessages.length >= state.source_message_count;
-			const validationMessages = hasPersistedSource
-				? persistedMessages
-				: undefined;
-			if (hasPersistedSource) {
-				if (
-					!(await this.canPersistCompactionState(
-						target,
-						state,
-						activeSession,
-						undefined,
-						persistedMessages,
-					))
-				) {
-					return { updated: false };
-				}
-				activeSession.agent.restore(persistedMessages);
-			}
-			return await this.persistActiveSessionCompactionState(
-				activeSession,
-				state,
-				validationMessages,
-			);
-		}
-		if (
-			!(await this.canPersistCompactionState(
-				target,
-				state,
-				undefined,
-				sessionRecord,
-			))
-		) {
-			return { updated: false };
-		}
-		const current = await this.invokeOptionalValue<SessionCompactionState>(
-			"readSessionCompactionState",
-			target,
+		return this.compactionStateStore.updateSessionCompactionState(
+			sessionId,
+			state,
 		);
-		if (isIncomingCompactionStateStale(state, current)) {
-			return { updated: false };
-		}
-		await this.invoke<void>("persistSessionCompactionState", target, state);
-		return { updated: true };
 	}
 
 	async readSessionCompactionState(
 		sessionId: string,
 	): Promise<SessionCompactionState | undefined> {
-		const target = sessionId.trim();
-		if (!target) return undefined;
-		const activeSession = this.sessions.get(target);
-		if (activeSession) {
-			for (;;) {
-				const pendingWrite = activeSession.compactionStateWriteQueue;
-				if (!pendingWrite) {
-					return activeSession.compactionState;
-				}
-				await pendingWrite.catch(() => undefined);
-			}
-		}
-		return await this.invokeOptionalValue<SessionCompactionState>(
-			"readSessionCompactionState",
-			target,
-		);
-	}
-
-	private isCompactionStateForSession(
-		sessionId: string,
-		state: SessionCompactionState,
-		activeSession?: ActiveSession,
-		sessionRecord?: SessionRecord,
-	): boolean {
-		const conversationId = state.conversation_id?.trim();
-		if (!conversationId) {
-			return true;
-		}
-		if (conversationId === sessionId) {
-			return true;
-		}
-		const expectedConversationId =
-			activeSession?.agent.getConversationId()?.trim() ||
-			sessionRecord?.conversationId?.trim();
-		return expectedConversationId
-			? conversationId === expectedConversationId
-			: false;
-	}
-
-	private async canPersistCompactionState(
-		sessionId: string,
-		state: SessionCompactionState,
-		activeSession?: ActiveSession,
-		sessionRecord?: SessionRecord,
-		sourceMessages?: readonly LlmsProviders.Message[],
-	): Promise<boolean> {
-		if (!state.conversation_id?.trim()) {
-			return false;
-		}
-		if (
-			!this.isCompactionStateForSession(
-				sessionId,
-				state,
-				activeSession,
-				sessionRecord,
-			)
-		) {
-			return false;
-		}
-		const messagesForProjection =
-			sourceMessages ??
-			activeSession?.agent.getMessages() ??
-			(await this.readSessionMessages(sessionId));
-		return (
-			projectSessionCompactionState(state, messagesForProjection) !== undefined
-		);
-	}
-
-	private async persistActiveSessionCompactionState(
-		session: ActiveSession,
-		state: SessionCompactionState,
-		sourceMessages?: readonly LlmsProviders.Message[],
-	): Promise<{ updated: boolean }> {
-		if (
-			!(await this.canPersistCompactionState(
-				session.sessionId,
-				state,
-				session,
-				undefined,
-				sourceMessages,
-			))
-		) {
-			return { updated: false };
-		}
-		return await this.enqueueCompactionStateWrite(session, async () => {
-			const currentState = session.compactionState;
-			const currentStateStillProjects =
-				currentState !== undefined &&
-				projectSessionCompactionState(
-					currentState,
-					sourceMessages ?? session.agent.getMessages(),
-				) !== undefined;
-			// The count-based stale guard exists to stop an old write from
-			// clobbering a newer one, which only makes sense while the stored
-			// state is still valid. An unprojectable state (e.g. invalidated by
-			// message-identity churn on resume, or a hash-format change) must
-			// not permanently block its replacement, so fall back to comparing
-			// timestamps and let the newer state win.
-			if (
-				currentState &&
-				(currentStateStillProjects
-					? isIncomingCompactionStateStale(state, currentState)
-					: Date.parse(state.updated_at) < Date.parse(currentState.updated_at))
-			) {
-				return { updated: false };
-			}
-			await this.invoke<void>(
-				"persistSessionCompactionState",
-				session.sessionId,
-				state,
-			);
-			session.compactionState = state;
-			return { updated: true };
-		});
-	}
-
-	private async enqueueCompactionStateWrite<T>(
-		session: ActiveSession,
-		action: () => Promise<T>,
-	): Promise<T> {
-		const previous = session.compactionStateWriteQueue ?? Promise.resolve();
-		const run = previous.catch(() => undefined).then(action);
-		const tracked = run.then(
-			() => undefined,
-			() => undefined,
-		);
-		session.compactionStateWriteQueue = tracked;
-		try {
-			return await run;
-		} finally {
-			if (session.compactionStateWriteQueue === tracked) {
-				session.compactionStateWriteQueue = undefined;
-			}
-		}
+		return this.compactionStateStore.readSessionCompactionState(sessionId);
 	}
 
 	async readLiveSessionMessages(
@@ -1577,313 +1366,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		);
 	}
 
-	// ── Turn execution ──────────────────────────────────────────────────
-
-	private async executeTurn(
-		session: ActiveSession,
-		input: {
-			prompt: string;
-			mode?: SendSessionInput["mode"];
-			userImages?: string[];
-			userFiles?: string[];
-		},
-	): Promise<AgentResult> {
-		const preparedInput = await this.prepareTurnInput(session, input);
-		const prompt = preparedInput.prompt.trim();
-		const images = preparedInput?.userImages?.length;
-		const files = preparedInput?.userFiles?.length;
-		if (!prompt && !images && !files) throw new Error("prompt cannot be empty");
-
-		if (!session.artifacts && !session.pendingPrompt) {
-			session.pendingPrompt = prompt;
-		}
-		await this.ensureSessionPersisted(session);
-		// A seeded session (fork, checkpoint restore, missing-session
-		// recovery) materializes at start, before any prompt exists, so its
-		// row is created promptless. Backfill it with the first user prompt,
-		// which restores the behavior rows had when materialization happened
-		// here: the persistence service derives the title from this prompt
-		// when the session is untitled, and leaves any user-set title alone.
-		if (!session.pendingPrompt) {
-			session.pendingPrompt = prompt;
-			try {
-				await this.invokeOptionalValue("updateSession", {
-					sessionId: session.sessionId,
-					prompt,
-				});
-			} catch (error) {
-				session.config.logger?.log?.(
-					"Failed to backfill seeded session prompt",
-					{ severity: "warn", sessionId: session.sessionId, error },
-				);
-			}
-		}
-		await this.refreshActiveSessionGitMetadata(session);
-		await this.syncOAuthCredentials(session);
-		await this.markTurnRunning(session);
-
-		try {
-			let result = await this.executeAgentTurn(
-				session,
-				prompt,
-				preparedInput.userImages,
-				preparedInput.userFiles,
-			);
-
-			while (shouldAutoContinueTeamRuns(session, result.finishReason)) {
-				const updates = await waitForTeamRunUpdates(session);
-				if (updates.length === 0) break;
-				const continuationPrompt = buildTeamRunContinuationPrompt(
-					session,
-					updates,
-				);
-				result = await this.executeAgentTurn(session, continuationPrompt);
-			}
-
-			return result;
-		} finally {
-			await this.refreshActiveSessionGitMetadata(session);
-		}
-	}
-
-	private async completeInteractiveTurn(
-		session: ActiveSession,
-		finishReason: AgentResult["finishReason"],
-	): Promise<void> {
-		if (hasPendingTeamRunWork(session)) return;
-		session.lastInteractiveTurnFinishReason = finishReason;
-		await this.markTurnIdle(session);
-		session.aborting = false;
-	}
-
-	private resolveInteractiveStopStatus(session: ActiveSession): SessionStatus {
-		const finishReason = session.lastInteractiveTurnFinishReason;
-		if (!finishReason) return "cancelled";
-
-		switch (finishReason) {
-			case "completed":
-				return "completed";
-			case "error":
-				return "failed";
-			case "aborted":
-			case "max_iterations":
-			case "mistake_limit":
-				return "cancelled";
-		}
-
-		const _exhaustive: never = finishReason;
-		return _exhaustive;
-	}
-
-	private resolveInteractiveStopExitCode(session: ActiveSession): number {
-		return session.lastInteractiveTurnFinishReason === "error" ? 1 : 0;
-	}
-
-	private async completeAbortedInteractiveTurn(
-		session: ActiveSession,
-	): Promise<AgentResult> {
-		const endedAt = new Date();
-		const messages = session.agent.getMessages();
-		const usage = createInitialAccumulatedUsage();
-		session.persistedMessages = messages;
-		session.started = session.started || messages.length > 0;
-		// Flush the transcript now: persistence otherwise lags at
-		// assistant-message/turn boundaries, so without this an aborted turn
-		// (including the user's prompt) exists only in memory. If the session
-		// later has to be rebuilt from disk (hub restart, session eviction),
-		// the recovery would silently drop the aborted exchange — or, for a
-		// session seeded with in-memory history, the entire conversation.
-		if (messages.length > 0) {
-			try {
-				await this.ensureSessionPersisted(session);
-				await this.invoke<void>(
-					"persistSessionMessages",
-					session.sessionId,
-					messages,
-					session.config.systemPrompt,
-				);
-			} catch (error) {
-				session.config.logger?.error?.(
-					"Failed to persist session messages after abort",
-					{ sessionId: session.sessionId, error },
-				);
-			}
-		}
-		this.eventBridge.dispatchAgentEvent(session.sessionId, session.config, {
-			type: "done",
-			reason: "aborted",
-			text: "",
-			iterations: 0,
-			usage,
-		});
-		await this.completeInteractiveTurn(session, "aborted");
-		// The abort is fully settled (aborting flag reset above), so prompts
-		// the user queued behind the stopped turn can run now. This mirrors
-		// the drain in runTurn() for turns that resolve with an "aborted"
-		// finish; this path handles turns that end by throwing instead.
-		queueMicrotask(() => {
-			void this.pendingPromptsController.drain(session.sessionId);
-		});
-		return {
-			text: "",
-			usage,
-			messages,
-			toolCalls: [],
-			iterations: 0,
-			finishReason: "aborted",
-			model: {
-				id: session.config.modelId,
-				provider: session.config.providerId,
-			},
-			startedAt: endedAt,
-			endedAt,
-			durationMs: 0,
-		};
-	}
-
-	private async executeAgentTurn(
-		session: ActiveSession,
-		prompt: string,
-		userImages?: string[],
-		userFiles?: string[],
-	): Promise<AgentResult> {
-		const shouldContinue =
-			session.started || session.agent.getMessages().length > 0;
-		const baselineMessages =
-			session.persistedMessages ?? session.agent.getMessages();
-		const usageBaseline =
-			this.usageBySession.get(session.sessionId) ??
-			createInitialAccumulatedUsage();
-		const aggregateUsageBaseline =
-			this.aggregateUsageBySession.get(session.sessionId) ?? usageBaseline;
-		session.turnUsageBaseline = usageBaseline;
-		session.turnAggregateUsageBaseline = aggregateUsageBaseline;
-		session.turnPrimaryUsage = createInitialAccumulatedUsage();
-		session.turnUsageByAgent = new Map<string, SessionAccumulatedUsage>();
-
-		try {
-			const runFn = shouldContinue
-				? () => session.agent.continue(prompt, userImages, userFiles)
-				: () => session.agent.run(prompt, userImages, userFiles);
-			const result = await this.runWithAuthRetry(
-				session,
-				runFn,
-				baselineMessages,
-			);
-
-			session.started = true;
-			const persistedMessages = withLatestAssistantTurnMetadata(
-				result.messages,
-				result,
-				baselineMessages,
-			);
-			session.persistedMessages = persistedMessages;
-			const teammateTurnUsage = sumUsageTotals(
-				session.turnUsageByAgent?.values() ?? [],
-			);
-			const accumulatedUsage = accumulateUsageTotals(
-				usageBaseline,
-				result.usage,
-			);
-			const aggregateTurnUsage = accumulateUsageTotals(
-				accumulateUsageTotals(createInitialAccumulatedUsage(), result.usage),
-				teammateTurnUsage,
-			);
-			const aggregateUsage = accumulateUsageTotals(
-				aggregateUsageBaseline,
-				aggregateTurnUsage,
-			);
-			this.usageBySession.set(session.sessionId, accumulatedUsage);
-			this.aggregateUsageBySession.set(session.sessionId, aggregateUsage);
-			await this.persistSessionMetadata(session.sessionId, (current) => ({
-				...(current ?? {}),
-				totalCost: accumulatedUsage.totalCost,
-				aggregatedAgentsCost: aggregateUsage.totalCost,
-				usage: accumulatedUsage,
-				aggregateUsage,
-			}));
-			await this.invoke<void>(
-				"persistSessionMessages",
-				session.sessionId,
-				persistedMessages,
-				session.config.systemPrompt,
-			);
-			return result;
-		} catch (error) {
-			try {
-				await this.invoke<void>(
-					"persistSessionMessages",
-					session.sessionId,
-					session.agent.getMessages(),
-					session.config.systemPrompt,
-				);
-			} catch (persistError) {
-				// Never let a failed transcript flush mask the error that
-				// actually killed the turn; that one is what callers must see.
-				session.config.logger?.error?.(
-					"Failed to persist session messages after turn error",
-					{ sessionId: session.sessionId, error: persistError },
-				);
-			}
-			throw error;
-		} finally {
-			session.turnUsageBaseline = undefined;
-			session.turnAggregateUsageBaseline = undefined;
-			session.turnPrimaryUsage = undefined;
-			session.turnUsageByAgent = undefined;
-		}
-	}
-
-	private async prepareTurnInput(
-		session: ActiveSession,
-		input: {
-			prompt: string;
-			mode?: SendSessionInput["mode"];
-			userImages?: string[];
-			userFiles?: string[];
-		},
-	): Promise<PreparedTurnInput> {
-		const mentionBaseDir = resolveWorkspacePath(session.config);
-		const normalizedPrompt = normalizeUserInput(input.prompt).trim();
-		if (!normalizedPrompt) {
-			return {
-				prompt: "",
-				userImages: input.userImages,
-				userFiles: this.resolveAbsoluteFilePaths(
-					session.config.cwd,
-					input.userFiles,
-				),
-			};
-		}
-
-		const enriched = await enrichPromptWithMentions(
-			normalizedPrompt,
-			mentionBaseDir,
-		);
-
-		const prompt = formatModePrompt(
-			enriched.prompt,
-			input.mode ?? session.config.mode,
-		);
-		const explicitUserFiles = this.resolveAbsoluteFilePaths(
-			session.config.cwd,
-			input.userFiles,
-		);
-		const mentionedFiles = this.resolveAbsoluteFilePaths(
-			mentionBaseDir,
-			enriched.matchedFiles,
-		);
-		const mergedUserFiles = Array.from(
-			new Set([...explicitUserFiles, ...mentionedFiles]),
-		);
-
-		return {
-			prompt,
-			userImages: input.userImages,
-			userFiles: mergedUserFiles.length > 0 ? mergedUserFiles : undefined,
-		};
-	}
-
 	// ── Session lifecycle ───────────────────────────────────────────────
 
 	private async ensureSessionPersisted(session: ActiveSession): Promise<void> {
@@ -1912,10 +1394,11 @@ export class LocalRuntimeHost implements RuntimeHost {
 			startedAt: session.startedAt,
 		})) as RootSessionArtifacts;
 		if (session.compactionState) {
-			const result = await this.persistActiveSessionCompactionState(
-				session,
-				session.compactionState,
-			);
+			const result =
+				await this.compactionStateStore.persistActiveSessionCompactionState(
+					session,
+					session.compactionState,
+				);
 			if (!result.updated) {
 				session.compactionState = undefined;
 			}
@@ -2186,26 +1669,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 
 	// ── OAuth & auth ────────────────────────────────────────────────────
 
-	private async runWithAuthRetry(
-		session: ActiveSession,
-		run: () => Promise<AgentResult>,
-		baselineMessages: LlmsProviders.Message[],
-	): Promise<AgentResult> {
-		try {
-			return await run();
-		} catch (error) {
-			if (
-				!isOAuthProvider(session.config.providerId) ||
-				!isLikelyAuthError(error)
-			) {
-				throw error;
-			}
-			await this.syncOAuthCredentials(session, { forceRefresh: true });
-			session.agent.restore(baselineMessages);
-			return run();
-		}
-	}
-
 	private async syncOAuthCredentials(
 		session: ActiveSession,
 		options?: { forceRefresh?: boolean },
@@ -2241,87 +1704,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			throw new SessionNotFoundError(sessionId);
 		}
 		return session;
-	}
-
-	private resolveAbsoluteFilePaths(cwd: string, paths?: string[]): string[] {
-		if (!paths || paths.length === 0) return [];
-		const resolved = paths
-			.map((p) => p.trim())
-			.filter((p) => p.length > 0)
-			.map((p) => (isAbsolute(p) ? p : resolve(cwd, p)));
-		return Array.from(new Set(resolved));
-	}
-
-	private async seedAggregateUsageFromArtifacts(input: {
-		initialUsage: SessionAccumulatedUsage;
-		sessionDir: string;
-		rootMessagesPath: string;
-		manifest: SessionManifest;
-	}): Promise<SessionAccumulatedUsage> {
-		const teammateUsage = await this.summarizePersistedTeammateUsage(
-			input.sessionDir,
-			input.rootMessagesPath,
-			input.manifest.session_id,
-		);
-		const aggregateUsage = accumulateUsageTotals(
-			input.initialUsage,
-			teammateUsage,
-		);
-		return this.withPersistedAggregateUsageFloor(
-			aggregateUsage,
-			input.manifest,
-		);
-	}
-
-	private async summarizePersistedTeammateUsage(
-		sessionDir: string,
-		rootMessagesPath: string,
-		sessionId: string,
-	): Promise<SessionAccumulatedUsage> {
-		const rootPath = resolve(rootMessagesPath);
-		const defaultRootMessagesFilename = `${sessionId}.messages.json`;
-		let filenames: string[];
-		try {
-			filenames = readdirSync(sessionDir);
-		} catch {
-			return createInitialAccumulatedUsage();
-		}
-
-		let usage = createInitialAccumulatedUsage();
-		for (const filename of filenames) {
-			if (!filename.endsWith(".messages.json")) continue;
-			if (filename === defaultRootMessagesFilename) continue;
-			const messagesPath = resolve(sessionDir, filename);
-			if (messagesPath === rootPath) continue;
-			const messages = await readPersistedMessagesFile(messagesPath);
-			if (messages.length === 0) continue;
-			usage = accumulateUsageTotals(
-				usage,
-				summarizeUsageFromMessages(messages),
-			);
-		}
-		return usage;
-	}
-
-	private withPersistedAggregateUsageFloor(
-		usage: SessionAccumulatedUsage,
-		manifest: SessionManifest,
-	): SessionAccumulatedUsage {
-		const persistedAggregateUsage = parseAccumulatedUsage(
-			manifest.metadata?.aggregateUsage,
-		);
-		if (persistedAggregateUsage) {
-			return maxAccumulatedUsage(usage, persistedAggregateUsage);
-		}
-		const aggregatedAgentsCost = manifest.metadata?.aggregatedAgentsCost;
-		if (
-			typeof aggregatedAgentsCost !== "number" ||
-			!Number.isFinite(aggregatedAgentsCost) ||
-			aggregatedAgentsCost <= usage.totalCost
-		) {
-			return usage;
-		}
-		return { ...usage, totalCost: aggregatedAgentsCost };
 	}
 
 	private emitStatus(sessionId: string, status: string): void {
