@@ -1048,7 +1048,7 @@ type TaskProxyLike = {
 	messageStateHandler: { getClineMessages(): ClineMessage[] }
 }
 
-export interface MergeTaskHistoryIntoStateOptions {
+interface MergeTaskHistoryIntoStateOptions {
 	/** The base ExtensionState, built by core/controller/state/getStateToPostToWebview.ts. */
 	baseState: ExtensionState
 	taskHistory: SdkTaskHistory
