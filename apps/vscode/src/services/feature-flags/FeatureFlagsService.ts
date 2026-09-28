@@ -103,10 +103,6 @@ export class FeatureFlagsService {
 		return this.cache.get(flagName) ?? FeatureFlagDefaultValue[flagName]
 	}
 
-	public getWorktreesEnabled(): boolean {
-		return this.getBooleanFlagEnabled(FeatureFlag.WORKTREES)
-	}
-
 	public getOnboardingOverrides() {
 		const payload = this.cache.get(FeatureFlag.ONBOARDING_MODELS)
 		// Check if payload is object

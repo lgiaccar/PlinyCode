@@ -72,7 +72,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	settingsInitialModelTab?: "recommended" | "free"
 	showHistory: boolean
 	showAccount: boolean
-	showWorktrees: boolean
 	expandTaskHeader: boolean
 
 	// Setters
@@ -119,14 +118,12 @@ export interface ExtensionStateContextType extends ExtensionState {
 	navigateToSettingsModelPicker: (opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => void
 	navigateToHistory: () => void
 	navigateToAccount: () => void
-	navigateToWorktrees: () => void
 	navigateToChat: () => void
 
 	// Hide functions
 	hideSettings: () => void
 	hideHistory: () => void
 	hideAccount: () => void
-	hideWorktrees: () => void
 	closeMarketplaceView: () => void
 	closeMcpView: () => void
 
@@ -148,7 +145,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	const [settingsInitialModelTab, setSettingsInitialModelTab] = useState<"recommended" | "free" | undefined>(undefined)
 	const [showHistory, setShowHistory] = useState(false)
 	const [showAccount, setShowAccount] = useState(false)
-	const [showWorktrees, setShowWorktrees] = useState(false)
 
 	// Helper for MCP view
 	const closeMcpView = useCallback(() => {
@@ -167,7 +163,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	}, [])
 	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
 	const hideAccount = useCallback(() => setShowAccount(false), [setShowAccount])
-	const hideWorktrees = useCallback(() => setShowWorktrees(false), [setShowWorktrees])
 
 	// Navigation functions
 	const navigateToMcp = useCallback(
@@ -175,14 +170,13 @@ export const ExtensionStateContextProvider: React.FC<{
 			setShowSettings(false)
 			setShowHistory(false)
 			setShowAccount(false)
-			setShowWorktrees(false)
 			closeMcpView()
 			if (tab) {
 				setMcpTab(tab)
 			}
 			setShowMarketplace(true)
 		},
-		[closeMcpView, setMcpTab, setShowSettings, setShowHistory, setShowAccount, setShowWorktrees],
+		[closeMcpView, setMcpTab, setShowSettings, setShowHistory, setShowAccount],
 	)
 
 	const navigateToMarketplace = useCallback(() => {
@@ -190,7 +184,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		closeMcpView()
 		setShowHistory(false)
 		setShowAccount(false)
-		setShowWorktrees(false)
 		setShowMarketplace(true)
 	}, [closeMcpView])
 
@@ -200,7 +193,6 @@ export const ExtensionStateContextProvider: React.FC<{
 			setShowHistory(false)
 			closeMcpView()
 			setShowAccount(false)
-			setShowWorktrees(false)
 			setSettingsTargetSection(targetSection)
 			setSettingsInitialModelTab(undefined)
 			setShowSettings(true)
@@ -214,7 +206,6 @@ export const ExtensionStateContextProvider: React.FC<{
 			setShowHistory(false)
 			closeMcpView()
 			setShowAccount(false)
-			setShowWorktrees(false)
 			setSettingsTargetSection(opts.targetSection)
 			setSettingsInitialModelTab(opts.initialModelTab)
 			setShowSettings(true)
@@ -227,27 +218,16 @@ export const ExtensionStateContextProvider: React.FC<{
 		setShowSettings(false)
 		closeMcpView()
 		setShowAccount(false)
-		setShowWorktrees(false)
 		setShowHistory(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowAccount, setShowWorktrees, setShowHistory])
+	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowAccount, setShowHistory])
 
 	const navigateToAccount = useCallback(() => {
 		closeMarketplaceView()
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
-		setShowWorktrees(false)
 		setShowAccount(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowWorktrees, setShowAccount])
-
-	const navigateToWorktrees = useCallback(() => {
-		closeMarketplaceView()
-		setShowSettings(false)
-		closeMcpView()
-		setShowHistory(false)
-		setShowAccount(false)
-		setShowWorktrees(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowAccount, setShowWorktrees])
+	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowAccount])
 
 	const navigateToChat = useCallback(() => {
 		closeMarketplaceView()
@@ -255,8 +235,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		closeMcpView()
 		setShowHistory(false)
 		setShowAccount(false)
-		setShowWorktrees(false)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowAccount, setShowWorktrees])
+	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowAccount])
 
 	const [state, setState] = useState<ExtensionState>({
 		version: "",
@@ -296,7 +275,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		prereleaseUpdatesEnabled: false,
 		conversationSpendingLimit: 5,
 		subagentsEnabled: true,
-		worktreesEnabled: { user: true, featureFlag: false },
 		favoritedModelIds: [],
 		optOutOfRemoteConfig: false,
 		remoteConfigAvailable: false,
@@ -411,7 +389,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	const chatButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const accountButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const settingsButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
-	const worktreesButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const partialMessageUnsubscribeRef = useRef<(() => void) | null>(null)
 	const openRouterModelsUnsubscribeRef = useRef<(() => void) | null>(null)
 	const liteLlmModelsUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -590,23 +567,6 @@ export const ExtensionStateContextProvider: React.FC<{
 			},
 		})
 
-		// Set up worktrees button clicked subscription
-		worktreesButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToWorktreesButtonClicked(
-			EmptyRequest.create({}),
-			{
-				onResponse: () => {
-					// When worktrees button is clicked, navigate to worktrees
-					navigateToWorktrees()
-				},
-				onError: (error: any) => {
-					console.error("Error in worktrees button clicked subscription:", error)
-				},
-				onComplete: () => {
-					console.log("Worktrees button clicked subscription completed")
-				},
-			},
-		)
-
 		// Subscribe to partial message events
 		partialMessageUnsubscribeRef.current = UiServiceClient.subscribeToPartialMessage(EmptyRequest.create({}), {
 			onResponse: (protoMessage: any) => {
@@ -751,10 +711,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				settingsButtonClickedSubscriptionRef.current()
 				settingsButtonClickedSubscriptionRef.current = null
 			}
-			if (worktreesButtonClickedSubscriptionRef.current) {
-				worktreesButtonClickedSubscriptionRef.current()
-				worktreesButtonClickedSubscriptionRef.current = null
-			}
 			if (partialMessageUnsubscribeRef.current) {
 				partialMessageUnsubscribeRef.current()
 				partialMessageUnsubscribeRef.current = null
@@ -885,7 +841,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		settingsInitialModelTab,
 		showHistory,
 		showAccount,
-		showWorktrees,
 		globalClineRulesToggles: state.globalClineRulesToggles || {},
 		localClineRulesToggles: state.localClineRulesToggles || {},
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
@@ -905,14 +860,12 @@ export const ExtensionStateContextProvider: React.FC<{
 		navigateToSettingsModelPicker,
 		navigateToHistory,
 		navigateToAccount,
-		navigateToWorktrees,
 		navigateToChat,
 
 		// Hide functions
 		hideSettings,
 		hideHistory,
 		hideAccount,
-		hideWorktrees,
 		closeMarketplaceView,
 		setShowWelcome,
 		setOnboardingModels,

@@ -92,8 +92,6 @@ const GLOBAL_STATE_FIELDS = {
 	remoteRulesToggles: { default: {} as ClineRulesToggles },
 	remoteWorkflowToggles: { default: {} as ClineRulesToggles },
 	remoteSkillsToggles: { default: {} as ClineRulesToggles },
-	// Path to worktree that should auto-open Cline sidebar when launched
-	worktreeAutoOpenPath: { default: undefined as string | undefined },
 } satisfies FieldDefinitions
 
 // Fields that map directly to ApiHandlerOptions in @shared/api.ts
@@ -278,7 +276,6 @@ const USER_SETTINGS_FIELDS = {
 	hooksEnabled: { default: true as boolean },
 	useAutoCondense: { default: true as boolean },
 	subagentsEnabled: { default: true as boolean },
-	worktreesEnabled: { default: false as boolean },
 	preferredLanguage: { default: "English" as string },
 	mode: { default: "act" as Mode },
 	focusChainSettings: { default: DEFAULT_FOCUS_CHAIN_SETTINGS as FocusChainSettings },

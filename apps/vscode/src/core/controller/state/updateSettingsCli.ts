@@ -39,7 +39,6 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			actModeApiProvider,
 			// Fields requiring special logic (merging, etc.)
 			useAutoCondense,
-			worktreesEnabled,
 			subagentsEnabled,
 			browserSettings,
 			defaultTerminalProfile,
@@ -110,11 +109,6 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 		// Update auto-condense setting
 		if (useAutoCondense !== undefined) {
 			controller.stateManager.setGlobalState("useAutoCondense", useAutoCondense)
-		}
-
-		// Update worktrees setting
-		if (worktreesEnabled !== undefined) {
-			controller.stateManager.setGlobalState("worktreesEnabled", worktreesEnabled)
 		}
 
 		// Update subagents setting

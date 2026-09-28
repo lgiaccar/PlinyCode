@@ -114,6 +114,8 @@ message Settings {
   reserved 142; // was yolo_mode_toggled (removed; migrated into auto_approval_settings)
   reserved 187, 188; // were plinycode_context_folders_enabled / plinycode_context_folders (context-folder import removed)
   reserved "plinycode_context_folders_enabled", "plinycode_context_folders";
+  reserved 172; // was worktrees_enabled (worktrees removed)
+  reserved "worktrees_enabled";
   optional string lite_llm_base_url = 1;
   optional bool lite_llm_use_prompt_cache = 2;
   optional string anthropic_base_url = 4;
@@ -271,7 +273,6 @@ message Settings {
   optional int32 open_telemetry_log_batch_size = 169;
   optional int32 open_telemetry_log_batch_timeout = 170;
   optional int32 open_telemetry_log_max_queue_size = 171;
-  optional bool worktrees_enabled = 172;
   map<string, string> open_ai_headers = 177;
   optional string plan_mode_cline_model_id = 178;
   optional OpenRouterModelInfo plan_mode_cline_model_info = 179;
@@ -379,10 +380,11 @@ message UpdateSettingsRequest {
   reserved 32, 34, 35, 41;
   reserved 38; // was skills_enabled (removed - now always enabled)
   reserved 43; // was lazy_teammate_mode_enabled (removed)
+  reserved 40; // was worktrees_enabled (worktrees removed)
   reserved 12; // was terminal_output_line_limit (removed; SDK command output limits are character-based)
   reserved 19; // was custom_prompt (removed - compact prompt setting no longer supported)
   reserved 3; // was telemetry_setting (telemetry removed)
-  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting";
+  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting", "worktrees_enabled";
 
   Metadata metadata = 1;
   optional ModelsApiConfiguration api_configuration = 2;
@@ -412,7 +414,6 @@ message UpdateSettingsRequest {
   optional bool background_edit_enabled = 36;
   optional string oca_reasoning_effort = 37;
   optional bool opt_out_of_remote_config = 39;
-  optional bool worktrees_enabled = 40;
   optional bool show_feature_tips = 42;
   optional string compaction_strategy = 44;
   optional bool web_search_enabled = 45;

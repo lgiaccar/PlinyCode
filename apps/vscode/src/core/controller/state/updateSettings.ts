@@ -131,11 +131,6 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 		if (request.hooksEnabled !== undefined) {
 			controller.stateManager.setGlobalState("hooksEnabled", !!request.hooksEnabled)
 		}
-		// Update worktrees setting
-		if (request.worktreesEnabled !== undefined) {
-			controller.stateManager.setGlobalState("worktreesEnabled", request.worktreesEnabled)
-		}
-
 		// Update subagents setting
 		if (request.subagentsEnabled !== undefined) {
 			controller.stateManager.setGlobalState("subagentsEnabled", !!request.subagentsEnabled)

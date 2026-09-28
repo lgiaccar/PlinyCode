@@ -21,7 +21,6 @@ import { ShowMessageType } from "./shared/proto/host/window"
 import { syncWorker } from "./shared/services/worker/sync"
 import { getBlobStoreSettingsFromEnv } from "./shared/services/worker/worker"
 import { getLatestAnnouncementId } from "./utils/announcements"
-import { arePathsEqual } from "./utils/path"
 
 /**
  * Performs intialization for PlinyCode that is common to all platforms.
@@ -78,8 +77,6 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	const stateManager = StateManager.get()
 	// Non-blocking announcement check and display
 	showVersionUpdateAnnouncement(stateManager)
-	// Check if this workspace was opened from worktree quick launch
-	await checkWorktreeAutoOpen(stateManager)
 
 	// =============== Background sync and cleanup tasks ===============
 	// Use remote config blobStoreConfig if available, otherwise fall back to env vars
@@ -120,39 +117,6 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error)
 		Logger.error(`Error during post-update actions: ${errorMessage}, Stack trace: ${error.stack}`)
-	}
-}
-
-/**
- * Checks if this workspace was opened from the worktree quick launch button.
- * If so, opens the PlinyCode sidebar and clears the state.
- */
-async function checkWorktreeAutoOpen(stateManager: StateManager): Promise<void> {
-	try {
-		// Read directly from globalState (not StateManager cache) since this may have been
-		// set by another window right before this one opened
-		const worktreeAutoOpenPath = stateManager.getGlobalStateKey("worktreeAutoOpenPath")
-		if (!worktreeAutoOpenPath) {
-			return
-		}
-
-		// Get current workspace path
-		const workspacePaths = (await HostProvider.workspace.getWorkspacePaths({})).paths
-		if (workspacePaths.length === 0) {
-			return
-		}
-
-		const currentPath = workspacePaths[0]
-
-		// Check if current workspace matches the worktree path
-		if (arePathsEqual(currentPath, worktreeAutoOpenPath)) {
-			// Clear the state first to prevent re-triggering
-			stateManager.setGlobalState("worktreeAutoOpenPath", undefined)
-			// Open the PlinyCode sidebar
-			await HostProvider.workspace.openClineSidebarPanel({})
-		}
-	} catch (error) {
-		Logger.error("Error checking worktree auto-open", error)
 	}
 }
 

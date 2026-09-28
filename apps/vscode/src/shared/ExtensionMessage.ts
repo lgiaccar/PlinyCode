@@ -129,7 +129,6 @@ export interface ExtensionState {
 	/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 	conversationSpendingLimit?: number
 	subagentsEnabled?: boolean
-	worktreesEnabled?: ClineFeatureSetting
 	favoritedModelIds: string[]
 	/**
 	 * The workspace this window is open on (folder, or .code-workspace file for

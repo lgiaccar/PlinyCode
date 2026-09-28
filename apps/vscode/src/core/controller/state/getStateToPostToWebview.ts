@@ -11,7 +11,6 @@ import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
-import { featureFlagsService } from "@/services/feature-flags"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { getClineOnboardingModels } from "../models/getClineOnboardingModels"
@@ -171,10 +170,6 @@ export async function getStateToPostToWebview(controller: {
 		multiRootSetting: {
 			user: stateManager.getGlobalStateKey("multiRootEnabled"),
 			featureFlag: true,
-		},
-		worktreesEnabled: {
-			user: stateManager.getGlobalSettingsKey("worktreesEnabled"),
-			featureFlag: featureFlagsService.getWorktreesEnabled(),
 		},
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
 		remoteConfigSettings: stateManager.getRemoteConfigSettings?.(),
