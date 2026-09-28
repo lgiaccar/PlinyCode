@@ -70,7 +70,7 @@ export class AzureDevOpsProvider implements Provider {
 		auth: Auth = adoAuth(),
 	) {
 		// On-premises Azure DevOps Server: {origin}/{collection path}/{project}, where the collection path may
-		// itself have multiple segments (e.g. "tfs/ANSYS_Development") that must stay separate path segments,
+		// itself have multiple segments (e.g. "tfs/Some_Collection") that must stay separate path segments,
 		// not one encoded blob. Cloud: https://dev.azure.com/{org}/{project}.
 		const orgUrl = remote.origin
 			? `${remote.origin}/${(remote.collection ?? "").split("/").map(encodeURIComponent).join("/")}`

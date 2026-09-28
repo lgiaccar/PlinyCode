@@ -225,18 +225,18 @@ describe("AzureDevOpsProvider", () => {
 	})
 
 	it("targets the on-premises server's own host and full collection path, not dev.azure.com or the git SSH port", async () => {
-		// Parse the real GPUSurfer remote (`git remote -v` on D:\dev0\GPUSurfer) end-to-end, rather than
-		// hand-building a Remote, so this catches both the dropped "tfs" app-path segment and the port-22
-		// carrying over from the ssh:// git URL into the HTTPS REST API base.
-		const remote = parseRemote("ssh://tfs.ansys.com:22/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")
-		const api = new FakeApi().on("GET", "/tfs/ANSYS_Development/Meshing/_apis/git/repositories/GPUSurfer", {
+		// Parse an on-premises remote end-to-end, rather than hand-building a Remote, so this catches both
+		// the dropped "tfs" app-path segment and the port-22 carrying over from the ssh:// git URL into the
+		// HTTPS REST API base.
+		const remote = parseRemote("ssh://tfs.internal.example.com:22/tfs/Some_Collection/Meshing/_git/SomeRepo")
+		const api = new FakeApi().on("GET", "/tfs/Some_Collection/Meshing/_apis/git/repositories/SomeRepo", {
 			id: "r-1",
 			defaultBranch: "refs/heads/main",
 			project: { id: "p-1" },
 		})
 		const provider = new AzureDevOpsProvider(remote, api.fetch, staticAuth())
 		expect(await provider.defaultBranch()).toBe("main")
-		expect(api.last("GET").url.href).toContain("https://tfs.ansys.com/tfs/ANSYS_Development/Meshing/_apis/")
+		expect(api.last("GET").url.href).toContain("https://tfs.internal.example.com/tfs/Some_Collection/Meshing/_apis/")
 	})
 
 	it("publishes a draft by patching isDraft", async () => {

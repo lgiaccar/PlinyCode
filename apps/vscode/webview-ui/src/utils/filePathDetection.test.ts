@@ -6,7 +6,7 @@ describe("isPotentialFilePath", () => {
 		"src/foo.ts",
 		"README.md",
 		"src\\core\\index.ts",
-		"d:\\dev0\\GPUSurfer\\ai_output\\reports\\branch_16_levelset_root_cause.md",
+		"d:\\dev0\\SomeRepo\\ai_output\\reports\\branch_16_levelset_root_cause.md",
 		"C:/Users/me/My Docs/notes.md",
 		"/home/me/project/file.py",
 	])("accepts %s", (value) => {
@@ -22,11 +22,11 @@ describe("splitTextFilePaths", () => {
 	it("finds a lowercase-drive Windows path in prose", () => {
 		expect(
 			splitTextFilePaths(
-				"The full analysis is at: d:\\dev0\\GPUSurfer\\ai_output\\reports\\branch_16_levelset_root_cause.md",
+				"The full analysis is at: d:\\dev0\\SomeRepo\\ai_output\\reports\\branch_16_levelset_root_cause.md",
 			),
 		).toEqual([
 			{ type: "text", value: "The full analysis is at: " },
-			{ type: "path", value: "d:\\dev0\\GPUSurfer\\ai_output\\reports\\branch_16_levelset_root_cause.md" },
+			{ type: "path", value: "d:\\dev0\\SomeRepo\\ai_output\\reports\\branch_16_levelset_root_cause.md" },
 		])
 	})
 

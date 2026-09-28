@@ -32,7 +32,7 @@ const FINISHED = [
 	"The commit included two new files that were staged:\n- scripts/dummy_task.py\n- scripts/run_dummy_task.bat\n\nIs there anything else you'd like me to do regarding these files or any other git operations?",
 	"The push was successful. The commit removed the two script files that were previously added, and your changes are now on the remote repository.\n\nIs there anything else you'd like me to do?",
 	"Its contents are now available in your working directory and are properly ignored by Git, meeting your requirement to have them untracked.\n\nIs there anything else you'd like me to do with these files?",
-	"The report is written to D:\\dev0\\GPUSurfer\\ai_output\\profile_nsight\\20260923_173521\\cross_case_report.md",
+	"The report is written to D:\\dev0\\SomeRepo\\ai_output\\profile_nsight\\20260923_173521\\cross_case_report.md",
 	"Committed as `a1b2c3d` and pushed to `origin/lgiaccar/pipeline_perf_tests`.",
 ]
 
