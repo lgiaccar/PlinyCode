@@ -14,7 +14,6 @@ import {
 	type CoreSessionEvent,
 	type EditorExecutor,
 	type HookEventPayload,
-	type ITelemetryService,
 	type PendingPromptMutationResult,
 	type PendingPromptsDeleteInput,
 	type PendingPromptsListInput,
@@ -80,8 +79,6 @@ export interface VscodeSessionHostOptions {
 	readFileExecutor?: ToolExecutors["readFile"]
 	/** Per-tool approval policies derived from the user's auto-approval settings. */
 	toolPolicies?: Record<string, ToolPolicy>
-	/** Shared SDK telemetry service owned by SdkController. */
-	telemetry?: ITelemetryService
 	/** Resolves once the applicable remote config is ready for a new SDK session. */
 	beforeStartSession?: () => Promise<void>
 	/** Returns the latest prepared remote-config integration, if remote config is active. */
@@ -176,7 +173,6 @@ export class VscodeSessionHost implements SdkSessionHost {
 				},
 				config: {
 					...inputWithRemoteConfig.config,
-					telemetry: inputWithRemoteConfig.config.telemetry ?? options.telemetry,
 					extraTools: [...(inputWithRemoteConfig.config.extraTools ?? []), ...extraTools],
 				},
 			}
@@ -190,7 +186,6 @@ export class VscodeSessionHost implements SdkSessionHost {
 				toolExecutors: Object.keys(toolExecutors).length > 0 ? toolExecutors : undefined,
 			},
 			toolPolicies: options.toolPolicies,
-			telemetry: options.telemetry,
 			distinctId: getDistinctId() || undefined,
 			prepare: async () => ({
 				applyToStartSessionInput: prepareStartSessionInput,

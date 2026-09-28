@@ -1,7 +1,7 @@
 export { FeatureFlagsService } from "./FeatureFlagsService"
 
-import { FeatureFlagsProviderFactory } from "./FeatureFlagsProviderFactory"
 import { FeatureFlagsService } from "./FeatureFlagsService"
+import { NoOpFeatureFlagsProvider } from "./providers/NoOpFeatureFlagsProvider"
 
 let _featureFlagsServiceInstance: FeatureFlagsService | null = null
 
@@ -12,8 +12,7 @@ let _featureFlagsServiceInstance: FeatureFlagsService | null = null
  */
 export function getFeatureFlagsService(): FeatureFlagsService {
 	if (!_featureFlagsServiceInstance) {
-		const provider = FeatureFlagsProviderFactory.createProvider(FeatureFlagsProviderFactory.getDefaultConfig())
-		_featureFlagsServiceInstance = new FeatureFlagsService(provider)
+		_featureFlagsServiceInstance = new FeatureFlagsService(new NoOpFeatureFlagsProvider())
 	}
 	return _featureFlagsServiceInstance
 }

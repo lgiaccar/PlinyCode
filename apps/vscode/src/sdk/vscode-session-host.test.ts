@@ -32,31 +32,26 @@ vi.mock("./vscode-runtime-builder", () => ({
 
 import { VscodeSessionHost } from "./vscode-session-host"
 
-describe("VscodeSessionHost telemetry wiring", () => {
+describe("VscodeSessionHost", () => {
 	beforeEach(() => {
 		mockClineCoreCreate.mockReset()
 		mockClineCoreCreate.mockResolvedValue({ runtimeAddress: undefined })
 		mockCreateVscodeExtraTools.mockReset().mockResolvedValue([])
 	})
 
-	it("passes shared telemetry to ClineCore.create", async () => {
-		const telemetry = makeTelemetry()
-
+	it("gives ClineCore no telemetry service", async () => {
 		await VscodeSessionHost.create({
 			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
 			mcpHub: {} as any,
-			telemetry,
 		})
 
-		expect(mockClineCoreCreate).toHaveBeenCalledWith(expect.objectContaining({ telemetry }))
+		expect(mockClineCoreCreate.mock.calls[0][0].telemetry).toBeUndefined()
 	})
 
-	it("injects shared telemetry into CoreSessionConfig when remote config did not provide one", async () => {
-		const telemetry = makeTelemetry()
+	it("marks sessions as started from vscode, without telemetry", async () => {
 		await VscodeSessionHost.create({
 			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
 			mcpHub: {} as any,
-			telemetry,
 		})
 
 		const prepare = mockClineCoreCreate.mock.calls[0][0].prepare
@@ -70,16 +65,14 @@ describe("VscodeSessionHost telemetry wiring", () => {
 		})
 
 		expect(prepared.source).toBe("vscode")
-		expect(prepared.config.telemetry).toBe(telemetry)
+		expect(prepared.config.telemetry).toBeUndefined()
 	})
 
 	it("preserves telemetry already supplied by remote config", async () => {
-		const telemetry = makeTelemetry()
 		const remoteTelemetry = makeTelemetry()
 		await VscodeSessionHost.create({
 			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
 			mcpHub: {} as any,
-			telemetry,
 			getRemoteConfigIntegration: () =>
 				({
 					applyToStartSessionInput: (input: ClineCoreStartInput) => ({

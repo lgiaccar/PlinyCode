@@ -107,7 +107,6 @@ import {
 	sessionRecordWorkspacePath,
 } from "./sdk-task-history"
 import { SdkTaskStartCoordinator } from "./sdk-task-start-coordinator"
-import { createVscodeSdkTelemetryHandle, type VscodeSdkTelemetryHandle } from "./sdk-telemetry"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
 import { isToolAutoApproved } from "./sdk-tool-policies"
 import {
@@ -204,7 +203,6 @@ export class Controller {
 	private compaction: SdkCompactionCoordinator
 	private sessionEvents: SdkSessionEventCoordinator
 	private sessionHistory: SdkSessionHistoryLoader
-	private readonly sdkTelemetry: VscodeSdkTelemetryHandle
 	private readonly providerFailureTelemetryTurnGate = new ProviderFailureTelemetryTurnGate()
 	private readonly providerConfigStore: ProviderConfigStore
 	private readonly providerCatalog: ProviderCatalog
@@ -323,7 +321,6 @@ export class Controller {
 		// StateManager must be initialized before creating the Controller
 		this.stateManager = StateManager.get()
 		syncTelemetrySettingFromSharedGlobalSettings(this.stateManager)
-		this.sdkTelemetry = createVscodeSdkTelemetryHandle()
 		this.statePostDebouncer = new StatePostDebouncer({
 			debounceMs: Controller.STATE_POST_DEBOUNCE_MS,
 			flush: () => this.flushStateToWebview(),
@@ -351,7 +348,7 @@ export class Controller {
 		)
 
 		// Initialize SDK-backed auth and account services.
-		this.authService = AuthService.getInstance(this, this.sdkTelemetry.telemetry)
+		this.authService = AuthService.getInstance(this)
 		this.ocaAuthService = OcaAuthService.initialize(this)
 		this.accountService = ClineAccountService.getInstance()
 
@@ -465,7 +462,6 @@ export class Controller {
 		})
 		this.sessions = new SdkSessionLifecycle({
 			mcpHub: this.mcpHub,
-			telemetry: this.sdkTelemetry.telemetry,
 			requestToolApproval: (request) => this.interactions.handleRequestToolApproval(request),
 			askQuestion: (question, options, context) => this.interactions.handleAskQuestion(question, options, context),
 			editorExecutor: (input, cwd, context) => this.diffEdits.executeEditorTool(input, cwd, context),
@@ -1099,7 +1095,6 @@ export class Controller {
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()
 		this.messages.dispose()
-		await this.sdkTelemetry.dispose()
 		Logger.log("[SdkController] Disposed")
 	}
 
@@ -2291,7 +2286,7 @@ export class Controller {
 	// ---- Telemetry ----
 
 	async updateTelemetrySetting(telemetrySetting: TelemetrySetting): Promise<void> {
-		setTelemetryOptOutGlobally(telemetrySetting === "disabled", { telemetry: this.sdkTelemetry.telemetry })
+		setTelemetryOptOutGlobally(telemetrySetting === "disabled")
 		// Mirror to StateManager for existing VS Code services during the transition.
 		this.stateManager.setGlobalState("telemetrySetting", telemetrySetting)
 		await this.postStateToWebview()
