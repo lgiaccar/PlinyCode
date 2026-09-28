@@ -83,11 +83,10 @@ function restoreHookDirsSpy(): void {
 }
 
 export async function createHookTestEnv(): Promise<HookTestEnv> {
-	// Hook execution emits telemetry, which lazily constructs TelemetryService
-	// via HostProvider.env.getHostVersion(). Under mocha's single-process run an
-	// earlier suite left HostProvider initialized; bun's per-file isolation does
-	// not, so initialize it here (idempotent) to keep the telemetry path from
-	// throwing "HostProvider not setup".
+	// Hook execution reads the workspace paths via HostProvider.workspace.getWorkspacePaths().
+	// Under mocha's single-process run an earlier suite left HostProvider initialized;
+	// bun's per-file isolation does not, so initialize it here (idempotent) to keep
+	// that lookup from throwing "HostProvider not setup".
 	if (!HostProvider.isInitialized()) {
 		setVscodeHostProviderMock()
 	}
