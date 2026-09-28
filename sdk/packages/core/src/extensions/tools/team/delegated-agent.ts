@@ -5,7 +5,6 @@ import type {
 	AgentTool,
 	BasicLogger,
 	HookErrorMode,
-	ITelemetryService,
 	ToolApprovalRequest,
 	ToolApprovalResult,
 } from "@plinycode/shared";
@@ -46,16 +45,15 @@ export interface DelegatedAgentRuntimeConfig
 	hooks?: AgentHooks;
 	extensions?: AgentExtension[];
 	logger?: BasicLogger;
-	telemetry?: ITelemetryService;
 	workspaceMetadata?: string;
 	/**
 	 * Stable end-user identity inherited from the parent session so
-	 * delegated-agent telemetry (Langfuse `userId`) groups with the user.
+	 * delegated-agent model requests carry the same user id as the lead.
 	 */
 	distinctId?: string;
 	/**
 	 * Root core session id inherited from the parent session so
-	 * delegated-agent telemetry (Langfuse `sessionId`) groups with it.
+	 * delegated-agent model requests carry the same session id as the lead.
 	 */
 	sessionId?: string;
 }

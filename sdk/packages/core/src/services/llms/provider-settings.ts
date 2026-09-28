@@ -60,7 +60,7 @@ export const AuthSettingsSchema = z.object({
 	refreshToken: z.string().optional(),
 	expiresAt: z.number().int().positive().optional(),
 	accountId: z.string().optional(),
-	// Active organization at last account load, for telemetry attribution.
+	// Active organization at last account load.
 	organizationId: z.string().optional(),
 	organizationName: z.string().optional(),
 	memberId: z.string().optional(),

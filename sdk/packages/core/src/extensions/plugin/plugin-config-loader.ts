@@ -252,7 +252,6 @@ export interface ResolveAndLoadAgentPluginsOptions
 	user?: PluginSetupContext["user"];
 	automation?: PluginSetupContext["automation"];
 	logger?: PluginSetupContext["logger"];
-	telemetry?: PluginSetupContext["telemetry"];
 }
 
 export async function resolveAndLoadAgentPlugins(
@@ -281,7 +280,6 @@ export async function resolveAndLoadAgentPlugins(
 			workspaceInfo: options.workspaceInfo,
 			automation: options.automation,
 			logger: options.logger,
-			telemetry: options.telemetry,
 		});
 		return {
 			extensions: report.plugins,
@@ -298,7 +296,6 @@ export async function resolveAndLoadAgentPlugins(
 		hookTimeoutMs: options.hookTimeoutMs,
 		contributionTimeoutMs: options.contributionTimeoutMs,
 		onEvent: options.onEvent,
-		telemetryAvailable: Boolean(options.telemetry),
 		providerId: options.providerId,
 		modelId: options.modelId,
 		cwd: options.cwd,

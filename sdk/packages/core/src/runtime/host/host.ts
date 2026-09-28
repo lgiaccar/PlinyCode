@@ -1,7 +1,6 @@
-import { captureSdkError } from "@plinycode/shared";
 import type { ClineCoreOptions } from "../../cline-core/types";
+import { resolveCoreDistinctId } from "../../services/distinct-id";
 import { SqliteSessionStore } from "../../services/storage/sqlite-session-store";
-import { resolveCoreDistinctId } from "../../services/telemetry/distinct-id";
 import { FileSessionService } from "../../session/services/file-session-service";
 import { CoreSessionService } from "../../session/services/session-service";
 import { LocalRuntimeHost } from "./local-runtime-host";
@@ -29,26 +28,8 @@ function createLocalBackend(options: ClineCoreOptions): SessionBackend {
 			messagesArtifactUploader: options.messagesArtifactUploader,
 			logger: options.logger,
 		});
-	} catch (error) {
+	} catch {
 		// Fallback to file-based session service if SQLite is unavailable.
-		options.telemetry?.capture({
-			event: "session_backend_fallback",
-			properties: {
-				requestedBackend: "sqlite",
-				fallbackBackend: "file",
-			},
-		});
-		captureSdkError(options.telemetry, {
-			component: "core",
-			operation: "session_backend.sqlite_init",
-			error,
-			severity: "warn",
-			handled: true,
-			context: {
-				requestedBackend: "sqlite",
-				fallbackBackend: "file",
-			},
-		});
 		return new FileSessionService(undefined, {
 			messagesArtifactUploader: options.messagesArtifactUploader,
 			logger: options.logger,
@@ -66,7 +47,6 @@ function createLocalRuntimeHost(
 			backend ?? options.sessionService ?? createLocalBackend(options),
 		capabilities: options.capabilities,
 		logger: options.logger,
-		telemetry: options.telemetry,
 		toolPolicies: options.toolPolicies,
 		distinctId,
 		fetch: options.fetch,
@@ -98,6 +78,5 @@ export async function createRuntimeHost(
 	options: ClineCoreOptions,
 ): Promise<RuntimeHost> {
 	const distinctId = resolveCoreDistinctId(options.distinctId);
-	options.telemetry?.setDistinctId(distinctId);
 	return createLocalRuntimeHost(options, distinctId);
 }

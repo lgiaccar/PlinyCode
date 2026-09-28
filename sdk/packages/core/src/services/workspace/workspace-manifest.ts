@@ -1,5 +1,4 @@
 import { basename, resolve } from "node:path";
-import { performance } from "node:perf_hooks";
 import type { WorkspaceInfo } from "@plinycode/shared";
 import { processWorkspaceInfo } from "@plinycode/shared";
 import simpleGit from "simple-git";
@@ -14,10 +13,7 @@ export interface WorkspaceInfoDiagnostics {
 export interface BuiltWorkspaceMetadata {
 	workspaceInfo: WorkspaceInfo;
 	workspaceMetadata: string;
-	durationMs: number;
-	vcsType: "git" | "none";
 	gitState: GitWorkspaceState;
-	initError?: { errorType: string; message: string };
 }
 
 export interface GitWorkspaceState {
@@ -226,16 +222,11 @@ export async function buildWorkspaceMetadata(cwd: string): Promise<string> {
 export async function buildWorkspaceMetadataWithInfo(
 	cwd: string,
 ): Promise<BuiltWorkspaceMetadata> {
-	const startedAt = performance.now();
 	const diagnostics = await generateWorkspaceInfoWithDiagnostics(cwd);
-	const durationMs = performance.now() - startedAt;
 	const workspaceInfo = diagnostics.info;
 	return {
 		workspaceInfo,
 		workspaceMetadata: processWorkspaceInfo(workspaceInfo),
-		durationMs,
-		vcsType: diagnostics.vcsType,
 		gitState: diagnostics.gitState,
-		initError: diagnostics.error,
 	};
 }

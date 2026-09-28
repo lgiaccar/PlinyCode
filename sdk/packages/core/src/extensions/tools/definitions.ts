@@ -11,11 +11,9 @@ import {
 	getDefaultShell,
 	getPowerShellEdition,
 	getShellKind,
-	type ITelemetryService,
 	validateWithZod,
 	zodToJsonSchema,
 } from "@plinycode/shared";
-import { captureRunCommandsTimeout } from "../../services/telemetry/core-events";
 import {
 	CommandAbortedError,
 	CommandExitError,
@@ -35,7 +33,6 @@ import {
 	getEditorSizeError,
 	getReadFileRangeError,
 	normalizeRunCommandsInput,
-	TimeoutError,
 	withTimeout,
 } from "./helpers";
 import {
@@ -80,42 +77,6 @@ import type {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-function getStringMetadata(
-	context: AgentToolContext,
-	key: string,
-): string | undefined {
-	const value = context.metadata?.[key];
-	return typeof value === "string" ? value : undefined;
-}
-
-function captureRunCommandsTimeoutFromContext(
-	telemetry: ITelemetryService | undefined,
-	context: AgentToolContext,
-	properties: {
-		effectiveTimeoutMs: number;
-		timeoutSource: "default_setting" | "configured_setting";
-		commandCount: number;
-		durationMs: number;
-	},
-): void {
-	captureRunCommandsTimeout(telemetry, {
-		tool_name: "run_commands",
-		effective_timeout_ms: properties.effectiveTimeoutMs,
-		timeout_source: properties.timeoutSource,
-		command_count: properties.commandCount,
-		duration_ms: properties.durationMs,
-		ulid: context.sessionId,
-		mode: getStringMetadata(context, "mode"),
-		source: getStringMetadata(context, "source"),
-		session_id: context.sessionId,
-		agent_id: context.agentId,
-		conversation_id: context.conversationId,
-		run_id: context.runId,
-		iteration: context.iteration,
-		tool_call_id: context.toolCallId,
-	});
-}
 
 function getHeredocDelimiter(command: string): string | undefined {
 	const match = command.match(
@@ -188,17 +149,13 @@ async function executeShellCommands(
 		cwd: string;
 		context: AgentToolContext;
 		timeoutMs: number;
-		timeoutSource: "default_setting" | "configured_setting";
-		telemetry?: ITelemetryService;
 	},
 ): Promise<ToolOperationResult[]> {
-	const { executor, cwd, context, timeoutMs, timeoutSource, telemetry } =
-		options;
+	const { executor, cwd, context, timeoutMs } = options;
 
 	return Promise.all(
 		commands.map(
 			async (command, commandIndex): Promise<ToolOperationResult> => {
-				const startedAt = Date.now();
 				const query = formatRunCommandQueryPreview(command);
 				const commandContext: AgentToolContext = context.emitUpdate
 					? {
@@ -228,14 +185,6 @@ async function executeShellCommands(
 						success: true,
 					};
 				} catch (error) {
-					if (error instanceof TimeoutError) {
-						captureRunCommandsTimeoutFromContext(telemetry, context, {
-							effectiveTimeoutMs: error.timeoutMs,
-							timeoutSource,
-							commandCount: commands.length,
-							durationMs: Date.now() - startedAt,
-						});
-					}
 					if (error instanceof CommandExitError) {
 						return {
 							query,
@@ -509,15 +458,11 @@ export function buildRunCommandsDescription(
  */
 export function createShellTool(
 	executor: ShellExecutor,
-	config: Pick<DefaultToolsConfig, "cwd" | "bashTimeoutMs" | "telemetry"> & {
+	config: Pick<DefaultToolsConfig, "cwd" | "bashTimeoutMs"> & {
 		shell?: string | (() => string);
 	} = {},
 ): AgentTool<unknown, ToolOperationResult[]> {
 	const timeoutMs = config.bashTimeoutMs ?? 30000;
-	const timeoutSource =
-		config.bashTimeoutMs === undefined
-			? "default_setting"
-			: "configured_setting";
 	const cwd = config.cwd ?? process.cwd();
 	const isWindows = process.platform === "win32";
 	const configShell = config.shell;
@@ -544,8 +489,6 @@ export function createShellTool(
 				cwd,
 				context,
 				timeoutMs,
-				timeoutSource,
-				telemetry: config.telemetry,
 			});
 		},
 	});

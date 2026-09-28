@@ -1,4 +1,3 @@
-import type { ITelemetryService } from "@plinycode/shared";
 import {
 	getProviderAuthHandler,
 	getProviderOAuthCredentialsFromSettings,
@@ -49,7 +48,6 @@ export type RuntimeOAuthResolution = {
 
 export class RuntimeOAuthTokenManager {
 	private readonly providerSettingsManager: ProviderSettingsManager;
-	private readonly telemetry?: ITelemetryService;
 	private readonly refreshInFlight = new Map<
 		ManagedOAuthProviderId,
 		Promise<RuntimeOAuthResolution | null>
@@ -57,11 +55,9 @@ export class RuntimeOAuthTokenManager {
 
 	constructor(options?: {
 		providerSettingsManager?: ProviderSettingsManager;
-		telemetry?: ITelemetryService;
 	}) {
 		this.providerSettingsManager =
 			options?.providerSettingsManager ?? new ProviderSettingsManager();
-		this.telemetry = options?.telemetry;
 	}
 
 	public async resolveProviderApiKey(input: {
@@ -158,7 +154,6 @@ export class RuntimeOAuthTokenManager {
 			settings,
 			credentials: currentCredentials,
 			forceRefresh,
-			telemetry: this.telemetry,
 		});
 		// A settings write (sign-out or a new sign-in) need not wait for an
 		// HTTP refresh. Never resurrect/overwrite credentials it replaced.

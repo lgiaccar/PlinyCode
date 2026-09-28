@@ -2,8 +2,8 @@
  * Team data types and interfaces.
  *
  * These are the pure data-shape contracts for the multi-agent team system.
- * They intentionally avoid referencing @plinycode/agents types so that shared
- * can remain dependency-free of the agents package.
+ * They intentionally avoid referencing agent runtime types so that shared
+ * does not depend on core.
  */
 
 export type TeamTaskStatus =
@@ -90,7 +90,7 @@ export type TeamRunStatus =
  * Shared representation of a teammate run record.
  *
  * The `result` field is typed as `unknown` at the shared contract level
- * because the concrete type (`AgentResult`) lives in `@plinycode/agents`.
+ * because the concrete result type lives in `@plinycode/core`.
  * Consuming packages narrow this via their own type assertions.
  */
 export interface TeamRunRecord {

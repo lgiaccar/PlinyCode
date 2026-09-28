@@ -11,7 +11,6 @@ const HOST_REQUIRE = createRequire(import.meta.url);
 const WORKSPACE_ROOT = resolve(MODULE_DIR, "..", "..", "..", "..", "..");
 const WORKSPACE_ALIASES = collectWorkspaceAliases(WORKSPACE_ROOT);
 const HOST_PROVIDED_SDK_SPECIFIERS = [
-	"@plinycode/agents",
 	"@plinycode/core",
 	"@plinycode/llms",
 	"@plinycode/llms/browser",
@@ -41,7 +40,6 @@ export interface ImportPluginModuleOptions {
 function collectWorkspaceAliases(root: string): Record<string, string> {
 	const aliases: Record<string, string> = {};
 	const candidates: Record<string, string> = {
-		"@plinycode/agents": resolve(root, "packages/agents/src/index.ts"),
 		"@plinycode/core": resolve(root, "packages/core/src/index.ts"),
 		"@plinycode/llms": resolve(root, "packages/llms/src/index.ts"),
 		"@plinycode/shared": resolve(root, "packages/shared/src/index.ts"),
@@ -56,7 +54,7 @@ function collectWorkspaceAliases(root: string): Record<string, string> {
 			aliases[key] = value;
 		}
 	}
-	for (const packageName of ["agents", "core", "llms", "shared"]) {
+	for (const packageName of ["core", "llms", "shared"]) {
 		const packageRoot = resolve(root, "packages", packageName);
 		const packageJsonPath = resolve(packageRoot, "package.json");
 		if (!existsSync(packageJsonPath)) {

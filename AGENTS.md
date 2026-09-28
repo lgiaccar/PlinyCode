@@ -10,7 +10,6 @@ PlinyCode is a VS Code / Cursor extension that talks only to Synopsys internal m
 | `sdk/packages/core`   | Agent engine — tasks, sessions, auth, providers, hooks, runtime |
 | `sdk/packages/shared` | Shared types and utilities                                      |
 | `sdk/packages/llms`   | Model catalog and provider gateway                              |
-| `sdk/packages/agents` | Browser-safe agent runtime loop                                 |
 
 Despite living under `sdk/`, these packages are **not** a distributable SDK — they are the engine the extension runs on. Over 100 files in `apps/vscode/src` import them.
 

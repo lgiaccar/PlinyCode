@@ -1,4 +1,4 @@
-import type { AgentToolContext, ITelemetryService } from "@plinycode/shared";
+import type { AgentToolContext } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildRunCommandsDescription,
@@ -10,7 +10,7 @@ import {
 	createSkillsTool,
 } from "./definitions";
 import { CommandAbortedError, CommandExitError } from "./executors/bash";
-import { RUN_COMMAND_QUERY_PREVIEW_LIMIT, TimeoutError } from "./helpers";
+import { RUN_COMMAND_QUERY_PREVIEW_LIMIT } from "./helpers";
 import { type EditFileInput, INPUT_ARG_CHAR_LIMIT } from "./schemas";
 import type { SkillsExecutorWithMetadata } from "./types";
 
@@ -607,30 +607,6 @@ describe("run_commands tool description", () => {
 });
 
 describe("default run_commands tool", () => {
-	function createTelemetryStub(): ITelemetryService {
-		return {
-			capture: vi.fn(),
-			captureRequired: vi.fn(),
-			setDistinctId: vi.fn(),
-			setMetadata: vi.fn(),
-			updateMetadata: vi.fn(),
-			setCommonProperties: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: vi.fn(() => true),
-			recordCounter: vi.fn(),
-			recordHistogram: vi.fn(),
-			recordGauge: vi.fn(),
-			flush: vi.fn(async () => {}),
-			dispose: vi.fn(async () => {}),
-		};
-	}
-
-	function capturedTimeoutEvents(telemetry: ITelemetryService) {
-		return (telemetry.capture as ReturnType<typeof vi.fn>).mock.calls
-			.map((call) => call[0])
-			.filter((event) => event.event === "sdk.tool_timeout");
-	}
-
 	it("accepts object input with commands as a single string", async () => {
 		const execute = vi.fn(async (command: string | { command: string }) =>
 			typeof command === "string" ? `ran:${command}` : `ran:${command.command}`,
@@ -1326,13 +1302,12 @@ describe("default run_commands tool", () => {
 		expect(result[0].query).toContain("command truncated");
 	});
 
-	it("emits timeout telemetry without leaking raw command data", async () => {
+	it("fails commands that exceed the configured timeout", async () => {
 		// Never resolves, so the configured timeout deterministically wins the
 		// race regardless of host load (a tight real-timer margin flaked under
 		// heavy parallel CI runs).
 		const execute = vi.fn((): Promise<string> => new Promise<string>(() => {}));
-		const telemetry = createTelemetryStub();
-		const tool = createShellTool(execute, { bashTimeoutMs: 5, telemetry });
+		const tool = createShellTool(execute, { bashTimeoutMs: 5 });
 
 		const result = await tool.execute(
 			{
@@ -1362,138 +1337,6 @@ describe("default run_commands tool", () => {
 			expect.objectContaining({ success: false }),
 			expect.objectContaining({ success: false }),
 		]);
-		const timeoutCalls = capturedTimeoutEvents(telemetry);
-		expect(timeoutCalls).toHaveLength(2);
-		for (const call of timeoutCalls) {
-			expect(call.properties).toMatchObject({
-				tool_name: "run_commands",
-				effective_timeout_ms: 5,
-				timeout_source: "configured_setting",
-				command_count: 2,
-				ulid: "session-1",
-				mode: "act",
-				source: "sdk-test",
-				session_id: "session-1",
-				agent_id: "agent-1",
-				conversation_id: "conv-1",
-				run_id: "run-1",
-				iteration: 1,
-				tool_call_id: "tool-call-1",
-			});
-			expect(typeof call.properties.duration_ms).toBe("number");
-			const payload = JSON.stringify(call.properties);
-			expect(payload).not.toContain("secret-token");
-			expect(payload).not.toContain("pwd");
-			expect(payload).not.toContain("stdout");
-			expect(payload).not.toContain("stderr");
-			expect(payload).not.toContain("env");
-			expect(call.properties).not.toHaveProperty("command");
-			expect(call.properties).not.toHaveProperty("commands");
-		}
-	});
-
-	it("emits timeout telemetry for executor TimeoutError only", async () => {
-		const telemetry = createTelemetryStub();
-		const executorTimeout = vi.fn(async () => {
-			throw new TimeoutError("Command timed out after 5000ms", 5000);
-		});
-		const plainFailure = vi.fn(async () => {
-			throw new Error("Command timed out after 5000ms");
-		});
-
-		await createShellTool(executorTimeout, {
-			bashTimeoutMs: 5000,
-			telemetry,
-		}).execute({ commands: ["echo timeout"] } as never, {
-			agentId: "agent-1",
-			conversationId: "conv-1",
-			iteration: 1,
-		});
-		await createShellTool(plainFailure, {
-			bashTimeoutMs: 5000,
-			telemetry,
-		}).execute({ commands: ["echo not-timeout"] } as never, {
-			agentId: "agent-1",
-			conversationId: "conv-1",
-			iteration: 2,
-		});
-
-		const timeoutCalls = capturedTimeoutEvents(telemetry);
-		expect(timeoutCalls).toHaveLength(1);
-		expect(timeoutCalls[0]?.properties).toMatchObject({
-			effective_timeout_ms: 5000,
-			timeout_source: "configured_setting",
-			command_count: 1,
-		});
-	});
-
-	it("emits timeout telemetry on the default bash tool path", async () => {
-		const telemetry = createTelemetryStub();
-		// Never resolves, so the configured timeout deterministically wins the
-		// race regardless of host load (a tight real-timer margin flaked under
-		// heavy parallel CI runs).
-		const execute = vi.fn((): Promise<string> => new Promise<string>(() => {}));
-		const tool = createShellTool(execute, { bashTimeoutMs: 5, telemetry });
-
-		const result = await tool.execute(
-			{ commands: ["echo secret-token", "pwd"] },
-			{
-				sessionId: "session-1",
-				agentId: "agent-1",
-				conversationId: "conv-1",
-				runId: "run-1",
-				iteration: 1,
-				toolCallId: "tool-call-1",
-				metadata: {
-					mode: "act",
-					source: "sdk-test",
-				},
-			},
-		);
-
-		expect(result).toEqual([
-			expect.objectContaining({ success: false }),
-			expect.objectContaining({ success: false }),
-		]);
-		const timeoutCalls = capturedTimeoutEvents(telemetry);
-		expect(timeoutCalls).toHaveLength(2);
-		for (const call of timeoutCalls) {
-			expect(call.properties).toMatchObject({
-				tool_name: "run_commands",
-				effective_timeout_ms: 5,
-				timeout_source: "configured_setting",
-				command_count: 2,
-				ulid: "session-1",
-				mode: "act",
-				source: "sdk-test",
-				session_id: "session-1",
-				agent_id: "agent-1",
-				conversation_id: "conv-1",
-				run_id: "run-1",
-				iteration: 1,
-				tool_call_id: "tool-call-1",
-			});
-			expect(typeof call.properties.duration_ms).toBe("number");
-			const payload = JSON.stringify(call.properties);
-			expect(payload).not.toContain("secret-token");
-			expect(payload).not.toContain("pwd");
-			expect(call.properties).not.toHaveProperty("command");
-			expect(call.properties).not.toHaveProperty("commands");
-		}
-	});
-
-	it("does not emit timeout telemetry for normal command success", async () => {
-		const execute = vi.fn(async () => "ok");
-		const telemetry = createTelemetryStub();
-		const tool = createShellTool(execute, { bashTimeoutMs: 50, telemetry });
-
-		await tool.execute({ commands: ["echo hi"] } as never, {
-			agentId: "agent-1",
-			conversationId: "conv-1",
-			iteration: 1,
-		});
-
-		expect(capturedTimeoutEvents(telemetry)).toEqual([]);
 	});
 });
 

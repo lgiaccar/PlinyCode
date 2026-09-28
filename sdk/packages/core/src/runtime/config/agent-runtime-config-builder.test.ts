@@ -10,7 +10,6 @@ import type {
 	AgentModel,
 	AgentModelEvent,
 	AgentTool,
-	ITelemetryService,
 } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import { version as clineCoreVersion } from "../../../package.json";
@@ -193,7 +192,7 @@ describe("createAgentRuntimeConfig", () => {
 		);
 	});
 
-	it("maps telemetry identity fields from AgentConfig", () => {
+	it("maps identity fields from AgentConfig", () => {
 		const runtimeConfig = createAgentRuntimeConfig({
 			agentConfig: makeAgentConfig({
 				distinctId: "user-123",
@@ -261,7 +260,7 @@ describe("createAgentRuntimeConfig", () => {
 		expect(runtimeConfig.hooks).toBeUndefined();
 	});
 
-	it("passes through plugins/initialMessages/logger/telemetry", () => {
+	it("passes through plugins/initialMessages/logger", () => {
 		const logger = {
 			log: vi.fn(),
 			debug: vi.fn(),
@@ -269,28 +268,11 @@ describe("createAgentRuntimeConfig", () => {
 			warn: vi.fn(),
 			error: vi.fn(),
 		};
-		const telemetryCapture = vi.fn();
-		const telemetry = {
-			capture: telemetryCapture,
-			captureRequired: vi.fn(),
-			setDistinctId: vi.fn(),
-			setMetadata: vi.fn(),
-			updateMetadata: vi.fn(),
-			setCommonProperties: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: () => true,
-			recordCounter: vi.fn(),
-			recordHistogram: vi.fn(),
-			recordGauge: vi.fn(),
-			flush: vi.fn(async () => undefined),
-			dispose: vi.fn(async () => undefined),
-		} as unknown as ITelemetryService;
 		const runtimeConfig = createAgentRuntimeConfig({
 			agentConfig: makeAgentConfig(),
 			agentId: "a",
 			model: nullModel,
 			logger,
-			telemetry,
 			plugins: [{ name: "p1" }],
 			initialMessages: [
 				{
@@ -302,7 +284,6 @@ describe("createAgentRuntimeConfig", () => {
 			],
 		});
 		expect(runtimeConfig.logger).toBe(logger);
-		expect(runtimeConfig.telemetry).toBe(telemetry);
 		expect(runtimeConfig.plugins).toHaveLength(1);
 		expect(runtimeConfig.initialMessages).toHaveLength(1);
 	});

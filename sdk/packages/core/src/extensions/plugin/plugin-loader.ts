@@ -30,7 +30,6 @@ export interface LoadAgentPluginFromPathOptions {
 	workspaceInfo?: PluginSetupContext["workspaceInfo"];
 	automation?: PluginSetupContext["automation"];
 	logger?: PluginSetupContext["logger"];
-	telemetry?: PluginSetupContext["telemetry"];
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -133,7 +132,6 @@ export async function loadAgentPluginFromPath(
 					workspaceInfo: options.workspaceInfo ?? _ctx.workspaceInfo,
 					automation: options.automation ?? _ctx.automation,
 					logger: options.logger ?? _ctx.logger,
-					telemetry: options.telemetry ?? _ctx.telemetry,
 				};
 				return originalSetup(api, ctx);
 			}

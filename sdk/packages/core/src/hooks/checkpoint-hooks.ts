@@ -3,11 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type {
-	AgentHooks,
-	BasicLogger,
-	ITelemetryService,
-} from "@plinycode/shared";
+import type { AgentHooks, BasicLogger } from "@plinycode/shared";
 import { resolveClineDataDir } from "@plinycode/shared/storage";
 import { countUserRunMessages } from "../session/user-run-messages";
 
@@ -111,13 +107,6 @@ type CreateCheckpointHooksOptions = {
 		sessionId: string;
 		runCount: number;
 	}) => Promise<CheckpointEntry | undefined> | CheckpointEntry | undefined;
-	/**
-	 * Emits one `checkpoint.snapshot` event per built-in snapshot attempt so
-	 * snapshot cost and degradations (HEAD fallbacks, skipped turns) are
-	 * observable in the field, not only in local logs. Properties carry
-	 * outcome and duration — never file paths or contents.
-	 */
-	telemetry?: Pick<ITelemetryService, "capture">;
 };
 
 function warn(logger: BasicLogger | undefined, message: string): void {
@@ -552,24 +541,6 @@ export function createCheckpointHooks(
 		}
 
 		const startedAt = Date.now();
-		// One event per built-in snapshot attempt. Outcomes: "stash" (full
-		// snapshot), "head_clean" (clean worktree, HEAD entry is the normal
-		// result), "head_fallback" (degraded to HEAD after a failure), and
-		// "skipped" (no checkpoint written this turn). Durations only — never
-		// file paths or contents.
-		const captureSnapshot = (
-			outcome: "stash" | "head_clean" | "head_fallback" | "skipped",
-		): void => {
-			options.telemetry?.capture({
-				event: "checkpoint.snapshot",
-				properties: {
-					sessionId: options.sessionId,
-					runCount,
-					outcome,
-					durationMs: Date.now() - startedAt,
-				},
-			});
-		};
 
 		const createHeadCheckpoint = async (
 			warnPrefix: string,
@@ -612,7 +583,6 @@ export function createCheckpointHooks(
 			const fallback = await createHeadCheckpoint(
 				"Checkpoint HEAD fallback failed",
 			);
-			captureSnapshot(fallback ? "head_fallback" : "skipped");
 			return fallback;
 		}
 		if (!ref) {
@@ -621,7 +591,6 @@ export function createCheckpointHooks(
 			const fallback = await createHeadCheckpoint(
 				"Checkpoint HEAD fallback failed",
 			);
-			captureSnapshot(fallback ? "head_clean" : "skipped");
 			return fallback;
 		}
 
@@ -639,11 +608,9 @@ export function createCheckpointHooks(
 				options.logger,
 				`Checkpoint store failed: ${error instanceof Error ? error.message : String(error)}`,
 			);
-			captureSnapshot("skipped");
 			return undefined;
 		}
 
-		captureSnapshot("stash");
 		return {
 			ref,
 			createdAt: Date.now(),

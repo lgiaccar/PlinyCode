@@ -62,7 +62,7 @@ export {
 } from "@plinycode/shared";
 
 // =============================================================================
-// Types that depend on @plinycode/agents (cannot live in shared)
+// Types that depend on the agent runtime (cannot live in shared)
 // =============================================================================
 
 export interface TeamMemberConfig extends AgentConfig {

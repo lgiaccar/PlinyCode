@@ -62,9 +62,9 @@
 //   * Provider-reported in-band `error` parts accept the attempt and pass
 //     through — they are business errors, not transport failures.
 //   * A successfully retried failure never reaches `streamText`, so no
-//     `onError`/`captureSdkError`/`task.provider_api_error` fires for it;
-//     an exhausted or non-retryable failure rejects the stream exactly as
-//     an unwrapped one does today, leaving the reporting path unchanged.
+//     `onError` fires for it; an exhausted or non-retryable failure rejects
+//     the stream exactly as an unwrapped one does today, leaving the error
+//     path unchanged.
 
 import type {
 	LanguageModelV4Middleware,

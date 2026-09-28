@@ -18,7 +18,6 @@ import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, describe, expect, it } from "vitest";
 import { createUserInstructionConfigService } from "../../extensions/config";
 import { PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME } from "../../extensions/tools/command-guard-extension";
-import { TelemetryService } from "../../services/telemetry/TelemetryService";
 import type { CoreSessionConfig } from "../../types/config";
 import { DefaultRuntimeBuilder } from "./runtime-builder";
 
@@ -244,18 +243,6 @@ Use the review guidance.`,
 			),
 		).not.toContain("skills");
 		await runtime.shutdown("test");
-	});
-
-	it("forwards telemetry for downstream runtime consumers", async () => {
-		const telemetry = new TelemetryService();
-		const runtime = await new DefaultRuntimeBuilder().build({
-			config: makeBaseConfig({
-				enableTools: false,
-				telemetry,
-			}),
-		});
-
-		expect(runtime.telemetry).toBe(telemetry);
 	});
 
 	it("uses readonly preset in plan mode", async () => {
