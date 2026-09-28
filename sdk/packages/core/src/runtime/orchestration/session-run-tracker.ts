@@ -19,7 +19,7 @@ import {
 	tryGetModelInfo,
 } from "./session-runtime-helpers";
 
-export interface SessionRunTrackerDeps {
+interface SessionRunTrackerDeps {
 	readonly conversation: ConversationStore;
 	readonly mistakeTracker: MistakeTracker;
 	readonly loopTracker: LoopDetectionTracker;

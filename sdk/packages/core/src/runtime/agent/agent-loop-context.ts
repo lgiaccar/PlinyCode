@@ -54,7 +54,7 @@ export function createAgentRuntimeState() {
 	};
 }
 
-export type AgentRuntimeState = ReturnType<typeof createAgentRuntimeState>;
+type AgentRuntimeState = ReturnType<typeof createAgentRuntimeState>;
 
 /**
  * The parts of an `AgentRuntime` that the model-turn, retry and

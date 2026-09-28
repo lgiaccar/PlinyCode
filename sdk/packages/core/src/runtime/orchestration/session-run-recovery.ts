@@ -17,14 +17,14 @@ import type { RuntimeEventAdapter } from "./runtime-event-adapter";
  */
 const MAX_RUN_RECOVERY_ATTEMPTS = 3;
 
-export interface SessionRunInput {
+interface SessionRunInput {
 	userMessage?: string;
 	userImages?: string[];
 	userFiles?: string[];
 	isContinue: boolean;
 }
 
-export interface SessionRunRecoveryDeps {
+interface SessionRunRecoveryDeps {
 	readonly agentId: string;
 	readonly logger?: BasicLogger;
 	readonly conversation: ConversationStore;
