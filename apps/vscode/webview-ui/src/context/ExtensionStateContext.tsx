@@ -290,7 +290,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		workspaceRoots: [],
 		primaryRootIndex: 0,
 		isMultiRootWorkspace: false,
-		multiRootSetting: { user: false, featureFlag: false },
 		hooksEnabled: false,
 	})
 	const [expandTaskHeader, setExpandTaskHeader] = useState(true)

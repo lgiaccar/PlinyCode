@@ -5,7 +5,6 @@ import { setSdkLogger } from "@plinycode/core"
 import { HostProvider } from "@/hosts/host-provider"
 import { Logger } from "@/shared/services/Logger"
 import type { StorageContext } from "@/shared/storage/storage-context"
-import { clearOnboardingModelsCache } from "./core/controller/models/getClineOnboardingModels"
 import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
 import { HookProcessRegistry } from "./core/hooks/HookProcessRegistry"
 import { StateManager } from "./core/storage/StateManager"
@@ -14,7 +13,6 @@ import { ExtensionRegistryInfo } from "./registry"
 import { registerVsCodeLmHandler } from "./sdk/vscode-lm/register-vscode-lm"
 import { registerClineClientIdentity } from "./services/ClineClientIdentity"
 import { ErrorService } from "./services/error"
-import { featureFlagsService } from "./services/feature-flags"
 import { getDistinctId } from "./services/logging/distinctId"
 import { ClineTempManager } from "./services/temp"
 import { ShowMessageType } from "./shared/proto/host/window"
@@ -127,11 +125,9 @@ export async function tearDown(): Promise<void> {
 	try {
 		AgentConfigLoader.getInstance()?.dispose()
 		ErrorService.get().dispose()
-		featureFlagsService.dispose()
 		// Dispose all webview instances
 		await WebviewProvider.disposeAllInstances()
 		syncWorker().dispose()
-		clearOnboardingModelsCache()
 
 		// Kill any running hook processes to prevent zombies
 		await HookProcessRegistry.terminateAll()

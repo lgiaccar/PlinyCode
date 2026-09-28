@@ -165,10 +165,6 @@ export async function getStateToPostToWebview(controller: {
 		workspaceRoots: controller.workspaceManager?.getRoots?.() ?? [],
 		primaryRootIndex: controller.workspaceManager?.getPrimaryIndex?.() ?? 0,
 		isMultiRootWorkspace: (controller.workspaceManager?.getRoots?.()?.length ?? 0) > 1,
-		multiRootSetting: {
-			user: stateManager.getGlobalStateKey("multiRootEnabled"),
-			featureFlag: true,
-		},
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
 		remoteConfigSettings: stateManager.getRemoteConfigSettings?.(),
 		remoteConfigRevision: controller.currentRemoteConfigRevision ?? 0,

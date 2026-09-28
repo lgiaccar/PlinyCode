@@ -32,7 +32,6 @@ import { HostProvider } from "@/hosts/host-provider"
 import { openAiCodexOAuthManager } from "@/integrations/openai-codex/oauth"
 import { LogoutReason } from "@/services/auth/types"
 import { buildBasicClineHeaders } from "@/services/EnvUtils"
-import { featureFlagsService } from "@/services/feature-flags"
 import { CLINE_API_ENDPOINT } from "@/shared/cline/api"
 import { fetch, getAxiosSettings } from "@/shared/net"
 import { Logger } from "@/shared/services/Logger"
@@ -1090,11 +1089,6 @@ export class AuthService {
 
 		await Promise.all(streamSends)
 
-		// Poll feature flags immediately for the current auth context so cache-only
-		// consumers see the latest remote config.
-		const authInfo = this._clineAuthInfo
-		const userId = authInfo?.userInfo?.id || null
-		await featureFlagsService.poll(userId)
 		for (const controller of uniqueControllers) {
 			controller.invalidateProviderListings()
 		}

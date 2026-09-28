@@ -12,9 +12,6 @@ const packageJson = (await Bun.file(
 // Keep declared runtime packages external so they are not duplicated inside each
 // bundled entrypoint and installed again from package.json.
 const external = [
-	// Preserve the optional provider boundary; bundling it hoists posthog-node
-	// into every runtime entrypoint even when the local import is dynamic.
-	"@plinycode/core/services/feature-flags/posthog",
 	...Object.keys({
 		...(packageJson.dependencies ?? {}),
 		...(packageJson.peerDependencies ?? {}),
@@ -39,11 +36,6 @@ const builds: Parameters<typeof Bun.build>[0][] = [
 	{
 		entrypoints: ["./src/index.ts"],
 		outdir: "./dist",
-		...buildConfig,
-	},
-	{
-		entrypoints: ["./src/services/feature-flags/posthog.ts"],
-		outdir: "./dist/services/feature-flags",
 		...buildConfig,
 	},
 	// The plugin sandbox bootstrap runs in an isolated child process via
