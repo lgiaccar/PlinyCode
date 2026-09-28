@@ -297,7 +297,6 @@ export class SdkRemoteConfigControlPlane {
 			const apiKeys = await fetchApiKeysForOrganization(organizationId)
 			if (remoteConfig.providerSettings?.LiteLLM) {
 				if (apiKeys.litellm) {
-					configuredApiKeys.litellm = true
 					this.controller.stateManager.setSecret("remoteLiteLlmApiKey", apiKeys.litellm)
 				} else {
 					this.controller.stateManager.setSecret("remoteLiteLlmApiKey", undefined)

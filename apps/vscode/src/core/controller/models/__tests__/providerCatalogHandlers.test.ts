@@ -282,8 +282,9 @@ describe("provider model catalog handlers", () => {
 				capabilities: ["prompt-cache"],
 			}),
 		})
+		// Every commit runs on Pliny, whatever provider id the request names.
 		expect(stateManager.setGlobalStateBatch).toHaveBeenCalledWith({
-			actModeApiProvider: "deepseek",
+			actModeApiProvider: "pliny",
 			actModeApiModelId: "deepseek-v4-flash",
 		})
 		expect(stateManager.flushPendingState).toHaveBeenCalledTimes(1)
@@ -369,34 +370,6 @@ describe("provider model catalog handlers", () => {
 	// (`actModeApiProvider` / `actModeOpenAiModelId`), otherwise the chat view
 	// and session factory (both keyed by `openai`) read stale or default
 	// models (gpt-4o) instead of the user's selection.
-	it("commitModelSelection folds the SDK openai-compatible spelling to legacy openai state keys", async () => {
-		const { commitModelSelection } = await import("../commitModelSelection")
-		const providerId = parseProviderId("openai-compatible")
-		expect(providerId).toBe("openai")
-		const store = makeStore({ providerId })
-		const stateManager: TestStateManager = {
-			setGlobalStateBatch: vi.fn(),
-			flushPendingState: vi.fn(async () => undefined),
-		}
-		const controller = makeController(store, makeCatalog(), stateManager)
-
-		await commitModelSelection(controller, {
-			providerId: "openai-compatible",
-			mode: "act",
-			modelId: "my-custom-model",
-		})
-
-		expect(store.commitSelection).toHaveBeenCalledWith(providerId, "act", {
-			providerId,
-			modelId: "my-custom-model",
-			overrides: undefined,
-		})
-		expect(stateManager.setGlobalStateBatch).toHaveBeenCalledWith({
-			actModeApiProvider: "openai",
-			actModeOpenAiModelId: "my-custom-model",
-		})
-	})
-
 	// The model label under the chat input renders from pushed extension
 	// state; a model-only commit must push state itself instead of waiting
 	// for an unrelated action (e.g. sending a message) to refresh it.

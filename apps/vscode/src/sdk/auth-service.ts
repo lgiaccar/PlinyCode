@@ -1102,13 +1102,13 @@ export class AuthService {
 	/**
 	 * Shared helper: set a provider's API key and switch both plan/act modes to it.
 	 */
-	private setProviderApiKey(provider: ApiProvider, apiKeyField: string, apiKey: string): void {
+	private setProviderApiKey(provider: string, apiKeyField: string, apiKey: string): void {
 		const stateManager = StateManager.get()
 		const currentApiConfiguration = stateManager.getApiConfiguration()
 		const updatedConfig = {
 			...currentApiConfiguration,
-			planModeApiProvider: provider,
-			actModeApiProvider: provider,
+			planModeApiProvider: provider as ApiProvider,
+			actModeApiProvider: provider as ApiProvider,
 			[apiKeyField]: apiKey,
 		}
 		stateManager.setApiConfiguration(updatedConfig)
