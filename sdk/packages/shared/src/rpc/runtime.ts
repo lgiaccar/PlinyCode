@@ -366,55 +366,6 @@ export type ProviderSettingsActionRequest =
 	| SaveProviderSettingsActionRequest
 	| AddProviderActionRequest;
 
-export type ClineAccountActionRequest =
-	| {
-			action: "clineAccount";
-			operation: "fetchMe";
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchBalance";
-			userId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchUsageTransactions";
-			userId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchPaymentTransactions";
-			userId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchUserOrganizations";
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchOrganizationBalance";
-			organizationId: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchOrganizationUsageTransactions";
-			organizationId: string;
-			memberId?: string;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "switchAccount";
-			organizationId?: string | null;
-	  }
-	| {
-			action: "clineAccount";
-			operation: "fetchFeaturebaseToken";
-	  };
-
-export type ProviderActionRequest =
-	| ProviderSettingsActionRequest
-	| ClineAccountActionRequest;
-
 export interface ProviderOAuthLoginResponse {
 	provider: string;
 	accessToken: string;
