@@ -87,10 +87,14 @@ bun run types                 # typecheck all packages
 
 ## Configuration
 
-| Setting                             | Default                                          | Description                                    |
-| ----------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
-| `plinycode.contextFolders.enabled`  | `true`                                           | Scan context folders to generate project rules |
-| `plinycode.contextFolders.folders`  | `.github`, `.vscode`, `.devcontainer`, `.cursor` | Which folders to scan                          |
+| Setting                                | Default | Description                                                        |
+| -------------------------------------- | ------- | ------------------------------------------------------------------ |
+| `plinycode.devops.enabled`             | `true`  | Run the built-in DevOps MCP server for pull requests and pipelines |
+| `plinycode.devops.registerWithEditor`  | `true`  | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
+| `plinycode.spending.conversationLimit` | `5`     | Budget, in US dollars, that each new conversation starts with      |
+| `plinycode.updates.enabled`            | `true`  | Install new PlinyCode releases from GitHub automatically           |
+| `plinycode.updates.prerelease`         | `false` | Also install pre-releases, for developers and testers              |
+| `plinycode.updates.url`                | GitHub  | URL of the `latest.json` that describes the newest release         |
 
 ## License
 
