@@ -4,7 +4,6 @@
  * Core contracts, shared state utilities, and Node runtime services.
  */
 
-export { Agent, createAgentRuntime } from "@plinycode/agents";
 export * as Llms from "@plinycode/llms";
 export {
 	buildClineClientHeaders,
@@ -477,6 +476,7 @@ export {
 	readRemoteConfigSessionBlobUploadMetadata,
 	registerRemoteConfigSessionBlobUpload,
 } from "./remote-config/integration";
+export { Agent, createAgentRuntime } from "./runtime/agent";
 export type { RuntimeCapabilities } from "./runtime/capabilities";
 export { normalizeRuntimeCapabilities } from "./runtime/capabilities";
 export type {

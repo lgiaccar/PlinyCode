@@ -15,11 +15,6 @@
  */
 
 import {
-	type AgentRuntime,
-	type AgentRuntimeConfig,
-	createAgentRuntime,
-} from "@plinycode/agents";
-import {
 	type AgentConfig,
 	type AgentEvent,
 	type AgentExtension,
@@ -34,6 +29,11 @@ import {
 } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import { MESSAGE_BUILDER_LIMIT_ENV } from "../../session/services/message-builder";
+import {
+	type AgentRuntime,
+	type AgentRuntimeConfig,
+	createAgentRuntime,
+} from "../agent";
 import {
 	SessionRuntime,
 	type SessionRuntimeOrchestratorDeps,

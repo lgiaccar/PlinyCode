@@ -82,7 +82,6 @@ bun run types                 # typecheck all packages
 | `sdk/packages/core`     | Agent engine — tasks, sessions, auth, providers, hooks, runtime   |
 | `sdk/packages/shared`   | Shared types and utilities                                        |
 | `sdk/packages/llms`     | Model catalog and provider gateway                                |
-| `sdk/packages/agents`   | Browser-safe agent runtime loop                                   |
 
 ## Configuration
 

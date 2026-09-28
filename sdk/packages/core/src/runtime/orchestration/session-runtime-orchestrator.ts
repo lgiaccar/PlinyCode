@@ -19,8 +19,6 @@
  * OAuth-retry and run replay feasible.
  */
 
-import type { AgentRuntime } from "@plinycode/agents";
-import { createAgentRuntime } from "@plinycode/agents";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -61,6 +59,8 @@ import {
 	MessageBuilder,
 } from "../../session/services/message-builder";
 import { ConversationStore } from "../../session/stores/conversation-store";
+import type { AgentRuntime } from "../agent";
+import { createAgentRuntime } from "../agent";
 import {
 	agentMessagesToMessages,
 	agentMessagesToMessagesWithMetadata,

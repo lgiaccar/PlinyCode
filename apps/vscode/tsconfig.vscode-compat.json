@@ -39,13 +39,6 @@
 			"@utils/*": [
 				"./src/utils/*"
 			],
-			"@plinycode/agents": [
-				"../../sdk/packages/agents/src/index.ts"
-			],
-			"@plinycode/agents/*": [
-				"../../sdk/packages/agents/src/*",
-				"../../sdk/packages/agents/src/*/index.ts"
-			],
 			"@plinycode/core": [
 				"../../sdk/packages/core/src/index.ts"
 			],

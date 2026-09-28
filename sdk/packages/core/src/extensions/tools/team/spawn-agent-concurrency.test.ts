@@ -1,6 +1,6 @@
-import { AgentRuntime } from "@plinycode/agents";
 import type { AgentConfig, AgentModel, AgentTool } from "@plinycode/shared";
 import { expect, it, vi } from "vitest";
+import { AgentRuntime } from "../../../runtime/agent";
 import { createAgentRuntimeConfig } from "../../../runtime/config/agent-runtime-config-builder";
 import { createDelegatedAgentConfigProvider } from "./delegated-agent";
 import { createSpawnAgentTool } from "./spawn-agent-tool";

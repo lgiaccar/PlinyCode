@@ -112,7 +112,6 @@ The package also exports storage and settings helpers such as:
 
 ## Related Packages
 
-- `@plinycode/agents`: stateless agent loop and tool primitives
 - `@plinycode/llms`: provider/model configuration and handlers
 
 ## More Examples

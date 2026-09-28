@@ -191,8 +191,8 @@ export type AgentEventListener = (event: AgentRuntimeEvent) => void;
 
 /**
  * Advanced form: caller supplies a pre-built `AgentModel`. Used by
- * `@plinycode/core`, which constructs models itself to share gateway wiring with the
- * rest of the session runtime.
+ * `SessionRuntime`, which constructs models itself to share gateway wiring
+ * with the rest of the session runtime.
  */
 export interface AgentRuntimeConfigWithModel extends BaseAgentRuntimeConfig {
 	model: AgentModel;
@@ -2370,7 +2370,7 @@ export function createAgentRuntime(config: AgentRuntimeConfig): AgentRuntime {
  *     const agent = new Agent({ providerId, modelId, apiKey });
  *     await agent.run("hello");
  *
- * while `@plinycode/core` (which owns model construction) continues to use
+ * while `SessionRuntime` (which owns model construction) continues to use
  * the `AgentRuntime` name with `{ model, ... }` configs.
  */
 export const Agent = AgentRuntime;

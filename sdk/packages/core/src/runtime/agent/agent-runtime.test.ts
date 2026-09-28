@@ -33,6 +33,21 @@ class ScriptedModel implements AgentModel {
 	}
 }
 
+// Promise.withResolvers needs lib es2024; the engine targets ES2022.
+function withResolvers<T>(): {
+	promise: Promise<T>;
+	resolve: (value: T | PromiseLike<T>) => void;
+	reject: (reason?: unknown) => void;
+} {
+	let resolve!: (value: T | PromiseLike<T>) => void;
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
+
 async function* toAsyncIterable(
 	events: Iterable<AgentModelEvent> | AsyncIterable<AgentModelEvent>,
 ): AsyncIterable<AgentModelEvent> {
@@ -74,7 +89,7 @@ describe("AgentRuntime", () => {
 		"empty",
 		"finish-event",
 	])("interrupts a blocked %s response to consume steering in the same run", async (content) => {
-		const started = Promise.withResolvers<void>();
+		const started = withResolvers<void>();
 		let pending: string | undefined;
 		const tool = createEchoTool();
 		const execute = vi.spyOn(tool, "execute");
@@ -145,7 +160,7 @@ describe("AgentRuntime", () => {
 	});
 
 	it("signals a running tool when steering arrives and reads the message next step", async () => {
-		const toolStarted = Promise.withResolvers<void>();
+		const toolStarted = withResolvers<void>();
 		let pending: string | undefined;
 		const signals: AbortSignal[] = [];
 		const waitTool: AgentTool<unknown, string> = {
@@ -575,7 +590,12 @@ describe("AgentRuntime", () => {
 			],
 		]);
 		const compactedMessages: AgentMessage[] = [
-			{ role: "user", content: [{ type: "text", text: "compacted" }] },
+			{
+				id: "compacted",
+				role: "user",
+				content: [{ type: "text", text: "compacted" }],
+				createdAt: 0,
+			},
 		];
 		const prepareTurn = vi.fn(
 			async (context: { overflowRecovery?: boolean }) =>
@@ -630,7 +650,12 @@ describe("AgentRuntime", () => {
 			],
 		]);
 		const compactedMessages: AgentMessage[] = [
-			{ role: "user", content: [{ type: "text", text: "compacted" }] },
+			{
+				id: "compacted",
+				role: "user",
+				content: [{ type: "text", text: "compacted" }],
+				createdAt: 0,
+			},
 		];
 		const prepareTurn = vi.fn(
 			async (context: { overflowRecovery?: boolean }) =>
@@ -880,7 +905,12 @@ describe("AgentRuntime", () => {
 		];
 		const model = new ScriptedModel([overflow, overflow]);
 		const compactedMessages: AgentMessage[] = [
-			{ role: "user", content: [{ type: "text", text: "x" }] },
+			{
+				id: "compacted",
+				role: "user",
+				content: [{ type: "text", text: "x" }],
+				createdAt: 0,
+			},
 		];
 		const prepareTurn = vi.fn(
 			async (context: { overflowRecovery?: boolean }) =>
@@ -994,8 +1024,8 @@ describe("AgentRuntime", () => {
 		undefined,
 		"parallel",
 	] as const)("preserves tool boundaries and result order with runtime mode %s", async (toolExecution) => {
-		const firstGate = Promise.withResolvers<void>();
-		const secondGate = Promise.withResolvers<void>();
+		const firstGate = withResolvers<void>();
+		const secondGate = withResolvers<void>();
 		const events: string[] = [];
 		const calls = [
 			["read", "serial"],
@@ -1137,8 +1167,8 @@ describe("AgentRuntime", () => {
 	});
 
 	it("finishes approval preparation before executing opted-in parallel tools", async () => {
-		const gate = Promise.withResolvers<void>();
-		const approvalStarted = Promise.withResolvers<void>();
+		const gate = withResolvers<void>();
+		const approvalStarted = withResolvers<void>();
 		const events: string[] = [];
 		const runtime = new AgentRuntime({
 			model: new ScriptedModel([
@@ -2398,6 +2428,7 @@ describe("AgentRuntime", () => {
 				beforeModel: async () => {
 					resolveHookStarted?.();
 					await hookCanFinish;
+					return undefined;
 				},
 			},
 		});

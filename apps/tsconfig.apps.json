@@ -1,11 +1,6 @@
 {
 	"compilerOptions": {
 		"paths": {
-			"@plinycode/agents": ["../sdk/packages/agents/src/index.ts"],
-			"@plinycode/agents/*": [
-				"../sdk/packages/agents/src/*",
-				"../sdk/packages/agents/src/*/index.ts"
-			],
 			"@plinycode/cline-hub": ["./cline-hub/src/server.ts"],
 			"@plinycode/core": ["../sdk/packages/core/src/index.ts"],
 			"@plinycode/core/hub/daemon-entry": [

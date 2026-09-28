@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentRuntime } from "@plinycode/agents";
 import {
 	type AgentConfig,
 	type AgentEvent,
@@ -15,6 +14,7 @@ import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserInstructionConfigService } from "../../extensions/config";
 import type { CoreSessionConfig } from "../../types/config";
+import { AgentRuntime } from "../agent";
 import { createAgentRuntimeConfig } from "../config/agent-runtime-config-builder";
 
 const runMock = vi.fn();

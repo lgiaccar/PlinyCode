@@ -18,22 +18,20 @@ The repo root is the Bun workspace root: `sdk/` has no `package.json`. Run every
 
 - `@plinycode/shared`: shared contracts, schemas, path helpers, hook engine, extension registry, low-level utilities
 - `@plinycode/llms`: provider settings/config, model catalogs, provider manifests, gateway contracts, handler creation
-- `@plinycode/agents`: stateless agent loop, tool orchestration, hook/extension runtime, event streaming
-- `@plinycode/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools. Sessions always run in-process, in the local runtime host
+- `@plinycode/core`: the stateless agent loop (`src/runtime/agent`), plus stateful orchestration, session lifecycle, storage, config watching, plugin loading and default tools. Sessions always run in-process, in the local runtime host
 
 ### Dependency Direction
 
 ```mermaid
 flowchart TD
-  shared["@plinycode/shared"] --> llms["@plinycode/llms"] & agents["@plinycode/agents"] & core["@plinycode/core"]
-  llms --> agents & core
-  agents --> core
+  shared["@plinycode/shared"] --> llms["@plinycode/llms"] & core["@plinycode/core"]
+  llms --> core
   core --> apps["VS Code extension (apps/vscode)"]
 ```
 
 Rules:
 - `shared` stays low-level and reusable
-- `agents` stays stateless — no session/storage/config concerns
+- the agent loop in `core/src/runtime/agent` stays stateless — no session/storage/config concerns
 - `core` owns stateful orchestration
 
 ## Change Routing
@@ -41,7 +39,7 @@ Rules:
 Route changes to the package that owns the concern:
 
 - model/provider schemas or handler behavior: `@plinycode/llms`
-- stateless loop, tool orchestration, streaming, hook/extension runtime: `@plinycode/agents`
+- stateless loop, tool orchestration, streaming, hook/extension runtime: `@plinycode/core` (`src/runtime/agent`)
 - session lifecycle, storage, config watching, default tools, plugin loading: `@plinycode/core`
 - remote-config schemas, managed instruction materialization, blob upload metadata, and OpenTelemetry config normalization: `@plinycode/shared/src/remote-config`
 - host-specific UX or shell behavior: the extension, `apps/vscode`
@@ -76,7 +74,6 @@ For focused verification, run one package's tests:
 ```sh
 bun -F @plinycode/shared test
 bun -F @plinycode/llms test
-bun -F @plinycode/agents test
 bun -F @plinycode/core test:unit
 ```
 
@@ -86,7 +83,7 @@ If a focused test command fails with a missing `@plinycode/*` export or missing 
 
 ### Keep Boundaries Clean
 
-- Don't move stateful logic down into `agents`
+- Don't move stateful logic into the agent loop (`core/src/runtime/agent`)
 - For `@plinycode/llms` provider/model routing rules, follow [packages/llms/AGENTS.md](./packages/llms/AGENTS.md).
 - Don't put app-specific behavior into `core` unless it is truly shared host behavior
 - Keep remote-config primitives generic in `shared`; host-facing session integration belongs in `core`

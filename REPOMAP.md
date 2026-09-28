@@ -100,12 +100,6 @@ Model catalog and provider gateway.
 
 `src/catalog/`, `src/providers/`, `src/services/`, `src/tests/`.
 
-### `sdk/packages/agents`
-
-Browser-safe agent runtime loop.
-
-`src/agent-runtime.ts`, `src/index.ts`, `*.test.ts`.
-
 ## Key files
 
 | File | Why it matters |

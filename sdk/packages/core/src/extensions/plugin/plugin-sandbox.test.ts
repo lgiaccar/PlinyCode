@@ -304,14 +304,14 @@ describe("plugin-sandbox", () => {
 		await writeFile(
 			join(dir, "plugin-create-tool.ts"),
 			[
-				"import { createTool } from '@plinycode/agents';",
+				"import { createTool } from '@plinycode/core';",
 				"export default {",
 				"  name: 'sandbox-create-tool',",
 				"  manifest: { capabilities: ['tools'] },",
 				"  setup(api) {",
 				"    api.registerTool(createTool({",
 				"      name: 'created_tool',",
-				"      description: 'created via agents export',",
+				"      description: 'created via the core createTool export',",
 				"      inputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },",
 				"      execute: async (input) => ({ echoed: input.value }),",
 				"    }));",
@@ -929,7 +929,7 @@ describe("plugin-sandbox", () => {
 		expect(sharedExtensions.get("host: true")?.name).toBe("host: true");
 	});
 
-	it("supports createTool through the agents package export in the sandbox", async () => {
+	it("supports createTool through the core package export in the sandbox", async () => {
 		const extension = sharedExtensions.get("sandbox-create-tool");
 		const { tools, api } = createApiCapture();
 		await extension?.setup?.(api, {});

@@ -227,7 +227,7 @@ export interface AgentExtensionRegistry<TTool = AgentTool, TMessage = unknown> {
  *
  * Hook handler properties are typed `unknown` here so that the generic base
  * interface stays free of agent-specific imports. Concrete extension types
- * (e.g. `AgentExtension` in `@plinycode/agents`) narrow them to the correct
+ * (e.g. `AgentExtension` in `@plinycode/core`) narrow them to the correct
  * context and return types.
  */
 export interface ContributionRegistryExtension<
@@ -241,7 +241,7 @@ export interface ContributionRegistryExtension<
 	manifest: PluginManifest;
 	/** Indicates whether this extension is disabled. Disabled extensions are ignored during setup. */
 	disabled?: boolean;
-	/** Runtime-native hooks consumed directly by `@plinycode/agents`. */
+	/** Runtime-native hooks consumed directly by the agent runtime in `@plinycode/core`. */
 	hooks?: AgentExtensionHooks;
 	/**
 	 * Called once during registry setup to register tools, commands, and other
