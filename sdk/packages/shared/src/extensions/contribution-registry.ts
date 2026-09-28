@@ -1,7 +1,6 @@
 import type { AgentRuntimeHooks, AgentTool } from "../agent";
 import type { AutomationEventEnvelope } from "../cron";
 import type { BasicLogger } from "../logging/logger";
-import type { ITelemetryService } from "../services/telemetry";
 import type { WorkspaceInfo } from "../session/workspace";
 import type { ClientContext, UserContext } from "./context";
 
@@ -183,22 +182,6 @@ export interface PluginSetupContext {
 	automation?: AgentExtensionAutomationContext;
 	/** Host-provided logger scoped to this session/plugin setup. */
 	logger?: BasicLogger;
-	/**
-	 * Host-provided telemetry service. Feature-detect it
-	 * (`ctx.telemetry?.capture(...)`): it is undefined when the host has no
-	 * telemetry service.
-	 *
-	 * In-process plugins receive the host service directly. Sandboxed plugins
-	 * receive a bridge — the live service cannot cross the JSON IPC boundary —
-	 * that forwards `capture`/`captureRequired`/`recordCounter`/
-	 * `recordHistogram`/`recordGauge` to the host, which namespaces every
-	 * event and metric under `plugin.`, stamps `plugin_name`, and drops them
-	 * when the user has opted out of telemetry. Bridge caveats: properties
-	 * must be JSON-serializable; `isEnabled()` always reports `true` (the
-	 * host is the arbiter, so do not gate expensive property computation on
-	 * it); identity and common-property setters are no-ops.
-	 */
-	telemetry?: ITelemetryService;
 }
 
 const ExtensionCapabilityOptions = [
@@ -244,7 +227,7 @@ export interface AgentExtensionRegistry<TTool = AgentTool, TMessage = unknown> {
  *
  * Hook handler properties are typed `unknown` here so that the generic base
  * interface stays free of agent-specific imports. Concrete extension types
- * (e.g. `AgentExtension` in `@plinycode/agents`) narrow them to the correct
+ * (e.g. `AgentExtension` in `@plinycode/core`) narrow them to the correct
  * context and return types.
  */
 export interface ContributionRegistryExtension<
@@ -258,7 +241,7 @@ export interface ContributionRegistryExtension<
 	manifest: PluginManifest;
 	/** Indicates whether this extension is disabled. Disabled extensions are ignored during setup. */
 	disabled?: boolean;
-	/** Runtime-native hooks consumed directly by `@plinycode/agents`. */
+	/** Runtime-native hooks consumed directly by the agent runtime in `@plinycode/core`. */
 	hooks?: AgentExtensionHooks;
 	/**
 	 * Called once during registry setup to register tools, commands, and other

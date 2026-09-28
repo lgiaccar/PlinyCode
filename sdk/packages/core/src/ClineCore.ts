@@ -1,4 +1,4 @@
-import type { BasicLogger, ITelemetryService } from "@plinycode/shared";
+import type { BasicLogger } from "@plinycode/shared";
 import { createClineCoreExtensionContext } from "./cline-core/extension-context";
 import {
 	createClineCorePendingPromptsApi,
@@ -9,7 +9,6 @@ import {
 	normalizeClineCoreStartInput,
 	toClineCoreStartInput,
 } from "./cline-core/start-input";
-import { emitSessionStartedTelemetry } from "./cline-core/telemetry";
 import type {
 	ClineCoreListHistoryOptions,
 	ClineCoreOptions,
@@ -36,7 +35,7 @@ import type {
 	StartSessionInput,
 	StartSessionResult,
 } from "./runtime/host/runtime-host";
-import { resolveCoreDistinctId } from "./services/telemetry/distinct-id";
+import { resolveCoreDistinctId } from "./services/distinct-id";
 import { compareCheckpointToWorkspace } from "./session/checkpoint-diff";
 import {
 	projectSessionMessagesForDisplay,
@@ -78,7 +77,6 @@ export class ClineCore {
 	private readonly prepare: ClineCoreOptions["prepare"] | undefined;
 	private readonly capabilities: RuntimeCapabilities | undefined;
 	private readonly logger: BasicLogger | undefined;
-	private readonly telemetry: ITelemetryService | undefined;
 	private readonly distinctId: string | undefined;
 	private readonly activeSessionBootstraps = new Map<
 		string,
@@ -93,7 +91,6 @@ export class ClineCore {
 		prepare: ClineCoreOptions["prepare"],
 		capabilities: RuntimeCapabilities | undefined,
 		logger: BasicLogger | undefined,
-		telemetry: ITelemetryService | undefined,
 		distinctId: string | undefined,
 	) {
 		this.clientName = clientName;
@@ -102,7 +99,6 @@ export class ClineCore {
 		this.prepare = prepare;
 		this.capabilities = capabilities;
 		this.logger = logger;
-		this.telemetry = telemetry;
 		this.distinctId = distinctId;
 		this.settings = createClineCoreSettingsApi(host);
 		this.pendingPrompts = createClineCorePendingPromptsApi(host);
@@ -143,7 +139,6 @@ export class ClineCore {
 			options.prepare,
 			capabilities,
 			options.logger,
-			options.telemetry,
 			distinctId,
 		);
 		return core;
@@ -207,7 +202,6 @@ export class ClineCore {
 							clientName: this.clientName,
 							distinctId: this.distinctId,
 							logger: this.logger,
-							telemetry: this.telemetry,
 						}),
 				}),
 			);
@@ -219,13 +213,6 @@ export class ClineCore {
 					await Promise.resolve(bootstrap.dispose?.());
 				}
 			}
-			emitSessionStartedTelemetry({
-				input: preparedInput,
-				sessionId: result.sessionId,
-				telemetry: this.telemetry,
-				clientName: this.clientName,
-				runtimeAddress: this.runtimeAddress,
-			});
 			return result;
 		} catch (error) {
 			await Promise.resolve(bootstrap?.dispose?.());
@@ -472,7 +459,6 @@ export class ClineCore {
 							clientName: this.clientName,
 							distinctId: this.distinctId,
 							logger: this.logger,
-							telemetry: this.telemetry,
 						}),
 				})
 			: undefined;

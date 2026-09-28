@@ -39,16 +39,7 @@ describe("VscodeSessionHost", () => {
 		mockCreateVscodeExtraTools.mockReset().mockResolvedValue([])
 	})
 
-	it("gives ClineCore no telemetry service", async () => {
-		await VscodeSessionHost.create({
-			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
-			mcpHub: {} as any,
-		})
-
-		expect(mockClineCoreCreate.mock.calls[0][0].telemetry).toBeUndefined()
-	})
-
-	it("marks sessions as started from vscode, without telemetry", async () => {
+	it("marks sessions as started from vscode", async () => {
 		await VscodeSessionHost.create({
 			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
 			mcpHub: {} as any,
@@ -65,7 +56,6 @@ describe("VscodeSessionHost", () => {
 		})
 
 		expect(prepared.source).toBe("vscode")
-		expect(prepared.config.telemetry).toBeUndefined()
 	})
 
 	it("passes custom editor and apply_patch executors into tool executor capabilities", async () => {

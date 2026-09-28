@@ -1,9 +1,5 @@
 import type { MessageWithMetadata } from "@plinycode/llms";
-import type {
-	AgentConfig,
-	BasicLogger,
-	ITelemetryService,
-} from "@plinycode/shared";
+import type { AgentConfig, BasicLogger } from "@plinycode/shared";
 import type { CheckpointEntry } from "../hooks/checkpoint-hooks";
 import type { RuntimeCapabilities } from "../runtime/capabilities";
 import type { SessionHistoryListOptions } from "../runtime/host/history";
@@ -73,11 +69,12 @@ export type CompareCheckpointResult = CheckpointWorkspaceCompareResult;
 export interface ClineCoreOptions {
 	/**
 	 * A human-readable name for this SDK client (e.g. `"my-app"`, `"acme-bot"`).
-	 * Used to identify the consumer in telemetry and logs.
+	 * Used to identify the consumer in logs.
 	 */
 	clientName?: string;
 	/**
-	 * A stable identifier for this machine or user, used for telemetry attribution.
+	 * A stable identifier for this machine or user, sent to the model gateway
+	 * as request metadata.
 	 * Defaults to the system machine ID, falling back to a generated `cl-<nanoid>` persisted
 	 * at `~/.cline/data/machine-id`.
 	 */
@@ -87,11 +84,6 @@ export interface ClineCoreOptions {
 	 * selected runtime backend so apps implement interactive behavior once.
 	 */
 	capabilities?: RuntimeCapabilities;
-	/**
-	 * Telemetry service instance to use for capturing events and usage.
-	 * If omitted, telemetry is a no-op.
-	 */
-	telemetry?: ITelemetryService;
 	/**
 	 * Optional structured logger for core-side operational diagnostics such as
 	 * runtime-host selection and fallback decisions.

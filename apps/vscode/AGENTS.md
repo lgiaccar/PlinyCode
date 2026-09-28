@@ -12,7 +12,7 @@ The code was forked from Cline and then moved onto the engine packages, so upstr
 
 ## How it fits together
 
-- **Entry:** `src/extension.ts` registers commands and providers, then calls `initialize()` in `src/common.ts`, which sets up `StateManager`, telemetry and the `WebviewProvider`.
+- **Entry:** `src/extension.ts` registers commands and providers, then calls `initialize()` in `src/common.ts`, which sets up `StateManager` and the `WebviewProvider`.
 - **Controller:** `Controller` (`src/core/controller/index.ts`) is a re-export of `SdkController` in `src/sdk/SdkController.ts`. It delegates the agent loop and session lifecycle to `@plinycode/core`. The `src/sdk/` directory holds the extension side of that bridge: `sdk-*-coordinator.ts` files per concern (task start, messages, MCP, mode, compaction, …), `message-translator.ts` (engine events to `ClineMessage`s) and `webview-grpc-bridge.ts` (pushes them to the webview's streams).
 - **Webview:** a React/Vite app in `webview-ui/`. Global state lives in `webview-ui/src/context/ExtensionStateContext.tsx`, fed by the `subscribeToState` stream; its shape is `ExtensionState` in `src/shared/ExtensionMessage.ts`.
 - **Host bridge:** `src/hosts/vscode/` holds everything that touches the VS Code API. `hostbridge/<service>/` implements the `proto/host/*.proto` services (diff, env, window, workspace, testing).

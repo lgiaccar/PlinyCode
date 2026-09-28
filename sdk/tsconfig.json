@@ -10,19 +10,11 @@
 		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
 		"paths": {
-			"@plinycode/agents": ["./packages/agents/src/index.ts"],
-			"@plinycode/agents/*": [
-				"./packages/agents/src/*",
-				"./packages/agents/src/*/index.ts"
-			],
 			"@plinycode/cline-hub": ["./apps/cline-hub/src/server.ts"],
 			"@plinycode/core": ["./packages/core/src/index.ts"],
 			"@plinycode/core/hub": ["./packages/core/src/hub/index.ts"],
 			"@plinycode/core/hub/daemon-entry": [
 				"./packages/core/src/hub/daemon/entry.ts"
-			],
-			"@plinycode/core/telemetry": [
-				"./packages/core/src/services/telemetry/index.ts"
 			],
 			"@plinycode/core/*": [
 				"./packages/core/src/*",

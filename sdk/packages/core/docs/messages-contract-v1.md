@@ -9,8 +9,8 @@ This document describes the persisted session messages artifact written by
 
 It is the canonical replay/export artifact. Downstream consumers (for example,
 ATIF converters) should be able to reconstruct a full session trajectory from
-this file alone. `hooks.jsonl` in the same directory is observability/debug
-telemetry and is not required for replay or export.
+this file alone. `hooks.jsonl` in the same directory is a local debug log
+and is not required for replay or export.
 
 The schema is versioned by the top-level `version` field. This document
 describes **version `1`**.

@@ -63,13 +63,6 @@ export interface PluginSandboxOptions extends PluginTargeting {
 	user?: SandboxedPluginSetupContext["user"];
 	/** Enables a logger bridge that forwards sandbox log calls to the host. */
 	logger?: SandboxedPluginSetupContext["logger"];
-	/**
-	 * Enables the telemetry bridge (`ctx.telemetry`) for sandboxed plugins.
-	 * Set only when the host has a live telemetry service to route
-	 * `plugin_telemetry` events into, so plugin feature-detection of
-	 * `ctx.telemetry` means "someone is listening" in both execution modes.
-	 */
-	telemetryAvailable?: boolean;
 }
 
 type AgentExtension = NonNullable<AgentConfig["extensions"]>[number];
@@ -348,7 +341,6 @@ export async function loadSandboxedPlugins(
 		user: options.user,
 		workspaceInfo: options.workspaceInfo,
 		loggerEnabled: Boolean(options.logger),
-		telemetryEnabled: options.telemetryAvailable === true,
 	};
 
 	// Guard against concurrent re-initialization when multiple tools/hooks
@@ -446,9 +438,9 @@ export async function loadSandboxedPlugins(
 /**
  * Tool contexts and hook payloads cross the sandbox process boundary over
  * JSON IPC, so they must survive JSON.stringify. Host code must not place
- * live host objects (telemetry services, sockets, abort signals) on them,
- * but a single offender would otherwise fail every sandboxed call — the
- * telemetry service on toolContextMetadata did exactly that ("JSON.stringify
+ * live host objects (loggers, sockets, abort signals) on them,
+ * but a single offender would otherwise fail every sandboxed call (a live
+ * service on toolContextMetadata once did exactly that: "JSON.stringify
  * cannot serialize cyclic structures"). These helpers are the safety net:
  * the first attempt sends the payload untouched (no extra serialization on
  * the happy path); only when the runtime rejects it as non-serializable do

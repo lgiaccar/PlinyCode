@@ -247,14 +247,12 @@ describe("auth/oca getValidOcaCredentials", () => {
 			);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const capture = vi.fn();
 		await expect(
 			getValidOcaCredentials(
 				createCredentials({ expires: 90_000 }),
 				{
 					refreshBufferMs: 60_000,
 					retryableTokenGraceMs: 30_000,
-					telemetry: { capture } as never,
 				},
 				{
 					config: {
@@ -268,19 +266,6 @@ describe("auth/oca getValidOcaCredentials", () => {
 				},
 			),
 		).rejects.toThrow("Token refresh failed: 500");
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_refresh_soft_failure",
-				properties: expect.objectContaining({
-					provider: "oca",
-					status: 500,
-					tokenExpired: true,
-				}),
-			}),
-		);
-		expect(capture).not.toHaveBeenCalledWith(
-			expect.objectContaining({ event: "user.auth_logged_out" }),
-		);
 		nowSpy.mockRestore();
 	});
 

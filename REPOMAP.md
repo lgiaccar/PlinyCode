@@ -31,9 +31,9 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 | Path | Role |
 |------|------|
 | `core/` | RPC handlers (`controller/`), storage, hooks, context and workspace helpers |
-| `services/` | VS Code–specific services (auth, telemetry, MCP, browser, search, …) |
+| `services/` | VS Code–specific services (MCP, browser, search, …) |
 | `shared/` | Proto conversions, model catalog, providers, storage, utils |
-| `hosts/` | Host abstractions: `vscode/`, plus `external/AuthHandler.ts` (used by OCA sign-in) |
+| `hosts/` | Host abstractions (`vscode/`) |
 | `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `terminal/`) |
 | `sdk/` | The controller (`SdkController.ts`) and the bridge to the engine: per-concern coordinators, message translator, webview gRPC bridge, `router/` (FreeAuto/BalanceAuto), `model-catalog/`, `vscode-lm/` |
 | `types/`, `utils/` | Declarations & helpers |
@@ -54,7 +54,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 ### `src/services/`
 
-`banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
+`banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 
@@ -98,12 +98,6 @@ Shared types & utilities.
 Model catalog and provider gateway.
 
 `src/catalog/`, `src/providers/`, `src/services/`, `src/tests/`.
-
-### `sdk/packages/agents`
-
-Browser-safe agent runtime loop.
-
-`src/agent-runtime.ts`, `src/index.ts`, `*.test.ts`.
 
 ## Key files
 

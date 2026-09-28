@@ -19,7 +19,6 @@ import {
 	type AiSdkFormatterMessage,
 	type AiSdkFormatterPart,
 	type ContextBreakdownTokens,
-	captureSdkError,
 	createMediaBudgetState,
 	estimateContextBreakdown,
 	estimateRequestInputTokens,
@@ -1368,12 +1367,6 @@ interface CapturedStreamError {
 	 * not multiply them.
 	 */
 	retryable: boolean;
-	/**
-	 * This layer already recorded `sdk.error` telemetry for the failure.
-	 * Forwarded as `errorReported` on the `finish` event so the agent loop
-	 * does not report the same failure a second time.
-	 */
-	reported?: boolean;
 }
 
 function captureStreamError(error: unknown): CapturedStreamError {
@@ -1959,7 +1952,6 @@ async function* emitAiSdkEvents(
 		error: streamError?.message,
 		errorClass: streamError?.errorClass,
 		errorRetryable: streamError?.retryable,
-		errorReported: streamError?.reported,
 	};
 }
 
@@ -2209,19 +2201,6 @@ function createAiSdkProvider(
 								severity: "error",
 							});
 						}
-						captured.reported = captureSdkError(context.telemetry, {
-							component: "llms",
-							operation: "provider.stream",
-							error: streamError,
-							errorMessage: msg,
-							severity: "error",
-							handled: true,
-							context: {
-								providerId: request.providerId,
-								modelId: request.modelId,
-								providerKind: kind,
-							},
-						});
 					},
 				}) as unknown as AiSdkStreamResult;
 
@@ -2257,26 +2236,12 @@ function createAiSdkProvider(
 						severity: "error",
 					});
 				}
-				const reported = captureSdkError(context.telemetry, {
-					component: "llms",
-					operation: "provider.create_or_stream",
-					error,
-					errorMessage: msg,
-					severity: "error",
-					handled: true,
-					context: {
-						providerId: request.providerId,
-						modelId: request.modelId,
-						providerKind: kind,
-					},
-				});
 				yield {
 					type: "finish",
 					reason: "error",
 					error: msg,
 					errorClass: captured.errorClass,
 					errorRetryable: captured.retryable,
-					errorReported: reported || captured.reported,
 				};
 			}
 		},

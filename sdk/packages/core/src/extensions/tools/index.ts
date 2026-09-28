@@ -9,7 +9,6 @@ export { validateWithZod, zodToJsonSchema } from "@plinycode/shared";
 export {
 	createPlanModeCommandGuardExtension,
 	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
-	type PlanModeCommandGuardOptions,
 } from "./command-guard-extension";
 // Constants
 export { ALL_DEFAULT_TOOL_NAMES, DefaultToolNames } from "./constants";
