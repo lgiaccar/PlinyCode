@@ -23,17 +23,6 @@ describe("parseProviderId", () => {
 		expect(parseProviderId("  Custom-SDK-Provider  ")).toBe("custom-sdk-provider")
 	})
 
-	it("normalizes the legacy camel-case nousResearch id", () => {
-		expect(parseProviderId("nousResearch")).toBe("nousresearch")
-		expect(parseProviderId("NOUSRESEARCH")).toBe("nousresearch")
-	})
-
-	it("folds the SDK openai-compatible spelling to the extension's openai id", () => {
-		expect(parseProviderId("openai-compatible")).toBe("openai")
-		expect(parseProviderId("  OpenAI-Compatible  ")).toBe("openai")
-		expect(warnSpy).not.toHaveBeenCalled()
-	})
-
 	it("warns once per non-empty unknown provider id", () => {
 		parseProviderId("provider-id-test-unknown-a")
 		parseProviderId("provider-id-test-unknown-a")
@@ -48,15 +37,8 @@ describe("parseProviderId", () => {
 	})
 
 	it("does not warn for known provider ids", () => {
-		parseProviderId("anthropic")
-		parseProviderId("openai")
-		parseProviderId("nousResearch")
-		parseProviderId("zai-coding-plan")
-		parseProviderId("poolside")
-		parseProviderId("v0")
-		parseProviderId("xiaomi")
-		parseProviderId("tencent-tokenhub")
-		parseProviderId("chutes")
+		parseProviderId("pliny")
+		parseProviderId("  Pliny ")
 
 		expect(warnSpy).not.toHaveBeenCalled()
 	})
@@ -64,29 +46,24 @@ describe("parseProviderId", () => {
 
 describe("isKnownProviderId", () => {
 	it("returns true for known provider ids after parsing", () => {
-		expect(isKnownProviderId(parseProviderId("anthropic"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("openai"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("deepseek"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("nousResearch"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("zai-coding-plan"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("poolside"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("v0"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("xiaomi"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("tencent-tokenhub"))).toBe(true)
-		expect(isKnownProviderId(parseProviderId("chutes"))).toBe(true)
+		expect(isKnownProviderId(parseProviderId("pliny"))).toBe(true)
 	})
 
 	it("returns false for a custom provider id", () => {
 		expect(isKnownProviderId(parseProviderId("provider-id-test-custom-provider"))).toBe(false)
 	})
 
+	it("returns false for a provider PlinyCode no longer has", () => {
+		expect(isKnownProviderId(parseProviderId("openrouter"))).toBe(false)
+	})
+
 	it("acts as a type predicate", () => {
-		const id = parseProviderId("anthropic")
+		const id = parseProviderId("pliny")
 		if (!isKnownProviderId(id)) {
-			throw new Error("expected anthropic to be known")
+			throw new Error("expected pliny to be known")
 		}
 
 		const knownProviderId: KnownProviderId = id
-		expect(knownProviderId).toBe("anthropic")
+		expect(knownProviderId).toBe("pliny")
 	})
 })

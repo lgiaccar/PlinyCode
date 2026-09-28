@@ -23,8 +23,8 @@ describe("SdkSessionRebuildScheduler", () => {
 		const first = vi.fn().mockResolvedValue(undefined)
 		const latest = vi.fn().mockResolvedValue(undefined)
 
-		scheduler.request("provider", first)
-		scheduler.request("provider", latest)
+		scheduler.request("mcpTools", first)
+		scheduler.request("mcpTools", latest)
 		activeSession.isRunning = false
 		scheduler.sessionBecameIdle()
 		await scheduler.waitUntilSettled()
@@ -37,7 +37,7 @@ describe("SdkSessionRebuildScheduler", () => {
 		const scheduler = new SdkSessionRebuildScheduler({ sessions: { getActiveSession: () => undefined } })
 		const rebuild = vi.fn().mockResolvedValue(undefined)
 
-		scheduler.request("provider", rebuild)
+		scheduler.request("mcpTools", rebuild)
 		await Promise.resolve()
 
 		expect(rebuild).not.toHaveBeenCalled()
@@ -77,7 +77,7 @@ describe("SdkSessionRebuildScheduler", () => {
 		)
 		const passiveRebuild = vi.fn().mockResolvedValue(undefined)
 
-		scheduler.request("provider", passiveRebuild)
+		scheduler.request("mcpTools", passiveRebuild)
 		await Promise.resolve()
 		expect(passiveRebuild).not.toHaveBeenCalled()
 

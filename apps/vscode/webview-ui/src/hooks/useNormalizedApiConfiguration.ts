@@ -1,5 +1,5 @@
-import type { ApiProvider, ModelInfo } from "@shared/api"
-import { toLegacyApiProvider } from "@shared/model-catalog/provider-helpers"
+import type { ModelInfo } from "@shared/api"
+import { PLINY_PROVIDER_ID } from "@shared/pliny"
 import { ResolveModelInfoRequest } from "@shared/proto/cline/models"
 import { fromProtobufModelInfo } from "@shared/proto-conversions/models/typeConversion"
 import type { Mode } from "@shared/storage/types"
@@ -20,56 +20,15 @@ const unknownModelInfo: ModelInfo = {
 }
 
 /**
- * Map a provider id to the `ApiConfiguration.{plan,act}Mode<…>ModelId`
- * field that stores its selected model id. For dynamic-list providers
- * (openrouter, openai-compatible, ollama, …) each one maintains its own
- * per-provider field; static-list providers share the common
- * `apiModelId` field.
- *
- * This mapping mirrors the writers in each provider component / picker
- * and the schema documented in `@/shared/storage/state-keys.ts`. When
- * adding a provider that needs its own model-id field, extend the map
- * here and the corresponding writer.
+ * The provider and model the mode runs on. The provider is always Pliny (a
+ * provider id stored by an older version reads as `pliny`), and Pliny keeps
+ * its model id in the generic `{plan,act}ModeApiModelId` field.
  */
 function getActiveProviderAndModelId(apiConfiguration: ReturnType<typeof useExtensionState>["apiConfiguration"], mode: Mode) {
-	// State written by older builds or other hosts may carry SDK catalog
-	// spellings (e.g. `openai-compatible`); fold them back to the legacy
-	// `ApiProvider` spelling so the provider-keyed lookups below resolve.
-	const provider = toLegacyApiProvider(
-		(mode === "plan" ? apiConfiguration?.planModeApiProvider : apiConfiguration?.actModeApiProvider) || "anthropic",
-	) as ApiProvider
 	const modeFields = getModeSpecificFields(apiConfiguration, mode)
-
-	const providerSpecificModelIds: Partial<Record<string, string | undefined>> = {
-		cline: modeFields.clineModelId,
-		"cline-pass": modeFields.clinePassModelId,
-		deepseek: modeFields.apiModelId,
-		openai: modeFields.openAiModelId,
-		openrouter: modeFields.openRouterModelId,
-		requesty: modeFields.requestyModelId,
-		litellm: modeFields.liteLlmModelId,
-		"vercel-ai-gateway": modeFields.vercelAiGatewayModelId,
-		ollama: modeFields.ollamaModelId,
-		lmstudio: modeFields.lmStudioModelId,
-		groq: modeFields.groqModelId,
-		baseten: modeFields.basetenModelId,
-		huggingface: modeFields.huggingFaceModelId,
-		hicap: modeFields.hicapModelId,
-		aihubmix: modeFields.aihubmixModelId,
-		nousResearch: modeFields.nousResearchModelId,
-		oca: modeFields.ocaModelId,
-		"huawei-cloud-maas": modeFields.huaweiCloudMaasModelId,
-		together: modeFields.togetherModelId,
-		fireworks: modeFields.fireworksModelId,
-		sapaicore: modeFields.apiModelId,
-		"vscode-lm": modeFields.vsCodeLmModelSelector
-			? `${modeFields.vsCodeLmModelSelector.vendor}/${modeFields.vsCodeLmModelSelector.family}`
-			: undefined,
-	}
-
 	return {
-		provider,
-		modelId: Object.hasOwn(providerSpecificModelIds, provider) ? providerSpecificModelIds[provider] : modeFields.apiModelId,
+		provider: modeFields.apiProvider ?? PLINY_PROVIDER_ID,
+		modelId: modeFields.apiModelId,
 	}
 }
 

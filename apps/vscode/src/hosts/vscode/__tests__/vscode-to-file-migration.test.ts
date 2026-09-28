@@ -202,7 +202,7 @@ describe("vscode-to-file-migration", () => {
 
 			const mockCtx = createMockVSCodeContext()
 			mockCtx._globalStateStore.set("mode", "plan") // should be skipped
-			mockCtx._secretsStore.set("apiKey", "sk-test") // should be skipped
+			mockCtx._secretsStore.set("authNonce", "sk-test") // should be skipped
 			mockCtx._workspaceStateStore.set("localClineRulesToggles", { "rule-1": true })
 
 			const result = await exportVSCodeStorageToSharedFiles(mockCtx as any, storageContext)
@@ -529,33 +529,33 @@ describe("vscode-to-file-migration", () => {
 	describe("secrets migration", () => {
 		it("should migrate secret keys", async () => {
 			const mockCtx = createMockVSCodeContext()
-			mockCtx._secretsStore.set("apiKey", "sk-test-123")
-			mockCtx._secretsStore.set("openRouterApiKey", "or-test-456")
+			mockCtx._secretsStore.set("authNonce", "sk-test-123")
+			mockCtx._secretsStore.set("mcpOAuthSecrets", "or-test-456")
 
 			const result = await exportVSCodeStorageToSharedFiles(mockCtx as any, storageContext)
 
 			result.migrated.should.be.true()
 			result.secretsCount.should.equal(2)
-			storageContext.secrets.get("apiKey")!.should.equal("sk-test-123")
-			storageContext.secrets.get("openRouterApiKey")!.should.equal("or-test-456")
+			storageContext.secrets.get("authNonce")!.should.equal("sk-test-123")
+			storageContext.secrets.get("mcpOAuthSecrets")!.should.equal("or-test-456")
 		})
 
 		it("should NOT overwrite existing secrets in file store", async () => {
-			storageContext.secrets.set("apiKey", "existing-key")
+			storageContext.secrets.set("authNonce", "existing-key")
 
 			const mockCtx = createMockVSCodeContext()
-			mockCtx._secretsStore.set("apiKey", "vscode-key")
+			mockCtx._secretsStore.set("authNonce", "vscode-key")
 
 			const result = await exportVSCodeStorageToSharedFiles(mockCtx as any, storageContext)
 
 			result.migrated.should.be.true()
 			result.skippedExisting.should.be.greaterThan(0)
-			storageContext.secrets.get("apiKey")!.should.equal("existing-key")
+			storageContext.secrets.get("authNonce")!.should.equal("existing-key")
 		})
 
 		it("should skip empty string secrets", async () => {
 			const mockCtx = createMockVSCodeContext()
-			mockCtx._secretsStore.set("apiKey", "")
+			mockCtx._secretsStore.set("authNonce", "")
 
 			const result = await exportVSCodeStorageToSharedFiles(mockCtx as any, storageContext)
 
@@ -565,12 +565,12 @@ describe("vscode-to-file-migration", () => {
 
 		it("should continue even if a single secret read fails", async () => {
 			const mockCtx = createMockVSCodeContext()
-			mockCtx._secretsStore.set("openRouterApiKey", "or-key-123")
+			mockCtx._secretsStore.set("mcpOAuthSecrets", "or-key-123")
 
 			// Make one secret read fail
 			const origGet = mockCtx.secrets.get.bind(mockCtx.secrets)
 			mockCtx.secrets.get = async (key: string) => {
-				if (key === "apiKey") {
+				if (key === "authNonce") {
 					throw new Error("Simulated secret read error")
 				}
 				return origGet(key)
@@ -580,7 +580,7 @@ describe("vscode-to-file-migration", () => {
 
 			result.migrated.should.be.true()
 			result.secretsCount.should.equal(1)
-			storageContext.secrets.get("openRouterApiKey")!.should.equal("or-key-123")
+			storageContext.secrets.get("mcpOAuthSecrets")!.should.equal("or-key-123")
 		})
 	})
 
@@ -754,7 +754,7 @@ describe("vscode-to-file-migration", () => {
 		it("should produce same result when run twice", async () => {
 			const mockCtx = createMockVSCodeContext()
 			mockCtx._globalStateStore.set("mode", "plan")
-			mockCtx._secretsStore.set("apiKey", "sk-test")
+			mockCtx._secretsStore.set("authNonce", "sk-test")
 
 			// First run
 			const result1 = await exportVSCodeStorageToSharedFiles(mockCtx as any, storageContext)
@@ -767,7 +767,7 @@ describe("vscode-to-file-migration", () => {
 
 			// Values should still be correct
 			storageContext.globalState.get("mode")!.should.equal("plan")
-			storageContext.secrets.get("apiKey")!.should.equal("sk-test")
+			storageContext.secrets.get("authNonce")!.should.equal("sk-test")
 		})
 	})
 })

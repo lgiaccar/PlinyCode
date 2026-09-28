@@ -117,25 +117,11 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 	const { selectedModelId, selectedModelInfo } = useNormalizedApiConfiguration(mode)
 	const modeFields = getModeSpecificFields(apiConfiguration, mode)
 
-	// Local providers report no cost; the openai-compatible provider can
-	// report cost only when the user has supplied both prices. For every
-	// other provider, the SDK is the source of truth for whether to render
-	// per-task cost: any `metadata.usageCostDisplay` other than "show" —
-	// "hide", or "subscription" for flat-rate providers like ClinePass and
-	// ChatGPT Plus/Pro where the computed figure would be an API-rate
-	// estimate rather than a real charge — suppresses the cost here. This
-	// mirrors the CLI's `shouldShowCliUsageCost` consumer and removes the
-	// previous extension-side hard-coded "openai-codex" check.
+	// The SDK is the source of truth for whether to render per-task cost:
+	// any `metadata.usageCostDisplay` other than "show" suppresses it. This
+	// mirrors the CLI's `shouldShowCliUsageCost` consumer.
 	const usageCostDisplay = useProviderUsageCostDisplay(modeFields.apiProvider)
-	const isCostAvailable =
-		(totalCost &&
-			modeFields.apiProvider === "openai" &&
-			modeFields.openAiModelInfo?.inputPrice &&
-			modeFields.openAiModelInfo?.outputPrice) ||
-		(modeFields.apiProvider !== "vscode-lm" &&
-			modeFields.apiProvider !== "ollama" &&
-			modeFields.apiProvider !== "lmstudio" &&
-			usageCostDisplay === "show")
+	const isCostAvailable = usageCostDisplay === "show"
 
 	// The conversation's own budget, else the default for new conversations.
 	// Free models are never limited, so no budget is shown while one is selected.

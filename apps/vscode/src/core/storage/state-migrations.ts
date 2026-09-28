@@ -164,7 +164,8 @@ export async function migrateWelcomeViewCompleted(context: vscode.ExtensionConte
 			// undefined. Also consider the file-backed stores (same signals: the
 			// completed flag itself, any provider secret, or the keyless provider
 			// configs), otherwise fully configured users are sent back through onboarding.
-			const fileGlobalState = readGlobalState(dataDir)
+			// Read loosely: these keys belong to providers PlinyCode no longer has.
+			const fileGlobalState: Record<string, unknown> = readGlobalState(dataDir)
 			const fileSecrets: Record<string, string | undefined> = readSecrets(dataDir)
 			const hasFileBackedConfig =
 				fileGlobalState.welcomeViewCompleted === true ||

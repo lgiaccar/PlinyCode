@@ -1,31 +1,55 @@
 import type { ApiConfiguration } from "@shared/api"
-import { describe, expect, it } from "vitest"
-import { getModeSpecificFields } from "../providerUtils"
+import { describe, expect, it, vi } from "vitest"
+import { getModeSpecificFields, syncModeConfigurations } from "../providerUtils"
 
 describe("getModeSpecificFields", () => {
-	it("returns undefined provider-specific fields when apiConfiguration is undefined", () => {
+	it("returns undefined fields when apiConfiguration is undefined", () => {
 		const fields = getModeSpecificFields(undefined, "plan")
 		expect(fields.apiProvider).toBeUndefined()
-		expect(fields.openRouterModelId).toBeUndefined()
-		expect(fields.clineModelId).toBeUndefined()
+		expect(fields.apiModelId).toBeUndefined()
 	})
 
-	it("isolates each provider's saved fields so cross-provider state does not leak", () => {
-		// Reproduces the original cline/openrouter conflation guard: even when
-		// the user has stale OpenRouter selection state and is now configured
-		// for Cline, Cline-specific fields stay undefined until the user
-		// commits a Cline selection.
+	it("reads the mode's provider and model", () => {
 		const apiConfiguration: ApiConfiguration = {
-			planModeApiProvider: "cline",
-			planModeOpenRouterModelId: "openrouter/some-model",
-			planModeOpenRouterModelInfo: { description: "stale OpenRouter model" },
-		} as ApiConfiguration
+			planModeApiProvider: "pliny",
+			planModeApiModelId: "snps-provider/GLM-5.2",
+			actModeApiProvider: "pliny",
+			actModeApiModelId: "pliny/auto-free",
+		}
 
-		const fields = getModeSpecificFields(apiConfiguration, "plan")
+		expect(getModeSpecificFields(apiConfiguration, "plan")).toMatchObject({
+			apiProvider: "pliny",
+			apiModelId: "snps-provider/GLM-5.2",
+		})
+		expect(getModeSpecificFields(apiConfiguration, "act").apiModelId).toBe("pliny/auto-free")
+	})
 
-		expect(fields.apiProvider).toBe("cline")
-		expect(fields.openRouterModelId).toBe("openrouter/some-model")
-		expect(fields.clineModelId).toBeUndefined()
-		expect(fields.clineModelInfo).toBeUndefined()
+	it("reads a provider stored by an older version as pliny", () => {
+		const apiConfiguration = { planModeApiProvider: "openrouter" } as unknown as ApiConfiguration
+
+		expect(getModeSpecificFields(apiConfiguration, "plan").apiProvider).toBe("pliny")
+	})
+})
+
+describe("syncModeConfigurations", () => {
+	it("copies the source mode's model to both modes", async () => {
+		const handleFieldsChange = vi.fn(async (_updates: Partial<ApiConfiguration>) => {})
+
+		await syncModeConfigurations(
+			{ planModeApiProvider: "pliny", planModeApiModelId: "snps-provider/GLM-5.2", planModeReasoningEffort: "high" },
+			"plan",
+			handleFieldsChange,
+		)
+
+		expect(handleFieldsChange).toHaveBeenCalledWith(
+			expect.objectContaining({
+				planModeApiProvider: "pliny",
+				actModeApiProvider: "pliny",
+				planModeApiModelId: "snps-provider/GLM-5.2",
+				actModeApiModelId: "snps-provider/GLM-5.2",
+				planModeReasoningEffort: "high",
+				actModeReasoningEffort: "high",
+			}),
+		)
 	})
 })

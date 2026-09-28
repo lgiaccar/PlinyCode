@@ -38,9 +38,7 @@ const BUN_TEST_IMPORT = /from\s+["']bun:test["']/
 const IGNORED = new Set<string>([
 	"src/core/controller/models/__tests__/providerCatalogHandlers.test.ts",
 	"src/core/controller/models/__tests__/providerCatalogSmoke.test.ts",
-	"src/core/controller/models/__tests__/providerSwitchNormalization.test.ts",
 	"src/core/controller/models/__tests__/resolveModelInfo.test.ts",
-	"src/core/controller/models/__tests__/refreshClineRecommendedModels.test.ts",
 ])
 
 // Files that require the real VSCode Electron host (@vscode/test-cli). Excluded

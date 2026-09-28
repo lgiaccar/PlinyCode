@@ -32,10 +32,10 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 |------|------|
 | `core/` | RPC handlers (`controller/`), storage, hooks, context and workspace helpers |
 | `services/` | VS Code–specific services (MCP, browser, search, …) |
-| `shared/` | Proto conversions, model catalog, providers, storage, utils |
+| `shared/` | Proto conversions, storage, Pliny model ids (`pliny.ts`), utils |
 | `hosts/` | Host abstractions (`vscode/`) |
 | `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `terminal/`) |
-| `sdk/` | The controller (`SdkController.ts`) and the bridge to the engine: per-concern coordinators, message translator, webview gRPC bridge, `router/` (FreeAuto/BalanceAuto), `model-catalog/`, `vscode-lm/` |
+| `sdk/` | The controller (`SdkController.ts`) and the bridge to the engine: per-concern coordinators, message translator, webview gRPC bridge, `router/` (FreeAuto/BalanceAuto), `model-catalog/` |
 | `types/`, `utils/` | Declarations & helpers |
 | `exports/` | Public API |
 | `generated/` | Auto-generated protobuf/gRPC code |

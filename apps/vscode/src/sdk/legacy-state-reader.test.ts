@@ -170,13 +170,13 @@ describe("readSecrets", () => {
 
 	it("reads secrets.json contents", () => {
 		writeJson(path.join(tempDir, "secrets.json"), {
-			apiKey: "sk-ant-test123",
-			openRouterApiKey: "sk-or-test456",
+			authNonce: "nonce-123",
+			mcpOAuthSecrets: '{"server":"secret"}',
 		})
 
 		const secrets = readSecrets(tempDir)
-		expect(secrets.apiKey).toBe("sk-ant-test123")
-		expect(secrets.openRouterApiKey).toBe("sk-or-test456")
+		expect(secrets.authNonce).toBe("nonce-123")
+		expect(secrets.mcpOAuthSecrets).toBe('{"server":"secret"}')
 	})
 
 	it("returns empty object for corrupt JSON", () => {
@@ -194,13 +194,13 @@ describe("readSecrets", () => {
 
 describe("readSecretKey", () => {
 	it("returns undefined for missing key", () => {
-		writeJson(path.join(tempDir, "secrets.json"), { apiKey: "test" })
-		expect(readSecretKey("openRouterApiKey", tempDir)).toBeUndefined()
+		writeJson(path.join(tempDir, "secrets.json"), { authNonce: "test" })
+		expect(readSecretKey("mcpOAuthSecrets", tempDir)).toBeUndefined()
 	})
 
 	it("returns value for present key", () => {
-		writeJson(path.join(tempDir, "secrets.json"), { apiKey: "sk-test" })
-		expect(readSecretKey("apiKey", tempDir)).toBe("sk-test")
+		writeJson(path.join(tempDir, "secrets.json"), { authNonce: "sk-test" })
+		expect(readSecretKey("authNonce", tempDir)).toBe("sk-test")
 	})
 })
 
@@ -414,7 +414,7 @@ describe("readAllLegacyState", () => {
 			actModeApiProvider: "anthropic",
 		})
 		writeJson(path.join(tempDir, "secrets.json"), {
-			apiKey: "sk-ant-test",
+			authNonce: "sk-ant-test",
 		})
 		writeJson(path.join(tempDir, "state", "taskHistory.json"), [
 			{ id: "task-1", ts: Date.now(), task: "Test", tokensIn: 0, tokensOut: 0, totalCost: 0 },
@@ -428,7 +428,7 @@ describe("readAllLegacyState", () => {
 		const state = readAllLegacyState(tempDir)
 		expect(state.globalState.mode).toBe("act")
 		expect(state.globalState.actModeApiProvider).toBe("anthropic")
-		expect(state.secrets.apiKey).toBe("sk-ant-test")
+		expect(state.secrets.authNonce).toBe("sk-ant-test")
 		expect(state.taskHistory).toHaveLength(1)
 		expect(state.taskHistory[0].id).toBe("task-1")
 		expect(state.mcpSettings.mcpServers["test-server"].command).toBe("node")

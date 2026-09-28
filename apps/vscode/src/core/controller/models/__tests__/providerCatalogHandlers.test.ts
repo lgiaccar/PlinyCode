@@ -36,13 +36,11 @@ function makeController(
 	store: ProviderConfigStore,
 	catalog: ProviderCatalog,
 	stateManager?: TestStateManager,
-	handleApiConfigurationChanged?: ReturnType<typeof vi.fn<(previous: ApiConfiguration, next: ApiConfiguration) => void>>,
 ): ProviderCatalogController {
 	return {
 		getProviderConfigStore: () => store,
 		getProviderCatalog: () => catalog,
 		...(stateManager ? { stateManager } : {}),
-		...(handleApiConfigurationChanged ? { handleApiConfigurationChanged } : {}),
 	}
 }
 
@@ -284,8 +282,9 @@ describe("provider model catalog handlers", () => {
 				capabilities: ["prompt-cache"],
 			}),
 		})
+		// Every commit runs on Pliny, whatever provider id the request names.
 		expect(stateManager.setGlobalStateBatch).toHaveBeenCalledWith({
-			actModeApiProvider: "deepseek",
+			actModeApiProvider: "pliny",
 			actModeApiModelId: "deepseek-v4-flash",
 		})
 		expect(stateManager.flushPendingState).toHaveBeenCalledTimes(1)
@@ -371,34 +370,6 @@ describe("provider model catalog handlers", () => {
 	// (`actModeApiProvider` / `actModeOpenAiModelId`), otherwise the chat view
 	// and session factory (both keyed by `openai`) read stale or default
 	// models (gpt-4o) instead of the user's selection.
-	it("commitModelSelection folds the SDK openai-compatible spelling to legacy openai state keys", async () => {
-		const { commitModelSelection } = await import("../commitModelSelection")
-		const providerId = parseProviderId("openai-compatible")
-		expect(providerId).toBe("openai")
-		const store = makeStore({ providerId })
-		const stateManager: TestStateManager = {
-			setGlobalStateBatch: vi.fn(),
-			flushPendingState: vi.fn(async () => undefined),
-		}
-		const controller = makeController(store, makeCatalog(), stateManager)
-
-		await commitModelSelection(controller, {
-			providerId: "openai-compatible",
-			mode: "act",
-			modelId: "my-custom-model",
-		})
-
-		expect(store.commitSelection).toHaveBeenCalledWith(providerId, "act", {
-			providerId,
-			modelId: "my-custom-model",
-			overrides: undefined,
-		})
-		expect(stateManager.setGlobalStateBatch).toHaveBeenCalledWith({
-			actModeApiProvider: "openai",
-			actModeOpenAiModelId: "my-custom-model",
-		})
-	})
-
 	// The model label under the chat input renders from pushed extension
 	// state; a model-only commit must push state itself instead of waiting
 	// for an unrelated action (e.g. sending a message) to refresh it.
@@ -465,29 +436,28 @@ describe("provider model catalog handlers", () => {
 		})
 	})
 
-	it("commitModelSelection reports provider changes when config is initialized", async () => {
+	it("commitModelSelection stores the Pliny provider and model id when config is initialized", async () => {
 		const { commitModelSelection } = await import("../commitModelSelection")
-		const providerId = parseProviderId("deepseek")
+		const providerId = parseProviderId("pliny")
 		const store = makeStore({ providerId })
 		const stateManager: TestStateManager = {
 			setGlobalStateBatch: vi.fn(),
 			flushPendingState: vi.fn(async () => undefined),
-			getApiConfiguration: vi
-				.fn<() => ApiConfiguration | undefined>()
-				.mockReturnValueOnce(undefined)
-				.mockReturnValueOnce({ actModeApiProvider: "deepseek" }),
+			getApiConfiguration: vi.fn<() => ApiConfiguration | undefined>(),
 		}
-		const handleApiConfigurationChanged = vi.fn<(previous: ApiConfiguration, next: ApiConfiguration) => void>()
-		const controller = makeController(store, makeCatalog(), stateManager, handleApiConfigurationChanged)
+		const controller = makeController(store, makeCatalog(), stateManager)
 
 		await commitModelSelection(controller, {
-			providerId: "deepseek",
+			providerId: "pliny",
 			mode: "act",
-			modelId: "deepseek-v4-flash",
-			overrides: ModelOverrides.create({ name: "DeepSeek V4 Flash" }),
+			modelId: "snps-provider/kimi-k2.6",
+			overrides: ModelOverrides.create({ name: "Kimi K2.6" }),
 		})
 
-		expect(handleApiConfigurationChanged).toHaveBeenCalledWith({}, { actModeApiProvider: "deepseek" })
+		expect(stateManager.setGlobalStateBatch).toHaveBeenCalledWith({
+			actModeApiProvider: "pliny",
+			actModeApiModelId: "snps-provider/kimi-k2.6",
+		})
 		expect(stateManager.flushPendingState).toHaveBeenCalledTimes(1)
 	})
 
