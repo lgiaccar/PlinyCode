@@ -6,8 +6,6 @@ import { RemoteConfigFields } from "@shared/storage/state-keys"
 import type { Environment } from "../config"
 import { AutoApprovalSettings } from "./AutoApprovalSettings"
 import { ApiConfiguration } from "./api"
-import { BrowserSettings } from "./BrowserSettings"
-import { ClineFeatureSetting } from "./ClineFeatureSetting"
 import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
@@ -41,8 +39,6 @@ export interface ExtensionState {
 	onboardingModels: OnboardingModelGroup | undefined
 	apiConfiguration?: ApiConfiguration
 	autoApprovalSettings: AutoApprovalSettings
-	browserSettings: BrowserSettings
-	remoteBrowserHost?: string
 	preferredLanguage?: string
 	mode: Mode
 	clineMessages: ClineMessage[]
@@ -82,7 +78,6 @@ export interface ExtensionState {
 	 */
 	epoch?: number
 	currentTaskItem?: HistoryItem
-	mcpMarketplaceEnabled?: boolean
 	mcpDisplayMode: McpDisplayMode
 	planActSeparateModelsSetting: boolean
 	enableCheckpointsSetting?: boolean
@@ -129,7 +124,6 @@ export interface ExtensionState {
 	/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 	conversationSpendingLimit?: number
 	subagentsEnabled?: boolean
-	worktreesEnabled?: ClineFeatureSetting
 	favoritedModelIds: string[]
 	/**
 	 * The workspace this window is open on (folder, or .code-workspace file for
@@ -142,7 +136,6 @@ export interface ExtensionState {
 	workspaceRoots: WorkspaceRoot[]
 	primaryRootIndex: number
 	isMultiRootWorkspace: boolean
-	multiRootSetting: ClineFeatureSetting
 	hooksEnabled?: boolean
 	remoteConfigSettings?: Partial<RemoteConfigFields>
 	remoteConfigRevision?: number
@@ -301,12 +294,9 @@ export interface ClineSayTool {
 	readLineEnd?: number
 }
 
-// must keep in sync with system prompt
-const browserActions = ["launch", "click", "type", "scroll_down", "scroll_up", "close"] as const
-export type BrowserAction = (typeof browserActions)[number]
-
+// The browser tool was removed; these shapes remain so old conversations still render.
 export interface ClineSayBrowserAction {
-	action: BrowserAction
+	action: "launch" | "click" | "type" | "scroll_down" | "scroll_up" | "close"
 	coordinate?: string
 	text?: string
 }

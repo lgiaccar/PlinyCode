@@ -9,7 +9,6 @@ import type {
 	StartSessionInput,
 	StartSessionResult,
 } from "../runtime/host/runtime-host";
-import type { FeatureFlagsService } from "../services/feature-flags";
 import type { CheckpointWorkspaceCompareResult } from "../session/checkpoint-diff";
 import type { ClineCoreStartConfig } from "../types/config";
 import type { SessionMessagesArtifactUploader } from "../types/session";
@@ -85,11 +84,6 @@ export interface ClineCoreOptions {
 	 * selected runtime backend so apps implement interactive behavior once.
 	 */
 	capabilities?: RuntimeCapabilities;
-	/**
-	 * Feature flags service for this ClineCore instance.
-	 * If omitted, Core uses a no-op provider with default flag values.
-	 */
-	featureFlags?: FeatureFlagsService;
 	/**
 	 * Optional structured logger for core-side operational diagnostics such as
 	 * runtime-host selection and fallback decisions.

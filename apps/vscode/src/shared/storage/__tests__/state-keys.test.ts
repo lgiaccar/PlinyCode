@@ -291,7 +291,6 @@ describe("State Keys Type Safety", () => {
 			// Test a few known defaults
 			const testCases: Array<{ key: GlobalStateAndSettingsKey; expectedType: string }> = [
 				{ key: "autoApprovalSettings", expectedType: "object" },
-				{ key: "browserSettings", expectedType: "object" },
 				{ key: "shellIntegrationTimeout", expectedType: "number" },
 				{ key: "preferredLanguage", expectedType: "string" },
 				{ key: "hooksEnabled", expectedType: "boolean" },
@@ -354,16 +353,6 @@ describe("State Keys Type Safety", () => {
 			const result = applyTransform("keyWithoutTransform", testValue)
 
 			expect(result).to.equal(testValue)
-		})
-
-		it("should merge defaults in browserSettings transform", () => {
-			if (hasTransform("browserSettings")) {
-				const partial = { viewport: { width: 800, height: 600 } }
-				const result = applyTransform("browserSettings", partial)
-
-				expect(result).to.be.an("object")
-				expect(result.viewport).to.deep.equal({ width: 800, height: 600 })
-			}
 		})
 
 		it("should fold SDK provider spellings to legacy ApiProvider spellings on load", () => {

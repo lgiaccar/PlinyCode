@@ -27,17 +27,11 @@ service WorkspaceService {
   // Opens the IDE file explorer panel and selects a file or directory.
   rpc openInFileExplorerPanel(OpenInFileExplorerPanelRequest) returns (OpenInFileExplorerPanelResponse);
 
-  // Opens and focuses the Cline sidebar panel in the host IDE.
-  rpc openClineSidebarPanel(OpenClineSidebarPanelRequest) returns (OpenClineSidebarPanelResponse);
-
   // Opens and focuses the terminal panel.
   rpc openTerminalPanel(OpenTerminalRequest) returns (OpenTerminalResponse);
 
   // Executes a command in a new terminal
   rpc executeCommandInTerminal(ExecuteCommandInTerminalRequest) returns (ExecuteCommandInTerminalResponse);
-
-  // Opens a folder/workspace in the IDE
-  rpc openFolder(OpenFolderRequest) returns (OpenFolderResponse);
 
   // Searches workspace files/folders by name using the host's native index
   // (e.g. IntelliJ FilenameIndex). Hosts that lack a fast index should leave
@@ -111,8 +105,6 @@ message OpenInFileExplorerPanelRequest {
   string path = 1;
 }
 message OpenInFileExplorerPanelResponse {}
-message OpenClineSidebarPanelRequest {}
-message OpenClineSidebarPanelResponse {}
 message OpenTerminalRequest {}
 message OpenTerminalResponse {}
 
@@ -123,14 +115,4 @@ message ExecuteCommandInTerminalRequest {
 
 message ExecuteCommandInTerminalResponse {
   bool success = 1; // Whether the command was successfully sent to the terminal
-}
-
-// Request to open a folder/workspace
-message OpenFolderRequest {
-  string path = 1; // The path to the folder to open
-  bool new_window = 2; // Whether to open in a new window
-}
-
-message OpenFolderResponse {
-  bool success = 1;
 }

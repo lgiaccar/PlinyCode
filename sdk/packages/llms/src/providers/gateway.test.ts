@@ -47,33 +47,13 @@ const openaiImageGenerationToolSpy = vi.fn((options: unknown) => ({
 	id: "openai.image_generation",
 	options,
 }));
-const openRouterFactorySpy = vi.fn();
-const openRouterChatSpy = vi.fn((modelId: string) => ({
-	modelId,
-	family: "openrouter-chat",
-}));
-const openRouterImageSpy = vi.fn((modelId: string) => ({
-	modelId,
-	family: "openrouter-image",
-}));
 const anthropicSpy = vi.fn((modelId: string) => ({
 	modelId,
 	family: "anthropic",
 }));
-const googleSpy = vi.fn((modelId: string) => ({ modelId, family: "google" }));
 const nativeWebSearchSpy = vi.fn((options?: unknown) => ({
 	type: "provider-tool",
 	options,
-}));
-const codexExecFactorySpy = vi.fn();
-const codexExecSpy = vi.fn((modelId: string) => ({
-	modelId,
-	family: "openai-codex",
-}));
-const claudeCodeFactorySpy = vi.fn();
-const claudeCodeSpy = vi.fn((modelId: string) => ({
-	modelId,
-	family: "claude-code",
 }));
 
 function createFetchMock() {
@@ -125,16 +105,6 @@ vi.mock("@ai-sdk/openai-compatible", () => ({
 	},
 }));
 
-vi.mock("@openrouter/ai-sdk-provider", () => ({
-	createOpenRouter: (config: unknown) => {
-		openRouterFactorySpy(config);
-		return {
-			chat: (modelId: string) => openRouterChatSpy(modelId),
-			imageModel: (modelId: string) => openRouterImageSpy(modelId),
-		};
-	},
-}));
-
 vi.mock("@ai-sdk/anthropic", () => ({
 	createAnthropic: () =>
 		Object.assign((modelId: string) => anthropicSpy(modelId), {
@@ -142,29 +112,6 @@ vi.mock("@ai-sdk/anthropic", () => ({
 				webSearch_20250305: (options?: unknown) => nativeWebSearchSpy(options),
 			},
 		}),
-}));
-
-vi.mock("@ai-sdk/google", () => ({
-	createGoogleGenerativeAI: () =>
-		Object.assign((modelId: string) => googleSpy(modelId), {
-			tools: {
-				googleSearch: (options?: unknown) => nativeWebSearchSpy(options),
-			},
-		}),
-}));
-
-vi.mock("ai-sdk-provider-codex-cli", () => ({
-	createCodexExec: (config: unknown) => {
-		codexExecFactorySpy(config);
-		return (modelId: string) => codexExecSpy(modelId);
-	},
-}));
-
-vi.mock("ai-sdk-provider-claude-code", () => ({
-	createClaudeCode: (config: unknown) => {
-		claudeCodeFactorySpy(config);
-		return (modelId: string) => claudeCodeSpy(modelId);
-	},
 }));
 
 async function* makeStreamParts(parts: unknown[]) {
@@ -302,18 +249,8 @@ describe("sdk-gateway", () => {
 		openaiResponsesSpy.mockReset();
 		openaiImageSpy.mockReset();
 		openaiImageGenerationToolSpy.mockReset();
-		openRouterFactorySpy.mockReset();
-		openRouterChatSpy.mockReset();
-		openRouterImageSpy.mockReset();
 		anthropicSpy.mockReset();
-		googleSpy.mockReset();
 		nativeWebSearchSpy.mockReset();
-		codexExecFactorySpy.mockReset();
-		codexExecSpy.mockReset();
-		googleSpy.mockImplementation((modelId: string) => ({
-			modelId,
-			family: "google",
-		}));
 		openaiCompatibleSpy.mockImplementation((modelId: string) => ({
 			modelId,
 			family: "openai-compatible",
@@ -331,21 +268,9 @@ describe("sdk-gateway", () => {
 			id: "openai.image_generation",
 			options,
 		}));
-		openRouterChatSpy.mockImplementation((modelId: string) => ({
-			modelId,
-			family: "openrouter-chat",
-		}));
-		openRouterImageSpy.mockImplementation((modelId: string) => ({
-			modelId,
-			family: "openrouter-image",
-		}));
 		anthropicSpy.mockImplementation((modelId: string) => ({
 			modelId,
 			family: "anthropic",
-		}));
-		codexExecSpy.mockImplementation((modelId: string) => ({
-			modelId,
-			family: "openai-codex",
 		}));
 		if (originalOpenRouterApiKey === undefined) {
 			delete process.env.OPENROUTER_API_KEY;
@@ -1780,109 +1705,6 @@ describe("sdk-gateway", () => {
 		expect(generateImageSpy).toHaveBeenCalledWith(
 			expect.objectContaining({ prompt: "Draw a mountain" }),
 		);
-	});
-
-	it.skip("uses the OpenRouter image transport for dedicated Cline image models", async () => {
-		generateImageSpy.mockResolvedValue({
-			images: [{ mediaType: "image/png", base64: "aGVsbG8=" }],
-		});
-		const gateway = createGateway({
-			providerConfigs: [
-				{
-					providerId: "cline",
-					apiKey: "test",
-					models: [
-						{
-							id: "openai/gpt-image-test",
-							name: "Cline Image Test",
-							operation: "image-generation",
-							modalities: { input: ["text"], output: ["image"] },
-						},
-					],
-				},
-			],
-		});
-
-		const events = await collect(
-			await gateway.stream({
-				providerId: "cline",
-				modelId: "openai/gpt-image-test",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(openRouterFactorySpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				apiKey: "test",
-				compatibility: "compatible",
-			}),
-		);
-		expect(openRouterImageSpy).toHaveBeenCalledWith("openai/gpt-image-test");
-		expect(generateImageSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				model: expect.objectContaining({ family: "openrouter-image" }),
-				providerOptions: expect.objectContaining({
-					openrouter: expect.any(Object),
-				}),
-			}),
-		);
-		expect(events).toEqual([
-			generatedImageEvent("image/png", "aGVsbG8="),
-			{ type: "finish", reason: "stop" },
-		]);
-	});
-
-	it.skip("uses the OpenRouter image transport for mixed Cline image models", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{
-					type: "file",
-					file: { mediaType: "image/png", base64: "aGVsbG8=" },
-				},
-				{ type: "finish", finishReason: "stop" },
-			]),
-		});
-		const gateway = createGateway({
-			providerConfigs: [
-				{
-					providerId: "cline",
-					apiKey: "test",
-					models: [
-						{
-							id: "google/gemini-image-test",
-							name: "Cline Gemini Image Test",
-							modalities: {
-								input: ["text", "image"],
-								output: ["text", "image"],
-							},
-						},
-					],
-				},
-			],
-		});
-
-		const events = await collect(
-			await gateway.stream({
-				providerId: "cline",
-				modelId: "google/gemini-image-test",
-				messages: baseMessages,
-				reasoning: { enabled: true, effort: "low" },
-			}),
-		);
-
-		expect(openRouterChatSpy).toHaveBeenCalledWith("google/gemini-image-test");
-		expect(streamTextSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				model: expect.objectContaining({ family: "openrouter-chat" }),
-				providerOptions: expect.objectContaining({
-					openrouter: expect.objectContaining({
-						modalities: ["image", "text"],
-					}),
-				}),
-			}),
-		);
-		expect(generateImageSpy).not.toHaveBeenCalled();
-		expect(events).toContainEqual(generatedImageEvent("image/png", "aGVsbG8="));
 	});
 
 	it.skip("allows mixed image models to return text without an image", async () => {
@@ -4396,151 +4218,6 @@ describe("sdk-gateway", () => {
 		expect(streamTextOptions).not.toHaveProperty("tools");
 	});
 
-	it.skip("does not pass extra tools to the Claude Code provider", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "claude-code" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "claude-code",
-				modelId: "sonnet",
-				messages: baseMessages,
-				tools: [
-					{
-						name: "run_commands",
-						description: "Runs shell commands",
-						inputSchema: { type: "object" },
-					},
-				],
-			}),
-		);
-
-		const streamTextOptions = streamTextSpy.mock.calls.at(-1)?.[0];
-		expect(streamTextOptions).not.toHaveProperty("tools");
-	});
-
-	it.skip("anchors the Claude Code session on workspace cwd, user settings, and auto-accepted edits", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-		claudeCodeFactorySpy.mockClear();
-
-		const workspaceDir = mkdtempSync(join(tmpdir(), "claude-code-cwd-"));
-		const gateway = createGateway({
-			providerConfigs: [
-				{ providerId: "claude-code", options: { cwd: workspaceDir } },
-			],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "claude-code",
-				modelId: "sonnet",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(claudeCodeFactorySpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				defaultSettings: expect.objectContaining({
-					cwd: workspaceDir,
-					settingSources: ["user", "project"],
-					permissionMode: "acceptEdits",
-				}),
-			}),
-		);
-		// The host-forwarded top-level cwd is lifted into defaultSettings, not
-		// leaked as a provider option.
-		expect(claudeCodeFactorySpy.mock.calls.at(-1)?.[0]).not.toHaveProperty(
-			"cwd",
-		);
-	});
-
-	it.skip("preserves explicit Claude Code session settings over the gateway defaults", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-		claudeCodeFactorySpy.mockClear();
-
-		const workspaceDir = mkdtempSync(join(tmpdir(), "claude-code-cwd-"));
-		const explicitDir = mkdtempSync(join(tmpdir(), "claude-code-explicit-"));
-		const gateway = createGateway({
-			providerConfigs: [
-				{
-					providerId: "claude-code",
-					options: {
-						cwd: workspaceDir,
-						defaultSettings: {
-							cwd: explicitDir,
-							settingSources: [],
-							permissionMode: "default",
-						},
-					},
-				},
-			],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "claude-code",
-				modelId: "sonnet",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(claudeCodeFactorySpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				defaultSettings: expect.objectContaining({
-					cwd: explicitDir,
-					settingSources: [],
-					permissionMode: "default",
-				}),
-			}),
-		);
-	});
-
-	it.skip("drops a non-existent workspace cwd instead of failing Claude Code settings validation", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-		claudeCodeFactorySpy.mockClear();
-
-		const gateway = createGateway({
-			providerConfigs: [
-				{
-					providerId: "claude-code",
-					options: { cwd: "/nonexistent/workspace/path" },
-				},
-			],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "claude-code",
-				modelId: "sonnet",
-				messages: baseMessages,
-			}),
-		);
-
-		const factoryOptions = claudeCodeFactorySpy.mock.calls.at(-1)?.[0] as {
-			defaultSettings?: Record<string, unknown>;
-		};
-		expect(factoryOptions.defaultSettings).not.toHaveProperty("cwd");
-	});
-
 	it.skip("tags tool call events with provider metadata for providers that disable external tool execution", async () => {
 		streamTextSpy.mockReturnValue({
 			fullStream: makeStreamParts([
@@ -4646,198 +4323,6 @@ describe("sdk-gateway", () => {
 			type: "finish",
 			reason: "tool-calls",
 			error: undefined,
-		});
-	});
-
-	it.skip("does not send maxOutputTokens to ChatGPT OAuth when the request omits max tokens", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-codex" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-codex",
-				modelId: "gpt-5.4",
-				messages: baseMessages,
-			}),
-		);
-
-		const call = streamTextSpy.mock.calls.at(-1)?.[0] as
-			| { maxOutputTokens?: unknown }
-			| undefined;
-		expect(call).not.toHaveProperty("maxOutputTokens");
-	});
-
-	it.skip("translates web search into the native OpenAI tool for ChatGPT OAuth", async () => {
-		mockSuccessfulStream();
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-codex" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-codex",
-				modelId: "gpt-5.4",
-				messages: baseMessages,
-				modelTools: [{ name: "web_search" }],
-			}),
-		);
-
-		expect(nativeWebSearchSpy).toHaveBeenCalledWith(undefined);
-		expect(streamTextSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				tools: expect.objectContaining({
-					web_search: expect.objectContaining({ type: "provider-tool" }),
-				}),
-			}),
-		);
-	});
-
-	it.skip("does not send explicit maxOutputTokens to ChatGPT OAuth", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-codex" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-codex",
-				modelId: "gpt-5.4",
-				messages: baseMessages,
-				maxTokens: 8_192,
-			}),
-		);
-
-		const call = streamTextSpy.mock.calls.at(-1)?.[0] as
-			| { maxOutputTokens?: unknown }
-			| undefined;
-		expect(call).not.toHaveProperty("maxOutputTokens");
-	});
-
-	it.skip("passes Codex instructions through provider options and removes the system message from messages", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-codex" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-codex",
-				modelId: "gpt-5.4",
-				systemPrompt: "You are helpful.",
-				messages: baseMessages,
-				reasoning: {
-					effort: "high",
-				},
-			}),
-		);
-
-		expect(streamTextSpy).toHaveBeenCalledWith(
-			expect.objectContaining({
-				messages: [
-					{
-						role: "user",
-						content: [{ type: "text", text: "Hello" }],
-					},
-				],
-				providerOptions: expect.objectContaining({
-					openai: expect.objectContaining({
-						instructions: "You are helpful.",
-						store: false,
-					}),
-					"openai-codex": expect.objectContaining({
-						store: false,
-					}),
-					openaiCodex: expect.objectContaining({
-						store: false,
-					}),
-				}),
-				reasoning: "high",
-			}),
-		);
-		const call = streamTextSpy.mock.calls.at(-1)?.[0] as
-			| {
-					maxOutputTokens?: unknown;
-					providerOptions?: Record<string, Record<string, unknown>>;
-			  }
-			| undefined;
-		expect(call).not.toHaveProperty("maxOutputTokens");
-		expect(call?.providerOptions?.openai).not.toHaveProperty("truncation");
-		expect(call?.providerOptions?.["openai-codex"]).not.toHaveProperty(
-			"truncation",
-		);
-		expect(call?.providerOptions?.["openai-codex"]).not.toHaveProperty(
-			"reasoningSummary",
-		);
-		expect(call?.providerOptions?.openaiCodex).not.toHaveProperty("truncation");
-	});
-
-	it.skip("passes object JSON schemas unchanged to the OpenAI Codex tool adapter", async () => {
-		streamTextSpy.mockReturnValue({
-			fullStream: makeStreamParts([
-				{ type: "finish", usage: { inputTokens: 1, outputTokens: 1 } },
-			]),
-		});
-
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-codex" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-codex",
-				modelId: "gpt-5.4",
-				messages: baseMessages,
-				tools: [
-					{
-						name: "run_commands",
-						description: "Runs shell commands",
-						inputSchema: {
-							type: "object",
-							properties: {
-								commands: {
-									type: "array",
-									items: { type: "string" },
-								},
-							},
-							required: ["commands"],
-							additionalProperties: false,
-						},
-					},
-				],
-			}),
-		);
-
-		const call = streamTextSpy.mock.calls[0]?.[0] as
-			| { tools?: Record<string, { inputSchema?: { jsonSchema?: unknown } }> }
-			| undefined;
-		const schema = await call?.tools?.run_commands.inputSchema?.jsonSchema;
-		expect(schema).toEqual({
-			type: "object",
-			properties: {
-				commands: {
-					type: "array",
-					items: { type: "string" },
-				},
-			},
-			required: ["commands"],
-			additionalProperties: false,
 		});
 	});
 
@@ -6154,52 +5639,6 @@ describe("sdk-gateway", () => {
 				defaults,
 			}),
 		).toEqual(expected);
-	});
-
-	it.skip("adapts Anthropic and Gemini providers", async () => {
-		streamTextSpy
-			.mockReturnValueOnce({
-				fullStream: makeStreamParts([
-					{ type: "text-delta", textDelta: "Anthropic" },
-					{ type: "finish", usage: { inputTokens: 5, outputTokens: 1 } },
-				]),
-			})
-			.mockReturnValueOnce({
-				fullStream: makeStreamParts([
-					{ type: "text-delta", textDelta: "Gemini" },
-					{ type: "finish", usage: { inputTokens: 6, outputTokens: 2 } },
-				]),
-			});
-
-		const gateway = createGateway({
-			providerConfigs: [
-				{ providerId: "anthropic", apiKey: "anthropic-key" },
-				{ providerId: "gemini", apiKey: "google-key" },
-			],
-		});
-
-		const anthropicEvents = await collect(
-			await gateway.stream({
-				providerId: "anthropic",
-				modelId: "claude-sonnet-4-5",
-				messages: baseMessages,
-			}),
-		);
-		const geminiEvents = await collect(
-			await gateway.stream({
-				providerId: "gemini",
-				modelId: "gemini-2.5-flash",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(anthropicSpy).toHaveBeenCalledWith("claude-sonnet-4-5");
-		expect(googleSpy).toHaveBeenCalledWith("gemini-2.5-flash");
-		expect(anthropicEvents[0]).toEqual({
-			type: "text-delta",
-			text: "Anthropic",
-		});
-		expect(geminiEvents[0]).toEqual({ type: "text-delta", text: "Gemini" });
 	});
 
 	it("normalizes models.dev catalogs into ModelInfo", () => {

@@ -18,7 +18,6 @@ vi.mock("./runtime/host/host", () => ({
 }));
 
 import { ClineCore } from "./ClineCore";
-import { NoOpFeatureFlagsProvider } from "./services/feature-flags";
 
 function createStartInput(): ClineCoreStartInput {
 	return {
@@ -436,7 +435,7 @@ describe("ClineCore", () => {
 		expect(startInput.localRuntime?.onTeamRestored).toBe(onTeamRestored);
 	});
 
-	it("uses a no-op feature flags provider by default", async () => {
+	it("disposes the runtime host", async () => {
 		const host = {
 			runtimeAddress: undefined,
 			startSession: vi.fn(),
@@ -456,9 +455,6 @@ describe("ClineCore", () => {
 
 		const core = await ClineCore.create();
 
-		expect(core.featureFlags.getProvider()).toBeInstanceOf(
-			NoOpFeatureFlagsProvider,
-		);
 		await core.dispose();
 		expect(host.dispose).toHaveBeenCalledTimes(1);
 	});

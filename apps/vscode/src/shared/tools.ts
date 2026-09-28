@@ -1,9 +1,3 @@
-import { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/index"
-import { FunctionDeclaration as GoogleTool } from "@google/genai"
-import { ChatCompletionTool as OpenAITool } from "openai/resources/chat/completions"
-
-type ClineTool = OpenAITool | AnthropicTool | GoogleTool
-
 // Define available tool ids
 export enum ClineDefaultTool {
 	ASK = "ask_followup_question",
@@ -15,7 +9,6 @@ export enum ClineDefaultTool {
 	SEARCH = "search_files",
 	LIST_FILES = "list_files",
 	LIST_CODE_DEF = "list_code_definition_names",
-	BROWSER = "browser_action",
 	MCP_USE = "use_mcp_tool",
 	MCP_ACCESS = "access_mcp_resource",
 	MCP_DOCS = "load_mcp_documentation",

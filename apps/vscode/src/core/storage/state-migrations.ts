@@ -227,22 +227,18 @@ export async function migrateWelcomeViewCompleted(context: vscode.ExtensionConte
 	}
 }
 
+/** Drops the MCP Marketplace's leftover keys (the marketplace is gone) from VS Code global state. */
 export async function cleanupMcpMarketplaceCatalogFromGlobalState(context: vscode.ExtensionContext) {
-	try {
-		// Check if mcpMarketplaceCatalog exists in global state
-		const mcpMarketplaceCatalog = await context.globalState.get("mcpMarketplaceCatalog")
-
-		if (mcpMarketplaceCatalog !== undefined) {
-			Logger.log("Cleaning up mcpMarketplaceCatalog from global state...")
-
-			// Delete it from global state
-			await context.globalState.update("mcpMarketplaceCatalog", undefined)
-
-			Logger.log("Successfully removed mcpMarketplaceCatalog from global state")
+	for (const key of ["mcpMarketplaceCatalog", "mcpMarketplaceEnabled"]) {
+		try {
+			if (context.globalState.get(key) !== undefined) {
+				await context.globalState.update(key, undefined)
+				Logger.log(`Removed ${key} from global state`)
+			}
+		} catch (error) {
+			// Continue execution - cleanup failure shouldn't break extension startup
+			Logger.error(`Failed to remove ${key} from global state:`, error)
 		}
-	} catch (error) {
-		Logger.error("Failed to cleanup mcpMarketplaceCatalog from global state:", error)
-		// Continue execution - cleanup failure shouldn't break extension startup
 	}
 }
 

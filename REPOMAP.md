@@ -14,7 +14,6 @@ This is a directory map. Commands, workflows and rules are in the `AGENTS.md` fi
 | `sdk/` | Internal engine packages |
 | `docs/` | Design and operations docs (releasing, FreeAuto/BalanceAuto routing, DevOps MCP) |
 | `assets/` | Shared product icons |
-| `patches/` | Bun dependency patches |
 | `ai_output/` | Git-ignored scratch dir for ephemeral artifacts |
 
 ## Workspaces
@@ -46,7 +45,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 | Path | Role |
 |------|------|
-| `controller/` | One directory per RPC service, one file per RPC: account, browser, checkpoints, commands, file, marketplace, MCP, models, OCA account, remote config, slash commands, state, task, UI, web, worktree. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
+| `controller/` | One directory per RPC service, one file per RPC: account, checkpoints, commands, file, MCP, models, OCA account, remote config, slash commands, state, task, UI, web. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
 | `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
 | `storage/` | Persistence (`remote-config/`, `utils/`) |
@@ -55,7 +54,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 ### `src/services/`
 
-`auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
+`auth/`, `banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 

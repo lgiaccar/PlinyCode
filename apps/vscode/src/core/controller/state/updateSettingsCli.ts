@@ -39,9 +39,7 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			actModeApiProvider,
 			// Fields requiring special logic (merging, etc.)
 			useAutoCondense,
-			worktreesEnabled,
 			subagentsEnabled,
-			browserSettings,
 			defaultTerminalProfile,
 			...simpleSettings
 		} = request.settings
@@ -112,44 +110,9 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			controller.stateManager.setGlobalState("useAutoCondense", useAutoCondense)
 		}
 
-		// Update worktrees setting
-		if (worktreesEnabled !== undefined) {
-			controller.stateManager.setGlobalState("worktreesEnabled", worktreesEnabled)
-		}
-
 		// Update subagents setting
 		if (subagentsEnabled !== undefined) {
 			controller.stateManager.setGlobalState("subagentsEnabled", !!subagentsEnabled)
-		}
-
-		// Update browser settings (requires careful merging to avoid protobuf defaults)
-		if (browserSettings !== undefined) {
-			const currentSettings = controller.stateManager.getGlobalSettingsKey("browserSettings")
-
-			const newBrowserSettings = {
-				...currentSettings,
-				viewport: {
-					width: browserSettings.viewport?.width || currentSettings.viewport.width,
-					height: browserSettings.viewport?.height || currentSettings.viewport.height,
-				},
-				...(browserSettings.remoteBrowserEnabled !== undefined && {
-					remoteBrowserEnabled: browserSettings.remoteBrowserEnabled,
-				}),
-				...(browserSettings.remoteBrowserHost !== undefined && {
-					remoteBrowserHost: browserSettings.remoteBrowserHost,
-				}),
-				...(browserSettings.chromeExecutablePath !== undefined && {
-					chromeExecutablePath: browserSettings.chromeExecutablePath,
-				}),
-				...(browserSettings.disableToolUse !== undefined && {
-					disableToolUse: browserSettings.disableToolUse,
-				}),
-				...(browserSettings.customArgs !== undefined && {
-					customArgs: browserSettings.customArgs,
-				}),
-			}
-
-			controller.stateManager.setGlobalState("browserSettings", newBrowserSettings)
 		}
 
 		// Update default terminal profile

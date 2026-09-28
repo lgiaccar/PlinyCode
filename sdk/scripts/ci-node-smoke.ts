@@ -122,8 +122,8 @@ async function main(): Promise<void> {
 		};
 
 		// Carry the repo root's dependency overrides into the sandbox so a broken
-		// third-party release that the root already pins around (e.g. the
-		// @sap-cloud-sdk 4.9.0 exports breakage) can't fail the smoke install.
+		// third-party release that the root already pins around can't fail the
+		// smoke install.
 		const rootPackageJson = JSON.parse(
 			await readFile(join(root, "..", "package.json"), "utf8"),
 		) as { overrides?: Record<string, unknown> };

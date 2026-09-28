@@ -36,10 +36,6 @@ import type {
 	StartSessionResult,
 } from "./runtime/host/runtime-host";
 import { resolveCoreDistinctId } from "./services/distinct-id";
-import {
-	FeatureFlagsService,
-	NoOpFeatureFlagsProvider,
-} from "./services/feature-flags";
 import { compareCheckpointToWorkspace } from "./session/checkpoint-diff";
 import {
 	projectSessionMessagesForDisplay,
@@ -76,7 +72,6 @@ export class ClineCore {
 	readonly clientName: string | undefined;
 	readonly runtimeAddress: string | undefined;
 	readonly settings: ClineCoreSettingsApi;
-	readonly featureFlags: FeatureFlagsService;
 	readonly pendingPrompts: PendingPromptsServiceApi;
 	private readonly host: RuntimeHost;
 	private readonly prepare: ClineCoreOptions["prepare"] | undefined;
@@ -97,7 +92,6 @@ export class ClineCore {
 		capabilities: RuntimeCapabilities | undefined,
 		logger: BasicLogger | undefined,
 		distinctId: string | undefined,
-		featureFlags: FeatureFlagsService,
 	) {
 		this.clientName = clientName;
 		this.runtimeAddress = runtimeAddress;
@@ -106,7 +100,6 @@ export class ClineCore {
 		this.capabilities = capabilities;
 		this.logger = logger;
 		this.distinctId = distinctId;
-		this.featureFlags = featureFlags;
 		this.settings = createClineCoreSettingsApi(host);
 		this.pendingPrompts = createClineCorePendingPromptsApi(host);
 		this.unsubscribeBootstrapCleanup = this.host.subscribe((event) => {
@@ -139,16 +132,6 @@ export class ClineCore {
 		const capabilities = normalizeRuntimeCapabilities(options.capabilities);
 		const normalizedOptions = { ...options, capabilities, distinctId };
 		const host = await createRuntimeHost(normalizedOptions);
-		const featureFlags =
-			options.featureFlags ||
-			new FeatureFlagsService({
-				provider: new NoOpFeatureFlagsProvider(),
-				logger: options.logger,
-				context: {
-					distinctId,
-					clientName: options.clientName,
-				},
-			});
 		const core = new ClineCore(
 			host,
 			options.clientName,
@@ -157,7 +140,6 @@ export class ClineCore {
 			capabilities,
 			options.logger,
 			distinctId,
-			featureFlags,
 		);
 		return core;
 	}

@@ -465,42 +465,6 @@ export const PlanMode: Story = {
 	},
 }
 
-const createBrowserMessages = () => [
-	createMessage(5, "say", "task", "Help me test the login functionality on my web application"),
-	createMessage(
-		4.7,
-		"say",
-		"text",
-		"I'll help you test the login functionality. Let me launch a browser and navigate to your application.",
-	),
-	createMessage(4.3, "say", "browser_action_launch", JSON.stringify({ action: "launch", url: "http://localhost:3000/login" })),
-	createMessage(
-		4,
-		"say",
-		"browser_action_result",
-		JSON.stringify({ currentUrl: "http://localhost:3000/login", logs: "Page loaded successfully" }),
-	),
-	createMessage(
-		3.7,
-		"say",
-		"text",
-		"Great! The browser has launched and navigated to your login page. Now let me test the login functionality.",
-	),
-	createMessage(3.3, "say", "browser_action", JSON.stringify({ action: "click", coordinate: "400,200" })),
-	createMessage(3, "say", "browser_action", JSON.stringify({ action: "type", text: "test@example.com" })),
-]
-
-export const BrowserAutomation: Story = {
-	decorators: [createStoryDecorator({ clineMessages: createBrowserMessages() })],
-	parameters: {
-		docs: {
-			description: {
-				story: "Shows Cline performing browser automation tasks, including launching browsers, clicking elements, and testing web applications.",
-			},
-		},
-	},
-}
-
 // Optimized stories using ask message pattern
 const createToolApprovalMessages = () => [
 	createMessage(5, "say", "task", "Help me read the configuration file"),
@@ -603,12 +567,6 @@ export const CompletionResult = quickStory(
 	"completion_result",
 	"Task completed successfully! I've implemented all the requested features.\n\nWould you like to start a new task?\n\n- Start New Task\n- Resume Previous Task HAS_CHANGES",
 	"Shows task completion state with Start New Task button.",
-)
-export const BrowserActionLaunch = quickStory(
-	"Browser Launch",
-	"browser_action_launch",
-	"Launch browser to test the website at http://localhost:3000",
-	"Shows browser action approval with Approve/Reject buttons for browser launch.",
 )
 export const McpServerUsage = quickStory(
 	"MCP Server",

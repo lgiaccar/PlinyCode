@@ -2,23 +2,16 @@ import { McpServer } from "@shared/mcp"
 import DevOpsServerCard, { useDevOpsServerStatus } from "./DevOpsServerCard"
 import ServerRow from "./server-row/ServerRow"
 
-export type MarketplaceMcpMetadata = {
-	name: string
-	description?: string
-}
-
 const ServersToggleList = ({
 	servers,
 	isExpandable,
 	hasTrashIcon,
 	listGap = "medium",
-	marketplaceMetadataByServerName,
 }: {
 	servers: McpServer[]
 	isExpandable: boolean
 	hasTrashIcon: boolean
 	listGap?: "small" | "medium" | "large"
-	marketplaceMetadataByServerName?: Map<string, MarketplaceMcpMetadata>
 }) => {
 	// The built-in DevOps server isn't in the user's MCP settings, so it isn't in
 	// `servers`; it's listed first wherever the server list appears.
@@ -36,13 +29,7 @@ const ServersToggleList = ({
 		<div className={`flex flex-col ${gapClass}`}>
 			{devOpsStatus && <DevOpsServerCard compact={!isExpandable} status={devOpsStatus} />}
 			{servers.map((server) => (
-				<ServerRow
-					hasTrashIcon={hasTrashIcon}
-					isExpandable={isExpandable}
-					key={server.name}
-					marketplaceMetadata={marketplaceMetadataByServerName?.get(server.name)}
-					server={server}
-				/>
+				<ServerRow hasTrashIcon={hasTrashIcon} isExpandable={isExpandable} key={server.name} server={server} />
 			))}
 			{servers.length === 0 && (
 				<div className="flex flex-col items-center gap-3 my-5 text-(--vscode-descriptionForeground)">

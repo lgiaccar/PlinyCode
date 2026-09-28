@@ -8,7 +8,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
-import { Anthropic } from "@anthropic-ai/sdk"
+import type { Anthropic } from "@anthropic-ai/sdk"
 import { ClineMessage } from "@shared/ExtensionMessage"
 import { HistoryItem } from "@shared/HistoryItem"
 import { Logger } from "@shared/services/Logger"

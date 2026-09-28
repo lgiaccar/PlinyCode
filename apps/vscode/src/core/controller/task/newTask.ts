@@ -4,7 +4,6 @@ import { NewTaskRequest } from "@shared/proto/cline/task"
 import { Settings } from "@shared/storage/state-keys"
 import { resolveWorkspaceRef } from "@/core/workspace/workspace-identity"
 import { convertProtoToApiProvider } from "@/shared/proto-conversions/models/api-configuration-conversion"
-import { DEFAULT_BROWSER_SETTINGS } from "../../../shared/BrowserSettings"
 import { Controller } from ".."
 import { normalizeOpenaiReasoningEffort } from "../state/reasoningEffort"
 
@@ -41,16 +40,6 @@ export async function newTask(controller: Controller, request: NewTaskRequest): 
 						},
 					}
 				})(),
-			}),
-			...(request.taskSettings?.browserSettings && {
-				browserSettings: {
-					viewport: request.taskSettings.browserSettings.viewport || DEFAULT_BROWSER_SETTINGS.viewport,
-					remoteBrowserHost: request.taskSettings.browserSettings.remoteBrowserHost,
-					remoteBrowserEnabled: request.taskSettings.browserSettings.remoteBrowserEnabled,
-					chromeExecutablePath: request.taskSettings.browserSettings.chromeExecutablePath,
-					disableToolUse: request.taskSettings.browserSettings.disableToolUse,
-					customArgs: request.taskSettings.browserSettings.customArgs,
-				},
 			}),
 			...(request.taskSettings?.planModeReasoningEffort !== undefined && {
 				planModeReasoningEffort: normalizeOpenaiReasoningEffort(request.taskSettings.planModeReasoningEffort),
