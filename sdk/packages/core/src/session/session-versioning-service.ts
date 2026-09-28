@@ -1,5 +1,4 @@
 import type * as LlmsProviders from "@plinycode/llms";
-import type { ITelemetryService } from "@plinycode/shared";
 import type {
 	CheckpointEntry,
 	CheckpointMetadata,
@@ -91,13 +90,6 @@ export interface SessionCheckpointRestoreInput<
 		sessionId: string,
 		history: CheckpointEntry[],
 	) => Promise<void>;
-	/**
-	 * Emits one `checkpoint.restore` event per restore attempt. Restores are
-	 * rare and destructive, so field visibility matters: outcome, duration
-	 * (the worktree transaction hashes all untracked files), and the
-	 * checkpoint kind. Never file paths or contents.
-	 */
-	telemetry?: Pick<ITelemetryService, "capture">;
 }
 
 function validateRestoreOptions(input: {
@@ -148,72 +140,38 @@ export class SessionVersioningService {
 	): Promise<SessionCheckpointRestoreResult<TStartResult>> {
 		const restoreMessages = input.restore?.messages !== false;
 		const restoreWorkspace = input.restore?.workspace !== false;
-		// Declared before any throwing setup so validation and lookup failures —
-		// the most common restore failures — are counted too. The checkpoint kind
-		// is only known once the plan exists.
-		const restoreStartedAt = Date.now();
-		let plannedCheckpoint: CheckpointEntry | undefined;
-		const captureRestore = (
-			outcome: "success" | "failed",
-			extra?: Record<string, string | number | boolean>,
-		): void => {
-			input.telemetry?.capture({
-				event: "checkpoint.restore",
-				properties: {
-					sessionId: input.sessionId,
-					checkpointRunCount: input.checkpointRunCount,
-					restoreWorkspace,
-					restoreMessages,
-					checkpointKind: plannedCheckpoint?.kind ?? "unknown",
-					outcome,
-					durationMs: Date.now() - restoreStartedAt,
-					...extra,
-				},
-			});
-		};
+		const sourceSessionId = validateRestoreOptions({
+			sessionId: input.sessionId,
+			restoreMessages,
+			restoreWorkspace,
+			requiresStart: input.start === undefined,
+			checkpointRunCount: input.checkpointRunCount,
+		});
 
-		let sourceSession: SessionRecord;
-		let sourceMessages: LlmsProviders.MessageWithMetadata[] | undefined;
-		let plan: CheckpointRestorePlan;
-		try {
-			const sourceSessionId = validateRestoreOptions({
-				sessionId: input.sessionId,
-				restoreMessages,
-				restoreWorkspace,
-				requiresStart: input.start === undefined,
-				checkpointRunCount: input.checkpointRunCount,
-			});
-
-			const session = await input.getSession(sourceSessionId);
-			if (!session) {
-				throw new SessionVersioningError(
-					"session_not_found",
-					`Session ${sourceSessionId} not found`,
-				);
-			}
-			sourceSession = session;
-			sourceMessages = restoreMessages
-				? await input.readMessages(sourceSessionId)
-				: undefined;
-			if (restoreMessages && sourceMessages?.length === 0) {
-				throw new SessionVersioningError(
-					"session_messages_not_found",
-					`No messages found for session ${sourceSessionId}`,
-				);
-			}
-
-			plan = createCheckpointRestorePlan({
-				session: sourceSession,
-				messages: sourceMessages,
-				checkpointRunCount: input.checkpointRunCount,
-				cwd: input.cwd,
-				restoreMessages,
-			});
-			plannedCheckpoint = plan.checkpoint;
-		} catch (error) {
-			captureRestore("failed", { phase: "plan" });
-			throw error;
+		const sourceSession = await input.getSession(sourceSessionId);
+		if (!sourceSession) {
+			throw new SessionVersioningError(
+				"session_not_found",
+				`Session ${sourceSessionId} not found`,
+			);
 		}
+		const sourceMessages = restoreMessages
+			? await input.readMessages(sourceSessionId)
+			: undefined;
+		if (restoreMessages && sourceMessages?.length === 0) {
+			throw new SessionVersioningError(
+				"session_messages_not_found",
+				`No messages found for session ${sourceSessionId}`,
+			);
+		}
+
+		const plan = createCheckpointRestorePlan({
+			session: sourceSession,
+			messages: sourceMessages,
+			checkpointRunCount: input.checkpointRunCount,
+			cwd: input.cwd,
+			restoreMessages,
+		});
 		const sourceSnapshot = createCoreSessionSnapshot({
 			session: sourceSession,
 			messages: sourceMessages,
@@ -300,7 +258,6 @@ export class SessionVersioningService {
 			if (!messageRestoreOperations) {
 				await transaction?.commit();
 				workspaceCommitted = true;
-				captureRestore("success");
 				return { checkpoint: plan.checkpoint, sourceSnapshot };
 			}
 
@@ -335,7 +292,6 @@ export class SessionVersioningService {
 				: undefined;
 			await transaction?.commit();
 			workspaceCommitted = true;
-			captureRestore("success");
 			return {
 				sessionId: newSessionId,
 				startResult,
@@ -360,10 +316,6 @@ export class SessionVersioningService {
 					recoveryErrors.push(rollbackError);
 				}
 			}
-			captureRestore("failed", {
-				workspaceRolledBack: !!transaction && !workspaceCommitted,
-				recovered: recoveryErrors.length === 0,
-			});
 			if (recoveryErrors.length > 0) {
 				throw new AggregateError(
 					[error, ...recoveryErrors],

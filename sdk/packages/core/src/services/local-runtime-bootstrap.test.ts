@@ -11,7 +11,6 @@ import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { version as corePackageVersion } from "../../package.json";
 import type { ProviderSettings } from "../types/provider-settings";
-import { CORE_TELEMETRY_EVENTS } from "./telemetry/core-events";
 
 function createProviderSettingsManager(settings?: ProviderSettings) {
 	return {
@@ -73,7 +72,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			},
 			sessionId: "sess-1",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -258,7 +256,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 					loadPrivateOnAuth: false,
 				},
 			}) as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -308,7 +305,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input,
 			sessionId: "sess-remote-prompt",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -350,7 +346,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input,
 			sessionId: "sess-explicit-prompt",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -402,7 +397,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input: createStartInput(),
 			sessionId: "sess-1",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -494,7 +488,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input: createStartInput(),
 			sessionId: "sess-1",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -552,7 +545,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			},
 			sessionId: "sess-1",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -579,7 +571,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input: createStartInput(),
 			sessionId: "sess-fetch",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			defaultFetch: customFetch,
 			onPluginEvent: () => {},
@@ -590,56 +581,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 		});
 
 		expect(bootstrap.providerConfig.fetch).toBe(customFetch);
-	});
-
-	it("stamps the session origin on every telemetry event the session emits", async () => {
-		const { prepareLocalRuntimeBootstrap } = await import(
-			"./local-runtime-bootstrap"
-		);
-
-		const capture = vi.fn();
-		const defaultTelemetry = {
-			capture,
-			captureRequired: vi.fn(),
-			recordCounter: vi.fn(),
-			recordHistogram: vi.fn(),
-			recordGauge: vi.fn(),
-			setDistinctId: vi.fn(),
-			setMetadata: vi.fn(),
-			updateMetadata: vi.fn(),
-			setCommonProperties: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: () => true,
-			flush: vi.fn(),
-			dispose: vi.fn(),
-		};
-		const bootstrap = await prepareLocalRuntimeBootstrap({
-			input: createStartInput(),
-			sessionId: "sess-origin",
-			sessionOrigin: { mode: "import", trigger: "claude-code" },
-			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: defaultTelemetry as never,
-			defaultToolPolicies: undefined,
-			onPluginEvent: () => {},
-			onTeamEvent: () => {},
-			createSpawnTool,
-			readSessionMetadata: async () => undefined,
-			writeSessionMetadata: async () => {},
-		});
-
-		bootstrap.config.telemetry?.capture({
-			event: CORE_TELEMETRY_EVENTS.TASK.PROVIDER_API_ERROR,
-			properties: { ulid: "sess-origin" },
-		});
-
-		expect(capture).toHaveBeenLastCalledWith({
-			event: CORE_TELEMETRY_EVENTS.TASK.PROVIDER_API_ERROR,
-			properties: expect.objectContaining({
-				ulid: "sess-origin",
-				session_origin: "import",
-				session_origin_trigger: "claude-code",
-			}),
-		});
 	});
 
 	it("prefers per-session config fetch over defaultFetch", async () => {
@@ -656,7 +597,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input,
 			sessionId: "sess-fetch-override",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			defaultFetch,
 			onPluginEvent: () => {},
@@ -678,7 +618,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input: createStartInput(),
 			sessionId: "sess-no-fetch",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -742,7 +681,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 					"x-shared": "stored-loses",
 				},
 			}) as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -787,7 +725,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			input,
 			sessionId: "sess-hub-client",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -830,7 +767,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 			},
 			sessionId: "sess-local-client",
 			providerSettingsManager: createProviderSettingsManager() as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -880,7 +816,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 					"x-stored": "stored",
 				},
 			}) as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -929,7 +864,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 					"x-stored": "stored",
 				},
 			}) as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -986,7 +920,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 					"x-shared": "stored-loses",
 				},
 			}) as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},
@@ -1038,7 +971,6 @@ describe("prepareLocalRuntimeBootstrap", () => {
 					accessToken: token,
 				},
 			}) as never,
-			defaultTelemetry: undefined,
 			defaultToolPolicies: undefined,
 			onPluginEvent: () => {},
 			onTeamEvent: () => {},

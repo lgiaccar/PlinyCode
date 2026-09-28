@@ -1,11 +1,6 @@
 {
 	"compilerOptions": {
 		"paths": {
-			"@plinycode/agents": ["../sdk/packages/agents/src/index.ts"],
-			"@plinycode/agents/*": [
-				"../sdk/packages/agents/src/*",
-				"../sdk/packages/agents/src/*/index.ts"
-			],
 			"@plinycode/cline-hub": ["./cline-hub/src/server.ts"],
 			"@plinycode/core": ["../sdk/packages/core/src/index.ts"],
 			"@plinycode/core/hub/daemon-entry": [
@@ -14,9 +9,6 @@
 			"@plinycode/core/*": [
 				"../sdk/packages/core/src/*",
 				"../sdk/packages/core/src/*/index.ts"
-			],
-			"@plinycode/core/telemetry": [
-				"../sdk/packages/core/src/services/telemetry/index.ts"
 			],
 			"@plinycode/llms": ["../sdk/packages/llms/src/index.ts"],
 			"@plinycode/shared": ["../sdk/packages/shared/src/index.ts"],

@@ -1,7 +1,6 @@
 import * as LlmsModels from "@plinycode/llms";
 import type {
 	AddProviderActionRequest,
-	ITelemetryService,
 	ProviderCapability,
 	ProviderConfigField,
 	ProviderConfigFieldPrimitive,
@@ -1166,7 +1165,6 @@ export async function loginLocalProvider(
 	providerId: string,
 	existing: ProviderSettings | undefined,
 	openUrl: (url: string) => void,
-	telemetry?: ITelemetryService,
 ): Promise<ProviderOAuthCredentials> {
 	const handler = getProviderAuthHandler(providerId);
 	if (!handler) {
@@ -1179,7 +1177,7 @@ export async function loginLocalProvider(
 			throw error instanceof Error ? error : new Error(String(error));
 		},
 	});
-	return handler.login({ settings: existing, callbacks, telemetry });
+	return handler.login({ settings: existing, callbacks });
 }
 
 export function saveLocalProviderOAuthCredentials(
@@ -1202,7 +1200,6 @@ export async function loginAndSaveLocalProviderOAuthCredentials(
 	manager: ProviderSettingsManager,
 	providerId: string,
 	openUrl: (url: string) => void,
-	telemetry?: ITelemetryService,
 ): Promise<ProviderSettings> {
 	const callbacks = createOAuthClientCallbacks({
 		onPrompt: async (prompt) => prompt.defaultValue ?? "",
@@ -1213,7 +1210,6 @@ export async function loginAndSaveLocalProviderOAuthCredentials(
 	});
 	return loginAndSaveProviderOAuthCredentials(manager, providerId, {
 		callbacks,
-		telemetry,
 	});
 }
 

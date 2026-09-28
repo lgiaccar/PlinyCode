@@ -32,7 +32,6 @@
 		"test:watch": "vitest --config vitest.config.ts"
 	},
 	"dependencies": {
-		"@plinycode/agents": "workspace:*",
 		"@plinycode/shared": "workspace:*",
 		"@plinycode/llms": "workspace:*",
 		"@modelcontextprotocol/sdk": "^1.29.0",

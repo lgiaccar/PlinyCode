@@ -23,7 +23,6 @@ const AREAS: Array<{ name: string; prefix: string }> = [
 	{ name: "core", prefix: "sdk/packages/core/" },
 	{ name: "llms", prefix: "sdk/packages/llms/" },
 	{ name: "shared", prefix: "sdk/packages/shared/" },
-	{ name: "agents", prefix: "sdk/packages/agents/" },
 ];
 
 const CODE_FILE = /\.tsx?$/;

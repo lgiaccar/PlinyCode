@@ -479,7 +479,6 @@
 	},
 	"dependencies": {
 		"@bufbuild/protobuf": "^2.2.5",
-		"@plinycode/agents": "workspace:*",
 		"@plinycode/core": "workspace:*",
 		"@plinycode/llms": "workspace:*",
 		"@plinycode/shared": "workspace:*",

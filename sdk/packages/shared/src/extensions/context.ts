@@ -1,5 +1,4 @@
 import type { BasicLogger } from "../logging/logger";
-import type { ITelemetryService } from "../services/telemetry";
 import type { WorkspaceInfo } from "../session/workspace";
 import type {
 	AgentExtensionAutomationContext,
@@ -81,7 +80,7 @@ export interface WorkspaceContext extends WorkspaceInfo {
  * Ambient runtime context carried alongside ProviderConfig.
  *
  * Captures who is calling (user + client), where they are (workspace),
- * and which services to use for logging and telemetry. None of these
+ * and which logger to use. None of these
  * belong in the LLM provider credential config.
  */
 export interface ExtensionContext {
@@ -96,5 +95,4 @@ export interface ExtensionContext {
 	 */
 	automation?: AgentExtensionAutomationContext;
 	logger?: BasicLogger;
-	telemetry?: ITelemetryService;
 }

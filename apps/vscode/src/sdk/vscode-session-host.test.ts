@@ -1,4 +1,4 @@
-import type { ClineCoreStartInput, ITelemetryService } from "@plinycode/core"
+import type { ClineCoreStartInput } from "@plinycode/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockClineCoreCreate = vi.hoisted(() => vi.fn())
@@ -39,16 +39,7 @@ describe("VscodeSessionHost", () => {
 		mockCreateVscodeExtraTools.mockReset().mockResolvedValue([])
 	})
 
-	it("gives ClineCore no telemetry service", async () => {
-		await VscodeSessionHost.create({
-			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
-			mcpHub: {} as any,
-		})
-
-		expect(mockClineCoreCreate.mock.calls[0][0].telemetry).toBeUndefined()
-	})
-
-	it("marks sessions as started from vscode, without telemetry", async () => {
+	it("marks sessions as started from vscode", async () => {
 		await VscodeSessionHost.create({
 			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
 			mcpHub: {} as any,
@@ -65,37 +56,6 @@ describe("VscodeSessionHost", () => {
 		})
 
 		expect(prepared.source).toBe("vscode")
-		expect(prepared.config.telemetry).toBeUndefined()
-	})
-
-	it("preserves telemetry already supplied by remote config", async () => {
-		const remoteTelemetry = makeTelemetry()
-		await VscodeSessionHost.create({
-			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
-			mcpHub: {} as any,
-			getRemoteConfigIntegration: () =>
-				({
-					applyToStartSessionInput: (input: ClineCoreStartInput) => ({
-						...input,
-						config: {
-							...input.config,
-							telemetry: remoteTelemetry,
-						},
-					}),
-				}) as never,
-		})
-
-		const prepare = mockClineCoreCreate.mock.calls[0][0].prepare
-		const bootstrap = await prepare()
-		const prepared = await bootstrap.applyToStartSessionInput({
-			source: undefined,
-			config: {
-				cwd: "/tmp/workspace",
-				extraTools: [],
-			},
-		})
-
-		expect(prepared.config.telemetry).toBe(remoteTelemetry)
 	})
 
 	it("passes custom editor and apply_patch executors into tool executor capabilities", async () => {
@@ -233,21 +193,3 @@ describe("VscodeSessionHost", () => {
 		expect(innerRestore).toHaveBeenCalledWith({ sessionId: "session-1", checkpointRunCount: 1 })
 	})
 })
-
-function makeTelemetry(): ITelemetryService {
-	return {
-		setDistinctId() {},
-		setMetadata() {},
-		updateMetadata() {},
-		setCommonProperties() {},
-		updateCommonProperties() {},
-		isEnabled: () => true,
-		capture() {},
-		captureRequired() {},
-		recordCounter() {},
-		recordHistogram() {},
-		recordGauge() {},
-		flush: async () => {},
-		dispose: async () => {},
-	}
-}

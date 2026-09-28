@@ -19,9 +19,7 @@ import type {
 	AgentBeforeToolContext,
 	AgentBeforeToolResult,
 	AgentExtension,
-	ITelemetryService,
 } from "@plinycode/shared";
-import { capturePlanModeCommandBlocked } from "../../services/telemetry/core-events";
 import {
 	findFileEditingCommand,
 	formatPlanModeBlockedCommandError,
@@ -32,13 +30,7 @@ import { normalizeRunCommandsInput } from "./helpers";
 export const PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME =
 	"core.plan-mode-command-guard";
 
-export interface PlanModeCommandGuardOptions {
-	telemetry?: ITelemetryService;
-}
-
-export function createPlanModeCommandGuardExtension(
-	options: PlanModeCommandGuardOptions = {},
-): AgentExtension {
+export function createPlanModeCommandGuardExtension(): AgentExtension {
 	const beforeTool = (
 		context: AgentBeforeToolContext,
 	): AgentBeforeToolResult | undefined => {
@@ -57,16 +49,6 @@ export function createPlanModeCommandGuardExtension(
 		for (const command of commands) {
 			const blocked = findFileEditingCommand(command);
 			if (blocked) {
-				capturePlanModeCommandBlocked(options.telemetry, {
-					tool_name: "run_commands",
-					blocked_construct: blocked,
-					command_count: commands.length,
-					agent_id: context.snapshot.agentId,
-					conversation_id: context.snapshot.conversationId,
-					run_id: context.snapshot.runId,
-					iteration: context.snapshot.iteration,
-					tool_call_id: context.toolCall.toolCallId,
-				});
 				return {
 					skip: true,
 					reason: formatPlanModeBlockedCommandError(blocked),

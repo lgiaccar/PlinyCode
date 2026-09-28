@@ -163,48 +163,9 @@ describe("auth/cline getValidClineCredentials", () => {
 				),
 		) as unknown as typeof fetch;
 
-		const capture = vi.fn();
-		const result = await getValidClineCredentials(current, {
-			...PROVIDER_OPTIONS,
-			telemetry: { capture } as never,
-		});
+		const result = await getValidClineCredentials(current, PROVIDER_OPTIONS);
 		expect(result).toBeNull();
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_logged_out",
-				properties: expect.objectContaining({
-					reason: "token_invalid",
-					status: 401,
-					errorCode: "invalid_grant",
-					request_id: "req-invalid-grant",
-					sessionId: "sid-1",
-					sessionDurationMs: Date.now() - 12_345,
-				}),
-			}),
-		);
 		nowSpy.mockRestore();
-	});
-
-	it("omits request_id when a failed response has no request ID header", async () => {
-		const current = createCredentials({ expires: 0 });
-		globalThis.fetch = vi.fn(
-			async () =>
-				new Response(JSON.stringify({ error: "invalid_grant" }), {
-					status: 401,
-					headers: { "Content-Type": "application/json" },
-				}),
-		) as unknown as typeof fetch;
-
-		const capture = vi.fn();
-		await getValidClineCredentials(current, {
-			...PROVIDER_OPTIONS,
-			telemetry: { capture } as never,
-		});
-
-		const logoutEvent = capture.mock.calls.find(
-			([event]) => event.event === "user.auth_logged_out",
-		)?.[0];
-		expect(logoutEvent?.properties).not.toHaveProperty("request_id");
 	});
 
 	it("keeps current credentials on transient refresh error while token remains valid", async () => {
@@ -242,28 +203,11 @@ describe("auth/cline getValidClineCredentials", () => {
 				),
 		) as unknown as typeof fetch;
 
-		const capture = vi.fn();
-		const result = await getValidClineCredentials(
-			current,
-			{ ...PROVIDER_OPTIONS, telemetry: { capture } as never },
-			{
-				refreshBufferMs: 60_000,
-				retryableTokenGraceMs: 30_000,
-			},
-		);
+		const result = await getValidClineCredentials(current, PROVIDER_OPTIONS, {
+			refreshBufferMs: 60_000,
+			retryableTokenGraceMs: 30_000,
+		});
 		expect(result).toBe(current);
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_refresh_soft_failure",
-				properties: expect.objectContaining({
-					status: 500,
-					request_id: "req-soft-failure-valid",
-					tokenExpired: false,
-					sessionId: "sid-2",
-					sessionDurationMs: Date.now() - 67_890,
-				}),
-			}),
-		);
 		nowSpy.mockRestore();
 	});
 
@@ -289,28 +233,9 @@ describe("auth/cline getValidClineCredentials", () => {
 				),
 		) as unknown as typeof fetch;
 
-		const capture = vi.fn();
 		await expect(
-			getValidClineCredentials(current, {
-				...PROVIDER_OPTIONS,
-				telemetry: { capture } as never,
-			}),
+			getValidClineCredentials(current, PROVIDER_OPTIONS),
 		).rejects.toThrow("Token refresh failed: 500");
-		// The "prevented logout" counter: this exact situation used to wipe
-		// stored credentials.
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_refresh_soft_failure",
-				properties: expect.objectContaining({
-					status: 500,
-					request_id: "req-soft-failure-expired",
-					tokenExpired: true,
-				}),
-			}),
-		);
-		expect(capture).not.toHaveBeenCalledWith(
-			expect.objectContaining({ event: "user.auth_logged_out" }),
-		);
 		nowSpy.mockRestore();
 	});
 });
@@ -375,15 +300,9 @@ describe("auth/cline loginClineOAuth", () => {
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
 		const onAuth = vi.fn();
-		const capture = vi.fn();
 		const credentials = await loginClineOAuth({
 			apiBaseUrl: "https://api.cline.bot",
 			useWorkOSDeviceAuth: true,
-			telemetry: {
-				capture,
-				setDistinctId: vi.fn(),
-				updateCommonProperties: vi.fn(),
-			} as never,
 			callbacks: {
 				onAuth,
 				onPrompt: async () => "",
@@ -415,16 +334,6 @@ describe("auth/cline loginClineOAuth", () => {
 			accessToken: "workos-access",
 			refreshToken: "workos-refresh",
 		});
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_succeeded",
-				properties: expect.objectContaining({
-					provider: "cline",
-					sessionId: "sid-login",
-					sessionDurationMs: Date.now() - 200_000,
-				}),
-			}),
-		);
 		nowSpy.mockRestore();
 	});
 
@@ -445,27 +354,17 @@ describe("auth/cline loginClineOAuth", () => {
 					},
 				),
 		) as unknown as typeof fetch;
-		const capture = vi.fn();
 
 		await expect(
 			loginClineOAuth({
 				apiBaseUrl: "https://api.cline.bot",
 				useWorkOSDeviceAuth: true,
-				telemetry: { capture } as never,
 				callbacks: {
 					onAuth: vi.fn(),
 					onPrompt: async () => "",
 				},
 			}),
 		).rejects.toThrow("Device authorization failed: 400");
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_failed",
-				properties: expect.objectContaining({
-					request_id: "req-device-authorization",
-				}),
-			}),
-		);
 	});
 });
 
@@ -492,7 +391,6 @@ describe("auth/cline completeClineDeviceAuth", () => {
 					},
 				),
 		) as unknown as typeof fetch;
-		const capture = vi.fn();
 
 		await expect(
 			completeClineDeviceAuth({
@@ -500,14 +398,7 @@ describe("auth/cline completeClineDeviceAuth", () => {
 				expiresInSeconds: 300,
 				pollIntervalSeconds: 1,
 				apiBaseUrl: "https://api.cline.bot",
-				telemetry: { capture } as never,
 			}),
 		).rejects.toThrow("authorization denied");
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_failed",
-				properties: expect.objectContaining({ request_id: "req-device-poll" }),
-			}),
-		);
 	});
 });

@@ -5,16 +5,8 @@
  * It is only intended for CLI use, not browser environments.
  */
 
-import { decodeJwtPayload, type ITelemetryService } from "@plinycode/shared";
+import { decodeJwtPayload } from "@plinycode/shared";
 import { nanoid } from "nanoid";
-import {
-	captureAuthFailed,
-	captureAuthLoggedOut,
-	captureAuthRefreshSoftFailure,
-	captureAuthStarted,
-	captureAuthSucceeded,
-	identifyAccount,
-} from "../services/telemetry/core-events";
 import { startLocalOAuthServer } from "./server";
 import type { OAuthCredentials, OAuthPrompt } from "./types";
 import {
@@ -298,9 +290,7 @@ export async function loginOpenAICodex(options: {
 	onProgress?: (message: string) => void;
 	onManualCodeInput?: () => Promise<string>;
 	originator?: string;
-	telemetry?: ITelemetryService;
 }): Promise<OAuthCredentials> {
-	captureAuthStarted(options.telemetry, "openai-codex");
 	const callbackConfig = resolveCallbackServerConfig();
 	const { verifier, state, url } = await createAuthorizationFlow(
 		options.originator,
@@ -323,7 +313,6 @@ export async function loginOpenAICodex(options: {
 		const error = new Error(
 			`Port ${callbackConfig.port} is already in use, so the OpenAI sign-in callback cannot be received. Close the application using that port (for example another Codex or Cline sign-in) and try again.`,
 		);
-		captureAuthFailed(options.telemetry, "openai-codex", error.message);
 		throw error;
 	}
 
@@ -376,20 +365,7 @@ export async function loginOpenAICodex(options: {
 		}
 
 		const credentials = toCodexCredentials(tokenResult);
-		captureAuthSucceeded(options.telemetry, "openai-codex");
-		identifyAccount(options.telemetry, {
-			id: credentials.accountId,
-			email: credentials.email,
-			provider: "openai-codex",
-		});
 		return credentials;
-	} catch (error) {
-		captureAuthFailed(
-			options.telemetry,
-			"openai-codex",
-			error instanceof Error ? error.message : String(error),
-		);
-		throw error;
 	} finally {
 		server.close();
 	}
@@ -415,7 +391,7 @@ export async function refreshOpenAICodexToken(
 
 export async function getValidOpenAICodexCredentials(
 	currentCredentials: OAuthCredentials | null,
-	options?: RefreshTokenResolution & { telemetry?: ITelemetryService },
+	options?: RefreshTokenResolution,
 ): Promise<OAuthCredentials | null> {
 	if (!currentCredentials) {
 		return null;
@@ -442,36 +418,14 @@ export async function getValidOpenAICodexCredentials(
 		);
 		return refreshed;
 	} catch (error) {
-		const failureDetails = {
-			status:
-				error instanceof OpenAICodexOAuthTokenError ? error.status : undefined,
-			errorCode:
-				error instanceof OpenAICodexOAuthTokenError
-					? error.errorCode
-					: undefined,
-			errorName: error instanceof Error ? error.name : undefined,
-		};
 		if (
 			error instanceof OpenAICodexOAuthTokenError &&
 			error.isLikelyInvalidGrant()
 		) {
-			captureAuthLoggedOut(
-				options?.telemetry,
-				"openai-codex",
-				"invalid_grant",
-				{
-					status: error.status,
-					errorCode: error.errorCode,
-				},
-			);
 			return null;
 		}
 		const tokenExpired =
 			currentCredentials.expires - Date.now() <= retryableTokenGraceMs;
-		captureAuthRefreshSoftFailure(options?.telemetry, "openai-codex", {
-			...failureDetails,
-			tokenExpired,
-		});
 		if (!tokenExpired) {
 			return currentCredentials;
 		}

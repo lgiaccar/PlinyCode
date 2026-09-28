@@ -45,11 +45,9 @@
 							{
 								"group": [
 									"@plinycode/llms/*",
-									"@plinycode/agents/*",
 									"@plinycode/core/*",
 									"@plinycode/shared/*",
 									"**/llms/src/**",
-									"**/agents/src/**",
 									"**/core/src/**",
 									"**/shared/src/**",
 									"**/rpc/src/**",
@@ -62,10 +60,7 @@
 									"!@plinycode/llms/models/*",
 									"!@plinycode/llms/providers",
 									"!@plinycode/llms/providers/*",
-									"!@plinycode/agents/node",
-									"!@plinycode/agents/browser",
 									"!@plinycode/core/hub",
-									"!@plinycode/core/telemetry",
 									"!@plinycode/core/rpc",
 									"!@plinycode/shared/browser",
 									"!@plinycode/shared/node",

@@ -2,9 +2,8 @@ import type {
 	AgentBeforeToolContext,
 	AgentRuntimeStateSnapshot,
 	AgentTool,
-	ITelemetryService,
 } from "@plinycode/shared";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
 	createPlanModeCommandGuardExtension,
 	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
@@ -38,24 +37,6 @@ function makeContext(toolName: string, input: unknown): AgentBeforeToolContext {
 			input,
 		},
 		input,
-	};
-}
-
-function makeTelemetryStub(): ITelemetryService {
-	return {
-		capture: vi.fn(),
-		captureRequired: vi.fn(),
-		setDistinctId: vi.fn(),
-		setMetadata: vi.fn(),
-		updateMetadata: vi.fn(),
-		setCommonProperties: vi.fn(),
-		updateCommonProperties: vi.fn(),
-		isEnabled: vi.fn(() => true),
-		recordCounter: vi.fn(),
-		recordHistogram: vi.fn(),
-		recordGauge: vi.fn(),
-		flush: vi.fn(async () => {}),
-		dispose: vi.fn(async () => {}),
 	};
 }
 
@@ -144,47 +125,5 @@ describe("plan-mode command-guard extension", () => {
 		);
 
 		expect(result).toBeUndefined();
-	});
-
-	it("captures block telemetry without raw command content", async () => {
-		const telemetry = makeTelemetryStub();
-		const extension = createPlanModeCommandGuardExtension({ telemetry });
-
-		await runBeforeTool(
-			extension,
-			makeContext("run_commands", {
-				commands: ["rm -rf /workspace/secret-project"],
-			}),
-		);
-
-		const captured = (telemetry.capture as ReturnType<typeof vi.fn>).mock.calls
-			.map((call) => call[0])
-			.filter((event) => event.event === "sdk.plan_mode_command_blocked");
-		expect(captured).toHaveLength(1);
-		expect(captured[0].properties).toMatchObject({
-			tool_name: "run_commands",
-			blocked_construct: "`rm`",
-			command_count: 1,
-			agent_id: "agent-1",
-			conversation_id: "conv-1",
-			run_id: "run-1",
-			iteration: 2,
-			tool_call_id: "tool-call-1",
-		});
-		expect(JSON.stringify(captured[0].properties)).not.toContain(
-			"secret-project",
-		);
-	});
-
-	it("does not capture telemetry for allowed calls", async () => {
-		const telemetry = makeTelemetryStub();
-		const extension = createPlanModeCommandGuardExtension({ telemetry });
-
-		await runBeforeTool(
-			extension,
-			makeContext("run_commands", { commands: ["ls"] }),
-		);
-
-		expect(telemetry.capture).not.toHaveBeenCalled();
 	});
 });

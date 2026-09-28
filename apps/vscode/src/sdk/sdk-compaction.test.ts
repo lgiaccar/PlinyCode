@@ -20,7 +20,6 @@ const baseConfig = {
 	knownModels: { claude: { id: "claude", maxInputTokens: 200_000 } },
 	compaction: undefined,
 	logger: undefined,
-	telemetry: undefined,
 } as unknown as Parameters<typeof compactSessionMessages>[0]["config"]
 
 describe("compactSessionMessages", () => {
@@ -51,7 +50,7 @@ describe("compactSessionMessages", () => {
 		]
 		const result = await compactSessionMessages({ config: baseConfig, sessionId: "s1", messages })
 
-		// Manual mode + enabled compaction + telemetry keying.
+		// Manual mode + enabled compaction + session id.
 		expect(createContextCompactionPrepareTurn).toHaveBeenCalledWith(
 			expect.objectContaining({
 				providerId: "anthropic",

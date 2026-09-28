@@ -1,17 +1,5 @@
-import {
-	decodeJwtPayload,
-	getClineEnvironmentConfig,
-	type ITelemetryService,
-} from "@plinycode/shared";
+import { getClineEnvironmentConfig } from "@plinycode/shared";
 import { hashSecret, sdkDebug } from "../logging/early-logger";
-import {
-	captureAuthFailed,
-	captureAuthLoggedOut,
-	captureAuthRefreshSoftFailure,
-	captureAuthStarted,
-	captureAuthSucceeded,
-	identifyAccount,
-} from "../services/telemetry/core-events";
 import { startLocalOAuthServer } from "./server";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "./types";
 import {
@@ -76,22 +64,10 @@ type ClineTokenResponse = {
 type HeaderMap = Record<string, string>;
 type HeaderInput = HeaderMap | (() => Promise<HeaderMap> | HeaderMap);
 
-type AuthTokenTelemetryClaims = {
-	sessionId?: string;
-};
-
-type AuthCredentialTelemetryProperties = {
-	sessionDurationMs?: number;
-};
-
-type AuthTelemetryDetails = AuthTokenTelemetryClaims &
-	AuthCredentialTelemetryProperties;
-
 export interface ClineOAuthProviderOptions {
 	apiBaseUrl: string;
 	headers?: HeaderInput;
 	requestTimeoutMs?: number;
-	telemetry?: ITelemetryService;
 	useWorkOSDeviceAuth?: boolean;
 	callbackPath?: string;
 	callbackPorts?: number[];
@@ -188,48 +164,6 @@ function toSeconds(value: unknown, fallback: number): number {
 		return fallback;
 	}
 	return Math.floor(value);
-}
-
-function asNonEmptyString(value: unknown): string | undefined {
-	return (typeof value === "string" && value.trim()) || undefined;
-}
-
-function getAuthTokenTelemetryClaims(token: string): AuthTokenTelemetryClaims {
-	const payload = decodeJwtPayload(token);
-	if (!payload) {
-		return {};
-	}
-
-	return {
-		sessionId: asNonEmptyString(payload.sid),
-	};
-}
-
-function getAuthCredentialTelemetryProperties(
-	credentials: ClineOAuthCredentials,
-): AuthCredentialTelemetryProperties {
-	const authProperties: AuthCredentialTelemetryProperties = {};
-
-	const sessionStartedAtMs = credentials.metadata?.sessionStartedAtMs;
-
-	if (
-		typeof sessionStartedAtMs === "number" &&
-		Number.isFinite(sessionStartedAtMs) &&
-		sessionStartedAtMs > 0
-	) {
-		authProperties.sessionDurationMs = Date.now() - sessionStartedAtMs;
-	}
-
-	return authProperties;
-}
-
-function getAuthTelemetryDetails(
-	credentials: ClineOAuthCredentials,
-): AuthTelemetryDetails {
-	return {
-		...getAuthTokenTelemetryClaims(credentials.access),
-		...getAuthCredentialTelemetryProperties(credentials),
-	};
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -519,7 +453,6 @@ export async function loginClineOAuth(
 		callbacks: OAuthLoginCallbacks;
 	},
 ): Promise<ClineOAuthCredentials> {
-	captureAuthStarted(options.telemetry, options.provider ?? "cline");
 	const useWorkOSDeviceAuth = options.useWorkOSDeviceAuth ?? true;
 	const callbackPorts = options.callbackPorts?.length
 		? options.callbackPorts
@@ -613,28 +546,7 @@ export async function loginClineOAuth(
 			);
 		}
 
-		captureAuthSucceeded(
-			options.telemetry,
-			options.provider ?? "cline",
-			getAuthTelemetryDetails(credentials),
-		);
-		identifyAccount(options.telemetry, {
-			id: credentials.accountId,
-			email: credentials.email,
-			provider: options.provider ?? "cline",
-		});
 		return credentials;
-	} catch (error) {
-		captureAuthFailed(
-			options.telemetry,
-			options.provider ?? "cline",
-			error instanceof Error ? error.message : String(error),
-			{
-				requestId:
-					error instanceof ClineOAuthTokenError ? error.requestId : undefined,
-			},
-		);
-		throw error;
 	} finally {
 		localServer?.close();
 	}
@@ -664,52 +576,25 @@ export async function completeClineDeviceAuth(options: {
 	provider?: string;
 	headers?: HeaderInput;
 	requestTimeoutMs?: number;
-	telemetry?: ITelemetryService;
 }): Promise<ClineOAuthCredentials> {
-	const providerName = options.provider ?? "cline";
-	captureAuthStarted(options.telemetry, providerName);
-	try {
-		const workosTokens = await pollWorkOSTokens({
-			clientId: getClineEnvironmentConfig().workOsClientId,
-			deviceCode: options.deviceCode,
-			expiresInSeconds: options.expiresInSeconds,
-			initialPollIntervalSeconds: options.pollIntervalSeconds,
-			requestTimeoutMs: options.requestTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
-			workosApiBaseUrl: DEFAULT_WORKOS_API_BASE_URL,
-		});
-		const credentials = await registerWorkOSTokens(
-			workosTokens,
-			{
-				apiBaseUrl: options.apiBaseUrl,
-				headers: options.headers,
-				requestTimeoutMs: options.requestTimeoutMs,
-				provider: options.provider,
-			},
-			options.provider,
-		);
-		captureAuthSucceeded(
-			options.telemetry,
-			providerName,
-			getAuthTelemetryDetails(credentials),
-		);
-		identifyAccount(options.telemetry, {
-			id: credentials.accountId,
-			email: credentials.email,
-			provider: providerName,
-		});
-		return credentials;
-	} catch (error) {
-		captureAuthFailed(
-			options.telemetry,
-			providerName,
-			error instanceof Error ? error.message : String(error),
-			{
-				requestId:
-					error instanceof ClineOAuthTokenError ? error.requestId : undefined,
-			},
-		);
-		throw error;
-	}
+	const workosTokens = await pollWorkOSTokens({
+		clientId: getClineEnvironmentConfig().workOsClientId,
+		deviceCode: options.deviceCode,
+		expiresInSeconds: options.expiresInSeconds,
+		initialPollIntervalSeconds: options.pollIntervalSeconds,
+		requestTimeoutMs: options.requestTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
+		workosApiBaseUrl: DEFAULT_WORKOS_API_BASE_URL,
+	});
+	return registerWorkOSTokens(
+		workosTokens,
+		{
+			apiBaseUrl: options.apiBaseUrl,
+			headers: options.headers,
+			requestTimeoutMs: options.requestTimeoutMs,
+			provider: options.provider,
+		},
+		options.provider,
+	);
 }
 
 export async function refreshClineToken(
@@ -805,38 +690,9 @@ export async function getValidClineCredentials(
 	try {
 		return await refreshClineToken(currentCredentials, providerOptions);
 	} catch (error) {
-		const authTelemetryDetails = getAuthTelemetryDetails(currentCredentials);
-		const requestIdDetails =
-			error instanceof ClineOAuthTokenError && error.requestId
-				? { request_id: error.requestId }
-				: {};
-		const failureDetails = {
-			status: error instanceof ClineOAuthTokenError ? error.status : undefined,
-			errorCode:
-				error instanceof ClineOAuthTokenError ? error.errorCode : undefined,
-			...requestIdDetails,
-			...authTelemetryDetails,
-			errorName: error instanceof Error ? error.name : undefined,
-		};
 		if (error instanceof ClineOAuthTokenError && error.isLikelyInvalidGrant()) {
 			sdkDebug(
 				`cline.getCredentials outcome=invalid_grant status=${error.status} errorCode=${error.errorCode ?? "none"}`,
-			);
-			// This is the single owner of the involuntary-logout event for the
-			// Cline provider — callers observing the `null` return must NOT
-			// emit their own user.auth_logged_out. `token_invalid` matches the
-			// legacy extension's LogoutReason vocabulary so warehouse queries
-			// cover both bundles; the raw OAuth code stays in `errorCode`.
-			captureAuthLoggedOut(
-				providerOptions.telemetry,
-				providerOptions.provider ?? "cline",
-				"token_invalid",
-				{
-					status: error.status,
-					errorCode: error.errorCode,
-					...requestIdDetails,
-					...authTelemetryDetails,
-				},
 			);
 			return null;
 		}
@@ -844,11 +700,6 @@ export async function getValidClineCredentials(
 			// Keep current token on transient refresh failures while still valid.
 			sdkDebug(
 				`cline.getCredentials outcome=transient_failure_kept_current error=${error instanceof Error ? error.message : String(error)}`,
-			);
-			captureAuthRefreshSoftFailure(
-				providerOptions.telemetry,
-				providerOptions.provider ?? "cline",
-				{ ...failureDetails, tokenExpired: false },
 			);
 			return currentCredentials;
 		}
@@ -859,13 +710,6 @@ export async function getValidClineCredentials(
 		// credentials over it, logging out every Cline process on the machine.
 		sdkDebug(
 			`cline.getCredentials outcome=transient_failure_rethrown error=${error instanceof Error ? error.message : String(error)}`,
-		);
-		// Every one of these events was a hard logout before the
-		// transient-vs-invalid_grant fix — the "prevented logout" counter.
-		captureAuthRefreshSoftFailure(
-			providerOptions.telemetry,
-			providerOptions.provider ?? "cline",
-			{ ...failureDetails, tokenExpired: true },
 		);
 		throw error;
 	}

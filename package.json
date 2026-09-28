@@ -15,7 +15,7 @@
         "clean": "bun run sdk/scripts/clean.ts",
         "types": "bun --parallel -F '*' typecheck",
         "test": "bun --parallel -F './sdk/packages/**' -F plinycode-dev test",
-        "test:unit": "bash -lc 'set -euo pipefail; bun -F @plinycode/agents test & p1=$!; bun -F @plinycode/llms test & p2=$!; bun -F @plinycode/core test:unit & p3=$!; bun -F plinycode-dev test & p4=$!; wait $p1; wait $p2; wait $p3; wait $p4'",
+        "test:unit": "bash -lc 'set -euo pipefail; bun -F @plinycode/llms test & p1=$!; bun -F @plinycode/core test:unit & p2=$!; bun -F plinycode-dev test & p3=$!; wait $p1; wait $p2; wait $p3'",
         "test:e2e": "bun -F @plinycode/core test:e2e",
         "biome": "bunx --bun @biomejs/biome",
         "format": "bun biome check --linter-enabled=false --diagnostic-level=error sdk/ && bun -F plinycode-dev format",

@@ -5,12 +5,10 @@ import {
 	type AgentTool,
 	CONFIGURABLE_MODEL_TOOL_NAMES,
 	type ConfigurableModelToolName,
-	type ITelemetryService,
 	type ModelToolSettings,
 } from "@plinycode/shared";
 import { resolveGlobalSettingsPath } from "@plinycode/shared/storage";
 import { z } from "zod";
-import { captureTelemetryOptOut } from "./telemetry/core-events";
 
 type AgentExtension = NonNullable<AgentConfig["extensions"]>[number];
 type AgentExtensionApi = Parameters<NonNullable<AgentExtension["setup"]>>[0];
@@ -60,7 +58,6 @@ export type GlobalPlanActMode = z.infer<typeof GlobalPlanActModeSchema>;
 
 export const GlobalSettingsSchema = z
 	.object({
-		telemetryOptOut: z.boolean().default(false).catch(false),
 		autoUpdateEnabled: z.boolean().default(true).catch(true),
 		compactionStrategy: GlobalCompactionStrategySchema.optional(),
 		compactionEnabled: z.boolean().optional().catch(undefined),
@@ -75,7 +72,6 @@ export const GlobalSettingsSchema = z
 	.strip()
 	.transform((settings) => {
 		const normalized: {
-			telemetryOptOut: boolean;
 			autoUpdateEnabled: boolean;
 			compactionStrategy?: GlobalCompactionStrategy;
 			compactionEnabled?: boolean;
@@ -88,7 +84,6 @@ export const GlobalSettingsSchema = z
 			disabledAgentPlugins?: string[];
 		} = {
 			autoUpdateEnabled: settings.autoUpdateEnabled,
-			telemetryOptOut: settings.telemetryOptOut,
 		};
 		if (settings.compactionStrategy) {
 			normalized.compactionStrategy = settings.compactionStrategy;
@@ -121,10 +116,6 @@ export const GlobalSettingsSchema = z
 	});
 
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>;
-
-export interface WriteGlobalSettingsOptions {
-	telemetry?: ITelemetryService;
-}
 
 function defaultGlobalSettings(): GlobalSettings {
 	return GlobalSettingsSchema.parse({});
@@ -219,51 +210,23 @@ export function readGlobalSettings(): GlobalSettings {
 
 export function writeGlobalSettings(
 	settings: z.input<typeof GlobalSettingsSchema>,
-	options: WriteGlobalSettingsOptions = {},
 ): void {
 	const filePath = resolveGlobalSettingsPath();
-	const previous = readGlobalSettings();
 	mkdirSync(dirname(filePath), { recursive: true });
 	const normalized = GlobalSettingsSchema.parse(settings);
-	if (!previous.telemetryOptOut && normalized.telemetryOptOut) {
-		captureTelemetryOptOut(options.telemetry);
-	}
 	writeFileSync(filePath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
 	invalidateSettingsCache();
-}
-
-export function isTelemetryOptedOutGlobally(): boolean {
-	return readGlobalSettings().telemetryOptOut;
-}
-
-export function setTelemetryOptOutGlobally(
-	telemetryOptOut: boolean,
-	options: WriteGlobalSettingsOptions = {},
-): void {
-	writeGlobalSettings(
-		{
-			...readGlobalSettings(),
-			telemetryOptOut,
-		},
-		options,
-	);
 }
 
 export function isAutoUpdateEnabledGlobally(): boolean {
 	return readGlobalSettings().autoUpdateEnabled;
 }
 
-export function setAutoUpdateEnabledGlobally(
-	autoUpdateEnabled: boolean,
-	options: WriteGlobalSettingsOptions = {},
-): void {
-	writeGlobalSettings(
-		{
-			...readGlobalSettings(),
-			autoUpdateEnabled,
-		},
-		options,
-	);
+export function setAutoUpdateEnabledGlobally(autoUpdateEnabled: boolean): void {
+	writeGlobalSettings({
+		...readGlobalSettings(),
+		autoUpdateEnabled,
+	});
 }
 
 export function readCompactionStrategyGlobally(): GlobalCompactionStrategy {

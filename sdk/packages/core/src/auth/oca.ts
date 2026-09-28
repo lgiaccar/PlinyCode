@@ -1,13 +1,5 @@
-import { decodeJwtPayload, type ITelemetryService } from "@plinycode/shared";
+import { decodeJwtPayload } from "@plinycode/shared";
 import { nanoid } from "nanoid";
-import {
-	captureAuthFailed,
-	captureAuthLoggedOut,
-	captureAuthRefreshSoftFailure,
-	captureAuthStarted,
-	captureAuthSucceeded,
-	identifyAccount,
-} from "../services/telemetry/core-events";
 import { BoundedTtlCache } from "./bounded-ttl-cache";
 import { startLocalOAuthServer } from "./server";
 import type {
@@ -346,10 +338,8 @@ function buildAuthorizationUrl(input: {
 export async function loginOcaOAuth(
 	options: OcaOAuthProviderOptions & {
 		callbacks: OAuthLoginCallbacks;
-		telemetry?: ITelemetryService;
 	},
 ): Promise<OAuthCredentials> {
-	captureAuthStarted(options.telemetry, "oca");
 	const config = resolveConfig(options.config);
 	const mode = resolveMode(options.mode);
 	const callbackPorts = options.callbackPorts?.length
@@ -423,20 +413,7 @@ export async function loginOcaOAuth(
 			config,
 			requestTimeoutMs,
 		});
-		captureAuthSucceeded(options.telemetry, "oca");
-		identifyAccount(options.telemetry, {
-			id: credentials.accountId,
-			email: credentials.email,
-			provider: "oca",
-		});
 		return credentials;
-	} catch (error) {
-		captureAuthFailed(
-			options.telemetry,
-			"oca",
-			error instanceof Error ? error.message : String(error),
-		);
-		throw error;
 	} finally {
 		localServer.close();
 	}
@@ -486,8 +463,8 @@ export async function refreshOcaToken(
 
 export async function getValidOcaCredentials(
 	currentCredentials: OAuthCredentials | null,
-	options?: OcaTokenResolution & { telemetry?: ITelemetryService },
-	providerOptions?: OcaOAuthProviderOptions & { telemetry?: ITelemetryService },
+	options?: OcaTokenResolution,
+	providerOptions?: OcaOAuthProviderOptions,
 ): Promise<OAuthCredentials | null> {
 	if (!currentCredentials) {
 		return null;
@@ -513,26 +490,11 @@ export async function getValidOcaCredentials(
 	try {
 		return await refreshOcaToken(currentCredentials, providerOptions);
 	} catch (error) {
-		const telemetry = providerOptions?.telemetry ?? options?.telemetry;
-		const failureDetails = {
-			status: error instanceof OcaOAuthTokenError ? error.status : undefined,
-			errorCode:
-				error instanceof OcaOAuthTokenError ? error.errorCode : undefined,
-			errorName: error instanceof Error ? error.name : undefined,
-		};
 		if (error instanceof OcaOAuthTokenError && error.isLikelyInvalidGrant()) {
-			captureAuthLoggedOut(telemetry, "oca", "invalid_grant", {
-				status: error.status,
-				errorCode: error.errorCode,
-			});
 			return null;
 		}
 		const tokenExpired =
 			currentCredentials.expires - Date.now() <= retryableTokenGraceMs;
-		captureAuthRefreshSoftFailure(telemetry, "oca", {
-			...failureDetails,
-			tokenExpired,
-		});
 		if (!tokenExpired) {
 			return currentCredentials;
 		}
