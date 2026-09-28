@@ -48,7 +48,6 @@ import { Logger } from "@shared/services/Logger"
 import * as path from "path"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
-import { CLINE_FREE_PROMOTION_ENDED_ERROR_CODE, isClineFreePromotionEndedMessage } from "../services/error/ClineError"
 import { MessageIdMinter } from "./message-id-minter"
 import { describeCredentialRejectedError, describeMissingCredentialError } from "./provider-credential-error"
 import { extractPersistedHookContextChips, isSyntheticSdkUserMessage, isSyntheticUserPrompt } from "./sdk-user-message-mapping"
@@ -2720,23 +2719,6 @@ export function reshapeErrorForWebview(
 	// provider when the active provider id is unknown.
 	const clineErrorProviderId = providerId ?? "cline"
 	const rawMessage = error.message ?? "Unknown error"
-
-	// A retired cline-free/ model answers "model not found" once its free
-	// promotion ends and the id is removed from the catalog. Stamp the payload
-	// with a dedicated code so the webview renders the promotion-ended card
-	// instead of the generic model-not-found guidance below.
-	if (isClineFreePromotionEndedMessage(rawMessage, modelId)) {
-		return JSON.stringify({
-			message: rawMessage,
-			code: CLINE_FREE_PROMOTION_ENDED_ERROR_CODE,
-			providerId: clineErrorProviderId,
-			modelId,
-			details: {
-				code: CLINE_FREE_PROMOTION_ENDED_ERROR_CODE,
-				message: rawMessage,
-			},
-		})
-	}
 
 	// Vertex global-endpoint rejections get recovery guidance before the
 	// generic model-not-found rewrite can claim them (Google's Publisher
