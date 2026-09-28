@@ -4,11 +4,9 @@ import { ClineRulesToggles } from "@shared/cline-rules"
 import { DEFAULT_FOCUS_CHAIN_SETTINGS, FocusChainSettings } from "@shared/FocusChainSettings"
 import { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_MCP_DISPLAY_MODE, McpDisplayMode } from "@shared/McpDisplayMode"
-import { GlobalInstructionsFile } from "@shared/remote-config/schema"
 import { Mode } from "@shared/storage/types"
 import { UserInfo } from "@shared/UserInfo"
 import { coerceToPlinyProvider } from "../pliny"
-import { type BlobStoreSettings } from "./types"
 
 // ============================================================================
 // SINGLE SOURCE OF TRUTH FOR STORAGE KEYS
@@ -37,23 +35,6 @@ type FieldDefinition<T> = {
 
 type FieldDefinitions = Record<string, FieldDefinition<any>>
 
-export type ConfiguredAPIKeys = Partial<Record<ApiProvider, boolean>>
-const REMOTE_CONFIG_EXTRA_FIELDS = {
-	remoteConfiguredProviders: { default: [] as ApiProvider[] },
-	allowedMCPServers: { default: [] as Array<{ id: string }> },
-	remoteMCPServers: { default: undefined as Array<{ name: string; url: string; alwaysEnabled?: boolean }> | undefined },
-	previousRemoteMCPServers: { default: undefined as Array<{ name: string; url: string }> | undefined },
-	remoteGlobalRules: { default: undefined as GlobalInstructionsFile[] | undefined },
-	remoteGlobalWorkflows: { default: undefined as GlobalInstructionsFile[] | undefined },
-	remoteGlobalSkills: { default: undefined as GlobalInstructionsFile[] | undefined },
-	blockPersonalRemoteMCPServers: { default: false as boolean },
-	openTelemetryOtlpHeaders: { default: undefined as Record<string, string> | undefined },
-	otlpMetricsHeaders: { default: undefined as Record<string, string> | undefined },
-	otlpLogsHeaders: { default: undefined as Record<string, string> | undefined },
-	blobStoreConfig: { default: undefined as BlobStoreSettings | undefined },
-	configuredApiKeys: { default: {} as ConfiguredAPIKeys | undefined },
-} satisfies FieldDefinitions
-
 const GLOBAL_STATE_FIELDS = {
 	clineVersion: { default: undefined as string | undefined },
 	"cline.generatedMachineId": { default: undefined as string | undefined }, // Note, distinctId reads/writes this directly from/to StorageContext before StateManager is initialized.
@@ -74,14 +55,6 @@ const GLOBAL_STATE_FIELDS = {
 	welcomeViewCompleted: { default: undefined as boolean | undefined },
 	mcpDisplayMode: { default: DEFAULT_MCP_DISPLAY_MODE as McpDisplayMode },
 	multiRootEnabled: { default: true as boolean },
-	// Organization id of the last successful managed remote-config publish.
-	// Persistent evidence that this install is managed: the session gate uses it
-	// to fail closed when the user's identity cannot be resolved (API unreachable)
-	// instead of starting an unpoliced session. Cleared on explicit no-config.
-	lastManagedOrganizationId: { default: undefined as string | undefined },
-	remoteRulesToggles: { default: {} as ClineRulesToggles },
-	remoteWorkflowToggles: { default: {} as ClineRulesToggles },
-	remoteSkillsToggles: { default: {} as ClineRulesToggles },
 } satisfies FieldDefinitions
 
 // Fields that map directly to ApiHandlerOptions in @shared/api.ts
@@ -152,25 +125,7 @@ const USER_SETTINGS_FIELDS = {
 	mode: { default: "act" as Mode },
 	focusChainSettings: { default: DEFAULT_FOCUS_CHAIN_SETTINGS as FocusChainSettings },
 	backgroundEditEnabled: { default: false as boolean },
-	optOutOfRemoteConfig: { default: false as boolean },
 	showFeatureTips: { default: false as boolean },
-
-	// OpenTelemetry configuration
-	openTelemetryEnabled: { default: true as boolean },
-	openTelemetryMetricsExporter: { default: undefined as string | undefined },
-	openTelemetryLogsExporter: { default: undefined as string | undefined },
-	openTelemetryTracesExporter: { default: undefined as string | undefined },
-	openTelemetryOtlpProtocol: { default: "http/json" as string | undefined },
-	openTelemetryOtlpEndpoint: { default: "http://localhost:4318" as string | undefined },
-	openTelemetryOtlpMetricsProtocol: { default: undefined as string | undefined },
-	openTelemetryOtlpMetricsEndpoint: { default: undefined as string | undefined },
-	openTelemetryOtlpLogsProtocol: { default: undefined as string | undefined },
-	openTelemetryOtlpLogsEndpoint: { default: undefined as string | undefined },
-	openTelemetryMetricExportInterval: { default: 60000 as number | undefined },
-	openTelemetryOtlpInsecure: { default: false as boolean | undefined },
-	openTelemetryLogBatchSize: { default: 512 as number | undefined },
-	openTelemetryLogBatchTimeout: { default: 5000 as number | undefined },
-	openTelemetryLogMaxQueueSize: { default: 2048 as number | undefined },
 } satisfies FieldDefinitions
 
 const SETTINGS_FIELDS = { ...API_HANDLER_SETTINGS_FIELDS, ...USER_SETTINGS_FIELDS }
@@ -184,13 +139,9 @@ const GLOBAL_STATE_AND_SETTINGS_FIELDS = { ...GLOBAL_STATE_FIELDS, ...SETTINGS_F
 const SECRETS_KEYS = [
 	"clineApiKey",
 	"clineAccountId", // Cline Account ID for Firebase
-	"cline:clineAccountId",
 	"authNonce",
-	"remoteLiteLlmApiKey",
 	"ocaApiKey",
-	"ocaRefreshToken",
 	"mcpOAuthSecrets",
-	"openai-codex-oauth-credentials", // JSON blob containing OAuth tokens for OpenAI Codex (ChatGPT subscription)
 ] as const
 
 // WARNING, these are not ALL of the local state keys in practice. For example, FileContextTracker
@@ -214,11 +165,9 @@ type BuildInterface<T extends Record<string, { default: any }>> = { [K in keyof 
 
 export type GlobalState = BuildInterface<typeof GLOBAL_STATE_FIELDS>
 export type Settings = BuildInterface<typeof SETTINGS_FIELDS>
-type RemoteConfigExtra = BuildInterface<typeof REMOTE_CONFIG_EXTRA_FIELDS>
 export type ApiHandlerOptionSettings = BuildInterface<typeof API_HANDLER_SETTINGS_FIELDS>
 export type ApiHandlerSettings = ApiHandlerOptionSettings & Secrets
 export type GlobalStateAndSettings = GlobalState & Settings
-export type RemoteConfigFields = GlobalStateAndSettings & RemoteConfigExtra
 
 // ============================================================================
 // TYPE ALIASES

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { StateManager } from "@core/storage/StateManager"
 import sinon from "sinon"
 import { McpHub } from "../McpHub"
 
@@ -16,9 +15,6 @@ describe("McpHub connect failure", () => {
 
 	beforeEach(() => {
 		sandbox = sinon.createSandbox()
-		sandbox.stub(StateManager, "get").returns({
-			getRemoteConfigSettings: () => ({}),
-		} as unknown as StateManager)
 	})
 
 	afterEach(() => {

@@ -28,8 +28,6 @@ export async function getStateToPostToWebview(controller: {
 	workspaceManager?: any
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
 	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
-	isRemoteConfigAvailable?: boolean
-	currentRemoteConfigRevision?: number
 }): Promise<ExtensionState> {
 	const stateManager = controller.stateManager
 
@@ -67,8 +65,6 @@ export async function getStateToPostToWebview(controller: {
 	const globalWorkflowToggles = stateManager.getGlobalStateKey("globalWorkflowToggles")
 	const globalSkillsToggles = stateManager.getGlobalStateKey("globalSkillsToggles")
 	const localSkillsToggles = stateManager.getWorkspaceStateKey("localSkillsToggles")
-	const remoteRulesToggles = stateManager.getGlobalStateKey("remoteRulesToggles")
-	const remoteWorkflowToggles = stateManager.getGlobalStateKey("remoteWorkflowToggles")
 	const shellIntegrationTimeout = stateManager.getGlobalSettingsKey("shellIntegrationTimeout")
 	const terminalReuseEnabled = stateManager.getGlobalStateKey("terminalReuseEnabled")
 	const vscodeTerminalExecutionMode = stateManager.getGlobalStateKey("vscodeTerminalExecutionMode")
@@ -142,8 +138,6 @@ export async function getStateToPostToWebview(controller: {
 		globalWorkflowToggles: globalWorkflowToggles || {},
 		globalSkillsToggles: globalSkillsToggles || {},
 		localSkillsToggles: localSkillsToggles || {},
-		remoteRulesToggles,
-		remoteWorkflowToggles,
 		shellIntegrationTimeout,
 		terminalReuseEnabled,
 		vscodeTerminalExecutionMode,
@@ -161,11 +155,7 @@ export async function getStateToPostToWebview(controller: {
 		primaryRootIndex: controller.workspaceManager?.getPrimaryIndex?.() ?? 0,
 		isMultiRootWorkspace: (controller.workspaceManager?.getRoots?.()?.length ?? 0) > 1,
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
-		remoteConfigSettings: stateManager.getRemoteConfigSettings?.(),
-		remoteConfigRevision: controller.currentRemoteConfigRevision ?? 0,
 		backgroundEditEnabled: stateManager.getGlobalSettingsKey("backgroundEditEnabled"),
-		optOutOfRemoteConfig: stateManager.getGlobalSettingsKey("optOutOfRemoteConfig"),
-		remoteConfigAvailable: controller.isRemoteConfigAvailable ?? false,
 		showFeatureTips,
 	} as ExtensionState
 }

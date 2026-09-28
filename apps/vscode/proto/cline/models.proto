@@ -14,8 +14,6 @@ service ModelsService {
   rpc getPlinyBudget(EmptyRequest) returns (PlinyBudgetResponse);
   // Updates API configuration (legacy - uses combined configuration)
   rpc updateApiConfigurationProto(UpdateApiConfigurationRequest) returns (Empty);
-  // Fetches available models from OCA
-  rpc refreshOcaModels(StringRequest) returns (OcaCompatibleModelInfo);
   // Lists providers available from the unified SDK-backed catalog
   rpc listProviders(Empty) returns (ProviderListingsResponse);
   // Resolves model metadata for a provider through the unified SDK-backed catalog
@@ -319,14 +317,6 @@ message OcaModelInfo {
   optional bool supports_reasoning = 19;
   // reasoning effort options
   repeated string reasoning_effort_options = 20;
-}
-
-// Aggregated OCA model catalog keyed by model identifier
-message OcaCompatibleModelInfo {
-  // key: canonical model id as reported by OCA (e.g., "openai/gpt-4o-mini")
-  // value: OcaModelInfo describing that model
-  map<string, OcaModelInfo> models = 1;
-  optional string error = 2;
 }
 
 enum ApiFormat {

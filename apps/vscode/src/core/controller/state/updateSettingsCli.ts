@@ -6,7 +6,6 @@ import { ClineEnv } from "@/config"
 import { Logger } from "@/shared/services/Logger"
 import { Mode } from "@/shared/storage/types"
 import { Controller } from ".."
-import { accountLogoutClicked } from "../account/accountLogoutClicked"
 import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
 import { normalizeOpenaiReasoningEffort } from "./reasoningEffort"
 
@@ -23,7 +22,6 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 
 	if (request.environment !== undefined) {
 		ClineEnv.setEnvironment(request.environment)
-		await accountLogoutClicked(controller, Empty.create())
 	}
 
 	if (request.settings) {

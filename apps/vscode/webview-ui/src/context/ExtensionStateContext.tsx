@@ -1,7 +1,6 @@
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
 import { DEFAULT_PLATFORM, type ExtensionState } from "@shared/ExtensionMessage"
 import { DEFAULT_MCP_DISPLAY_MODE } from "@shared/McpDisplayMode"
-import type { UserInfo } from "@shared/proto/cline/account"
 import { EmptyRequest } from "@shared/proto/cline/common"
 import type { ProviderModelsResponse } from "@shared/proto/cline/models"
 import type { TerminalProfile } from "@shared/proto/cline/state"
@@ -53,7 +52,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	settingsTargetSection?: string
 	settingsInitialModelTab?: "recommended" | "free"
 	showHistory: boolean
-	showAccount: boolean
 	expandTaskHeader: boolean
 
 	// Setters
@@ -68,15 +66,11 @@ export interface ExtensionStateContextType extends ExtensionState {
 	setGlobalWorkflowToggles: (toggles: Record<string, boolean>) => void
 	setGlobalSkillsToggles: (toggles: Record<string, boolean>) => void
 	setLocalSkillsToggles: (toggles: Record<string, boolean>) => void
-	setRemoteRulesToggles: (toggles: Record<string, boolean>) => void
-	setRemoteWorkflowToggles: (toggles: Record<string, boolean>) => void
 	setTotalTasksSize: (value: number | null) => void
 	setExpandTaskHeader: (value: boolean) => void
 	setShowWelcome: (value: boolean) => void
 	startProviderModelsRequest: (providerId: ProviderId, requestId: string) => void
 	applyProviderModelsResponse: (response: ProviderModelsResponse) => void
-
-	setUserInfo: (userInfo?: UserInfo) => void
 
 	// Navigation state setters
 	setShowMcp: (value: boolean) => void
@@ -87,13 +81,11 @@ export interface ExtensionStateContextType extends ExtensionState {
 	navigateToSettings: (targetSection?: string) => void
 	navigateToSettingsModelPicker: (opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => void
 	navigateToHistory: () => void
-	navigateToAccount: () => void
 	navigateToChat: () => void
 
 	// Hide functions
 	hideSettings: () => void
 	hideHistory: () => void
-	hideAccount: () => void
 	closeMcpView: () => void
 
 	// Event callbacks
@@ -112,7 +104,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	const [settingsTargetSection, setSettingsTargetSection] = useState<string | undefined>(undefined)
 	const [settingsInitialModelTab, setSettingsInitialModelTab] = useState<"recommended" | "free" | undefined>(undefined)
 	const [showHistory, setShowHistory] = useState(false)
-	const [showAccount, setShowAccount] = useState(false)
 
 	// Helper for MCP view
 	const closeMcpView = useCallback(() => {
@@ -127,25 +118,22 @@ export const ExtensionStateContextProvider: React.FC<{
 		setSettingsInitialModelTab(undefined)
 	}, [])
 	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
-	const hideAccount = useCallback(() => setShowAccount(false), [setShowAccount])
 
 	// Navigation functions
 	const navigateToMcp = useCallback(
 		(tab?: McpViewTab) => {
 			setShowSettings(false)
 			setShowHistory(false)
-			setShowAccount(false)
 			setMcpTab(tab)
 			setShowMcp(true)
 		},
-		[setMcpTab, setShowSettings, setShowHistory, setShowAccount],
+		[setMcpTab, setShowSettings, setShowHistory],
 	)
 
 	const navigateToSettings = useCallback(
 		(targetSection?: string) => {
 			setShowHistory(false)
 			closeMcpView()
-			setShowAccount(false)
 			setSettingsTargetSection(targetSection)
 			setSettingsInitialModelTab(undefined)
 			setShowSettings(true)
@@ -157,7 +145,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		(opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => {
 			setShowHistory(false)
 			closeMcpView()
-			setShowAccount(false)
 			setSettingsTargetSection(opts.targetSection)
 			setSettingsInitialModelTab(opts.initialModelTab)
 			setShowSettings(true)
@@ -168,23 +155,14 @@ export const ExtensionStateContextProvider: React.FC<{
 	const navigateToHistory = useCallback(() => {
 		setShowSettings(false)
 		closeMcpView()
-		setShowAccount(false)
 		setShowHistory(true)
-	}, [setShowSettings, closeMcpView, setShowAccount, setShowHistory])
-
-	const navigateToAccount = useCallback(() => {
-		setShowSettings(false)
-		closeMcpView()
-		setShowHistory(false)
-		setShowAccount(true)
-	}, [setShowSettings, closeMcpView, setShowHistory, setShowAccount])
+	}, [setShowSettings, closeMcpView, setShowHistory])
 
 	const navigateToChat = useCallback(() => {
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
-		setShowAccount(false)
-	}, [setShowSettings, closeMcpView, setShowHistory, setShowAccount])
+	}, [setShowSettings, closeMcpView, setShowHistory])
 
 	const [state, setState] = useState<ExtensionState>({
 		version: "",
@@ -223,9 +201,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		conversationSpendingLimit: 5,
 		subagentsEnabled: true,
 		favoritedModelIds: [],
-		optOutOfRemoteConfig: false,
-		remoteConfigAvailable: false,
-		remoteConfigSettings: {},
 		backgroundCommandRunning: false,
 		backgroundCommandTaskId: undefined,
 		foregroundCommandRunning: false,
@@ -312,7 +287,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	const mcpButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const historyButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const chatButtonUnsubscribeRef = useRef<(() => void) | null>(null)
-	const accountButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const settingsButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const partialMessageUnsubscribeRef = useRef<(() => void) | null>(null)
 	const workspaceUpdatesUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -521,21 +495,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				console.error("Failed to initialize webview via gRPC:", error)
 			})
 
-		// Set up account button clicked subscription
-		accountButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToAccountButtonClicked(EmptyRequest.create(), {
-			onResponse: () => {
-				// When account button is clicked, navigate to account view
-				console.log("[DEBUG] Received account button clicked event from gRPC stream")
-				navigateToAccount()
-			},
-			onError: (error: any) => {
-				console.error("Error in account button clicked subscription:", error)
-			},
-			onComplete: () => {
-				console.log("Account button clicked subscription completed")
-			},
-		})
-
 		// Fetch available terminal profiles on launch
 		StateServiceClient.getAvailableTerminalProfiles(EmptyRequest.create({}))
 			.then((response) => {
@@ -577,10 +536,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				chatButtonUnsubscribeRef.current()
 				chatButtonUnsubscribeRef.current = null
 			}
-			if (accountButtonClickedSubscriptionRef.current) {
-				accountButtonClickedSubscriptionRef.current()
-				accountButtonClickedSubscriptionRef.current = null
-			}
 			if (settingsButtonClickedSubscriptionRef.current) {
 				settingsButtonClickedSubscriptionRef.current()
 				settingsButtonClickedSubscriptionRef.current = null
@@ -619,7 +574,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		settingsTargetSection,
 		settingsInitialModelTab,
 		showHistory,
-		showAccount,
 		globalClineRulesToggles: state.globalClineRulesToggles || {},
 		localClineRulesToggles: state.localClineRulesToggles || {},
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
@@ -628,8 +582,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		localCopilotRulesToggles: state.localCopilotRulesToggles || {},
 		localWorkflowToggles: state.localWorkflowToggles || {},
 		globalWorkflowToggles: state.globalWorkflowToggles || {},
-		remoteRulesToggles: state.remoteRulesToggles || {},
-		remoteWorkflowToggles: state.remoteWorkflowToggles || {},
 		enableCheckpointsSetting: state.enableCheckpointsSetting,
 
 		// Navigation functions
@@ -637,13 +589,11 @@ export const ExtensionStateContextProvider: React.FC<{
 		navigateToSettings,
 		navigateToSettingsModelPicker,
 		navigateToHistory,
-		navigateToAccount,
 		navigateToChat,
 
 		// Hide functions
 		hideSettings,
 		hideHistory,
-		hideAccount,
 		setShowWelcome,
 		startProviderModelsRequest,
 		applyProviderModelsResponse,
@@ -700,20 +650,9 @@ export const ExtensionStateContextProvider: React.FC<{
 				...prevState,
 				localSkillsToggles: toggles,
 			})),
-		setRemoteRulesToggles: (toggles) =>
-			setState((prevState) => ({
-				...prevState,
-				remoteRulesToggles: toggles,
-			})),
-		setRemoteWorkflowToggles: (toggles) =>
-			setState((prevState) => ({
-				...prevState,
-				remoteWorkflowToggles: toggles,
-			})),
 		setMcpTab,
 		setTotalTasksSize,
 		onRelinquishControl,
-		setUserInfo: (userInfo?: UserInfo) => setState((prevState) => ({ ...prevState, userInfo })),
 		expandTaskHeader,
 		setExpandTaskHeader,
 	}

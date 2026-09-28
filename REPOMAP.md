@@ -31,10 +31,10 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 | Path | Role |
 |------|------|
 | `core/` | RPC handlers (`controller/`), storage, hooks, context and workspace helpers |
-| `services/` | VS Code–specific services (auth, MCP, browser, search, …) |
+| `services/` | VS Code–specific services (MCP, browser, search, …) |
 | `shared/` | Proto conversions, storage, Pliny model ids (`pliny.ts`), utils |
-| `hosts/` | Host abstractions: `vscode/`, plus `external/AuthHandler.ts` (used by OCA sign-in) |
-| `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `openai-codex/`, `terminal/`) |
+| `hosts/` | Host abstractions (`vscode/`) |
+| `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `terminal/`) |
 | `sdk/` | The controller (`SdkController.ts`) and the bridge to the engine: per-concern coordinators, message translator, webview gRPC bridge, `router/` (FreeAuto/BalanceAuto), `model-catalog/` |
 | `types/`, `utils/` | Declarations & helpers |
 | `exports/` | Public API |
@@ -45,20 +45,20 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 | Path | Role |
 |------|------|
-| `controller/` | One directory per RPC service, one file per RPC: account, checkpoints, commands, file, MCP, models, OCA account, remote config, slash commands, state, task, UI, web. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
+| `controller/` | One directory per RPC service, one file per RPC: checkpoints, commands, file, MCP, models, slash commands, state, task, UI, web. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
 | `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
-| `storage/` | Persistence (`remote-config/`, `utils/`) |
+| `storage/` | Persistence (`utils/`) |
 | `workspace/` | Workspace logic (`utils/`) |
 | `hooks/`, `mentions/`, `export/`, `webview/` | Supporting primitives |
 
 ### `src/services/`
 
-`auth/`, `banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
+`banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 
-`clients/`, `cline/`, `internal/`, `messages/`, `model-catalog/`, `multi-root/`, `proto/`, `proto-conversions/`, `providers/`, `remote-config/`, `services/`, `storage/` (`state-keys.ts`; `StateManager` itself is in `src/core/storage/`), `utils/`.
+`clients/`, `cline/`, `messages/`, `model-catalog/`, `multi-root/`, `proto/`, `proto-conversions/`, `providers/`, `services/`, `storage/` (`state-keys.ts`; `StateManager` itself is in `src/core/storage/`), `utils/`.
 
 ### `webview-ui/`
 

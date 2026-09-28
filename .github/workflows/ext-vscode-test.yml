@@ -89,16 +89,6 @@ jobs:
               working-directory: ${{ github.workspace }}
               run: bun run build:sdk
 
-            - name: Assert better-sqlite3 native binary present
-              run: |
-                  NODE_FILE="node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-                  if [ ! -f "$NODE_FILE" ]; then
-                    echo "ERROR: better-sqlite3 native binary missing at apps/vscode/$NODE_FILE"
-                    echo "(bun trustedDependencies postinstall likely did not run)"
-                    exit 1
-                  fi
-                  echo "Found better-sqlite3 native binary: $NODE_FILE"
-
             - name: Run Quality Checks (Parallel)
               run: bun run ci:check-all
 
@@ -160,16 +150,6 @@ jobs:
             - name: Build SDK packages
               working-directory: ${{ github.workspace }}
               run: bun run build:sdk
-
-            - name: Assert better-sqlite3 native binary present
-              run: |
-                  NODE_FILE="node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-                  if [ ! -f "$NODE_FILE" ]; then
-                    echo "ERROR: better-sqlite3 native binary missing at apps/vscode/$NODE_FILE"
-                    echo "(bun trustedDependencies postinstall likely did not run)"
-                    exit 1
-                  fi
-                  echo "Found better-sqlite3 native binary: $NODE_FILE"
 
             # NOTE: The old `npm config set script-shell bash` step is intentionally
             # removed. Scripts are now launched with `bun run`, which uses Bun's own

@@ -1,10 +1,4 @@
-import type {
-	CoreSessionEvent,
-	PreparedRemoteConfigCoreIntegration,
-	RestoreInput,
-	RestoreResult,
-	StartSessionResult,
-} from "@plinycode/core"
+import type { CoreSessionEvent, RestoreInput, RestoreResult, StartSessionResult } from "@plinycode/core"
 import { formatModeSwitchNotice, type ModeSwitchNotice } from "@plinycode/shared"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
@@ -38,10 +32,6 @@ export interface SdkSessionLifecycleOptions {
 	getTerminalManager?: () => VscodeTerminalManager
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
-	/** Resolves once the applicable remote config is ready for a new SDK session. */
-	beforeStartSession?: () => Promise<void>
-	/** Returns the latest prepared remote-config integration, if remote config is active. */
-	getRemoteConfigIntegration?: () => PreparedRemoteConfigCoreIntegration | undefined
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void
 	onSendError: (error: unknown, sessionId: string) => Promise<void> | void
@@ -394,8 +384,6 @@ export class SdkSessionLifecycle {
 				readFileExecutor: this.options.readFileExecutor,
 				getTerminalManager: this.options.getTerminalManager,
 				foregroundCommands: this.options.foregroundCommands,
-				beforeStartSession: this.options.beforeStartSession,
-				getRemoteConfigIntegration: this.options.getRemoteConfigIntegration,
 			})
 				.then((sdkHost) => {
 					this.ensureSharedHostSubscription(sdkHost)

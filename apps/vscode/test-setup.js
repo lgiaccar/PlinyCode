@@ -215,17 +215,11 @@ Module.prototype.require = function (id) {
 			fetchClineRecommendedModels: async () => ({ recommended: [], free: [] }),
 			readGlobalSettings: () => ({ telemetryOptOut: false }),
 			setTelemetryOptOutGlobally: () => undefined,
-			prepareRemoteConfigCoreIntegration: () => undefined,
 			createDefaultExecutors: () => ({}),
 			createMcpTools: () => ({}),
-			createOAuthClientCallbacks: () => ({}),
 			getProviderAuthHandler,
 			getProviderAuthStorageId,
 			resolveProviderApiKeyFromSettings,
-			getValidClineCredentials: async () => undefined,
-			loginClineOAuth: async () => undefined,
-			loginOcaOAuth: async () => undefined,
-			loginOpenAICodex: async () => undefined,
 		}
 	}
 

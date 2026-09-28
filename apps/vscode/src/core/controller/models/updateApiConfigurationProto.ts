@@ -5,7 +5,6 @@ import { fromProtobufModelInfo, fromProtobufOcaModelInfo } from "@shared/proto-c
 import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { Logger } from "@/shared/services/Logger"
 import type { Controller } from "../index"
-import { clearOrganizationForClinePassProviderSelection } from "./handleClinePassProviderSelection"
 import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "./taskApiModel"
 
 /**
@@ -63,7 +62,6 @@ export async function updateApiConfigurationProto(
 
 		// Update the API configuration in storage
 		controller.stateManager.setApiConfiguration(convertedApiConfigurationFromProto)
-		clearOrganizationForClinePassProviderSelection(controller, convertedApiConfigurationFromProto)
 
 		// Update the task's API handler if there's an active task
 		if (controller.task) {

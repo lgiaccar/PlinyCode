@@ -110,3 +110,35 @@ export function getProviderSettingsManager(dataDir?: string): ProviderSettingsMa
 	_cachedDataDir = resolvedDataDir
 	return _cachedManager
 }
+
+// ---------------------------------------------------------------------------
+// Removed sign-ins
+// ---------------------------------------------------------------------------
+
+/**
+ * Providers whose sign-in PlinyCode no longer has (the Cline account, OpenAI
+ * Codex and OCA). Their OAuth tokens in providers.json are dropped on start-up
+ * so old credentials don't linger on disk.
+ */
+const REMOVED_SIGN_IN_PROVIDERS = ["cline", "openai-codex", "oca"] as const
+
+/**
+ * Clear the stored OAuth tokens of the providers in
+ * {@link REMOVED_SIGN_IN_PROVIDERS}. Leaves the rest of each entry, its token
+ * source and the last-used provider alone, and writes nothing when no tokens
+ * are stored.
+ */
+export function purgeRemovedProviderSignIns(manager: ProviderSettingsManager = getProviderSettingsManager()): void {
+	for (const providerId of REMOVED_SIGN_IN_PROVIDERS) {
+		try {
+			const settings = manager.getProviderSettings(providerId)
+			if (!settings?.auth) {
+				continue
+			}
+			manager.saveProviderSettings({ ...settings, provider: providerId, auth: undefined }, { setLastUsed: false })
+			Logger.info(`[ProviderMigration] Cleared the stored ${providerId} sign-in`)
+		} catch (error) {
+			Logger.error(`[ProviderMigration] Failed to clear the stored ${providerId} sign-in:`, error)
+		}
+	}
+}

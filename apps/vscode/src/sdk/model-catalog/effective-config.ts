@@ -180,7 +180,7 @@ function assignIfDefined<T extends ConfigKey>(target: Partial<ConfigParts>, key:
  * Build an {@link EffectiveProviderConfig} by merging provider-owned settings
  * from SDK `providers.json` with the current StateManager effective API
  * configuration. StateManager's `getApiConfiguration()` already applies
- * task/session/remote-config overlays for legacy fields, so those values win.
+ * task/session overlays for legacy fields, so those values win.
  *
  * Mode-dependent model selection is intentionally excluded; callers use
  * `ProviderConfigStore.readSelection(providerId, mode)` for that.

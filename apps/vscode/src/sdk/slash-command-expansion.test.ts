@@ -166,30 +166,6 @@ describe("buildDisabledWorkflowNames", () => {
 		).toEqual(new Set())
 	})
 
-	it("governs each command by its own record when similar names span scopes", () => {
-		// Distinct commands whose names only differ by case/extension must not
-		// influence each other: the disabled remote command stays disabled even
-		// though the similarly-named local one is enabled, and vice versa.
-		const records = [
-			{ name: "Release", filePath: "/repo/.clinerules/workflows/Release.md" },
-			{ name: "release", filePath: "/repo/.cline/remote-config/workflows/release.md" },
-		]
-		expect(
-			buildDisabledWorkflowNames({
-				records,
-				workspaceToggles: { "/repo/.clinerules/workflows/Release.md": true },
-				remoteToggles: { release: false },
-			}),
-		).toEqual(new Set(["release"]))
-		expect(
-			buildDisabledWorkflowNames({
-				records,
-				workspaceToggles: { "/repo/.clinerules/workflows/Release.md": false },
-				remoteAlwaysEnabledNames: ["release"],
-			}),
-		).toEqual(new Set(["Release"]))
-	})
-
 	it("treats records without any toggle entry as enabled", () => {
 		const disabled = buildDisabledWorkflowNames({
 			records: [{ name: "fresh", filePath: "/home/user/.cline/workflows/fresh.md" }],
@@ -198,84 +174,16 @@ describe("buildDisabledWorkflowNames", () => {
 		expect(disabled).toEqual(new Set())
 	})
 
-	it("governs remote-config records by name-keyed remote toggles", () => {
-		const disabled = buildDisabledWorkflowNames({
-			records: [
-				{ name: "org-standards", filePath: "/repo/.cline/remote-config/workflows/org-standards.md" },
-				{ name: "org-review", filePath: "/repo/.cline/remote-config/workflows/org-review.md" },
-				{ name: "org-default", filePath: "C:\\repo\\.cline\\remote-config\\workflows\\org-default.md" },
-			],
-			remoteToggles: { "org-standards": false, "org-review": true },
-		})
-		expect(disabled).toEqual(new Set(["org-standards"]))
-	})
-
-	it("keys remote toggles off the materialized filename even when frontmatter aliases the command", () => {
-		const disabled = buildDisabledWorkflowNames({
-			records: [{ name: "friendly-alias", filePath: "/repo/.cline/remote-config/workflows/org-standards.md" }],
-			remoteToggles: { "Org Standards": false },
-		})
-		expect(disabled).toEqual(new Set(["friendly-alias"]))
-	})
-
-	it("matches remote toggles whose config names get sanitized during materialization", () => {
-		// "Org Standards" materializes as org-standards.md, and the record is
-		// named after the sanitized basename.
-		const disabled = buildDisabledWorkflowNames({
-			records: [{ name: "org-standards", filePath: "/repo/.cline/remote-config/workflows/org-standards.md" }],
-			remoteToggles: { "Org Standards": false },
-		})
-		expect(disabled).toEqual(new Set(["org-standards"]))
-	})
-
-	it("merges colliding sanitized remote names as enabled-if-any-enabled", () => {
-		// "Org Standards" and "org standards" both sanitize to org-standards.
-		const records = [{ name: "org-standards", filePath: "/repo/.cline/remote-config/workflows/org-standards.md" }]
-		expect(
-			buildDisabledWorkflowNames({
-				records,
-				remoteToggles: { "Org Standards": false, "org standards": true },
-			}),
-		).toEqual(new Set())
-		expect(
-			buildDisabledWorkflowNames({
-				records,
-				remoteToggles: { "Org Standards": false, "org standards": false },
-			}),
-		).toEqual(new Set(["org-standards"]))
-	})
-
-	it("matches remote toggles for names longer than the materializer's 80-char cap", () => {
-		const longConfigName = "a".repeat(100)
-		const materializedName = "a".repeat(80)
-		const disabled = buildDisabledWorkflowNames({
-			records: [{ name: materializedName, filePath: `/repo/.cline/remote-config/workflows/${materializedName}.md` }],
-			remoteToggles: { [longConfigName]: false },
-		})
-		expect(disabled).toEqual(new Set([materializedName]))
-	})
-
-	it("treats locked (alwaysEnabled) remote workflows as enabled despite stale toggles", () => {
-		const disabled = buildDisabledWorkflowNames({
-			records: [{ name: "org-standards", filePath: "/repo/.cline/remote-config/workflows/org-standards.md" }],
-			remoteToggles: { "Org Standards": false },
-			remoteAlwaysEnabledNames: ["Org Standards"],
-		})
-		expect(disabled).toEqual(new Set())
-	})
-
-	it("collects disabled names across local and remote scopes", () => {
+	it("collects disabled names across local and global scopes", () => {
 		const disabled = buildDisabledWorkflowNames({
 			records: [
 				{ name: "deploy", filePath: "/global/dir/deploy.md" },
 				{ name: "keep", filePath: "/global/dir/keep.md" },
 				{ name: "hotfix", filePath: "C:\\repo\\.clinerules\\workflows\\hotfix.md" },
-				{ name: "org-standards", filePath: "/repo/.cline/remote-config/workflows/org-standards.md" },
 			],
 			globalToggles: { "/global/dir/deploy.md": false, "/global/dir/keep.md": true },
 			workspaceToggles: { "C:\\repo\\.clinerules\\workflows\\hotfix.md": false },
-			remoteToggles: { "org-standards": false },
 		})
-		expect(disabled).toEqual(new Set(["deploy", "hotfix", "org-standards"]))
+		expect(disabled).toEqual(new Set(["deploy", "hotfix"]))
 	})
 })
