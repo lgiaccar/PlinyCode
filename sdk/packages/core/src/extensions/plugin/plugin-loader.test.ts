@@ -181,9 +181,9 @@ describe("plugin-loader", () => {
 		await writeFile(
 			join(packagedSdkSubpathDir, "index.ts"),
 			[
-				"import { createConfiguredTelemetryHandle } from '@plinycode/core/telemetry';",
+				"import { resolveSessionDataDir } from '@plinycode/shared/storage';",
 				"export default {",
-				"  name: typeof createConfiguredTelemetryHandle === 'function' ? 'sdk-subpath-ok' : 'invalid',",
+				"  name: typeof resolveSessionDataDir === 'function' ? 'sdk-subpath-ok' : 'invalid',",
 				"  manifest: { capabilities: ['tools'] },",
 				"};",
 			].join("\n"),

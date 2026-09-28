@@ -42,11 +42,6 @@ const builds: Parameters<typeof Bun.build>[0][] = [
 		...buildConfig,
 	},
 	{
-		entrypoints: ["./src/services/telemetry/index.ts"],
-		outdir: "./dist/services/telemetry",
-		...buildConfig,
-	},
-	{
 		entrypoints: ["./src/services/feature-flags/posthog.ts"],
 		outdir: "./dist/services/feature-flags",
 		...buildConfig,
