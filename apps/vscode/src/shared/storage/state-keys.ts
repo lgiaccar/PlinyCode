@@ -69,7 +69,6 @@ const GLOBAL_STATE_FIELDS = {
 	taskHistory: { default: [] as HistoryItem[], isAsync: true },
 	userInfo: { default: undefined as UserInfo | undefined },
 	favoritedModelIds: { default: [] as string[] },
-	mcpMarketplaceEnabled: { default: true as boolean },
 	mcpResponsesCollapsed: { default: false as boolean },
 	// User-dragged max height for the chat prompt textarea, in rows (react-textarea-autosize's maxRows).
 	chatInputMaxRows: { default: 10 as number },

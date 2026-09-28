@@ -62,7 +62,6 @@ export async function getStateToPostToWebview(controller: {
 	const conversationSpendingLimit = getConversationSpendingLimit()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
 	const userInfo = stateManager.getGlobalStateKey("userInfo")
-	const mcpMarketplaceEnabled = stateManager.getGlobalStateKey("mcpMarketplaceEnabled")
 	const mcpDisplayMode = stateManager.getGlobalStateKey("mcpDisplayMode")
 	const planActSeparateModelsSetting = stateManager.getGlobalSettingsKey("planActSeparateModelsSetting")
 	const enableCheckpointsSetting = stateManager.getGlobalSettingsKey("enableCheckpointsSetting")
@@ -129,7 +128,6 @@ export async function getStateToPostToWebview(controller: {
 		conversationSpendingLimit,
 		subagentsEnabled,
 		userInfo,
-		mcpMarketplaceEnabled,
 		mcpDisplayMode,
 		planActSeparateModelsSetting,
 		enableCheckpointsSetting: enableCheckpointsSetting ?? true,

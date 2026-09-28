@@ -140,11 +140,6 @@
 				"icon": "$(server)"
 			},
 			{
-				"command": "cline.marketplaceButtonClicked",
-				"title": "Customize",
-				"icon": "$(wrench)"
-			},
-			{
 				"command": "cline.historyButtonClicked",
 				"title": "History",
 				"icon": "$(history)"
@@ -277,7 +272,7 @@
 					"when": "view == plinycode-dev.SidebarProvider"
 				},
 				{
-					"command": "cline.marketplaceButtonClicked",
+					"command": "cline.mcpButtonClicked",
 					"group": "navigation@2",
 					"when": "view == plinycode-dev.SidebarProvider"
 				},

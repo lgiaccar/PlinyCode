@@ -372,16 +372,16 @@ message UpdateSettingsRequest {
   reserved 43; // was lazy_teammate_mode_enabled (removed)
   reserved 40; // was worktrees_enabled (worktrees removed)
   reserved 20; // was browser_settings (browser tool removed)
+  reserved 6; // was mcp_marketplace_enabled (MCP Marketplace removed)
   reserved 12; // was terminal_output_line_limit (removed; SDK command output limits are character-based)
   reserved 19; // was custom_prompt (removed - compact prompt setting no longer supported)
   reserved 3; // was telemetry_setting (telemetry removed)
-  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting", "worktrees_enabled", "browser_settings";
+  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting", "worktrees_enabled", "browser_settings", "mcp_marketplace_enabled";
 
   Metadata metadata = 1;
   optional ModelsApiConfiguration api_configuration = 2;
   optional bool plan_act_separate_models_setting = 4;
   optional bool enable_checkpoints_setting = 5;
-  optional bool mcp_marketplace_enabled = 6;
   optional int32 shell_integration_timeout = 8;
   optional bool terminal_reuse_enabled = 9;
   optional bool mcp_responses_collapsed = 10;

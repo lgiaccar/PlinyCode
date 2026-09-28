@@ -690,62 +690,6 @@ export type {
 	RegisterProviderInput,
 } from "./services/llms/runtime-types";
 export type {
-	MarketplaceActionResult,
-	MarketplaceEntryInput,
-	MarketplacePrimitiveType,
-	MarketplaceSpawnCommand,
-	MarketplaceSpawnResult,
-	UninstallMarketplaceEntryOptions,
-} from "./services/marketplace";
-export {
-	findInstalledGlobalMarketplaceSkillName,
-	getGlobalMarketplaceSkillPaths,
-	getMarketplaceSkillCandidates,
-	isMarketplaceSkillInstalled,
-	marketplaceEntryKey,
-	resolveMarketplaceMcpServerName,
-	uninstallMarketplaceEntry,
-	uninstallMarketplaceMcpServerFromSettings,
-	uninstallMarketplacePlugin,
-	uninstallMarketplaceSkill,
-} from "./services/marketplace";
-export type {
-	McpInstallOptions,
-	McpInstallResult,
-	McpUninstallOptions,
-	McpUninstallResult,
-} from "./services/mcp-install";
-export {
-	buildMcpInstallTransport,
-	installMcpServer,
-	parseMcpInstallArgs,
-	uninstallMcpServer,
-} from "./services/mcp-install";
-export type {
-	ParsedPluginSource,
-	PluginInstallOptions,
-	PluginInstallResult,
-	PluginInstallSourceType,
-	PluginMcpOAuthCandidate,
-} from "./services/plugin-install";
-export {
-	collectPluginMcpOAuthCandidates,
-	installPlugin,
-	isOfficialPluginSlug,
-	parsePluginSource,
-} from "./services/plugin-install";
-export type {
-	PluginMcpSettingsMutation,
-	PluginMcpSettingsSyncResult,
-	RemovePluginMcpServersFromSettingsOptions,
-	SyncPluginMcpServersToSettingsOptions,
-} from "./services/plugin-mcp-settings";
-export {
-	disablePluginMcpServersInSettings,
-	removePluginMcpServersFromSettings,
-	syncPluginMcpServersToSettings,
-} from "./services/plugin-mcp-settings";
-export type {
 	ListPluginToolsResult,
 	PluginContributionSummary,
 	PluginToolSummary,
@@ -754,11 +698,6 @@ export {
 	listPluginTools,
 	listPluginToolsWithDiagnostics,
 } from "./services/plugin-tools";
-export type {
-	PluginUninstallOptions,
-	PluginUninstallResult,
-} from "./services/plugin-uninstall";
-export { uninstallPlugin } from "./services/plugin-uninstall";
 export {
 	ensureCustomProvidersLoadedSync,
 	readModelsFileSync,

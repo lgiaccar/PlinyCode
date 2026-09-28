@@ -63,7 +63,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	availableTerminalProfiles: TerminalProfile[]
 
 	// View state
-	showMarketplace: boolean
 	showMcp: boolean
 	mcpTab?: McpViewTab
 	showSettings: boolean
@@ -106,12 +105,10 @@ export interface ExtensionStateContextType extends ExtensionState {
 	setUserInfo: (userInfo?: UserInfo) => void
 
 	// Navigation state setters
-	setShowMarketplace: (value: boolean) => void
 	setShowMcp: (value: boolean) => void
 	setMcpTab: (tab?: McpViewTab) => void
 
 	// Navigation functions
-	navigateToMarketplace: () => void
 	navigateToMcp: (tab?: McpViewTab) => void
 	navigateToSettings: (targetSection?: string) => void
 	navigateToSettingsModelPicker: (opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => void
@@ -123,7 +120,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	hideSettings: () => void
 	hideHistory: () => void
 	hideAccount: () => void
-	closeMarketplaceView: () => void
 	closeMcpView: () => void
 
 	// Event callbacks
@@ -136,7 +132,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	children: React.ReactNode
 }> = ({ children }) => {
 	// UI view state
-	const [showMarketplace, setShowMarketplace] = useState(false)
 	const [showMcp, setShowMcp] = useState(false)
 	const [mcpTab, setMcpTab] = useState<McpViewTab | undefined>(undefined)
 	const [showSettings, setShowSettings] = useState(false)
@@ -150,9 +145,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		setShowMcp(false)
 		setMcpTab(undefined)
 	}, [setShowMcp, setMcpTab])
-	const closeMarketplaceView = useCallback(() => {
-		setShowMarketplace(false)
-	}, [])
 
 	// Hide functions
 	const hideSettings = useCallback(() => {
@@ -169,26 +161,14 @@ export const ExtensionStateContextProvider: React.FC<{
 			setShowSettings(false)
 			setShowHistory(false)
 			setShowAccount(false)
-			closeMcpView()
-			if (tab) {
-				setMcpTab(tab)
-			}
-			setShowMarketplace(true)
+			setMcpTab(tab)
+			setShowMcp(true)
 		},
-		[closeMcpView, setMcpTab, setShowSettings, setShowHistory, setShowAccount],
+		[setMcpTab, setShowSettings, setShowHistory, setShowAccount],
 	)
-
-	const navigateToMarketplace = useCallback(() => {
-		setShowSettings(false)
-		closeMcpView()
-		setShowHistory(false)
-		setShowAccount(false)
-		setShowMarketplace(true)
-	}, [closeMcpView])
 
 	const navigateToSettings = useCallback(
 		(targetSection?: string) => {
-			closeMarketplaceView()
 			setShowHistory(false)
 			closeMcpView()
 			setShowAccount(false)
@@ -196,12 +176,11 @@ export const ExtensionStateContextProvider: React.FC<{
 			setSettingsInitialModelTab(undefined)
 			setShowSettings(true)
 		},
-		[closeMarketplaceView, closeMcpView],
+		[closeMcpView],
 	)
 
 	const navigateToSettingsModelPicker = useCallback(
 		(opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => {
-			closeMarketplaceView()
 			setShowHistory(false)
 			closeMcpView()
 			setShowAccount(false)
@@ -209,32 +188,29 @@ export const ExtensionStateContextProvider: React.FC<{
 			setSettingsInitialModelTab(opts.initialModelTab)
 			setShowSettings(true)
 		},
-		[closeMarketplaceView, closeMcpView],
+		[closeMcpView],
 	)
 
 	const navigateToHistory = useCallback(() => {
-		closeMarketplaceView()
 		setShowSettings(false)
 		closeMcpView()
 		setShowAccount(false)
 		setShowHistory(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowAccount, setShowHistory])
+	}, [setShowSettings, closeMcpView, setShowAccount, setShowHistory])
 
 	const navigateToAccount = useCallback(() => {
-		closeMarketplaceView()
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
 		setShowAccount(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowAccount])
+	}, [setShowSettings, closeMcpView, setShowHistory, setShowAccount])
 
 	const navigateToChat = useCallback(() => {
-		closeMarketplaceView()
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
 		setShowAccount(false)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowAccount])
+	}, [setShowSettings, closeMcpView, setShowHistory, setShowAccount])
 
 	const [state, setState] = useState<ExtensionState>({
 		version: "",
@@ -380,7 +356,6 @@ export const ExtensionStateContextProvider: React.FC<{
 	// References to store subscription cancellation functions
 	const stateSubscriptionRef = useRef<(() => void) | null>(null)
 
-	const marketplaceButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const mcpButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const historyButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const chatButtonUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -476,7 +451,7 @@ export const ExtensionStateContextProvider: React.FC<{
 			{
 				onResponse: () => {
 					console.log("[DEBUG] Received mcpButtonClicked event from gRPC stream")
-					navigateToMarketplace()
+					navigateToMcp()
 				},
 				onError: (error: any) => {
 					console.error("Error in mcpButtonClicked subscription:", error)
@@ -486,19 +461,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				},
 			},
 		)
-
-		marketplaceButtonUnsubscribeRef.current = UiServiceClient.subscribeToMarketplaceButtonClicked(EmptyRequest.create({}), {
-			onResponse: () => {
-				console.log("[DEBUG] Received marketplaceButtonClicked event from gRPC stream")
-				navigateToMarketplace()
-			},
-			onError: (error: any) => {
-				console.error("Error in marketplaceButtonClicked subscription:", error)
-			},
-			onComplete: () => {
-				console.log("marketplaceButtonClicked subscription completed")
-			},
-		})
 
 		// Set up history button clicked subscription with webview type
 		historyButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToHistoryButtonClicked(
@@ -688,10 +650,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				mcpButtonUnsubscribeRef.current()
 				mcpButtonUnsubscribeRef.current = null
 			}
-			if (marketplaceButtonUnsubscribeRef.current) {
-				marketplaceButtonUnsubscribeRef.current()
-				marketplaceButtonUnsubscribeRef.current = null
-			}
 			if (historyButtonClickedSubscriptionRef.current) {
 				historyButtonClickedSubscriptionRef.current()
 				historyButtonClickedSubscriptionRef.current = null
@@ -830,7 +788,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		mcpServers,
 		totalTasksSize,
 		availableTerminalProfiles,
-		showMarketplace,
 		showMcp,
 		mcpTab,
 		showSettings,
@@ -851,7 +808,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		enableCheckpointsSetting: state.enableCheckpointsSetting,
 
 		// Navigation functions
-		navigateToMarketplace,
 		navigateToMcp,
 		navigateToSettings,
 		navigateToSettingsModelPicker,
@@ -863,7 +819,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		hideSettings,
 		hideHistory,
 		hideAccount,
-		closeMarketplaceView,
 		setShowWelcome,
 		setOnboardingModels,
 		startProviderModelsRequest,
@@ -873,7 +828,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		setGroqModels,
 		setBasetenModels,
 		setHuggingFaceModels,
-		setShowMarketplace,
 		setShowMcp,
 		closeMcpView,
 		setGlobalClineRulesToggles: (toggles) =>

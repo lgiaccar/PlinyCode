@@ -1,5 +1,5 @@
 import { IntentEvent } from "@shared/proto/cline/ui"
-import { HistoryIcon, PlusIcon, PuzzleIcon, SettingsIcon } from "lucide-react"
+import { HistoryIcon, PlusIcon, ServerIcon, SettingsIcon } from "lucide-react"
 import { useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -7,7 +7,7 @@ import { TaskServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { useExtensionState } from "../../context/ExtensionStateContext"
 
 export const Navbar = () => {
-	const { navigateToHistory, navigateToSettings, navigateToMarketplace, navigateToChat } = useExtensionState()
+	const { navigateToHistory, navigateToSettings, navigateToMcp, navigateToChat } = useExtensionState()
 
 	const SETTINGS_TABS = useMemo(
 		() => [
@@ -32,11 +32,11 @@ export const Navbar = () => {
 				},
 			},
 			{
-				id: "customize",
-				name: "Customize",
-				tooltip: "Customize",
-				icon: PuzzleIcon,
-				navigate: navigateToMarketplace,
+				id: "mcp",
+				name: "MCP Servers",
+				tooltip: "MCP Servers",
+				icon: ServerIcon,
+				navigate: () => navigateToMcp(),
 			},
 			{
 				id: "history",
@@ -53,7 +53,7 @@ export const Navbar = () => {
 				navigate: navigateToSettings,
 			},
 		],
-		[navigateToChat, navigateToHistory, navigateToMarketplace, navigateToSettings],
+		[navigateToChat, navigateToHistory, navigateToMcp, navigateToSettings],
 	)
 
 	return (

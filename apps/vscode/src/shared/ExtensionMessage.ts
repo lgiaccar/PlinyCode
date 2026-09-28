@@ -78,7 +78,6 @@ export interface ExtensionState {
 	 */
 	epoch?: number
 	currentTaskItem?: HistoryItem
-	mcpMarketplaceEnabled?: boolean
 	mcpDisplayMode: McpDisplayMode
 	planActSeparateModelsSetting: boolean
 	enableCheckpointsSetting?: boolean
