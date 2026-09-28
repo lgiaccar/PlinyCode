@@ -13,13 +13,11 @@ export interface PlatformConfig {
 
 export enum PlatformType {
 	VSCODE = 0,
-	STANDALONE = 1,
 }
 
 function stringToPlatformType(name: string): PlatformType {
 	const mapping: Record<string, PlatformType> = {
 		vscode: PlatformType.VSCODE,
-		standalone: PlatformType.STANDALONE,
 	}
 	if (name in mapping) {
 		return mapping[name]
@@ -33,7 +31,7 @@ function stringToPlatformType(name: string): PlatformType {
 type PlatformConfigJson = {
 	messageEncoding: "none" | "json"
 	showNavbar: boolean
-	postMessageHandler: "vscode" | "standalone"
+	postMessageHandler: "vscode"
 	togglePlanActKeys: string
 	supportsTerminalMentions: boolean
 }
@@ -42,12 +40,6 @@ type PlatformConfigs = Record<string, PlatformConfigJson>
 
 // Global type declarations for postMessage and vscode API
 declare global {
-	interface Window {
-		// This is the post message handler injected by JetBrains.
-		// !! Do not change the name of the handler without updating it on
-		// the JetBrains side as well. !!
-		standalonePostMessage?: (message: string) => void
-	}
 	function acquireVsCodeApi(): any
 }
 
@@ -67,15 +59,6 @@ const postMessageStrategies: Record<string, PostMessageFunction> = {
 		} else {
 			console.log("postMessage fallback: ", message)
 		}
-	},
-	standalone: (message: any) => {
-		if (!window.standalonePostMessage) {
-			console.error("Standalone postMessage not found.")
-			return
-		}
-		const json = JSON.stringify(message)
-		console.log("Standalone postMessage: " + json.slice(0, 200))
-		window.standalonePostMessage(json)
 	},
 }
 

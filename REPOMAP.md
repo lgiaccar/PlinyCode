@@ -19,7 +19,7 @@ This is a directory map. Commands, workflows and rules are in the `AGENTS.md` fi
 
 ## Workspaces
 
-Root `package.json` defines workspaces: `sdk/packages/*`, `apps/*`, `apps/vscode/webview-ui`, `apps/vscode/testing-platform`.
+Root `package.json` defines workspaces: `sdk/packages/*`, `apps/*`, `apps/vscode/webview-ui`.
 
 > **Important:** Engine packages resolve each other through compiled `dist/`. You **must** run `bun run build:sdk` after any `sdk/packages/` change. Running processes do **not** hot-reload engine source.
 
@@ -34,11 +34,11 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 | `core/` | RPC handlers (`controller/`), storage, hooks, context and workspace helpers |
 | `services/` | VS Code–specific services (auth, telemetry, MCP, browser, search, …) |
 | `shared/` | Proto conversions, model catalog, providers, storage, utils |
-| `hosts/` | Host abstractions (`external/`, `vscode/`) |
+| `hosts/` | Host abstractions: `vscode/`, plus `external/AuthHandler.ts` (used by OCA sign-in) |
 | `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `openai-codex/`, `terminal/`) |
 | `sdk/` | The controller (`SdkController.ts`) and the bridge to the engine: per-concern coordinators, message translator, webview gRPC bridge, `router/` (FreeAuto/BalanceAuto), `model-catalog/`, `vscode-lm/` |
 | `types/`, `utils/` | Declarations & helpers |
-| `exports/`, `standalone/` | Public API & standalone mode |
+| `exports/` | Public API |
 | `generated/` | Auto-generated protobuf/gRPC code |
 | `test/`, `__tests__/` | Extension integration & unit tests |
 
@@ -46,12 +46,12 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 | Path | Role |
 |------|------|
-| `controller/` | One directory per RPC service, one file per RPC: account, browser, checkpoints, commands, file, gRPC recorder, marketplace, MCP, models, OCA account, remote config, slash commands, state, task, UI, web, worktree. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
+| `controller/` | One directory per RPC service, one file per RPC: account, browser, checkpoints, commands, file, marketplace, MCP, models, OCA account, remote config, slash commands, state, task, UI, web, worktree. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
 | `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
 | `storage/` | Persistence (`remote-config/`, `utils/`) |
 | `workspace/` | Workspace logic (`utils/`) |
-| `hooks/`, `locks/`, `mentions/`, `export/`, `webview/` | Supporting primitives |
+| `hooks/`, `mentions/`, `export/`, `webview/` | Supporting primitives |
 
 ### `src/services/`
 

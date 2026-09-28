@@ -8,7 +8,7 @@ import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import type { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
 import type { SdkSessionHost } from "./session-host"
 import type { VscodeSessionHost } from "./vscode-session-host"
-import { getEffectiveTerminalExecutionMode, type VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
+import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
 
 type StartInput = Parameters<VscodeSessionHost["start"]>[0]
 type InitialMessages = StartInput["initialMessages"]
@@ -59,8 +59,7 @@ export class SdkTerminalExecutionModeCoordinator {
 		}
 
 		const { sdkHost: oldManager, sessionId: oldSessionId } = activeSession
-		const requestedTerminalMode = this.options.stateManager.getGlobalStateKey("vscodeTerminalExecutionMode")
-		const terminalMode = getEffectiveTerminalExecutionMode(requestedTerminalMode)
+		const terminalMode = this.options.stateManager.getGlobalStateKey("vscodeTerminalExecutionMode")
 
 		Logger.log(`[SdkController] Restarting session ${oldSessionId} for terminal execution mode ${terminalMode}`)
 

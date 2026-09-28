@@ -37,7 +37,7 @@ for (const [key, value] of Object.entries(parentEnv)) {
 }
 
 // Valid platforms, these should the keys in platform-configs.json
-const VALID_PLATFORMS = ["vscode", "standalone"]
+const VALID_PLATFORMS = ["vscode"]
 const platform = process.env.PLATFORM || "vscode" // Default to vscode
 
 if (!VALID_PLATFORMS.includes(platform)) {

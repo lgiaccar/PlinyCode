@@ -78,9 +78,8 @@ if (!fsSync.existsSync(PROTOC)) {
 
 const PROTO_DIR = path.resolve("proto")
 const TS_OUT_DIR = path.resolve("src/shared/proto")
-const GRPC_JS_OUT_DIR = path.resolve("src/generated/grpc-js")
-const NICE_JS_OUT_DIR = path.resolve("src/generated/nice-grpc")
-const DESCRIPTOR_OUT_DIR = path.resolve("dist-standalone/proto")
+// Scratch output for the codegen scripts (descriptor set, Windows plugin wrapper).
+const DESCRIPTOR_OUT_DIR = path.resolve("out/proto")
 
 // protoc invokes the ts-proto plugin as a child process, so it needs a path it can
 // directly execute. On POSIX the package's JS bin (with its shebang) works. On
@@ -93,7 +92,7 @@ function resolveTsProtoPlugin() {
 	if (!isWindows) {
 		return pluginJs
 	}
-	const wrapperDir = path.resolve("dist-standalone")
+	const wrapperDir = DESCRIPTOR_OUT_DIR
 	fsSync.mkdirSync(wrapperDir, { recursive: true })
 	const wrapperPath = path.join(wrapperDir, "protoc-gen-ts_proto.cmd")
 	// %* forwards protoc's plugin args/stdio to the JS entry run under node.
@@ -125,7 +124,7 @@ async function compileProtos() {
 	checkAppleSiliconCompatibility()
 
 	// Create output directories if they don't exist
-	for (const dir of [TS_OUT_DIR, GRPC_JS_OUT_DIR, NICE_JS_OUT_DIR, DESCRIPTOR_OUT_DIR]) {
+	for (const dir of [TS_OUT_DIR, DESCRIPTOR_OUT_DIR]) {
 		await fs.mkdir(dir, { recursive: true })
 	}
 
@@ -134,10 +133,6 @@ async function compileProtos() {
 	console.log(chalk.cyan(`Processing ${protoFiles.length} proto files from`), PROTO_DIR)
 
 	tsProtoc(TS_OUT_DIR, protoFiles, TS_PROTO_OPTIONS)
-	// grpc-js is used to generate service impls for the ProtoBus service.
-	tsProtoc(GRPC_JS_OUT_DIR, protoFiles, ["outputServices=grpc-js", ...TS_PROTO_OPTIONS])
-	// nice-js is used for the Host Bridge client impls because it uses promises.
-	tsProtoc(NICE_JS_OUT_DIR, protoFiles, ["outputServices=nice-grpc,useExactTypes=false", ...TS_PROTO_OPTIONS])
 
 	const descriptorFile = path.join(DESCRIPTOR_OUT_DIR, "descriptor_set.pb")
 	const descriptorProtocArgs = [
@@ -184,8 +179,6 @@ async function cleanup() {
 	await rmrf("src/generated")
 
 	// Clean up generated files that were moved.
-	await rmrf("src/standalone/services/host-grpc-client.ts")
-	await rmrf("src/standalone/server-setup.ts")
 	await rmrf("src/hosts/vscode/host-grpc-service-config.ts")
 	await rmrf("src/core/controller/grpc-service-config.ts")
 	const oldhostbridgefiles = [

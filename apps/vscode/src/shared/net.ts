@@ -101,7 +101,7 @@
  * ```
  */
 
-import { EnvHttpProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from "undici"
+import { EnvHttpProxyAgent, fetch as undiciFetch } from "undici"
 import { Logger } from "./services/Logger"
 import { isTlsTrustError, trustedCaCertificates } from "./tls-trust"
 
@@ -135,16 +135,7 @@ function canReplay(input: string | URL | Request, init?: RequestInit): boolean {
 export const fetch: typeof globalThis.fetch = (() => {
 	// Note: Don't use Logger here; it may not be initialized.
 
-	let baseFetch: typeof globalThis.fetch = globalThis.fetch
-	// Note: See esbuild.mjs, process.env.IS_STANDALONE is statically rewritten
-	// to "true" or "false" (as strings) in the JetBrains/CLI build.
-	// We must use explicit string comparison because "false" is truthy in JS.
-	if (process.env.IS_STANDALONE === "true") {
-		// Configure undici with ProxyAgent
-		const agent = new EnvHttpProxyAgent({})
-		setGlobalDispatcher(agent)
-		baseFetch = undiciFetch as any as typeof globalThis.fetch
-	}
+	const baseFetch: typeof globalThis.fetch = globalThis.fetch
 
 	// Fallback for hosts whose chain the default trust store cannot verify (see
 	// tls-trust.ts): retried once with the extra CAs, then used for that origin
