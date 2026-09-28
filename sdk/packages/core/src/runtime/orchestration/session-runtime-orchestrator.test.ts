@@ -426,9 +426,6 @@ describe("SessionRuntime.getExtensionRegistry", () => {
 			log: vi.fn(),
 			error: vi.fn(),
 		};
-		const telemetry = {
-			capture: vi.fn(),
-		} as unknown as AgentConfig["telemetry"];
 		const ingestEvent = vi.fn();
 		let observed: AgentExtensionContext | undefined;
 		const extension: AgentExtension = {
@@ -452,7 +449,6 @@ describe("SessionRuntime.getExtensionRegistry", () => {
 					workspace: { rootPath: "/tmp/workspace" },
 					automation: { ingestEvent },
 					logger,
-					telemetry,
 				},
 			}),
 			deps,
@@ -468,37 +464,9 @@ describe("SessionRuntime.getExtensionRegistry", () => {
 		expect(observed?.user?.distinctId).toBe("user-1");
 		expect(observed?.workspaceInfo?.rootPath).toBe("/tmp/workspace");
 		expect(observed?.automation?.ingestEvent).toBe(ingestEvent);
-		expect(observed?.telemetry).toBe(telemetry);
 		expect(logger.log).toHaveBeenCalledWith("plugin setup", {
 			sessionId: "sess_plugin_context",
 		});
-	});
-
-	it("passes effective telemetry into AgentRuntime config", async () => {
-		const telemetry = {
-			capture: vi.fn(),
-		} as unknown as AgentConfig["telemetry"];
-		const { deps, configs } = withCapturingFakeRuntime();
-		const session = new SessionRuntime(makeAgentConfig({ telemetry }), deps);
-
-		await session.run("go");
-
-		expect(configs[0]?.telemetry).toBe(telemetry);
-	});
-
-	it("passes dependency telemetry into AgentRuntime config", async () => {
-		const telemetry = {
-			capture: vi.fn(),
-		} as unknown as AgentConfig["telemetry"];
-		const { deps, configs } = withCapturingFakeRuntime();
-		const session = new SessionRuntime(makeAgentConfig(), {
-			...deps,
-			telemetry,
-		});
-
-		await session.run("go");
-
-		expect(configs[0]?.telemetry).toBe(telemetry);
 	});
 
 	it("merges extension-registered tools into the AgentRuntime tools for the turn", async () => {
@@ -873,15 +841,10 @@ describe("SessionRuntime message preparation", () => {
 it("derives tool image support metadata from resolved provider model catalog", async () => {
 	const { deps, configs } = withCapturingFakeRuntime();
 	const execute = vi.fn(async () => "ok");
-	const telemetry = {
-		capture: vi.fn(),
-		captureRequired: vi.fn(),
-	} as unknown as AgentConfig["telemetry"];
 	const session = new SessionRuntime(
 		makeAgentConfig({
 			providerId: "cline",
 			modelId: "anthropic/claude-sonnet-4.6",
-			telemetry,
 			tools: [
 				{
 					name: "read_file",
@@ -935,13 +898,6 @@ it("derives tool image support metadata from resolved provider model catalog", a
 			modelSupportsImages: true,
 		}),
 	);
-	// The live telemetry service is a host object with cyclic internals; it
-	// must never ride on toolContextMetadata, which crosses process
-	// boundaries over JSON IPC (plugin sandbox, hub clients).
-	expect(Object.values(runtimeConfig.toolContextMetadata ?? {})).not.toContain(
-		telemetry,
-	);
-	expect(runtimeConfig.toolContextMetadata?.telemetry).toBeUndefined();
 });
 
 it.each([
@@ -2515,7 +2471,6 @@ describe("SessionRuntime.run — tracker wiring (P1 #3)", () => {
 			makeAgentConfig({ execution: { maxConsecutiveMistakes: 1 } }),
 			{
 				...deps,
-				telemetry: undefined,
 				logger: {
 					log() {},
 					debug() {},
@@ -2548,61 +2503,6 @@ describe("SessionRuntime.run — tracker wiring (P1 #3)", () => {
 		expect(abortCalls).toHaveLength(0);
 		await session.run("task two");
 		expect(abortCalls).toHaveLength(0);
-	});
-
-	it("captures task.mistake_limit_reached telemetry exactly once when the limit is hit", async () => {
-		const capture = vi.fn();
-		const telemetry = {
-			capture,
-			captureRequired: vi.fn(),
-			setDistinctId: vi.fn(),
-			setMetadata: vi.fn(),
-			updateMetadata: vi.fn(),
-			setCommonProperties: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: vi.fn(() => true),
-			recordCounter: vi.fn(),
-			recordHistogram: vi.fn(),
-			recordGauge: vi.fn(),
-			flush: vi.fn(async () => {}),
-			dispose: vi.fn(async () => {}),
-		};
-		const { deps } = makeScriptedRuntime({
-			events: failedToolTurnEvents(),
-		});
-		const session = new SessionRuntime(
-			makeAgentConfig({
-				execution: { maxConsecutiveMistakes: 2 },
-				sessionId: "sess_mistakes",
-				telemetry,
-			}),
-			deps,
-		);
-
-		await session.run("one");
-		// First failed turn — counter 1 < 2, no telemetry yet.
-		const limitEvents = () =>
-			capture.mock.calls
-				.map((call) => call[0])
-				.filter((event) => event.event === "task.mistake_limit_reached");
-		expect(limitEvents()).toHaveLength(0);
-
-		await session.continue("two");
-		// Second failed turn hits the limit: exactly one event, even though
-		// no `onConsecutiveMistakeLimitReached` callback is configured (the
-		// tracker falls back to the default stop decision).
-		const events = limitEvents();
-		expect(events).toHaveLength(1);
-		expect(events[0].properties).toMatchObject({
-			ulid: "sess_mistakes",
-			model: "claude-3-5-sonnet",
-			provider: "anthropic",
-			reason: "tool_execution_failed",
-			consecutiveMistakes: 2,
-			maxConsecutiveMistakes: 2,
-			isSubagent: false,
-		});
-		expect(events[0].properties.agentId).toMatch(/^agent_/);
 	});
 
 	it("aborts on hard-threshold loop detection of identical tool calls", async () => {
@@ -2789,16 +2689,11 @@ describe("SessionRuntime auth retry", () => {
 
 	it("retries once with refreshed credentials when a run fails with an auth error", async () => {
 		const onAuthError = vi.fn(async () => true);
-		const capture = vi.fn();
-		const telemetry = { capture } as unknown as AgentConfig["telemetry"];
 		const { deps, createdCount } = withSequencedRuntimes([
 			{ result: authFailure },
 			{ result: { outputText: "recovered" } },
 		]);
-		const session = new SessionRuntime(
-			makeAgentConfig({ onAuthError, telemetry }),
-			deps,
-		);
+		const session = new SessionRuntime(makeAgentConfig({ onAuthError }), deps);
 
 		const result = await session.run("go");
 
@@ -2806,10 +2701,6 @@ describe("SessionRuntime auth retry", () => {
 		expect(createdCount()).toBe(2);
 		expect(result.finishReason).toBe("completed");
 		expect(result.text).toBe("recovered");
-		expect(capture).toHaveBeenCalledWith({
-			event: "user.auth_run_retry",
-			properties: { provider: "anthropic", recovered: true },
-		});
 	});
 
 	it("returns the failed result when the host cannot refresh credentials", async () => {

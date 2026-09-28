@@ -17,7 +17,6 @@ vi.mock("./runtime/host/host", () => ({
 	createRuntimeHost: createRuntimeHostMock,
 }));
 
-import type { AgentResult } from "@plinycode/shared";
 import { ClineCore } from "./ClineCore";
 import { NoOpFeatureFlagsProvider } from "./services/feature-flags";
 
@@ -46,28 +45,6 @@ function createStartResult(sessionId: string): StartSessionResult {
 		manifest: {} as StartSessionResult["manifest"],
 		manifestPath: `/tmp/${sessionId}.json`,
 		messagesPath: `/tmp/${sessionId}.messages.json`,
-	};
-}
-
-function createAgentResult(text: string): AgentResult {
-	const now = new Date("2026-04-24T10:00:00.000Z");
-	return {
-		text,
-		usage: {
-			inputTokens: 1,
-			outputTokens: 1,
-		},
-		messages: [],
-		toolCalls: [],
-		iterations: 1,
-		finishReason: "completed",
-		model: {
-			id: "test-model",
-			provider: "test-provider",
-		},
-		startedAt: now,
-		endedAt: now,
-		durationMs: 1,
 	};
 }
 
@@ -353,61 +330,6 @@ describe("ClineCore", () => {
 		expect(dispose).toHaveBeenCalledTimes(1);
 	});
 
-	it("emits session.started telemetry when a new session is started", async () => {
-		const host = {
-			runtimeAddress: undefined,
-			startSession: vi.fn(async () => createStartResult("session-telemetry")),
-			runTurn: vi.fn(),
-			getAccumulatedUsage: vi.fn(),
-			abort: vi.fn(),
-			stopSession: vi.fn(),
-			dispose: vi.fn(),
-			getSession: vi.fn(async () => undefined),
-			listSessions: vi.fn(),
-			deleteSession: vi.fn(),
-			readSessionMessages: vi.fn(),
-			subscribe: vi.fn(() => () => {}),
-			updateSessionModel: vi.fn(),
-		};
-		createRuntimeHostMock.mockResolvedValue(host);
-
-		const telemetry = {
-			capture: vi.fn(),
-			captureRequired: vi.fn(),
-			setDistinctId: vi.fn(),
-			setMetadata: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: vi.fn(() => true),
-			recordCounter: vi.fn(),
-			recordHistogram: vi.fn(),
-			recordGauge: vi.fn(),
-			flush: vi.fn().mockResolvedValue(undefined),
-			dispose: vi.fn().mockResolvedValue(undefined),
-		};
-
-		const core = await ClineCore.create({
-			clientName: "unit-test-client",
-			telemetry: telemetry as never,
-		});
-		await core.start(createStartInput());
-
-		expect(telemetry.capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "session.started",
-				properties: expect.objectContaining({
-					sessionId: "session-telemetry",
-					source: "core",
-					providerId: "anthropic",
-					modelId: "claude-sonnet-4-6",
-					enableTools: true,
-					enableSpawnAgent: false,
-					enableAgentTeams: false,
-					clientName: "unit-test-client",
-				}),
-			}),
-		);
-	});
-
 	it("merges instance and per-start runtime capabilities", async () => {
 		const host = {
 			runtimeAddress: undefined,
@@ -512,50 +434,6 @@ describe("ClineCore", () => {
 			clientContext,
 		);
 		expect(startInput.localRuntime?.onTeamRestored).toBe(onTeamRestored);
-	});
-
-	it("prefers the per-session telemetry service over the ClineCore one", async () => {
-		const host = {
-			runtimeAddress: undefined,
-			startSession: vi.fn(async () => createStartResult("session-override")),
-			runTurn: vi.fn(),
-			getAccumulatedUsage: vi.fn(),
-			abort: vi.fn(),
-			stopSession: vi.fn(),
-			dispose: vi.fn(),
-			getSession: vi.fn(async () => undefined),
-			listSessions: vi.fn(),
-			deleteSession: vi.fn(),
-			readSessionMessages: vi.fn(),
-			subscribe: vi.fn(() => () => {}),
-			updateSessionModel: vi.fn(),
-		};
-		createRuntimeHostMock.mockResolvedValue(host);
-
-		const coreTelemetry = {
-			capture: vi.fn(),
-			setDistinctId: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: vi.fn(() => true),
-		};
-		const sessionTelemetry = {
-			capture: vi.fn(),
-			setDistinctId: vi.fn(),
-			updateCommonProperties: vi.fn(),
-			isEnabled: vi.fn(() => true),
-		};
-
-		const core = await ClineCore.create({
-			telemetry: coreTelemetry as never,
-		});
-		const input = createStartInput();
-		input.config.telemetry = sessionTelemetry as never;
-		await core.start(input);
-
-		expect(sessionTelemetry.capture).toHaveBeenCalledWith(
-			expect.objectContaining({ event: "session.started" }),
-		);
-		expect(coreTelemetry.capture).not.toHaveBeenCalled();
 	});
 
 	it("uses a no-op feature flags provider by default", async () => {

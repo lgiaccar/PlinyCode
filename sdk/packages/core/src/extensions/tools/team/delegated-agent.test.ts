@@ -5,7 +5,7 @@ import {
 } from "./delegated-agent";
 
 describe("buildDelegatedAgentConfig", () => {
-	it("inherits the parent distinctId and sessionId for telemetry grouping", () => {
+	it("inherits the parent distinctId and sessionId", () => {
 		const configProvider = createDelegatedAgentConfigProvider({
 			providerId: "anthropic",
 			modelId: "claude-sonnet-4-5",

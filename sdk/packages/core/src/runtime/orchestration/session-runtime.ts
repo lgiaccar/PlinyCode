@@ -5,7 +5,6 @@ import type {
 	AgentResult,
 	AgentTool,
 	BasicLogger,
-	ITelemetryService,
 	ModelTool,
 	RuntimeConfigExtensionKind,
 	ToolApprovalRequest,
@@ -49,7 +48,6 @@ export interface BuiltRuntime {
 	modelTools?: ModelTool[];
 	hooks?: AgentHooks;
 	logger?: BasicLogger;
-	telemetry?: ITelemetryService;
 	teamRuntime?: AgentTeamsRuntime;
 	teamRestoredFromPersistence?: boolean;
 	delegatedAgentConfigProvider?: DelegatedAgentConfigProvider;
@@ -63,7 +61,7 @@ export interface RuntimeBuilderInput {
 	config: CoreSessionConfig;
 	/**
 	 * Host-resolved stable end-user identity, forwarded so delegated agents
-	 * (sub-agents / teammates) emit the same telemetry `userId` as the lead.
+	 * (sub-agents / teammates) send the same gateway `userId` as the lead.
 	 */
 	distinctId?: string;
 	hooks?: AgentHooks;
@@ -86,7 +84,6 @@ export interface RuntimeBuilderInput {
 	toolPolicies?: CoreSessionConfig["toolPolicies"];
 	workspaceManager?: WorkspaceManager;
 	logger?: BasicLogger;
-	telemetry?: ITelemetryService;
 	requestToolApproval?: (
 		request: ToolApprovalRequest,
 	) => Promise<ToolApprovalResult> | ToolApprovalResult;

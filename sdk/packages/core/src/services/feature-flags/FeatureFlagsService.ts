@@ -6,14 +6,12 @@ import type {
 	FeatureFlagsAndPayloads,
 	FeatureFlagsContext,
 	IFeatureFlagsProvider,
-	ITelemetryService,
 } from "@plinycode/shared";
 import {
 	FEATURE_FLAGS,
 	type FeatureFlag,
 	FeatureFlagDefaultValue,
 } from "@plinycode/shared";
-import { CORE_TELEMETRY_EVENTS } from "../telemetry/core-events";
 
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_PERSISTENT_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -36,7 +34,6 @@ interface FeatureFlagsCacheFile {
 
 export interface FeatureFlagsServiceOptions {
 	provider: IFeatureFlagsProvider;
-	telemetry?: ITelemetryService;
 	logger?: BasicLogger;
 	cacheTtlMs?: number;
 	cacheFilePath?: string;
@@ -46,7 +43,6 @@ export interface FeatureFlagsServiceOptions {
 
 export class FeatureFlagsService {
 	private readonly provider: IFeatureFlagsProvider;
-	private readonly telemetry?: ITelemetryService;
 	private readonly logger?: BasicLogger;
 	private readonly cacheTtlMs: number;
 	private readonly cacheFilePath?: string;
@@ -57,7 +53,6 @@ export class FeatureFlagsService {
 
 	constructor(options: FeatureFlagsServiceOptions) {
 		this.provider = options.provider;
-		this.telemetry = options.telemetry;
 		this.logger = options.logger;
 		this.cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
 		this.cacheFilePath = options.cacheFilePath;
@@ -297,16 +292,6 @@ export class FeatureFlagsService {
 			const flagValue = this.cacheInfo.flagsPayload?.featureFlags?.[flagName];
 			const value =
 				payload ?? flagValue ?? FeatureFlagDefaultValue[flagName] ?? undefined;
-
-			if (!this.cache.has(flagName) || this.cache.get(flagName) !== value) {
-				this.telemetry?.capture({
-					event: CORE_TELEMETRY_EVENTS.FEATURE_FLAGS.FLAG_CALLED,
-					properties: {
-						$feature_flag: flagName,
-						$feature_flag_response: flagValue,
-					},
-				});
-			}
 
 			return value;
 		} catch (error) {

@@ -596,46 +596,6 @@ describe("createCheckpointHooks", () => {
 		).toEqual([1, 2]);
 	});
 
-	it("emits one checkpoint.snapshot event per snapshot attempt without file paths", async () => {
-		const cwd = await createGitRepo();
-		const sessionId = "sess_telemetry";
-		let metadata: Record<string, unknown> | undefined;
-		const events: { event: string; properties?: Record<string, unknown> }[] =
-			[];
-		try {
-			const hooks = createCheckpointHooks({
-				cwd,
-				sessionId,
-				telemetry: {
-					capture: (input) => {
-						events.push(input);
-					},
-				},
-				readSessionMetadata: async () => metadata,
-				writeSessionMetadata: async (next) => {
-					metadata = next;
-				},
-			});
-
-			await writeFile(join(cwd, "loose-data.txt"), "loose\n", "utf8");
-			await runCheckpointHooks(hooks);
-
-			expect(events).toHaveLength(1);
-			expect(events[0]?.event).toBe("checkpoint.snapshot");
-			expect(events[0]?.properties).toMatchObject({
-				sessionId,
-				runCount: 1,
-				outcome: "stash",
-			});
-			expect(typeof events[0]?.properties?.durationMs).toBe("number");
-			// Durations and outcomes only — never workspace file paths.
-			expect(JSON.stringify(events[0])).not.toContain("loose-data");
-		} finally {
-			await deleteCheckpointRefs(cwd, sessionId);
-			await rm(cwd, { recursive: true, force: true });
-		}
-	});
-
 	it("drops persistent-index entries for untracked files that disappear between runs", async () => {
 		// The per-session GIT_INDEX_FILE caches untracked hashes across turns so
 		// unchanged files are not re-hashed; a file that was deleted (or became

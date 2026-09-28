@@ -34,10 +34,8 @@ describe("FeatureFlagsService", () => {
 
 	it("polls provider values into the cache", async () => {
 		const provider = createProvider();
-		const telemetry = { capture: vi.fn() };
 		const service = new FeatureFlagsService({
 			provider,
-			telemetry: telemetry as never,
 			context: { distinctId: "machine-1", clientName: "unit-test" },
 		});
 
@@ -53,13 +51,6 @@ describe("FeatureFlagsService", () => {
 		});
 		expect(service.getBooleanFlagEnabled(TEST_BOOLEAN_FLAG)).toBe(true);
 		expect(service.getFlagPayload(TEST_PAYLOAD_FLAG)).toBe(1234);
-		expect(telemetry.capture).toHaveBeenCalledWith({
-			event: "$feature_flag_called",
-			properties: {
-				$feature_flag: TEST_BOOLEAN_FLAG,
-				$feature_flag_response: true,
-			},
-		});
 	});
 
 	it("skips polling while the cache is fresh and user context is unchanged", async () => {

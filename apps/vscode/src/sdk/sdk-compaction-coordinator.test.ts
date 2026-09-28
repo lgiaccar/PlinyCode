@@ -399,7 +399,6 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		knownModels: undefined,
 		compaction: undefined,
 		logger: undefined,
-		telemetry: undefined,
 		sessionId: undefined as string | undefined,
 	}
 	const options = {

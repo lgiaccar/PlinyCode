@@ -1,4 +1,3 @@
-import type { ITelemetryService } from "@plinycode/shared";
 import type { OAuthServerCloseInfo, OAuthServerListeningInfo } from "./server";
 
 export interface OAuthPrompt {
@@ -18,7 +17,7 @@ export interface OAuthCredentials {
 	 */
 	accountId?: string;
 	/**
-	 * Optional email for display/telemetry.
+	 * Optional email for display.
 	 */
 	email?: string;
 	/**
@@ -100,7 +99,6 @@ export interface OcaOAuthProviderOptions {
 	requestTimeoutMs?: number;
 	refreshBufferMs?: number;
 	retryableTokenGraceMs?: number;
-	telemetry?: ITelemetryService;
 }
 
 export interface OcaTokenResolution {

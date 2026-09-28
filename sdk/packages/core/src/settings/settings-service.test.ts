@@ -820,7 +820,6 @@ Use the browser.`,
 		).toEqual({
 			autoUpdateEnabled: true,
 			disabledTools: ["plugin-tool"],
-			telemetryOptOut: false,
 		});
 
 		await service.toggle({ type: "tools", name: "plugin-tool", enabled: true });
@@ -829,6 +828,6 @@ Use the browser.`,
 			JSON.parse(
 				await readFile(process.env.CLINE_GLOBAL_SETTINGS_PATH, "utf8"),
 			),
-		).toEqual({ autoUpdateEnabled: true, telemetryOptOut: false });
+		).toEqual({ autoUpdateEnabled: true });
 	});
 });

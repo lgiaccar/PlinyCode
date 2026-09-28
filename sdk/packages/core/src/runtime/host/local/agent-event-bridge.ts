@@ -7,12 +7,10 @@ import type {
 import type { TeamEvent } from "../../../extensions/tools/team";
 import {
 	type AgentEventContext,
-	type AgentTelemetryContextOverrides,
-	buildTelemetryAgentIdentity,
+	type AgentEventContextOverrides,
 	extractAgentEventMetadata,
 	handleAgentEvent,
 } from "../../../services/agent-events";
-import { captureAgentCreated } from "../../../services/telemetry/core-events";
 import {
 	dispatchTeamEventToBackend,
 	emitTeamProgress,
@@ -45,12 +43,12 @@ export class AgentEventBridge {
 	 * was still registered. A session's agent can keep emitting after the host
 	 * removes it from the sessions map (teardown deletes the entry before the
 	 * run fully drains), and without this snapshot those late events reach
-	 * telemetry with no agent identity at all. Bounded FIFO so a long-lived
+	 * clients with no agent identity at all. Bounded FIFO so a long-lived
 	 * host doesn't accumulate entries forever.
 	 */
 	private readonly lastKnownIdentityBySession = new Map<
 		string,
-		AgentTelemetryContextOverrides
+		AgentEventContextOverrides
 	>();
 	private static readonly MAX_IDENTITY_SNAPSHOTS = 512;
 
@@ -75,9 +73,8 @@ export class AgentEventBridge {
 			(!eventMetadata.agentId ||
 				eventMetadata.agentId === readAgentId(liveSession.agent));
 		if (isRootAgentEvent) {
-			const identity: AgentTelemetryContextOverrides = {
+			const identity: AgentEventContextOverrides = {
 				agentId: readAgentId(liveSession.agent),
-				conversationId: liveSession.agent.getConversationId(),
 				...(liveSession?.runtime.teamRuntime
 					? { teamRole: "lead" as const }
 					: {}),
@@ -103,7 +100,7 @@ export class AgentEventBridge {
 
 	private rememberSessionIdentity(
 		sessionId: string,
-		identity: AgentTelemetryContextOverrides,
+		identity: AgentEventContextOverrides,
 	): void {
 		// Delete-then-set keeps insertion order acting as least-recently-updated
 		// for the FIFO eviction below.
@@ -144,26 +141,6 @@ export class AgentEventBridge {
 					isPrimaryAgentEvent: false,
 				});
 			}
-			if (event.type === "teammate_spawned") {
-				const agentIdentity = buildTelemetryAgentIdentity({
-					agentId: event.teammate.runtimeAgentId ?? event.agentId,
-					conversationId: event.teammate.conversationId,
-					parentAgentId: event.teammate.parentAgentId,
-					createdByAgentId: readAgentId(session.agent),
-					teamId: session.runtime.teamRuntime?.getTeamId(),
-					teamName: session.runtime.teamRuntime?.getTeamName(),
-					teamRole: "teammate",
-					teamAgentId: event.agentId,
-				});
-				if (agentIdentity) {
-					captureAgentCreated(session.config.telemetry, {
-						ulid: rootSessionId,
-						modelId: event.teammate.modelId ?? session.config.modelId,
-						provider: session.config.providerId,
-						...agentIdentity,
-					});
-				}
-			}
 		}
 
 		await dispatchTeamEventToBackend(
@@ -183,18 +160,9 @@ export class AgentEventBridge {
 		fallbackAutomation?: NonNullable<
 			CoreSessionConfig["extensionContext"]
 		>["automation"],
-		fallbackTelemetry?: CoreSessionConfig["telemetry"],
 	): Promise<void> {
 		if (event.name === "plugin_log") {
 			this.handlePluginLog(rootSessionId, event.payload);
-			return;
-		}
-		if (event.name === "plugin_telemetry") {
-			this.handlePluginTelemetry(
-				rootSessionId,
-				event.payload,
-				fallbackTelemetry,
-			);
 			return;
 		}
 		if (event.name === "automation_event") {
@@ -238,92 +206,6 @@ export class AgentEventBridge {
 						? "steer"
 						: "queue";
 		this.deps.enqueuePendingPrompt(targetSessionId, { prompt, delivery });
-	}
-
-	/**
-	 * Route `plugin_telemetry` events emitted by the sandbox-side telemetry
-	 * bridge into the host telemetry service. Sandboxed plugins cannot hold
-	 * the live service (it is not JSON-serializable across the IPC boundary),
-	 * so their capture/record calls arrive as events. All plugin events are
-	 * namespaced under `plugin.` and stamped with the plugin name so they
-	 * cannot impersonate first-party events.
-	 */
-	handlePluginTelemetry(
-		rootSessionId: string,
-		payload: unknown,
-		fallbackTelemetry?: CoreSessionConfig["telemetry"],
-	): void {
-		// Plugin setup() runs during session bootstrap, before the session is
-		// registered in the sessions map — the fallback keeps setup-time
-		// telemetry (and any other pre-registration events) from being
-		// silently dropped, mirroring handlePluginLog's fallback logger.
-		const session = this.deps.getSession(rootSessionId);
-		const telemetry = session?.config.telemetry ?? fallbackTelemetry;
-		if (!telemetry || !payload || typeof payload !== "object") return;
-		const record = payload as Record<string, unknown>;
-		const pluginName =
-			typeof record.pluginName === "string" && record.pluginName
-				? record.pluginName
-				: "unknown";
-
-		if (record.kind === "event") {
-			const event = typeof record.event === "string" ? record.event.trim() : "";
-			if (!event) return;
-			const properties = {
-				...(record.properties && typeof record.properties === "object"
-					? (record.properties as Record<string, unknown>)
-					: {}),
-				plugin_name: pluginName,
-				session_id: rootSessionId,
-			};
-			if (record.required === true) {
-				telemetry.captureRequired(`plugin.${event}`, properties);
-			} else {
-				telemetry.capture({ event: `plugin.${event}`, properties });
-			}
-			return;
-		}
-
-		if (record.kind === "metric") {
-			const name = typeof record.name === "string" ? record.name.trim() : "";
-			const value = typeof record.value === "number" ? record.value : NaN;
-			if (!name || Number.isNaN(value)) return;
-			const attributes = {
-				...(record.attributes && typeof record.attributes === "object"
-					? (record.attributes as Record<string, unknown>)
-					: {}),
-				plugin_name: pluginName,
-			};
-			const description =
-				typeof record.description === "string" ? record.description : undefined;
-			const required = record.required === true;
-			const metricName = `plugin.${name}`;
-			if (record.metric === "counter") {
-				telemetry.recordCounter(
-					metricName,
-					value,
-					attributes,
-					description,
-					required,
-				);
-			} else if (record.metric === "histogram") {
-				telemetry.recordHistogram(
-					metricName,
-					value,
-					attributes,
-					description,
-					required,
-				);
-			} else if (record.metric === "gauge") {
-				telemetry.recordGauge(
-					metricName,
-					value,
-					attributes,
-					description,
-					required,
-				);
-			}
-		}
 	}
 
 	handlePluginLog(

@@ -65,7 +65,7 @@ Read the resolved paths from `result.manifest.cwd` and
 `ClineCore.create(...)` also accepts `prepare(input)`.
 
 Use it when a host needs to prepare workspace-scoped runtime state before each
-session starts, then apply watcher/extensions/telemetry inputs through
+session starts, then apply watcher/extensions inputs through
 explicit `localRuntime` bootstrap fields without widening the shared host
 contract.
 

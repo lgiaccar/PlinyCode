@@ -21,9 +21,6 @@
 			"@plinycode/core/hub/daemon-entry": [
 				"./packages/core/src/hub/daemon/entry.ts"
 			],
-			"@plinycode/core/telemetry": [
-				"./packages/core/src/services/telemetry/index.ts"
-			],
 			"@plinycode/core/*": [
 				"./packages/core/src/*",
 				"./packages/core/src/*/index.ts"

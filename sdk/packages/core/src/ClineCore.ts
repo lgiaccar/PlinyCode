@@ -1,4 +1,4 @@
-import type { BasicLogger, ITelemetryService } from "@plinycode/shared";
+import type { BasicLogger } from "@plinycode/shared";
 import { createClineCoreExtensionContext } from "./cline-core/extension-context";
 import {
 	createClineCorePendingPromptsApi,
@@ -9,7 +9,6 @@ import {
 	normalizeClineCoreStartInput,
 	toClineCoreStartInput,
 } from "./cline-core/start-input";
-import { emitSessionStartedTelemetry } from "./cline-core/telemetry";
 import type {
 	ClineCoreListHistoryOptions,
 	ClineCoreOptions,
@@ -36,11 +35,11 @@ import type {
 	StartSessionInput,
 	StartSessionResult,
 } from "./runtime/host/runtime-host";
+import { resolveCoreDistinctId } from "./services/distinct-id";
 import {
 	FeatureFlagsService,
 	NoOpFeatureFlagsProvider,
 } from "./services/feature-flags";
-import { resolveCoreDistinctId } from "./services/telemetry/distinct-id";
 import { compareCheckpointToWorkspace } from "./session/checkpoint-diff";
 import {
 	projectSessionMessagesForDisplay,
@@ -83,7 +82,6 @@ export class ClineCore {
 	private readonly prepare: ClineCoreOptions["prepare"] | undefined;
 	private readonly capabilities: RuntimeCapabilities | undefined;
 	private readonly logger: BasicLogger | undefined;
-	private readonly telemetry: ITelemetryService | undefined;
 	private readonly distinctId: string | undefined;
 	private readonly activeSessionBootstraps = new Map<
 		string,
@@ -98,7 +96,6 @@ export class ClineCore {
 		prepare: ClineCoreOptions["prepare"],
 		capabilities: RuntimeCapabilities | undefined,
 		logger: BasicLogger | undefined,
-		telemetry: ITelemetryService | undefined,
 		distinctId: string | undefined,
 		featureFlags: FeatureFlagsService,
 	) {
@@ -108,7 +105,6 @@ export class ClineCore {
 		this.prepare = prepare;
 		this.capabilities = capabilities;
 		this.logger = logger;
-		this.telemetry = telemetry;
 		this.distinctId = distinctId;
 		this.featureFlags = featureFlags;
 		this.settings = createClineCoreSettingsApi(host);
@@ -147,7 +143,6 @@ export class ClineCore {
 			options.featureFlags ||
 			new FeatureFlagsService({
 				provider: new NoOpFeatureFlagsProvider(),
-				telemetry: options.telemetry,
 				logger: options.logger,
 				context: {
 					distinctId,
@@ -161,7 +156,6 @@ export class ClineCore {
 			options.prepare,
 			capabilities,
 			options.logger,
-			options.telemetry,
 			distinctId,
 			featureFlags,
 		);
@@ -226,7 +220,6 @@ export class ClineCore {
 							clientName: this.clientName,
 							distinctId: this.distinctId,
 							logger: this.logger,
-							telemetry: this.telemetry,
 						}),
 				}),
 			);
@@ -238,13 +231,6 @@ export class ClineCore {
 					await Promise.resolve(bootstrap.dispose?.());
 				}
 			}
-			emitSessionStartedTelemetry({
-				input: preparedInput,
-				sessionId: result.sessionId,
-				telemetry: this.telemetry,
-				clientName: this.clientName,
-				runtimeAddress: this.runtimeAddress,
-			});
 			return result;
 		} catch (error) {
 			await Promise.resolve(bootstrap?.dispose?.());
@@ -491,7 +477,6 @@ export class ClineCore {
 							clientName: this.clientName,
 							distinctId: this.distinctId,
 							logger: this.logger,
-							telemetry: this.telemetry,
 						}),
 				})
 			: undefined;

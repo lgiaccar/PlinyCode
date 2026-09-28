@@ -2,7 +2,6 @@ import { supportsModelTool } from "@plinycode/llms";
 import type {
 	AgentTool,
 	BasicLogger,
-	ITelemetryService,
 	ModelTool,
 	RuntimeConfigExtensionKind,
 	TeamTeammateSpec,
@@ -146,7 +145,6 @@ function createBuiltinToolsList(
 	toolPolicies: CoreSessionConfig["toolPolicies"],
 	skillsExecutor?: SkillsExecutorWithMetadata,
 	executorOverrides?: Partial<ToolExecutors>,
-	telemetry?: ITelemetryService,
 	runCommandExecutionController?: RunCommandExecutionController,
 ): AgentTool[] {
 	const preset = ToolPresets[resolveToolPresetName({ mode })];
@@ -160,7 +158,6 @@ function createBuiltinToolsList(
 	return filterAvailableTools(
 		createBuiltinTools({
 			cwd,
-			telemetry,
 			executorOptions: {
 				bash: { executionController: runCommandExecutionController },
 			},
@@ -406,7 +403,6 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			hooks,
 			extensions,
 			logger,
-			telemetry,
 			createSpawnTool,
 			onTeamRestored,
 			userInstructionService: sharedUserInstructionService,
@@ -553,9 +549,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 		// the guard appears/disappears with the mode.
 		const planModeCommandGuard =
 			normalized.mode === "plan" && normalized.enableTools
-				? createPlanModeCommandGuardExtension({
-						telemetry: telemetry ?? config.telemetry,
-					})
+				? createPlanModeCommandGuardExtension()
 				: undefined;
 		const injectedExtensions = [
 			userInstructionPlugin,
@@ -577,7 +571,6 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 					effectiveToolPolicies,
 					undefined,
 					toolExecutors,
-					telemetry ?? config.telemetry,
 					input.runCommandExecutionController,
 				),
 			);
@@ -636,7 +629,6 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			hooks,
 			extensions: runtimeExtensions,
 			logger: logger ?? config.logger,
-			telemetry: input.telemetry ?? config.telemetry,
 			workspaceMetadata: config.workspaceMetadata,
 		});
 		if (normalized.enableSpawnAgent) {
@@ -663,7 +655,6 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 														)
 													: undefined,
 												toolExecutors,
-												telemetry ?? config.telemetry,
 												input.runCommandExecutionController,
 											),
 											agent,
@@ -767,7 +758,6 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 									effectiveToolPolicies,
 									undefined,
 									toolExecutors,
-									telemetry ?? config.telemetry,
 									input.runCommandExecutionController,
 								)
 						: undefined,
@@ -855,7 +845,6 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			tools: finalTools,
 			modelTools,
 			logger: logger ?? config.logger,
-			telemetry: telemetry ?? config.telemetry,
 			teamRuntime,
 			teamRestoredFromPersistence: Boolean(restoredTeamState),
 			delegatedAgentConfigProvider:

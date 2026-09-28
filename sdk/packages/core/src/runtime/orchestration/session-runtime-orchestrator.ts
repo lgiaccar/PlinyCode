@@ -38,7 +38,6 @@ import {
 	type BasicLogger,
 	type ContributionRegistry,
 	createContributionRegistry,
-	type ITelemetryService,
 	isLikelyAuthError,
 	type LegacyAgentUsage,
 	type LoopDetectionConfig,
@@ -57,10 +56,6 @@ import {
 	createAgentModelFromConfig,
 	resolveKnownModelsFromConfig,
 } from "../../services/llms/handler-factory";
-import {
-	captureAuthRunRetry,
-	captureMistakeLimitReached,
-} from "../../services/telemetry/core-events";
 import {
 	getMessageBuilderOptionsFromEnv,
 	MessageBuilder,
@@ -281,7 +276,6 @@ export type SessionEventListener = (event: AgentEvent) => void;
 /** Subset of host-side deps needed by the session orchestrator. */
 export interface SessionRuntimeOrchestratorDeps {
 	readonly logger?: BasicLogger;
-	readonly telemetry?: ITelemetryService;
 	/**
 	 * Test hook: override the `AgentRuntime` factory. Production
 	 * callers leave this undefined and get the real `createAgentRuntime`.
@@ -315,11 +309,6 @@ export class SessionRuntime {
 	private readonly agentId: string;
 	private readonly parentAgentId?: string;
 	private readonly logger?: BasicLogger;
-	// §3.4.4 telemetry parity. Currently consumed by the MistakeTracker's
-	// `onLimitTelemetry` hook (task.mistake_limit_reached); most other
-	// runtime telemetry is emitted host-side from the agent event stream
-	// (services/agent-events.ts).
-	readonly telemetry?: ITelemetryService;
 	private readonly conversation: ConversationStore;
 	private readonly mistakeTracker: MistakeTracker;
 	private readonly loopTracker: LoopDetectionTracker;
@@ -419,7 +408,6 @@ export class SessionRuntime {
 			.slice(2, 8)}`;
 		this.parentAgentId = config.parentAgentId;
 		this.logger = deps.logger ?? config.logger;
-		this.telemetry = deps.telemetry ?? config.telemetry;
 		this.createAgentRuntimeImpl =
 			deps.createAgentRuntimeImpl ?? createAgentRuntime;
 
@@ -438,7 +426,6 @@ export class SessionRuntime {
 				workspaceInfo: config.extensionContext?.workspace,
 				automation: config.extensionContext?.automation,
 				logger: config.extensionContext?.logger ?? this.logger,
-				telemetry: config.extensionContext?.telemetry ?? this.telemetry,
 			},
 		});
 		// Resolve + validate eagerly so `getExtensionRegistry()` is
@@ -454,22 +441,6 @@ export class SessionRuntime {
 		this.mistakeTracker = new MistakeTracker({
 			maxConsecutiveMistakes: maxMistakes,
 			onLimitReached: config.onConsecutiveMistakeLimitReached,
-			onLimitTelemetry: (context) => {
-				// Read connection fields from `this.config` at fire time so a
-				// mid-session `updateConnection` is reflected in the event.
-				captureMistakeLimitReached(this.telemetry, {
-					ulid: this.config.sessionId ?? this.conversation.getConversationId(),
-					model: this.config.modelId,
-					provider: this.config.providerId,
-					reason: context.reason,
-					consecutiveMistakes: context.consecutiveMistakes,
-					maxConsecutiveMistakes: context.maxConsecutiveMistakes,
-					agentId: this.agentId,
-					conversationId: this.conversation.getConversationId(),
-					parentAgentId: this.parentAgentId,
-					isSubagent: Boolean(this.parentAgentId),
-				});
-			},
 			emit: (event) => this.emitLegacyEvent(event),
 			log: (level, message, metadata) =>
 				leveledLog(this.logger, level, message, metadata),
@@ -811,11 +782,6 @@ export class SessionRuntime {
 
 			this.discardDeferredRunFailure();
 			result = await this.executeRunInternal({ isContinue: true });
-			if (recovered.kind === "auth") {
-				captureAuthRunRetry(this.telemetry, this.config.providerId, {
-					recovered: result.finishReason !== "error",
-				});
-			}
 		}
 
 		// Whatever the outcome, a failure that was never recovered must still be
@@ -977,7 +943,6 @@ export class SessionRuntime {
 						}
 					: this.config,
 				this.logger,
-				this.telemetry,
 			);
 		const agentModel = this.config.agentModelFactory
 			? this.config.agentModelFactory({
@@ -1041,7 +1006,6 @@ export class SessionRuntime {
 			parentAgentId: this.parentAgentId,
 			model: agentModel,
 			logger: this.logger,
-			telemetry: this.telemetry,
 			tools,
 			toolContextMetadata: {
 				modelSupportsImages: modelSupportsImageInput(modelInfo ?? {}),

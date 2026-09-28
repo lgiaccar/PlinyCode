@@ -1,8 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ITelemetryService } from "@plinycode/shared";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
 	GlobalSettingsSchema,
 	isAgentPluginDisabledGlobally,
@@ -21,7 +20,6 @@ import {
 	setDisabledTools,
 	setModelToolEnabledGlobally,
 	setPlanActModeGlobally,
-	setTelemetryOptOutGlobally,
 	setToolAutoApproveGlobally,
 	setTuiThemeGlobally,
 	writeGlobalSettings,
@@ -46,17 +44,15 @@ describe("global-settings", () => {
 			disabledAgentPlugins: ["portable"],
 			disabledPlugins: ["/plugins/example.js"],
 			disabledTools: ["editor", "read_files"],
-			telemetryOptOut: false,
 		});
 		expect(
 			GlobalSettingsSchema.parse({
 				disabledTools: [],
-				telemetryOptOut: true,
+				toolAutoApprove: true,
 			}),
-		).toEqual({ autoUpdateEnabled: true, telemetryOptOut: true });
+		).toEqual({ autoUpdateEnabled: true, toolAutoApprove: true });
 		expect(GlobalSettingsSchema.parse({ disabledTools: [] })).toEqual({
 			autoUpdateEnabled: true,
-			telemetryOptOut: false,
 		});
 		expect(
 			GlobalSettingsSchema.parse({
@@ -68,17 +64,16 @@ describe("global-settings", () => {
 			autoUpdateEnabled: true,
 			compactionStrategy: "agentic",
 			disabledTools: ["read_files"],
-			telemetryOptOut: false,
 		});
 		expect(
 			GlobalSettingsSchema.parse({
 				disabledTools: 42,
 				extra: true,
-				telemetryOptOut: true,
+				toolAutoApprove: true,
 			}),
 		).toEqual({
 			autoUpdateEnabled: true,
-			telemetryOptOut: true,
+			toolAutoApprove: true,
 		});
 		expect(
 			GlobalSettingsSchema.parse({
@@ -86,7 +81,6 @@ describe("global-settings", () => {
 			}),
 		).toEqual({
 			autoUpdateEnabled: false,
-			telemetryOptOut: false,
 		});
 	});
 
@@ -104,12 +98,10 @@ describe("global-settings", () => {
 			expect(readGlobalSettings()).toEqual({
 				autoUpdateEnabled: true,
 				disabledTools: ["editor", "read_files"],
-				telemetryOptOut: false,
 			});
 			expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
 				autoUpdateEnabled: true,
 				disabledTools: ["editor", "read_files"],
-				telemetryOptOut: false,
 			});
 
 			await writeFile(
@@ -117,13 +109,13 @@ describe("global-settings", () => {
 				JSON.stringify({
 					disabledTools: ["read_files"],
 					extra: true,
-					telemetryOptOut: true,
+					toolAutoApprove: true,
 				}),
 			);
 			expect(readGlobalSettings()).toEqual({
 				autoUpdateEnabled: true,
 				disabledTools: ["read_files"],
-				telemetryOptOut: true,
+				toolAutoApprove: true,
 			});
 
 			await writeFile(
@@ -131,12 +123,12 @@ describe("global-settings", () => {
 				JSON.stringify({
 					disabledTools: 42,
 					extra: true,
-					telemetryOptOut: true,
+					toolAutoApprove: true,
 				}),
 			);
 			expect(readGlobalSettings()).toEqual({
 				autoUpdateEnabled: true,
-				telemetryOptOut: true,
+				toolAutoApprove: true,
 			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
@@ -159,14 +151,12 @@ describe("global-settings", () => {
 				disabledAgentPlugins: ["portable-review"],
 				disabledPlugins: ["/plugins/example.js"],
 				disabledTools: ["read_files"],
-				telemetryOptOut: false,
 			});
 			expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
 				autoUpdateEnabled: true,
 				disabledAgentPlugins: ["portable-review"],
 				disabledPlugins: ["/plugins/example.js"],
 				disabledTools: ["read_files"],
-				telemetryOptOut: false,
 			});
 
 			setDisabledAgentPlugin("portable-review", false);
@@ -216,31 +206,6 @@ describe("global-settings", () => {
 		}
 	});
 
-	it("records telemetry opt-out once when the setting changes to true", async () => {
-		const root = await mkdtemp(join(tmpdir(), "core-global-settings-"));
-		try {
-			const settingsPath = join(root, "global-settings.json");
-			process.env.CLINE_GLOBAL_SETTINGS_PATH = settingsPath;
-			const captureRequired = vi.fn();
-			const telemetry = {
-				captureRequired,
-			} as unknown as ITelemetryService;
-
-			setTelemetryOptOutGlobally(true, { telemetry });
-			setTelemetryOptOutGlobally(true, { telemetry });
-			setTelemetryOptOutGlobally(false, { telemetry });
-
-			expect(captureRequired).toHaveBeenCalledTimes(1);
-			expect(captureRequired).toHaveBeenCalledWith("user.opt_out", undefined);
-			expect(readGlobalSettings()).toEqual({
-				autoUpdateEnabled: true,
-				telemetryOptOut: false,
-			});
-		} finally {
-			await rm(root, { recursive: true, force: true });
-		}
-	});
-
 	it("preserves other settings when auto update is changed", async () => {
 		const root = await mkdtemp(join(tmpdir(), "core-global-settings-"));
 		try {
@@ -249,14 +214,14 @@ describe("global-settings", () => {
 
 			writeGlobalSettings({
 				disabledTools: ["editor"],
-				telemetryOptOut: true,
+				toolAutoApprove: true,
 			});
 			setAutoUpdateEnabledGlobally(false);
 
 			expect(readGlobalSettings()).toEqual({
 				autoUpdateEnabled: false,
 				disabledTools: ["editor"],
-				telemetryOptOut: true,
+				toolAutoApprove: true,
 			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
@@ -288,7 +253,6 @@ describe("global-settings", () => {
 			autoUpdateEnabled: true,
 			compactionEnabled: false,
 			planActMode: "plan",
-			telemetryOptOut: false,
 			toolAutoApprove: false,
 		});
 		// Invalid values fall back to unset instead of failing the whole parse.
@@ -300,7 +264,6 @@ describe("global-settings", () => {
 			}),
 		).toEqual({
 			autoUpdateEnabled: true,
-			telemetryOptOut: false,
 		});
 	});
 
@@ -318,7 +281,6 @@ describe("global-settings", () => {
 			expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
 				autoUpdateEnabled: true,
 				planActMode: "act",
-				telemetryOptOut: false,
 			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
@@ -352,7 +314,6 @@ describe("global-settings", () => {
 			expect(readTuiThemeGlobally()).toBe("tokyo-night");
 			expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
 				autoUpdateEnabled: true,
-				telemetryOptOut: false,
 				tuiTheme: "tokyo-night",
 			});
 
@@ -383,7 +344,6 @@ describe("global-settings", () => {
 				autoUpdateEnabled: true,
 				compactionEnabled: false,
 				compactionStrategy: "basic",
-				telemetryOptOut: false,
 			});
 
 			setCompactionModeGlobally("agentic");
@@ -392,7 +352,6 @@ describe("global-settings", () => {
 				autoUpdateEnabled: true,
 				compactionEnabled: true,
 				compactionStrategy: "agentic",
-				telemetryOptOut: false,
 			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
@@ -413,7 +372,6 @@ describe("global-settings", () => {
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
 					disabledTools: ["read_files"],
-					telemetryOptOut: false,
 				});
 			} finally {
 				await rm(root, { recursive: true, force: true });
@@ -436,7 +394,6 @@ describe("global-settings", () => {
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
 					disabledTools: ["read_files"],
-					telemetryOptOut: false,
 				});
 			} finally {
 				await rm(root, { recursive: true, force: true });
@@ -455,7 +412,6 @@ describe("global-settings", () => {
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
 					disabledTools: ["editor"],
-					telemetryOptOut: false,
 				});
 
 				process.env.CLINE_GLOBAL_SETTINGS_PATH = pathB;
@@ -463,14 +419,12 @@ describe("global-settings", () => {
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
 					disabledTools: ["read_files"],
-					telemetryOptOut: false,
 				});
 
 				process.env.CLINE_GLOBAL_SETTINGS_PATH = pathA;
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
 					disabledTools: ["editor"],
-					telemetryOptOut: false,
 				});
 			} finally {
 				await rm(rootA, { recursive: true, force: true });
@@ -486,11 +440,9 @@ describe("global-settings", () => {
 
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
-					telemetryOptOut: false,
 				});
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
-					telemetryOptOut: false,
 				});
 			} finally {
 				await rm(root, { recursive: true, force: true });
@@ -515,7 +467,8 @@ describe("global-settings", () => {
 				expect(Object.isFrozen(settings.disabledTools)).toBe(true);
 				expect(Object.isFrozen(settings.disabledPlugins)).toBe(true);
 				expect(() => {
-					(settings as { telemetryOptOut: boolean }).telemetryOptOut = true;
+					(settings as { autoUpdateEnabled: boolean }).autoUpdateEnabled =
+						false;
 				}).toThrow();
 				expect(() => {
 					settings.disabledTools?.push("malicious");
@@ -534,7 +487,6 @@ describe("global-settings", () => {
 
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
-					telemetryOptOut: false,
 				});
 
 				await writeFile(
@@ -545,7 +497,6 @@ describe("global-settings", () => {
 				expect(readGlobalSettings()).toEqual({
 					autoUpdateEnabled: true,
 					disabledTools: ["editor"],
-					telemetryOptOut: false,
 				});
 			} finally {
 				await rm(root, { recursive: true, force: true });

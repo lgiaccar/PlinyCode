@@ -10,23 +10,12 @@ import type {
 	SubAgentStartContext,
 } from "../../../extensions/tools/team";
 import { createSpawnAgentTool } from "../../../extensions/tools/team";
-import { buildTelemetryAgentIdentity } from "../../../services/agent-events";
 import { filterDisabledTools } from "../../../services/global-settings";
-import {
-	captureAgentCreated,
-	captureSubagentExecution,
-} from "../../../services/telemetry/core-events";
 import type { CoreSessionConfig } from "../../../types/config";
 import type { ActiveSession } from "../../../types/session";
 
-export type SubAgentStartTracker = Map<
-	string,
-	{ startedAt: number; rootSessionId: string }
->;
-
 export interface SpawnToolDeps {
 	getSession(sessionId: string): ActiveSession | undefined;
-	subAgentStarts: SubAgentStartTracker;
 	onAgentEvent(
 		rootSessionId: string,
 		config: CoreSessionConfig,
@@ -49,35 +38,6 @@ export function createSessionSubAgentLifecycleCallbacks(
 	return {
 		onSubAgentEvent: (event) => deps.onAgentEvent(rootSessionId, config, event),
 		onSubAgentStart: (context) => {
-			const teamRuntime = deps.getSession(rootSessionId)?.runtime.teamRuntime;
-			deps.subAgentStarts.set(context.subAgentId, {
-				startedAt: Date.now(),
-				rootSessionId,
-			});
-			const agentIdentity = buildTelemetryAgentIdentity({
-				agentId: context.subAgentId,
-				conversationId: context.conversationId,
-				parentAgentId: context.parentAgentId,
-				teamId: teamRuntime?.getTeamId(),
-				teamName: teamRuntime?.getTeamName(),
-				createdByAgentId: context.parentAgentId,
-			});
-			if (agentIdentity) {
-				captureAgentCreated(config.telemetry, {
-					ulid: rootSessionId,
-					modelId: config.modelId,
-					provider: config.providerId,
-					...agentIdentity,
-				});
-			}
-			captureSubagentExecution(config.telemetry, {
-				event: "started",
-				ulid: rootSessionId,
-				durationMs: 0,
-				parentId: context.parentAgentId,
-				agentId: context.subAgentId,
-				...agentIdentity,
-			});
 			void deps.invokeBackendOptional(
 				"handleSubAgentStart",
 				rootSessionId,
@@ -85,30 +45,6 @@ export function createSessionSubAgentLifecycleCallbacks(
 			);
 		},
 		onSubAgentEnd: (context) => {
-			const teamRuntime = deps.getSession(rootSessionId)?.runtime.teamRuntime;
-			const started = deps.subAgentStarts.get(context.subAgentId);
-			const durationMs = started ? Date.now() - started.startedAt : 0;
-			const outputLines = context.result?.text
-				? context.result.text.split("\n").length
-				: 0;
-			captureSubagentExecution(config.telemetry, {
-				event: "ended",
-				ulid: rootSessionId,
-				durationMs,
-				outputLines,
-				errorMessage: context.error ? String(context.error) : undefined,
-				agentId: context.subAgentId,
-				parentId: context.parentAgentId,
-				...buildTelemetryAgentIdentity({
-					agentId: context.subAgentId,
-					conversationId: context.conversationId,
-					parentAgentId: context.parentAgentId,
-					teamId: teamRuntime?.getTeamId(),
-					teamName: teamRuntime?.getTeamName(),
-					createdByAgentId: context.parentAgentId,
-				}),
-			});
-			deps.subAgentStarts.delete(context.subAgentId);
 			void deps.invokeBackendOptional(
 				"handleSubAgentEnd",
 				rootSessionId,
@@ -133,7 +69,6 @@ export function createSessionSpawnTool(
 		const tools: AgentTool[] = config.enableTools
 			? createBuiltinTools({
 					cwd: config.cwd,
-					telemetry: config.telemetry,
 					...ToolPresets[resolveToolPresetName({ mode: config.mode })],
 					executors: toolExecutors,
 				})
@@ -165,7 +100,6 @@ export function createSessionSpawnTool(
 					hooks: config.hooks,
 					extensions: config.extensions,
 					logger: config.logger,
-					telemetry: config.telemetry,
 				},
 			getConnectionConfig: () =>
 				deps

@@ -131,27 +131,12 @@ describe("auth/codex token lifecycle", () => {
 			),
 		);
 
-		const capture = vi.fn();
 		const current = createCredentials({ expires: 150_000 });
 		const result = await getValidOpenAICodexCredentials(current, {
 			refreshBufferMs: 60_000,
 			retryableTokenGraceMs: 30_000,
-			telemetry: { capture } as never,
 		});
 		expect(result).toBe(current);
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_refresh_soft_failure",
-				properties: expect.objectContaining({
-					provider: "openai-codex",
-					status: 500,
-					tokenExpired: false,
-				}),
-			}),
-		);
-		expect(capture).not.toHaveBeenCalledWith(
-			expect.objectContaining({ event: "user.auth_logged_out" }),
-		);
 		nowSpy.mockRestore();
 	});
 
@@ -191,25 +176,9 @@ describe("auth/codex token lifecycle", () => {
 			),
 		);
 
-		const capture = vi.fn();
 		await expect(
-			getValidOpenAICodexCredentials(createCredentials({ expires: 90_000 }), {
-				telemetry: { capture } as never,
-			}),
+			getValidOpenAICodexCredentials(createCredentials({ expires: 90_000 })),
 		).rejects.toThrow("Token refresh failed: 500");
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_refresh_soft_failure",
-				properties: expect.objectContaining({
-					provider: "openai-codex",
-					status: 500,
-					tokenExpired: true,
-				}),
-			}),
-		);
-		expect(capture).not.toHaveBeenCalledWith(
-			expect.objectContaining({ event: "user.auth_logged_out" }),
-		);
 		nowSpy.mockRestore();
 	});
 
@@ -222,24 +191,9 @@ describe("auth/codex token lifecycle", () => {
 			}),
 		);
 
-		const capture = vi.fn();
 		await expect(
-			getValidOpenAICodexCredentials(createCredentials({ expires: 90_000 }), {
-				telemetry: { capture } as never,
-			}),
+			getValidOpenAICodexCredentials(createCredentials({ expires: 90_000 })),
 		).rejects.toThrow("Failed to refresh OpenAI Codex token");
-		expect(capture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				event: "user.auth_refresh_soft_failure",
-				properties: expect.objectContaining({
-					provider: "openai-codex",
-					tokenExpired: true,
-				}),
-			}),
-		);
-		expect(capture).not.toHaveBeenCalledWith(
-			expect.objectContaining({ event: "user.auth_logged_out" }),
-		);
 		nowSpy.mockRestore();
 	});
 });
