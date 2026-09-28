@@ -46,7 +46,6 @@ export type {
 	AutomationEventEnvelope,
 	BasicLogger,
 	BasicLogger as Logger,
-	CaptureSdkErrorInput,
 	ChatRunTurnRequest,
 	ChatRuntimeConfig,
 	ChatStartSessionArtifacts,

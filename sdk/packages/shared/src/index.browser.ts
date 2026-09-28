@@ -445,36 +445,7 @@ export {
 	getClineEnvironmentConfig,
 	resolveClineEnvironment,
 } from "./runtime/cline-environment";
-export type {
-	CaptureAgentUnexpectedReasoningTokensInput,
-	CaptureSdkErrorInput,
-	CaptureTaskLifecycleEventInput,
-	ITelemetryService,
-	OpenTelemetryClientConfig,
-	SdkTelemetryErrorComponent,
-	SdkTelemetryErrorSeverity,
-	TelemetryArray,
-	TelemetryMetadata,
-	TelemetryObject,
-	TelemetryPrimitive,
-	TelemetryProperties,
-	TelemetryValue,
-} from "./services/telemetry";
-export {
-	AGENT_UNEXPECTED_REASONING_TOKENS_EVENT,
-	buildSdkErrorProperties,
-	captureAgentUnexpectedReasoningTokens,
-	captureSdkError,
-	captureTaskLifecycleEvent,
-	normalizeSdkError,
-	resetSdkErrorRateLimiterForTests,
-	SDK_ERROR_TELEMETRY_EVENT,
-	TASK_CANCELLED_EVENT,
-	TASK_FIRST_CHUNK_RECEIVED_EVENT,
-	TASK_PROVIDER_REQUEST_STARTED_EVENT,
-	TASK_PROVIDER_STREAM_FAILED_EVENT,
-	TASK_PROVIDER_STREAM_STARTED_EVENT,
-} from "./services/telemetry";
+export type { OpenTelemetryClientConfig } from "./services/telemetry";
 export type {
 	HookSessionContext,
 	HookSessionContextLookup,

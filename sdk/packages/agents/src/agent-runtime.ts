@@ -26,26 +26,16 @@ import type {
 	AgentToolResult,
 	AgentUsage,
 	AgentRuntimeConfig as BaseAgentRuntimeConfig,
-	CaptureTaskLifecycleEventInput,
 	GatewayProviderSettings,
 	ProviderErrorClass,
-	TelemetryProperties,
 	ToolApprovalResult,
 	ToolPolicy,
 } from "@plinycode/shared";
 import {
-	captureAgentUnexpectedReasoningTokens,
-	captureSdkError,
-	captureTaskLifecycleEvent,
 	estimateTokens,
 	mergeModelOptions,
 	normalizeJsonLikeStringsForSchema,
 	omitUndefinedValues,
-	TASK_CANCELLED_EVENT,
-	TASK_FIRST_CHUNK_RECEIVED_EVENT,
-	TASK_PROVIDER_REQUEST_STARTED_EVENT,
-	TASK_PROVIDER_STREAM_FAILED_EVENT,
-	TASK_PROVIDER_STREAM_STARTED_EVENT,
 	TOOL_REJECTION_SUFFIX,
 	trimNonEmpty,
 } from "@plinycode/shared";
@@ -201,8 +191,8 @@ export type AgentEventListener = (event: AgentRuntimeEvent) => void;
 
 /**
  * Advanced form: caller supplies a pre-built `AgentModel`. Used by
- * `@plinycode/core`, which constructs models itself to share gateway/telemetry
- * wiring with the rest of the session runtime.
+ * `@plinycode/core`, which constructs models itself to share gateway wiring with the
+ * rest of the session runtime.
  */
 export interface AgentRuntimeConfigWithModel extends BaseAgentRuntimeConfig {
 	model: AgentModel;
@@ -255,7 +245,6 @@ function resolveRuntimeConfig(
 		config;
 	const gateway = createGateway({
 		providerConfigs: [{ providerId, apiKey, baseUrl, headers, options }],
-		telemetry: rest.telemetry,
 	});
 	const model = gateway.createAgentModel({ providerId, modelId });
 	// The prebuilt-model path preserves a caller-provided messageModelInfo;
@@ -520,10 +509,6 @@ function usageDelta(
 	};
 }
 
-function reasoningWasRequestedOff(request: AgentModelRequest): boolean {
-	return request.options?.thinking === false;
-}
-
 function textFromMessage(message: AgentMessage | undefined): string {
 	if (!message) {
 		return "";
@@ -615,13 +600,6 @@ export class AgentRuntime {
 		 * flattened `lastError` message instead.
 		 */
 		lastErrorRetryable: undefined as boolean | undefined,
-		/**
-		 * Whether the model layer already recorded `sdk.error` telemetry for
-		 * `lastError` (from `errorReported` on the stream's `finish` event).
-		 * Custom `AgentModel` implementations that do not record their own
-		 * telemetry leave this false, so their failures still get reported.
-		 */
-		lastErrorReported: false,
 	};
 	/** One automatic overflow-recovery attempt per run. */
 	private overflowRecoveryAttempted = false;
@@ -633,16 +611,8 @@ export class AgentRuntime {
 	 * `userMessageSignal`. Replaced whenever pending messages are consumed.
 	 */
 	private userMessageController = new AbortController();
-	private readonly telemetryProviderId?: string;
-	private readonly telemetryModelId?: string;
 
 	constructor(config: AgentRuntimeConfig) {
-		this.telemetryProviderId =
-			trimNonEmpty(config.messageModelInfo?.provider) ??
-			("providerId" in config ? trimNonEmpty(config.providerId) : undefined);
-		this.telemetryModelId =
-			trimNonEmpty(config.messageModelInfo?.id) ??
-			("modelId" in config ? trimNonEmpty(config.modelId) : undefined);
 		const resolved = resolveRuntimeConfig(config);
 		this.config = {
 			...resolved,
@@ -684,9 +654,6 @@ export class AgentRuntime {
 				? reason
 				: new AgentRuntimeAbortError(reason);
 		this.state.lastError = abortError.message;
-		this.captureTaskLifecycle(TASK_CANCELLED_EVENT, {
-			error: abortError,
-		});
 		this.abortController.abort(abortError);
 	}
 
@@ -718,7 +685,6 @@ export class AgentRuntime {
 		this.state.lastError = undefined;
 		this.state.lastErrorClass = undefined;
 		this.state.lastErrorRetryable = undefined;
-		this.state.lastErrorReported = false;
 		this.state.messages = cloneMessages(messages);
 		this.config = {
 			...this.config,
@@ -847,7 +813,6 @@ export class AgentRuntime {
 		this.state.lastError = undefined;
 		this.state.lastErrorClass = undefined;
 		this.state.lastErrorRetryable = undefined;
-		this.state.lastErrorReported = false;
 		this.state.usage = cloneUsage(DEFAULT_USAGE);
 		this.overflowRecoveryAttempted = false;
 		this.state.lastRequestInputTokens = 0;
@@ -1061,15 +1026,9 @@ export class AgentRuntime {
 					: normalized.message === this.state.lastError
 						? this.state.lastErrorClass
 						: undefined;
-			// Same guard: the model layer's telemetry only covers this failure
-			// if the run failed on that exact recorded error.
-			const errorAlreadyReported =
-				normalized.message === this.state.lastError &&
-				this.state.lastErrorReported;
 			this.state.status = status;
 			this.state.lastError = normalized.message;
 			this.state.lastErrorClass = errorClass;
-			this.state.lastErrorReported = errorAlreadyReported;
 			const lastAssistantMessage = this.findLastAssistantMessage();
 			const result: AgentRunResult = {
 				agentId: this.state.agentId,
@@ -1231,7 +1190,6 @@ export class AgentRuntime {
 		this.state.lastError = undefined;
 		this.state.lastErrorClass = undefined;
 		this.state.lastErrorRetryable = undefined;
-		this.state.lastErrorReported = false;
 	}
 
 	/**
@@ -1376,10 +1334,6 @@ export class AgentRuntime {
 			}),
 		};
 
-		const taskLifecycleStartedAt = Date.now();
-		const getTaskLifecycleDurationMs = () =>
-			Date.now() - taskLifecycleStartedAt;
-
 		if (this.state.iteration > 1) {
 			// Messages that arrive from here on belong to the next step's tools.
 			this.userMessageController = new AbortController();
@@ -1434,10 +1388,6 @@ export class AgentRuntime {
 		});
 
 		this.throwIfAborted();
-		this.captureTaskLifecycle(TASK_PROVIDER_REQUEST_STARTED_EVENT, {
-			durationMs: getTaskLifecycleDurationMs(),
-			phase: "provider_request_started",
-		});
 		// Steering cancels provider generation, while request preparation keeps
 		// the run-level signal so compaction and hooks can finish consistently.
 		request = {
@@ -1447,10 +1397,7 @@ export class AgentRuntime {
 				...(this.abortController ? [this.abortController.signal] : []),
 			]),
 		};
-		const stream = this.openTaskLifecycleStream(
-			request,
-			getTaskLifecycleDurationMs,
-		);
+		const stream = this.openModelStream(request);
 
 		const content: AgentMessagePart[] = [];
 		const toolAssemblies = new Map<string, PendingToolAssembly>();
@@ -1661,7 +1608,6 @@ export class AgentRuntime {
 						// it.
 						this.state.lastErrorRetryable =
 							event.errorRetryable ?? isRetryableProviderError(event.error);
-						this.state.lastErrorReported = event.errorReported === true;
 					}
 					break;
 				}
@@ -1730,7 +1676,6 @@ export class AgentRuntime {
 		const metrics = usageDelta(usageBeforeModel, this.state.usage);
 		if (metrics) {
 			message.metrics = metrics;
-			this.captureUnexpectedReasoningTokens(request, metrics);
 		}
 		if (this.config.messageModelInfo) {
 			message.modelInfo = { ...this.config.messageModelInfo };
@@ -1747,138 +1692,30 @@ export class AgentRuntime {
 		return { message, finishReason, interrupted };
 	}
 
-	private async *openTaskLifecycleStream(
+	private async *openModelStream(
 		request: AgentModelRequest,
-		getTaskLifecycleDurationMs: () => number | undefined,
 	): AsyncIterable<AgentModelEvent> {
+		// A steer aborts the request signal but not the run: end the stream
+		// quietly so the loop can pick up the steering message.
 		let stream: AsyncIterable<AgentModelEvent>;
-		let phase = "provider_request_started";
 		try {
 			stream = await this.config.model.stream(request);
 			this.throwIfAborted();
-			phase = "provider_stream_started";
-			this.captureTaskLifecycle(TASK_PROVIDER_STREAM_STARTED_EVENT, {
-				durationMs: getTaskLifecycleDurationMs(),
-				phase,
-			});
 		} catch (error) {
 			if (request.signal?.aborted && !this.abortController?.signal.aborted)
 				return;
-			if (!request.signal?.aborted && !this.isAbortError(error)) {
-				this.captureTaskLifecycleFailure(
-					error,
-					phase,
-					getTaskLifecycleDurationMs(),
-				);
-			}
 			throw error;
 		}
 
-		let receivedFirstChunk = false;
 		try {
 			for await (const event of stream) {
-				if (!receivedFirstChunk) {
-					receivedFirstChunk = true;
-					phase = "first_chunk_received";
-					this.captureTaskLifecycle(TASK_FIRST_CHUNK_RECEIVED_EVENT, {
-						durationMs: getTaskLifecycleDurationMs(),
-						phase,
-						eventType: event.type,
-					});
-				}
 				yield event;
 			}
 		} catch (error) {
 			if (request.signal?.aborted && !this.abortController?.signal.aborted)
 				return;
-			if (!request.signal?.aborted && !this.isAbortError(error)) {
-				this.captureTaskLifecycleFailure(
-					error,
-					phase,
-					getTaskLifecycleDurationMs(),
-				);
-			}
 			throw error;
 		}
-	}
-
-	private captureTaskLifecycleFailure(
-		error: unknown,
-		phase: string,
-		durationMs: number | undefined,
-	): void {
-		this.captureTaskLifecycle(TASK_PROVIDER_STREAM_FAILED_EVENT, {
-			durationMs,
-			error,
-			errorClass: classifyProviderError(error),
-			phase,
-		});
-	}
-
-	private captureTaskLifecycle(
-		event: string,
-		input: Partial<Omit<CaptureTaskLifecycleEventInput, "event">> = {},
-	): void {
-		const sessionId = trimNonEmpty(this.config.sessionId);
-		captureTaskLifecycleEvent(this.config.telemetry, {
-			event,
-			sessionId,
-			ulid: sessionId,
-			agentId: this.state.agentId,
-			conversationId: trimNonEmpty(this.config.conversationId),
-			runId: this.state.runId,
-			iteration: this.state.iteration > 0 ? this.state.iteration : undefined,
-			providerId: this.getTelemetryProviderId(),
-			modelId: this.getTelemetryModelId(),
-			...input,
-		});
-	}
-
-	private getTelemetryProviderId(): string | undefined {
-		return (
-			trimNonEmpty(this.config.messageModelInfo?.provider) ??
-			this.telemetryProviderId
-		);
-	}
-
-	private getTelemetryModelId(): string | undefined {
-		return (
-			trimNonEmpty(this.config.messageModelInfo?.id) ?? this.telemetryModelId
-		);
-	}
-
-	private isAbortError(error: unknown): boolean {
-		return (
-			error instanceof AgentRuntimeAbortError ||
-			this.abortController?.signal.aborted === true
-		);
-	}
-
-	private captureUnexpectedReasoningTokens(
-		request: AgentModelRequest,
-		metrics: NonNullable<AgentMessage["metrics"]>,
-	): void {
-		if (
-			!reasoningWasRequestedOff(request) ||
-			(metrics.reasoningTokenCount ?? 0) <= 0
-		) {
-			return;
-		}
-		const reasoningTokenCount = metrics.reasoningTokenCount;
-		if (reasoningTokenCount === undefined) {
-			return;
-		}
-
-		captureAgentUnexpectedReasoningTokens(this.config.telemetry, {
-			sessionId: this.config.sessionId,
-			agentId: this.state.agentId,
-			runId: this.state.runId,
-			iteration: this.state.iteration,
-			providerId: this.config.messageModelInfo?.provider,
-			modelId: this.config.messageModelInfo?.id,
-			requestedThinking: false,
-			reasoningTokenCount,
-		});
 	}
 
 	private async prepareTurnForModelRequest(
@@ -2384,46 +2221,9 @@ export class AgentRuntime {
 					...metadata,
 					error: event.error,
 				});
-				// Failures the model layer already recorded at its own error
-				// boundary (`provider.stream`, carried across the stream's
-				// string-flattening boundary as `finish.errorReported`) must not
-				// be re-reported here — that exactly doubled `sdk.error` volume.
-				// Everything else still reports: loop-originated failures, and
-				// failures from model implementations that do not record their
-				// own telemetry.
-				if (!this.state.lastErrorReported) {
-					captureSdkError(this.config.telemetry, {
-						component: "agents",
-						operation: "agent.run",
-						error: event.error,
-						severity: "error",
-						handled: false,
-						context: {
-							...(metadata as TelemetryProperties),
-							providerId: this.getTelemetryProviderId(),
-							modelId: this.getTelemetryModelId(),
-						},
-					});
-				}
 				break;
 			default:
 				this.config.logger?.debug?.("Agent event", metadata);
-				break;
-		}
-		switch (event.type) {
-			// Per-token/per-chunk stream events are ~97% of agent.* telemetry
-			// volume and are never queried, so they are not mirrored to
-			// telemetry. Listeners and hooks below still receive them.
-			case "assistant-text-delta":
-			case "assistant-reasoning-delta":
-			case "assistant-media":
-			case "tool-updated":
-				break;
-			default:
-				this.config.telemetry?.capture({
-					event: `agent.${event.type}`,
-					properties: metadata as TelemetryProperties,
-				});
 				break;
 		}
 		for (const listener of this.listeners) {

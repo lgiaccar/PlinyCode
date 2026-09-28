@@ -11,7 +11,6 @@ import type {
 	GatewayModelSelection,
 	GatewayProviderRegistration,
 	GatewayStreamRequest,
-	ITelemetryService,
 	ReasoningEffort,
 } from "@plinycode/shared";
 import {
@@ -299,12 +298,10 @@ async function* withOutputLimit(
 export class DefaultGateway implements Gateway {
 	private readonly registry: GatewayRegistry;
 	private readonly logger: BasicLogger | undefined;
-	private readonly telemetry: ITelemetryService | undefined;
 
 	constructor(config: GatewayConfig = {}) {
 		this.registry = new GatewayRegistry(config.fetch);
 		this.logger = config.logger;
-		this.telemetry = config.telemetry;
 
 		if (config.builtins !== false) {
 			const builtins = new Set(
@@ -427,7 +424,6 @@ export class DefaultGateway implements Gateway {
 				config: providerRecord.config,
 				signal: request.signal,
 				logger: this.logger,
-				telemetry: this.telemetry,
 			},
 		);
 

@@ -14,11 +14,6 @@ import type {
 	ToolPolicy,
 } from "./llms/tools";
 import type { BasicLogger } from "./logging/logger";
-import type { ITelemetryService } from "./services/telemetry";
-
-// =============================================================================
-// Lightweight telemetry surface used by AgentRuntime
-// =============================================================================
 
 // =============================================================================
 // Message parts
@@ -320,8 +315,8 @@ export type AgentModelFinishReason =
 /**
  * Coarse classification of a provider error, derived from the raw provider
  * error object before it is flattened into a display string. Shared by the
- * runtime's recovery policy and telemetry (`error_class`). Extend with new
- * classes (rate_limit, billing, ...) as consumers need them.
+ * runtime's recovery policy. Extend with new classes (rate_limit, billing,
+ * ...) as consumers need them.
  *
  * `auth`: the provider rejected the request's credentials (HTTP 401/403) —
  * hosts should point the user at their API key configuration.
@@ -378,15 +373,6 @@ export type AgentModelEvent =
 			 * this). When absent, the agent loop classifies from the message.
 			 */
 			errorRetryable?: boolean;
-			/**
-			 * The model layer already recorded `sdk.error` telemetry for this
-			 * failure at its own error boundary. `error` is a flattened string,
-			 * so this bit carries reporting ownership across the boundary: the
-			 * agent loop skips re-reporting when it is set, and still reports
-			 * failures from model implementations that do not record their own
-			 * telemetry.
-			 */
-			errorReported?: boolean;
 			/**
 			 * The output-token cap the gateway applied to this request and why.
 			 * Lets a "max-tokens" finish explain which limit was hit.
@@ -590,7 +576,7 @@ export interface AgentRuntimeConfig {
 	/**
 	 * Agent conversation/transcript identifier.
 	 *
-	 * Used by the stateless agent loop, tools, hooks, telemetry, and model
+	 * Used by the stateless agent loop, tools, hooks, and model
 	 * history correlation. This id follows the current conversation store and
 	 * should not be used as the hub/session routing key.
 	 */
@@ -608,7 +594,6 @@ export interface AgentRuntimeConfig {
 	hooks?: Partial<AgentRuntimeHooks>;
 	plugins?: readonly AgentRuntimePlugin[];
 	logger?: BasicLogger;
-	telemetry?: ITelemetryService;
 	initialMessages?: readonly AgentMessage[];
 	maxIterations?: number;
 	completionPolicy?: {

@@ -16,8 +16,6 @@ import {
 	estimateRequestInputTokens,
 	type GatewayModelHandleOptions,
 	IMAGE_UNSUPPORTED_PLACEHOLDER,
-	type ITelemetryService,
-	resetSdkErrorRateLimiterForTests,
 } from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { normalizeModelsDevProviderModels } from "../catalog/catalog-live";
@@ -200,17 +198,6 @@ function mockSuccessfulStream(): void {
 	});
 }
 
-function createTelemetryMock(): {
-	telemetry: ITelemetryService;
-	capture: ReturnType<typeof vi.fn>;
-} {
-	const capture = vi.fn();
-	return {
-		capture,
-		telemetry: { capture } as unknown as ITelemetryService,
-	};
-}
-
 const baseMessages: AgentMessage[] = [
 	{
 		id: "user_1",
@@ -308,7 +295,6 @@ function readCaptureRecords(dir: string): Array<Record<string, unknown>> {
 
 describe("sdk-gateway", () => {
 	beforeEach(() => {
-		resetSdkErrorRateLimiterForTests();
 		streamTextSpy.mockReset();
 		generateImageSpy.mockReset();
 		openaiCompatibleFactorySpy.mockReset();
@@ -2562,179 +2548,6 @@ describe("sdk-gateway", () => {
 			error: "Invalid API key",
 			errorClass: "unknown",
 			errorRetryable: false,
-		});
-	});
-
-	it.skip("records the extracted provider message for AI SDK stream errors", async () => {
-		const rawError = Object.assign(new Error("Stream error occurred"), {
-			statusCode: 400,
-			responseBody: JSON.stringify({
-				error: {
-					message: "prompt is too long",
-					code: "context_length_exceeded",
-				},
-			}),
-		});
-		streamTextSpy.mockImplementation(
-			(input: { onError?: (event: { error: unknown }) => void }) => {
-				input.onError?.({ error: rawError });
-				return {
-					fullStream: makeStreamParts([
-						{ type: "error", error: new Error("No output generated") },
-					]),
-				};
-			},
-		);
-		const { telemetry, capture } = createTelemetryMock();
-		const gateway = createGateway({
-			telemetry,
-			providerConfigs: [{ providerId: "openai-native", apiKey: "test" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-native",
-				modelId: "gpt-5-mini",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(capture).toHaveBeenCalledWith({
-			event: "sdk.error",
-			properties: expect.objectContaining({
-				operation: "provider.stream",
-				error_message: "prompt is too long",
-				error_status: 400,
-			}),
-		});
-	});
-
-	it.skip("marks the finish event as reported so the agent loop skips the same failure", async () => {
-		const rawError = Object.assign(new Error("Upstream returned HTTP 429"), {
-			statusCode: 429,
-		});
-		streamTextSpy.mockImplementation(
-			(input: { onError?: (event: { error: unknown }) => void }) => {
-				input.onError?.({ error: rawError });
-				return {
-					fullStream: makeStreamParts([{ type: "error", error: rawError }]),
-				};
-			},
-		);
-		const { telemetry, capture } = createTelemetryMock();
-		const gateway = createGateway({
-			telemetry,
-			providerConfigs: [{ providerId: "openai-native", apiKey: "test" }],
-		});
-
-		const events = await collect(
-			await gateway.stream({
-				providerId: "openai-native",
-				modelId: "gpt-5-mini",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(events.at(-1)).toMatchObject({
-			type: "finish",
-			reason: "error",
-			error: "Upstream returned HTTP 429",
-			errorReported: true,
-		});
-		const sdkErrors = capture.mock.calls.filter(
-			([call]) => (call as { event: string }).event === "sdk.error",
-		);
-		expect(sdkErrors).toHaveLength(1);
-	});
-
-	it("does not mark the finish event as reported when telemetry is unavailable", async () => {
-		const rawError = Object.assign(new Error("Upstream returned HTTP 429"), {
-			statusCode: 429,
-		});
-		streamTextSpy.mockImplementation(
-			(input: { onError?: (event: { error: unknown }) => void }) => {
-				input.onError?.({ error: rawError });
-				return {
-					fullStream: makeStreamParts([{ type: "error", error: rawError }]),
-				};
-			},
-		);
-		const gateway = createGateway({
-			providerConfigs: [{ providerId: "openai-compatible", apiKey: "test" }],
-		});
-
-		const events = await collect(
-			await gateway.stream({
-				providerId: "openai-compatible",
-				modelId: "gpt-4o",
-				messages: baseMessages,
-			}),
-		);
-
-		const finish = events.at(-1) as { errorReported?: boolean };
-		expect(finish.errorReported).not.toBe(true);
-	});
-
-	it("rate-limits identical stream failures per process", async () => {
-		const { telemetry, capture } = createTelemetryMock();
-		const gateway = createGateway({
-			telemetry,
-			providerConfigs: [{ providerId: "openai-compatible", apiKey: "test" }],
-		});
-
-		for (let i = 0; i < 20; i++) {
-			const rawError = Object.assign(new Error("Upstream returned HTTP 429"), {
-				statusCode: 429,
-			});
-			streamTextSpy.mockImplementation(
-				(input: { onError?: (event: { error: unknown }) => void }) => {
-					input.onError?.({ error: rawError });
-					return {
-						fullStream: makeStreamParts([{ type: "error", error: rawError }]),
-					};
-				},
-			);
-			await collect(
-				await gateway.stream({
-					providerId: "openai-compatible",
-					modelId: "gpt-4o",
-					messages: baseMessages,
-				}),
-			);
-		}
-
-		const sdkErrors = capture.mock.calls.filter(
-			([call]) => (call as { event: string }).event === "sdk.error",
-		);
-		expect(sdkErrors).toHaveLength(5);
-	});
-
-	it.skip("records the extracted cause when provider creation fails through a generic wrapper", async () => {
-		streamTextSpy.mockImplementation(() => {
-			throw new Error("No output generated. Check the stream for errors.", {
-				cause: new Error("Invalid API key"),
-			});
-		});
-		const { telemetry, capture } = createTelemetryMock();
-		const gateway = createGateway({
-			telemetry,
-			providerConfigs: [{ providerId: "openai-native", apiKey: "test" }],
-		});
-
-		await collect(
-			await gateway.stream({
-				providerId: "openai-native",
-				modelId: "gpt-5-mini",
-				messages: baseMessages,
-			}),
-		);
-
-		expect(capture).toHaveBeenCalledWith({
-			event: "sdk.error",
-			properties: expect.objectContaining({
-				operation: "provider.create_or_stream",
-				error_message: "Invalid API key",
-			}),
 		});
 	});
 

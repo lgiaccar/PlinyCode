@@ -32,7 +32,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 | Path | Role |
 |------|------|
 | `core/` | RPC handlers (`controller/`), storage, hooks, context and workspace helpers |
-| `services/` | VS Code–specific services (auth, telemetry, MCP, browser, search, …) |
+| `services/` | VS Code–specific services (auth, MCP, browser, search, …) |
 | `shared/` | Proto conversions, model catalog, providers, storage, utils |
 | `hosts/` | Host abstractions: `vscode/`, plus `external/AuthHandler.ts` (used by OCA sign-in) |
 | `integrations/` | Editor integrations (`diagnostics/`, `editor/`, `misc/`, `openai-codex/`, `terminal/`) |
@@ -55,7 +55,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 ### `src/services/`
 
-`auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `telemetry/`, `temp/`, `uri/`.
+`auth/`, `banner/`, `browser/` (Puppeteer), `devops-mcp/` (built-in DevOps MCP server), `error/`, `feature-flags/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 
