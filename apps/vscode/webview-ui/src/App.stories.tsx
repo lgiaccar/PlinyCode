@@ -71,21 +71,15 @@ type Story = StoryObj<typeof MockApp>
 
 // Mock data factories
 const createApiConfig = (overrides: Partial<ApiConfiguration> = {}): ApiConfiguration => ({
-	actModeApiProvider: "anthropic",
-	actModeApiModelId: "claude-3-5-sonnet-20241022",
-	actModeOpenRouterModelInfo: {
-		maxTokens: 8000,
-		contextWindow: 200000,
-		supportsPromptCache: true,
-	},
-	apiKey: "mock-key",
+	actModeApiProvider: "pliny",
+	actModeApiModelId: "snps-provider/kimi-k2.6",
 	...overrides,
 })
 
 const mockApiConfiguration = createApiConfig()
 const mockApiConfigurationPlan = createApiConfig({
-	planModeApiProvider: "anthropic",
-	planModeApiModelId: "claude-3-5-sonnet-20241022",
+	planModeApiProvider: "pliny",
+	planModeApiModelId: "snps-provider/kimi-k2.6",
 })
 
 const createHistoryItem = (id: string, hoursAgo: number, task: string, metrics: Partial<HistoryItem> = {}): HistoryItem => ({

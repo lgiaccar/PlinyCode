@@ -32,7 +32,7 @@ describe("clearOrganizationForClinePassProviderSelection", () => {
 	it("does nothing when ClinePass is not selected", () => {
 		clearOrganizationForClinePassProviderSelection(createController(), {
 			planModeApiProvider: "cline",
-			actModeApiProvider: "openrouter",
+			actModeApiProvider: "pliny",
 		})
 
 		expect(switchAccount.callCount).toBe(0)
@@ -41,7 +41,7 @@ describe("clearOrganizationForClinePassProviderSelection", () => {
 	it("switches to the personal account when ClinePass is selected without blocking the caller", () => {
 		clearOrganizationForClinePassProviderSelection(createController(), {
 			planModeApiProvider: "cline-pass",
-			actModeApiProvider: "openrouter",
+			actModeApiProvider: "pliny",
 		})
 
 		expect(switchAccount.callCount).toBe(1)

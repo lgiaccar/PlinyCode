@@ -9,41 +9,31 @@
 // The factory does NOT handle UI concerns — that's the SdkController's job.
 
 import {
-	buildWorkspaceMetadata,
 	type ClineCoreStartInput,
 	type CoreSessionConfig,
-	getProviderAuthHandler,
 	type ProviderSettings,
 	readCompactionStrategyGlobally,
 	resolveProviderApiKeyFromSettings,
 	type StartSessionResult,
 } from "@plinycode/core"
-import type { ProviderApiLine, ModelInfo as SdkModelInfo } from "@plinycode/llms"
-import {
-	getGeneratedModelsForProvider,
-	getModelsForProvider,
-	isProviderApiLine,
-	MODEL_COLLECTIONS_BY_PROVIDER_ID,
-	OLLAMA_DEFAULT_CONTEXT_WINDOW,
-} from "@plinycode/llms"
-import { buildClineSystemPrompt, isClineProvider } from "@plinycode/shared"
+import type { ModelInfo as SdkModelInfo } from "@plinycode/llms"
+import { getGeneratedModelsForProvider, getModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@plinycode/llms"
+import { buildClineSystemPrompt } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import { ClineClient } from "@shared/cline"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_LANGUAGE_SETTINGS, getLanguageKey, type LanguageDisplay } from "@shared/Languages"
-import { toLegacyApiProvider } from "@shared/model-catalog/provider-helpers"
 import { Logger } from "@shared/services/Logger"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
-import { stringifyVsCodeLmModelSelector } from "@shared/vsCodeSelectorUtils"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { fetch } from "@/shared/net"
-import { type BedrockProviderConfig, buildBedrockProviderConfig } from "./bedrock-config"
+import { coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { buildAgentHooks } from "./hooks-adapter"
 import { readTaskHistory, resolveDataDir } from "./legacy-state-reader"
 import type { ResolvedModelSelection } from "./model-catalog/contracts"
@@ -52,7 +42,6 @@ import { parseProviderId } from "./model-catalog/provider-id"
 import { toSdkProviderId } from "./model-catalog/sdk-provider-id"
 import { createProviderConfigStore, resolveRuntimeModelSelection } from "./model-catalog/store"
 import { getProviderSettingsManager } from "./provider-migration"
-import { buildSapProviderConfig, type SapProviderConfig } from "./sap-config"
 import type { SdkSessionHost } from "./session-host"
 
 // ---------------------------------------------------------------------------
@@ -222,25 +211,6 @@ function resolveProviderReasoningConfig(providerId: string): SessionReasoningCon
 	}
 }
 
-function resolveOcaReasoningConfig(mode: Mode, apiConfig: ApiConfiguration | undefined): SessionReasoningConfig | undefined {
-	const rawEffort = mode === "plan" ? apiConfig?.planModeOcaReasoningEffort : apiConfig?.actModeOcaReasoningEffort
-	const effort = rawEffort?.trim().toLowerCase()
-	if (!effort) {
-		return undefined
-	}
-
-	if (effort === "none") {
-		return { thinking: false }
-	}
-
-	return isReasoningEffort(effort) ? { thinking: true, reasoningEffort: effort } : undefined
-}
-
-function resolveOpenAiCompatibleMaxTokens(config: ApiConfiguration | undefined, mode: Mode): number | undefined {
-	const modelInfo = mode === "plan" ? config?.planModeOpenAiModelInfo : config?.actModeOpenAiModelInfo
-	return positiveFiniteNumber(modelInfo?.maxTokens)
-}
-
 function toSdkModelInfo(selection: ResolvedModelSelection): SdkModelInfo {
 	const modelInfo = selection.modelInfo
 	// Seed from the SDK capability list preserved at the catalog boundary
@@ -338,110 +308,13 @@ function resolveCommittedRuntimeModel(
 }
 
 // ---------------------------------------------------------------------------
-// Provider → API key field mapping
-// ---------------------------------------------------------------------------
-
-/**
- * Maps a provider ID to the corresponding API key field name in ApiConfiguration.
- * This covers all 30+ providers supported by the classic extension.
- */
-const PROVIDER_API_KEY_MAP: Record<string, keyof ApiConfiguration> = {
-	anthropic: "apiKey",
-	openrouter: "openRouterApiKey",
-	openai: "openAiApiKey",
-	"openai-native": "openAiNativeApiKey",
-	bedrock: "awsBedrockApiKey",
-	vertex: "geminiApiKey",
-	gemini: "geminiApiKey",
-	deepseek: "deepSeekApiKey",
-	cline: "clineApiKey",
-	"cline-pass": "clineApiKey",
-	ollama: "ollamaApiKey",
-	lmstudio: "apiKey", // LM Studio doesn't need a key but uses the generic field
-	requesty: "requestyApiKey",
-	together: "togetherApiKey",
-	fireworks: "fireworksApiKey",
-	qwen: "qwenApiKey",
-	doubao: "doubaoApiKey",
-	mistral: "mistralApiKey",
-	litellm: "liteLlmApiKey",
-	asksage: "asksageApiKey",
-	xai: "xaiApiKey",
-	moonshot: "moonshotApiKey",
-	zai: "zaiApiKey",
-	huggingface: "huggingFaceApiKey",
-	nebius: "nebiusApiKey",
-	sambanova: "sambanovaApiKey",
-	cerebras: "cerebrasApiKey",
-	groq: "groqApiKey",
-	baseten: "basetenApiKey",
-	"huawei-cloud-maas": "huaweiCloudMaasApiKey",
-	dify: "difyApiKey",
-	minimax: "minimaxApiKey",
-	hicap: "hicapApiKey",
-	aihubmix: "aihubmixApiKey",
-	nousResearch: "nousResearchApiKey",
-	"vercel-ai-gateway": "vercelAiGatewayApiKey",
-	claude_code: "apiKey", // Claude Code uses anthropic key
-	wandb: "wandbApiKey",
-	"qwen-code": "qwenApiKey",
-	oca: "ocaApiKey",
-}
-
-/**
- * Maps a provider ID to the mode-specific model ID field name in ApiConfiguration.
- * For providers that have dedicated model ID fields per mode.
- */
-const PROVIDER_MODEL_ID_MAP: Record<string, { plan: keyof ApiConfiguration; act: keyof ApiConfiguration }> = {
-	anthropic: { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	openrouter: { plan: "planModeOpenRouterModelId", act: "actModeOpenRouterModelId" },
-	openai: { plan: "planModeOpenAiModelId", act: "actModeOpenAiModelId" },
-	"openai-native": { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	"openai-codex": { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	ollama: { plan: "planModeOllamaModelId", act: "actModeOllamaModelId" },
-	lmstudio: { plan: "planModeLmStudioModelId", act: "actModeLmStudioModelId" },
-	gemini: { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	bedrock: { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	vertex: { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	deepseek: { plan: "planModeApiModelId", act: "actModeApiModelId" },
-	cline: { plan: "planModeClineModelId", act: "actModeClineModelId" },
-	"cline-pass": { plan: "planModeClinePassModelId", act: "actModeClinePassModelId" },
-	litellm: { plan: "planModeLiteLlmModelId", act: "actModeLiteLlmModelId" },
-	requesty: { plan: "planModeRequestyModelId", act: "actModeRequestyModelId" },
-	together: { plan: "planModeTogetherModelId", act: "actModeTogetherModelId" },
-	fireworks: { plan: "planModeFireworksModelId", act: "actModeFireworksModelId" },
-	groq: { plan: "planModeGroqModelId", act: "actModeGroqModelId" },
-	baseten: { plan: "planModeBasetenModelId", act: "actModeBasetenModelId" },
-	huggingface: { plan: "planModeHuggingFaceModelId", act: "actModeHuggingFaceModelId" },
-	"huawei-cloud-maas": { plan: "planModeHuaweiCloudMaasModelId", act: "actModeHuaweiCloudMaasModelId" },
-	oca: { plan: "planModeOcaModelId", act: "actModeOcaModelId" },
-	aihubmix: { plan: "planModeAihubmixModelId", act: "actModeAihubmixModelId" },
-	hicap: { plan: "planModeHicapModelId", act: "actModeHicapModelId" },
-	nousResearch: { plan: "planModeNousResearchModelId", act: "actModeNousResearchModelId" },
-	"vercel-ai-gateway": { plan: "planModeVercelAiGatewayModelId", act: "actModeVercelAiGatewayModelId" },
-}
-
-// ---------------------------------------------------------------------------
 // Provider/model defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PROVIDER_ID = "pliny"
-
-/**
- * Providers whose model list comes from a live local endpoint (Ollama's
- * `/api/tags`, LM Studio's `/v1/models`). Their installed models are the only
- * meaningful catalog; a bundled-catalog default would silently select a model
- * the user never installed (e.g. an Ollama Cloud nemotron model).
- */
-function providerHasLocalModelSource(providerId: string): boolean {
-	return Boolean(MODEL_COLLECTIONS_BY_PROVIDER_ID[toSdkProviderId(providerId)]?.provider.modelsSourceUrl)
-}
+const DEFAULT_PROVIDER_ID = PLINY_PROVIDER_ID
 
 export function getDefaultModelIdForProvider(providerId: string): string | undefined {
 	const sdkProviderId = toSdkProviderId(providerId)
-	if (providerHasLocalModelSource(providerId)) {
-		return undefined
-	}
 	const collection = MODEL_COLLECTIONS_BY_PROVIDER_ID[sdkProviderId]
 	if (!collection) {
 		return undefined
@@ -457,111 +330,44 @@ export function getDefaultModelIdForProvider(providerId: string): string | undef
 }
 
 // ---------------------------------------------------------------------------
-// API key resolution
+// Provider, model, API key and base URL resolution
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the API key for a given provider from the ApiConfiguration.
- *
- * For SDK-managed OAuth providers, reads the OAuth token from providers.json
- * via ProviderSettingsManager (the single source of truth for credentials).
+ * Resolve the provider for a mode. PlinyCode only runs on Pliny: a provider id
+ * stored by an older version (or by upstream Cline) reads as `pliny` instead of
+ * naming a provider this build can't reach.
  */
-export function resolveApiKey(providerId: string, config: ApiConfiguration): string | undefined {
-	const authHandler = getProviderAuthHandler(providerId)
-	if (authHandler) {
-		const keyField = PROVIDER_API_KEY_MAP[providerId]
-		const configuredApiKey = keyField ? (config[keyField] as string | undefined)?.trim() : undefined
-		if (configuredApiKey) {
-			return configuredApiKey
-		}
+export function resolveProviderId(mode: Mode, config: ApiConfiguration | undefined): string {
+	return coerceToPlinyProvider(mode === "plan" ? config?.planModeApiProvider : config?.actModeApiProvider)
+}
 
-		// Read from providers.json via the shared ProviderSettingsManager. This is
-		// intentionally keyed by the requested provider so SDK auth metadata can
-		// resolve shared storage (e.g. cline-pass -> cline) without VS Code
-		// hardcoding provider exceptions.
-		try {
-			const manager = getProviderSettingsManager()
-			const apiKey = resolveProviderApiKeyFromSettings(manager, providerSettingsProviderId(providerId))?.trim()
-			if (apiKey) {
-				return apiKey
-			}
-		} catch {
-			Logger.warn(`[SessionFactory] Failed to read ${providerId} credentials from providers.json`)
-		}
-
-		return undefined
-	}
-
-	// For all other providers, look up the API key field name
-	const keyField = PROVIDER_API_KEY_MAP[providerId]
-	if (keyField) {
-		const apiKey = config[keyField] as string | undefined
-		if (apiKey) {
-			return apiKey
-		}
-	}
-
-	// SDK-backed API-key providers save credentials in providers.json instead
-	// of legacy ApiConfiguration fields. Fall back to that store so providers
-	// exposed through the SDK settings UI still receive credentials at task
-	// startup.
+/**
+ * Resolve the API key for a provider. The settings UI saves the Pliny key in
+ * providers.json (through `writeProviderConfig`), which
+ * ProviderSettingsManager reads.
+ */
+export function resolveApiKey(providerId: string): string | undefined {
 	try {
 		const manager = getProviderSettingsManager()
-		const apiKey = resolveProviderApiKeyFromSettings(manager, providerSettingsProviderId(providerId))?.trim()
-		if (apiKey) {
-			return apiKey
-		}
+		return resolveProviderApiKeyFromSettings(manager, providerSettingsProviderId(providerId))?.trim() || undefined
 	} catch {
 		Logger.warn(`[SessionFactory] Failed to read ${providerId} API key from providers.json`)
+		return undefined
 	}
-
-	return undefined
 }
 
 /**
- * Resolve the model ID for a given provider and mode from the ApiConfiguration.
- * Uses mode-specific model ID fields when available, falls back to generic fields.
+ * Resolve the model ID for a mode from the ApiConfiguration.
  */
-export function resolveModelId(providerId: string, mode: Mode, config: ApiConfiguration): string | undefined {
-	// VS Code LM has no plain model-id field: the selected model is stored as a
-	// structured LanguageModelChatSelector ({vendor, family, ...}) in
-	// plan/actModeVsCodeLmModelSelector. The SDK ProviderConfig only carries a
-	// string modelId, so we stringify the selector to "vendor/family[/version/id]"
-	// and the VS Code LM handler parses it back. See sdk/vscode-lm/vscode-lm-handler.ts.
-	if (providerId === "vscode-lm") {
-		const selector = mode === "plan" ? config.planModeVsCodeLmModelSelector : config.actModeVsCodeLmModelSelector
-		return selector ? stringifyVsCodeLmModelSelector(selector) || undefined : undefined
-	}
-
-	if (providerId === "sapaicore") {
-		const genericField = mode === "plan" ? "planModeApiModelId" : "actModeApiModelId"
-		const legacyField = mode === "plan" ? "planModeSapAiCoreModelId" : "actModeSapAiCoreModelId"
-		return (
-			(config[genericField] as string | undefined)?.trim() ||
-			(config[legacyField] as string | undefined)?.trim() ||
-			undefined
-		)
-	}
-
-	// Check provider-specific mode model ID fields.
-	// If the provider has a dedicated field, do not fall back to generic
-	// *ModeApiModelId. Those generic slots may contain a stale model from a
-	// previous provider (for example openai/gpt-5.4), which would make the SDK
-	// session use a different model than the Cline provider UI shows.
-	const modelFields = PROVIDER_MODEL_ID_MAP[providerId]
-	if (modelFields) {
-		const field = mode === "plan" ? modelFields.plan : modelFields.act
-		return (config[field] as string | undefined)?.trim() || undefined
-	}
-
-	// Fallback to generic mode model ID fields only for providers without a
-	// dedicated model field.
-	const genericField = mode === "plan" ? "planModeApiModelId" : "actModeApiModelId"
-	return (config[genericField] as string | undefined)?.trim() || undefined
+export function resolveModelId(mode: Mode, config: ApiConfiguration): string | undefined {
+	const field = mode === "plan" ? "planModeApiModelId" : "actModeApiModelId"
+	return config[field]?.trim() || undefined
 }
 
 /**
- * Resolve the base URL for a given provider from the ApiConfiguration.
+ * Normalize a configured base URL: blank means unset, and a bare origin
+ * inherits the provider default's path.
  */
 export function normalizeSdkBaseUrl(providerId: string, baseUrl: unknown): string | undefined {
 	if (typeof baseUrl !== "string") {
@@ -595,220 +401,29 @@ export function normalizeSdkBaseUrl(providerId: string, baseUrl: unknown): strin
 	return trimmed
 }
 
-export function resolveVertexProviderConfig(config: ApiConfiguration): Pick<ProviderSettings, "gcp" | "region"> {
-	let providerSettingsProjectId: string | undefined
-	let providerSettingsRegion: string | undefined
-	try {
-		const settings = getProviderSettingsManager().getProviderSettings("vertex")
-		providerSettingsProjectId = settings?.gcp?.projectId?.trim() || undefined
-		providerSettingsRegion = settings?.gcp?.region?.trim() || settings?.region?.trim() || undefined
-	} catch {
-		Logger.warn("[SessionFactory] Failed to read Vertex settings from providers.json")
-	}
-
-	const region = (providerSettingsRegion ?? config.vertexRegion?.trim()) || undefined
-	return {
-		region,
-		gcp: {
-			projectId: (providerSettingsProjectId ?? config.vertexProjectId?.trim()) || undefined,
-			region,
-		},
-	}
-}
-
-/**
- * Resolve Azure OpenAI settings (API version / Entra ID auth) for the OpenAI
- * Compatible provider. The webview saves them only to legacy state
- * (`azureApiVersion` / `azureIdentity`); the providers.json `azure` block is
- * the fallback for entries written by the CLI onboarding or the one-shot
- * legacy migration. Without this mapping the SDK gateway never appends
- * `?api-version=` to Azure deployment URLs and Azure rejects every request
- * with "Resource not found" (#13655).
- *
- * Values resolved from legacy state are also mirrored into providers.json so
- * the CLI — which reads only providers.json — sees the same Azure
- * configuration the extension uses. The legacy migration never updates
- * existing entries, so this mirror is the only ongoing sync for these fields.
- */
-export function resolveAzureProviderConfig(config: ApiConfiguration): Pick<ProviderSettings, "azure"> | undefined {
-	const apiVersion = config.azureApiVersion?.trim() || undefined
-	const useIdentity = typeof config.azureIdentity === "boolean" ? config.azureIdentity : undefined
-
-	let stored: ProviderSettings | undefined
-	try {
-		stored = getProviderSettingsManager().getProviderSettings("openai-compatible")
-	} catch {
-		Logger.warn("[SessionFactory] Failed to read OpenAI Compatible Azure settings from providers.json")
-	}
-
-	if (apiVersion === undefined && useIdentity === undefined) {
-		return stored?.azure ? { azure: stored.azure } : undefined
-	}
-
-	const azure: NonNullable<ProviderSettings["azure"]> = {
-		...(stored?.azure ?? {}),
-		...(apiVersion !== undefined ? { apiVersion } : {}),
-		...(useIdentity !== undefined ? { useIdentity } : {}),
-	}
-
-	if (stored?.azure?.apiVersion !== azure.apiVersion || stored?.azure?.useIdentity !== azure.useIdentity) {
-		try {
-			getProviderSettingsManager().saveProviderSettings(
-				{ ...(stored ?? {}), provider: "openai-compatible", azure },
-				{ setLastUsed: false },
-			)
-		} catch {
-			Logger.warn("[SessionFactory] Failed to mirror Azure settings into providers.json")
-		}
-	}
-
-	return { azure }
-}
-
-type OllamaProviderConfig = {
-	modelInfo?: { id: string; name: string; contextWindow: number }
-	timeoutMs?: number
-}
-
-/**
- * Resolve the user's "Model Context Window" setting for Ollama and surface it
- * as the selected model's `contextWindow`. The gateway carries it on the
- * resolved model definition, and the Ollama vendor maps it onto the wire as
- * `options.num_ctx` — without it Ollama loads every model with its 4096-token
- * server default. Keeping it on the model also means context management
- * budgets against the window Ollama actually applies (Ollama truncates the
- * prompt to `num_ctx` server-side).
- */
-export function resolveOllamaProviderConfig(config: ApiConfiguration, modelId: string | undefined): OllamaProviderConfig {
-	// providers.json (`contextWindow`) is the source of truth; the legacy
-	// StateManager string is a migration fallback (the config store mirrors
-	// writes to both).
-	let settingsContextWindow: number | undefined
-	try {
-		const value = getProviderSettingsManager().getProviderSettings("ollama")?.contextWindow
-		settingsContextWindow = typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
-	} catch {
-		Logger.warn("[SessionFactory] Failed to read Ollama settings from providers.json")
-	}
-	const raw = config.ollamaApiOptionsCtxNum?.trim()
-	const parsed = raw ? Number(raw) : Number.NaN
-	const legacyContextWindow = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined
-	const contextWindow = settingsContextWindow ?? legacyContextWindow ?? OLLAMA_DEFAULT_CONTEXT_WINDOW
-	const timeoutMs = config.requestTimeoutMs
-	return {
-		...(typeof timeoutMs === "number" && timeoutMs > 0 ? { timeoutMs } : {}),
-		...(modelId ? { modelInfo: { id: modelId, name: modelId, contextWindow } } : {}),
-	}
-}
-
-export function resolveBaseUrl(providerId: string, config: ApiConfiguration): string | undefined {
+export function resolveBaseUrl(providerId: string): string | undefined {
 	// E2E test override: when PLINY_BASE_URL is set (by the e2e harness via the
 	// openVSCode fixture env), short-circuit all resolution so the Pliny provider
 	// talks to the local mock server instead of the real gateway. This is the
 	// most reliable injection point because it runs before the SDK gateway's own
 	// base URL resolution (which may use the hardcoded PLINY_BASE_URL from the
 	// provider spec).
-	if (providerId === "pliny" && process.env.PLINY_BASE_URL) {
+	if (providerId === PLINY_PROVIDER_ID && process.env.PLINY_BASE_URL) {
 		return process.env.PLINY_BASE_URL
 	}
-	const baseUrlMap: Record<string, keyof ApiConfiguration> = {
-		anthropic: "anthropicBaseUrl",
-		openai: "openAiBaseUrl",
-		// The OpenAI Compatible provider may be stored under its SDK spelling
-		// (settings written through the SDK settings store) instead of the
-		// extension's legacy "openai" id; both use the same legacy state field.
-		"openai-compatible": "openAiBaseUrl",
-		ollama: "ollamaBaseUrl",
-		lmstudio: "lmStudioBaseUrl",
-		gemini: "geminiBaseUrl",
-		requesty: "requestyBaseUrl",
-		litellm: "liteLlmBaseUrl",
-		asksage: "asksageApiUrl",
-		oca: "ocaBaseUrl",
-		aihubmix: "aihubmixBaseUrl",
-		dify: "difyBaseUrl",
-	}
 
-	const field = baseUrlMap[providerId]
-	if (field) {
-		const fromState = normalizeSdkBaseUrl(providerId, config[field])
-		if (fromState) {
-			return fromState
-		}
-	}
-
-	// SDK-backed providers save their base URL in providers.json instead of
-	// legacy ApiConfiguration fields. Fall back to that store (mirroring
-	// resolveApiKey) so ProviderConfig consumers that don't re-resolve settings
-	// themselves — e.g. the compaction summarizer's createHandlerAsync — still
-	// reach the configured endpoint instead of the provider default.
+	// A base URL saved in providers.json. Consumers that don't re-resolve
+	// settings themselves — e.g. the compaction summarizer's
+	// createHandlerAsync — need it on the ProviderConfig to reach the
+	// configured endpoint instead of the provider default.
 	try {
 		const manager = getProviderSettingsManager()
 		const settingsBaseUrl = manager.getProviderSettings(providerSettingsProviderId(providerId))?.baseUrl
-		const normalized = normalizeSdkBaseUrl(providerId, settingsBaseUrl)
-		if (normalized) {
-			return normalized
-		}
+		return normalizeSdkBaseUrl(providerId, settingsBaseUrl)
 	} catch {
 		Logger.warn(`[SessionFactory] Failed to read ${providerId} base URL from providers.json`)
+		return undefined
 	}
-
-	return undefined
-}
-
-/**
- * Resolve the regional API line ("china" | "international") for providers with
- * regional endpoints (Qwen, Moonshot, Z AI, MiniMax and their coding
- * variants). Resolution order:
- *
- * 1. The provider's own legacy StateManager field (mirroring resolveBaseUrl).
- * 2. The provider's own providers.json `apiLine` (SDK-store fallback).
- * 3. For coding variants without their own legacy field or stored line, the
- *    base provider's legacy field (qwen-code shares Qwen's DashScope region,
- *    zai-coding-plan shares Z AI's account region) — so a variant-specific
- *    providers.json setting still wins over the shared field.
- *
- * The SDK gateway maps the line to the provider's regional base URL when no
- * explicit base URL is configured.
- */
-export function resolveApiLine(providerId: string, config: ApiConfiguration): ProviderApiLine | undefined {
-	const apiLineMap: Record<string, keyof ApiConfiguration> = {
-		qwen: "qwenApiLine",
-		moonshot: "moonshotApiLine",
-		zai: "zaiApiLine",
-		minimax: "minimaxApiLine",
-	}
-	const sharedApiLineMap: Record<string, keyof ApiConfiguration> = {
-		"qwen-code": "qwenApiLine",
-		"zai-coding-plan": "zaiApiLine",
-	}
-
-	const field = apiLineMap[providerId]
-	if (field) {
-		const fromState = config[field]
-		if (isProviderApiLine(fromState)) {
-			return fromState
-		}
-	}
-
-	try {
-		const settingsApiLine = getProviderSettingsManager().getProviderSettings(providerSettingsProviderId(providerId))?.apiLine
-		if (isProviderApiLine(settingsApiLine)) {
-			return settingsApiLine
-		}
-	} catch {
-		Logger.warn(`[SessionFactory] Failed to read ${providerId} API line from providers.json`)
-	}
-
-	const sharedField = sharedApiLineMap[providerId]
-	if (sharedField) {
-		const fromSharedState = config[sharedField]
-		if (isProviderApiLine(fromSharedState)) {
-			return fromSharedState
-		}
-	}
-
-	return undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -835,151 +450,32 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	const sdkLogger = createSdkLogger()
 	const distinctId = getDistinctId()
 
-	let providerId: string | undefined
-	let modelId: string | undefined
-	let apiKey: string | undefined
-	let baseUrl: string | undefined
-	let apiLine: ProviderApiLine | undefined
+	// StateManager is the source of truth for the mode's model; the API key
+	// and base URL live in providers.json.
 	let apiConfig: ApiConfiguration | undefined
-	// Cloud-provider structured options. The core runtime reads these from
-	// CoreSessionConfig.providerConfig; without them the SDK gateway never receives
-	// region/project/auth fields for inference calls.
-	let bedrockProviderConfig: BedrockProviderConfig | undefined
-	let vertexProviderConfig: Pick<ProviderSettings, "gcp" | "region"> | undefined
-	let sapProviderConfig: SapProviderConfig | undefined
-	let ollamaProviderConfig: ReturnType<typeof resolveOllamaProviderConfig> | undefined
-	let azureProviderConfig: Pick<ProviderSettings, "azure"> | undefined
-
 	try {
-		const stateManager = StateManager.get()
-		apiConfig = stateManager.getApiConfiguration()
-
-		// Resolve the provider for the current mode. State written by older
-		// builds or other hosts may carry SDK catalog spellings (e.g.
-		// `openai-compatible`); fold them back to the legacy spelling the
-		// provider-keyed maps below are keyed by.
-		const modeProvider = mode === "plan" ? apiConfig.planModeApiProvider : apiConfig.actModeApiProvider
-		providerId = modeProvider ? toLegacyApiProvider(modeProvider) : modeProvider
-
-		if (providerId) {
-			// Resolve API key
-			apiKey = resolveApiKey(providerId, apiConfig)
-
-			// Resolve model ID
-			modelId = resolveModelId(providerId, mode, apiConfig)
-
-			// Resolve base URL
-			baseUrl = resolveBaseUrl(providerId, apiConfig)
-
-			// Resolve the regional API line (Qwen/Moonshot/Z AI/MiniMax). The
-			// SDK gateway routes to the line's regional endpoint when no
-			// explicit base URL is set.
-			apiLine = resolveApiLine(providerId, apiConfig)
-
-			// Resolve Bedrock region + AWS authentication options from the legacy
-			// ApiConfiguration (StateManager is the VSCode source of truth, not
-			// providers.json).
-			if (providerId === "bedrock") {
-				bedrockProviderConfig = buildBedrockProviderConfig(apiConfig, mode)
-			}
-
-			if (providerId === "vertex") {
-				vertexProviderConfig = resolveVertexProviderConfig(apiConfig)
-			}
-
-			if (providerId === "sapaicore") {
-				sapProviderConfig = buildSapProviderConfig(apiConfig, mode)
-				baseUrl = sapProviderConfig.baseUrl
-			}
-
-			if (providerId === "ollama") {
-				ollamaProviderConfig = resolveOllamaProviderConfig(apiConfig, modelId)
-			}
-
-			// The OpenAI Compatible provider is spelled "openai" after the
-			// legacy fold above; keep the SDK spelling as a defensive alias.
-			if (providerId === "openai" || providerId === "openai-compatible") {
-				azureProviderConfig = resolveAzureProviderConfig(apiConfig)
-			}
-
-			Logger.log(
-				`[SessionFactory] Resolved from StateManager: provider=${providerId}, model=${modelId}, hasApiKey=${!!apiKey}`,
-			)
-		}
+		apiConfig = StateManager.get().getApiConfiguration()
 	} catch (error) {
-		Logger.warn("[SessionFactory] StateManager credential resolution failed:", error)
+		Logger.warn("[SessionFactory] StateManager read failed:", error)
 	}
 
-	// Fallback: try SDK's ProviderSettingsManager only when StateManager did not
-	// resolve a provider at all. If the user selected a provider but credentials
-	// are missing, keep that provider/model so the UI can surface the right auth
-	// state instead of silently switching to a previous provider.
-	if (!providerId) {
-		try {
-			const dataDir = resolveDataDir()
-			const manager = getProviderSettingsManager(dataDir)
-			const lastUsed = manager.getLastUsedProviderSettings({
-				isClinePassEnabled: true,
-			})
+	const providerId = resolveProviderId(mode, apiConfig)
+	const apiKey = resolveApiKey(providerId) ?? ""
+	const baseUrl = resolveBaseUrl(providerId)
+	// Keep the default aligned with the provider catalog so the UI and session
+	// factory share one source of truth for default models.
+	const modelId =
+		(apiConfig ? resolveModelId(mode, apiConfig) : undefined) ??
+		getDefaultModelIdForProvider(providerId) ??
+		getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ??
+		""
+	Logger.log(`[SessionFactory] Resolved provider=${providerId}, model=${modelId}, hasApiKey=${!!apiKey}`)
 
-			if (lastUsed?.provider && lastUsed?.apiKey) {
-				// providers.json stores SDK provider ids (e.g. `openai-compatible`);
-				// normalize to the legacy spelling used across this factory.
-				providerId = toLegacyApiProvider(lastUsed.provider)
-				modelId = lastUsed.model
-				apiKey = lastUsed.apiKey
-				baseUrl = lastUsed.baseUrl
-				apiLine = isProviderApiLine(lastUsed.apiLine) ? lastUsed.apiLine : undefined
-				Logger.log(`[SessionFactory] Using SDK provider fallback: ${providerId}/${modelId}`)
-			}
-		} catch (error) {
-			Logger.warn("[SessionFactory] SDK ProviderSettingsManager fallback failed:", error)
-		}
-	}
-
-	// Final defaults. Keep this aligned with the provider catalog so the UI and
-	// session factory share one source of truth for default models.
-	providerId = providerId ?? DEFAULT_PROVIDER_ID
-	if (!modelId && providerHasLocalModelSource(providerId)) {
-		// Local-model-source providers: the committed selection lives in
-		// providers.json when the legacy state slot is empty (e.g. configs
-		// created through the SDK settings store). Never fall through to a
-		// catalog default — an empty model id surfaces an explicit "select a
-		// model" state instead of silently running a model the user never chose.
-		try {
-			modelId = getProviderSettingsManager().getProviderSettings(providerSettingsProviderId(providerId))?.model?.trim()
-		} catch {
-			Logger.warn(`[SessionFactory] Failed to read ${providerId} model from providers.json`)
-		}
-		modelId = modelId || ""
-	} else {
-		modelId = modelId ?? getDefaultModelIdForProvider(providerId) ?? getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ?? ""
-	}
-	if (!apiKey && apiConfig) {
-		apiKey = resolveApiKey(providerId, apiConfig)
-	}
-	apiKey = apiKey ?? ""
 	const committedRuntimeModel = resolveCommittedRuntimeModel(providerId, mode, modelId)
 	const overriddenMaxTokens = committedRuntimeModel?.overrides?.maxTokens
-	const maxTokensPerTurn =
-		positiveFiniteNumber(overriddenMaxTokens) ??
-		(providerId === "openai" ? resolveOpenAiCompatibleMaxTokens(apiConfig, mode) : undefined)
+	const maxTokensPerTurn = positiveFiniteNumber(overriddenMaxTokens)
 	const temperature = nonNegativeFiniteNumber(committedRuntimeModel?.overrides?.temperature)
-	const reasoningConfig =
-		providerId === "oca"
-			? (resolveOcaReasoningConfig(mode, apiConfig) ?? resolveProviderReasoningConfig(providerId))
-			: resolveProviderReasoningConfig(providerId)
-
-	// Include rich workspace metadata so Cline API observability can extract
-	// git remotes and the latest commit hash from the system message.
-	let workspaceMetadata: string | undefined
-	if (isClineProvider(providerId)) {
-		try {
-			workspaceMetadata = await buildWorkspaceMetadata(workspaceRoot)
-		} catch (error) {
-			Logger.warn("[SessionFactory] Failed to build workspace metadata:", error)
-		}
-	}
+	const reasoningConfig = resolveProviderReasoningConfig(providerId)
 
 	let systemPrompt = ""
 	try {
@@ -988,7 +484,6 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			ide: "VS Code",
 			workspaceRoot,
 			workspaceName,
-			metadata: workspaceMetadata,
 			mode: mode === "plan" ? "plan" : "act",
 			providerId,
 			platform: process.platform,
@@ -1054,23 +549,12 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 
 	// Always pass a providerConfig so the proxy/CA-aware fetch reaches the SDK
 	// gateway; without it the agent loop uses bare global fetch and corporate
-	// proxy/self-signed CA setups fail on JetBrains and CLI. Cloud providers
-	// additionally need structured options (region/project/auth/SAP OAuth), which core
-	// reads from providerConfig in createAgentModelFromConfig.
-	const cloudProviderConfig = bedrockProviderConfig ?? vertexProviderConfig ?? sapProviderConfig ?? ollamaProviderConfig
-	// Spread the cloud config first so the explicit fields below — notably the
-	// proxy/CA-aware fetch — can never be clobbered if those types gain matching keys.
+	// proxy/self-signed CA setups fail.
 	const providerConfig = {
-		...(cloudProviderConfig ?? {}),
-		// Only spread when defined: an explicit `azure: undefined` key would
-		// clobber the providers.json azure block core merges in downstream
-		// (buildProviderConfig spreads this session config over stored settings).
-		...(azureProviderConfig ?? {}),
 		providerId: sdkProviderId,
 		modelId,
 		...(apiKey ? { apiKey } : {}),
 		...(baseUrl !== undefined ? { baseUrl } : {}),
-		...(apiLine !== undefined ? { apiLine } : {}),
 		...(knownModels && Object.keys(knownModels).length > 0 ? { knownModels } : {}),
 		// Mirror the user's Max Output Tokens for consumers that build handlers
 		// straight from providerConfig — notably the compaction summarizer, which

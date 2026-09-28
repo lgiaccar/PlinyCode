@@ -1,5 +1,5 @@
 import { syncStoredProviderRegistration } from "@plinycode/core"
-import { type ApiConfiguration, type ModelInfo, openAiModelInfoSafeDefaults } from "@shared/api"
+import { type ApiConfiguration, type ModelInfo } from "@shared/api"
 import { ApiFormat } from "@shared/proto/cline/models"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ProviderConfigChange } from "./contracts"
@@ -91,7 +91,7 @@ vi.mock("../provider-migration", () => ({
 }))
 
 vi.mock("@plinycode/core", () => ({
-	isPrivateModelCatalogProvider: (providerId: string) => ["baseten", "hicap", "litellm", "poolside"].includes(providerId),
+	isPrivateModelCatalogProvider: () => false,
 	syncStoredProviderRegistration: vi.fn(),
 	readModelsFileSync: vi.fn(() => mocks.getModelsFile()),
 	resolveModelsRegistryPath: vi.fn(() => "/tmp/models.json"),
@@ -159,13 +159,13 @@ describe("createProviderConfigStore", () => {
 	it("round-trips write then read with fresh structurally equal objects", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("deepseek")
+		const providerId = parseProviderId("pliny")
 
-		const written = store.write(providerId, { apiKey: "deepseek-key" })
+		const written = store.write(providerId, { apiKey: "pliny-key" })
 		const firstRead = store.read(providerId)
 		const secondRead = store.read(providerId)
 
-		expect(written).toEqual({ providerId, apiKey: "deepseek-key" })
+		expect(written).toEqual({ providerId, apiKey: "pliny-key" })
 		expect(firstRead).toEqual(written)
 		expect(secondRead).toEqual(firstRead)
 		expect(secondRead).not.toBe(firstRead)
@@ -173,14 +173,13 @@ describe("createProviderConfigStore", () => {
 
 	it("clears string fields from providers.json when they are written as empty strings", async () => {
 		const { createProviderConfigStore } = await import("./store")
-		mocks.setProviderSettings({ gemini: { provider: "gemini", apiKey: "existing-key", baseUrl: "https://custom.example" } })
-		mocks.setApiConfiguration({ geminiApiKey: "existing-key", geminiBaseUrl: "https://custom.example" })
+		mocks.setProviderSettings({ pliny: { provider: "pliny", apiKey: "existing-key", baseUrl: "https://custom.example" } })
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("gemini")
+		const providerId = parseProviderId("pliny")
 
 		store.write(providerId, { baseUrl: "" })
 
-		expect(mocks.getSavedProviderSettings("gemini")).toEqual({ provider: "gemini", apiKey: "existing-key" })
+		expect(mocks.getSavedProviderSettings("pliny")).toEqual({ provider: "pliny", apiKey: "existing-key" })
 		expect(store.read(providerId).baseUrl).toBeUndefined()
 	})
 
@@ -189,62 +188,39 @@ describe("createProviderConfigStore", () => {
 	// them from the user and the provider rejects the key with a 401 that
 	// looks identical to a genuinely wrong key, so the write boundary must
 	// strip them before the value reaches either backing store.
-	it("sanitizes pasted API keys before writing to both stores", async () => {
+	it("sanitizes pasted API keys before writing them", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("mistral")
+		const providerId = parseProviderId("pliny")
 
-		store.write(providerId, { apiKey: " \u200b\ufeffmistral-key\u200d \n" })
+		store.write(providerId, { apiKey: " \u200b\ufeffpliny-key\u200d \n" })
 
-		expect(mocks.getApiConfiguration().mistralApiKey).toBe("mistral-key")
-		expect(mocks.getSavedProviderSettings("mistral")).toEqual({ provider: "mistral", apiKey: "mistral-key" })
-		expect(store.read(providerId).apiKey).toBe("mistral-key")
+		expect(mocks.getSavedProviderSettings("pliny")).toEqual({ provider: "pliny", apiKey: "pliny-key" })
+		expect(store.read(providerId).apiKey).toBe("pliny-key")
 	})
 
 	it("treats a whitespace-only API key as a clear", async () => {
 		const { createProviderConfigStore } = await import("./store")
-		mocks.setProviderSettings({ mistral: { provider: "mistral", apiKey: "existing-key" } })
-		mocks.setApiConfiguration({ mistralApiKey: "existing-key" })
+		mocks.setProviderSettings({ pliny: { provider: "pliny", apiKey: "existing-key" } })
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("mistral")
+		const providerId = parseProviderId("pliny")
 
 		store.write(providerId, { apiKey: " \n " })
 
-		expect(mocks.getApiConfiguration().mistralApiKey).toBeUndefined()
-		expect(mocks.getSavedProviderSettings("mistral")).toEqual({ provider: "mistral" })
+		expect(mocks.getSavedProviderSettings("pliny")).toEqual({ provider: "pliny" })
 		expect(store.read(providerId).apiKey).toBeUndefined()
-	})
-
-	// Changing the regional API line in the settings UI goes through
-	// store.write. It must land in providers.json (the CLI and desktop app
-	// bake the regional base URL from its stored apiLine) AND mirror to the
-	// legacy state key (the VS Code session factory's resolveApiLine reads
-	// legacy state first).
-	it.each([
-		["qwen", "qwenApiLine"],
-		["moonshot", "moonshotApiLine"],
-	] as const)("mirrors %s apiLine writes to both providers.json and the legacy state key", async (provider, legacyKey) => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId(provider)
-
-		store.write(providerId, { apiLine: "china" })
-
-		expect(mocks.getSavedProviderSettings(provider)).toMatchObject({ provider, apiLine: "china" })
-		expect(mocks.getApiConfiguration()[legacyKey]).toBe("china")
-		expect(store.read(providerId).apiLine).toBe("china")
 	})
 
 	it("round-trips commitSelection then readSelection for provider-specific model info", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openrouter")
+		const providerId = parseProviderId("pliny")
 		const selection = selectionFromModelInfo(providerId, "anthropic/claude-sonnet-4", modelInfoA)
 
 		store.commitSelection(providerId, "act", selection)
 
 		expectResolvedSelection(store.readSelection(providerId, "act"), selection, modelInfoA)
-		expect(mocks.getModelsFile().providers.openrouter?.models?.["anthropic/claude-sonnet-4"]).toMatchObject({
+		expect(mocks.getModelsFile().providers.pliny?.models?.["anthropic/claude-sonnet-4"]).toMatchObject({
 			name: "Model A",
 			contextWindow: 128_000,
 			maxTokens: 8_192,
@@ -253,148 +229,11 @@ describe("createProviderConfigStore", () => {
 		})
 	})
 
-	it("persists host catalog metadata for a dynamic LiteLLM model without turning it into an override", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("litellm")
-		const modelId = "openai/grok-4.6"
-		const liveModelInfo: ModelInfo = {
-			name: "xai/grok-4.6",
-			contextWindow: 500_000,
-			maxInputTokens: 500_000,
-			maxTokens: 64_000,
-			supportsPromptCache: false,
-			supportsReasoning: true,
-		}
-
-		store.commitSelection(providerId, "act", { providerId, modelId }, liveModelInfo)
-
-		expect(mocks.getApiConfiguration().actModeLiteLlmModelInfo).toEqual(liveModelInfo)
-		expect(store.readSelection(providerId, "act")).toMatchObject({
-			providerId,
-			modelId,
-			overrides: undefined,
-			modelInfoSource: "state",
-			baseModelInfo: liveModelInfo,
-			modelInfo: liveModelInfo,
-		})
-		expect(mocks.getModelsFile().providers.litellm?.models?.[modelId]).toBeUndefined()
-	})
-
-	it.each([
-		["litellm", "actModeLiteLlmModelInfo"],
-		["baseten", "actModeBasetenModelInfo"],
-		["hicap", "actModeHicapModelInfo"],
-	] as const)("keeps a persisted %s private-catalog snapshot authoritative after reload", async (provider, modelInfoKey) => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId(provider)
-		const modelId = "shared-private-model"
-		const staticModelInfo: ModelInfo = {
-			name: "SDK fallback model",
-			contextWindow: 128_000,
-			maxInputTokens: 128_000,
-			maxTokens: 16_384,
-			supportsPromptCache: true,
-		}
-		const liveModelInfo: ModelInfo = {
-			name: "Private endpoint deployment",
-			contextWindow: 500_000,
-			maxInputTokens: 500_000,
-			maxTokens: 64_000,
-			supportsPromptCache: false,
-		}
-		mocks.setGeneratedModels(provider, { [modelId]: staticModelInfo })
-
-		store.commitSelection(providerId, "act", { providerId, modelId }, liveModelInfo)
-
-		expect(mocks.getApiConfiguration()[modelInfoKey]).toEqual(liveModelInfo)
-
-		// A window reload clears the in-process catalog and selection envelope;
-		// the durable provider snapshot must still beat the same-id static entry.
-		vi.resetModules()
-		const { createProviderConfigStore: createReloadedStore } = await import("./store")
-		expect(createReloadedStore().readSelection(providerId, "act")).toMatchObject({
-			modelInfoSource: "state",
-			baseModelInfo: liveModelInfo,
-			modelInfo: liveModelInfo,
-		})
-	})
-
-	it("lets a public catalog update supersede an older persisted snapshot after reload", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openrouter")
-		const modelId = "shared-public-model"
-		const refreshedModelInfo: ModelInfo = {
-			name: "Refreshed public catalog model",
-			contextWindow: 256_000,
-			maxTokens: 32_000,
-			supportsPromptCache: true,
-		}
-		const selectedModelInfo: ModelInfo = {
-			name: "Catalog model at selection time",
-			contextWindow: 128_000,
-			maxTokens: 16_000,
-			supportsPromptCache: false,
-		}
-
-		store.commitSelection(providerId, "act", { providerId, modelId }, selectedModelInfo)
-		mocks.setGeneratedModels("openrouter", { [modelId]: refreshedModelInfo })
-
-		vi.resetModules()
-		const { createProviderConfigStore: createReloadedStore } = await import("./store")
-		expect(createReloadedStore().readSelection(providerId, "act")).toMatchObject({
-			modelInfoSource: "catalog",
-			baseModelInfo: refreshedModelInfo,
-			modelInfo: refreshedModelInfo,
-		})
-	})
-
-	it("keeps a LiteLLM max-input override ahead of cached catalog metadata without baking it into the base", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("litellm")
-		const modelId = "openai/grok-4.6"
-		const liveModelInfo: ModelInfo = {
-			name: "xai/grok-4.6",
-			contextWindow: 500_000,
-			maxInputTokens: 500_000,
-			maxTokens: 64_000,
-			supportsPromptCache: false,
-		}
-
-		store.commitSelection(providerId, "act", { providerId, modelId, overrides: { maxInputTokens: 300_000 } }, liveModelInfo)
-
-		expect(mocks.getApiConfiguration().actModeLiteLlmModelInfo).toEqual(liveModelInfo)
-		expect(store.readSelection(providerId, "act")).toMatchObject({
-			baseModelInfo: liveModelInfo,
-			overrides: { maxInputTokens: 300_000 },
-			modelInfo: { maxInputTokens: 300_000 },
-		})
-	})
-
-	it("does not fabricate maxInputTokens or a metadata snapshot when a dynamic model has no catalog metadata", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("litellm")
-		const modelId = "custom/no-metadata"
-
-		store.commitSelection(providerId, "act", { providerId, modelId })
-
-		expect(mocks.getApiConfiguration()).toMatchObject({ actModeLiteLlmModelId: modelId })
-		expect(mocks.getApiConfiguration().actModeLiteLlmModelInfo).toBeUndefined()
-		const resolved = store.readSelection(providerId, "act")
-		expect(resolved?.modelInfoSource).toBe("fallback")
-		expect(resolved?.modelInfo.maxInputTokens).toBeUndefined()
-		expect(mocks.getModelsFile().providers.litellm?.models?.[modelId]).toBeUndefined()
-	})
-
 	it("round-trips generic provider selections using the in-process modelInfo envelope", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("deepseek")
-		const selection = selectionFromModelInfo(providerId, "deepseek-v4-pro", modelInfoA)
+		const providerId = parseProviderId("pliny")
+		const selection = selectionFromModelInfo(providerId, "snps-provider/kimi-k2.6", modelInfoA)
 
 		store.commitSelection(providerId, "act", selection)
 
@@ -403,293 +242,26 @@ describe("createProviderConfigStore", () => {
 
 	it("hydrates a generic provider selection from providers.json after reload", async () => {
 		const { createProviderConfigStore } = await import("./store")
-		mocks.setProviderSettings({ zai: { provider: "zai", model: "manual-zai-model" } })
+		mocks.setProviderSettings({ pliny: { provider: "pliny", model: "manual-pliny-model" } })
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("zai")
+		const providerId = parseProviderId("pliny")
 
 		expect(store.readSelection(providerId, "act")).toEqual({
 			providerId,
-			modelId: "manual-zai-model",
+			modelId: "manual-pliny-model",
 			modelInfoSource: "fallback",
-			baseModelInfo: expect.objectContaining({ name: "manual-zai-model" }),
+			baseModelInfo: expect.objectContaining({ name: "manual-pliny-model" }),
 			modelInfo: expect.objectContaining({
-				name: "manual-zai-model",
+				name: "manual-pliny-model",
 				supportsPromptCache: false,
 			}),
-		})
-	})
-
-	it("does not combine a generic provider's remembered model info with another provider's active model id", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const geminiProviderId = parseProviderId("gemini")
-		const deepSeekProviderId = parseProviderId("deepseek")
-		const geminiSelection = selectionFromModelInfo(geminiProviderId, "gemini-3.1-pro-preview", modelInfoA)
-		const deepSeekSelection = selectionFromModelInfo(deepSeekProviderId, "deepseek-v4-pro", modelInfoB)
-
-		store.commitSelection(geminiProviderId, "act", geminiSelection)
-		store.commitSelection(deepSeekProviderId, "act", deepSeekSelection)
-
-		expectResolvedSelection(store.readSelection(geminiProviderId, "act"), geminiSelection, modelInfoA)
-		expectResolvedSelection(store.readSelection(deepSeekProviderId, "act"), deepSeekSelection, modelInfoB)
-	})
-
-	it("handles normalized nousResearch provider casing for writes and selections", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("nousResearch")
-		const selection = selectionFromModelInfo(providerId, "nousresearch/hermes-4-70b", modelInfoA)
-
-		const written = store.write(providerId, { apiKey: "nous-key" })
-		store.commitSelection(providerId, "act", selection)
-
-		expect(written).toEqual({ providerId, apiKey: "nous-key" })
-		expectResolvedSelection(store.readSelection(providerId, "act"), selection, modelInfoA)
-		expect(mocks.getSavedProviderSettings("nousResearch")).toMatchObject({
-			provider: "nousResearch",
-			apiKey: "nous-key",
-			model: "nousresearch/hermes-4-70b",
-		})
-	})
-
-	it("reads migrated OpenAI Compatible settings from the SDK provider id", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		mocks.setProviderSettings({
-			"openai-compatible": {
-				provider: "openai-compatible",
-				apiKey: "migrated-openai-compatible-key",
-				baseUrl: "https://gateway.example.invalid/v1",
-				headers: { "X-Test": "legacy-header" },
-			},
-		})
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		expect(store.read(providerId)).toEqual({
-			providerId,
-			apiKey: "migrated-openai-compatible-key",
-			baseUrl: "https://gateway.example.invalid/v1",
-			headers: { "X-Test": "legacy-header" },
-		})
-	})
-
-	it("writes OpenAI Compatible settings under the SDK provider id", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		store.write(providerId, {
-			apiKey: "openai-compatible-key",
-			baseUrl: "https://gateway.example.invalid/v1",
-		})
-
-		expect(mocks.getSavedProviderSettings("openai")).toBeUndefined()
-		expect(mocks.getSavedProviderSettings("openai-compatible")).toMatchObject({
-			provider: "openai-compatible",
-			apiKey: "openai-compatible-key",
-			baseUrl: "https://gateway.example.invalid/v1",
-		})
-	})
-
-	it("lazily migrates meaningful legacy custom-model metadata once", async () => {
-		const legacyModelInfo = {
-			name: "Legacy Custom",
-			maxTokens: 4_096,
-			contextWindow: 64_000,
-			supportsImages: false,
-			supportsPromptCache: true,
-			supportsReasoning: true,
-			inputPrice: 1,
-			outputPrice: 2,
-			cacheReadsPrice: 0.25,
-			cacheWritesPrice: 0.5,
-			temperature: 0.3,
-			apiFormat: ApiFormat.OPENAI_RESPONSES,
-		}
-		mocks.setApiConfiguration({
-			actModeOpenAiModelId: "legacy-custom",
-			actModeOpenAiModelInfo: legacyModelInfo,
-		})
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		const first = store.readSelection(providerId, "act")
-		const second = store.readSelection(providerId, "act")
-
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["legacy-custom"]).toEqual({
-			name: "Legacy Custom",
-			maxTokens: 4_096,
-			contextWindow: 64_000,
-			// "tools" must always ride along: legacy ModelInfo carries no
-			// tool-calling boolean, and a persisted capability list without
-			// "tools" reads as authoritative "cannot call tools" to the SDK
-			// runtime (#13463).
-			capabilities: ["tools", "prompt-cache"],
-			supportsVision: false,
-			supportsReasoning: true,
-			inputPrice: 1,
-			outputPrice: 2,
-			cacheReadsPrice: 0.25,
-			cacheWritesPrice: 0.5,
-			temperature: 0.3,
-			apiFormat: "openai-responses",
-		})
-		expect(first?.overrides).toEqual(second?.overrides)
-		expect(first?.modelInfo).toMatchObject({
-			name: "Legacy Custom",
-			maxTokens: 4_096,
-			contextWindow: 64_000,
-			supportsImages: false,
-			supportsPromptCache: true,
-			supportsReasoning: true,
-			inputPrice: 1,
-			outputPrice: 2,
-			cacheReadsPrice: 0.25,
-			cacheWritesPrice: 0.5,
-			temperature: 0.3,
-			apiFormat: ApiFormat.OPENAI_RESPONSES,
-		})
-		expect(syncStoredProviderRegistration).toHaveBeenCalledTimes(1)
-	})
-
-	it("does not create migration noise for legacy safe defaults", async () => {
-		mocks.setApiConfiguration({
-			actModeOpenAiModelId: "default-custom",
-			actModeOpenAiModelInfo: { ...openAiModelInfoSafeDefaults, name: "default-custom" },
-		})
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		const first = store.readSelection(providerId, "act")
-		const second = store.readSelection(providerId, "act")
-
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["default-custom"]).toBeUndefined()
-		expect(first?.overrides).toBeUndefined()
-		expect(second?.overrides).toBeUndefined()
-		expect(first?.modelInfo).toMatchObject({ contextWindow: 128_000, supportsImages: true, temperature: 0 })
-		expect(first?.modelInfo.maxTokens).toBeUndefined()
-		expect(syncStoredProviderRegistration).not.toHaveBeenCalled()
-	})
-
-	it("never overwrites an existing models.json entry during migration", async () => {
-		mocks.setModelsFile({
-			version: 1,
-			providers: {
-				"openai-compatible": { models: { "existing-custom": { temperature: 0.7 } } },
-			},
-		})
-		mocks.setApiConfiguration({
-			actModeOpenAiModelId: "existing-custom",
-			actModeOpenAiModelInfo: { ...openAiModelInfoSafeDefaults, temperature: 0.2 },
-		})
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		const selection = store.readSelection(providerId, "act")
-
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["existing-custom"]).toEqual({
-			temperature: 0.7,
-		})
-		expect(selection?.overrides).toEqual({ temperature: 0.7 })
-		expect(selection?.modelInfo.temperature).toBe(0.7)
-		expect(syncStoredProviderRegistration).not.toHaveBeenCalled()
-	})
-
-	it("does not migrate stale legacy snapshots for catalog-known models", async () => {
-		mocks.setGeneratedModels("openai-compatible", {
-			"known-model": {
-				name: "Current Catalog Model",
-				contextWindow: 256_000,
-				supportsPromptCache: false,
-				temperature: 0.1,
-			},
-		})
-		mocks.setApiConfiguration({
-			actModeOpenAiModelId: "known-model",
-			actModeOpenAiModelInfo: {
-				name: "Stale Catalog Model",
-				contextWindow: 32_000,
-				supportsPromptCache: false,
-				temperature: 0.9,
-			},
-		})
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		const selection = store.readSelection(providerId, "act")
-
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["known-model"]).toBeUndefined()
-		expect(selection?.overrides).toBeUndefined()
-		expect(selection?.modelInfo).toMatchObject({
-			name: "Current Catalog Model",
-			contextWindow: 256_000,
-			temperature: 0.1,
-		})
-		expect(syncStoredProviderRegistration).not.toHaveBeenCalled()
-	})
-
-	it("migrates separate Plan and Act legacy custom models independently", async () => {
-		mocks.setApiConfiguration({
-			planActSeparateModelsSetting: true,
-			planModeOpenAiModelId: "legacy-plan",
-			planModeOpenAiModelInfo: {
-				...openAiModelInfoSafeDefaults,
-				contextWindow: 64_000,
-				apiFormat: ApiFormat.OPENAI_RESPONSES,
-			},
-			actModeOpenAiModelId: "legacy-act",
-			actModeOpenAiModelInfo: {
-				...openAiModelInfoSafeDefaults,
-				maxTokens: 2_048,
-			},
-		})
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-
-		const plan = store.readSelection(providerId, "plan")
-		const act = store.readSelection(providerId, "act")
-		store.readSelection(providerId, "plan")
-		store.readSelection(providerId, "act")
-
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models).toMatchObject({
-			"legacy-plan": { contextWindow: 64_000, apiFormat: "openai-responses" },
-			"legacy-act": { maxTokens: 2_048 },
-		})
-		expect(plan?.modelInfo).toMatchObject({ contextWindow: 64_000, apiFormat: ApiFormat.OPENAI_RESPONSES })
-		expect(act?.modelInfo).toMatchObject({ maxTokens: 2_048 })
-		expect(syncStoredProviderRegistration).toHaveBeenCalledTimes(2)
-	})
-
-	it("preserves migrated OpenAI Compatible settings when committing model selections", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		mocks.setProviderSettings({
-			"openai-compatible": {
-				provider: "openai-compatible",
-				apiKey: "migrated-openai-compatible-key",
-			},
-		})
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-		const selection = selectionFromModelInfo(providerId, "gpt-oss-120b", modelInfoA)
-
-		store.commitSelection(providerId, "act", selection)
-
-		expect(mocks.getSavedProviderSettings("openai-compatible")).toMatchObject({
-			provider: "openai-compatible",
-			apiKey: "migrated-openai-compatible-key",
-			model: "gpt-oss-120b",
 		})
 	})
 
 	it("preserves per-model OpenAI Compatible overrides when switching models without new overrides", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 		const modelASelection = selectionFromModelInfo(providerId, "model-a", modelInfoA)
 
 		store.commitSelection(providerId, "act", modelASelection)
@@ -697,7 +269,7 @@ describe("createProviderConfigStore", () => {
 		store.commitSelection(providerId, "act", { providerId, modelId: "model-a" })
 
 		expectResolvedSelection(store.readSelection(providerId, "act"), modelASelection, modelInfoA)
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["model-a"]).toMatchObject({
+		expect(mocks.getModelsFile().providers.pliny?.models?.["model-a"]).toMatchObject({
 			name: "Model A",
 			maxTokens: 8_192,
 			contextWindow: 128_000,
@@ -707,7 +279,7 @@ describe("createProviderConfigStore", () => {
 	it("deletes a model entry when an explicit replacement override set is empty", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -718,7 +290,7 @@ describe("createProviderConfigStore", () => {
 				temperature: 0.2,
 			},
 		})
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["custom-model"]).toMatchObject({
+		expect(mocks.getModelsFile().providers.pliny?.models?.["custom-model"]).toMatchObject({
 			apiFormat: "openai-responses",
 			capabilities: ["tools", "streaming"],
 			temperature: 0.2,
@@ -726,14 +298,14 @@ describe("createProviderConfigStore", () => {
 
 		store.commitSelection(providerId, "act", { providerId, modelId: "custom-model", overrides: {} })
 
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["custom-model"]).toBeUndefined()
+		expect(mocks.getModelsFile().providers.pliny?.models?.["custom-model"]).toBeUndefined()
 		expect(store.readSelection(providerId, "act")?.overrides).toBeUndefined()
 	})
 
 	it("replaces an existing model override set instead of merging stale fields", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -746,7 +318,7 @@ describe("createProviderConfigStore", () => {
 			overrides: { temperature: 0.4 },
 		})
 
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["custom-model"]).toEqual({ temperature: 0.4 })
+		expect(mocks.getModelsFile().providers.pliny?.models?.["custom-model"]).toEqual({ temperature: 0.4 })
 		expect(store.readSelection(providerId, "act")?.overrides).toEqual({ temperature: 0.4 })
 	})
 
@@ -757,7 +329,7 @@ describe("createProviderConfigStore", () => {
 	] as const)("round-trips supported apiFormat %s through models.json", async (apiFormat, storedApiFormat) => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -765,7 +337,7 @@ describe("createProviderConfigStore", () => {
 			overrides: { apiFormat },
 		})
 
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["custom-model"]).toEqual({
+		expect(mocks.getModelsFile().providers.pliny?.models?.["custom-model"]).toEqual({
 			apiFormat: storedApiFormat,
 		})
 		expect(store.readSelection(providerId, "act")?.overrides).toEqual({ apiFormat })
@@ -774,7 +346,7 @@ describe("createProviderConfigStore", () => {
 	it("normalizes invalid override values before storage and resolved legacy state", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -796,7 +368,7 @@ describe("createProviderConfigStore", () => {
 			},
 		})
 
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["custom-model"]).toEqual({
+		expect(mocks.getModelsFile().providers.pliny?.models?.["custom-model"]).toEqual({
 			name: "Custom model",
 			capabilities: ["tools"],
 			supportsVision: false,
@@ -815,15 +387,13 @@ describe("createProviderConfigStore", () => {
 		})
 		expect(selection?.modelInfo.maxTokens).toBeUndefined()
 		expect(selection?.modelInfo.temperature).toBe(0)
-		expect(mocks.getApiConfiguration().actModeOpenAiModelInfo).not.toHaveProperty("maxTokens")
-		expect(mocks.getApiConfiguration().actModeOpenAiModelInfo).not.toHaveProperty("temperature", -1)
 		expect(syncStoredProviderRegistration).toHaveBeenCalledTimes(1)
 	})
 
 	it("deletes a stored entry when normalization removes every replacement field", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -843,7 +413,7 @@ describe("createProviderConfigStore", () => {
 			},
 		})
 
-		expect(mocks.getModelsFile().providers["openai-compatible"]?.models?.["custom-model"]).toBeUndefined()
+		expect(mocks.getModelsFile().providers.pliny?.models?.["custom-model"]).toBeUndefined()
 		expect(store.readSelection(providerId, "act")?.overrides).toBeUndefined()
 		expect(syncStoredProviderRegistration).toHaveBeenCalledTimes(2)
 	})
@@ -851,12 +421,12 @@ describe("createProviderConfigStore", () => {
 	it("normalizes invalid values already present in models.json on read", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		mocks.setProviderSettings({
-			"openai-compatible": { provider: "openai-compatible", model: "custom-model" },
+			pliny: { provider: "pliny", model: "custom-model" },
 		})
 		mocks.setModelsFile({
 			version: 1,
 			providers: {
-				"openai-compatible": {
+				pliny: {
 					models: {
 						"custom-model": {
 							maxTokens: -1,
@@ -870,7 +440,7 @@ describe("createProviderConfigStore", () => {
 			},
 		})
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		const selection = store.readSelection(providerId, "act")
 
@@ -883,7 +453,7 @@ describe("createProviderConfigStore", () => {
 	it("lets explicit capability booleans win over capability arrays", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -920,19 +490,19 @@ describe("createProviderConfigStore", () => {
 		})
 	})
 
-	it("keeps OpenAI Compatible Plan and Act selections independent when separate models are enabled", async () => {
+	it("keeps Plan and Act model ids independent in state when separate models are enabled", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		mocks.setApiConfiguration({ planActSeparateModelsSetting: true })
 		mocks.setProviderSettings({
-			"openai-compatible": {
-				provider: "openai-compatible",
-				apiKey: "migrated-openai-compatible-key",
+			pliny: {
+				provider: "pliny",
+				apiKey: "pliny-key",
 			},
 		})
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-		const planSelection = selectionFromModelInfo(providerId, "plan-openai-model", modelInfoA)
-		const actSelection = selectionFromModelInfo(providerId, "act-openai-model", modelInfoB)
+		const providerId = parseProviderId("pliny")
+		const planSelection = selectionFromModelInfo(providerId, "plan-pliny-model", modelInfoA)
+		const actSelection = selectionFromModelInfo(providerId, "act-pliny-model", modelInfoB)
 
 		store.commitSelection(providerId, "plan", planSelection)
 		store.commitSelection(providerId, "act", actSelection)
@@ -940,83 +510,42 @@ describe("createProviderConfigStore", () => {
 		expectResolvedSelection(store.readSelection(providerId, "plan"), planSelection, modelInfoA)
 		expectResolvedSelection(store.readSelection(providerId, "act"), actSelection, modelInfoB)
 		expect(mocks.getApiConfiguration()).toMatchObject({
-			planModeOpenAiModelId: "plan-openai-model",
-			planModeOpenAiModelInfo: modelInfoA,
-			actModeOpenAiModelId: "act-openai-model",
-			actModeOpenAiModelInfo: modelInfoB,
+			planModeApiModelId: "plan-pliny-model",
+			actModeApiModelId: "act-pliny-model",
 		})
-		expect(mocks.getSavedProviderSettings("openai")).toBeUndefined()
-		expect(mocks.getSavedProviderSettings("openai-compatible")).toMatchObject({
-			provider: "openai-compatible",
-			apiKey: "migrated-openai-compatible-key",
-			model: "act-openai-model",
+		expect(mocks.getSavedProviderSettings("pliny")).toMatchObject({
+			provider: "pliny",
+			apiKey: "pliny-key",
+			model: "act-pliny-model",
 		})
 	})
 
-	it("mirrors OpenAI Compatible selections to both modes when separate models are disabled", async () => {
+	it("mirrors a selection to both modes when separate models are disabled", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		mocks.setApiConfiguration({ planActSeparateModelsSetting: false })
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
-		const selection = selectionFromModelInfo(providerId, "shared-openai-model", modelInfoA)
+		const providerId = parseProviderId("pliny")
+		const selection = selectionFromModelInfo(providerId, "shared-pliny-model", modelInfoA)
 
 		store.commitSelection(providerId, "act", selection)
 
 		expectResolvedSelection(store.readSelection(providerId, "plan"), selection, modelInfoA)
 		expectResolvedSelection(store.readSelection(providerId, "act"), selection, modelInfoA)
 		expect(mocks.getApiConfiguration()).toMatchObject({
-			planModeOpenAiModelId: "shared-openai-model",
-			planModeOpenAiModelInfo: modelInfoA,
-			actModeOpenAiModelId: "shared-openai-model",
-			actModeOpenAiModelInfo: modelInfoA,
+			planModeApiModelId: "shared-pliny-model",
+			actModeApiModelId: "shared-pliny-model",
 		})
-		expect(mocks.getSavedProviderSettings("openai-compatible")).toMatchObject({
-			provider: "openai-compatible",
-			model: "shared-openai-model",
+		expect(mocks.getSavedProviderSettings("pliny")).toMatchObject({
+			provider: "pliny",
+			model: "shared-pliny-model",
 		})
-	})
-
-	it("writes Z.AI Coding Plan API keys only to provider-specific settings", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		mocks.setApiConfiguration({ zaiApiKey: "shared-zai-key" })
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("zai-coding-plan")
-
-		const written = store.write(providerId, { apiKey: "coding-plan-key" })
-
-		expect(written).toEqual({ providerId, apiKey: "coding-plan-key" })
-		expect(mocks.getSavedProviderSettings("zai-coding-plan")).toMatchObject({
-			provider: "zai-coding-plan",
-			apiKey: "coding-plan-key",
-		})
-		expect(mocks.getApiConfiguration().zaiApiKey).toBe("shared-zai-key")
-	})
-
-	it("resolves a bare state modelId with fallback metadata and ignores a bare modelInfo", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openrouter")
-
-		// The mode-specific model id alone identifies the selection; commits
-		// whose resolution was pure fallback intentionally leave the state
-		// modelInfo snapshot unset.
-		mocks.setApiConfiguration({ actModeOpenRouterModelId: "anthropic/claude-sonnet-4" })
-		expect(store.readSelection(providerId, "act")).toMatchObject({
-			providerId,
-			modelId: "anthropic/claude-sonnet-4",
-			modelInfoSource: "fallback",
-		})
-
-		// A modelInfo snapshot without a model id is not a selection.
-		mocks.setApiConfiguration({ actModeOpenRouterModelInfo: modelInfoA })
-		expect(store.readSelection(providerId, "act")).toBeUndefined()
 	})
 
 	it("keeps Plan and Act selections independent and mirrors the latest selection to provider settings", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		mocks.setApiConfiguration({ planActSeparateModelsSetting: true })
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openrouter")
+		const providerId = parseProviderId("pliny")
 		const planSelection = selectionFromModelInfo(providerId, "provider/model-a", modelInfoA)
 		const actSelection = selectionFromModelInfo(providerId, "provider/model-b", modelInfoB)
 
@@ -1025,53 +554,34 @@ describe("createProviderConfigStore", () => {
 
 		expectResolvedSelection(store.readSelection(providerId, "plan"), planSelection, modelInfoA)
 		expectResolvedSelection(store.readSelection(providerId, "act"), actSelection, modelInfoB)
-		expect(mocks.getSavedProviderSettings("openrouter")).toMatchObject({
-			provider: "openrouter",
+		expect(mocks.getSavedProviderSettings("pliny")).toMatchObject({
+			provider: "pliny",
 			model: "provider/model-b",
 		})
-		expect(mocks.getSavedProviderSettings("openrouter")).not.toHaveProperty("contextWindow")
-		expect(mocks.getSavedProviderSettings("openrouter")).not.toHaveProperty("maxTokens")
+		expect(mocks.getSavedProviderSettings("pliny")).not.toHaveProperty("contextWindow")
+		expect(mocks.getSavedProviderSettings("pliny")).not.toHaveProperty("maxTokens")
 	})
 
 	it("updates providers.json model with setLastUsed false when planActSeparateModelsSetting=false", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		mocks.setApiConfiguration({ planActSeparateModelsSetting: false })
 		mocks.setProviderSettings({
-			openrouter: { provider: "openrouter", apiKey: "existing-key", contextWindow: 64_000, maxTokens: 4_096 },
+			pliny: { provider: "pliny", apiKey: "existing-key", contextWindow: 64_000, maxTokens: 4_096 },
 		})
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openrouter")
+		const providerId = parseProviderId("pliny")
 		const selection = selectionFromModelInfo(providerId, "provider/model-a", modelInfoA)
 
 		store.commitSelection(providerId, "act", selection)
 
-		expect(mocks.getSavedProviderSettings("openrouter")).toMatchObject({
-			provider: "openrouter",
+		expect(mocks.getSavedProviderSettings("pliny")).toMatchObject({
+			provider: "pliny",
 			apiKey: "existing-key",
 			model: "provider/model-a",
 		})
-		expect(mocks.getSavedProviderSettings("openrouter")).not.toHaveProperty("contextWindow")
-		expect(mocks.getSavedProviderSettings("openrouter")).not.toHaveProperty("maxTokens")
+		expect(mocks.getSavedProviderSettings("pliny")).not.toHaveProperty("contextWindow")
+		expect(mocks.getSavedProviderSettings("pliny")).not.toHaveProperty("maxTokens")
 		expect(mocks.getSaveProviderSettingsMock()).toHaveBeenCalledWith(expect.objectContaining({ model: "provider/model-a" }), {
-			setLastUsed: false,
-		})
-	})
-
-	it("persists Claude Code model selections to providers.json", async () => {
-		const { createProviderConfigStore } = await import("./store")
-		const store = createProviderConfigStore()
-		const providerId = parseProviderId("claude-code")
-		const selection = selectionFromModelInfo(providerId, "haiku", modelInfoA)
-
-		store.commitSelection(providerId, "act", selection)
-
-		expect(mocks.getSavedProviderSettings("claude-code")).toMatchObject({
-			provider: "claude-code",
-			model: "haiku",
-		})
-		expect(mocks.getSavedProviderSettings("claude-code")).not.toHaveProperty("contextWindow")
-		expect(mocks.getSavedProviderSettings("claude-code")).not.toHaveProperty("maxTokens")
-		expect(mocks.getSaveProviderSettingsMock()).toHaveBeenCalledWith(expect.objectContaining({ model: "haiku" }), {
 			setLastUsed: false,
 		})
 	})
@@ -1079,7 +589,7 @@ describe("createProviderConfigStore", () => {
 	it("subscribers fire synchronously and multiple writes emit events in order", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("deepseek")
+		const providerId = parseProviderId("pliny")
 		const events: ProviderConfigChange[] = []
 		let fired = false
 
@@ -1101,7 +611,7 @@ describe("createProviderConfigStore", () => {
 	it("write emits fields, commitSelection emits selection, and write never emits selection", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openrouter")
+		const providerId = parseProviderId("pliny")
 		const events: ProviderConfigChange[] = []
 		const selection = selectionFromModelInfo(providerId, "provider/model-a", modelInfoA)
 
@@ -1122,12 +632,12 @@ describe("createProviderConfigStore", () => {
 	it("dispose unregisters listeners", async () => {
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("deepseek")
+		const providerId = parseProviderId("pliny")
 		const listener = vi.fn()
 		const disposable = store.subscribe(listener)
 
 		disposable.dispose()
-		store.write(providerId, { apiKey: "deepseek-key" })
+		store.write(providerId, { apiKey: "pliny-key" })
 
 		expect(listener).not.toHaveBeenCalled()
 	})
@@ -1145,7 +655,7 @@ describe("createProviderConfigStore", () => {
 		}
 		const { createProviderConfigStore } = await import("./store")
 		const store = createProviderConfigStore()
-		const providerId = parseProviderId("openai")
+		const providerId = parseProviderId("pliny")
 
 		store.commitSelection(providerId, "act", {
 			providerId,
@@ -1168,7 +678,7 @@ describe("createProviderConfigStore", () => {
 			},
 		})
 
-		const entry = mocks.getModelsFile().providers["openai-compatible"]?.models?.["contract-model"]
+		const entry = mocks.getModelsFile().providers.pliny?.models?.["contract-model"]
 		expect(entry).toBeDefined()
 		// No SDK capability may be silently stripped by the store's converter.
 		expect([...(entry?.capabilities as string[])].sort()).toEqual([...ModelCapabilitySchema.options].sort())

@@ -34,15 +34,6 @@ export const DropdownContainer = styled.div<{ zIndex?: number }>`
 	}
 `
 
-declare module "vscode" {
-	interface LanguageModelChatSelector {
-		vendor?: string
-		family?: string
-		version?: string
-		id?: string
-	}
-}
-
 const ApiOptions = ({ showModelOptions, apiErrorMessage, modelIdErrorMessage, isPopup, currentMode }: ApiOptionsProps) => {
 	// Use full context state for immediate save payload
 	const { apiConfiguration } = useExtensionState()
@@ -51,7 +42,7 @@ const ApiOptions = ({ showModelOptions, apiErrorMessage, modelIdErrorMessage, is
 	const { providers: catalogProviderListings } = useProviderListings()
 	const catalogProviderListing = useMemo(
 		() => catalogProviderListings.find((provider) => provider.id === selectedProvider),
-		[catalogProviderListings, selectedProvider],
+		[catalogProviderListings],
 	)
 
 	const { handleModeFieldChange } = useApiConfigurationHandlers()

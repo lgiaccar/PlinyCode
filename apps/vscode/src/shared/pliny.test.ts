@@ -20,6 +20,7 @@ import {
 import { describe, expect, it } from "vitest"
 import {
 	canonicalPlinyModelId,
+	coerceToPlinyProvider,
 	isPlinyBalanceAutoModelId,
 	isPlinyFreeAutoModelId,
 	isPlinyFreeModelId,
@@ -156,5 +157,23 @@ describe("FreeAuto rules URI", () => {
 	it("is not mistaken for a model id", () => {
 		expect(isPlinyFreeAutoModelId(PLINY_FREE_AUTO_RULES_URI)).toBe(false)
 		expect(isPlinyFreeModelId(PLINY_FREE_AUTO_RULES_URI)).toBe(false)
+	})
+})
+
+describe("coerceToPlinyProvider", () => {
+	it("keeps pliny", () => {
+		expect(coerceToPlinyProvider("pliny")).toBe("pliny")
+	})
+
+	it("reads a provider stored by an older version as pliny", () => {
+		for (const stored of ["anthropic", "openrouter", "openai", "openai-compatible", "vscode-lm", "cline", "oca"]) {
+			expect(coerceToPlinyProvider(stored)).toBe("pliny")
+		}
+	})
+
+	it("reads a missing or empty provider as pliny", () => {
+		expect(coerceToPlinyProvider(undefined)).toBe("pliny")
+		expect(coerceToPlinyProvider(null)).toBe("pliny")
+		expect(coerceToPlinyProvider("")).toBe("pliny")
 	})
 })

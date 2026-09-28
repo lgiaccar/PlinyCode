@@ -24,24 +24,20 @@ function setApiConfiguration(apiConfiguration: Record<string, unknown>) {
 	mockUseExtensionState.mockReturnValue({ apiConfiguration } as ReturnType<typeof useExtensionState>)
 }
 
-function modelInfoResponse(providerId: string, modelId: string, contextWindow = 1_000_000) {
+function modelInfoResponse(modelId: string, contextWindow = 262_144) {
 	return ResolveModelInfoResponse.create({
-		providerId,
+		providerId: "pliny",
 		modelId,
 		source: "sdk-known-models",
 		modelInfo: {
-			name: "DeepSeek V4 Pro",
+			name: "Kimi K2.6",
 			contextWindow,
-			maxTokens: 384_000,
+			maxTokens: 32_768,
 			supportsPromptCache: true,
 			supportsReasoning: true,
 			apiFormat: ApiFormat.OPENAI_CHAT,
 		},
 	})
-}
-
-function deepSeekResponse(modelId: string, contextWindow = 1_000_000) {
-	return modelInfoResponse("deepseek", modelId, contextWindow)
 }
 
 describe("useNormalizedApiConfiguration", () => {
@@ -50,21 +46,22 @@ describe("useNormalizedApiConfiguration", () => {
 		setApiConfiguration({})
 	})
 
-	it("resolves DeepSeek model info through the pure RPC", async () => {
-		setApiConfiguration({ actModeApiProvider: "deepseek", actModeApiModelId: "deepseek-v4-pro" })
-		mockResolveModelInfo.mockResolvedValue(deepSeekResponse("deepseek-v4-pro"))
+	it("resolves Pliny model info through the pure RPC", async () => {
+		setApiConfiguration({ actModeApiProvider: "pliny", actModeApiModelId: "snps-provider/kimi-k2.6" })
+		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("snps-provider/kimi-k2.6"))
 
 		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
 
 		expect(result.current.selectedModelInfo.contextWindow).toBeUndefined()
-		await waitFor(() => expect(result.current.selectedModelInfo.contextWindow).toBe(1_000_000))
-		expect(result.current.selectedModelId).toBe("deepseek-v4-pro")
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "deepseek", modelId: "deepseek-v4-pro" })
+		await waitFor(() => expect(result.current.selectedModelInfo.contextWindow).toBe(262_144))
+		expect(result.current.selectedProvider).toBe("pliny")
+		expect(result.current.selectedModelId).toBe("snps-provider/kimi-k2.6")
+		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "pliny", modelId: "snps-provider/kimi-k2.6" })
 		expect(mockResolveProviderModels).not.toHaveBeenCalled()
 	})
 
-	it("does not flash 128K before the DeepSeek RPC resolves", () => {
-		setApiConfiguration({ actModeApiProvider: "deepseek", actModeApiModelId: "deepseek-v4-pro" })
+	it("does not flash a context window before the RPC resolves", () => {
+		setApiConfiguration({ actModeApiProvider: "pliny", actModeApiModelId: "snps-provider/kimi-k2.6" })
 		mockResolveModelInfo.mockReturnValue(new Promise(() => undefined))
 
 		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
@@ -74,126 +71,46 @@ describe("useNormalizedApiConfiguration", () => {
 	})
 
 	it("uses the SDK default model info when model id is empty", async () => {
-		setApiConfiguration({ actModeApiProvider: "deepseek", actModeApiModelId: "" })
-		mockResolveModelInfo.mockResolvedValue(deepSeekResponse("deepseek-v4-flash"))
+		setApiConfiguration({ actModeApiProvider: "pliny", actModeApiModelId: "" })
+		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("pliny/auto-free"))
 
 		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
 
-		await waitFor(() => expect(result.current.selectedModelId).toBe("deepseek-v4-flash"))
-		expect(result.current.selectedModelInfo.contextWindow).toBe(1_000_000)
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "deepseek", modelId: undefined })
-		expect(mockResolveProviderModels).not.toHaveBeenCalled()
+		await waitFor(() => expect(result.current.selectedModelId).toBe("pliny/auto-free"))
+		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "pliny", modelId: undefined })
 	})
 
-	it("uses Cline-specific model fields instead of stale generic or OpenRouter fields", async () => {
+	it("reads a provider stored by an older version as Pliny and uses the generic model field", async () => {
 		setApiConfiguration({
-			actModeApiProvider: "cline",
-			actModeApiModelId: "openai/gpt-5.4",
-			actModeOpenRouterModelId: "anthropic/claude-sonnet-4.5",
-			actModeClineModelId: "anthropic/claude-sonnet-4.6",
-		})
-		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("cline", "anthropic/claude-sonnet-4.6"))
-
-		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
-
-		await waitFor(() => expect(result.current.selectedModelId).toBe("anthropic/claude-sonnet-4.6"))
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "cline", modelId: "anthropic/claude-sonnet-4.6" })
-	})
-
-	it("asks the backend for the Cline default when no Cline-specific model is selected", async () => {
-		setApiConfiguration({
-			actModeApiProvider: "cline",
-			actModeApiModelId: "openai/gpt-5.4",
+			actModeApiProvider: "openrouter",
+			actModeApiModelId: "snps-provider/GLM-5.2",
 			actModeOpenRouterModelId: "anthropic/claude-sonnet-4.5",
 		})
-		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("cline", "anthropic/claude-sonnet-4.6"))
+		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("snps-provider/GLM-5.2"))
 
 		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
 
-		await waitFor(() => expect(result.current.selectedModelId).toBe("anthropic/claude-sonnet-4.6"))
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "cline", modelId: undefined })
+		await waitFor(() => expect(result.current.selectedModelId).toBe("snps-provider/GLM-5.2"))
+		expect(result.current.selectedProvider).toBe("pliny")
+		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "pliny", modelId: "snps-provider/GLM-5.2" })
 	})
 
-	it("resolves static SDK-backed providers through the model-info RPC", async () => {
-		setApiConfiguration({ actModeApiProvider: "anthropic", actModeApiModelId: "claude-sonnet-4-5-20250929" })
-		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("anthropic", "claude-sonnet-4-5-20250929", 200_000))
-
-		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
-
-		await waitFor(() => expect(result.current.selectedModelInfo.contextWindow).toBe(200_000))
-		expect(result.current.selectedProvider).toBe("anthropic")
-		expect(result.current.selectedModelId).toBe("claude-sonnet-4-5-20250929")
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({
-			providerId: "anthropic",
-			modelId: "claude-sonnet-4-5-20250929",
-		})
-		expect(mockResolveProviderModels).not.toHaveBeenCalled()
-	})
-
-	it("folds the SDK openai-compatible provider spelling to legacy openai and reads its model slot", async () => {
-		// State written by older builds (or other hosts) may still carry the
-		// SDK catalog spelling; the hook must read the OpenAI-specific model
-		// slot instead of the generic one and resolve under `openai`.
-		setApiConfiguration({
-			actModeApiProvider: "openai-compatible",
-			actModeApiModelId: "stale-generic-model",
-			actModeOpenAiModelId: "my-custom-model",
-		})
-		mockResolveModelInfo.mockResolvedValue(
-			ResolveModelInfoResponse.create({ providerId: "openai", modelId: "my-custom-model", source: "unknown" }),
-		)
-
-		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
-
-		await waitFor(() => expect(result.current.selectedModelId).toBe("my-custom-model"))
-		expect(result.current.selectedProvider).toBe("openai")
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "openai", modelId: "my-custom-model" })
-	})
-
-	it("uses local provider-specific model fields instead of a stale generic id", async () => {
-		setApiConfiguration({
-			actModeApiProvider: "ollama",
-			actModeApiModelId: "stale-generic-model",
-			actModeOllamaModelId: "llama3.1:8b",
-		})
-		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("ollama", "llama3.1:8b", 32_768))
-
-		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
-
-		await waitFor(() => expect(result.current.selectedModelId).toBe("llama3.1:8b"))
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "ollama", modelId: "llama3.1:8b" })
-	})
-
-	it("uses VS Code LM selector as the active model id", async () => {
-		setApiConfiguration({
-			actModeApiProvider: "vscode-lm",
-			actModeApiModelId: "stale-generic-model",
-			actModeVsCodeLmModelSelector: { vendor: "copilot", family: "claude-sonnet" },
-		})
-		mockResolveModelInfo.mockResolvedValue(modelInfoResponse("vscode-lm", "copilot/claude-sonnet", 128_000))
-
-		const { result } = renderHook(() => useNormalizedApiConfiguration("act"))
-
-		await waitFor(() => expect(result.current.selectedModelId).toBe("copilot/claude-sonnet"))
-		expect(mockResolveModelInfo).toHaveBeenCalledWith({ providerId: "vscode-lm", modelId: "copilot/claude-sonnet" })
-	})
-
-	it("ignores stale DeepSeek responses after provider/model changes", async () => {
+	it("ignores stale responses after the model changes", async () => {
 		let resolveFirst: (value: ResolveModelInfoResponse) => void = () => undefined
 		mockResolveModelInfo
 			.mockReturnValueOnce(new Promise((resolve) => (resolveFirst = resolve)))
-			.mockResolvedValueOnce(deepSeekResponse("deepseek-v4-flash", 1_000_000))
-		setApiConfiguration({ actModeApiProvider: "deepseek", actModeApiModelId: "deepseek-v4-pro" })
+			.mockResolvedValueOnce(modelInfoResponse("snps-provider/GLM-5.2", 512_000))
+		setApiConfiguration({ actModeApiProvider: "pliny", actModeApiModelId: "snps-provider/kimi-k2.6" })
 
 		const { result, rerender } = renderHook(() => useNormalizedApiConfiguration("act"))
 
-		setApiConfiguration({ actModeApiProvider: "deepseek", actModeApiModelId: "deepseek-v4-flash" })
+		setApiConfiguration({ actModeApiProvider: "pliny", actModeApiModelId: "snps-provider/GLM-5.2" })
 		rerender()
 		await act(async () => {
-			resolveFirst(deepSeekResponse("deepseek-v4-pro", 500_000))
+			resolveFirst(modelInfoResponse("snps-provider/kimi-k2.6", 262_144))
 		})
 
-		await waitFor(() => expect(result.current.selectedModelId).toBe("deepseek-v4-flash"))
-		expect(result.current.selectedModelInfo.contextWindow).toBe(1_000_000)
+		await waitFor(() => expect(result.current.selectedModelId).toBe("snps-provider/GLM-5.2"))
+		expect(result.current.selectedModelInfo.contextWindow).toBe(512_000)
 	})
 })

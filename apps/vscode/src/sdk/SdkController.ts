@@ -19,7 +19,6 @@ import {
 	type UserInstructionConfigService,
 } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@plinycode/shared"
-import type { ApiConfiguration } from "@shared/api"
 import type { ChatContent } from "@shared/ChatContent"
 import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"
 import { mentionRegexGlobal } from "@shared/context-mentions"
@@ -54,7 +53,7 @@ import { ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
-import { toLegacyApiProvider } from "@/shared/model-catalog/provider-helpers"
+import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
@@ -84,7 +83,6 @@ import { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"
 import { SdkMcpCoordinator } from "./sdk-mcp-coordinator"
 import { SdkMessageCoordinator, type SessionEventListener } from "./sdk-message-coordinator"
 import { SdkModeCoordinator } from "./sdk-mode-coordinator"
-import { SdkProviderChangeCoordinator } from "./sdk-provider-change-coordinator"
 import { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 import { SdkSessionEventCoordinator } from "./sdk-session-event-coordinator"
 import { SdkSessionHistoryLoader } from "./sdk-session-history-loader"
@@ -186,7 +184,6 @@ export class Controller {
 	private mode: SdkModeCoordinator
 	private mcpTools: SdkMcpCoordinator
 	private terminalExecutionMode: SdkTerminalExecutionModeCoordinator
-	private providerChanges: SdkProviderChangeCoordinator
 	private followups: SdkFollowupCoordinator
 	private taskControl: SdkTaskControlCoordinator
 	private taskStart: SdkTaskStartCoordinator
@@ -598,19 +595,6 @@ export class Controller {
 			postStateToWebview: () => this.postStateToWebview(),
 			rebuilds: this.sessionRebuilds,
 		})
-		this.providerChanges = new SdkProviderChangeCoordinator({
-			stateManager: this.stateManager,
-			sessions: this.sessions,
-			messages: this.messages,
-			sessionConfigBuilder: this.sessionConfigBuilder,
-			getTask: () => this.task,
-			getWorkspaceRoot: () => this.getWorkspaceRoot(),
-			loadInitialMessages: async (sdkHost, sessionId) =>
-				(await this.sessionHistory.loadInitialMessages(sdkHost, sessionId)) ?? [],
-			buildStartSessionInput,
-			postStateToWebview: () => this.postStateToWebview(),
-			rebuilds: this.sessionRebuilds,
-		})
 		this.followups = new SdkFollowupCoordinator({
 			stateManager: this.stateManager,
 			interactions: this.interactions,
@@ -798,10 +782,6 @@ export class Controller {
 		}
 	}
 
-	handleApiConfigurationChanged(previous: ApiConfiguration, next: ApiConfiguration): void {
-		this.providerChanges.handleApiConfigurationChanged(previous, next)
-	}
-
 	handleTerminalExecutionModeChanged(previous: VscodeTerminalExecutionMode, next: VscodeTerminalExecutionMode): void {
 		this.terminalExecutionMode.handleTerminalExecutionModeChanged(previous, next)
 	}
@@ -855,11 +835,9 @@ export class Controller {
 			if (activeProvider === undefined) {
 				return false
 			}
-			// Normalize both sides so stale SDK spellings in cached state
-			// (e.g. `openai-compatible`) still match the parse-normalized
-			// event id and model-only commits keep the lightweight
-			// in-session update path.
-			return toLegacyApiProvider(activeProvider) === toLegacyApiProvider(event.providerId.toString())
+			// A stale id in cached state reads as Pliny, so model-only commits
+			// keep the lightweight in-session update path.
+			return coerceToPlinyProvider(activeProvider) === event.providerId.toString()
 		} catch {
 			return false
 		}

@@ -1,4 +1,7 @@
+import type { ApiConfiguration } from "@shared/api"
+import { PLINY_FREE_AUTO_FALLBACK_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@shared/pliny"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { PLINY_REQUEST_TIMEOUT_MS } from "./pliny-fetch"
 import { buildSdkProviderConfig } from "./sdk-api-handler"
 
 const mocks = vi.hoisted(() => {
@@ -21,101 +24,74 @@ vi.mock("@shared/services/Logger", () => ({
 	},
 }))
 
+function mockPlinySettings(settings: Record<string, unknown>): void {
+	mocks.providerSettingsManager.getProviderSettings.mockImplementation((providerId: string) =>
+		providerId === "pliny" ? { provider: "pliny", ...settings } : undefined,
+	)
+}
+
 describe("buildSdkProviderConfig", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
 
-	it("uses shared Cline OAuth credentials for ClinePass direct handlers", () => {
-		mocks.providerSettingsManager.getProviderSettings.mockImplementation((providerId: string) => {
-			if (providerId !== "cline") {
-				return undefined
-			}
-			return {
-				provider: "cline",
-				auth: {
-					accessToken: "workos:shared-cline-token",
-					refreshToken: "refresh-token",
-				},
-			}
-		})
+	it("reads the Pliny API key and base URL from providers.json", () => {
+		mockPlinySettings({ apiKey: "pliny-key", baseUrl: "https://pliny.example/v1" })
 
 		const providerConfig = buildSdkProviderConfig(
-			{
-				actModeApiProvider: "cline-pass",
-				actModeClinePassModelId: "cline-pass/glm-5.2",
-			},
+			{ actModeApiProvider: "pliny", actModeApiModelId: "snps-provider/GLM-5.2" },
 			"act",
 		)
 
 		expect(providerConfig).toMatchObject({
-			providerId: "cline-pass",
-			modelId: "cline-pass/glm-5.2",
-			apiKey: "workos:shared-cline-token",
+			providerId: "pliny",
+			modelId: "snps-provider/GLM-5.2",
+			apiKey: "pliny-key",
+			baseUrl: "https://pliny.example/v1",
+			timeoutMs: PLINY_REQUEST_TIMEOUT_MS,
 		})
-		expect(mocks.providerSettingsManager.getProviderSettings).toHaveBeenCalledWith("cline")
+		expect(mocks.providerSettingsManager.getProviderSettings).toHaveBeenCalledWith("pliny")
 	})
 
-	it("uses provider-specific settings for SDK-backed direct handlers", () => {
-		mocks.providerSettingsManager.getProviderSettings.mockImplementation((providerId: string) => {
-			if (providerId !== "v0") {
-				return undefined
-			}
-			return {
-				provider: "v0",
-				apiKey: "v0-key",
-			}
-		})
+	it("maps the FreeAuto router onto a concrete model for standalone handlers", () => {
+		mockPlinySettings({ apiKey: "pliny-key" })
+
+		const providerConfig = buildSdkProviderConfig(
+			{ planModeApiProvider: "pliny", planModeApiModelId: PLINY_FREE_AUTO_MODEL_ID },
+			"plan",
+		)
+
+		expect(providerConfig.modelId).toBe(PLINY_FREE_AUTO_FALLBACK_MODEL_ID)
+	})
+
+	it("runs on Pliny when an older version stored another provider", () => {
+		mockPlinySettings({ apiKey: "pliny-key" })
 
 		const providerConfig = buildSdkProviderConfig(
 			{
-				actModeApiProvider: "v0",
-				actModeApiModelId: "v0-1.5-md",
-			},
+				actModeApiProvider: "openrouter",
+				actModeApiModelId: "snps-provider/kimi-k2.6",
+			} as unknown as ApiConfiguration,
 			"act",
 		)
 
 		expect(providerConfig).toMatchObject({
-			providerId: "v0",
-			modelId: "v0-1.5-md",
-			apiKey: "v0-key",
-		})
-		expect(mocks.providerSettingsManager.getProviderSettings).toHaveBeenCalledWith("v0")
-	})
-
-	it("forwards the Ollama request timeout and context window to standalone handlers", () => {
-		mocks.providerSettingsManager.getProviderSettings.mockReturnValue(undefined)
-
-		const providerConfig = buildSdkProviderConfig(
-			{
-				actModeApiProvider: "ollama",
-				actModeOllamaModelId: "qwen2.5:7b",
-				requestTimeoutMs: 45_000,
-				ollamaApiOptionsCtxNum: "16384",
-			},
-			"act",
-		)
-
-		expect(providerConfig).toMatchObject({
-			providerId: "ollama",
-			modelId: "qwen2.5:7b",
-			timeoutMs: 45_000,
-			modelInfo: { id: "qwen2.5:7b", contextWindow: 16384 },
+			providerId: "pliny",
+			modelId: "snps-provider/kimi-k2.6",
+			apiKey: "pliny-key",
 		})
 	})
 
-	it("omits timeoutMs for Ollama when no explicit timeout is configured", () => {
-		mocks.providerSettingsManager.getProviderSettings.mockReturnValue(undefined)
+	it("turns reasoning off when asked to", () => {
+		mockPlinySettings({ apiKey: "pliny-key" })
 
 		const providerConfig = buildSdkProviderConfig(
-			{
-				actModeApiProvider: "ollama",
-				actModeOllamaModelId: "qwen2.5:7b",
-			},
+			{ actModeApiProvider: "pliny", actModeApiModelId: "snps-provider/kimi-k2.6", actModeReasoningEffort: "high" },
 			"act",
+			{ disableReasoning: true },
 		)
 
-		expect(providerConfig.providerId).toBe("ollama")
-		expect("timeoutMs" in providerConfig).toBe(false)
+		expect(providerConfig.thinking).toBe(false)
+		expect(providerConfig).not.toHaveProperty("reasoningEffort")
 	})
 })

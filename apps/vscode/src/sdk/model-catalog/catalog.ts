@@ -18,7 +18,6 @@ import type {
 } from "./contracts"
 import { providerAllowsCustomModelIds } from "./custom-model-ids"
 import { computeConfigFingerprint } from "./fingerprint"
-import { applyHostModelInfoOverrides } from "./host-overrides"
 import { parseProviderId } from "./provider-id"
 import { toSdkProviderId } from "./sdk-provider-id"
 import { adaptSdkModelInfo, CatalogShapeError } from "./shape-adapter"
@@ -211,12 +210,7 @@ async function resolveSdkModels(
 		toSdkProviderConfig(config, selection),
 	)
 	const sdkModels = resolved?.knownModels ?? {}
-	const models = new Map(
-		Object.entries(sdkModels).map(([modelId, sdkInfo]) => [
-			modelId,
-			applyHostModelInfoOverrides(providerId, modelId, adaptSdkModelInfo(sdkInfo)),
-		]),
-	)
+	const models = new Map(Object.entries(sdkModels).map(([modelId, sdkInfo]) => [modelId, adaptSdkModelInfo(sdkInfo)]))
 	return {
 		ok: true,
 		providerId,

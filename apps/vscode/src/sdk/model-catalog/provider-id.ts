@@ -11,75 +11,13 @@ import type { KnownProviderId, ProviderId } from "./contracts"
  * different spelling normalize at the SDK boundary.
  */
 const KNOWN_API_PROVIDERS = {
-	anthropic: true,
-	"claude-code": true,
-	openrouter: true,
-	bedrock: true,
-	vertex: true,
-	openai: true,
-	ollama: true,
-	lmstudio: true,
-	gemini: true,
-	"openai-native": true,
-	"openai-codex": true,
-	requesty: true,
-	together: true,
-	deepseek: true,
-	qwen: true,
-	"qwen-code": true,
-	doubao: true,
-	mistral: true,
-	"vscode-lm": true,
-	cline: true,
-	litellm: true,
-	moonshot: true,
-	nebius: true,
-	fireworks: true,
-	asksage: true,
-	xai: true,
-	sambanova: true,
-	cerebras: true,
-	sapaicore: true,
-	groq: true,
-	poolside: true,
-	huggingface: true,
-	"huawei-cloud-maas": true,
-	dify: true,
-	baseten: true,
-	"vercel-ai-gateway": true,
-	v0: true,
-	zai: true,
-	"zai-coding-plan": true,
-	oca: true,
-	aihubmix: true,
-	minimax: true,
-	hicap: true,
-	nousResearch: true,
-	wandb: true,
-	xiaomi: true,
-	"tencent-tokenhub": true,
-	chutes: true,
-	"cline-pass": true,
 	pliny: true,
+	cline: true,
+	"cline-pass": true,
+	oca: true,
 } satisfies Record<ApiProvider, true>
 
-/**
- * Spelling aliases folded into the canonical extension provider id at parse
- * time. The SDK catalog (and therefore the settings UI's provider listings)
- * uses `openai-compatible` for the OpenAI Compatible built-in, while the
- * extension's config/storage layer has always used `openai`. Normalizing here
- * keeps every gRPC entry point (commit selection, provider config reads and
- * writes, model resolution) operating on the single spelling the rest of the
- * extension is keyed by.
- */
-const PROVIDER_ID_ALIASES: Readonly<Record<string, string>> = {
-	"openai-compatible": "openai",
-}
-
-const normalizeProviderId = (raw: string): string => {
-	const lowered = raw.trim().toLowerCase()
-	return PROVIDER_ID_ALIASES[lowered] ?? lowered
-}
+const normalizeProviderId = (raw: string): string => raw.trim().toLowerCase()
 
 const knownProviderIds = new Set(Object.keys(KNOWN_API_PROVIDERS).map(normalizeProviderId))
 const warnedUnknownProviderIds = new Set<string>()

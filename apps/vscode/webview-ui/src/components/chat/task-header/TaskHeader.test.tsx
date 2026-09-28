@@ -30,6 +30,10 @@ vi.mock("@/services/grpc-client", () => ({
 	TaskServiceClient: {
 		editMessageAndRegenerate: mocks.editMessageAndRegenerate,
 	},
+	ModelsServiceClient: {
+		getPlinyBudget: vi.fn(() => new Promise(() => undefined)),
+		resolveModelInfo: vi.fn(() => new Promise(() => undefined)),
+	},
 	CheckpointsServiceClient: {
 		checkpointLatestChangesSummary: vi.fn(),
 	},

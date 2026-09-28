@@ -413,7 +413,7 @@ describe("State Keys Type Safety", () => {
 			// These assignments verify the key types are correctly narrowed
 			const globalKey: GlobalStateKey = "isNewUser"
 			const settingsKey: SettingsKey = "preferredLanguage"
-			const secretKey: SecretKey = "apiKey"
+			const secretKey: SecretKey = "authNonce"
 			const localKey: LocalStateKey = "localClineRulesToggles"
 
 			expect(globalKey).to.be.a("string")
