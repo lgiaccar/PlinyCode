@@ -6,7 +6,7 @@ import { ClineEnv } from "@/config"
 import { Logger } from "@/shared/services/Logger"
 import { Mode } from "@/shared/storage/types"
 import { Controller } from ".."
-import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
+import { resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
 import { normalizeOpenaiReasoningEffort } from "./reasoningEffort"
 
 /**
@@ -97,10 +97,10 @@ export async function updateSettingsCli(controller: Controller, request: UpdateS
 			controller.stateManager.setGlobalState("actModeApiProvider", converted)
 		}
 
-		if (controller.task) {
+		if (controller.activeTaskId) {
 			const currentMode = controller.stateManager.getGlobalSettingsKey("mode")
 			const modelId = resolveActiveModelIdFromApiConfiguration(controller.stateManager.getApiConfiguration(), currentMode)
-			controller.task.api = createTaskApiModelShim(modelId)
+			controller.setActiveTaskModelId(modelId)
 		}
 
 		// Update auto-condense setting

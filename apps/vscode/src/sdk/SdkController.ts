@@ -27,8 +27,9 @@ import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/ch
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
-import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
+import type { ClineAskResponse, ClineCheckpointRestore } from "@shared/WebviewMessage"
 import type { WorkspaceRef } from "@shared/workspaceRef"
+import { createTaskApiModelShim } from "@/core/controller/models/taskApiModel"
 import { sendChatButtonClickedEvent } from "@/core/controller/ui/subscribeToChatButtonClicked"
 import { renderConversationMarkdown } from "@/core/export/markdown"
 import { defaultMarkdownExportFilename, saveMarkdownExport } from "@/core/export/save-markdown"
@@ -1353,6 +1354,67 @@ export class Controller {
 		)
 	}
 
+	// ---- Task accessors (for gRPC handlers in core/controller/*) ----
+	//
+	// Handlers outside src/sdk/ should read/act on the displayed task through
+	// these instead of poking at the TaskProxy's properties directly — the
+	// TaskProxy shape is an internal implementation detail of the SDK adapter
+	// layer (see task-proxy.ts).
+
+	/** The id of the task currently displayed in the webview, if any. */
+	get activeTaskId(): string | undefined {
+		return this.task?.taskId
+	}
+
+	/** The displayed task's transcript, or an empty array when no task is active. */
+	getActiveTaskMessages(): ClineMessage[] {
+		return this.task?.messageStateHandler.getClineMessages() ?? []
+	}
+
+	/**
+	 * Delivers a webview ask response (button click or follow-up message) to
+	 * the displayed task. No-ops and returns false when no task is active.
+	 */
+	async sendTaskAskResponse(
+		askResponse: ClineAskResponse,
+		text?: string,
+		images?: string[],
+		files?: string[],
+		delivery?: string,
+	): Promise<boolean> {
+		if (!this.task) {
+			return false
+		}
+		await this.task.handleWebviewAskResponse(askResponse, text, images, files, delivery)
+		return true
+	}
+
+	/**
+	 * Points the displayed task's API handler at `modelId`. Used when a
+	 * provider/model change is committed while a task is active. No-ops when
+	 * no task is active.
+	 */
+	setActiveTaskModelId(modelId: string): void {
+		if (!this.task) {
+			return
+		}
+		this.task.api = createTaskApiModelShim(modelId)
+	}
+
+	/** Aborts the displayed task (without clearing it) — used by resetState. */
+	abortActiveTask(): void {
+		this.task?.abortTask()
+	}
+
+	/**
+	 * Drops the displayed task without running the usual clearTask() teardown
+	 * (session stop, workspace reset, state post) — used by resetState, which
+	 * runs its own full extension-state reset around this.
+	 */
+	clearActiveTask(): void {
+		this.task = undefined
+	}
+
 	async editMessageAndRegenerate(input: {
 		messageTs: number
 		text: string
@@ -2256,7 +2318,8 @@ export class Controller {
 		try {
 			const { getStateToPostToWebview: buildBaseState } = await import("@core/controller/state/getStateToPostToWebview")
 			const baseState = await buildBaseState({
-				task: this.task,
+				activeTaskId: this.activeTaskId,
+				activeTaskMessages: this.getActiveTaskMessages(),
 				stateManager: this.stateManager,
 				mcpHub: this.mcpHub,
 				backgroundCommandRunning: this.backgroundCommandRunning,

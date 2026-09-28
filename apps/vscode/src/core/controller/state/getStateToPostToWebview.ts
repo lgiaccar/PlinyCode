@@ -6,7 +6,7 @@
 
 import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
 import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@plinycode/core"
-import type { ExtensionState, Platform } from "@shared/ExtensionMessage"
+import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
@@ -19,7 +19,10 @@ import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
  * Extracted from the classic Controller.getStateToPostToWebview().
  */
 export async function getStateToPostToWebview(controller: {
-	task?: any
+	/** The id of the task currently displayed in the webview, if any. */
+	activeTaskId?: string
+	/** The displayed task's transcript — see Controller.getActiveTaskMessages(). */
+	activeTaskMessages?: ClineMessage[]
 	stateManager: any
 	mcpHub?: any
 	backgroundCommandRunning?: boolean
@@ -87,10 +90,10 @@ export async function getStateToPostToWebview(controller: {
 	const localCopilotRulesToggles = stateManager.getWorkspaceStateKey("localCopilotRulesToggles")
 	const workflowToggles = stateManager.getWorkspaceStateKey("workflowToggles")
 
-	const currentTaskItem = controller.task?.taskId
-		? (taskHistory || []).find((item: any) => item.id === controller.task?.taskId)
+	const currentTaskItem = controller.activeTaskId
+		? (taskHistory || []).find((item: any) => item.id === controller.activeTaskId)
 		: undefined
-	const clineMessages = [...(controller.task?.messageStateHandler?.getClineMessages?.() || [])]
+	const clineMessages = [...(controller.activeTaskMessages ?? [])]
 	const checkpointRestoreInput = controller.checkpointRestoreInput
 	const editMessageRestartFocus = controller.editMessageRestartFocus
 

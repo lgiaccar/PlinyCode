@@ -6,9 +6,9 @@
 // the subscribeToPartialMessage and subscribeToState streams the webview
 // already listens on.
 
-import type { CoreSessionEvent } from "@plinycode/core"
 import { sendStateUpdate } from "@core/controller/state/subscribeToState"
 import { sendPartialMessageEvent } from "@core/controller/ui/subscribeToPartialMessage"
+import type { CoreSessionEvent } from "@plinycode/core"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import type { ClineMessage as ProtoClineMessage } from "@shared/proto/cline/ui"
 import { convertClineMessageToProto } from "@shared/proto-conversions/cline-message"
@@ -120,7 +120,8 @@ export class WebviewGrpcBridge {
 				const { StateManager } = await import("@core/storage/StateManager")
 				const stateManager = StateManager.get()
 				const state = await getStateToPostToWebview({
-					task: undefined,
+					activeTaskId: undefined,
+					activeTaskMessages: undefined,
 					stateManager,
 					mcpHub: undefined,
 					backgroundCommandRunning: false,
