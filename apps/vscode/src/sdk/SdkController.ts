@@ -729,7 +729,6 @@ export class Controller {
 			sessions: this.sessions,
 			messages: this.messages,
 			taskHistory: this.taskHistory,
-			stateManager: this.stateManager,
 			getTask: () => this.task,
 			postStateToWebview: () => this.postStateToWebview(),
 			setTurnPhase: (phase, anchorTs) => this.turnStateTracker.set(phase, anchorTs),

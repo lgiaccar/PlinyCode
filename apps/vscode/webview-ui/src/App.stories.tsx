@@ -1,6 +1,6 @@
 import { HeroUIProvider } from "@heroui/react"
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
-import type { ApiConfiguration, ModelInfo } from "@shared/api"
+import type { ApiConfiguration } from "@shared/api"
 import type { ClineMessage, ClineSayTool } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import type { Meta, StoryObj } from "@storybook/react-vite"
@@ -216,19 +216,6 @@ const mockStreamingMessages: ClineMessage[] = [
 ]
 
 // Reusable state and decorator factories
-// Minimal fixture for the `openRouterModels` storybook prop — the story
-// only needs a non-empty record to exercise the picker code paths.
-const STORYBOOK_OPENROUTER_MODELS: Record<string, ModelInfo> = {
-	"anthropic/claude-sonnet-4.6": {
-		maxTokens: 8192,
-		contextWindow: 200_000,
-		supportsImages: true,
-		supportsPromptCache: true,
-		inputPrice: 3,
-		outputPrice: 15,
-	},
-}
-
 const createMockState = (overrides: any = {}) => ({
 	...useExtensionState(),
 	useAutoCondense: true,
@@ -238,8 +225,6 @@ const createMockState = (overrides: any = {}) => ({
 	clineMessages: mockActiveMessages,
 	taskHistory: mockTaskHistory,
 	apiConfiguration: mockApiConfiguration,
-	onboardingModels: undefined,
-	openRouterModels: STORYBOOK_OPENROUTER_MODELS,
 	backgroundEditEnabled: false,
 	...overrides,
 })

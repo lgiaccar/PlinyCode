@@ -10,7 +10,6 @@ import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
-import { OnboardingModelGroup } from "./proto/cline/state"
 import { Mode } from "./storage/types"
 import { UserInfo } from "./UserInfo"
 import type { WorkspaceRef } from "./workspaceRef"
@@ -36,7 +35,6 @@ export const COMMAND_CANCEL_TOKEN = "__cline_command_cancel__"
 export interface ExtensionState {
 	isNewUser: boolean
 	welcomeViewCompleted: boolean
-	onboardingModels: OnboardingModelGroup | undefined
 	apiConfiguration?: ApiConfiguration
 	autoApprovalSettings: AutoApprovalSettings
 	preferredLanguage?: string
