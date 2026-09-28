@@ -1,6 +1,6 @@
 import type { ApiProvider } from "@shared/api"
 import { Logger } from "../../shared/services/Logger"
-import type { KnownProviderId, ProviderId } from "./contracts"
+import type { ProviderId } from "./contracts"
 
 /**
  * Extension-known provider ids. The object is typed against `ApiProvider`
@@ -40,15 +40,4 @@ export function parseProviderId(raw: string): ProviderId {
 		Logger.warn(`[model-catalog] Unknown provider id "${normalized}". Treating as a custom provider.`)
 	}
 	return normalized as ProviderId
-}
-
-/**
- * Type guard narrowing a {@link ProviderId} to {@link KnownProviderId}.
- *
- * Recognition is membership in the normalized `ApiProvider` set. Because
- * `parseProviderId` lowercases input, legacy `nousResearch` is recognized
- * after parsing as `nousresearch`.
- */
-export function isKnownProviderId(id: ProviderId): id is KnownProviderId {
-	return knownProviderIds.has(id)
 }

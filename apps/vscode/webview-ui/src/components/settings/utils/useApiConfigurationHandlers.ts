@@ -71,39 +71,5 @@ export const useApiConfigurationHandlers = () => {
 		}
 	}
 
-	/**
-	 * Updates multiple mode-specific fields in a single atomic operation.
-	 *
-	 * This prevents race conditions that can occur when making multiple separate
-	 * handleModeFieldChange calls in rapid succession.
-	 *
-	 * @param fieldPairs - Object mapping keys to plan/act field pairs
-	 * @param values - Object with values for each key
-	 * @param currentMode - The current mode being targeted
-	 */
-	const handleModeFieldsChange = async <T extends Record<string, any>>(
-		fieldPairs: { [K in keyof T]: { plan: keyof ApiConfiguration; act: keyof ApiConfiguration } },
-		values: T,
-		currentMode: Mode,
-	) => {
-		if (planActSeparateModelsSetting) {
-			// Update only the current mode's fields
-			const updates: Partial<ApiConfiguration> = {}
-			Object.entries(fieldPairs).forEach(([key, { plan, act }]) => {
-				const targetField = currentMode === "plan" ? plan : act
-				updates[targetField] = values[key]
-			})
-			await handleFieldsChange(updates)
-		} else {
-			// Update both modes' fields
-			const updates: Partial<ApiConfiguration> = {}
-			Object.entries(fieldPairs).forEach(([key, { plan, act }]) => {
-				updates[plan] = values[key]
-				updates[act] = values[key]
-			})
-			await handleFieldsChange(updates)
-		}
-	}
-
-	return { handleFieldChange, handleFieldsChange, handleModeFieldChange, handleModeFieldsChange }
+	return { handleFieldChange, handleFieldsChange, handleModeFieldChange }
 }

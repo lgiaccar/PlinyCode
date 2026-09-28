@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Logger } from "../../shared/services/Logger"
-import type { KnownProviderId } from "./contracts"
-import { isKnownProviderId, parseProviderId } from "./provider-id"
+import { parseProviderId } from "./provider-id"
 
 let warnSpy: ReturnType<typeof vi.spyOn>
 
@@ -41,29 +40,5 @@ describe("parseProviderId", () => {
 		parseProviderId("  Pliny ")
 
 		expect(warnSpy).not.toHaveBeenCalled()
-	})
-})
-
-describe("isKnownProviderId", () => {
-	it("returns true for known provider ids after parsing", () => {
-		expect(isKnownProviderId(parseProviderId("pliny"))).toBe(true)
-	})
-
-	it("returns false for a custom provider id", () => {
-		expect(isKnownProviderId(parseProviderId("provider-id-test-custom-provider"))).toBe(false)
-	})
-
-	it("returns false for a provider PlinyCode no longer has", () => {
-		expect(isKnownProviderId(parseProviderId("openrouter"))).toBe(false)
-	})
-
-	it("acts as a type predicate", () => {
-		const id = parseProviderId("pliny")
-		if (!isKnownProviderId(id)) {
-			throw new Error("expected pliny to be known")
-		}
-
-		const knownProviderId: KnownProviderId = id
-		expect(knownProviderId).toBe("pliny")
 	})
 })

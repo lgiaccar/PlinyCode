@@ -42,52 +42,6 @@ export const PLINY_FREE_AUTO_FALLBACK_MODEL_ID = "snps-provider/kimi-k2.6"
 
 export const PLINY_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
 
-/** Featured Pliny models for any remaining "recommended" UI surfaces. */
-export const PLINY_FEATURED_MODELS = [
-	{
-		id: PLINY_FREE_AUTO_MODEL_ID,
-		name: "auto-free (router)",
-		description: "Picks the best free model per task and fails over automatically",
-		tags: ["DEFAULT", "FREE"],
-	},
-	{
-		id: "snps-provider/kimi-k2.6",
-		name: "Kimi K2.6",
-		description: "Self-hosted MoE via Pliny",
-		tags: ["SELF-HOSTED"],
-	},
-	{
-		id: "snps-aws-bedrock/aws-claude-sonnet-4.6",
-		name: "Claude Sonnet 4.6",
-		description: "Hosted coder via Pliny (Bedrock)",
-		tags: ["HOSTED"],
-	},
-	{
-		id: "snps-aws-bedrock/global.anthropic.claude-sonnet-5",
-		name: "Claude Sonnet 5",
-		description: "Strongest hosted coder on Pliny; supports prompt caching",
-		tags: ["HOSTED"],
-	},
-	{
-		id: "snps-provider/GLM-5.2",
-		name: "GLM-5.2",
-		description: "Largest self-hosted context (512k) via Pliny",
-		tags: ["SELF-HOSTED"],
-	},
-	{
-		id: "snps-provider/qwen3-coder-480b-a35b-inst-fp8",
-		name: "Qwen3 Coder 480B",
-		description: "Coding-specialised self-hosted model",
-		tags: ["SELF-HOSTED"],
-	},
-	{
-		id: "azure-openai/gpt-5.2",
-		name: "GPT-5.2",
-		description: "Hosted via Pliny Azure OpenAI (auto-caches)",
-		tags: ["HOSTED"],
-	},
-] as const
-
 /**
  * URI the webview passes to `FileServiceClient.openFile` to open the FreeAuto
  * routing rules. The real path depends on the host data directory, which the
@@ -131,10 +85,6 @@ export function resolvePlinyConcreteModelId(
 	fallbackModelId: string = PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 ): string {
 	return modelId && isPlinyRouterModelId(modelId) ? fallbackModelId : (modelId ?? fallbackModelId)
-}
-
-export function isPlinyProviderId(providerId: string | undefined | null): boolean {
-	return providerId === PLINY_PROVIDER_ID
 }
 
 export function coerceToPlinyProvider(_providerId: string | undefined | null): ApiProvider {
