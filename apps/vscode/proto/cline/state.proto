@@ -22,7 +22,6 @@ service StateService {
   rpc updateSettings(UpdateSettingsRequest) returns (Empty);
   rpc updateSettingsCli(UpdateSettingsRequestCli) returns (Empty);
   rpc updateTaskSettings(UpdateTaskSettingsRequest) returns (Empty);
-  rpc updateTelemetrySetting(TelemetrySettingRequest) returns (Empty);
   rpc captureOnboardingProgress(OnboardingProgressRequest) returns (Empty);
   rpc setWelcomeViewCompleted(BooleanRequest) returns (Empty);
   rpc updateInfoBannerVersion(Int64Request) returns (Empty);
@@ -114,6 +113,8 @@ message Secrets {
 message Settings {
   reserved 150; // was custom_prompt (removed - compact prompt setting no longer supported)
   reserved "custom_prompt";
+  reserved 133; // was telemetry_setting (telemetry removed)
+  reserved "telemetry_setting";
   reserved 139; // was max_consecutive_mistakes (removed; the SDK owns the mistake limit)
   reserved "max_consecutive_mistakes";
   reserved 142; // was yolo_mode_toggled (removed; migrated into auto_approval_settings)
@@ -250,7 +251,6 @@ message Settings {
   optional string global_workflow_toggles = 130;
   optional string global_skills_toggles = 131;
   optional BrowserSettings browser_settings = 132;
-  optional string telemetry_setting = 133;
   optional bool plan_act_separate_models_setting = 134;
   optional bool enable_checkpoints_setting = 135;
   optional int32 shell_integration_timeout = 136;
@@ -355,17 +355,6 @@ message AutoApprovalSettingsRequest {
   bool enable_notifications = 4;
 }
 
-enum TelemetrySettingEnum {
-  UNSET = 0;
-  ENABLED = 1;
-  DISABLED = 2;
-}
-
-message TelemetrySettingRequest {
-  Metadata metadata = 1;
-  TelemetrySettingEnum setting = 2;
-}
-
 // Browser settings for UpdateSettingsRequest
 message BrowserSettingsUpdate {
   optional Viewport viewport = 1;
@@ -398,11 +387,11 @@ message UpdateSettingsRequest {
   reserved 43; // was lazy_teammate_mode_enabled (removed)
   reserved 12; // was terminal_output_line_limit (removed; SDK command output limits are character-based)
   reserved 19; // was custom_prompt (removed - compact prompt setting no longer supported)
-  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt";
+  reserved 3; // was telemetry_setting (telemetry removed)
+  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting";
 
   Metadata metadata = 1;
   optional ModelsApiConfiguration api_configuration = 2;
-  optional string telemetry_setting = 3;
   optional bool plan_act_separate_models_setting = 4;
   optional bool enable_checkpoints_setting = 5;
   optional bool mcp_marketplace_enabled = 6;
