@@ -3,7 +3,6 @@ import type { BasicLogger } from "@plinycode/shared";
 import { resolveSessionDataDir } from "@plinycode/shared/storage";
 import { nowIso } from "../../services/session-artifacts";
 import type { SqliteSessionStore } from "../../services/storage/sqlite-session-store";
-import type { SessionMessagesArtifactUploader } from "../../types/session";
 import {
 	type CreateRootSessionInput,
 	patchSqliteRow,
@@ -272,7 +271,6 @@ export class CoreSessionService extends UnifiedSessionPersistenceService {
 		private readonly store: SqliteSessionStore,
 		options: {
 			sessionArtifactsDir?: string;
-			messagesArtifactUploader?: SessionMessagesArtifactUploader;
 			logger?: BasicLogger;
 		} = {},
 	) {

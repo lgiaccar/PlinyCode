@@ -8,17 +8,17 @@
  * `@plinycode/shared`.
  */
 
-export type {
-	AgentEventListener,
-	AgentRunInput,
-	AgentRuntimeConfig,
-	AgentRuntimeConfigWithModel,
-	AgentRuntimeConfigWithProvider,
-} from "./agent-runtime";
+export { AgentRuntimeAbortError } from "./agent-errors";
+export type { AgentRunInput } from "./agent-messages";
+export type { AgentEventListener } from "./agent-runtime";
 export {
 	Agent,
 	AgentRuntime,
-	AgentRuntimeAbortError,
 	createAgent,
 	createAgentRuntime,
 } from "./agent-runtime";
+export type {
+	AgentRuntimeConfig,
+	AgentRuntimeConfigWithModel,
+	AgentRuntimeConfigWithProvider,
+} from "./runtime-config";

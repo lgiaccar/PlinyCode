@@ -2,7 +2,7 @@
 //
 // Two consumers previously held independent, incomplete interpretations of
 // this union: the empty-response retry middleware decided "did the model
-// produce anything?" and `emitAiSdkEvents()` in `ai-sdk.ts` decided "what do
+// produce anything?" and `emitAiSdkEvents()` in `ai-sdk-stream-events.ts` decided "what do
 // we convert into agent events?". A part counted by one but not the other
 // produced exactly the failure the retry exists to prevent — e.g. a
 // file-only turn was "content" to the middleware (never retried) but was

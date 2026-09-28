@@ -34,14 +34,6 @@ export async function getProofKey(): Promise<{
 	return { verifier, challenge };
 }
 
-export function normalizeBaseUrl(value: string): string {
-	return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-export function resolveUrl(baseUrl: string, path: string): string {
-	return new URL(path, `${normalizeBaseUrl(baseUrl)}/`).toString();
-}
-
 export type ParsedAuthorizationInput = {
 	code?: string;
 	state?: string;

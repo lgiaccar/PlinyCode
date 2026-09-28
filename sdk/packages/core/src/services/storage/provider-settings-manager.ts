@@ -10,7 +10,7 @@ import {
 import { basename, dirname } from "node:path";
 import { resolveProviderSettingsPath } from "@plinycode/shared/storage";
 import { getProviderAuthHandler } from "../../auth/provider-auth-registry";
-import { hashSecret, sdkDebug } from "../../logging/early-logger";
+import { sdkDebug } from "../../logging/early-logger";
 import {
 	emptyStoredProviderSettings,
 	type ProviderConfig,
@@ -170,9 +170,8 @@ export class ProviderSettingsManager {
 			const result = StoredProviderSettingsSchema.safeParse(parsed);
 			if (result.success) {
 				registerConfiguredProvidersFromSettings(result.data);
-				const clineAuth = result.data.providers["cline"]?.settings?.auth;
 				sdkDebug(
-					`providers.read providers=[${Object.keys(result.data.providers).join(",")}] lastUsed=${result.data.lastUsedProvider ?? "none"} clineAuthPresent=${!!clineAuth?.accessToken} clineAccessTokenHash=${hashSecret(clineAuth?.accessToken)} clineRefreshTokenHash=${hashSecret(clineAuth?.refreshToken)}`,
+					`providers.read providers=[${Object.keys(result.data.providers).join(",")}] lastUsed=${result.data.lastUsedProvider ?? "none"}`,
 				);
 				return result.data;
 			}
@@ -241,15 +240,8 @@ export class ProviderSettingsManager {
 				: previous.lastUsedProvider,
 		};
 		this.write(next);
-		const prevClineAuth = previous.providers["cline"]?.settings?.auth;
-		const nextClineAuth =
-			validatedSettings.provider === "cline"
-				? validatedSettings.auth
-				: next.providers["cline"]?.settings?.auth;
-		const authDropped =
-			!!prevClineAuth?.accessToken && !nextClineAuth?.accessToken;
 		sdkDebug(
-			`providers.save providerId=${providerId} tokenSource=${tokenSource} clineAuthWasPresent=${!!prevClineAuth?.accessToken} clineAuthIsPresent=${!!nextClineAuth?.accessToken} authDropped=${authDropped}`,
+			`providers.save providerId=${providerId} tokenSource=${tokenSource}`,
 		);
 		return next;
 	}

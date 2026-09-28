@@ -32,8 +32,7 @@ It also exports cross-client runtime payload DTOs used by multiple hosts
 outside transport wiring:
 
 - chat runtime payloads (`ChatStartSessionRequest`, `ChatRunTurnRequest`, `ChatTurnResult`)
-- provider runtime payloads (`ProviderActionRequest`, `ProviderCatalogResponse`, `ProviderOAuthLoginResponse`)
-- Cline account action payloads (`ClineAccountActionRequest`)
+- provider runtime payloads (`ProviderSettingsActionRequest`, `ProviderCatalogResponse`, `ProviderOAuthLoginResponse`)
 - provider action requests include provider catalog/model operations plus provider add/save operations for settings hosts
 - provider action payloads now expose granular request/type contracts for reuse:
   `AddProviderActionRequest`, `SaveProviderSettingsActionRequest`,

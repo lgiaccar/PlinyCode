@@ -6,10 +6,8 @@ import type {
 } from "@plinycode/shared";
 import { NoSuchToolError } from "ai";
 import { describe, expect, it } from "vitest";
-import {
-	createOpenAICompatibleProvider,
-	repairMalformedToolCall,
-} from "./ai-sdk";
+import { createOpenAICompatibleProvider } from "./ai-sdk";
+import { repairMalformedToolCall } from "./ai-sdk-message-convert";
 
 /**
  * Integration tests for malformed tool-call handling in the AI SDK adapter.

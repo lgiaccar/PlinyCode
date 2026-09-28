@@ -24,8 +24,6 @@ import {
 	type AgentEvent,
 	type AgentExtension,
 	type AgentExtensionRegistry,
-	type AgentExtensionRule,
-	type AgentFinishReason,
 	type AgentMessage,
 	type AgentResult,
 	type AgentRunResult,
@@ -36,24 +34,15 @@ import {
 	type BasicLogger,
 	type ContributionRegistry,
 	createContributionRegistry,
-	isLikelyAuthError,
-	type LegacyAgentUsage,
 	type LoopDetectionConfig,
 	type Message,
 	type MessageWithMetadata,
 	type ModelInfo,
-	mergeModelOptions,
 	modelSupportsImageInput,
 	modelSupportsToolCalling,
-	type ProviderErrorClass,
-	type ToolCallRecord,
 	usesImageGenerationOperation,
 } from "@plinycode/shared";
-import { filterDisabledTools } from "../../services/global-settings";
-import {
-	createAgentModelFromConfig,
-	resolveKnownModelsFromConfig,
-} from "../../services/llms/handler-factory";
+import { createAgentModelFromConfig } from "../../services/llms/handler-factory";
 import {
 	getMessageBuilderOptionsFromEnv,
 	MessageBuilder,
@@ -73,7 +62,18 @@ import {
 } from "../config/connection-update";
 import { LoopDetectionTracker } from "../safety/loop-detection";
 import { MistakeTracker } from "../safety/mistake-tracker";
+import { mergeRuntimeHooks } from "./merge-runtime-hooks";
 import { RuntimeEventAdapter } from "./runtime-event-adapter";
+import { SessionRunRecovery } from "./session-run-recovery";
+import { SessionRunTracker } from "./session-run-tracker";
+import {
+	buildUserTurnContent,
+	filterAvailableExtensionTools,
+	leveledLog,
+	mergeSystemPromptRules,
+	resolveRuleContent,
+	tryGetModelInfo,
+} from "./session-runtime-helpers";
 
 export const SESSION_RUN_IN_PROGRESS_ERROR_CODE = "session_run_in_progress";
 
@@ -97,169 +97,6 @@ export class SessionRunInProgressError extends Error {
 		);
 		this.name = "SessionRunInProgressError";
 	}
-}
-
-function formatToolResultError(output: unknown): string {
-	if (typeof output === "string") {
-		return output;
-	}
-	if (output instanceof Error) {
-		return output.message;
-	}
-	try {
-		return JSON.stringify(output);
-	} catch {
-		return String(output);
-	}
-}
-
-async function resolveRuleContent(
-	rule: AgentExtensionRule,
-): Promise<string | undefined> {
-	const content =
-		typeof rule.content === "function" ? await rule.content() : rule.content;
-	const trimmed = content.trim();
-	return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function mergeSystemPromptRules(
-	systemPrompt: string,
-	rules: ReadonlyArray<string>,
-): string {
-	const base = systemPrompt.trim();
-	const additional = rules
-		.map((rule) => rule.trim())
-		.filter(Boolean)
-		.join("\n\n");
-	if (base && additional) {
-		return `${base}\n\n${additional}`;
-	}
-	return base || additional;
-}
-
-function isToolEnabledByPolicies(
-	toolName: string,
-	toolPolicies: AgentConfig["toolPolicies"],
-): boolean {
-	const globalPolicy = toolPolicies?.["*"] ?? {};
-	const toolPolicy = toolPolicies?.[toolName] ?? {};
-	return (
-		{
-			...globalPolicy,
-			...toolPolicy,
-		}.enabled !== false
-	);
-}
-
-function filterToolsByPolicies(
-	tools: AgentTool[],
-	toolPolicies: AgentConfig["toolPolicies"],
-): AgentTool[] {
-	return tools.filter((tool) =>
-		isToolEnabledByPolicies(tool.name, toolPolicies),
-	);
-}
-
-function filterAvailableExtensionTools(
-	tools: AgentTool[],
-	toolPolicies: AgentConfig["toolPolicies"],
-): AgentTool[] {
-	return filterDisabledTools(filterToolsByPolicies(tools, toolPolicies));
-}
-
-function mergeRuntimeHooks(
-	layers: Array<Partial<AgentRuntimeHooks> | undefined>,
-): Partial<AgentRuntimeHooks> {
-	const hooks = layers.filter(
-		(layer): layer is Partial<AgentRuntimeHooks> => layer !== undefined,
-	);
-	if (hooks.length === 0) {
-		return {};
-	}
-
-	return {
-		beforeRun: async (ctx) => {
-			for (const hook of hooks) {
-				const result = await hook.beforeRun?.(ctx);
-				if (result?.stop) return result;
-			}
-			return undefined;
-		},
-		afterRun: async (ctx) => {
-			for (const hook of hooks) {
-				await hook.afterRun?.(ctx);
-			}
-		},
-		beforeModel: async (ctx) => {
-			let request = ctx.request;
-			let aggregate:
-				| Awaited<ReturnType<NonNullable<AgentRuntimeHooks["beforeModel"]>>>
-				| undefined;
-			for (const hook of hooks) {
-				const result = await hook.beforeModel?.({ ...ctx, request });
-				if (!result) continue;
-				if (result.stop) return result;
-				aggregate = {
-					...aggregate,
-					...result,
-					options: mergeModelOptions(aggregate?.options, result.options),
-				};
-				request = {
-					...request,
-					...(result.messages ? { messages: result.messages } : {}),
-					...(result.tools ? { tools: result.tools } : {}),
-					...(result.options
-						? { options: mergeModelOptions(request.options, result.options) }
-						: {}),
-				};
-			}
-			return aggregate;
-		},
-		afterModel: async (ctx) => {
-			for (const hook of hooks) {
-				const result = await hook.afterModel?.(ctx);
-				if (result?.stop) return result;
-			}
-			return undefined;
-		},
-		beforeTool: async (ctx) => {
-			let input = ctx.input;
-			let aggregate:
-				| Awaited<ReturnType<NonNullable<AgentRuntimeHooks["beforeTool"]>>>
-				| undefined;
-			for (const hook of hooks) {
-				const result = await hook.beforeTool?.({ ...ctx, input });
-				if (!result) continue;
-				if (result.stop || result.skip) return result;
-				aggregate = { ...aggregate, ...result };
-				if (Object.hasOwn(result, "input")) {
-					input = result.input;
-				}
-			}
-			return aggregate;
-		},
-		afterTool: async (ctx) => {
-			let result = ctx.result;
-			let aggregate:
-				| Awaited<ReturnType<NonNullable<AgentRuntimeHooks["afterTool"]>>>
-				| undefined;
-			for (const hook of hooks) {
-				const next = await hook.afterTool?.({ ...ctx, result });
-				if (!next) continue;
-				if (next.stop) return next;
-				aggregate = { ...aggregate, ...next };
-				if (next.result) {
-					result = next.result;
-				}
-			}
-			return aggregate;
-		},
-		onEvent: async (event) => {
-			for (const hook of hooks) {
-				await hook.onEvent?.(event);
-			}
-		},
-	};
 }
 
 // =============================================================================
@@ -297,13 +134,6 @@ export type ConnectionOverrides = ConnectionUpdate;
  * `run` / `continue` repeatedly. The class matches the subset of
  * runtime-facing session surface.
  */
-/**
- * How many times a failed run may be recovered in place (auth refresh or a
- * host-chosen model swap) before the failure is surfaced. Each attempt is a
- * full additional run, so this is deliberately small.
- */
-const MAX_RUN_RECOVERY_ATTEMPTS = 3;
-
 export class SessionRuntime {
 	private config: AgentConfig;
 	private readonly agentId: string;
@@ -351,52 +181,15 @@ export class SessionRuntime {
 	private activeRuntime: AgentRuntime | null = null;
 	/** Promise returned from the current run so shutdown can await its drain. */
 	private activeRunPromise: Promise<AgentResult> | null = null;
-	/**
-	 * Error class of the most recent `run-failed` runtime event, captured while
-	 * the classification is still structured (`AgentResult.text` is flattened).
-	 */
-	private lastRunFailureClass: ProviderErrorClass | undefined;
-	/**
-	 * A `run-failed` event held back from listeners while a recovery decision is
-	 * pending. Replayed verbatim when the run is not recovered, so a genuinely
-	 * terminal failure reaches the host exactly as it does without recovery.
-	 */
-	private deferredRunFailure: AgentRuntimeEvent | undefined;
+
 	/** Per-run `Agent → AgentEvent` adapter; `reset()` each run. */
 	private readonly eventAdapter = new RuntimeEventAdapter();
 	/** Session-shutdown gate — rejects late runs. */
 	private shutdownCalled = false;
-	/** Running tally of tool-call records for `AgentResult.toolCalls`. */
-	private currentRunToolCalls: ToolCallRecord[] = [];
-	/** Aggregated usage across the current run. */
-	private currentRunUsage: LegacyAgentUsage = {
-		inputTokens: 0,
-		outputTokens: 0,
-	};
-	/** Tool-start timestamps for `ToolCallRecord.durationMs`. */
-	private toolStartedAt = new Map<string, Date>();
-	/** Tool-call input snapshot for `ToolCallRecord.input`. */
-	private toolInputs = new Map<string, unknown>();
-	/**
-	 * Per-turn tool outcome counters used by the MistakeTracker wiring.
-	 * Reset on every `turn-started` event; consumed on `turn-finished`
-	 * to feed `mistakeTracker.record` when every tool call erred and no
-	 * successful call landed. Matches legacy `agent.ts` tool-failure
-	 * mistake-feed path (§3.4.6 + pre-Step-9 oracle lines 972-997).
-	 */
-	private currentTurnSuccessfulTools = 0;
-	private currentTurnFailedTools = 0;
-	private currentTurnFailureDetails: string[] = [];
-	/**
-	 * Serial queue for `MistakeTracker.record(...)` + loop-detection
-	 * side-effects fired from the sync `handleRuntimeEvent` stream. The
-	 * tracker's `record()` is async but the runtime event stream is
-	 * synchronous, so we chain tracker work onto a promise and await it
-	 * in `executeRun` before returning the `AgentResult`.
-	 */
-	private activeTrackerWork: Promise<void> = Promise.resolve();
-	/** True when tracker logic has issued an abort for the active run. */
-	private trackerAbortInFlight = false;
+	/** Tool-call records, usage and mistake/loop tracking for the active run. */
+	private readonly runTracker: SessionRunTracker;
+	/** In-place recovery of failed runs and the deferred `run-failed` event. */
+	private readonly runRecovery: SessionRunRecovery;
 	private readonly handleExternalAbort = (): void => {
 		this.abort(this.config.abortSignal?.reason);
 	};
@@ -461,6 +254,25 @@ export class SessionRuntime {
 				? undefined
 				: loopDetectionInput;
 		this.loopTracker = new LoopDetectionTracker(loopConfig);
+		this.runTracker = new SessionRunTracker({
+			conversation: this.conversation,
+			mistakeTracker: this.mistakeTracker,
+			loopTracker: this.loopTracker,
+			loopDetectionDisabled: this.loopDetectionDisabled,
+			getConfig: () => this.config,
+			getActiveRuntime: () => this.activeRuntime,
+		});
+		this.runRecovery = new SessionRunRecovery({
+			agentId: this.agentId,
+			logger: this.logger,
+			conversation: this.conversation,
+			eventAdapter: this.eventAdapter,
+			getConfig: () => this.config,
+			isShutdownCalled: () => this.shutdownCalled,
+			isAbortRequested: () => this.abortRequested,
+			executeRunInternal: (input) => this.executeRunInternal(input),
+			emitLegacyEvent: (event) => this.emitLegacyEvent(event),
+		});
 	}
 
 	// -------------------------------------------------------------------
@@ -724,147 +536,15 @@ export class SessionRuntime {
 		isContinue: boolean;
 	}): Promise<AgentResult> {
 		let activePromise!: Promise<AgentResult>;
-		activePromise = this.executeRunWithRecovery(input).finally(() => {
-			if (this.activeRunPromise === activePromise) {
-				this.activeRunPromise = null;
-			}
-		});
+		activePromise = this.runRecovery
+			.executeRunWithRecovery(input)
+			.finally(() => {
+				if (this.activeRunPromise === activePromise) {
+					this.activeRunPromise = null;
+				}
+			});
 		this.activeRunPromise = activePromise;
 		return activePromise;
-	}
-
-	/**
-	 * Run a turn, recovering failures in place rather than surfacing them.
-	 *
-	 * Two recovery paths, in order of precedence:
-	 *
-	 * 1. `config.onAuthError` — an auth-like failure (e.g. an OAuth token that
-	 *    expired mid-run). The host refreshes credentials and the run is retried
-	 *    once. Unchanged from the original auth-only behavior.
-	 * 2. `config.onRunError` — any other failure the host can recover by
-	 *    changing the connection, typically by routing the next attempt to a
-	 *    different model (an output-token cutoff, a stalled stream, a transport
-	 *    death). The host may supply a hidden continuation prompt.
-	 *
-	 * Both continue from the failed attempt's persisted trail (`isContinue`)
-	 * rather than replaying the run, because the partial assistant message was
-	 * already written to the conversation store — and its deltas were already
-	 * streamed to the UI, where they cannot be retracted.
-	 */
-	private async executeRunWithRecovery(input: {
-		userMessage?: string;
-		userImages?: string[];
-		userFiles?: string[];
-		isContinue: boolean;
-	}): Promise<AgentResult> {
-		let result = await this.executeRunInternal(input);
-
-		for (let attempt = 1; attempt <= MAX_RUN_RECOVERY_ATTEMPTS; attempt += 1) {
-			if (result.finishReason !== "error" || this.shutdownCalled) {
-				break;
-			}
-			// An aborted run is the user's decision, never something to recover.
-			// (`finishReason` is already narrowed to "error" above; a cancelled
-			// run surfaces as an abort request rather than an error finish.)
-			if (this.abortRequested) {
-				break;
-			}
-
-			const errorClass = this.lastRunFailureClass;
-			const recovered = await this.attemptRunRecovery({
-				result,
-				errorClass,
-				attempt,
-			});
-			if (!recovered) {
-				break;
-			}
-
-			this.discardDeferredRunFailure();
-			result = await this.executeRunInternal({ isContinue: true });
-		}
-
-		// Whatever the outcome, a failure that was never recovered must still be
-		// reported to listeners exactly as it would be without recovery.
-		if (result.finishReason === "error") {
-			this.replayDeferredRunFailure();
-		} else {
-			this.discardDeferredRunFailure();
-		}
-		return result;
-	}
-
-	/**
-	 * Ask the host whether a failed run can be recovered, and prepare the
-	 * conversation for the retry. Returns `undefined` when the run must stay
-	 * failed.
-	 */
-	private async attemptRunRecovery(context: {
-		result: AgentResult;
-		errorClass: ProviderErrorClass | undefined;
-		attempt: number;
-	}): Promise<{ kind: "auth" | "run" } | undefined> {
-		const { result, errorClass, attempt } = context;
-
-		if (this.config.onAuthError && isLikelyAuthError(result.text)) {
-			const refreshed = await this.config.onAuthError().catch(() => false);
-			return refreshed ? { kind: "auth" } : undefined;
-		}
-
-		if (!this.config.onRunError) {
-			return undefined;
-		}
-
-		const decision = await this.config
-			.onRunError({
-				error: result.text,
-				errorClass,
-				attempt,
-				modelId: this.config.modelId,
-				hadAssistantContent: this.hasTrailingAssistantContent(),
-			})
-			.catch((error) => {
-				this.logger?.error?.("onRunError hook failed", {
-					agentId: this.agentId,
-					error,
-				});
-				return false as const;
-			});
-
-		if (!decision || decision.retry !== true) {
-			return undefined;
-		}
-
-		const continuationPrompt = decision.continuationPrompt?.trim();
-		if (continuationPrompt) {
-			// `displayRole: "system"` keeps the nudge out of user-facing
-			// transcripts (live and replayed) while the model still sees it —
-			// the same treatment compaction summaries and hook context get.
-			this.conversation.appendMessage({
-				role: "user",
-				content: [{ type: "text", text: continuationPrompt }],
-				metadata: { userRunSpan: 0, displayRole: "system" },
-			});
-		}
-		return { kind: "run" };
-	}
-
-	/**
-	 * Whether the persisted trail ends with assistant content, i.e. the failed
-	 * attempt produced output a retry should continue from rather than repeat.
-	 */
-	private hasTrailingAssistantContent(): boolean {
-		const messages = this.conversation.getMessages();
-		for (let index = messages.length - 1; index >= 0; index -= 1) {
-			const message = messages[index];
-			if (message?.role === "assistant") {
-				return message.content.length > 0;
-			}
-			if (message?.role === "user") {
-				return false;
-			}
-		}
-		return false;
 	}
 
 	private async executeRunInternal(input: {
@@ -893,15 +573,7 @@ export class SessionRuntime {
 		// first run, before runtime construction.
 		await this.ensureExtensionsInitialized();
 		this.eventAdapter.reset();
-		this.currentRunToolCalls = [];
-		this.currentRunUsage = { inputTokens: 0, outputTokens: 0 };
-		this.toolStartedAt.clear();
-		this.toolInputs.clear();
-		this.currentTurnSuccessfulTools = 0;
-		this.currentTurnFailedTools = 0;
-		this.currentTurnFailureDetails = [];
-		this.activeTrackerWork = Promise.resolve();
-		this.trackerAbortInFlight = false;
+		this.runTracker.reset();
 
 		const startedAt = new Date();
 		const effectiveUserMessage = input.userMessage;
@@ -1067,7 +739,7 @@ export class SessionRuntime {
 			// queued from handleRuntimeEvent) before we clear state so a
 			// late abort can still reach the runtime if needed.
 			try {
-				await this.activeTrackerWork;
+				await this.runTracker.activeTrackerWork;
 			} catch (error) {
 				this.logger?.error?.(
 					"SessionRuntime tracker work failed during drain",
@@ -1093,7 +765,7 @@ export class SessionRuntime {
 
 		const endedAt = new Date();
 		try {
-			return this.buildLegacyResult({
+			return this.runTracker.buildLegacyResult({
 				runResult,
 				thrownError,
 				startedAt,
@@ -1244,198 +916,13 @@ export class SessionRuntime {
 	private handleRuntimeEvent(event: AgentRuntimeEvent): void {
 		// Track tool-call records before translation so the timing data
 		// is available to observers via `AgentResult.toolCalls`.
-		switch (event.type) {
-			case "message-added":
-			case "assistant-message": {
-				this.syncConversationFromRuntimeMessage(event.snapshot.messages, [
-					event.message,
-				]);
-				break;
-			}
-			case "turn-started": {
-				// Reset per-turn tool-outcome counters used by the
-				// MistakeTracker wiring. Parity with pre-Step-9
-				// agent.ts which accumulates per-iteration success/fail
-				// counts and feeds them into recordMistake at the
-				// turn boundary.
-				this.currentTurnSuccessfulTools = 0;
-				this.currentTurnFailedTools = 0;
-				this.currentTurnFailureDetails = [];
-				break;
-			}
-			case "tool-started": {
-				this.toolStartedAt.set(event.toolCall.toolCallId, new Date());
-				this.toolInputs.set(event.toolCall.toolCallId, event.toolCall.input);
-				if (event.toolCall.execution) {
-					break;
-				}
-				// Loop-detection inspection: identical consecutive
-				// tool-call signatures trip the tracker. On "soft"
-				// verdict we append a recovery notice; on "hard"
-				// verdict we feed the mistake tracker with
-				// forceAtLimit:true and abort. Parity with pre-Step-9
-				// agent.ts L917-954.
-				this.inspectLoopForToolCall(
-					event.toolCall.toolName,
-					event.toolCall.input,
-					event.iteration,
-				);
-				break;
-			}
-			case "tool-finished": {
-				const startedAt = this.toolStartedAt.get(event.toolCall.toolCallId);
-				const endedAt = new Date();
-				const input = this.toolInputs.get(event.toolCall.toolCallId);
-				this.toolStartedAt.delete(event.toolCall.toolCallId);
-				this.toolInputs.delete(event.toolCall.toolCallId);
-				const resultPart = event.message.content.find(
-					(part) => part.type === "tool-result",
-				);
-				const isError =
-					resultPart?.type === "tool-result" && resultPart.isError === true;
-				const errorText = isError
-					? formatToolResultError(
-							resultPart?.type === "tool-result"
-								? resultPart.output
-								: undefined,
-						)
-					: undefined;
-				const record: ToolCallRecord = {
-					id: event.toolCall.toolCallId,
-					name: event.toolCall.toolName,
-					execution: event.toolCall.execution,
-					input,
-					output:
-						resultPart?.type === "tool-result" ? resultPart.output : undefined,
-					error: errorText,
-					durationMs:
-						startedAt === undefined
-							? 0
-							: endedAt.getTime() - startedAt.getTime(),
-					startedAt: startedAt ?? endedAt,
-					endedAt,
-				};
-				this.currentRunToolCalls.push(record);
-				if (event.toolCall.execution) {
-					break;
-				}
-				// Per-turn success/failure bookkeeping for MistakeTracker.
-				if (isError) {
-					this.currentTurnFailedTools += 1;
-					if (errorText) {
-						this.currentTurnFailureDetails.push(
-							`[${event.toolCall.toolName}] ${errorText}`,
-						);
-					}
-				} else {
-					this.currentTurnSuccessfulTools += 1;
-				}
-				break;
-			}
-			case "turn-finished": {
-				// End-of-turn mistake evaluation: legacy parity (pre-Step-9
-				// agent.ts L972-997). When some tool calls failed and the
-				// turn had no successful tool calls, record a mistake;
-				// reset on productive turns.
-				const failed = this.currentTurnFailedTools;
-				const succeeded = this.currentTurnSuccessfulTools;
-				if (failed > 0 && succeeded === 0) {
-					const details = this.currentTurnFailureDetails.join("; ");
-					this.enqueueMistakeRecord({
-						iteration: event.iteration,
-						reason: "tool_execution_failed",
-						details: `${failed} tool call(s) failed${
-							details ? `: ${details}` : ""
-						}`,
-					});
-				} else if (succeeded > 0) {
-					// Productive turn — reset the tracker so transient
-					// failures don't accumulate across unrelated turns.
-					this.mistakeTracker.reset();
-				}
-				break;
-			}
-			case "usage-updated": {
-				this.currentRunUsage = {
-					inputTokens: event.usage.inputTokens,
-					outputTokens: event.usage.outputTokens,
-					cacheReadTokens:
-						event.usage.cacheReadTokens > 0
-							? event.usage.cacheReadTokens
-							: undefined,
-					cacheWriteTokens:
-						event.usage.cacheWriteTokens > 0
-							? event.usage.cacheWriteTokens
-							: undefined,
-					totalCost: event.usage.totalCost,
-				};
-				break;
-			}
-			default:
-				break;
-		}
-		// A failed run may still be recovered in place by `onRunError` (and the
-		// existing auth retry). Reporting the failure now would put the host's UI
-		// into its terminal error state even when the very next attempt succeeds,
-		// so hold the event until the recovery decision is made. It is replayed
-		// by `replayDeferredRunFailure` when the run is not recovered.
-		if (event.type === "run-failed" && this.hasRunRecovery()) {
-			this.lastRunFailureClass = event.errorClass;
-			this.deferredRunFailure = event;
+		this.runTracker.record(event);
+		if (this.runRecovery.deferRunFailure(event)) {
 			return;
 		}
 		for (const legacy of this.eventAdapter.translate(event)) {
 			this.emitLegacyEvent(legacy);
 		}
-	}
-
-	/** Whether any hook could recover a failed run in place. */
-	private hasRunRecovery(): boolean {
-		return Boolean(this.config.onRunError || this.config.onAuthError);
-	}
-
-	/** Emit a held-back `run-failed` event, if any. */
-	private replayDeferredRunFailure(): void {
-		const deferred = this.deferredRunFailure;
-		this.deferredRunFailure = undefined;
-		if (!deferred) {
-			return;
-		}
-		for (const legacy of this.eventAdapter.translate(deferred)) {
-			this.emitLegacyEvent(legacy);
-		}
-	}
-
-	/** Drop a held-back `run-failed` event because the run was recovered. */
-	private discardDeferredRunFailure(): void {
-		this.deferredRunFailure = undefined;
-	}
-
-	private syncConversationFromRuntimeMessage(
-		snapshotMessages: readonly AgentMessage[],
-		fallbackMessages: readonly AgentMessage[],
-	): void {
-		if (snapshotMessages.length > 0) {
-			this.conversation.replaceMessages(
-				agentMessagesToMessagesWithMetadata(snapshotMessages),
-			);
-			return;
-		}
-		if (fallbackMessages.length === 0) return;
-		const existingIds = new Set(
-			this.conversation
-				.getMessages()
-				.map((message) => message.id)
-				.filter((id): id is string => typeof id === "string"),
-		);
-		const newMessages = agentMessagesToMessagesWithMetadata(
-			fallbackMessages,
-		).filter((message) => !message.id || !existingIds.has(message.id));
-		if (newMessages.length === 0) return;
-		this.conversation.replaceMessages([
-			...this.conversation.getMessages(),
-			...newMessages,
-		]);
 	}
 
 	private emitLegacyEvent(event: AgentEvent): void {
@@ -1450,202 +937,4 @@ export class SessionRuntime {
 			}
 		}
 	}
-
-	/**
-	 * Feed the `LoopDetectionTracker` with a tool-call and react to
-	 * the returned verdict. Parity with pre-Step-9 agent.ts L917-954:
-	 *
-	 *   - `"soft"`  → append a recovery notice telling the model to
-	 *                 change approach;
-	 *   - `"hard"`  → feed `MistakeTracker.record` with
-	 *                 `forceAtLimit:true`. When the tracker returns
-	 *                 `action: "stop"`, append the stop notice and
-	 *                 abort the active runtime.
-	 */
-	private inspectLoopForToolCall(
-		toolName: string,
-		input: unknown,
-		iteration: number,
-	): void {
-		if (this.trackerAbortInFlight || this.loopDetectionDisabled) {
-			return;
-		}
-		const verdict = this.loopTracker.inspect({ name: toolName, input });
-		if (verdict.kind === "ok") {
-			return;
-		}
-		if (verdict.kind === "soft") {
-			if (verdict.message) {
-				this.conversation.appendMessage({
-					role: "user",
-					content: [{ type: "text", text: verdict.message }],
-				});
-			}
-			return;
-		}
-		// Hard escalation.
-		this.enqueueMistakeRecord({
-			iteration,
-			reason: "tool_execution_failed",
-			forceAtLimit: true,
-			details:
-				verdict.message ??
-				`Detected repeated tool calls to \`${toolName}\`; stopping to avoid a loop.`,
-		});
-	}
-
-	/**
-	 * Enqueue a mistake-record onto the serial tracker work chain. The
-	 * runtime event stream is synchronous but `MistakeTracker.record`
-	 * is async — chaining onto a shared promise preserves ordering
-	 * (legacy parity) and lets `executeRun` await draining before
-	 * returning the `AgentResult`.
-	 *
-	 * When the tracker returns `action: "stop"`, append the stop notice
-	 * to the conversation and abort the active runtime so the run ends
-	 * with `finishReason: "aborted"`.
-	 */
-	private enqueueMistakeRecord(input: {
-		iteration: number;
-		reason: "api_error" | "invalid_tool_call" | "tool_execution_failed";
-		details?: string;
-		forceAtLimit?: boolean;
-	}): void {
-		if (this.trackerAbortInFlight) {
-			return;
-		}
-		this.activeTrackerWork = this.activeTrackerWork.then(async () => {
-			if (this.trackerAbortInFlight) {
-				return;
-			}
-			const outcome = await this.mistakeTracker.record(input);
-			if (outcome.action === "stop") {
-				this.trackerAbortInFlight = true;
-				this.conversation.appendMessage({
-					role: "user",
-					content: [{ type: "text", text: outcome.message }],
-				});
-				this.activeRuntime?.abort(outcome.reason ?? outcome.message);
-			}
-		});
-	}
-
-	private buildLegacyResult(input: {
-		runResult: AgentRunResult | undefined;
-		thrownError: Error | undefined;
-		startedAt: Date;
-		endedAt: Date;
-	}): AgentResult {
-		const { runResult, thrownError, startedAt, endedAt } = input;
-		const durationMs = endedAt.getTime() - startedAt.getTime();
-		const finishReason: AgentFinishReason = thrownError
-			? "error"
-			: deriveFinishReason(runResult);
-		const text =
-			(runResult?.status === "failed" ? runResult.error?.message : undefined) ||
-			runResult?.outputText ||
-			"";
-		const usage: LegacyAgentUsage = runResult
-			? {
-					inputTokens: runResult.usage.inputTokens,
-					outputTokens: runResult.usage.outputTokens,
-					cacheReadTokens:
-						runResult.usage.cacheReadTokens > 0
-							? runResult.usage.cacheReadTokens
-							: undefined,
-					cacheWriteTokens:
-						runResult.usage.cacheWriteTokens > 0
-							? runResult.usage.cacheWriteTokens
-							: undefined,
-					totalCost: runResult.usage.totalCost,
-				}
-			: this.currentRunUsage;
-		const messages = runResult
-			? agentMessagesToMessagesWithMetadata(runResult.messages)
-			: this.conversation.getMessages();
-		const modelInfo = tryGetModelInfo(this.config);
-		if (thrownError) {
-			throw thrownError;
-		}
-		return {
-			text,
-			usage,
-			messages,
-			toolCalls: this.currentRunToolCalls,
-			iterations: runResult?.iterations ?? 0,
-			finishReason,
-			model: {
-				id: this.config.modelId,
-				provider: this.config.providerId,
-				info: modelInfo,
-			},
-			startedAt,
-			endedAt,
-			durationMs,
-		};
-	}
-}
-
-// =============================================================================
-// Module-level helpers
-// =============================================================================
-
-function leveledLog(
-	logger: BasicLogger | undefined,
-	level: "debug" | "info" | "warn" | "error",
-	message: string,
-	metadata?: Record<string, unknown>,
-): void {
-	if (!logger) {
-		return;
-	}
-	if (level === "debug") {
-		logger.debug(message, metadata);
-		return;
-	}
-	if (level === "error" && logger.error) {
-		logger.error(message, metadata);
-		return;
-	}
-	const severity: "info" | "warn" | "error" =
-		level === "warn" ? "warn" : level === "error" ? "error" : "info";
-	logger.log(message, { ...metadata, severity });
-}
-
-function deriveFinishReason(
-	runResult: AgentRunResult | undefined,
-): AgentFinishReason {
-	if (!runResult) {
-		return "error";
-	}
-	switch (runResult.status) {
-		case "completed":
-			return "completed";
-		case "aborted":
-			return "aborted";
-		case "failed":
-			return "error";
-	}
-}
-
-async function buildUserTurnContent(
-	userMessage: string,
-	userImages: string[] | undefined,
-	userFiles: string[] | undefined,
-	loader: AgentConfig["userFileContentLoader"],
-): Promise<Message["content"]> {
-	// Import lazily to avoid a circular-import hazard via runtime barrels.
-	const { buildInitialUserContent } = await import("./user-input-builder");
-	return buildInitialUserContent(userMessage, userImages, userFiles, loader);
-}
-
-function tryGetModelInfo(config: AgentConfig): ModelInfo | undefined {
-	if (config.knownModels?.[config.modelId]) {
-		return config.knownModels[config.modelId];
-	}
-	const resolvedKnownModels = resolveKnownModelsFromConfig(config);
-	if (resolvedKnownModels?.[config.modelId]) {
-		return resolvedKnownModels[config.modelId];
-	}
-	return undefined;
 }

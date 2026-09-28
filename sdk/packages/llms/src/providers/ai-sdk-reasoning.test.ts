@@ -1,6 +1,6 @@
 import type { GatewayStreamRequest } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
-import { buildAiSdkStreamConfig } from "./ai-sdk";
+import { buildAiSdkStreamConfig } from "./ai-sdk-message-convert";
 import {
 	resolvePortableReasoning,
 	withoutPortableReasoning,

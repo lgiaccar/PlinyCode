@@ -26,7 +26,6 @@ import {
 } from "../../types/common";
 import type {
 	PersistedSessionUpdateInput,
-	SessionMessagesArtifactUploader,
 	SessionPersistenceAdapter,
 	StoredMessageWithMetadata,
 } from "../../types/session";
@@ -50,15 +49,10 @@ export class UnifiedSessionPersistenceService {
 	constructor(
 		private readonly adapter: SessionPersistenceAdapter,
 		options: {
-			messagesArtifactUploader?: SessionMessagesArtifactUploader;
 			logger?: BasicLogger;
 		} = {},
 	) {
-		this.manifestStore = new SessionManifestStore(
-			adapter,
-			options.messagesArtifactUploader,
-			options.logger,
-		);
+		this.manifestStore = new SessionManifestStore(adapter, options.logger);
 		this.teamChildren = new TeamChildSessionManager(
 			adapter,
 			this.manifestStore,
