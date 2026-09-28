@@ -11,7 +11,6 @@ import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
-import { featureFlagsService } from "@/services/feature-flags"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { getClineOnboardingModels } from "../models/getClineOnboardingModels"
@@ -52,7 +51,6 @@ export async function getStateToPostToWebview(controller: {
 	}
 	const taskHistory = stateManager.getGlobalStateKey("taskHistory")
 	const autoApprovalSettings = stateManager.getGlobalSettingsKey("autoApprovalSettings")
-	const browserSettings = stateManager.getGlobalSettingsKey("browserSettings")
 	const preferredLanguage = stateManager.getGlobalSettingsKey("preferredLanguage")
 	const mode = stateManager.getGlobalSettingsKey("mode")
 	const useAutoCondense = stateManager.getGlobalSettingsKey("useAutoCondense")
@@ -62,7 +60,6 @@ export async function getStateToPostToWebview(controller: {
 	const conversationSpendingLimit = getConversationSpendingLimit()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
 	const userInfo = stateManager.getGlobalStateKey("userInfo")
-	const mcpMarketplaceEnabled = stateManager.getGlobalStateKey("mcpMarketplaceEnabled")
 	const mcpDisplayMode = stateManager.getGlobalStateKey("mcpDisplayMode")
 	const planActSeparateModelsSetting = stateManager.getGlobalSettingsKey("planActSeparateModelsSetting")
 	const enableCheckpointsSetting = stateManager.getGlobalSettingsKey("enableCheckpointsSetting")
@@ -118,7 +115,6 @@ export async function getStateToPostToWebview(controller: {
 		checkpointRestoreInput,
 		editMessageRestartFocus,
 		autoApprovalSettings,
-		browserSettings,
 		preferredLanguage,
 		mode,
 		useAutoCondense,
@@ -128,7 +124,6 @@ export async function getStateToPostToWebview(controller: {
 		conversationSpendingLimit,
 		subagentsEnabled,
 		userInfo,
-		mcpMarketplaceEnabled,
 		mcpDisplayMode,
 		planActSeparateModelsSetting,
 		enableCheckpointsSetting: enableCheckpointsSetting ?? true,
@@ -162,14 +157,6 @@ export async function getStateToPostToWebview(controller: {
 		workspaceRoots: controller.workspaceManager?.getRoots?.() ?? [],
 		primaryRootIndex: controller.workspaceManager?.getPrimaryIndex?.() ?? 0,
 		isMultiRootWorkspace: (controller.workspaceManager?.getRoots?.()?.length ?? 0) > 1,
-		multiRootSetting: {
-			user: stateManager.getGlobalStateKey("multiRootEnabled"),
-			featureFlag: true,
-		},
-		worktreesEnabled: {
-			user: stateManager.getGlobalSettingsKey("worktreesEnabled"),
-			featureFlag: featureFlagsService.getWorktreesEnabled(),
-		},
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
 		backgroundEditEnabled: stateManager.getGlobalSettingsKey("backgroundEditEnabled"),
 		showFeatureTips,

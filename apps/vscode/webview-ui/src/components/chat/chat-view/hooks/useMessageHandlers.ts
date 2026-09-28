@@ -232,7 +232,6 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 							case "followup":
 							case "plan_mode_respond":
 							case "tool":
-							case "browser_action_launch":
 							case "command":
 							case "command_output":
 							case "use_mcp_server":

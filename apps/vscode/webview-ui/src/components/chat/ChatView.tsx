@@ -19,7 +19,6 @@ import {
 	convertHtmlToMarkdown,
 	filterVisibleMessages,
 	groupLowStakesTools,
-	groupMessages,
 	InputSection,
 	MessagesArea,
 	QueuedPrompts,
@@ -359,7 +358,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 	}, [modifiedMessages])
 
 	const groupedMessages = useMemo(() => {
-		return groupLowStakesTools(groupMessages(visibleMessages))
+		return groupLowStakesTools(visibleMessages)
 	}, [visibleMessages])
 
 	// Use scroll behavior hook

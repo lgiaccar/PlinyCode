@@ -206,8 +206,6 @@ export function convertClineMessageToProto(message: AppClineMessage): ProtoCline
 			: undefined,
 		// Additional optional fields for specific ask/say types
 		sayTool: undefined,
-		sayBrowserAction: undefined,
-		browserActionResult: undefined,
 		askUseMcpServer: undefined,
 		planModeResponse: undefined,
 		askQuestion: undefined,

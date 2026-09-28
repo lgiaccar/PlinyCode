@@ -14,7 +14,6 @@ interface FeatureCheckboxProps {
 	label: string
 	description: ReactNode
 	disabled?: boolean
-	isVisible?: boolean
 }
 
 // Interface for feature toggle configuration
@@ -58,13 +57,6 @@ const editorFeatures: FeatureToggle[] = [
 		stateKey: "enableCheckpointsSetting",
 		settingKey: "enableCheckpointsSetting",
 	},
-	{
-		id: "worktrees",
-		label: "Worktrees",
-		description: "Enables git worktree management for running parallel PlinyCode tasks.",
-		stateKey: "worktreesEnabled",
-		settingKey: "worktreesEnabled",
-	},
 ]
 
 const advancedFeatures: FeatureToggle[] = [
@@ -84,11 +76,7 @@ const advancedFeatures: FeatureToggle[] = [
 	},
 ]
 
-const FeatureRow = memo(({ checked = false, onChange, label, description, disabled, isVisible = true }: FeatureCheckboxProps) => {
-	if (!isVisible) {
-		return null
-	}
-
+const FeatureRow = memo(({ checked = false, onChange, label, description, disabled }: FeatureCheckboxProps) => {
 	const checkbox = (
 		<div className="flex items-center justify-between w-full">
 			<div>{label}</div>
@@ -126,7 +114,6 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 		compactionStrategy,
 		webSearchEnabled,
 		subagentsEnabled,
-		worktreesEnabled,
 		backgroundEditEnabled,
 		showFeatureTips,
 	} = useExtensionState()
@@ -138,13 +125,7 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 		hooksEnabled,
 		useAutoCondense,
 		subagentsEnabled,
-		worktreesEnabled: worktreesEnabled?.user,
 		backgroundEditEnabled,
-	}
-
-	// Visibility lookup for features with feature flags
-	const featureVisibility: Record<string, boolean | undefined> = {
-		worktreesEnabled: worktreesEnabled?.featureFlag,
 	}
 
 	return (
@@ -162,7 +143,6 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 								<FeatureRow
 									checked={featureState[feature.stateKey]}
 									description={feature.description}
-									isVisible={featureVisibility[feature.stateKey] ?? true}
 									key={feature.id}
 									label={feature.label}
 									onChange={(checked) => updateSetting(feature.settingKey, checked)}
@@ -203,7 +183,6 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 								<FeatureRow
 									checked={featureState[feature.stateKey]}
 									description={feature.description}
-									isVisible={featureVisibility[feature.stateKey] ?? true}
 									key={feature.id}
 									label={feature.label}
 									onChange={(checked) => updateSetting(feature.settingKey, checked)}
@@ -222,7 +201,6 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 								<FeatureRow
 									checked={featureState[feature.stateKey]}
 									description={feature.description}
-									isVisible={featureVisibility[feature.stateKey] ?? true}
 									key={feature.id}
 									label={feature.label}
 									onChange={(checked) => updateSetting(feature.settingKey, checked)}

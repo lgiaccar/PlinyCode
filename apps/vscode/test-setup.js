@@ -26,8 +26,8 @@ tsConfigPaths.register({
 	paths: outPaths,
 })
 
-// Mock the @google/genai module to avoid ESM compatibility issues in tests
-// The module is ES6 only, but the integration tests are compiled to commonJS.
+// Redirect some requires in the integration tests, which are compiled to
+// CommonJS, to shims (see each branch below).
 const originalRequire = Module.prototype.require
 Module.prototype.require = function (id) {
 	// Serve `mocha` imports from the runner's own interface. The runner
@@ -61,13 +61,6 @@ Module.prototype.require = function (id) {
 			}
 		}
 		return mochaInterface
-	}
-
-	// Intercept requires for @google/genai
-	if (id === "@google/genai") {
-		// Return the mock instead
-		const mockPath = path.join(baseUrl, "out/src/test/fixtures/google-genai-mock.js")
-		return originalRequire.call(this, mockPath)
 	}
 
 	// The SDK packages are ESM-only and expose only an `import` condition.

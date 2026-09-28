@@ -7,7 +7,6 @@ import {
 	type OcaModelInfo,
 	OpenAiCompatibleModelInfo,
 } from "@shared/api"
-import { BrowserSettings, DEFAULT_BROWSER_SETTINGS } from "@shared/BrowserSettings"
 import { ClineRulesToggles } from "@shared/cline-rules"
 import { DEFAULT_FOCUS_CHAIN_SETTINGS, FocusChainSettings } from "@shared/FocusChainSettings"
 import { HistoryItem } from "@shared/HistoryItem"
@@ -51,7 +50,6 @@ const GLOBAL_STATE_FIELDS = {
 	taskHistory: { default: [] as HistoryItem[], isAsync: true },
 	userInfo: { default: undefined as UserInfo | undefined },
 	favoritedModelIds: { default: [] as string[] },
-	mcpMarketplaceEnabled: { default: true as boolean },
 	mcpResponsesCollapsed: { default: false as boolean },
 	// User-dragged max height for the chat prompt textarea, in rows (react-textarea-autosize's maxRows).
 	chatInputMaxRows: { default: 10 as number },
@@ -65,8 +63,6 @@ const GLOBAL_STATE_FIELDS = {
 	welcomeViewCompleted: { default: undefined as boolean | undefined },
 	mcpDisplayMode: { default: DEFAULT_MCP_DISPLAY_MODE as McpDisplayMode },
 	multiRootEnabled: { default: true as boolean },
-	// Path to worktree that should auto-open Cline sidebar when launched
-	worktreeAutoOpenPath: { default: undefined as string | undefined },
 } satisfies FieldDefinitions
 
 // Fields that map directly to ApiHandlerOptions in @shared/api.ts
@@ -240,10 +236,6 @@ const USER_SETTINGS_FIELDS = {
 	globalClineRulesToggles: { default: {} as ClineRulesToggles },
 	globalWorkflowToggles: { default: {} as ClineRulesToggles },
 	globalSkillsToggles: { default: {} as Record<string, boolean> },
-	browserSettings: {
-		default: DEFAULT_BROWSER_SETTINGS as BrowserSettings,
-		transform: (v: any) => ({ ...DEFAULT_BROWSER_SETTINGS, ...v }),
-	},
 	planActSeparateModelsSetting: { default: false as boolean, isComputed: true },
 	enableCheckpointsSetting: { default: true as boolean },
 	shellIntegrationTimeout: { default: 4000 as number },
@@ -251,7 +243,6 @@ const USER_SETTINGS_FIELDS = {
 	hooksEnabled: { default: true as boolean },
 	useAutoCondense: { default: true as boolean },
 	subagentsEnabled: { default: true as boolean },
-	worktreesEnabled: { default: false as boolean },
 	preferredLanguage: { default: "English" as string },
 	mode: { default: "act" as Mode },
 	focusChainSettings: { default: DEFAULT_FOCUS_CHAIN_SETTINGS as FocusChainSettings },

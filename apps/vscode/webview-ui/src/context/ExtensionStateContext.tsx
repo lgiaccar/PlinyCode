@@ -1,5 +1,4 @@
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
-import { DEFAULT_BROWSER_SETTINGS } from "@shared/BrowserSettings"
 import { DEFAULT_PLATFORM, type ExtensionState } from "@shared/ExtensionMessage"
 import { DEFAULT_MCP_DISPLAY_MODE } from "@shared/McpDisplayMode"
 import { EmptyRequest } from "@shared/proto/cline/common"
@@ -63,14 +62,12 @@ export interface ExtensionStateContextType extends ExtensionState {
 	availableTerminalProfiles: TerminalProfile[]
 
 	// View state
-	showMarketplace: boolean
 	showMcp: boolean
 	mcpTab?: McpViewTab
 	showSettings: boolean
 	settingsTargetSection?: string
 	settingsInitialModelTab?: "recommended" | "free"
 	showHistory: boolean
-	showWorktrees: boolean
 	expandTaskHeader: boolean
 
 	// Setters
@@ -103,24 +100,19 @@ export interface ExtensionStateContextType extends ExtensionState {
 	refreshLiteLlmModels: () => Promise<void>
 
 	// Navigation state setters
-	setShowMarketplace: (value: boolean) => void
 	setShowMcp: (value: boolean) => void
 	setMcpTab: (tab?: McpViewTab) => void
 
 	// Navigation functions
-	navigateToMarketplace: () => void
 	navigateToMcp: (tab?: McpViewTab) => void
 	navigateToSettings: (targetSection?: string) => void
 	navigateToSettingsModelPicker: (opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => void
 	navigateToHistory: () => void
-	navigateToWorktrees: () => void
 	navigateToChat: () => void
 
 	// Hide functions
 	hideSettings: () => void
 	hideHistory: () => void
-	hideWorktrees: () => void
-	closeMarketplaceView: () => void
 	closeMcpView: () => void
 
 	// Event callbacks
@@ -133,23 +125,18 @@ export const ExtensionStateContextProvider: React.FC<{
 	children: React.ReactNode
 }> = ({ children }) => {
 	// UI view state
-	const [showMarketplace, setShowMarketplace] = useState(false)
 	const [showMcp, setShowMcp] = useState(false)
 	const [mcpTab, setMcpTab] = useState<McpViewTab | undefined>(undefined)
 	const [showSettings, setShowSettings] = useState(false)
 	const [settingsTargetSection, setSettingsTargetSection] = useState<string | undefined>(undefined)
 	const [settingsInitialModelTab, setSettingsInitialModelTab] = useState<"recommended" | "free" | undefined>(undefined)
 	const [showHistory, setShowHistory] = useState(false)
-	const [showWorktrees, setShowWorktrees] = useState(false)
 
 	// Helper for MCP view
 	const closeMcpView = useCallback(() => {
 		setShowMcp(false)
 		setMcpTab(undefined)
 	}, [setShowMcp, setMcpTab])
-	const closeMarketplaceView = useCallback(() => {
-		setShowMarketplace(false)
-	}, [])
 
 	// Hide functions
 	const hideSettings = useCallback(() => {
@@ -158,80 +145,51 @@ export const ExtensionStateContextProvider: React.FC<{
 		setSettingsInitialModelTab(undefined)
 	}, [])
 	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
-	const hideWorktrees = useCallback(() => setShowWorktrees(false), [setShowWorktrees])
 
 	// Navigation functions
 	const navigateToMcp = useCallback(
 		(tab?: McpViewTab) => {
 			setShowSettings(false)
 			setShowHistory(false)
-			setShowWorktrees(false)
-			closeMcpView()
-			if (tab) {
-				setMcpTab(tab)
-			}
-			setShowMarketplace(true)
+			setMcpTab(tab)
+			setShowMcp(true)
 		},
-		[closeMcpView, setMcpTab, setShowSettings, setShowHistory, setShowWorktrees],
+		[setMcpTab, setShowSettings, setShowHistory],
 	)
-
-	const navigateToMarketplace = useCallback(() => {
-		setShowSettings(false)
-		closeMcpView()
-		setShowHistory(false)
-		setShowWorktrees(false)
-		setShowMarketplace(true)
-	}, [closeMcpView])
 
 	const navigateToSettings = useCallback(
 		(targetSection?: string) => {
-			closeMarketplaceView()
 			setShowHistory(false)
 			closeMcpView()
-			setShowWorktrees(false)
 			setSettingsTargetSection(targetSection)
 			setSettingsInitialModelTab(undefined)
 			setShowSettings(true)
 		},
-		[closeMarketplaceView, closeMcpView],
+		[closeMcpView],
 	)
 
 	const navigateToSettingsModelPicker = useCallback(
 		(opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => {
-			closeMarketplaceView()
 			setShowHistory(false)
 			closeMcpView()
-			setShowWorktrees(false)
 			setSettingsTargetSection(opts.targetSection)
 			setSettingsInitialModelTab(opts.initialModelTab)
 			setShowSettings(true)
 		},
-		[closeMarketplaceView, closeMcpView],
+		[closeMcpView],
 	)
 
 	const navigateToHistory = useCallback(() => {
-		closeMarketplaceView()
 		setShowSettings(false)
 		closeMcpView()
-		setShowWorktrees(false)
 		setShowHistory(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowWorktrees, setShowHistory])
-
-	const navigateToWorktrees = useCallback(() => {
-		closeMarketplaceView()
-		setShowSettings(false)
-		closeMcpView()
-		setShowHistory(false)
-		setShowWorktrees(true)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowWorktrees])
+	}, [setShowSettings, closeMcpView, setShowHistory])
 
 	const navigateToChat = useCallback(() => {
-		closeMarketplaceView()
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
-		setShowWorktrees(false)
-	}, [closeMarketplaceView, setShowSettings, closeMcpView, setShowHistory, setShowWorktrees])
+	}, [setShowSettings, closeMcpView, setShowHistory])
 
 	const [state, setState] = useState<ExtensionState>({
 		version: "",
@@ -239,7 +197,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		queuedPrompts: [],
 		taskHistory: [],
 		autoApprovalSettings: DEFAULT_AUTO_APPROVAL_SETTINGS,
-		browserSettings: DEFAULT_BROWSER_SETTINGS,
 		preferredLanguage: "English",
 		mode: "act",
 		platform: DEFAULT_PLATFORM,
@@ -271,7 +228,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		prereleaseUpdatesEnabled: false,
 		conversationSpendingLimit: 5,
 		subagentsEnabled: true,
-		worktreesEnabled: { user: true, featureFlag: false },
 		favoritedModelIds: [],
 		backgroundCommandRunning: false,
 		backgroundCommandTaskId: undefined,
@@ -286,7 +242,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		workspaceRoots: [],
 		primaryRootIndex: 0,
 		isMultiRootWorkspace: false,
-		multiRootSetting: { user: false, featureFlag: false },
 		hooksEnabled: false,
 	})
 	const [expandTaskHeader, setExpandTaskHeader] = useState(true)
@@ -377,12 +332,10 @@ export const ExtensionStateContextProvider: React.FC<{
 	// References to store subscription cancellation functions
 	const stateSubscriptionRef = useRef<(() => void) | null>(null)
 
-	const marketplaceButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const mcpButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const historyButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const chatButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const settingsButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
-	const worktreesButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const partialMessageUnsubscribeRef = useRef<(() => void) | null>(null)
 	const openRouterModelsUnsubscribeRef = useRef<(() => void) | null>(null)
 	const liteLlmModelsUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -473,7 +426,7 @@ export const ExtensionStateContextProvider: React.FC<{
 			{
 				onResponse: () => {
 					console.log("[DEBUG] Received mcpButtonClicked event from gRPC stream")
-					navigateToMarketplace()
+					navigateToMcp()
 				},
 				onError: (error: any) => {
 					console.error("Error in mcpButtonClicked subscription:", error)
@@ -483,19 +436,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				},
 			},
 		)
-
-		marketplaceButtonUnsubscribeRef.current = UiServiceClient.subscribeToMarketplaceButtonClicked(EmptyRequest.create({}), {
-			onResponse: () => {
-				console.log("[DEBUG] Received marketplaceButtonClicked event from gRPC stream")
-				navigateToMarketplace()
-			},
-			onError: (error: any) => {
-				console.error("Error in marketplaceButtonClicked subscription:", error)
-			},
-			onComplete: () => {
-				console.log("marketplaceButtonClicked subscription completed")
-			},
-		})
 
 		// Set up history button clicked subscription with webview type
 		historyButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToHistoryButtonClicked(
@@ -560,23 +500,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				console.log("Settings button clicked subscription completed")
 			},
 		})
-
-		// Set up worktrees button clicked subscription
-		worktreesButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToWorktreesButtonClicked(
-			EmptyRequest.create({}),
-			{
-				onResponse: () => {
-					// When worktrees button is clicked, navigate to worktrees
-					navigateToWorktrees()
-				},
-				onError: (error: any) => {
-					console.error("Error in worktrees button clicked subscription:", error)
-				},
-				onComplete: () => {
-					console.log("Worktrees button clicked subscription completed")
-				},
-			},
-		)
 
 		// Subscribe to partial message events
 		partialMessageUnsubscribeRef.current = UiServiceClient.subscribeToPartialMessage(EmptyRequest.create({}), {
@@ -687,10 +610,6 @@ export const ExtensionStateContextProvider: React.FC<{
 				mcpButtonUnsubscribeRef.current()
 				mcpButtonUnsubscribeRef.current = null
 			}
-			if (marketplaceButtonUnsubscribeRef.current) {
-				marketplaceButtonUnsubscribeRef.current()
-				marketplaceButtonUnsubscribeRef.current = null
-			}
 			if (historyButtonClickedSubscriptionRef.current) {
 				historyButtonClickedSubscriptionRef.current()
 				historyButtonClickedSubscriptionRef.current = null
@@ -702,10 +621,6 @@ export const ExtensionStateContextProvider: React.FC<{
 			if (settingsButtonClickedSubscriptionRef.current) {
 				settingsButtonClickedSubscriptionRef.current()
 				settingsButtonClickedSubscriptionRef.current = null
-			}
-			if (worktreesButtonClickedSubscriptionRef.current) {
-				worktreesButtonClickedSubscriptionRef.current()
-				worktreesButtonClickedSubscriptionRef.current = null
 			}
 			if (partialMessageUnsubscribeRef.current) {
 				partialMessageUnsubscribeRef.current()
@@ -829,14 +744,12 @@ export const ExtensionStateContextProvider: React.FC<{
 		mcpServers,
 		totalTasksSize,
 		availableTerminalProfiles,
-		showMarketplace,
 		showMcp,
 		mcpTab,
 		showSettings,
 		settingsTargetSection,
 		settingsInitialModelTab,
 		showHistory,
-		showWorktrees,
 		globalClineRulesToggles: state.globalClineRulesToggles || {},
 		localClineRulesToggles: state.localClineRulesToggles || {},
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
@@ -848,19 +761,15 @@ export const ExtensionStateContextProvider: React.FC<{
 		enableCheckpointsSetting: state.enableCheckpointsSetting,
 
 		// Navigation functions
-		navigateToMarketplace,
 		navigateToMcp,
 		navigateToSettings,
 		navigateToSettingsModelPicker,
 		navigateToHistory,
-		navigateToWorktrees,
 		navigateToChat,
 
 		// Hide functions
 		hideSettings,
 		hideHistory,
-		hideWorktrees,
-		closeMarketplaceView,
 		setShowWelcome,
 		setOnboardingModels,
 		startProviderModelsRequest,
@@ -870,7 +779,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		setGroqModels,
 		setBasetenModels,
 		setHuggingFaceModels,
-		setShowMarketplace,
 		setShowMcp,
 		closeMcpView,
 		setGlobalClineRulesToggles: (toggles) =>

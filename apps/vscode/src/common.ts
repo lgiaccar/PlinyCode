@@ -5,7 +5,6 @@ import { setSdkLogger } from "@plinycode/core"
 import { HostProvider } from "@/hosts/host-provider"
 import { Logger } from "@/shared/services/Logger"
 import type { StorageContext } from "@/shared/storage/storage-context"
-import { clearOnboardingModelsCache } from "./core/controller/models/getClineOnboardingModels"
 import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
 import { HookProcessRegistry } from "./core/hooks/HookProcessRegistry"
 import { StateManager } from "./core/storage/StateManager"
@@ -15,11 +14,9 @@ import { purgeRemovedProviderSignIns } from "./sdk/provider-migration"
 import { registerVsCodeLmHandler } from "./sdk/vscode-lm/register-vscode-lm"
 import { registerClineClientIdentity } from "./services/ClineClientIdentity"
 import { ErrorService } from "./services/error"
-import { featureFlagsService } from "./services/feature-flags"
 import { ClineTempManager } from "./services/temp"
 import { ShowMessageType } from "./shared/proto/host/window"
 import { getLatestAnnouncementId } from "./utils/announcements"
-import { arePathsEqual } from "./utils/path"
 
 /**
  * Performs intialization for PlinyCode that is common to all platforms.
@@ -84,8 +81,6 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	const stateManager = StateManager.get()
 	// Non-blocking announcement check and display
 	showVersionUpdateAnnouncement(stateManager)
-	// Check if this workspace was opened from worktree quick launch
-	await checkWorktreeAutoOpen(stateManager)
 
 	// =============== Background cleanup tasks ===============
 	// Clean up old temp files in background (non-blocking) and start periodic cleanup every 24 hours
@@ -127,49 +122,14 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 }
 
 /**
- * Checks if this workspace was opened from the worktree quick launch button.
- * If so, opens the PlinyCode sidebar and clears the state.
- */
-async function checkWorktreeAutoOpen(stateManager: StateManager): Promise<void> {
-	try {
-		// Read directly from globalState (not StateManager cache) since this may have been
-		// set by another window right before this one opened
-		const worktreeAutoOpenPath = stateManager.getGlobalStateKey("worktreeAutoOpenPath")
-		if (!worktreeAutoOpenPath) {
-			return
-		}
-
-		// Get current workspace path
-		const workspacePaths = (await HostProvider.workspace.getWorkspacePaths({})).paths
-		if (workspacePaths.length === 0) {
-			return
-		}
-
-		const currentPath = workspacePaths[0]
-
-		// Check if current workspace matches the worktree path
-		if (arePathsEqual(currentPath, worktreeAutoOpenPath)) {
-			// Clear the state first to prevent re-triggering
-			stateManager.setGlobalState("worktreeAutoOpenPath", undefined)
-			// Open the PlinyCode sidebar
-			await HostProvider.workspace.openClineSidebarPanel({})
-		}
-	} catch (error) {
-		Logger.error("Error checking worktree auto-open", error)
-	}
-}
-
-/**
  * Performs cleanup when PlinyCode is deactivated that is common to all platforms.
  */
 export async function tearDown(): Promise<void> {
 	try {
 		AgentConfigLoader.getInstance()?.dispose()
 		ErrorService.get().dispose()
-		featureFlagsService.dispose()
 		// Dispose all webview instances
 		await WebviewProvider.disposeAllInstances()
-		clearOnboardingModelsCache()
 
 		// Kill any running hook processes to prevent zombies
 		await HookProcessRegistry.terminateAll()

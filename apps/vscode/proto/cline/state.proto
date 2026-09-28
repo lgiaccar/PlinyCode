@@ -1,7 +1,6 @@
 syntax = "proto3";
 package cline;
 
-import "cline/browser.proto";
 import "cline/common.proto";
 import "cline/models.proto";
 
@@ -118,6 +117,10 @@ message Settings {
   reserved "opt_out_of_remote_config";
   reserved 158 to 171, 189; // were open_telemetry_* (OpenTelemetry removed with remote config)
   reserved "open_telemetry_enabled", "open_telemetry_metrics_exporter", "open_telemetry_logs_exporter", "open_telemetry_otlp_protocol", "open_telemetry_otlp_endpoint", "open_telemetry_otlp_metrics_protocol", "open_telemetry_otlp_metrics_endpoint", "open_telemetry_otlp_logs_protocol", "open_telemetry_otlp_logs_endpoint", "open_telemetry_metric_export_interval", "open_telemetry_otlp_insecure", "open_telemetry_log_batch_size", "open_telemetry_log_batch_timeout", "open_telemetry_log_max_queue_size", "open_telemetry_traces_exporter";
+  reserved 172; // was worktrees_enabled (worktrees removed)
+  reserved "worktrees_enabled";
+  reserved 132; // was browser_settings (browser tool removed)
+  reserved "browser_settings";
   optional string lite_llm_base_url = 1;
   optional bool lite_llm_use_prompt_cache = 2;
   optional string anthropic_base_url = 4;
@@ -248,7 +251,6 @@ message Settings {
   optional string global_cline_rules_toggles = 129;
   optional string global_workflow_toggles = 130;
   optional string global_skills_toggles = 131;
-  optional BrowserSettings browser_settings = 132;
   optional bool plan_act_separate_models_setting = 134;
   optional bool enable_checkpoints_setting = 135;
   optional int32 shell_integration_timeout = 136;
@@ -260,7 +262,6 @@ message Settings {
   optional bool hooks_enabled = 152;
   optional bool subagents_enabled = 153;
   optional bool background_edit_enabled = 155;
-  optional bool worktrees_enabled = 172;
   map<string, string> open_ai_headers = 177;
   optional string plan_mode_cline_model_id = 178;
   optional OpenRouterModelInfo plan_mode_cline_model_info = 179;
@@ -337,16 +338,6 @@ message AutoApprovalSettingsRequest {
   bool enable_notifications = 4;
 }
 
-// Browser settings for UpdateSettingsRequest
-message BrowserSettingsUpdate {
-  optional Viewport viewport = 1;
-  optional string remote_browser_host = 2;
-  optional bool remote_browser_enabled = 3;
-  optional string chrome_executable_path = 4;
-  optional bool disable_tool_use = 5;
-  optional string custom_args = 6;
-}
-
 message UpdateSettingsRequestCli {
   Metadata metadata = 1;
   optional Settings settings = 2;
@@ -367,17 +358,19 @@ message UpdateSettingsRequest {
   reserved 32, 34, 35, 41;
   reserved 38; // was skills_enabled (removed - now always enabled)
   reserved 43; // was lazy_teammate_mode_enabled (removed)
+  reserved 40; // was worktrees_enabled (worktrees removed)
+  reserved 20; // was browser_settings (browser tool removed)
+  reserved 6; // was mcp_marketplace_enabled (MCP Marketplace removed)
   reserved 12; // was terminal_output_line_limit (removed; SDK command output limits are character-based)
   reserved 19; // was custom_prompt (removed - compact prompt setting no longer supported)
   reserved 3; // was telemetry_setting (telemetry removed)
   reserved 39; // was opt_out_of_remote_config (remote config removed)
-  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting", "opt_out_of_remote_config";
+  reserved "native_tool_call_enabled", "cline_web_tools_enabled", "enable_parallel_tool_calling", "double_check_completion_enabled", "custom_prompt", "telemetry_setting", "worktrees_enabled", "browser_settings", "mcp_marketplace_enabled", "opt_out_of_remote_config";
 
   Metadata metadata = 1;
   optional ModelsApiConfiguration api_configuration = 2;
   optional bool plan_act_separate_models_setting = 4;
   optional bool enable_checkpoints_setting = 5;
-  optional bool mcp_marketplace_enabled = 6;
   optional int32 shell_integration_timeout = 8;
   optional bool terminal_reuse_enabled = 9;
   optional bool mcp_responses_collapsed = 10;
@@ -387,7 +380,6 @@ message UpdateSettingsRequest {
   reserved 16; // was strict_plan_mode_enabled (removed)
   optional FocusChainSettings focus_chain_settings = 17;
   optional bool use_auto_condense = 18;
-  optional BrowserSettingsUpdate browser_settings = 20;
   optional string default_terminal_profile = 21;
   reserved 22; // was yolo_mode_toggled (removed; migrated into auto_approval_settings)
   optional bool multi_root_enabled = 25;
@@ -400,7 +392,6 @@ message UpdateSettingsRequest {
   optional OnboardingModelGroup onboarding_models = 33;
   optional bool background_edit_enabled = 36;
   optional string oca_reasoning_effort = 37;
-  optional bool worktrees_enabled = 40;
   optional bool show_feature_tips = 42;
   optional string compaction_strategy = 44;
   optional bool web_search_enabled = 45;

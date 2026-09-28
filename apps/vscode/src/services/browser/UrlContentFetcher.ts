@@ -1,7 +1,6 @@
 import * as cheerio from "cheerio"
 import { Browser, Page } from "puppeteer-core"
 import TurndownService from "turndown"
-import { StateManager } from "@/core/storage/StateManager"
 import { ensureChromiumExists } from "./utils"
 
 export class UrlContentFetcher {
@@ -13,14 +12,9 @@ export class UrlContentFetcher {
 			return
 		}
 		const stats = await ensureChromiumExists()
-		// Read browser settings from globalState for custom args only
-		const browserSettings = StateManager.get().getGlobalSettingsKey("browserSettings")
-		const customArgsStr = browserSettings.customArgs || ""
-		const customArgs = customArgsStr.trim() ? customArgsStr.split(/\s+/) : []
 		this.browser = await stats.puppeteer.launch({
 			args: [
 				"--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-				...customArgs, // Append user-provided custom arguments
 			],
 			executablePath: stats.executablePath,
 		})
