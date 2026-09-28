@@ -5,7 +5,6 @@ import styled from "styled-components"
 
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useProviderListings } from "@/hooks/useProviderListings"
-import { OPENROUTER_MODEL_PICKER_Z_INDEX } from "./OpenRouterModelPicker"
 import { GenericProviderSettings } from "./providers/GenericProviderSettings"
 import { getFallbackGenericProviderSettings, getGenericProviderSettings } from "./providers/providerSettingsRegistry"
 import { useApiConfigurationHandlers } from "./utils/useApiConfigurationHandlers"
@@ -19,8 +18,9 @@ interface ApiOptionsProps {
 	initialModelTab?: "recommended" | "free"
 }
 
-// This is necessary to ensure dropdown opens downward, important for when this is used in popup
-export const DROPDOWN_Z_INDEX = OPENROUTER_MODEL_PICKER_Z_INDEX + 2 // Higher than the OpenRouterModelPicker's and ModelSelectorTooltip's z-index
+// This is necessary to ensure dropdown opens downward, important for when this is used in popup.
+// Above the model picker and the context menu, which use z-index 1000.
+export const DROPDOWN_Z_INDEX = 1_002
 
 export const DropdownContainer = styled.div<{ zIndex?: number }>`
 	position: relative;
