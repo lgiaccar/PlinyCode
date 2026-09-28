@@ -386,7 +386,6 @@ describe("ClineCore", () => {
 		};
 
 		const core = await ClineCore.create({
-			backendMode: "local",
 			clientName: "unit-test-client",
 			telemetry: telemetry as never,
 		});
@@ -547,7 +546,6 @@ describe("ClineCore", () => {
 		};
 
 		const core = await ClineCore.create({
-			backendMode: "local",
 			telemetry: coreTelemetry as never,
 		});
 		const input = createStartInput();

@@ -169,7 +169,7 @@ async function main(): Promise<void> {
 				`
 				: `
 					const { resolveSessionBackend } = await import("@plinycode/core");
-					await resolveSessionBackend({ backendMode: "local" });
+					await resolveSessionBackend({});
 					console.log("Node compatibility smoke test passed");
 				`;
 		const smokeFile = join(smokeDir, "smoke.mjs");
