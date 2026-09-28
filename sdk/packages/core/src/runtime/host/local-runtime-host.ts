@@ -37,7 +37,6 @@ import {
 	toSessionRecord,
 	withLatestAssistantTurnMetadata,
 } from "../../services/session-data";
-import { readImportedFromMetadata } from "../../services/session-import/service";
 import {
 	emitMentionTelemetry,
 	emitSessionCreationTelemetry,
@@ -709,12 +708,12 @@ export class LocalRuntimeHost implements RuntimeHost {
 		// the policy stands down once that sidecar projects, so it applies once
 		// per session and again only if the sidecar has gone stale.
 		const importedFrom = isReadOnlyResumeStart
-			? readImportedFromMetadata(manifest.metadata)
+			? readImportedFromTool(manifest.metadata)
 			: undefined;
 		const compact = importedFrom
 			? createImportedHistoryCompactionPrepareTurn({
 					config: configWithProvider,
-					importedFrom: importedFrom.tool,
+					importedFrom,
 					next: autoCompact,
 				})
 			: autoCompact;
@@ -2766,4 +2765,23 @@ export class LocalRuntimeHost implements RuntimeHost {
 	): Promise<T | undefined> {
 		return invokeBackendOptionalValue<T>(this.sessionService, method, ...args);
 	}
+}
+
+/**
+ * The source tool of a session imported from another agent (Claude Code, Codex,
+ * opencode), read from its `importedFrom` metadata. Such sessions get a
+ * one-off compaction of the imported history when they are resumed.
+ */
+function readImportedFromTool(
+	metadata: Record<string, unknown> | null | undefined,
+): string | undefined {
+	const value = metadata?.importedFrom;
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		return undefined;
+	}
+	const record = value as Record<string, unknown>;
+	return typeof record.tool === "string" &&
+		typeof record.sourceSessionId === "string"
+		? record.tool
+		: undefined;
 }
