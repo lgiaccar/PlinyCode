@@ -112,12 +112,3 @@ export interface SessionPersistenceAdapter {
 		parentAgentId: string,
 	): Promise<string | undefined>;
 }
-
-export interface SessionMessagesArtifactUploader {
-	uploadMessagesFile(input: {
-		sessionId: string;
-		path: string;
-		contents: string;
-		row?: SessionRow;
-	}): Promise<void>;
-}

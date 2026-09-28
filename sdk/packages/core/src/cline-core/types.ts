@@ -11,7 +11,6 @@ import type {
 } from "../runtime/host/runtime-host";
 import type { CheckpointWorkspaceCompareResult } from "../session/checkpoint-diff";
 import type { ClineCoreStartConfig } from "../types/config";
-import type { SessionMessagesArtifactUploader } from "../types/session";
 
 export type { ClineCoreSettingsApi } from "../settings";
 
@@ -94,11 +93,6 @@ export interface ClineCoreOptions {
 	 * requires user confirmation, or is blocked entirely.
 	 */
 	toolPolicies?: AgentConfig["toolPolicies"];
-	/**
-	 * Optional hook invoked after `messages.json` is persisted to disk.
-	 * Consumers can use this to mirror session transcripts into remote storage.
-	 */
-	messagesArtifactUploader?: SessionMessagesArtifactUploader;
 	/**
 	 * Custom `fetch` implementation forwarded to the AI gateway providers used
 	 * by local sessions. When supplied, it is threaded into each

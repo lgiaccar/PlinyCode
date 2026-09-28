@@ -29,8 +29,7 @@ describe("OAuth refresh across processes", () => {
 		const path = join(dir, "providers.json");
 		const settings = new ProviderSettingsManager({ filePath: path });
 		settings.saveProviderSettings({
-			provider: "cline",
-			baseUrl: "https://unused.example",
+			provider: "openai-codex",
 			auth: {
 				accessToken: "expired",
 				refreshToken: "single-use",
@@ -52,17 +51,15 @@ describe("OAuth refresh across processes", () => {
 				appendFileSync(log, "refresh\\n");
 				console.log("refreshing");
 				while (!existsSync(release)) await setTimeout(10);
-				return Response.json({ success: true, data: {
-					accessToken: "rotated", refreshToken: "rotated-refresh", tokenType: "Bearer",
-					expiresAt: new Date(Date.now() + 3600000).toISOString(),
-					userInfo: { clineUserId: "account-a", email: "", subject: null, name: "", accounts: [] }
-				} });
+				return Response.json({
+					access_token: "rotated", refresh_token: "rotated-refresh", expires_in: 3600
+				});
 			};
 			const manager = new RuntimeOAuthTokenManager({
 				providerSettingsManager: new ProviderSettingsManager({ filePath: path })
 			});
 			console.log("resolving");
-			const result = await manager.resolveProviderApiKey({ providerId: "cline" });
+			const result = await manager.resolveProviderApiKey({ providerId: "openai-codex" });
 			console.log(JSON.stringify(result));
 		`;
 		function launch() {
@@ -120,12 +117,12 @@ describe("OAuth refresh across processes", () => {
 		writeFileSync(release, "");
 		const results = await Promise.all([first.done, second.done]);
 		for (const result of results)
-			expect(result).toContain('"apiKey":"workos:rotated"');
+			expect(result).toContain('"apiKey":"rotated"');
 		expect(readFileSync(refreshLog, "utf8").trim().split("\n")).toEqual([
 			"refresh",
 		]);
-		expect(settings.getProviderSettings("cline")?.auth?.refreshToken).toBe(
-			"rotated-refresh",
-		);
+		expect(
+			settings.getProviderSettings("openai-codex")?.auth?.refreshToken,
+		).toBe("rotated-refresh");
 	}, 30_000);
 });

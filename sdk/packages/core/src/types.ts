@@ -204,7 +204,6 @@ export type {
 	SessionTeamProgressEvent,
 	SessionToolEvent,
 } from "./types/events";
-export type { SessionMessagesArtifactUploader } from "./types/session";
 export type {
 	SessionHistoryMetadata,
 	SessionHistoryRecord,

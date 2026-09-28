@@ -4,7 +4,6 @@ import {
 	parseAuthorizationInput,
 	parseOAuthError,
 	resolveAuthorizationCodeInput,
-	resolveUrl,
 } from "./utils";
 
 describe("auth/utils", () => {
@@ -27,12 +26,6 @@ describe("auth/utils", () => {
 			allowHashCodeState: true,
 		});
 		expect(parsed).toEqual({ code: "abc123", state: "state1" });
-	});
-
-	it("builds resolved URLs from base + path", () => {
-		expect(resolveUrl("https://example.com/", "/token")).toBe(
-			"https://example.com/token",
-		);
 	});
 
 	it("parses OAuth error payloads from string and object forms", () => {

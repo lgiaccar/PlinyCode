@@ -55,12 +55,6 @@ describe("getProviderConfigFields", () => {
 		);
 	});
 
-	it("returns oauth auth with no fields for cline", () => {
-		const result = getProviderConfigFields("cline");
-		expect(result.authMethod).toBe("oauth");
-		expect(result.fields).toEqual({});
-	});
-
 	it("returns oauth auth with no fields for openai-codex", () => {
 		const result = getProviderConfigFields("openai-codex");
 		expect(result.authMethod).toBe("oauth");

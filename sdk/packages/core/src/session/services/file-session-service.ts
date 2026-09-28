@@ -8,7 +8,6 @@ import {
 import { join } from "node:path";
 import type { BasicLogger } from "@plinycode/shared";
 import { resolveSessionDataDir } from "@plinycode/shared/storage";
-import type { SessionMessagesArtifactUploader } from "../../types/session";
 import type { SessionRow } from "../models/session-row";
 import type {
 	PersistedSessionUpdateInput,
@@ -275,7 +274,6 @@ export class FileSessionService extends UnifiedSessionPersistenceService {
 	constructor(
 		sessionsDir?: string,
 		options: {
-			messagesArtifactUploader?: SessionMessagesArtifactUploader;
 			logger?: BasicLogger;
 		} = {},
 	) {
