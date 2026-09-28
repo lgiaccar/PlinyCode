@@ -83,7 +83,6 @@ bun run types                 # typecheck all packages
 | `sdk/packages/shared`   | Shared types and utilities                                        |
 | `sdk/packages/llms`     | Model catalog and provider gateway                                |
 | `sdk/packages/agents`   | Browser-safe agent runtime loop                                   |
-| `sdk/packages/ui`       | Shared webview theme and components                               |
 
 ## Configuration
 

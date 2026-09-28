@@ -35,8 +35,7 @@
 				"*.ts"
 			],
 			"ignoreDependencies": [
-				"@plinycode/shared",
-				"@plinycode/ui"
+				"@plinycode/shared"
 			],
 			"vite": true
 		}

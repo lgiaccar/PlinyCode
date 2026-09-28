@@ -1,4 +1,3 @@
-import { GeneratedMediaContent } from "@plinycode/ui"
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import {
 	ClineApiReqInfo,
@@ -35,6 +34,7 @@ import {
 import { MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSize } from "react-use"
 import { canRestoreWorkspaceFromMessage, getRestoreWorkspaceDisabledReason } from "@/components/chat/chat-view/utils/messageUtils"
+import { GeneratedMediaContent } from "@/components/chat/GeneratedMediaContent"
 import { OptionsButtons } from "@/components/chat/OptionsButtons"
 import { WithCopyButton } from "@/components/common/CopyButton"
 import Thumbnails from "@/components/common/Thumbnails"
