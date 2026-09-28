@@ -564,11 +564,6 @@ export {
 	TASK_PROVIDER_STREAM_FAILED_EVENT,
 	TASK_PROVIDER_STREAM_STARTED_EVENT,
 } from "./services/telemetry";
-export type { ClineTelemetryServiceConfig } from "./services/telemetry-config";
-export {
-	createClineTelemetryServiceConfig,
-	createClineTelemetryServiceMetadata,
-} from "./services/telemetry-config";
 export type {
 	HookSessionContext,
 	HookSessionContextLookup,

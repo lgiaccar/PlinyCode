@@ -170,12 +170,6 @@ export {
 	type ResolveProviderRequestHeadersInput,
 	resolveProviderRequestHeaders,
 } from "./providers/request-headers";
-export { LangfuseAttributesSpanProcessor } from "./services/LangfuseAttributesSpanProcessor";
-export {
-	disposeLangfuseTelemetry,
-	type LangfuseTraceAttributes,
-	withLangfuseTraceAttributes,
-} from "./services/langfuse-telemetry";
 export {
 	type AudioTranscriptionRequest,
 	type AudioTranscriptionResult,

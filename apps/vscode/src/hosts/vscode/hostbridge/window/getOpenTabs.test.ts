@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, it } from "mocha"
 import { strict as assert } from "assert"
 import * as fs from "fs/promises"
+import { afterEach, beforeEach, describe, it } from "mocha"
 import * as os from "os"
 import pWaitFor from "p-wait-for"
 import * as path from "path"
@@ -179,5 +179,20 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 		} catch (error) {
 			console.error(error)
 		}
+	})
+
+	it("should list a file open in two editor groups once", async () => {
+		await createAndOpenTestDocument("split-view", vscode.ViewColumn.One)
+		await createAndOpenTestDocument("split-view", vscode.ViewColumn.Two)
+
+		// Wait until both groups show the file, so the dedupe is what's under test
+		await pWaitFor(() => vscode.window.tabGroups.all.filter((group) => group.tabs.length > 0).length === 2, {
+			timeout: 8000,
+			interval: 50,
+		})
+
+		const response = await getOpenTabs(GetOpenTabsRequest.create({}))
+
+		assert.deepStrictEqual(response.paths, ["test-file-split-view.js"])
 	})
 })

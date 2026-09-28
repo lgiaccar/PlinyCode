@@ -669,7 +669,7 @@ describe("sdk-gateway", () => {
 		});
 	});
 
-	it("passes AI SDK 7 telemetry and correlation context to streamText", async () => {
+	it("passes correlation context to streamText without AI SDK telemetry", async () => {
 		mockSuccessfulStream();
 		const gateway = createGateway({
 			providerConfigs: [
@@ -707,25 +707,7 @@ describe("sdk-gateway", () => {
 			  }
 			| undefined;
 		expect(call).not.toHaveProperty("experimental_telemetry");
-		expect(call?.telemetry).toEqual({
-			isEnabled: expect.any(Boolean),
-			functionId: "cline-agent-turn",
-			includeRuntimeContext: {
-				distinctId: true,
-				userId: true,
-				sessionId: true,
-				clientName: true,
-				clientVersion: true,
-				clineCoreVersion: true,
-				tags: true,
-				conversationId: true,
-				runId: true,
-				iteration: true,
-				providerId: true,
-				modelId: true,
-				resolvedModelId: true,
-			},
-		});
+		expect(call).not.toHaveProperty("telemetry");
 		expect(call?.runtimeContext).toEqual({
 			distinctId: "user-1",
 			userId: "user-1",
