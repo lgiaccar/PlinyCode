@@ -483,7 +483,7 @@
 		"@plinycode/core": "workspace:*",
 		"@plinycode/llms": "workspace:*",
 		"@plinycode/shared": "workspace:*",
-		"@modelcontextprotocol/sdk": "^1.25.1",
+		"@modelcontextprotocol/sdk": "^1.29.0",
 		"@vscode/codicons": "^0.0.36",
 		"aws4fetch": "^1.0.20",
 		"axios": "1.18.0",

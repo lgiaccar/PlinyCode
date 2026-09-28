@@ -22,7 +22,7 @@
       "version": "0.1.6",
       "dependencies": {
         "@bufbuild/protobuf": "^2.2.5",
-        "@modelcontextprotocol/sdk": "^1.25.1",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@plinycode/agents": "workspace:*",
         "@plinycode/core": "workspace:*",
         "@plinycode/llms": "workspace:*",
