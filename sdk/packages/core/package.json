@@ -43,17 +43,6 @@
 		"yaml": "^2.8.2",
 		"zod": "^4.3.6"
 	},
-	"peerDependencies": {
-		"posthog-node": "^5.8.0"
-	},
-	"peerDependenciesMeta": {
-		"posthog-node": {
-			"optional": true
-		}
-	},
-	"devDependencies": {
-		"posthog-node": "^5.8.0"
-	},
 	"engines": {
 		"node": ">=22"
 	},
