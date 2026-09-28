@@ -75,7 +75,7 @@
 		"jsdom": "^26.0.0",
 		"storybook": "^9.1.17",
 		"tailwindcss": "^4.1.13",
-		"typescript": "^5.7.3",
+		"typescript": "^5.9.3",
 		"vite": "^7.1.11",
 		"vitest": "^4.0.18"
 	},
