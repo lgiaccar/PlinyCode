@@ -18,7 +18,6 @@ import {
 	type PendingPromptsDeleteInput,
 	type PendingPromptsListInput,
 	type PendingPromptsUpdateInput,
-	type PreparedRemoteConfigCoreIntegration,
 	type RestoreInput,
 	type RestoreResult,
 	type SendSessionInput,
@@ -78,10 +77,6 @@ export interface VscodeSessionHostOptions {
 	readFileExecutor?: ToolExecutors["readFile"]
 	/** Per-tool approval policies derived from the user's auto-approval settings. */
 	toolPolicies?: Record<string, ToolPolicy>
-	/** Resolves once the applicable remote config is ready for a new SDK session. */
-	beforeStartSession?: () => Promise<void>
-	/** Returns the latest prepared remote-config integration, if remote config is active. */
-	getRemoteConfigIntegration?: () => PreparedRemoteConfigCoreIntegration | undefined
 	/**
 	 * Lazy factory for the VscodeTerminalManager.
 	 * When provided, the SDK's built-in `run_commands` is suppressed and replaced
@@ -134,44 +129,36 @@ export class VscodeSessionHost implements SdkSessionHost {
 			;(toolExecutors as Record<string, unknown>).bash = undefined
 		}
 
-		// Single funnel for session-start preparation: waits on the remote-config
-		// readiness/policy gate, applies the remote-config integration, and adds
-		// the VSCode extra tools. Used by ClineCore's prepare hook for normal
-		// starts AND by restore() for checkpoint-restore replacement sessions,
-		// which ClineCore starts without running the prepare hook.
+		// Single funnel for session-start preparation: adds the VSCode extra tools.
+		// Used by ClineCore's prepare hook for normal starts AND by restore() for
+		// checkpoint-restore replacement sessions, which ClineCore starts without
+		// running the prepare hook.
 		const prepareStartSessionInput = async (input: ClineCoreStartInput): Promise<ClineCoreStartInput> => {
-			await options.beforeStartSession?.()
-			// Read only after the readiness gate: it may have atomically replaced
-			// the integration that must be captured by this session.
-			const remoteConfigIntegration = options.getRemoteConfigIntegration?.()
-			const inputWithRemoteConfig = remoteConfigIntegration
-				? await remoteConfigIntegration.applyToStartSessionInput(input)
-				: input
 			const extraTools = await createVscodeExtraTools(options.mcpHub, {
-				cwd: inputWithRemoteConfig.config.cwd,
+				cwd: input.config.cwd,
 				getTerminalManager: options.getTerminalManager,
 				vscodeTerminalExecutionMode: StateManager.get().getGlobalStateKey("vscodeTerminalExecutionMode"),
 				foregroundCommands: options.foregroundCommands,
 			})
 			return {
-				...inputWithRemoteConfig,
-				source: inputWithRemoteConfig.source ?? "vscode",
+				...input,
+				source: input.source ?? "vscode",
 				// The extension runs file hooks through its own hooks adapter
 				// (status chips, hooksEnabled setting, HookFactory discovery).
 				// Exclude the SDK core's file-hook extension or every hook
 				// would execute twice per event.
 				localRuntime: {
-					...(inputWithRemoteConfig.localRuntime ?? {}),
+					...(input.localRuntime ?? {}),
 					// Honor the Rules panel toggles: the SDK discovers rule files
 					// itself, so disabled files must be filtered out here.
 					ruleFilter: createRuleFileFilter(StateManager.get()),
-					configExtensions: (
-						inputWithRemoteConfig.localRuntime?.configExtensions ?? RUNTIME_CONFIG_EXTENSION_KINDS
-					).filter((kind) => kind !== "hooks"),
+					configExtensions: (input.localRuntime?.configExtensions ?? RUNTIME_CONFIG_EXTENSION_KINDS).filter(
+						(kind) => kind !== "hooks",
+					),
 				},
 				config: {
-					...inputWithRemoteConfig.config,
-					extraTools: [...(inputWithRemoteConfig.config.extraTools ?? []), ...extraTools],
+					...input.config,
+					extraTools: [...(input.config.extraTools ?? []), ...extraTools],
 				},
 			}
 		}
@@ -275,8 +262,8 @@ export class VscodeSessionHost implements SdkSessionHost {
 
 	async restore(input: RestoreInput): Promise<RestoreResult> {
 		// ClineCore.restore starts the checkpoint-restore replacement session
-		// WITHOUT running the prepare hook, which would bypass the remote-config
-		// session gate and integration. Run the same preparation here.
+		// WITHOUT running the prepare hook, which would drop the VS Code extra
+		// tools and rule filter. Run the same preparation here.
 		if (input.start && this.prepareStartSessionInput) {
 			input = { ...input, start: await this.prepareStartSessionInput(input.start) }
 		}

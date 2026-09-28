@@ -56,7 +56,7 @@ export type Fingerprint = string & { readonly [FingerprintBrand]: void }
 // ---------------------------------------------------------------------------
 
 /**
- * Effective configuration for a provider, with all overlays (remote config,
+ * Effective configuration for a provider, with all overlays (task settings,
  * secrets, defaults) applied. Produced only by `ProviderConfigStore.read`.
  *
  * Invariants:
@@ -377,7 +377,7 @@ export interface ProviderConfigReader {
  * user-edited provider configuration fields and committed model selections.
  *
  * Storage strategy is private. Implementations decide whether each field
- * lives in StateManager, providers.json, remote config overlays, or
+ * lives in StateManager, providers.json, or
  * elsewhere. Consumers must not name the storage layout.
  *
  * Invariants (also documented per method):

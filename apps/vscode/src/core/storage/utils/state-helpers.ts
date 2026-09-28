@@ -19,6 +19,39 @@ import { StateManager } from "../StateManager"
 // ─── File-backed storage readers (used by StateManager) ────────────────────
 
 /**
+ * Secrets written by features PlinyCode no longer has. They are deleted from
+ * the secret store on start-up so old credentials don't linger on disk.
+ */
+export const REMOVED_SECRET_KEYS: readonly string[] = [
+	// OCA (Oracle Code Assist) sign-in
+	"ocaApiKey",
+	"ocaRefreshToken",
+	"ocaAccessToken",
+	"ocaTokenSet",
+	// Remote config (organization-managed LiteLLM key)
+	"remoteLiteLlmApiKey",
+	// Cline account sign-in
+	"clineApiKey",
+	"clineAccountId",
+	"cline:clineAccountId",
+	// OpenAI Codex (ChatGPT subscription) sign-in
+	"openai-codex-oauth-credentials",
+]
+
+/**
+ * Delete the secrets of removed features from a ClineFileStorage instance.
+ * Writes to disk only when one of them is actually present.
+ */
+export function purgeRemovedSecrets(store: ClineFileStorage<string>): void {
+	const present = REMOVED_SECRET_KEYS.filter((key) => store.get(key) !== undefined)
+	if (present.length === 0) {
+		return
+	}
+	store.setBatch(Object.fromEntries(present.map((key) => [key, undefined])))
+	Logger.info(`[StateManager] Purged ${present.length} secret(s) of removed features`)
+}
+
+/**
  * Read secrets from a ClineFileStorage instance.
  */
 export function readSecretsFromStorage(store: ClineFileStorage<string>): Secrets {

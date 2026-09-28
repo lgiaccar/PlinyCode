@@ -12,7 +12,7 @@ import path from "node:path"
 // Each test gets a fresh tempDir, so the per-dataDir manager cache and the
 // stub's per-dataDir store are naturally isolated between tests.
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { getProviderSettingsManager, migrateProviders } from "./provider-migration"
+import { getProviderSettingsManager, migrateProviders, purgeRemovedProviderSignIns } from "./provider-migration"
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -119,5 +119,35 @@ describe("getProviderSettingsManager", () => {
 		const first = getProviderSettingsManager(tempDir)
 		const second = getProviderSettingsManager(tempDir)
 		expect(second).toBe(first)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// purgeRemovedProviderSignIns
+// ---------------------------------------------------------------------------
+
+describe("purgeRemovedProviderSignIns", () => {
+	it("clears the stored Cline and OpenAI Codex sign-ins and keeps the rest", () => {
+		const manager = getProviderSettingsManager(tempDir)
+		manager.saveProviderSettings({ provider: "cline", model: "cline-model", auth: { accessToken: "workos:token" } })
+		manager.saveProviderSettings({ provider: "openai-codex", auth: { accessToken: "codex-token", refreshToken: "r" } })
+		manager.saveProviderSettings({ provider: "pliny", apiKey: "pliny-key" })
+
+		purgeRemovedProviderSignIns(manager)
+
+		expect(manager.getProviderSettings("cline")).toMatchObject({ provider: "cline", model: "cline-model", auth: undefined })
+		expect(manager.getProviderSettings("openai-codex")?.auth).toBeUndefined()
+		expect(manager.getProviderSettings("pliny")).toMatchObject({ provider: "pliny", apiKey: "pliny-key" })
+		expect(manager.read().lastUsedProvider).toBe("pliny")
+	})
+
+	it("writes nothing when no removed sign-in is stored", () => {
+		const manager = getProviderSettingsManager(tempDir)
+		manager.saveProviderSettings({ provider: "pliny", apiKey: "pliny-key" })
+		const before = manager.read()
+
+		purgeRemovedProviderSignIns(manager)
+
+		expect(manager.read()).toEqual(before)
 	})
 })

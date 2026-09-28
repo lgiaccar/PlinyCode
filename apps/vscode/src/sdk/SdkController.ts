@@ -12,16 +12,14 @@ import {
 	createUserInstructionConfigService,
 	ensureChatWorkspace,
 	getProviderAuthStorageId,
-	type PreparedRemoteConfigCoreIntegration,
 	readSessionCheckpointHistory,
 	resolveDefaultMcpSettingsPath,
 	type SessionHistoryRecord,
 	type UserInstructionConfigService,
 } from "@plinycode/core"
-import { type AgentStopControl, formatDisplayUserInput, type RemoteConfig, type RemoteConfigBundle } from "@plinycode/shared"
+import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import type { ChatContent } from "@shared/ChatContent"
-import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE } from "@shared/ClineAccount"
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import type { ClineApiReqInfo, ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
@@ -38,7 +36,6 @@ import { renderConversationMarkdown } from "@/core/export/markdown"
 import { defaultMarkdownExportFilename, saveMarkdownExport } from "@/core/export/save-markdown"
 import { parseMentions } from "@/core/mentions"
 import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
-import { clearSdkRemoteConfig, refreshSdkRemoteConfig } from "@/core/storage/remote-config/sdk-refresh"
 import { StateManager } from "@/core/storage/StateManager"
 import { RecentWorkspacesStore } from "@/core/workspace/recent-workspaces-store"
 import { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
@@ -47,10 +44,9 @@ import { HostProvider } from "@/hosts/host-provider"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
-import { OcaAuthService } from "@/services/auth/oca/OcaAuthService"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
-import { ClineError } from "@/services/error/ClineError"
+import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE, ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
@@ -59,16 +55,12 @@ import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
-import { ClineAccountService } from "./account-service"
-import { AuthService, LogoutReason } from "./auth-service"
 import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
 import { buildStartSessionInput, createHistoryItemFromSession } from "./cline-session-factory"
 import { MessageTranslatorState, normalizeUsageEvent, reshapeErrorForWebview } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
-import { parseProviderId } from "./model-catalog/provider-id"
 import { createProviderConfigStore } from "./model-catalog/store"
-import { RemoteConfigRefreshCoordinator } from "./remote-config-refresh-coordinator"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import {
@@ -116,7 +108,7 @@ import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
 import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
 import { WebviewGrpcBridge } from "./webview-grpc-bridge"
-import { resolveWorkspaceManagerPaths, resolveWorkspaceRootPath } from "./workspace-root"
+import { resolveWorkspaceManagerPaths } from "./workspace-root"
 
 /**
  * Log a stub warning and return undefined.
@@ -210,9 +202,6 @@ export class Controller {
 	task?: TaskProxy
 
 	mcpHub: McpHub
-	accountService: ClineAccountService
-	authService: AuthService
-	ocaAuthService: OcaAuthService
 	readonly stateManager: StateManager
 
 	// Lazy terminal manager for foreground (VS Code terminal) command execution.
@@ -249,22 +238,9 @@ export class Controller {
 		diffs: CompareCheckpointResult["diffs"]
 	}
 
-	// Timer for periodic remote config fetching (enterprise policy enforcement)
-	private remoteConfigTimer?: NodeJS.Timeout
 	private unsubscribeBuiltinMcp?: () => void
-	private remoteConfigCoreIntegration?: PreparedRemoteConfigCoreIntegration
-	private remoteConfigRevision = 0
-	private remoteConfigAvailable = false
-	private readonly remoteConfigRefreshCoordinator = new RemoteConfigRefreshCoordinator<boolean>((isCurrent) =>
-		this.performRemoteConfigRefresh(isCurrent),
-	)
-	private resolveInitialRemoteConfigReady!: () => void
-	private readonly initialRemoteConfigReady = new Promise<void>((resolve) => {
-		this.resolveInitialRemoteConfigReady = resolve
-	})
 
-	// Watches user-instruction files (workflows/skills/rules), including those
-	// materialized by remote config under `.cline/remote-config/`. Used to expand
+	// Watches user-instruction files (workflows/skills/rules). Used to expand
 	// `/workflow` and `/skill` slash commands into their instruction bodies before
 	// the prompt reaches the model — the same mechanism the CLI uses in
 	// `buildUserInputMessage`. The agent loop never auto-expands commands, so this
@@ -289,22 +265,6 @@ export class Controller {
 	/** Most recently used workspaces, shared with the other windows through a file. */
 	readonly recentWorkspaces = new RecentWorkspacesStore()
 	private windowWorkspaceRecorded = false
-
-	get remoteConfig(): RemoteConfig | undefined {
-		return this.remoteConfigCoreIntegration?.prepared.bundle?.remoteConfig
-	}
-
-	get remoteConfigBundle(): RemoteConfigBundle | undefined {
-		return this.remoteConfigCoreIntegration?.prepared.bundle
-	}
-
-	get isRemoteConfigAvailable(): boolean {
-		return this.remoteConfigAvailable
-	}
-
-	get currentRemoteConfigRevision(): number {
-		return this.remoteConfigRevision
-	}
 
 	constructor(readonly context: ClineExtensionContext) {
 		// StateManager must be initialized before creating the Controller
@@ -333,11 +293,6 @@ export class Controller {
 			},
 			ExtensionRegistryInfo.version,
 		)
-
-		// Initialize SDK-backed auth and account services.
-		this.authService = AuthService.getInstance(this)
-		this.ocaAuthService = OcaAuthService.initialize(this)
-		this.accountService = ClineAccountService.getInstance()
 
 		// Initialize message translator state. The mode getter styles the inferred turn-final
 		// completion row (plan → yellow plan box, act → green completion box).
@@ -468,8 +423,6 @@ export class Controller {
 				})
 			},
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
-			beforeStartSession: () => this.ensureRemoteConfigForSessionStart(),
-			getRemoteConfigIntegration: () => this.remoteConfigCoreIntegration,
 			foregroundCommands: this.foregroundCommands,
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
@@ -624,7 +577,7 @@ export class Controller {
 			},
 			runExclusive: (operation) => this.sessionRebuilds.runExclusive(operation),
 			getTask: () => this.task,
-			createTempSessionHost: () => this.createRemoteConfigAwareSessionHost(),
+			createTempSessionHost: () => this.createTempSessionHost(),
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
 			loadInitialMessages: (sessionHost, taskId) => this.sessionHistory.loadInitialMessages(sessionHost, taskId),
 			buildStartSessionInput,
@@ -704,7 +657,7 @@ export class Controller {
 					void this.recentWorkspaces.touch(workspace)
 				}
 			},
-			createTempSessionHost: () => this.createRemoteConfigAwareSessionHost(),
+			createTempSessionHost: () => this.createTempSessionHost(),
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
 			isClineManagedProviderActive: () => this.isClineManagedProviderActive(),
@@ -719,7 +672,7 @@ export class Controller {
 			taskHistory: this.taskHistory,
 			sessionConfigBuilder: this.sessionConfigBuilder,
 			getDisplayedTaskId: () => this.task?.taskId,
-			createTempSessionHost: () => this.createRemoteConfigAwareSessionHost(),
+			createTempSessionHost: () => this.createTempSessionHost(),
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
 			postStateToWebview: () => this.postStateToWebview(),
@@ -753,28 +706,7 @@ export class Controller {
 		// Register the bridge as a session event listener
 		this.onSessionEvent(this.grpcBridge.createListener())
 
-		// Restore auth state from secrets on startup, then start the remote
-		// config polling timer (enterprise policy enforcement). The timer must
-		// start after auth is restored so remote config can identify the user's
-		// organization and apply org-level policies.
-		this.authService
-			.restoreRefreshTokenAndRetrieveAuthInfo()
-			.then(async () => {
-				try {
-					await this.refreshRemoteConfig()
-				} catch (err) {
-					Logger.error("[SdkController] Initial remote config refresh failed:", err)
-				}
-				this.startRemoteConfigTimer()
-			})
-			.catch((err) => {
-				Logger.error("[SdkController] Failed to restore auth state:", err)
-			})
-			.finally(() => {
-				this.resolveInitialRemoteConfigReady()
-			})
-
-		Logger.log("[SdkController] Initialized with SDK adapter layer + gRPC bridge + auth services")
+		Logger.log("[SdkController] Initialized with SDK adapter layer + gRPC bridge")
 	}
 
 	getProviderConfigStore(): ProviderConfigStore {
@@ -880,118 +812,8 @@ export class Controller {
 		})
 	}
 
-	/**
-	 * Starts the periodic remote config fetching timer. Fetches immediately
-	 * and then every hour, to enforce enterprise policy (provider lockdown,
-	 * MCP server management, OpenTelemetry, etc.).
-	 */
-	private startRemoteConfigTimer(): void {
-		// Set up 1-hour interval
-		this.remoteConfigTimer = setInterval(() => {
-			this.refreshRemoteConfig().catch((err) => Logger.error("[SdkController] Remote config timer failed:", err))
-		}, 3600000) // 1 hour
-	}
-
-	async refreshRemoteConfig(options: { force?: boolean } = {}): Promise<boolean> {
-		const userId = this.authService.getInfo().user?.uid ?? "signed-out"
-		const organizationId = this.authService.getActiveOrganizationId() ?? "no-org"
-		return this.remoteConfigRefreshCoordinator.refresh(`${userId}:${organizationId}`, options)
-	}
-
-	async waitForInitialRemoteConfig(): Promise<void> {
-		await this.initialRemoteConfigReady
-	}
-
-	async rematerializeRemoteConfig(): Promise<void> {
-		// force: this runs right after a toggle/opt-out mutation; coalescing onto
-		// an in-flight refresh that sampled the pre-mutation state would report
-		// success while applying the old configuration.
-		const refreshed = await this.refreshRemoteConfig({ force: true })
-		if (!refreshed) {
-			throw new Error("Could not apply managed configuration change. Check your connection and try again.")
-		}
-		await this.sessions.endActiveSession("remoteConfigToggle", { awaitStop: true })
-		await this.postStateToWebview()
-	}
-
-	private async ensureRemoteConfigForSessionStart(): Promise<void> {
-		await this.waitForInitialRemoteConfig()
-		let refreshed = false
-		try {
-			refreshed = await this.refreshRemoteConfig()
-		} catch (error) {
-			// A rejected refresh must degrade to the same fallback logic as a
-			// false return: otherwise a filesystem error on the clear path (e.g.
-			// EACCES on the remote-config workspace) blocks even unmanaged users
-			// from starting sessions with a raw fs error.
-			Logger.error("[SdkController] Remote config refresh threw during session gate:", error)
-		}
-		const activeOrganizationId = this.authService.getActiveOrganizationId()
-		if (refreshed) {
-			return
-		}
-
-		if (!activeOrganizationId) {
-			if (this.stateManager.getGlobalStateKey("lastManagedOrganizationId")) {
-				// This install last ran under organization policy, but the current
-				// identity could not be resolved (refresh failed and no org was
-				// restored — e.g. the API is unreachable). Fail closed rather than
-				// starting an unpoliced session.
-				throw new Error("Could not verify organization policy. Check your connection and try again.")
-			}
-			// No organization policy applies to personal or signed-out use; a
-			// failed refresh must not block local work.
-			return
-		}
-
-		const bundleOrganizationId = this.remoteConfigBundle?.metadata?.organizationId
-		if (bundleOrganizationId === activeOrganizationId) {
-			Logger.warn("[SdkController] Remote config refresh failed; starting with last known-good organization policy")
-			return
-		}
-		throw new Error("Could not verify organization policy. Check your connection and try again.")
-	}
-
-	private createRemoteConfigAwareSessionHost(): Promise<VscodeSessionHost> {
-		return VscodeSessionHost.create({
-			mcpHub: this.mcpHub,
-			beforeStartSession: () => this.ensureRemoteConfigForSessionStart(),
-			getRemoteConfigIntegration: () => this.remoteConfigCoreIntegration,
-		})
-	}
-
-	private async performRemoteConfigRefresh(isCurrent: () => boolean): Promise<boolean> {
-		const refreshed = await refreshSdkRemoteConfig(this, {
-			workspacePath: await this.getRemoteConfigWorkspacePath(),
-			isCurrent,
-		})
-		if (!isCurrent()) {
-			return false
-		}
-		// Remote config may have materialized new workflows/skills/rules under
-		// `.cline/remote-config/`. Refresh the watcher so slash-command expansion
-		// sees them without waiting on filesystem events.
-		await this.refreshUserInstructionWatchers()
-		return refreshed
-	}
-
-	setRemoteConfigAvailable(available: boolean): void {
-		this.remoteConfigAvailable = available
-	}
-
-	async setRemoteConfigCoreIntegration(integration: PreparedRemoteConfigCoreIntegration | undefined): Promise<void> {
-		const previous = this.remoteConfigCoreIntegration
-		this.remoteConfigCoreIntegration = integration
-		if (previous !== integration) {
-			this.remoteConfigRevision += 1
-		}
-		if (previous && previous !== integration) {
-			try {
-				await previous.dispose()
-			} catch (error) {
-				Logger.error("[SdkController] Failed to dispose previous remote config integration:", error)
-			}
-		}
+	private createTempSessionHost(): Promise<VscodeSessionHost> {
+		return VscodeSessionHost.create({ mcpHub: this.mcpHub })
 	}
 
 	async invalidateUserInstructionService(): Promise<void> {
@@ -1005,12 +827,6 @@ export class Controller {
 
 	async dispose(): Promise<void> {
 		this.providerConfigStoreSubscription.dispose()
-		// Clear the remote config timer to prevent stale fetches
-		if (this.remoteConfigTimer) {
-			clearInterval(this.remoteConfigTimer)
-			this.remoteConfigTimer = undefined
-		}
-		await this.setRemoteConfigCoreIntegration(undefined)
 		this.isDisposed = true
 		// Tear down the debounced state-post machinery before downstream resources
 		// are disposed below — see StatePostDebouncer.dispose().
@@ -1036,8 +852,7 @@ export class Controller {
 	/**
 	 * Lazily create (or rebuild on workspace-root change) the user-instruction
 	 * watcher. Pointed at the workspace root so it discovers both local config
-	 * (`.clinerules/workflows`, `.cline/workflows`, …) and remote-config files
-	 * materialized under `<root>/.cline/remote-config/{workflows,skills,rules}`.
+	 * (`.clinerules/workflows`, `.cline/workflows`, …).
 	 *
 	 * `workspaceRoot` is resolved by the caller so the memoization check below runs
 	 * synchronously on entry — there is no `await` before the assignment, so
@@ -1094,7 +909,6 @@ export class Controller {
 		try {
 			const workspaceRoot = await this.getWorkspaceRoot()
 			const service = await this.ensureUserInstructionService(workspaceRoot)
-			const remoteWorkflows = this.stateManager.getRemoteConfigSettings()?.remoteGlobalWorkflows ?? []
 			const workflowRecords = service.listRecords("workflow").map((record) => ({
 				id: record.id,
 				name: record.item.name,
@@ -1104,8 +918,6 @@ export class Controller {
 				records: workflowRecords,
 				globalToggles: this.stateManager.getGlobalSettingsKey("globalWorkflowToggles"),
 				workspaceToggles: this.stateManager.getWorkspaceStateKey("workflowToggles"),
-				remoteToggles: this.stateManager.getGlobalStateKey("remoteWorkflowToggles"),
-				remoteAlwaysEnabledNames: remoteWorkflows.filter((workflow) => workflow.alwaysEnabled).map((w) => w.name),
 			})
 			return expandSlashCommands(text, [...service.listRuntimeCommands(), ...BUILTIN_SLASH_COMMANDS], {
 				disabledWorkflowNames,
@@ -1114,24 +926,6 @@ export class Controller {
 		} catch (error) {
 			Logger.warn("[SdkController] Slash command resolution failed, using raw text:", error)
 			return text
-		}
-	}
-
-	/**
-	 * Refresh the user-instruction watcher after remote config is (re)materialized
-	 * so newly written workflows/skills/rules are picked up immediately rather than
-	 * waiting on filesystem watch events.
-	 */
-	private async refreshUserInstructionWatchers(): Promise<void> {
-		const servicePromise = this.userInstructionService
-		if (!servicePromise) {
-			return
-		}
-		try {
-			const service = await servicePromise
-			await Promise.all([service.refreshType("workflow"), service.refreshType("skill"), service.refreshType("rule")])
-		} catch (error) {
-			Logger.warn("[SdkController] Failed to refresh user instruction watchers:", error)
 		}
 	}
 
@@ -1243,19 +1037,6 @@ export class Controller {
 			}
 		})()
 		return this.noWorkspaceFallbackPromise
-	}
-
-	private async getRemoteConfigWorkspacePath(): Promise<string | undefined> {
-		try {
-			const { paths } = await HostProvider.workspace.getWorkspacePaths({})
-			if (!paths.length) {
-				return undefined
-			}
-			return resolveWorkspaceRootPath(paths, paths[0])
-		} catch (error) {
-			Logger.warn("[SdkController] Failed to get workspace paths for remote config, using global fallback:", error)
-			return undefined
-		}
 	}
 
 	// ---- Session event subscription ----
@@ -1481,7 +1262,6 @@ export class Controller {
 		taskSettings?: Partial<Settings>,
 		workspace?: WorkspaceRef,
 	): Promise<string | undefined> {
-		await this.waitForInitialRemoteConfig()
 		// A new task is starting — the agent is about to stream.
 		this.turnStateTracker.set("streaming")
 		// Clear the previous turn's completion signal so this turn's phase is computed fresh.
@@ -1490,7 +1270,6 @@ export class Controller {
 	}
 
 	async reinitExistingTaskFromId(taskId: string): Promise<void> {
-		await this.waitForInitialRemoteConfig()
 		this.turnStateTracker.set("streaming")
 		this.messageTranslatorState.clearTurnOutcome()
 		await this.taskStart.reinitExistingTaskFromId(taskId)
@@ -1654,7 +1433,7 @@ export class Controller {
 		}
 		let sdkMessages: SdkUserMessage[]
 		let tempHost: VscodeSessionHost | undefined
-		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createRemoteConfigAwareSessionHost())
+		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createTempSessionHost())
 		try {
 			sdkMessages = (await sessionHost.readMessages(sourceSessionId)) as SdkUserMessage[]
 			const sdkTargetIndex = findSdkUserMessageIndexByOrdinal(sdkMessages, userOrdinal)
@@ -1948,7 +1727,7 @@ export class Controller {
 		// After a window reload the latest task is shown from history without a
 		// live session, so fall back to a temporary host for the comparison.
 		let tempHost: VscodeSessionHost | undefined
-		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createRemoteConfigAwareSessionHost())
+		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createTempSessionHost())
 		try {
 			if (!sessionHost.compareCheckpoint) {
 				throw new Error("This session host does not support checkpoint comparison")
@@ -2164,77 +1943,6 @@ export class Controller {
 
 	async togglePlanActMode(modeToSwitchTo: Mode, chatContent?: ChatContent): Promise<boolean> {
 		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent)
-	}
-
-	// ---- Auth callbacks ----
-
-	async handleSignOut(): Promise<void> {
-		const sessionProviderId = this.getSessionProviderId() ?? this.getActiveProviderId()
-		// Capture before deauth nulls the auth info, so the per-org config cache
-		// (which can hold enterprise secrets) is actually deleted on sign-out.
-		const organizationId = this.authService.getActiveOrganizationId() ?? undefined
-		await this.taskControl.cancelClineTaskOnSignOut(isClineManagedProvider(sessionProviderId))
-		await this.authService.handleDeauth(LogoutReason.USER_INITIATED)
-		// Invalidate BEFORE clearing: a refresh that already fetched under the
-		// signed-in identity must not republish the policy (and re-create the
-		// secret-bearing caches) after the clear. The clear itself runs under the
-		// same publication lock refreshes use, so it cannot interleave either.
-		this.remoteConfigRefreshCoordinator.invalidate()
-		await clearSdkRemoteConfig(this, {
-			workspacePath: await this.getRemoteConfigWorkspacePath(),
-			organizationId,
-		})
-		await this.postStateToWebview()
-	}
-
-	async handleOcaSignOut(): Promise<void> {
-		await this.ocaAuthService.handleDeauth(LogoutReason.USER_INITIATED)
-		await this.postStateToWebview()
-	}
-
-	async handleAuthCallback(customToken: string, provider: string | null = null): Promise<void> {
-		await this.authService.handleAuthCallback(customToken, provider ?? "cline")
-		// Fetch remote config immediately after login so enterprise policies
-		// (provider lockdown, MCP servers, OTel, etc.) are applied right away.
-		await this.refreshRemoteConfig()
-		await this.postStateToWebview()
-	}
-
-	async handleOcaAuthCallback(code: string, state: string): Promise<void> {
-		await this.ocaAuthService.handleAuthCallback(code, state)
-		await this.postStateToWebview()
-	}
-
-	// ---- Provider auth callbacks ----
-
-	private persistProviderApiKeyFromState(provider: string): void {
-		const providerId = parseProviderId(provider)
-		const apiKey = this.providerConfigStore.read(providerId).apiKey
-
-		if (!apiKey) {
-			Logger.warn(`[SdkController] No API key found after ${provider} auth callback`)
-			return
-		}
-
-		this.providerConfigStore.write(providerId, { apiKey })
-	}
-
-	async handleOpenRouterCallback(code: string): Promise<void> {
-		await this.authService.handleOpenRouterCallback(code)
-		this.persistProviderApiKeyFromState("openrouter")
-		await this.postStateToWebview()
-	}
-
-	async handleRequestyCallback(code: string): Promise<void> {
-		await this.authService.handleRequestyCallback(code)
-		this.persistProviderApiKeyFromState("requesty")
-		await this.postStateToWebview()
-	}
-
-	async handleHicapCallback(code: string): Promise<void> {
-		await this.authService.handleHicapCallback(code)
-		this.persistProviderApiKeyFromState("hicap")
-		await this.postStateToWebview()
 	}
 
 	async getTaskHistory(request: GetTaskHistoryRequest): Promise<TaskHistoryArray> {
@@ -2592,8 +2300,6 @@ export class Controller {
 				backgroundCommandRunning: this.backgroundCommandRunning,
 				backgroundCommandTaskId: this.backgroundCommandTaskId,
 				foregroundCommandRunning: this.foregroundCommands.isRunning,
-				isRemoteConfigAvailable: this.isRemoteConfigAvailable,
-				currentRemoteConfigRevision: this.currentRemoteConfigRevision,
 				// Without this the webview always receives workspaceRoots: [] on the
 				// SDK path (classic Controller exposes a public workspaceManager;
 				// SdkController builds one lazily). The task-header working-directory

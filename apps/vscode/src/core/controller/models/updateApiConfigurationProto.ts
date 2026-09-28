@@ -10,7 +10,6 @@ import {
 import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { Logger } from "@/shared/services/Logger"
 import type { Controller } from "../index"
-import { clearOrganizationForClinePassProviderSelection } from "./handleClinePassProviderSelection"
 import { normalizeProviderSwitchModel } from "./providerSwitchNormalization"
 import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "./taskApiModel"
 
@@ -141,7 +140,6 @@ export async function updateApiConfigurationProto(
 
 		// Update the API configuration in storage
 		controller.stateManager.setApiConfiguration(normalizedApiConfiguration)
-		clearOrganizationForClinePassProviderSelection(controller, normalizedApiConfiguration)
 
 		// Update the task's API handler if there's an active task
 		if (controller.task) {

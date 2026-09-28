@@ -1,21 +1,8 @@
 export const E2E_REGISTERED_MOCK_ENDPOINTS = {
 	"/api/v1": {
-		GET: [
-			"/generation",
-			"/ai/cline/models",
-			"/ai/cline/recommended-models",
-			"/organizations/{orgId}/balance",
-			"/organizations/{orgId}/members/{memberId}/usages",
-			"/organizations/{orgId}/api-keys",
-			"/organizations/{orgId}/remote-config",
-			"/users/me",
-			"/users/me/featurebase-token",
-			"/users/{userId}/balance",
-			"/users/{userId}/usages",
-			"/users/{userId}/payments",
-		],
-		POST: ["/chat/completions", "/auth/token", "/auth/register", "/users/me/budget/request"],
-		PUT: ["/users/active-account"],
+		GET: ["/generation", "/ai/cline/models", "/ai/cline/recommended-models"],
+		POST: ["/chat/completions"],
+		PUT: [],
 	},
 	// Pliny gateway path: OpenAI-compatible chat completions at /api/llm/chat/completions.
 	// The e2e harness redirects the extension's PLINY_BASE_URL to http://localhost:7777/api/llm
@@ -23,11 +10,6 @@ export const E2E_REGISTERED_MOCK_ENDPOINTS = {
 	"/api/llm": {
 		GET: ["/models"],
 		POST: ["/chat/completions"],
-		PUT: [],
-	},
-	"/.test": {
-		GET: [],
-		POST: ["/auth", "/setUserBalance", "/setUserHasOrganization", "/setOrgBalance", "/setSpendLimitExceeded"],
 		PUT: [],
 	},
 	"/health": {

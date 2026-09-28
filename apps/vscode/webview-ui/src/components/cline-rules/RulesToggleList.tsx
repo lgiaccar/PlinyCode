@@ -9,8 +9,6 @@ const RulesToggleList = ({
 	ruleType,
 	showNewRule,
 	showNoRules,
-	isRemote = false,
-	alwaysEnabledMap = {},
 	tokenCounts,
 }: {
 	rules: [string, boolean][]
@@ -20,8 +18,6 @@ const RulesToggleList = ({
 	ruleType: string
 	showNewRule: boolean
 	showNoRules: boolean
-	isRemote?: boolean
-	alwaysEnabledMap?: Record<string, boolean>
 	/** Estimated tokens per rule path; rows show a token badge when provided. */
 	tokenCounts?: Record<string, number>
 }) => {
@@ -39,10 +35,8 @@ const RulesToggleList = ({
 				<>
 					{rules.map(([rulePath, enabled]) => (
 						<RuleRow
-							alwaysEnabled={alwaysEnabledMap[rulePath]}
 							enabled={enabled}
 							isGlobal={isGlobal}
-							isRemote={isRemote}
 							key={rulePath}
 							rulePath={rulePath}
 							ruleType={ruleType}

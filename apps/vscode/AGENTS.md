@@ -25,7 +25,7 @@ To add an RPC:
 
 1. Add it to a service in `proto/cline/<domain>.proto`. Services are `PascalCaseService`, RPCs `camelCase`, messages `PascalCase`. Reuse `common.proto` types for simple values.
 2. Run `bun run protos`. It regenerates `src/shared/proto/`, `src/generated/` and `webview-ui/src/services/grpc-client.ts`, all gitignored.
-3. Write the handler in **`src/core/controller/<domain>/<rpcName>.ts`**, exporting `async function <rpcName>(controller: Controller, request)`. The generated service table imports it by that exact path. `<domain>` is the service name without `Service`, with its first letter lowercased: `TaskService` → `task/`, `OcaAccountService` → `ocaAccount/`. Server-streaming RPCs also take a `responseStream` argument; see `ui/subscribeToShowWebview.ts`.
+3. Write the handler in **`src/core/controller/<domain>/<rpcName>.ts`**, exporting `async function <rpcName>(controller: Controller, request)`. The generated service table imports it by that exact path. `<domain>` is the service name without `Service`, with its first letter lowercased: `TaskService` → `task/`, `McpService` → `mcp/`. Server-streaming RPCs also take a `responseStream` argument; see `ui/subscribeToShowWebview.ts`.
 4. Call it from the webview through the generated client: `TaskServiceClient.newTask(NewTaskRequest.create({ … }))`.
 
 When you add a value to the `ClineSay` or `ClineAsk` enums, update both the TypeScript union in `src/shared/ExtensionMessage.ts` and the proto enum. The two maps in `src/shared/proto-conversions/cline-message.ts` are exhaustive, so `bun run check-types` points at what's missing. Then render it in `webview-ui/src/components/chat/ChatRow.tsx`.

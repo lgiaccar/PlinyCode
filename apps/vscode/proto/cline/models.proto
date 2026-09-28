@@ -49,8 +49,6 @@ service ModelsService {
   rpc refreshBasetenModelsRpc(EmptyRequest) returns (OpenRouterCompatibleModelInfo);
   // Fetches available models from SAP AI Core
   rpc getSapAiCoreModels(SapAiCoreModelsRequest) returns (SapAiCoreModelsResponse);
-  // Fetches available models from OCA
-  rpc refreshOcaModels(StringRequest) returns (OcaCompatibleModelInfo);
   // Fetches available models from AIhubmix
   rpc getAihubmixModels(EmptyRequest) returns (OpenRouterCompatibleModelInfo);
   // Refreshes and returns Vercel AI Gateway models
@@ -630,14 +628,6 @@ message OcaModelInfo {
   optional bool supports_reasoning = 19;
   // reasoning effort options
   repeated string reasoning_effort_options = 20;
-}
-
-// Aggregated OCA model catalog keyed by model identifier
-message OcaCompatibleModelInfo {
-  // key: canonical model id as reported by OCA (e.g., "openai/gpt-4o-mini")
-  // value: OcaModelInfo describing that model
-  map<string, OcaModelInfo> models = 1;
-  optional string error = 2;
 }
 
 enum ApiFormat {

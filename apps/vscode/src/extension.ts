@@ -5,7 +5,6 @@ import assert from "node:assert"
 import { disableCurrentDirectoryExecutableSearch } from "@plinycode/shared"
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
-import { sendAccountButtonClickedEvent } from "./core/controller/ui/subscribeToAccountButtonClicked"
 import { sendChatButtonClickedEvent } from "./core/controller/ui/subscribeToChatButtonClicked"
 import { sendHistoryButtonClickedEvent } from "./core/controller/ui/subscribeToHistoryButtonClicked"
 import { sendMcpButtonClickedEvent } from "./core/controller/ui/subscribeToMcpButtonClicked"
@@ -51,7 +50,6 @@ import { EDIT_PREVIEW_URI_SCHEME, editPreviewContentProvider, VscodeEditPreview 
 import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { ExtensionRegistryInfo } from "./registry"
-import { AuthService, LogoutReason } from "./sdk/auth-service"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
@@ -141,7 +139,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand(commands.McpButton, () => sendMcpButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.SettingsButton, () => sendSettingsButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.HistoryButton, () => sendHistoryButtonClickedEvent()))
-	context.subscriptions.push(vscode.commands.registerCommand(commands.AccountButton, () => sendAccountButtonClickedEvent()))
 
 	// FreeAuto / BalanceAuto: make sure every profile's routing rules file
 	// exists so the command below always has something to open, then let the
@@ -559,28 +556,6 @@ ${ctx.cellJson || "{}"}
 			abortCommitGeneration()
 		}),
 	)
-
-	// Listen for secrets changes (cross-window login/logout sync).
-	// NOTE: Credentials now live in providers.json (single source of truth).
-	// This listener catches legacy secrets.json writes from older windows and
-	// triggers a re-read from providers.json via restoreRefreshTokenAndRetrieveAuthInfo().
-	const unsubSecrets = storageContext.secrets.onDidChange((event) => {
-		if (event.key === "cline:clineAccountId") {
-			const secretValue = storageContext.secrets.get<string>(event.key)
-			const activeWebview = WebviewProvider.getVisibleInstance()
-			const controller = activeWebview?.controller
-
-			const authService = AuthService.getInstance(controller)
-			if (secretValue) {
-				// Secret was added or updated - restore auth info (login from another window)
-				authService?.restoreRefreshTokenAndRetrieveAuthInfo()
-			} else {
-				// Secret was removed - handle logout for all windows
-				authService?.handleDeauth(LogoutReason.CROSS_WINDOW_SYNC)
-			}
-		}
-	})
-	context.subscriptions.push({ dispose: unsubSecrets })
 
 	Logger.log(`[PlinyCode] extension activated in ${performance.now() - activationStartTime} ms`)
 

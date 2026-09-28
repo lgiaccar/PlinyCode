@@ -181,7 +181,7 @@ describe("buildEffectiveProviderConfig", () => {
 		})
 	})
 
-	it("respects remote-config-locked LiteLLM key already applied by StateManager", async () => {
+	it("prefers the LiteLLM settings from StateManager over providers.json", async () => {
 		const { buildEffectiveProviderConfig } = await import("./effective-config")
 		mocks.setProviderSettings({
 			litellm: {
@@ -191,13 +191,13 @@ describe("buildEffectiveProviderConfig", () => {
 			},
 		})
 		mocks.setApiConfiguration({
-			liteLlmApiKey: "remote-config-locked-litellm-key",
+			liteLlmApiKey: "state-manager-litellm-key",
 			liteLlmBaseUrl: "https://remote-litellm.example.com/v1",
 		})
 
 		expect(buildEffectiveProviderConfig(parseProviderId("litellm"))).toEqual({
 			providerId: parseProviderId("litellm"),
-			apiKey: "remote-config-locked-litellm-key",
+			apiKey: "state-manager-litellm-key",
 			baseUrl: "https://remote-litellm.example.com/v1",
 		})
 	})

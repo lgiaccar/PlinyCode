@@ -454,10 +454,10 @@ describe("State Keys Type Safety", () => {
 			expect(isLocalStateKey("")).to.be.false
 		})
 
-		it("should handle keys with special characters", () => {
-			// The cline:clineAccountId key has a colon
-			expect(SecretKeys).to.include("cline:clineAccountId")
-			expect(isSecretKey("cline:clineAccountId")).to.be.true
+		it("should not declare the secrets of removed features", () => {
+			// Purged on start-up instead (see purgeRemovedSecrets)
+			expect(SecretKeys).to.not.include("cline:clineAccountId")
+			expect(isSecretKey("openai-codex-oauth-credentials")).to.be.false
 		})
 
 		it("should not have keys that could cause prototype pollution", () => {

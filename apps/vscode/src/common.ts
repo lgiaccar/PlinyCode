@@ -10,14 +10,12 @@ import { HookProcessRegistry } from "./core/hooks/HookProcessRegistry"
 import { StateManager } from "./core/storage/StateManager"
 import { AgentConfigLoader } from "./core/task/tools/subagent/AgentConfigLoader"
 import { ExtensionRegistryInfo } from "./registry"
+import { purgeRemovedProviderSignIns } from "./sdk/provider-migration"
 import { registerVsCodeLmHandler } from "./sdk/vscode-lm/register-vscode-lm"
 import { registerClineClientIdentity } from "./services/ClineClientIdentity"
 import { ErrorService } from "./services/error"
-import { getDistinctId } from "./services/logging/distinctId"
 import { ClineTempManager } from "./services/temp"
 import { ShowMessageType } from "./shared/proto/host/window"
-import { syncWorker } from "./shared/services/worker/sync"
-import { getBlobStoreSettingsFromEnv } from "./shared/services/worker/worker"
 import { getLatestAnnouncementId } from "./utils/announcements"
 
 /**
@@ -59,6 +57,14 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 		})
 	}
 
+	// Drop the stored tokens of sign-ins PlinyCode no longer has (Cline account,
+	// OpenAI Codex, OCA). Their secrets-store copies are purged by StateManager.
+	try {
+		purgeRemovedProviderSignIns()
+	} catch (error) {
+		Logger.error("[PlinyCode] Failed to clear removed provider sign-ins:", error)
+	}
+
 	void registerClineClientIdentity()
 
 	// Register host-only SDK provider handlers (e.g. VS Code Language Model API),
@@ -76,10 +82,7 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	// Non-blocking announcement check and display
 	showVersionUpdateAnnouncement(stateManager)
 
-	// =============== Background sync and cleanup tasks ===============
-	// Use remote config blobStoreConfig if available, otherwise fall back to env vars
-	const blobStoreSettings = stateManager.getRemoteConfigSettings()?.blobStoreConfig ?? getBlobStoreSettingsFromEnv()
-	syncWorker().init({ ...blobStoreSettings, userDistinctId: getDistinctId() })
+	// =============== Background cleanup tasks ===============
 	// Clean up old temp files in background (non-blocking) and start periodic cleanup every 24 hours
 	ClineTempManager.startPeriodicCleanup()
 	return webview
@@ -127,7 +130,6 @@ export async function tearDown(): Promise<void> {
 		ErrorService.get().dispose()
 		// Dispose all webview instances
 		await WebviewProvider.disposeAllInstances()
-		syncWorker().dispose()
 
 		// Kill any running hook processes to prevent zombies
 		await HookProcessRegistry.terminateAll()

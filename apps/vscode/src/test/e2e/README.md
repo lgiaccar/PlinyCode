@@ -99,8 +99,8 @@ import { expect } from "@playwright/test"
 import { e2e } from "./utils/helpers"
 
 e2e("Test description", async ({ sidebar, helper, page }) => {
-  // Sign in to Cline
-  await helper.signin(sidebar)
+  // Wait for the chat view
+  await helper.ensureReady(sidebar)
   
   // Test interactions
   const inputbox = sidebar.getByTestId("chat-input")
@@ -136,10 +136,10 @@ The test fixtures provide the following objects:
 
 ### Common Patterns
 
-#### Authentication
+#### Waiting for the chat view
 ```typescript
-// Sign in with test API key
-await helper.signin(sidebar)
+// PlinyCode opens straight on the chat view; wait for the input
+await helper.ensureReady(sidebar)
 ```
 
 #### Chat Interactions
@@ -251,7 +251,7 @@ The test environment includes:
 5. **Test both success and error cases:**
    ```typescript
    // Test successful flow
-   await helper.signin(sidebar)
+   await helper.ensureReady(sidebar)
    
    // Test error handling
    await expect(sidebar.getByText("API Request Failed")).toBeVisible()

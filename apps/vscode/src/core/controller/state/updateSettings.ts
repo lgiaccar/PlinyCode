@@ -9,7 +9,6 @@ import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { McpDisplayMode } from "@/shared/McpDisplayMode"
 import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
-import { accountLogoutClicked } from "../account/accountLogoutClicked"
 import { normalizeProviderSwitchModel } from "../models/providerSwitchNormalization"
 import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
 
@@ -23,7 +22,6 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 	try {
 		if (request.clineEnv !== undefined && request.clineEnv !== "") {
 			ClineEnv.setEnvironment(request.clineEnv)
-			await accountLogoutClicked(controller, Empty.create())
 		}
 
 		if (request.apiConfiguration) {
@@ -181,19 +179,6 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 
 		if (request.multiRootEnabled !== undefined) {
 			controller.stateManager.setGlobalState("multiRootEnabled", !!request.multiRootEnabled)
-		}
-
-		if (request.optOutOfRemoteConfig !== undefined) {
-			const hadOptedOut = !!controller.stateManager.getGlobalSettingsKey("optOutOfRemoteConfig")
-			const isOptingOut = !!request.optOutOfRemoteConfig
-
-			// Update first so the authoritative refresh evaluates the new preference.
-			controller.stateManager.setGlobalState("optOutOfRemoteConfig", isOptingOut)
-			if (isOptingOut !== hadOptedOut) {
-				// force: never coalesce onto an in-flight refresh that already
-				// evaluated the pre-change opt-out preference.
-				await controller.refreshRemoteConfig({ force: true })
-			}
 		}
 
 		if (request.showFeatureTips !== undefined) {

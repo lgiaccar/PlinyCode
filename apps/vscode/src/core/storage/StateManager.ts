@@ -8,7 +8,6 @@ import {
 	isSettingsKey,
 	type LocalState,
 	type LocalStateKey,
-	type RemoteConfigFields,
 	type SecretKey,
 	SecretKeys,
 	type Secrets,
@@ -23,8 +22,12 @@ import { Logger } from "@/shared/services/Logger"
 import { AgentConfigLoader } from "../task/tools/subagent/AgentConfigLoader"
 import { readTaskSettingsFromStorage, writeTaskSettingsToStorage } from "./disk"
 import { STATE_MANAGER_NOT_INITIALIZED } from "./error-messages"
-import { filterAllowedRemoteConfigFields } from "./remote-config/utils"
-import { readGlobalStateFromStorage, readSecretsFromStorage, readWorkspaceStateFromStorage } from "./utils/state-helpers"
+import {
+	purgeRemovedSecrets,
+	readGlobalStateFromStorage,
+	readSecretsFromStorage,
+	readWorkspaceStateFromStorage,
+} from "./utils/state-helpers"
 export interface PersistenceErrorEvent {
 	error: Error
 }
@@ -56,7 +59,6 @@ export class StateManager {
 	private globalStateCache: GlobalStateAndSettings = {} as GlobalStateAndSettings
 	private taskStateCache: Partial<Settings> = {}
 	private sessionOverrideCache: Partial<Settings> = {}
-	private remoteConfigCache: Partial<RemoteConfigFields> = {} as RemoteConfigFields
 	private secretsCache: Secrets = {} as Secrets
 	private workspaceStateCache: LocalState = {} as LocalState
 
@@ -104,6 +106,7 @@ export class StateManager {
 
 			// Load all extension state from file-backed stores
 			const globalState = await readGlobalStateFromStorage(storage.globalState)
+			purgeRemovedSecrets(storage.secrets)
 			const secrets = readSecretsFromStorage(storage.secrets)
 			const workspaceState = readWorkspaceStateFromStorage(storage.workspaceState)
 
@@ -240,18 +243,6 @@ export class StateManager {
 
 		// Schedule debounced persistence
 		this.scheduleDebouncedPersistence()
-	}
-
-	private setRemoteConfigState(updates: Partial<GlobalStateAndSettings>): void {
-		if (!this.isInitialized) {
-			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-
-		// Update cache in one go
-		this.remoteConfigCache = {
-			...this.remoteConfigCache,
-			...filterAllowedRemoteConfigFields(updates),
-		}
 	}
 
 	/**
@@ -411,7 +402,7 @@ export class StateManager {
 	/**
 	 * Set a session-scoped override for a settings key.
 	 * Session overrides are in-memory only and are NEVER persisted to disk.
-	 * They take precedence after remote config but before task-specific and global settings.
+	 * They take precedence over task-specific and global settings.
 	 *
 	 * Use this for CLI flags like --yolo that should apply for the current
 	 * process lifetime only, without modifying the user's saved settings.
@@ -421,56 +412,6 @@ export class StateManager {
 			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
 		}
 		this.sessionOverrideCache[key] = value
-	}
-
-	/**
-	 * Set method for remote config field - updates cache immediately (no persistence)
-	 * Remote config is read-only from the extension's perspective and only stored in memory
-	 */
-	setRemoteConfigField<K extends keyof RemoteConfigFields>(key: K, value: RemoteConfigFields[K]): void {
-		if (!this.isInitialized) {
-			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-
-		// Update cache immediately for instant access (no persistence needed)
-		this.remoteConfigCache[key] = value
-	}
-
-	/**
-	 * Get method for remote config settings - returns cache immediately (no persistence)
-	 * Remote config is read-only from the extension's perspective and only stored in memory
-	 */
-	getRemoteConfigSettings(): Partial<RemoteConfigFields> {
-		if (!this.isInitialized) {
-			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-
-		return this.remoteConfigCache
-	}
-
-	/**
-	 * Clear remote config cache
-	 * Used when switching organizations or when remote config is no longer applicable
-	 */
-	clearRemoteConfig(): void {
-		if (!this.isInitialized) {
-			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-
-		this.remoteConfigCache = {} as GlobalStateAndSettings
-	}
-
-	/**
-	 * Atomically replace the entire remote config cache.
-	 * Use this instead of clearRemoteConfig() + setRemoteConfigField() loops
-	 * to avoid a window where the cache is empty and concurrent readers get stale data.
-	 */
-	replaceRemoteConfig(newCache: Partial<RemoteConfigFields>): void {
-		if (!this.isInitialized) {
-			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-
-		this.remoteConfigCache = { ...newCache }
 	}
 
 	/**
@@ -517,7 +458,6 @@ export class StateManager {
 
 		// Batch update settings (stored in global state)
 		if (Object.keys(settingsUpdates).length > 0) {
-			this.setRemoteConfigState(settingsUpdates)
 			this.setGlobalStateBatch(settingsUpdates)
 		}
 
@@ -529,14 +469,11 @@ export class StateManager {
 
 	/**
 	 * Get method for global settings keys - reads from in-memory cache
-	 * Precedence: remote config > session override > task settings > global settings
+	 * Precedence: session override > task settings > global settings
 	 */
 	getGlobalSettingsKey<K extends keyof Settings>(key: K): Settings[K] {
 		if (!this.isInitialized) {
 			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-		if (this.remoteConfigCache[key] !== undefined) {
-			return this.remoteConfigCache[key] as Settings[K]
 		}
 		if (this.sessionOverrideCache[key] !== undefined) {
 			return this.sessionOverrideCache[key] as Settings[K]
@@ -553,9 +490,6 @@ export class StateManager {
 	getGlobalStateKey<K extends keyof GlobalState>(key: K): GlobalState[K] {
 		if (!this.isInitialized) {
 			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
-		}
-		if (this.remoteConfigCache[key] !== undefined) {
-			return this.remoteConfigCache[key] as GlobalState[K]
 		}
 		return this.globalStateCache[key]
 	}
@@ -624,7 +558,6 @@ export class StateManager {
 		this.secretsCache = {} as Secrets
 		this.workspaceStateCache = {} as LocalState
 		this.taskStateCache = {}
-		this.remoteConfigCache = {} as GlobalStateAndSettings
 		this.sessionOverrideCache = {}
 
 		this.isInitialized = false
@@ -795,13 +728,9 @@ export class StateManager {
 
 	/**
 	 * Helper to get a setting value with override support
-	 * Precedence: remote config > session override > task settings > global settings
+	 * Precedence: session override > task settings > global settings
 	 */
 	private getSettingWithOverride<K extends keyof Settings>(key: K): Settings[K] {
-		const remoteValue = this.remoteConfigCache[key]
-		if (remoteValue !== undefined) {
-			return remoteValue
-		}
 		if (this.sessionOverrideCache[key] !== undefined) {
 			return this.sessionOverrideCache[key]
 		}
@@ -825,14 +754,6 @@ export class StateManager {
 	private constructApiConfigurationFromCache(): ApiConfiguration {
 		// Build secrets object
 		const secrets = Object.fromEntries(SecretKeys.map((key) => [key, this.getSecret(key)])) as Secrets
-
-		// Preserve legacy fallback behavior for LiteLLM API key:
-		// if a remoteLiteLlmApiKey is set (via remote config), it should
-		// take precedence over the local liteLlmApiKey.
-		const remoteLiteLlmApiKey = this.secretsCache.remoteLiteLlmApiKey
-		if (remoteLiteLlmApiKey !== undefined && remoteLiteLlmApiKey !== null && remoteLiteLlmApiKey !== "") {
-			secrets.liteLlmApiKey = remoteLiteLlmApiKey
-		}
 
 		// Build API handler settings object with task override support
 		const settings = Object.fromEntries(ApiHandlerSettingsKeys.map((key) => [key, this.getSettingWithOverride(key)]))

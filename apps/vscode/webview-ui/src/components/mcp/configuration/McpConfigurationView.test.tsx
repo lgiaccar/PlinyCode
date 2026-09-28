@@ -5,12 +5,10 @@ import McpConfigurationView from "./McpConfigurationView"
 const mocks = vi.hoisted(() => ({
 	getLatestMcpServers: vi.fn(),
 	setMcpServers: vi.fn(),
-	remoteConfigSettings: {} as Record<string, unknown>,
 }))
 
 vi.mock("@/context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({
-		remoteConfigSettings: mocks.remoteConfigSettings,
 		setMcpServers: mocks.setMcpServers,
 		environment: "production",
 	}),
@@ -39,14 +37,16 @@ describe("McpConfigurationView", () => {
 		mocks.getLatestMcpServers.mockResolvedValue({ mcpServers: [] })
 		mocks.setMcpServers.mockReset()
 		mocks.getLatestMcpServers.mockClear()
-		mocks.remoteConfigSettings = {}
+	})
+
+	it("opens the remote servers tab when asked to", () => {
+		render(<McpConfigurationView initialTab="addRemote" onDone={vi.fn()} />)
+
+		expect(screen.getByText("Add Remote Server Form")).toBeInTheDocument()
+		expect(screen.queryByText("Configure Servers View")).not.toBeInTheDocument()
 	})
 
 	it("never renders the marketplace tab while keeping remote servers available", async () => {
-		mocks.remoteConfigSettings = {
-			blockPersonalRemoteMCPServers: false,
-		}
-
 		render(<McpConfigurationView onDone={vi.fn()} />)
 
 		expect(screen.queryByRole("button", { name: "Marketplace" })).not.toBeInTheDocument()
@@ -55,19 +55,5 @@ describe("McpConfigurationView", () => {
 		expect(screen.getByText("Configure Servers View")).toBeInTheDocument()
 
 		await waitFor(() => expect(mocks.getLatestMcpServers).toHaveBeenCalledTimes(1))
-	})
-
-	it("hides remote servers only when personal remote MCP servers are blocked", () => {
-		mocks.remoteConfigSettings = {
-			blockPersonalRemoteMCPServers: true,
-		}
-
-		render(<McpConfigurationView initialTab="addRemote" onDone={vi.fn()} />)
-
-		expect(screen.queryByRole("button", { name: "Marketplace" })).not.toBeInTheDocument()
-		expect(screen.queryByRole("button", { name: "Remote Servers" })).not.toBeInTheDocument()
-		expect(screen.getByRole("button", { name: "Configure" })).toBeInTheDocument()
-		expect(screen.queryByText("Add Remote Server Form")).not.toBeInTheDocument()
-		expect(screen.getByText("Configure Servers View")).toBeInTheDocument()
 	})
 })
