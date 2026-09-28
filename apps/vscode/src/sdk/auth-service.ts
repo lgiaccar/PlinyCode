@@ -8,7 +8,7 @@
 // disk — it's fetched from the Cline API on startup and cached in memory.
 // This matches the CLI's pattern (see apps/cli/src/runtime/interactive-welcome.ts).
 
-import type { ITelemetryService, OAuthCredentials, ProviderSettings } from "@plinycode/core"
+import type { OAuthCredentials, ProviderSettings } from "@plinycode/core"
 import {
 	createOAuthClientCallbacks,
 	getProviderAuthStorageId,
@@ -34,7 +34,6 @@ import { LogoutReason } from "@/services/auth/types"
 import { BannerService } from "@/services/banner/BannerService"
 import { buildBasicClineHeaders } from "@/services/EnvUtils"
 import { featureFlagsService } from "@/services/feature-flags"
-import { telemetryService } from "@/services/telemetry"
 import { CLINE_API_ENDPOINT } from "@/shared/cline/api"
 import { fetch, getAxiosSettings } from "@/shared/net"
 import { Logger } from "@/shared/services/Logger"
@@ -245,7 +244,6 @@ export class AuthService {
 	private _activeAuthStatusUpdateHandlers = new Set<StreamingResponseHandler<AuthState>>()
 	private _handlerToController = new Map<StreamingResponseHandler<AuthState>, Controller>()
 	private _refreshPromise: Promise<string | undefined> | null = null
-	private _telemetry?: ITelemetryService
 
 	private constructor() {}
 
@@ -253,12 +251,9 @@ export class AuthService {
 	 * Gets the singleton instance of AuthService.
 	 * On first call with a controller, initializes BannerService.
 	 */
-	public static getInstance(controller?: Controller, telemetry?: ITelemetryService): AuthService {
+	public static getInstance(controller?: Controller): AuthService {
 		if (!AuthService.instance) {
 			AuthService.instance = new AuthService()
-		}
-		if (telemetry) {
-			AuthService.instance._telemetry = telemetry
 		}
 		// Initialize BannerService on first call with a controller
 		// (mirrors classic AuthService behavior)
@@ -352,7 +347,7 @@ export class AuthService {
 
 		return getValidClineCredentials(
 			this.toOAuthCredentials(authInfo),
-			{ apiBaseUrl: ClineEnv.config().apiBaseUrl, telemetry: this._telemetry },
+			{ apiBaseUrl: ClineEnv.config().apiBaseUrl },
 			{ forceRefresh: options?.forceRefresh },
 		)
 	}
@@ -848,7 +843,6 @@ export class AuthService {
 	 */
 	async handleDeauth(reason: LogoutReason = LogoutReason.UNKNOWN): Promise<void> {
 		try {
-			telemetryService.captureAuthLoggedOut("cline", reason)
 			this._clineAuthInfo = null
 			this._authenticated = false
 			clearClineCredentials()
@@ -1060,7 +1054,6 @@ export class AuthService {
 			// writing providers.json, pushing auth state, …). Transient refresh
 			// failures are handled above and never reach this reason.
 			Logger.error("[SdkAuthService] Error restoring auth token:", error)
-			telemetryService.captureAuthLoggedOut("cline", LogoutReason.RESTORE_ERROR)
 			this._authenticated = false
 			this._clineAuthInfo = null
 		}
@@ -1126,9 +1119,6 @@ export class AuthService {
 		// Poll feature flags immediately for the current auth context so cache-only
 		// consumers (for example BannerService) see the latest remote config.
 		const authInfo = this._clineAuthInfo
-		if (authInfo?.userInfo) {
-			await telemetryService.identifyAccount(authInfo.userInfo)
-		}
 		const userId = authInfo?.userInfo?.id || null
 		await featureFlagsService.poll(userId)
 		for (const controller of uniqueControllers) {

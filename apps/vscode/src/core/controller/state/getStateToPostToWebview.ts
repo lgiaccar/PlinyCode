@@ -14,7 +14,6 @@ import { ExtensionRegistryInfo } from "@/registry"
 import { BannerService } from "@/services/banner/BannerService"
 import { featureFlagsService } from "@/services/feature-flags"
 import { getDistinctId } from "@/services/logging/distinctId"
-import { getExtensionVariant } from "@/services/telemetry/rollout-metadata"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { getLatestAnnouncementId } from "@/utils/announcements"
 import { getClineOnboardingModels } from "../models/getClineOnboardingModels"
@@ -129,7 +128,6 @@ export async function getStateToPostToWebview(controller: {
 
 	return {
 		version,
-		extensionVariant: getExtensionVariant(),
 		apiConfiguration,
 		currentTaskItem,
 		clineMessages,

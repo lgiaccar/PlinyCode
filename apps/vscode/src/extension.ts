@@ -57,15 +57,9 @@ import { AuthService, LogoutReason } from "./sdk/auth-service"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
-import { telemetryService } from "./services/telemetry"
-import type { RolloutBundleActivation } from "./services/telemetry/rollout-metadata"
 import { SharedUriHandler, TASK_URI_PATH } from "./services/uri/SharedUriHandler"
 import { ShowMessageType } from "./shared/proto/host/window"
 import { fileExistsAtPath } from "./utils/fs"
-
-export async function reportRolloutActivation(input: RolloutBundleActivation): Promise<void> {
-	await telemetryService.captureRolloutBundleActivated(input)
-}
 
 // This method is called when the VS Code extension is activated.
 // NOTE: This is VS Code specific - services that should be registered
@@ -141,7 +135,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commands.PlusButton, async () => {
 			const sidebarInstance = WebviewProvider.getInstance()
-			telemetryService.captureNewTaskClicked("activity_bar_plus", !!sidebarInstance.controller.task)
 			await sidebarInstance.controller.clearTask({ detachRunning: true })
 			await sidebarInstance.controller.postStateToWebview()
 			await sendChatButtonClickedEvent()
@@ -434,7 +427,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// Send show webview event with preserveEditorFocus flag
 			sendShowWebviewEvent(preserveEditorFocus)
-			telemetryService.captureButtonClick("command_focusChatInput", webview.controller?.task?.ulid)
 		}),
 	)
 
@@ -543,7 +535,6 @@ ${ctx.cellJson || "{}"}
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commands.Walkthrough, async () => {
 			await vscode.commands.executeCommand("workbench.action.openWalkthrough", `${context.extension.id}#ClineWalkthrough`)
-			telemetryService.captureButtonClick("command_openWalkthrough")
 		}),
 	)
 

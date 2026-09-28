@@ -22,7 +22,6 @@ import {
 	truncateCommandOutput,
 } from "@plinycode/core"
 import type { AgentTool } from "@plinycode/shared"
-import { TerminalUserInterventionAction, telemetryService } from "@services/telemetry"
 import { ClineTempManager } from "@services/temp"
 import * as fs from "fs"
 import { StateManager } from "@/core/storage/StateManager"
@@ -260,9 +259,6 @@ export async function executeForeground(
 			state.phase = "detached"
 			detachReason = reason
 			detachedLog = createDetachedCommandLog(terminalCommand, [])
-			if (reason === "user") {
-				telemetryService.captureTerminalUserIntervention(TerminalUserInterventionAction.PROCESS_WHILE_RUNNING, "vscode")
-			}
 			resolvePreStartControl("detach")
 		} else if (state.phase === "started") {
 			applyDetach?.(reason)
@@ -422,12 +418,6 @@ export async function executeForeground(
 				detachReason = reason
 				detachedLog = createDetachedCommandLog(terminalCommand, outputLines)
 				detachedLog.attach(process)
-				if (reason === "user") {
-					telemetryService.captureTerminalUserIntervention(
-						TerminalUserInterventionAction.PROCESS_WHILE_RUNNING,
-						"vscode",
-					)
-				}
 				// detach() flushes any partial line (reaching both bufferLine and
 				// the log) before resolving the awaited promise. After that the
 				// partial output is final: stop buffering so the remaining
@@ -593,16 +583,8 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 			// foreground mode in the same task.terminal_execution event.
 			try {
 				const result = await bgExecutor(command, commandCwd || cwd, context)
-				telemetryService.captureTerminalExecution(true, "vscode", "child_process", {
-					exitCode: 0,
-					terminalExecutionMode: "backgroundExec",
-				})
 				return result
 			} catch (error) {
-				telemetryService.captureTerminalExecution(false, "vscode", "child_process", {
-					...(error instanceof CommandExitError && { exitCode: error.exitCode }),
-					terminalExecutionMode: "backgroundExec",
-				})
 				throw error
 			}
 		}
