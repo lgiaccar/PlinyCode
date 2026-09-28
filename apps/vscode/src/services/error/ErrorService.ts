@@ -1,7 +1,7 @@
 import { Logger } from "@/shared/services/Logger"
 import { ClineError } from "./ClineError"
-import { ErrorProviderFactory } from "./ErrorProviderFactory"
 import { IErrorProvider } from "./providers/IErrorProvider"
+import { NoOpErrorProvider } from "./providers/NoOpErrorProvider"
 
 /**
  * ErrorService handles error logging and tracking for the Cline extension
@@ -21,8 +21,7 @@ export class ErrorService {
 			throw new Error("ErrorService has already been initialized.")
 		}
 
-		const provider = await ErrorProviderFactory.createProvider(ErrorProviderFactory.getDefaultConfig())
-		ErrorService.instance = new ErrorService(provider)
+		ErrorService.instance = new ErrorService(new NoOpErrorProvider())
 		return ErrorService.instance
 	}
 

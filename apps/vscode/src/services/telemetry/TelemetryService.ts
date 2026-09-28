@@ -18,7 +18,6 @@ import {
 	type RolloutBundleActivation,
 	type RolloutTelemetryMetadata,
 } from "./rollout-metadata"
-import { TelemetryProviderFactory } from "./TelemetryProviderFactory"
 
 /**
  * Represents telemetry event categories that can be individually enabled or disabled
@@ -362,7 +361,6 @@ export class TelemetryService {
 	}
 
 	public static async create(): Promise<TelemetryService> {
-		const providers = await TelemetryProviderFactory.createProviders()
 		const hostVersion = await HostProvider.env.getHostVersion({})
 		const metadata: TelemetryMetadata = {
 			extension_version: extensionVersion,
@@ -378,7 +376,7 @@ export class TelemetryService {
 			...getCoreSpawnTelemetryMetadata(),
 			...getRolloutTelemetryMetadata(),
 		}
-		return new TelemetryService(providers, metadata)
+		return new TelemetryService([], metadata)
 	}
 
 	/**

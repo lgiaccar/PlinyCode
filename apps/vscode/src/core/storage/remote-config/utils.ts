@@ -5,12 +5,7 @@ import { ConfiguredAPIKeys, GlobalStateAndSettings, RemoteConfigFields } from "@
 import { AuthService } from "@/services/auth/AuthService"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { type McpHub } from "@/services/mcp/McpHub"
-import { telemetryService } from "@/services/telemetry"
-import { OpenTelemetryClientProvider } from "@/services/telemetry/providers/opentelemetry/OpenTelemetryClientProvider"
-import { OpenTelemetryTelemetryProvider } from "@/services/telemetry/providers/opentelemetry/OpenTelemetryTelemetryProvider"
-import { type TelemetryService } from "@/services/telemetry/TelemetryService"
 import { ApiProvider } from "@/shared/api"
-import { isOpenTelemetryConfigValid, remoteConfigToOtelConfig } from "@/shared/services/config/otel-config"
 import { Logger } from "@/shared/services/Logger"
 import { syncWorker } from "@/shared/services/worker/sync"
 import { BlobStoreSettings } from "@/shared/storage"
@@ -239,35 +234,6 @@ export function transformRemoteConfigToStateShape(remoteConfig: RemoteConfig): P
 	return transformed
 }
 
-export const REMOTE_CONFIG_OTEL_PROVIDER_ID = "OpenTelemetryRemoteConfiguredProvider"
-async function applyRemoteOTELConfig(transformed: Partial<RemoteConfigFields>, telemetryService: TelemetryService) {
-	try {
-		const otelConfig = remoteConfigToOtelConfig(transformed)
-		if (isOpenTelemetryConfigValid(otelConfig)) {
-			const client = new OpenTelemetryClientProvider(otelConfig)
-
-			try {
-				if (client.meterProvider || client.loggerProvider || client.tracerProvider) {
-					telemetryService.addProvider(
-						await new OpenTelemetryTelemetryProvider(client.meterProvider, client.loggerProvider, {
-							name: REMOTE_CONFIG_OTEL_PROVIDER_ID,
-							bypassUserSettings: true,
-							client,
-						}).initialize(),
-					)
-					return
-				}
-			} catch (error) {
-				await client.dispose()
-				throw error
-			}
-			await client.dispose()
-		}
-	} catch (err) {
-		Logger.error("[REMOTE CONFIG DEBUG] Failed to apply remote OTEL config", err)
-	}
-}
-
 async function applyRemoteSyncQueueConfig(transformed: Partial<RemoteConfigFields>) {
 	try {
 		const blobStoreConfig = transformed.blobStoreConfig
@@ -286,7 +252,6 @@ export async function clearRemoteConfig(organizationId?: string): Promise<void> 
 		const stateManager = StateManager.get()
 
 		stateManager.clearRemoteConfig()
-		await telemetryService.removeProvider(REMOTE_CONFIG_OTEL_PROVIDER_ID)
 		// the remote config cline rules toggle state is stored in global state
 		stateManager.setGlobalState("remoteRulesToggles", {})
 		stateManager.setGlobalState("remoteWorkflowToggles", {})
@@ -361,8 +326,6 @@ export async function applyRemoteConfig(
 	stateManager.setGlobalState("remoteWorkflowToggles", syncedWorkflowToggles)
 	stateManager.setGlobalState("remoteSkillsToggles", syncedSkillToggles)
 
-	await telemetryService.removeProvider(REMOTE_CONFIG_OTEL_PROVIDER_ID)
-
 	// If the existing configured provider is valid, don't update it
 	const apiConfiguration = stateManager.getApiConfiguration()
 	if (isProviderValid(apiConfiguration.actModeApiProvider, transformed)) {
@@ -397,7 +360,6 @@ export async function applyRemoteConfig(
 		Logger.error("[RemoteConfig] Failed to sync remote MCP servers to settings:", error)
 		// Continue with other config application even if MCP sync fails
 	}
-	await applyRemoteOTELConfig(transformed, telemetryService)
 }
 
 const isProviderValid = (provider?: ApiProvider, remoteConfig?: Partial<RemoteConfigFields>) => {

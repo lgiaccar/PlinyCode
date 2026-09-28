@@ -1,6 +1,5 @@
 import type {
 	CoreSessionEvent,
-	ITelemetryService,
 	PreparedRemoteConfigCoreIntegration,
 	RestoreInput,
 	RestoreResult,
@@ -43,8 +42,6 @@ export interface SdkSessionLifecycleOptions {
 	beforeStartSession?: () => Promise<void>
 	/** Returns the latest prepared remote-config integration, if remote config is active. */
 	getRemoteConfigIntegration?: () => PreparedRemoteConfigCoreIntegration | undefined
-	/** Shared SDK telemetry service owned by SdkController. */
-	telemetry?: ITelemetryService
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void
 	onSendError: (error: unknown, sessionId: string) => Promise<void> | void
@@ -399,7 +396,6 @@ export class SdkSessionLifecycle {
 				foregroundCommands: this.options.foregroundCommands,
 				beforeStartSession: this.options.beforeStartSession,
 				getRemoteConfigIntegration: this.options.getRemoteConfigIntegration,
-				telemetry: this.options.telemetry,
 			})
 				.then((sdkHost) => {
 					this.ensureSharedHostSubscription(sdkHost)
