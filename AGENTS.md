@@ -72,5 +72,7 @@ Some internal identifiers intentionally keep the `cline` prefix, because renamin
 
 - the `cline.*` VS Code command IDs and context keys
 - the `cline` protobuf package namespace (and the `@cline-grpc/*` path alias)
-- the `.clinerules` and `.clineignore` workspace files
+- the `.clinerules` workspace files
 - the `Documents/Cline` on-disk paths
+
+`.clineignore` files are not read: nothing in the extension or the engine enforces them. Old conversations that show a `clineignore_error` still render.
