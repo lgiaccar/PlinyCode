@@ -6,7 +6,8 @@ import type {
 	AgentRuntimeEvent,
 } from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentRuntime, AgentRuntimeAbortError } from "./agent-runtime";
+import { AgentRuntimeAbortError } from "./agent-errors";
+import { AgentRuntime } from "./agent-runtime";
 import { Agent, createAgent } from "./index";
 
 const { createAgentModel, createGateway } = vi.hoisted(() => {

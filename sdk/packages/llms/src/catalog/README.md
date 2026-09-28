@@ -200,7 +200,7 @@ and observable.
 - `../providers/providers.generated.ts`: checked-in generated provider specs.
 - `../providers/provider-ids.generated.ts`: checked-in generated provider IDs.
 - `../../scripts/generate-models.ts`: writes generated catalog output.
-- `../providers/ai-sdk.ts`: conditionally passes `maxOutputTokens` into AI SDK.
+- `../providers/ai-sdk-message-convert.ts`: conditionally passes `maxOutputTokens` into AI SDK.
 - `../providers/gateway.ts`: resolves per-request/default `maxTokens`.
 
 ### Offline Cline featured lists
