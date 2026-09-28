@@ -27,7 +27,6 @@ import { Logger } from "@shared/services/Logger"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
-import type { WorkspaceRef } from "@shared/workspaceRef"
 import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -35,7 +34,7 @@ import { getDistinctId } from "@/services/logging/distinctId"
 import { fetch } from "@/shared/net"
 import { coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { buildAgentHooks } from "./hooks-adapter"
-import { readTaskHistory, resolveDataDir } from "./legacy-state-reader"
+import { resolveDataDir } from "./legacy-state-reader"
 import type { ResolvedModelSelection } from "./model-catalog/contracts"
 import { nonNegativeFiniteNumber, positiveFiniteNumber, toSdkApiFormat } from "./model-catalog/model-values"
 import { parseProviderId } from "./model-catalog/provider-id"
@@ -665,59 +664,5 @@ export function buildResumeSessionInput(
 		prompt,
 		userImages: images,
 		userFiles: files,
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Task history helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Get a HistoryItem by ID from the task history.
- */
-export function getHistoryItemById(taskId: string, dataDir?: string): HistoryItem | undefined {
-	const history = readTaskHistory(dataDir)
-	return history.find((item) => item.id === taskId)
-}
-
-/**
- * Update a HistoryItem in the task history.
- * Returns the updated history array.
- */
-export function updateHistoryItem(item: HistoryItem, dataDir?: string): HistoryItem[] {
-	const history = readTaskHistory(dataDir)
-	const index = history.findIndex((h) => h.id === item.id)
-	if (index >= 0) {
-		history[index] = item
-	} else {
-		history.unshift(item)
-	}
-	return history
-}
-
-/**
- * Create a new HistoryItem from a session start result.
- */
-export function createHistoryItemFromSession(
-	sessionId: string,
-	prompt: string,
-	modelId?: string,
-	cwd?: string,
-	workspaceRoot?: string,
-	workspace?: WorkspaceRef,
-): HistoryItem {
-	const trimmedCwd = cwd?.trim() || undefined
-	const trimmedRoot = workspaceRoot?.trim() || trimmedCwd
-	return {
-		id: sessionId,
-		ts: Date.now(),
-		task: prompt,
-		tokensIn: 0,
-		tokensOut: 0,
-		totalCost: 0,
-		modelId,
-		cwdOnTaskInitialization: trimmedCwd,
-		workspaceRootOnTaskInitialization: trimmedRoot,
-		...(workspace ? { workspacePath: workspace.path, workspaceKind: workspace.kind } : {}),
 	}
 }

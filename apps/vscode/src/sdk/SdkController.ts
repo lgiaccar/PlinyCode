@@ -14,7 +14,6 @@ import {
 	getProviderAuthStorageId,
 	readSessionCheckpointHistory,
 	resolveDefaultMcpSettingsPath,
-	type SessionHistoryRecord,
 	type UserInstructionConfigService,
 } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
@@ -55,7 +54,7 @@ import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
 import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
-import { buildStartSessionInput, createHistoryItemFromSession } from "./cline-session-factory"
+import { buildStartSessionInput } from "./cline-session-factory"
 import { MessageTranslatorState, normalizeUsageEvent, reshapeErrorForWebview } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
@@ -82,8 +81,13 @@ import { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
 import { type ClearTaskOptions, SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
 import {
+	createHistoryItemFromSession,
+	dateStringToTimestamp,
+	mergeTaskHistoryIntoState,
+	metadataBoolean,
+	metadataNumber,
+	metadataString,
 	SdkTaskHistory,
-	sessionHistoryRecordToHistoryItem,
 	sessionHistoryRecordToTaskItemFields,
 	sessionRecordWorkspacePath,
 } from "./sdk-task-history"
@@ -115,31 +119,8 @@ function stubWarn(name: string): void {
 	Logger.warn(`[SdkController] STUB: ${name} not yet implemented`)
 }
 
-function metadataNumber(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): number | undefined {
-	const value = metadata?.[key]
-	return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
-
 function usesClineAccountAuth(providerId: string): boolean {
 	return getProviderAuthStorageId(providerId) === "cline"
-}
-
-function metadataBoolean(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): boolean | undefined {
-	const value = metadata?.[key]
-	return typeof value === "boolean" ? value : undefined
-}
-
-function metadataString(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): string | undefined {
-	const value = metadata?.[key]
-	return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
-}
-
-function dateStringToTimestamp(value: string | null | undefined): number {
-	if (!value) {
-		return 0
-	}
-	const timestamp = Date.parse(value)
-	return Number.isFinite(timestamp) ? timestamp : 0
 }
 
 function historyItemToTaskResponse(item: HistoryItem): TaskResponse {
@@ -2265,12 +2246,16 @@ export class Controller {
 		this.messageTranslatorState.getMinter().bumpEpoch()
 	}
 
+	/**
+	 * Build the ExtensionState to push to the webview: the base state (settings,
+	 * toggles, the active task's messages — see getStateToPostToWebview.ts) with
+	 * the SDK's task history, current task item, turn state, queued prompts and
+	 * background tasks layered on top by mergeTaskHistoryIntoState.
+	 */
 	async getStateToPostToWebview(): Promise<ExtensionState> {
-		// Build the base ExtensionState from StateManager, then layer the SDK's
-		// task history on top.
 		try {
 			const { getStateToPostToWebview: buildBaseState } = await import("@core/controller/state/getStateToPostToWebview")
-			const state = await buildBaseState({
+			const baseState = await buildBaseState({
 				task: this.task,
 				stateManager: this.stateManager,
 				mcpHub: this.mcpHub,
@@ -2283,57 +2268,6 @@ export class Controller {
 				// badge and anything else keyed on workspaceRoots depend on it.
 				workspaceManager: await this.ensureWorkspaceManager(),
 			})
-			const sdkTaskHistory = (await this.taskHistory.listHistory({ limit: 100, hydrate: false }))
-				.map(sessionHistoryRecordToHistoryItem)
-				.filter((item) => item.ts && item.task)
-				.sort((a, b) => b.ts - a.ts)
-			const legacyTaskHistory = state.taskHistory ?? []
-			const mergedTaskHistoryById = new Map<string, HistoryItem>()
-
-			// Keep the SDK records authoritative for migrated/new tasks, but append
-			// legacy persisted history so pre-migration tasks still appear in the UI.
-			for (const item of legacyTaskHistory) {
-				mergedTaskHistoryById.set(item.id, item)
-			}
-			for (const item of sdkTaskHistory) {
-				mergedTaskHistoryById.set(item.id, item)
-			}
-
-			// A just-started task may not be visible in SDK persisted history yet (the
-			// history adapter can lag behind the active in-memory TaskProxy). Classic
-			// state included the current task immediately, and the testing platform
-			// asserts that taskHistory reflects newTask before the model turn completes.
-			if (this.task?.taskId && !mergedTaskHistoryById.has(this.task.taskId)) {
-				const taskMessage = this.task.messageStateHandler
-					.getClineMessages()
-					.find((message) => message.type === "say" && message.say === "task" && message.text)
-				if (taskMessage?.text) {
-					mergedTaskHistoryById.set(this.task.taskId, {
-						id: this.task.taskId,
-						ts: taskMessage.ts || Date.now(),
-						startedTs: taskMessage.ts || undefined,
-						task: taskMessage.text,
-						tokensIn: 0,
-						tokensOut: 0,
-						cacheWrites: 0,
-						cacheReads: 0,
-						totalCost: 0,
-						modelId: this.task.api?.getModel?.().id,
-						cwdOnTaskInitialization: await this.getWorkspaceRoot(),
-						...(this.activeTaskWorkspace?.workspace
-							? {
-									workspacePath: this.activeTaskWorkspace.workspace.path,
-									workspaceKind: this.activeTaskWorkspace.workspace.kind,
-								}
-							: {}),
-					})
-				}
-			}
-
-			const processedTaskHistory = Array.from(mergedTaskHistoryById.values())
-				.filter((item) => item.ts && item.task)
-				.sort((a, b) => b.ts - a.ts)
-				.slice(0, 100)
 
 			let queuedPrompts: ExtensionState["queuedPrompts"] = []
 			const activeSession = this.sessions.getActiveSession()
@@ -2350,24 +2284,21 @@ export class Controller {
 			// out-of-order state pushes and fence traffic from a previous task/render. Sampled
 			// synchronously here (no await between sampling and return).
 			const minter = this.messageTranslatorState.getMinter()
-			const currentHistoryItem = this.task?.taskId
-				? processedTaskHistory.find((item) => item.id === this.task?.taskId)
-				: undefined
-			const runningSince = activeSession?.sessionId === currentHistoryItem?.id ? activeSession?.runningSince : undefined
-			return {
-				...state,
-				currentWorkspace: await this.getWindowWorkspace(),
-				currentTaskItem:
-					currentHistoryItem && runningSince !== undefined
-						? { ...currentHistoryItem, runningSinceTs: runningSince }
-						: currentHistoryItem,
-				taskHistory: processedTaskHistory,
+
+			return await mergeTaskHistoryIntoState({
+				baseState,
+				taskHistory: this.taskHistory,
+				task: this.task,
+				getWorkspaceRoot: () => this.getWorkspaceRoot(),
+				getWindowWorkspace: () => this.getWindowWorkspace(),
+				activeTaskWorkspace: this.activeTaskWorkspace,
 				turnState: this.turnStateTracker.get(),
 				queuedPrompts,
 				backgroundTasks: this.background.list(),
+				activeSession,
 				stateVersion: minter.nextSeq(),
 				epoch: minter.epoch,
-			}
+			})
 		} catch (error) {
 			Logger.error("[SdkController] Failed to get state for webview:", error)
 			throw error
