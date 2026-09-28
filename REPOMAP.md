@@ -86,7 +86,7 @@ Not published externally; consumed by the extension through compiled `dist/`.
 
 Agent engine — tasks, sessions, auth, providers, hooks, runtime.
 
-`src/account/`, `src/auth/`, `src/cline-core/`, `src/cron/`, `src/extensions/`, `src/hooks/`, `src/logging/`, `src/remote-config/`, `src/runtime/`, `src/services/`, `src/session/`, `src/settings/`, `src/types/`.
+`src/account/`, `src/auth/`, `src/cline-core/`, `src/extensions/`, `src/hooks/`, `src/logging/`, `src/remote-config/`, `src/runtime/`, `src/services/`, `src/session/`, `src/settings/`, `src/types/`.
 
 ### `sdk/packages/shared`
 
