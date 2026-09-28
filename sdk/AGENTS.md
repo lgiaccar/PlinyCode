@@ -20,7 +20,6 @@ The repo root is the Bun workspace root: `sdk/` has no `package.json`. Run every
 - `@plinycode/llms`: provider settings/config, model catalogs, provider manifests, gateway contracts, handler creation
 - `@plinycode/agents`: stateless agent loop, tool orchestration, hook/extension runtime, event streaming
 - `@plinycode/core`: stateful orchestration, session lifecycle, storage, config watching, plugin loading, default tools, telemetry. Sessions always run in-process, in the local runtime host
-- `@plinycode/ui`: shared webview theme and React components. It depends only on `shared` and sits outside the runtime chain below
 
 ### Dependency Direction
 
@@ -79,7 +78,6 @@ bun -F @plinycode/shared test
 bun -F @plinycode/llms test
 bun -F @plinycode/agents test
 bun -F @plinycode/core test:unit
-bun -F @plinycode/ui test
 ```
 
 If a focused test command fails with a missing `@plinycode/*` export or missing `dist/` file, build the relevant dependency package or run `bun run build:sdk`, then rerun the same test command. Treat that as a workspace setup issue, not as evidence of a source-code bug.

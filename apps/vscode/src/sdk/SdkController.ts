@@ -54,7 +54,6 @@ import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
-import { telemetryService } from "@/services/telemetry"
 import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { toLegacyApiProvider } from "@/shared/model-catalog/provider-helpers"
@@ -71,12 +70,6 @@ import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { parseProviderId } from "./model-catalog/provider-id"
 import { createProviderConfigStore } from "./model-catalog/store"
-import {
-	PROVIDER_FAILURE_ERROR_TYPE,
-	PROVIDER_FAILURE_PHASE,
-	type ProviderFailureTelemetry,
-	ProviderFailureTelemetryTurnGate,
-} from "./provider-failure-telemetry"
 import { RemoteConfigRefreshCoordinator } from "./remote-config-refresh-coordinator"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
@@ -203,7 +196,6 @@ export class Controller {
 	private compaction: SdkCompactionCoordinator
 	private sessionEvents: SdkSessionEventCoordinator
 	private sessionHistory: SdkSessionHistoryLoader
-	private readonly providerFailureTelemetryTurnGate = new ProviderFailureTelemetryTurnGate()
 	private readonly providerConfigStore: ProviderConfigStore
 	private readonly providerCatalog: ProviderCatalog
 	private readonly providerConfigStoreSubscription: Disposable
@@ -344,7 +336,6 @@ export class Controller {
 				return settingsDir
 			},
 			ExtensionRegistryInfo.version,
-			telemetryService,
 		)
 
 		// Initialize SDK-backed auth and account services.
@@ -499,9 +490,6 @@ export class Controller {
 				}
 				return this._terminalManager
 			},
-			onSendStart: () => {
-				this.beginProviderFailureTelemetryTurn()
-			},
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
 			consumeModeSwitchNotice: (sessionId) => this.mode.consumeModeSwitchNotice(sessionId),
@@ -528,31 +516,10 @@ export class Controller {
 						errorMessage.toLowerCase().includes("unauthorized"))
 
 				if (isClineAuthError) {
-					this.captureProviderFailure({
-						sessionId,
-						error,
-						providerId,
-						errorType: PROVIDER_FAILURE_ERROR_TYPE.AUTH,
-						failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
-					})
 					this.emitClineAuthError()
 				} else if (isClineManagedProvider(providerId) && this.isClineBalanceError(errorMessage)) {
-					this.captureProviderFailure({
-						sessionId,
-						error,
-						providerId,
-						errorType: PROVIDER_FAILURE_ERROR_TYPE.BALANCE,
-						failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
-					})
 					this.emitClineBalanceError(errorMessage)
 				} else {
-					this.captureProviderFailure({
-						sessionId,
-						error,
-						providerId,
-						errorType: PROVIDER_FAILURE_ERROR_TYPE.SEND_ERROR,
-						failurePhase: PROVIDER_FAILURE_PHASE.STREAMING,
-					})
 					this.messages.emitSessionEvents(
 						[
 							{
@@ -574,7 +541,6 @@ export class Controller {
 			mcpHub: this.mcpHub,
 			sessions: this.sessions,
 			legacyExtensionStorageDir: this.context.globalStorageUri.fsPath,
-			telemetry: telemetryService,
 			// History rendering mints ids from the shared authority so regenerated history ids
 			// never overlap live-session ids.
 			getMinter: () => this.messageTranslatorState.getMinter(),
@@ -597,7 +563,7 @@ export class Controller {
 			loadInitialMessages: async (sdkHost, sessionId) =>
 				(await this.sessionHistory.loadInitialMessages(sdkHost, sessionId)) ?? [],
 			buildStartSessionInput,
-			emitClineAuthError: () => this.emitClineAuthErrorWithTelemetry(),
+			emitClineAuthError: () => this.emitClineAuthError(),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			postStateToWebview: () => this.postStateToWebview(),
 			getTurnPhase: () => this.turnStateTracker.currentPhase,
@@ -668,7 +634,7 @@ export class Controller {
 			buildStartSessionInput,
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
 			isClineManagedProviderActive: () => this.isClineManagedProviderActive(),
-			emitClineAuthError: () => this.emitClineAuthErrorWithTelemetry(),
+			emitClineAuthError: () => this.emitClineAuthError(),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			postStateToWebview: () => this.postStateToWebview(),
 			onResumeFailed: () => {
@@ -746,8 +712,7 @@ export class Controller {
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
 			isClineManagedProviderActive: () => this.isClineManagedProviderActive(),
-			emitClineAuthError: (task) => this.emitClineAuthErrorWithTelemetry(task),
-			captureProviderApiError: (event) => this.captureProviderFailure(event),
+			emitClineAuthError: (task) => this.emitClineAuthError(task),
 			postStateToWebview: () => this.postStateToWebview(),
 		})
 		this.compaction = new SdkCompactionCoordinator({
@@ -773,8 +738,6 @@ export class Controller {
 			postStateToWebview: () => this.postStateToWebview(),
 			setTurnPhase: (phase, anchorTs) => this.turnStateTracker.set(phase, anchorTs),
 			getTurnPhase: () => this.turnStateTracker.currentPhase,
-			captureProviderApiError: (event) => this.captureProviderFailure(event),
-			beginProviderFailureTelemetryTurn: () => this.beginProviderFailureTelemetryTurn(),
 			background: this.background,
 		})
 		// Subscribe to MCP tool list changes so we can restart the SDK session
@@ -956,7 +919,6 @@ export class Controller {
 	}
 
 	private async ensureRemoteConfigForSessionStart(): Promise<void> {
-		const startedAt = Date.now()
 		await this.waitForInitialRemoteConfig()
 		let refreshed = false
 		try {
@@ -970,11 +932,6 @@ export class Controller {
 		}
 		const activeOrganizationId = this.authService.getActiveOrganizationId()
 		if (refreshed) {
-			void telemetryService.captureRemoteConfigSessionGate({
-				outcome: "refreshed",
-				durationMs: Date.now() - startedAt,
-				managed: Boolean(activeOrganizationId),
-			})
 			return
 		}
 
@@ -984,38 +941,18 @@ export class Controller {
 				// identity could not be resolved (refresh failed and no org was
 				// restored — e.g. the API is unreachable). Fail closed rather than
 				// starting an unpoliced session.
-				void telemetryService.captureRemoteConfigSessionGate({
-					outcome: "blocked",
-					durationMs: Date.now() - startedAt,
-					managed: true,
-				})
 				throw new Error("Could not verify organization policy. Check your connection and try again.")
 			}
 			// No organization policy applies to personal or signed-out use; a
 			// failed refresh must not block local work.
-			void telemetryService.captureRemoteConfigSessionGate({
-				outcome: "unmanaged",
-				durationMs: Date.now() - startedAt,
-				managed: false,
-			})
 			return
 		}
 
 		const bundleOrganizationId = this.remoteConfigBundle?.metadata?.organizationId
 		if (bundleOrganizationId === activeOrganizationId) {
 			Logger.warn("[SdkController] Remote config refresh failed; starting with last known-good organization policy")
-			void telemetryService.captureRemoteConfigSessionGate({
-				outcome: "last_known_good",
-				durationMs: Date.now() - startedAt,
-				managed: true,
-			})
 			return
 		}
-		void telemetryService.captureRemoteConfigSessionGate({
-			outcome: "blocked",
-			durationMs: Date.now() - startedAt,
-			managed: true,
-		})
 		throw new Error("Could not verify organization policy. Check your connection and try again.")
 	}
 
@@ -1397,60 +1334,11 @@ export class Controller {
 		}
 	}
 
-	private beginProviderFailureTelemetryTurn(): void {
-		this.providerFailureTelemetryTurnGate.beginTurn()
-	}
-
 	/**
 	 * Check if the active API provider uses Cline account auth for the current mode.
 	 */
 	private isClineManagedProviderActive(): boolean {
 		return isClineManagedProvider(this.getActiveProviderId())
-	}
-
-	private captureProviderFailure(event: ProviderFailureTelemetry): void {
-		const ulid = event.sessionId ?? this.task?.taskId ?? this.sessions.getActiveSession()?.sessionId
-		if (!ulid) {
-			return
-		}
-		if (
-			event.failurePhase === PROVIDER_FAILURE_PHASE.STREAMING &&
-			!this.providerFailureTelemetryTurnGate.shouldCaptureStreamingFailure()
-		) {
-			return
-		}
-
-		const provider = event.providerId ?? this.getSessionProviderId(event.sessionId) ?? "unknown"
-		const model = event.modelId ?? this.getSessionModelId(event.sessionId) ?? this.getTaskModelId() ?? "unknown"
-		const clineError = ClineError.transform(event.error, model, provider)
-
-		telemetryService.captureProviderApiError({
-			ulid,
-			model,
-			provider,
-			errorMessage: clineError.message || String(event.error),
-			errorStatus: clineError.status,
-			requestId: clineError.requestId,
-			errorType: event.errorType,
-			failurePhase: event.failurePhase,
-			// Every event here is a failure the user actually saw: transient
-			// errors are retried inside the provider layer before any event
-			// reaches this adapter, and recoverable in-run notices are filtered
-			// out upstream. The legacy extension applies the same
-			// surfaced-failures-only rule at its emission sites, so the A/B
-			// cohorts compare directly with no query-side filtering.
-		})
-	}
-
-	private emitClineAuthErrorWithTelemetry(task?: string, sessionId?: string): void {
-		this.emitClineAuthError(task)
-		this.captureProviderFailure({
-			sessionId: sessionId ?? this.task?.taskId,
-			error: CLINE_ACCOUNT_AUTH_ERROR_MESSAGE,
-			providerId: this.getActiveProviderId(),
-			errorType: PROVIDER_FAILURE_ERROR_TYPE.AUTH,
-			failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
-		})
 	}
 
 	/**
@@ -1802,7 +1690,7 @@ export class Controller {
 			const mode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
 			const config = await this.sessionConfigBuilder.build({ cwd, mode, prompt: historyTitle })
 			if (usesClineAccountAuth(config.providerId) && !config.apiKey) {
-				this.emitClineAuthErrorWithTelemetry(editedText)
+				this.emitClineAuthError(editedText)
 				return
 			}
 
@@ -1918,7 +1806,6 @@ export class Controller {
 
 			const taskUlid = task.ulid ?? currentTask.ulid
 			if (taskUlid) {
-				telemetryService.captureEditMessageRestart(taskUlid, input.restoreWorkspace ? "chat_and_workspace" : "chat_only")
 			}
 
 			this.sessions.fireAndForgetSend(sdkHost, startResult.sessionId, resolvedPrompt, input.images, input.files)
@@ -1957,7 +1844,7 @@ export class Controller {
 		const historyTitle = checkpointRunCount === 1 ? restoredText : firstUserMessage?.text || restoredText
 		const config = restoreMessages ? await this.sessionConfigBuilder.build({ cwd, mode, prompt: historyTitle }) : undefined
 		if (config && usesClineAccountAuth(config.providerId) && !config.apiKey) {
-			this.emitClineAuthErrorWithTelemetry(restoredText)
+			this.emitClineAuthError(restoredText)
 			return
 		}
 

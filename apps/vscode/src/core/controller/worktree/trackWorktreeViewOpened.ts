@@ -1,16 +1,11 @@
 import { Empty } from "@shared/proto/cline/common"
 import { TrackWorktreeViewOpenedRequest } from "@shared/proto/cline/worktree"
-import { telemetryService } from "@/services/telemetry"
 import { Controller } from ".."
 
 /**
- * Tracks when the worktrees view is opened (for telemetry)
- * @param controller The controller instance
- * @param request The request containing the source of the navigation
- * @returns Empty response
+ * Records that the worktrees view was opened. Only telemetry used it, which
+ * PlinyCode doesn't send, so there is nothing to record.
  */
-export async function trackWorktreeViewOpened(_controller: Controller, request: TrackWorktreeViewOpenedRequest): Promise<Empty> {
-	const source = request.source === "home_page" ? "home_page" : "menu_bar"
-	telemetryService.captureWorktreeViewOpened(source)
+export async function trackWorktreeViewOpened(_controller: Controller, _request: TrackWorktreeViewOpenedRequest): Promise<Empty> {
 	return Empty.create({})
 }

@@ -16,7 +16,6 @@ import { registerClineClientIdentity } from "./services/ClineClientIdentity"
 import { ErrorService } from "./services/error"
 import { featureFlagsService } from "./services/feature-flags"
 import { getDistinctId } from "./services/logging/distinctId"
-import { telemetryService } from "./services/telemetry"
 import { ClineTempManager } from "./services/temp"
 import { ShowMessageType } from "./shared/proto/host/window"
 import { syncWorker } from "./shared/services/worker/sync"
@@ -88,9 +87,6 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	syncWorker().init({ ...blobStoreSettings, userDistinctId: getDistinctId() })
 	// Clean up old temp files in background (non-blocking) and start periodic cleanup every 24 hours
 	ClineTempManager.startPeriodicCleanup()
-
-	telemetryService.captureExtensionActivated()
-
 	return webview
 }
 
@@ -165,7 +161,6 @@ async function checkWorktreeAutoOpen(stateManager: StateManager): Promise<void> 
 export async function tearDown(): Promise<void> {
 	try {
 		AgentConfigLoader.getInstance()?.dispose()
-		telemetryService.dispose()
 		ErrorService.get().dispose()
 		featureFlagsService.dispose()
 		// Dispose all webview instances

@@ -2,7 +2,6 @@ import { clearOnboardingModelsCache, getClineOnboardingModels } from "@/core/con
 import type { OnboardingModel } from "@/shared/proto/cline/state"
 import { FEATURE_FLAGS, FeatureFlag, FeatureFlagDefaultValue } from "@/shared/services/feature-flags/feature-flags"
 import { Logger } from "@/shared/services/Logger"
-import { telemetryService } from "../telemetry"
 import type { FeatureFlagPayload, FeatureFlagsAndPayloads, IFeatureFlagsProvider } from "./providers/IFeatureFlagsProvider"
 
 // Default cache time-to-live (TTL) for feature flags - an hour
@@ -74,16 +73,6 @@ export class FeatureFlagsService {
 			const payload = this.cacheInfo.flagsPayload?.featureFlagPayloads?.[flagName]
 			const flagValue = this.cacheInfo.flagsPayload?.featureFlags?.[flagName]
 			const value = payload ?? flagValue ?? FeatureFlagDefaultValue[flagName] ?? undefined
-
-			if (!this.cache.has(flagName) || this.cache.get(flagName) !== value) {
-				telemetryService.capture({
-					event: "$feature_flag_called",
-					properties: {
-						$feature_flag: flagName,
-						$feature_flag_response: flagValue,
-					},
-				})
-			}
 
 			Logger.info(
 				`[FeatureFlagsService] resolving ${flagName}: payload=${JSON.stringify(payload)} flagValue=${JSON.stringify(flagValue)} default=${JSON.stringify(FeatureFlagDefaultValue[flagName])} final=${JSON.stringify(value)} type=${typeof value}`,
