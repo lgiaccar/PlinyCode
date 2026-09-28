@@ -47,7 +47,6 @@ import { HostProvider } from "@/hosts/host-provider"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
-import { OcaAuthService } from "@/services/auth/oca/OcaAuthService"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { ClineError } from "@/services/error/ClineError"
@@ -212,7 +211,6 @@ export class Controller {
 	mcpHub: McpHub
 	accountService: ClineAccountService
 	authService: AuthService
-	ocaAuthService: OcaAuthService
 	readonly stateManager: StateManager
 
 	// Lazy terminal manager for foreground (VS Code terminal) command execution.
@@ -336,7 +334,6 @@ export class Controller {
 
 		// Initialize SDK-backed auth and account services.
 		this.authService = AuthService.getInstance(this)
-		this.ocaAuthService = OcaAuthService.initialize(this)
 		this.accountService = ClineAccountService.getInstance()
 
 		// Initialize message translator state. The mode getter styles the inferred turn-final
@@ -2187,21 +2184,11 @@ export class Controller {
 		await this.postStateToWebview()
 	}
 
-	async handleOcaSignOut(): Promise<void> {
-		await this.ocaAuthService.handleDeauth(LogoutReason.USER_INITIATED)
-		await this.postStateToWebview()
-	}
-
 	async handleAuthCallback(customToken: string, provider: string | null = null): Promise<void> {
 		await this.authService.handleAuthCallback(customToken, provider ?? "cline")
 		// Fetch remote config immediately after login so enterprise policies
 		// (provider lockdown, MCP servers, OTel, etc.) are applied right away.
 		await this.refreshRemoteConfig()
-		await this.postStateToWebview()
-	}
-
-	async handleOcaAuthCallback(code: string, state: string): Promise<void> {
-		await this.ocaAuthService.handleAuthCallback(code, state)
 		await this.postStateToWebview()
 	}
 

@@ -115,7 +115,6 @@ vi.mock("@plinycode/core", async () => ({
 		onPrompt: opts.onPrompt,
 	}),
 	loginClineOAuth: mockLoginClineOAuth,
-	loginOcaOAuth: vi.fn(),
 	loginOpenAICodex: vi.fn(),
 	refreshClineToken: vi.fn(),
 	getValidClineCredentials: vi.fn(),

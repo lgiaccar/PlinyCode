@@ -15,7 +15,6 @@ import {
 	getValidClineCredentials,
 	hashSecret,
 	loginClineOAuth,
-	loginOcaOAuth,
 	loginOpenAICodex,
 	sdkDebug,
 } from "@plinycode/core"
@@ -682,46 +681,6 @@ export class AuthService {
 	}
 
 	/**
-	 * Initiate OCA OAuth login.
-	 */
-	async ocaLogin(): Promise<String> {
-		try {
-			const callbacks = createOAuthClientCallbacks({
-				onPrompt: async (prompt) => prompt.defaultValue ?? "",
-				openUrl: async (url: string) => {
-					await openExternal(url)
-				},
-				onOpenUrlError: ({ url, error }) => {
-					Logger.error(`[SdkAuthService] Failed to open browser for OCA: ${url}:`, error)
-				},
-			})
-
-			const credentials = await loginOcaOAuth({ callbacks })
-
-			const authInfo = await this.credentialsToAuthInfo(credentials, "oca")
-			this._clineAuthInfo = authInfo
-			this._authenticated = true
-
-			writeClineCredentials({
-				accessToken: credentials.access,
-				refreshToken: credentials.refresh,
-				expiresAt: credentials.expires,
-				accountId: authInfo.userInfo.id || credentials.accountId,
-				metadata: credentials.metadata,
-				sessionStartedAtMs: authInfo.startedAt,
-			})
-
-			await this.sendAuthStatusUpdate()
-
-			const { String: ProtoString } = await import("@shared/proto/cline/common")
-			return ProtoString.create({ value: "Authenticated" })
-		} catch (error) {
-			Logger.error("[SdkAuthService] OCA OAuth login failed:", error)
-			throw error
-		}
-	}
-
-	/**
 	 * Initiate OpenAI Codex OAuth login.
 	 */
 	async openAiCodexLogin(): Promise<void> {
@@ -920,15 +879,6 @@ export class AuthService {
 			Logger.error("[SdkAuthService] Error handling auth callback:", error)
 			throw error
 		}
-	}
-
-	/**
-	 * Handle OCA auth callback.
-	 */
-	async handleOcaAuthCallback(_code: string, _state: string): Promise<void> {
-		// OCA uses SDK's local callback server, so this shouldn't normally be called.
-		// Keeping it as a stub for interface compatibility.
-		Logger.warn("[SdkAuthService] handleOcaAuthCallback called — OCA uses SDK callback server")
 	}
 
 	// ---- Restore auth on startup ----

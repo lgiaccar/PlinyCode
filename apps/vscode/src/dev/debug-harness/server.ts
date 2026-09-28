@@ -1233,8 +1233,8 @@ class DebugHarness {
 	 * Params:
 	 *   path     - URI path (e.g., "/auth", "/openrouter", "/mcp-auth/callback/HASH")
 	 *   code     - Authorization code from the OAuth provider
-	 *   state    - OAuth state parameter (for MCP/OCA)
-	 *   provider - Provider name for /auth path (e.g., "cline", "oca")
+	 *   state    - OAuth state parameter (for MCP)
+	 *   provider - Provider name for /auth path (e.g., "cline")
 	 *   token    - Direct token for /auth path (overrides code)
 	 */
 	async oauthSimulateCallback(params: {

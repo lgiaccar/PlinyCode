@@ -24,7 +24,12 @@ import { AgentConfigLoader } from "../task/tools/subagent/AgentConfigLoader"
 import { readTaskSettingsFromStorage, writeTaskSettingsToStorage } from "./disk"
 import { STATE_MANAGER_NOT_INITIALIZED } from "./error-messages"
 import { filterAllowedRemoteConfigFields } from "./remote-config/utils"
-import { readGlobalStateFromStorage, readSecretsFromStorage, readWorkspaceStateFromStorage } from "./utils/state-helpers"
+import {
+	purgeRemovedSecrets,
+	readGlobalStateFromStorage,
+	readSecretsFromStorage,
+	readWorkspaceStateFromStorage,
+} from "./utils/state-helpers"
 export interface PersistenceErrorEvent {
 	error: Error
 }
@@ -104,6 +109,7 @@ export class StateManager {
 
 			// Load all extension state from file-backed stores
 			const globalState = await readGlobalStateFromStorage(storage.globalState)
+			purgeRemovedSecrets(storage.secrets)
 			const secrets = readSecretsFromStorage(storage.secrets)
 			const workspaceState = readWorkspaceStateFromStorage(storage.workspaceState)
 

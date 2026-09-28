@@ -356,7 +356,6 @@ const SECRETS_KEYS = [
 	"nousResearchApiKey",
 	"remoteLiteLlmApiKey",
 	"ocaApiKey",
-	"ocaRefreshToken",
 	"mcpOAuthSecrets",
 	"openai-codex-oauth-credentials", // JSON blob containing OAuth tokens for OpenAI Codex (ChatGPT subscription)
 	"wandbApiKey",

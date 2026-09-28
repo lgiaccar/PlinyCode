@@ -53,6 +53,8 @@ message AutoApprovalSettings {
 // NOTE: Add the new secret fields under SECRETS_KEYS in src/shared/storage/state-keys.ts
 // and use the scripts/generate-state-proto.mjs script to regenerate this list.
 message Secrets {
+  reserved 42; // was oca_refresh_token (OCA sign-in removed)
+  reserved "oca_refresh_token";
   optional string api_key = 1;
   optional string cline_account_id = 2;
   optional string open_router_api_key = 3;
@@ -94,7 +96,6 @@ message Secrets {
   optional string nous_research_api_key = 39;
   optional string remote_lite_llm_api_key = 40;
   optional string oca_api_key = 41;
-  optional string oca_refresh_token = 42;
   optional string mcp_o_auth_secrets = 43;
   optional string cline_api_key = 44;
   optional string openai_codex_oauth_credentials = 48;

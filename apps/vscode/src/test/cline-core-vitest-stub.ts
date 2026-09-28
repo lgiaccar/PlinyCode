@@ -465,10 +465,6 @@ export async function loginClineOAuth(): Promise<OAuthCredentials> {
 	return {}
 }
 
-export async function loginOcaOAuth(): Promise<OAuthCredentials> {
-	return {}
-}
-
 export async function loginOpenAICodex(): Promise<OAuthCredentials> {
 	return {}
 }

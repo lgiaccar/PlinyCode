@@ -231,7 +231,6 @@ Module.prototype.require = function (id) {
 			resolveProviderApiKeyFromSettings,
 			getValidClineCredentials: async () => undefined,
 			loginClineOAuth: async () => undefined,
-			loginOcaOAuth: async () => undefined,
 			loginOpenAICodex: async () => undefined,
 		}
 	}
