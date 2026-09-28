@@ -81,8 +81,8 @@
 					},
 					{
 						"id": "advanced-features",
-						"title": "Always Use the Best AI Models",
-						"description": "PlinyCode empowers you with State-of-the-Art AI, connecting to top models (Anthropic, Gemini, OpenAI & more).",
+						"title": "The Right Pliny Model for Every Task",
+						"description": "Pick a Synopsys internal model, or let FreeAuto and BalanceAuto choose one for each step.",
 						"media": {
 							"markdown": "walkthrough/step3.md"
 						}
@@ -350,24 +350,6 @@
 		"configuration": {
 			"title": "PlinyCode",
 			"properties": {
-				"plinycode.contextFolders.enabled": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable automatic scanning of context folders (.github, .vscode, .devcontainer, .cursor) for rule generation. Rules are generated in .cline/rules/ and must be manually enabled."
-				},
-				"plinycode.contextFolders.folders": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					},
-					"default": [
-						".github",
-						".vscode",
-						".devcontainer",
-						".cursor"
-					],
-					"description": "List of context folders to scan for automatic rule generation. These folders will be scanned and rules generated in .cline/rules/."
-				},
 				"plinycode.devops.enabled": {
 					"type": "boolean",
 					"default": true,
@@ -418,7 +400,6 @@
 		"release:package": "bun scripts/release.ts package",
 		"release:publish": "bun scripts/release.ts publish",
 		"protos": "node scripts/build-proto.mjs",
-		"protos-python": "node scripts/build-python-proto.mjs",
 		"download-ripgrep": "node scripts/download-ripgrep.mjs",
 		"postprotos": "biome format --config-path ./biome.jsonc src/shared/proto src/core/controller src/hosts/ webview-ui/src/services src/generated --write --no-errors-on-unmatched",
 		"clean:build": "rimraf dist dist-standalone webview-ui/build src/generated out/",
@@ -432,8 +413,6 @@
 		"lint:proto": "bash ./scripts/proto-lint.sh",
 		"analyze:unused": "bunx --yes knip --config knip.json --include files,exports,types,enumMembers,duplicates",
 		"analyze:unused:prod": "bunx --yes knip --config knip.json --production --include files,exports,types,enumMembers,dependencies",
-		"analyze:unused:fix-exports": "node scripts/remove-unused-exports.mjs --apply",
-		"analyze:unused:fix-exports:dry": "node scripts/remove-unused-exports.mjs",
 		"format": "biome format --config-path ./biome.jsonc --no-errors-on-unmatched --files-ignore-unknown=true --diagnostic-level=error --semicolons=as-needed",
 		"format:fix": "biome check --config-path ./biome.jsonc --changed --since main --no-errors-on-unmatched --files-ignore-unknown=true --write --semicolons=as-needed",
 		"fix:all": "biome check --config-path ./biome.jsonc --no-errors-on-unmatched --files-ignore-unknown=true --write --diagnostic-level=error --unsafe --semicolons=as-needed",
@@ -460,15 +439,7 @@
 		"dev:webview": "node scripts/clean-webview-vite-cache.mjs && cd webview-ui && bun run dev",
 		"build:webview": "bun run protos && cd webview-ui && bun run build",
 		"test:webview": "cd webview-ui && bun run test",
-		"publish:marketplace": "node scripts/publish-marketplace.mjs",
-		"publish:marketplace:prerelease": "node scripts/publish-marketplace.mjs --pre-release",
-		"publish:marketplace:nightly": "node ./scripts/publish-nightly.mjs",
-		"docs": "cd docs && bun run dev",
-		"docs:check-links": "cd docs && bun run check",
-		"docs:rename-file": "cd docs && bun run rename",
-		"report-issue": "node scripts/report-issue.js",
-		"storybook": "cd webview-ui && bun run storybook",
-		"eval:smoke:run": "bun evals/smoke-tests/run-smoke-tests.ts"
+		"storybook": "cd webview-ui && bun run storybook"
 	},
 	"lint-staged": {
 		"src/shared/storage/state-keys.ts": [

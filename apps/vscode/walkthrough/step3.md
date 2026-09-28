@@ -1,7 +1,5 @@
-# Always Use the Best Models
+# The Right Pliny Model for Every Task
 
-**Connect your keys for Anthropic (Claude), Google (Gemini), OpenAI (GPT), and other leading LLMs.**
+**PlinyCode runs on Synopsys internal models through the Pliny gateway.**
 
-PlinyCode puts you at the forefront of AI. Bring your own API keys for leading models like Anthropic (Claude), Google (Gemini), and OpenAI (GPT). Always leverage the most powerful State-of-the-Art (SOTA) capabilities, ensuring you control both cost and cutting-edge performance.
-
-![PlinyCode Models Demo](https://storage.googleapis.com/cline_public_images/docs/assets/clines-models-hifi-3_compress.webp)
+Pick a model in the model picker, which shows each model's description, context size and price. Or let PlinyCode choose for you: **FreeAuto** routes every step to a suitable free model, and **BalanceAuto** uses paid models for the hard work and free ones for the rest. Your code and prompts never leave the Synopsys network.

@@ -24,8 +24,8 @@ All requests go **only** to Synopsys internal models through the Pliny gateway
 ## Features
 
 - **Plan & Act modes** — let the agent propose a plan for your approval before it touches any code.
-- **Context folders** — automatically scans `.github`, `.vscode`, `.devcontainer` and `.cursor` to generate
-  project rules in `.cline/rules/`, which you enable per rule.
+- **Rules from other agents** — reads the rules you already wrote for GitHub Copilot, Cursor and Windsurf,
+  and the workspace `AGENTS.md`, in place. Enable or disable each one in the Rules panel.
 - **MCP servers** — extend the agent with Model Context Protocol tools.
 - **Editor integrations** — explain or improve a selection from the context menu, generate and improve
   Jupyter cells, and write git commit messages from your staged diff.
@@ -40,10 +40,14 @@ All requests go **only** to Synopsys internal models through the Pliny gateway
 
 ## Settings
 
-| Setting                            | Default                                          | Description                                    |
-| ---------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
-| `plinycode.contextFolders.enabled` | `true`                                           | Scan context folders to generate project rules |
-| `plinycode.contextFolders.folders` | `.github`, `.vscode`, `.devcontainer`, `.cursor` | Which folders to scan                          |
+| Setting                                | Default | Description                                                        |
+| -------------------------------------- | ------- | ------------------------------------------------------------------ |
+| `plinycode.devops.enabled`             | `true`  | Run the built-in DevOps MCP server for pull requests and pipelines |
+| `plinycode.devops.registerWithEditor`  | `true`  | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
+| `plinycode.spending.conversationLimit` | `5`     | Budget, in US dollars, that each new conversation starts with      |
+| `plinycode.updates.enabled`            | `true`  | Install new PlinyCode releases from GitHub automatically           |
+| `plinycode.updates.prerelease`         | `false` | Also install pre-releases, for developers and testers              |
+| `plinycode.updates.url`                | GitHub  | URL of the `latest.json` that describes the newest release         |
 
 ## License
 
