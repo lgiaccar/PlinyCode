@@ -42,7 +42,6 @@ export interface ProviderCatalogStateController extends ProviderCatalogControlle
 		flushPendingState?(): Promise<void>
 		getApiConfiguration?(): ApiConfiguration
 	}
-	handleApiConfigurationChanged?(previous: ApiConfiguration, next: ApiConfiguration): void
 	postStateToWebview?(): Promise<void>
 }
 

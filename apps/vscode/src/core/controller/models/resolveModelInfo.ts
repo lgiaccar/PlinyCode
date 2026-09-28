@@ -71,7 +71,7 @@ export async function resolveModelInfo(
 		// Honor the user's committed selection (readSelection falls through to
 		// providers.json when the state field is empty) before substituting a
 		// catalog default, so the settings UI reflects the model that will
-		// actually run instead of the hardcoded openRouterDefaultModelId.
+		// actually run instead of a catalog default.
 		//
 		// The act-then-plan order mirrors the matching loop above. It cannot
 		// misattribute a mode-specific selection: the request only omits the id

@@ -13,7 +13,6 @@ import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
-import { getClineOnboardingModels } from "../models/getClineOnboardingModels"
 
 /**
  * Builds the ExtensionState object to push to the webview.
@@ -33,7 +32,6 @@ export async function getStateToPostToWebview(controller: {
 	const stateManager = controller.stateManager
 
 	// Get API configuration from cache for immediate access
-	const onboardingModels = getClineOnboardingModels()
 	const rawApiConfiguration = stateManager.getApiConfiguration()
 	const apiConfiguration = {
 		...rawApiConfiguration,
@@ -146,7 +144,6 @@ export async function getStateToPostToWebview(controller: {
 		defaultTerminalProfile,
 		isNewUser,
 		welcomeViewCompleted,
-		onboardingModels,
 		mcpResponsesCollapsed,
 		chatInputMaxRows,
 		taskHistory: processedTaskHistory,

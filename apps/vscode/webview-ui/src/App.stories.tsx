@@ -1,6 +1,6 @@
 import { HeroUIProvider } from "@heroui/react"
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
-import type { ApiConfiguration, ModelInfo } from "@shared/api"
+import type { ApiConfiguration } from "@shared/api"
 import type { ClineMessage, ClineSayTool } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import type { Meta, StoryObj } from "@storybook/react-vite"
@@ -71,21 +71,15 @@ type Story = StoryObj<typeof MockApp>
 
 // Mock data factories
 const createApiConfig = (overrides: Partial<ApiConfiguration> = {}): ApiConfiguration => ({
-	actModeApiProvider: "anthropic",
-	actModeApiModelId: "claude-3-5-sonnet-20241022",
-	actModeOpenRouterModelInfo: {
-		maxTokens: 8000,
-		contextWindow: 200000,
-		supportsPromptCache: true,
-	},
-	apiKey: "mock-key",
+	actModeApiProvider: "pliny",
+	actModeApiModelId: "snps-provider/kimi-k2.6",
 	...overrides,
 })
 
 const mockApiConfiguration = createApiConfig()
 const mockApiConfigurationPlan = createApiConfig({
-	planModeApiProvider: "anthropic",
-	planModeApiModelId: "claude-3-5-sonnet-20241022",
+	planModeApiProvider: "pliny",
+	planModeApiModelId: "snps-provider/kimi-k2.6",
 })
 
 const createHistoryItem = (id: string, hoursAgo: number, task: string, metrics: Partial<HistoryItem> = {}): HistoryItem => ({
@@ -216,19 +210,6 @@ const mockStreamingMessages: ClineMessage[] = [
 ]
 
 // Reusable state and decorator factories
-// Minimal fixture for the `openRouterModels` storybook prop — the story
-// only needs a non-empty record to exercise the picker code paths.
-const STORYBOOK_OPENROUTER_MODELS: Record<string, ModelInfo> = {
-	"anthropic/claude-sonnet-4.6": {
-		maxTokens: 8192,
-		contextWindow: 200_000,
-		supportsImages: true,
-		supportsPromptCache: true,
-		inputPrice: 3,
-		outputPrice: 15,
-	},
-}
-
 const createMockState = (overrides: any = {}) => ({
 	...useExtensionState(),
 	useAutoCondense: true,
@@ -238,8 +219,6 @@ const createMockState = (overrides: any = {}) => ({
 	clineMessages: mockActiveMessages,
 	taskHistory: mockTaskHistory,
 	apiConfiguration: mockApiConfiguration,
-	onboardingModels: undefined,
-	openRouterModels: STORYBOOK_OPENROUTER_MODELS,
 	backgroundEditEnabled: false,
 	...overrides,
 })

@@ -1,9 +1,10 @@
-import { ApiConfiguration } from "@shared/api"
-import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
-import { ExtensionStateContextProvider, useExtensionState } from "@/context/ExtensionStateContext"
-import { useProviderListings } from "@/hooks/useProviderListings"
+import type { ApiConfiguration } from "@shared/api"
+import { render, screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { useExtensionState } from "@/context/ExtensionStateContext"
 import ApiOptions from "../ApiOptions"
+
+const handleModeFieldChange = vi.fn(async () => {})
 
 vi.mock("@/hooks/useProviderListings", () => ({
 	useProviderListings: vi.fn(() => ({ providers: [], isLoading: false, error: undefined, refresh: vi.fn() })),
@@ -13,266 +14,44 @@ vi.mock("../providers/GenericProviderSettings", () => ({
 	GenericProviderSettings: vi.fn((props) => <div data-testid="generic-provider-settings">{props.providerName}</div>),
 }))
 
-const mockProviderListings = (
-	providers: Array<{ id: string; name: string; protocol: string; allowsCustomModelIds: boolean }>,
-) => {
-	vi.mocked(useProviderListings).mockReturnValue({ providers, isLoading: false, error: undefined, refresh: vi.fn() })
+vi.mock("../utils/useApiConfigurationHandlers", () => ({
+	useApiConfigurationHandlers: () => ({ handleModeFieldChange }),
+}))
+
+vi.mock("@/context/ExtensionStateContext", () => ({
+	useExtensionState: vi.fn(),
+}))
+
+function mockApiConfiguration(apiConfiguration: Partial<ApiConfiguration>) {
+	vi.mocked(useExtensionState).mockReturnValue({ apiConfiguration } as ReturnType<typeof useExtensionState>)
 }
 
-vi.mock("../../../context/ExtensionStateContext", async (importOriginal) => {
-	const actual = await importOriginal()
-	return {
-		...(actual || {}),
-		// your mocked methods
-		useExtensionState: vi.fn(() => ({
-			apiConfiguration: {
-				planModeApiProvider: "requesty",
-				actModeApiProvider: "requesty",
-				requestyApiKey: "",
-				planModeRequestyModelId: "",
-				actModeRequestyModelId: "",
-			},
-			setApiConfiguration: vi.fn(),
-			requestyModels: {},
-			planActSeparateModelsSetting: false,
-		})),
-	}
-})
-
-const mockExtensionState = (apiConfiguration: Partial<ApiConfiguration>) => {
-	vi.mocked(useExtensionState).mockReturnValue({
-		apiConfiguration,
-		setApiConfiguration: vi.fn(),
-		requestyModels: {},
-		planActSeparateModelsSetting: false,
-		// Provider model-list context read by useProviderModels. Static-list
-		// providers render their model <select> from this map, so seed the
-		// providers exercised here with the model id each test expects.
-		providerModelsByProvider: {
-			fireworks: {
-				models: { "accounts/fireworks/models/kimi-k2p5": { supportsPromptCache: false } },
-				defaultModelId: "accounts/fireworks/models/kimi-k2p5",
-			},
-			nebius: {
-				models: { "Qwen/Qwen2.5-32B-Instruct-fast": { supportsPromptCache: false } },
-				defaultModelId: "Qwen/Qwen2.5-32B-Instruct-fast",
-			},
-		},
-		startProviderModelsRequest: vi.fn(),
-		applyProviderModelsResponse: vi.fn(),
-	} as any)
-}
-
-describe("ApiOptions Component", () => {
-	vi.clearAllMocks()
-	const mockPostMessage = vi.fn()
-
-	beforeEach(() => {
-		//@ts-expect-error - vscode is not defined in the global namespace in test environment
-		global.vscode = { postMessage: mockPostMessage }
-		vi.mocked(useProviderListings).mockReturnValue({ providers: [], isLoading: false, error: undefined, refresh: vi.fn() })
-		mockExtensionState({
-			planModeApiProvider: "requesty",
-			actModeApiProvider: "requesty",
-		})
-	})
-
-	it.skip("renders Requesty API Key input", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-		const apiKeyInput = screen.getByPlaceholderText("Enter API Key...")
-		expect(apiKeyInput).toBeInTheDocument()
-	})
-
-	it.skip("renders Requesty Model ID input", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-		const modelIdInput = screen.getByPlaceholderText("Search and select a model...")
-		expect(modelIdInput).toBeInTheDocument()
-	})
-
-	// openai-native and openai-codex are not wired to the Pliny gateway.
-	it.skip.each([
-		["openai-native", "OpenAI API Key"],
-		["openai-codex", "Sign in to OpenAI Codex"],
-	])("renders only the dedicated form for %s", (provider, dedicatedFormText) => {
-		mockExtensionState({
-			planModeApiProvider: provider as any,
-			actModeApiProvider: provider as any,
-		})
-
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={false} />
-			</ExtensionStateContextProvider>,
-		)
-
-		expect(screen.getByText(dedicatedFormText)).toBeInTheDocument()
-		expect(screen.queryByText("Custom Headers")).not.toBeInTheDocument()
-	})
-
-	it.skip("renders the OpenAI-compatible form for custom/unknown catalog providers", () => {
-		vi.mocked(useProviderListings).mockReturnValue({
-			providers: [
-				{
-					allowsCustomModelIds: true,
-					id: "future-simple-provider",
-					name: "Future Simple Provider",
-					protocol: "openai-chat",
-				},
-			],
-			isLoading: false,
-			error: undefined,
-			refresh: vi.fn(),
-		})
-		mockExtensionState({
-			planModeApiProvider: "future-simple-provider" as any,
-			actModeApiProvider: "future-simple-provider" as any,
-		})
-
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-
-		// Custom/unknown providers use the richer OpenAI-compatible form (Base
-		// URL, Custom Headers, Model Configuration, Reasoning Effort) rather than
-		// the simpler generic settings form.
-		expect(screen.getByText("Custom Headers")).toBeInTheDocument()
-		expect(screen.queryByTestId("generic-provider-settings")).not.toBeInTheDocument()
-	})
-})
-
-describe("ApiOptions Component", () => {
-	vi.clearAllMocks()
-	const mockPostMessage = vi.fn()
-
-	beforeEach(() => {
-		//@ts-expect-error - vscode is not defined in the global namespace in test environment
-		global.vscode = { postMessage: mockPostMessage }
-		mockExtensionState({
-			planModeApiProvider: "together",
-			actModeApiProvider: "together",
-		})
-	})
-
-	it.skip("renders Together generic provider settings", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-
-		expect(screen.getByTestId("generic-provider-settings")).toHaveTextContent("Together")
-	})
-})
-
-describe("ApiOptions Component", () => {
-	vi.clearAllMocks()
-	const mockPostMessage = vi.fn()
-
-	beforeEach(() => {
-		//@ts-expect-error - vscode is not defined in the global namespace in test environment
-		global.vscode = { postMessage: mockPostMessage }
-
-		mockProviderListings([{ id: "fireworks", name: "Fireworks", protocol: "openai-chat", allowsCustomModelIds: false }])
-		mockExtensionState({
-			planModeApiProvider: "fireworks",
-			actModeApiProvider: "fireworks",
-			fireworksApiKey: "",
-			planModeFireworksModelId: "",
-			actModeFireworksModelId: "",
-			fireworksModelMaxCompletionTokens: 2000,
-			fireworksModelMaxTokens: 4000,
-		})
-	})
-
-	it.skip("renders Fireworks generic provider settings", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-		expect(screen.getByTestId("generic-provider-settings")).toHaveTextContent("Fireworks")
-	})
-})
-
-describe("OpenApiInfoOptions", () => {
-	const mockPostMessage = vi.fn()
-
+describe("ApiOptions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		//@ts-expect-error - vscode is not defined in the global namespace in test environment
-		global.vscode = { postMessage: mockPostMessage }
-		mockExtensionState({
-			planModeApiProvider: "openai",
-			actModeApiProvider: "openai",
-		})
 	})
 
-	it.skip("renders OpenAI Supports Images input", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
+	it("renders the Pliny settings", () => {
+		mockApiConfiguration({ planModeApiProvider: "pliny", actModeApiProvider: "pliny" })
+
+		render(<ApiOptions currentMode="plan" showModelOptions={true} />)
+
+		expect(screen.getByTestId("generic-provider-settings")).toHaveTextContent("Pliny")
+		expect(handleModeFieldChange).not.toHaveBeenCalled()
+	})
+
+	it("pins a provider stored by an older version to Pliny", () => {
+		mockApiConfiguration({
+			planModeApiProvider: "requesty",
+			actModeApiProvider: "pliny",
+		} as unknown as Partial<ApiConfiguration>)
+
+		render(<ApiOptions currentMode="act" showModelOptions={true} />)
+
+		expect(handleModeFieldChange).toHaveBeenCalledWith(
+			{ plan: "planModeApiProvider", act: "actModeApiProvider" },
+			"pliny",
+			"act",
 		)
-		fireEvent.click(screen.getByText("Model Configuration"))
-		const apiKeyInput = screen.getByText("Supports Images")
-		expect(apiKeyInput).toBeInTheDocument()
-	})
-
-	it.skip("renders OpenAI Context Window Size input", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-		fireEvent.click(screen.getByText("Model Configuration"))
-		const orgIdInput = screen.getByText("Context Window Size")
-		expect(orgIdInput).toBeInTheDocument()
-	})
-
-	it.skip("renders OpenAI Max Output Tokens input", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-		fireEvent.click(screen.getByText("Model Configuration"))
-		const modelInput = screen.getByText("Max Output Tokens")
-		expect(modelInput).toBeInTheDocument()
-	})
-})
-
-describe("ApiOptions Component", () => {
-	vi.clearAllMocks()
-	const mockPostMessage = vi.fn()
-
-	beforeEach(() => {
-		//@ts-expect-error - vscode is not defined in the global namespace in test environment
-		global.vscode = { postMessage: mockPostMessage }
-
-		mockProviderListings([{ id: "nebius", name: "Nebius", protocol: "openai-chat", allowsCustomModelIds: false }])
-		mockExtensionState({
-			planModeApiProvider: "nebius",
-			actModeApiProvider: "nebius",
-			nebiusApiKey: "",
-		})
-	})
-
-	it.skip("renders Nebius generic provider settings", () => {
-		render(
-			<ExtensionStateContextProvider>
-				<ApiOptions currentMode="plan" showModelOptions={true} />
-			</ExtensionStateContextProvider>,
-		)
-		expect(screen.getByTestId("generic-provider-settings")).toHaveTextContent("Nebius")
 	})
 })

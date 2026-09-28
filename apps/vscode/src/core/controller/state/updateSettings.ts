@@ -9,7 +9,6 @@ import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { McpDisplayMode } from "@/shared/McpDisplayMode"
 import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
-import { normalizeProviderSwitchModel } from "../models/providerSwitchNormalization"
 import { createTaskApiModelShim, resolveActiveModelIdFromApiConfiguration } from "../models/taskApiModel"
 
 /**
@@ -40,21 +39,13 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 				actModeReasoningEffort: protoApiConfiguration.actModeReasoningEffort as OpenaiReasoningEffort | undefined,
 			}
 
-			const previousApiConfiguration = controller.stateManager.getApiConfiguration()
-			const normalizedApiConfiguration = normalizeProviderSwitchModel(
-				controller.getProviderConfigStore(),
-				previousApiConfiguration,
-				convertedApiConfigurationFromProto,
-			)
-
-			controller.stateManager.setApiConfiguration(normalizedApiConfiguration)
+			controller.stateManager.setApiConfiguration(convertedApiConfigurationFromProto)
 
 			if (controller.task) {
 				const currentMode = controller.stateManager.getGlobalSettingsKey("mode")
-				const modelId = resolveActiveModelIdFromApiConfiguration(normalizedApiConfiguration, currentMode)
+				const modelId = resolveActiveModelIdFromApiConfiguration(convertedApiConfigurationFromProto, currentMode)
 				controller.task.api = createTaskApiModelShim(modelId)
 			}
-			controller.handleApiConfigurationChanged(previousApiConfiguration, normalizedApiConfiguration)
 		}
 
 		// Update plan/act separate models setting

@@ -252,13 +252,15 @@ describe("State Keys Type Safety", () => {
 
 		it("should correctly identify Secret keys", () => {
 			// Sample known secret keys
-			const knownSecretKeys = ["apiKey", "openRouterApiKey", "awsAccessKey"]
+			const knownSecretKeys = ["authNonce", "mcpOAuthSecrets"]
 
 			for (const key of knownSecretKeys) {
 				expect(isSecretKey(key), `${key} should be a SecretKey`).to.be.true
 			}
 
 			expect(isSecretKey("notASecretKey")).to.be.false
+			// API keys of providers PlinyCode no longer has
+			expect(isSecretKey("openRouterApiKey")).to.be.false
 		})
 
 		it("should correctly identify LocalState keys", () => {
@@ -355,14 +357,13 @@ describe("State Keys Type Safety", () => {
 			expect(result).to.equal(testValue)
 		})
 
-		it("should fold SDK provider spellings to legacy ApiProvider spellings on load", () => {
-			// State written by older builds (or other hosts) may store the SDK
-			// catalog id `openai-compatible`; the load transform migrates it to
-			// the legacy `openai` spelling the rest of the extension is keyed by.
-			expect(applyTransform("planModeApiProvider", "openai-compatible")).to.equal("openai")
-			expect(applyTransform("actModeApiProvider", "openai-compatible")).to.equal("openai")
-			expect(applyTransform("planModeApiProvider", "anthropic")).to.equal("anthropic")
-			expect(applyTransform("actModeApiProvider", "openai")).to.equal("openai")
+		it("should read any stored provider as pliny on load", () => {
+			// State written by older versions (or upstream Cline) may name a
+			// provider PlinyCode can't reach; the load transform reads it as pliny.
+			expect(applyTransform("planModeApiProvider", "openai-compatible")).to.equal("pliny")
+			expect(applyTransform("actModeApiProvider", "anthropic")).to.equal("pliny")
+			expect(applyTransform("actModeApiProvider", "pliny")).to.equal("pliny")
+			expect(applyTransform("planModeApiProvider", undefined)).to.equal("pliny")
 		})
 	})
 
@@ -413,7 +414,7 @@ describe("State Keys Type Safety", () => {
 			// These assignments verify the key types are correctly narrowed
 			const globalKey: GlobalStateKey = "isNewUser"
 			const settingsKey: SettingsKey = "preferredLanguage"
-			const secretKey: SecretKey = "apiKey"
+			const secretKey: SecretKey = "authNonce"
 			const localKey: LocalStateKey = "localClineRulesToggles"
 
 			expect(globalKey).to.be.a("string")

@@ -11,15 +11,7 @@ import { type ApiHandler, createHandler, type ProviderConfig, resolvePlinyConcre
 import type { ApiConfiguration } from "@shared/api"
 import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
-import { fetch } from "@/shared/net"
-import { buildBedrockProviderConfig } from "./bedrock-config"
-import {
-	resolveApiKey,
-	resolveBaseUrl,
-	resolveModelId,
-	resolveOllamaProviderConfig,
-	resolveVertexProviderConfig,
-} from "./cline-session-factory"
+import { resolveApiKey, resolveBaseUrl, resolveModelId, resolveProviderId } from "./cline-session-factory"
 import { toSdkProviderId } from "./model-catalog/sdk-provider-id"
 import { createPlinyFetch, PLINY_REQUEST_TIMEOUT_MS } from "./pliny-fetch"
 
@@ -28,8 +20,8 @@ export interface BuildApiHandlerOptions {
 	 * Disable extended thinking/reasoning for this handler. Standalone utility
 	 * calls (commit message generation) want fast, cheap,
 	 * deterministic completions and don't benefit from reasoning. When true we
-	 * send `thinking: false` and omit both effort and budget so providers like
-	 * OpenRouter don't receive a reasoning config at all.
+	 * send `thinking: false` and omit both effort and budget so the gateway
+	 * doesn't receive a reasoning config at all.
 	 */
 	disableReasoning?: boolean
 }
@@ -38,9 +30,9 @@ export interface BuildApiHandlerOptions {
  * Build an SDK `ProviderConfig` from the extension's `ApiConfiguration` for the
  * given mode (plan/act).
  *
- * Reuses the same resolvers the session factory uses to map the legacy config
- * onto provider id, model id, API key, and base URL, then converts the provider
- * id to the SDK's spelling (e.g. `openai` → `openai-compatible`).
+ * Reuses the same resolvers the session factory uses to map the config onto
+ * provider id, model id, API key, and base URL. The provider is always Pliny:
+ * a stored id from an older version reads as `pliny`.
  *
  * Reasoning handling: the SDK gateway forwards `reasoningEffort` as
  * `reasoning.effort`. Effort is the only reasoning control the extension UI
@@ -54,41 +46,28 @@ export function buildSdkProviderConfig(
 	mode: Mode,
 	options?: BuildApiHandlerOptions,
 ): ProviderConfig {
-	const providerId = (mode === "plan" ? configuration.planModeApiProvider : configuration.actModeApiProvider) ?? "pliny"
+	const providerId = resolveProviderId(mode, configuration)
 
-	const apiKey = resolveApiKey(providerId, configuration)
+	const apiKey = resolveApiKey(providerId)
 	// Standalone callers (commit message generation) talk to the gateway
 	// directly, so the virtual FreeAuto id — which only the agent loop knows how
 	// to route — must be mapped to a concrete model here.
-	const modelId = resolvePlinyConcreteModelId(resolveModelId(providerId, mode, configuration))
-	const baseUrl = resolveBaseUrl(providerId, configuration)
+	const modelId = resolvePlinyConcreteModelId(resolveModelId(mode, configuration))
+	const baseUrl = resolveBaseUrl(providerId)
 
 	const reasoningEffort = mode === "plan" ? configuration.planModeReasoningEffort : configuration.actModeReasoningEffort
 	const legacyThinkingBudgetTokens =
 		mode === "plan" ? configuration.planModeThinkingBudgetTokens : configuration.actModeThinkingBudgetTokens
-
-	const vertexProviderConfig = providerId === "vertex" ? resolveVertexProviderConfig(configuration) : undefined
-	const isPliny = providerId === "pliny"
 
 	const base: ProviderConfig = {
 		providerId: toSdkProviderId(providerId),
 		modelId: modelId ?? "",
 		apiKey: apiKey ?? "",
 		baseUrl,
-		...(vertexProviderConfig ?? {}),
-		// Use the proxy-aware fetch so gateway providers respect corporate proxy
-		// configuration (see .clinerules/network.md). Pliny gets a long-timeout
-		// wrapper for slow self-hosted models.
-		fetch: isPliny ? createPlinyFetch() : fetch,
-		...(isPliny ? { timeoutMs: PLINY_REQUEST_TIMEOUT_MS } : {}),
-		// Bedrock needs its region + structured AWS auth options forwarded to the
-		// SDK gateway. Without these, a pasted Bedrock API key / region is dropped.
-		...(providerId === "bedrock" ? buildBedrockProviderConfig(configuration, mode) : {}),
-		// Ollama carries the user's request timeout and context window
-		// (`num_ctx`) on the provider config; without this, standalone callers
-		// ignore an explicit Request Timeout setting and load models with
-		// Ollama's 4096-token server default.
-		...(providerId === "ollama" ? resolveOllamaProviderConfig(configuration, modelId) : {}),
+		// Proxy-aware fetch with a long timeout for slow self-hosted models
+		// (see .clinerules/network.md).
+		fetch: createPlinyFetch(),
+		timeoutMs: PLINY_REQUEST_TIMEOUT_MS,
 	}
 
 	if (options?.disableReasoning) {

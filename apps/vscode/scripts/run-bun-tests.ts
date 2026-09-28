@@ -30,13 +30,10 @@ import { Glob } from "bun"
 // Mirror of vitest.config.ts `test.include`. Keep these in sync.
 const INCLUDE_PATTERNS = [
 	"src/sdk/**/*.test.ts",
-	"src/shared/vsCodeSelectorUtils.test.ts",
 	"src/shared/model-catalog/provider-helpers.test.ts",
 	"src/core/controller/models/__tests__/providerCatalogHandlers.test.ts",
-	"src/core/controller/models/__tests__/providerSwitchNormalization.test.ts",
 	"src/core/controller/models/__tests__/resolveModelInfo.test.ts",
 	"src/core/controller/models/__tests__/providerCatalogSmoke.test.ts",
-	"src/core/controller/models/__tests__/refreshClineRecommendedModels.test.ts",
 ]
 
 const projectRoot = path.resolve(import.meta.dir, "..")

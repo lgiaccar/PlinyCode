@@ -278,45 +278,6 @@ describe("SdkSessionEventCoordinator", () => {
 		expect(options.taskHistory.updateTaskUsage).not.toHaveBeenCalled()
 	})
 
-	it("zeros usage and api request message cost for free Cline models", async () => {
-		const { coordinator, options, event } = makeCoordinator({
-			isClineFreeModel: vi.fn().mockResolvedValue(true),
-			task: { taskId: "task-1" },
-			translation: {
-				messages: [
-					{
-						ts: 1,
-						type: "say",
-						say: "api_req_started",
-						text: JSON.stringify({ tokensIn: 10, tokensOut: 5, cost: 0.0016 }),
-					},
-				],
-				sessionEnded: false,
-				turnComplete: false,
-				usage: { tokensIn: 10, tokensOut: 5, totalCost: 0.0016 },
-			},
-		})
-
-		await coordinator.handleSessionEvent(event)
-
-		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
-			[
-				{
-					ts: 1,
-					type: "say",
-					say: "api_req_started",
-					text: JSON.stringify({ tokensIn: 10, tokensOut: 5, cost: 0 }),
-				},
-			],
-			event,
-		)
-		expect(options.taskHistory.updateTaskUsage).toHaveBeenCalledWith("task-1", {
-			tokensIn: 10,
-			tokensOut: 5,
-			totalCost: 0,
-		})
-	})
-
 	it("leaves mistake-limit recovery to the SDK callback instead of mutating tool-error events", async () => {
 		const message: ClineMessage = { ts: 1, type: "say", say: "tool", text: "{}", partial: false }
 		const { coordinator, options, event } = makeCoordinator({
@@ -376,7 +337,6 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		setTurnPhase: vi.fn(),
 		getTurnPhase: vi.fn(() => input.turnPhase ?? "streaming"),
 		translateSessionEvent: vi.fn(() => input.translation ?? { messages: [], sessionEnded: false, turnComplete: false }),
-		isClineFreeModel: input.isClineFreeModel,
 	} as unknown as SdkSessionEventCoordinatorOptions & {
 		sessions: SdkSessionEventCoordinatorOptions["sessions"] & {
 			getActiveSession: ReturnType<typeof vi.fn>
@@ -413,7 +373,6 @@ interface MakeCoordinatorInput {
 	activeSession: ReturnType<typeof makeActiveSession>
 	task: { taskId: string; messageStateHandler?: { getClineMessages: () => ClineMessage[] } }
 	turnPhase: "streaming" | "resumable"
-	isClineFreeModel: () => Promise<boolean>
 	translation: {
 		messages: ClineMessage[]
 		sessionEnded: boolean

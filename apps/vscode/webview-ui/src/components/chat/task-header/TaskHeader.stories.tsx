@@ -84,8 +84,8 @@ export const Collapsed: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: false,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -114,8 +114,8 @@ export const Expanded: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -148,8 +148,8 @@ export const WithImages: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -182,8 +182,8 @@ export const WithFiles: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -214,8 +214,8 @@ export const LongTaskText: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -245,13 +245,8 @@ export const HighTokenUsage: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
-				actModeOpenRouterModelInfo: {
-					contextWindow: 200000,
-					maxTokens: 8000,
-					supportsPromptCache: true,
-				},
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -267,7 +262,7 @@ export const HighTokenUsage: Story = {
 
 export const NoCost: Story = {
 	args: {
-		task: createTask("Test local model with Ollama"),
+		task: createTask("Test a free self-hosted model"),
 		tokensIn: 1500,
 		tokensOut: 800,
 		totalCost: 0,
@@ -278,8 +273,8 @@ export const NoCost: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "ollama",
-				actModeApiModelId: "llama3.2",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-provider/kimi-k2.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -287,7 +282,7 @@ export const NoCost: Story = {
 	parameters: {
 		docs: {
 			description: {
-				story: "TaskHeader with local model (Ollama) showing no cost information.",
+				story: "TaskHeader with a free self-hosted model showing no cost information.",
 			},
 		},
 	},
@@ -308,8 +303,8 @@ export const WithProgressMessage: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -337,8 +332,8 @@ export const LocalEnvironment: Story = {
 			expandTaskHeader: true,
 			environment: Environment.local,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -366,8 +361,8 @@ export const StagingEnvironment: Story = {
 			expandTaskHeader: true,
 			environment: Environment.staging,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -395,8 +390,8 @@ export const ProductionEnvironment: Story = {
 			expandTaskHeader: true,
 			environment: Environment.production,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: createMessages(),
 		}),
@@ -423,8 +418,8 @@ export const MinimalTask: Story = {
 		createStorybookDecorator({
 			expandTaskHeader: true,
 			apiConfiguration: {
-				actModeApiProvider: "anthropic",
-				actModeApiModelId: "claude-3-5-sonnet-20241022",
+				actModeApiProvider: "pliny",
+				actModeApiModelId: "snps-aws-bedrock/aws-claude-sonnet-4.6",
 			},
 			clineMessages: [
 				{
