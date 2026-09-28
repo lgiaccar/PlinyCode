@@ -13,11 +13,6 @@ service WorkspaceService {
   // Returns a list of the top level directories of the workspace.
   rpc getWorkspacePaths(GetWorkspacePathsRequest) returns (GetWorkspacePathsResponse);
 
-  // Saves an open document if it's open in the editor and has unsaved changes.
-  // Returns true if the document was saved, returns false if the document was not found, or did not
-  // need to be saved.
-  rpc saveOpenDocumentIfDirty(SaveOpenDocumentIfDirtyRequest) returns (SaveOpenDocumentIfDirtyResponse);
-
   // Get diagnostics from the workspace.
   rpc getDiagnostics(GetDiagnosticsRequest) returns (GetDiagnosticsResponse);
 
@@ -29,9 +24,6 @@ service WorkspaceService {
 
   // Opens and focuses the terminal panel.
   rpc openTerminalPanel(OpenTerminalRequest) returns (OpenTerminalResponse);
-
-  // Executes a command in a new terminal
-  rpc executeCommandInTerminal(ExecuteCommandInTerminalRequest) returns (ExecuteCommandInTerminalResponse);
 
   // Searches workspace files/folders by name using the host's native index
   // (e.g. IntelliJ FilenameIndex). Hosts that lack a fast index should leave
@@ -54,14 +46,6 @@ message GetWorkspacePathsResponse {
   // it was opened from one (and that file is saved on disk). Empty for a single
   // folder window, an untitled workspace or an empty window.
   optional string workspace_file = 3;
-}
-
-message SaveOpenDocumentIfDirtyRequest {
-  optional string file_path = 2;
-}
-message SaveOpenDocumentIfDirtyResponse {
-  // Returns true if the document was saved.
-  optional bool was_saved = 1;
 }
 
 message GetDiagnosticsRequest {
@@ -107,12 +91,3 @@ message OpenInFileExplorerPanelRequest {
 message OpenInFileExplorerPanelResponse {}
 message OpenTerminalRequest {}
 message OpenTerminalResponse {}
-
-// Execute a command in the terminal
-message ExecuteCommandInTerminalRequest {
-  string command = 1; // The command to execute
-}
-
-message ExecuteCommandInTerminalResponse {
-  bool success = 1; // Whether the command was successfully sent to the terminal
-}
