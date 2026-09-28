@@ -7,18 +7,12 @@ import { updateSetting } from "../utils/settingsHandlers"
 
 interface AboutSectionProps {
 	version: string
-	extensionVariant?: "legacy" | "next"
 	renderSectionHeader: (tabId: string) => JSX.Element | null
 }
 
 const PLINYCODE_REPO_URL = "https://github.com/lgiaccar/PlinyCode"
 
-const VARIANT_LABELS: Record<"legacy" | "next", string> = {
-	legacy: "Legacy",
-	next: "Next",
-}
-
-const AboutSection = ({ version, extensionVariant, renderSectionHeader }: AboutSectionProps) => {
+const AboutSection = ({ version, renderSectionHeader }: AboutSectionProps) => {
 	const { prereleaseUpdatesEnabled } = useExtensionState()
 
 	return (
@@ -26,14 +20,7 @@ const AboutSection = ({ version, extensionVariant, renderSectionHeader }: AboutS
 			{renderSectionHeader("about")}
 			<Section>
 				<div className="flex px-4 flex-col gap-2">
-					<h2 className="text-lg font-semibold">
-						PlinyCode v{version}
-						{extensionVariant && (
-							<span className="ml-2 text-sm font-normal text-description">
-								({VARIANT_LABELS[extensionVariant]})
-							</span>
-						)}
-					</h2>
+					<h2 className="text-lg font-semibold">PlinyCode v{version}</h2>
 					<p>
 						An AI assistant that can use your CLI and Editor. PlinyCode can handle complex software development tasks
 						step-by-step with tools that let him create & edit files, explore large projects, use the browser, and

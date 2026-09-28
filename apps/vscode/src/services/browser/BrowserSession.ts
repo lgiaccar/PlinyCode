@@ -8,11 +8,10 @@ import * as chromeLauncher from "chrome-launcher"
 import os from "os"
 import pWaitFor from "p-wait-for"
 import * as path from "path"
-// @ts-ignore
+// @ts-expect-error
 import type { LoggerMessage, ScreenshotOptions } from "puppeteer-core"
 import { Browser, connect, launch, Page, TimeoutError } from "puppeteer-core"
 import { StateManager } from "@/core/storage/StateManager"
-import { telemetryService } from "@/services/telemetry"
 import { Logger } from "@/shared/services/Logger"
 import { discoverChromeInstances, isPortOpen, testBrowserConnection } from "./BrowserDiscovery"
 import { ensureChromiumExists } from "./utils"
@@ -172,27 +171,9 @@ export class BrowserSession {
 				await this.launchRemoteBrowser()
 				// Don't create a new page here, as we'll create it in launchRemoteBrowser
 
-				// Send telemetry for browser tool start
-				if (this.ulid) {
-					telemetryService.captureBrowserToolStart(this.ulid, browserSettings)
-				}
-
 				return
 			} catch (error) {
 				Logger.error("Failed to launch remote browser, falling back to local mode:", error)
-
-				// Capture error telemetry
-				if (this.ulid) {
-					telemetryService.captureBrowserError(
-						this.ulid,
-						"remote_browser_launch_error",
-						error instanceof Error ? error.message : String(error),
-						{
-							isRemote: true,
-							remoteBrowserHost: browserSettings.remoteBrowserHost,
-						},
-					)
-				}
 
 				await this.launchLocalBrowser()
 			}
@@ -202,11 +183,6 @@ export class BrowserSession {
 		}
 
 		this.page = await this.browser?.newPage()
-
-		// Send telemetry for browser tool start
-		if (this.ulid) {
-			telemetryService.captureBrowserToolStart(this.ulid, browserSettings)
-		}
 	}
 
 	async launchLocalBrowser() {
@@ -264,19 +240,6 @@ export class BrowserSession {
 			} catch (error) {
 				Logger.log(`Failed to connect using cached endpoint: ${error}`)
 
-				// Capture error telemetry
-				if (this.ulid) {
-					telemetryService.captureBrowserError(
-						this.ulid,
-						"cached_endpoint_connection_error",
-						error instanceof Error ? error.message : String(error),
-						{
-							isRemote: true,
-							endpoint: browserWSEndpoint,
-						},
-					)
-				}
-
 				// Clear the cached endpoint since it's no longer valid
 				this.cachedWebSocketEndpoint = undefined
 				// User wants to give up after one reconnection attempt
@@ -315,19 +278,6 @@ export class BrowserSession {
 				return
 			} catch (error) {
 				Logger.log(`Failed to connect to remote browser: ${error}`)
-
-				// Capture error telemetry
-				if (this.ulid) {
-					telemetryService.captureBrowserError(
-						this.ulid,
-						"remote_host_connection_error",
-						error instanceof Error ? error.message : String(error),
-						{
-							isRemote: true,
-							remoteBrowserHost,
-						},
-					)
-				}
 			}
 		}
 
@@ -340,14 +290,6 @@ export class BrowserSession {
 	async closeBrowser(): Promise<BrowserActionResult> {
 		if (this.browser || this.page) {
 			// Send telemetry for browser tool end if we have a task ID and session was started
-			if (this.ulid && this.sessionStartTime > 0) {
-				const sessionDuration = Date.now() - this.sessionStartTime
-				telemetryService.captureBrowserToolEnd(this.ulid, {
-					actionCount: this.browserActions.length,
-					duration: sessionDuration,
-					actions: this.browserActions,
-				})
-			}
 
 			if (this.isConnectedToRemote && this.browser) {
 				// Close the page/tab first if it exists
@@ -410,14 +352,6 @@ export class BrowserSession {
 
 			if (!(err instanceof TimeoutError)) {
 				logs.push(`[Error] ${errorMessage}`)
-
-				// Capture error telemetry
-				if (this.ulid) {
-					telemetryService.captureBrowserError(this.ulid, "browser_action_error", errorMessage, {
-						isRemote: this.isConnectedToRemote,
-						action: this.browserActions[this.browserActions.length - 1],
-					})
-				}
 			}
 		}
 
@@ -456,13 +390,6 @@ export class BrowserSession {
 		}
 
 		if (!screenshotBase64) {
-			// Capture error telemetry
-			if (this.ulid) {
-				telemetryService.captureBrowserError(this.ulid, "screenshot_error", "Failed to take screenshot", {
-					isRemote: this.isConnectedToRemote,
-					action: this.browserActions[this.browserActions.length - 1],
-				})
-			}
 			throw new Error("Failed to take screenshot.")
 		}
 

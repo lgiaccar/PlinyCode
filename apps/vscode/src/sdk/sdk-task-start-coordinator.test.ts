@@ -2,7 +2,6 @@ import type { HistoryItem } from "@shared/HistoryItem"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { StateManager } from "@/core/storage/StateManager"
 import { isDirectory } from "@/utils/fs"
-import { PROVIDER_FAILURE_ERROR_TYPE, PROVIDER_FAILURE_PHASE } from "./provider-failure-telemetry"
 import { SdkTaskStartCoordinator, type SdkTaskStartCoordinatorOptions } from "./sdk-task-start-coordinator"
 
 vi.mock("@/shared/services/Logger", () => ({
@@ -196,7 +195,6 @@ describe("SdkTaskStartCoordinator", () => {
 
 		expect(sessionId).toBeUndefined()
 		expect(options.emitClineAuthError).toHaveBeenCalledWith("needs auth")
-		expect(options.captureProviderApiError).not.toHaveBeenCalled()
 		expect(options.sessions.startNewSession).not.toHaveBeenCalled()
 	})
 
@@ -207,7 +205,6 @@ describe("SdkTaskStartCoordinator", () => {
 
 		expect(sessionId).toBeUndefined()
 		expect(options.emitClineAuthError).toHaveBeenCalledWith("needs clinepass auth")
-		expect(options.captureProviderApiError).not.toHaveBeenCalled()
 		expect(options.sessions.startNewSession).not.toHaveBeenCalled()
 	})
 
@@ -220,14 +217,6 @@ describe("SdkTaskStartCoordinator", () => {
 
 		expect(sessionId).toBeUndefined()
 		expect(options.emitClineAuthError).not.toHaveBeenCalled()
-		expect(options.captureProviderApiError).toHaveBeenCalledWith({
-			sessionId: state.task?.taskId,
-			error,
-			providerId: "anthropic",
-			modelId: "model",
-			errorType: PROVIDER_FAILURE_ERROR_TYPE.TASK_INIT,
-			failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
-		})
 		expect(state.task?.taskId).toEqual(expect.any(String))
 		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
 			[
@@ -401,7 +390,6 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		resolveContextMentions: vi.fn(async (text: string) => `resolved: ${text}`),
 		isClineManagedProviderActive: vi.fn(() => false),
 		emitClineAuthError: vi.fn(),
-		captureProviderApiError: vi.fn(),
 		postStateToWebview: vi.fn().mockResolvedValue(undefined),
 	} as unknown as SdkTaskStartCoordinatorOptions & {
 		sessions: SdkTaskStartCoordinatorOptions["sessions"] & {
@@ -426,7 +414,6 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		resolveContextMentions: ReturnType<typeof vi.fn>
 		isClineManagedProviderActive: ReturnType<typeof vi.fn>
 		emitClineAuthError: ReturnType<typeof vi.fn>
-		captureProviderApiError: ReturnType<typeof vi.fn>
 		postStateToWebview: ReturnType<typeof vi.fn>
 	}
 
