@@ -11,19 +11,45 @@
 
 import {
 	type ContentBlock,
-	createMediaBudgetState,
-	IMAGE_OMITTED_PLACEHOLDER,
-	type ImageContent,
 	type MediaBudgetOptions,
-	type MediaBudgetState,
 	type Message,
 	normalizeUserInput,
 	type ResolvedMediaBudget,
 	resolveMediaBudget,
-	type TextContent,
 	type ToolResultContent,
-	validateAndReserveImageMedia,
 } from "@plinycode/shared";
+import {
+	isBinaryContentLike,
+	isStructuredToolResultEntry,
+} from "./messages/content-entries";
+import { applyMediaBudget } from "./messages/media-budget";
+import { addMissingToolResults } from "./messages/missing-tool-results";
+import {
+	countOutdatedImageEntries,
+	replaceOutdatedReadContent,
+} from "./messages/outdated-reads";
+import {
+	extractLocatorFromResultEntry,
+	extractLocatorsFromReadToolInput,
+	extractReadLocatorsFromToolResultContent,
+	isFullFileRead,
+	isReadTool,
+	type ReadLocator,
+	toReadLocatorKey,
+} from "./messages/read-locators";
+import {
+	cloneContentBlockForMutation,
+	collectTruncationCandidates,
+	countMessageTextBytes,
+	REPEATED_TOOL_CALL_MARKUP_THRESHOLD,
+	TOOL_CALL_MARKUP_PATTERN,
+	TRUNCATE_ASSISTANT_TEXT_MARKER,
+	TRUNCATE_ASSISTANT_TOOL_MARKUP_MARKER,
+	TRUNCATE_MARKER_DEFAULT,
+	truncateMiddleByChars,
+	truncateMiddleToBytes,
+	utf8ByteLength,
+} from "./messages/truncation";
 
 export const DEFAULT_MAX_TOOL_RESULT_CHARS = 8_000;
 export const DEFAULT_MAX_FILE_CONTENT_CHARS = 50_000;
@@ -37,42 +63,12 @@ export const DEFAULT_MAX_ASSISTANT_TOOL_MARKUP_CHARS = 12_000;
 // Batch stale-read rewrites to avoid breaking provider prefix caches on every re-read.
 // 64KB is roughly 8 provider-capped read results; set to 0 for eager rewriting.
 export const DEFAULT_MIN_OUTDATED_REWRITE_BYTES = 65_536;
-const MIN_TOTAL_BUDGET_TOOL_RESULT_BYTES = 2_000;
-const MIN_TOTAL_BUDGET_ASSISTANT_TEXT_BYTES = 40_000;
-const REPEATED_TOOL_CALL_MARKUP_THRESHOLD = 8;
+
 export const MESSAGE_BUILDER_LIMIT_ENV = {
 	maxToolResultChars: "CLINE_MESSAGE_BUILDER_MAX_TOOL_RESULT_CHARS",
 	maxTotalTextBytes: "CLINE_MESSAGE_BUILDER_MAX_TOTAL_TEXT_BYTES",
 	minOutdatedRewriteBytes: "CLINE_MESSAGE_BUILDER_MIN_OUTDATED_REWRITE_BYTES",
 } as const;
-const READ_TOOL_NAMES = new Set(["read", "read_files"]);
-const OUTDATED_FILE_CONTENT = "[outdated - see the latest file content]";
-const MISSING_TOOL_RESULT_TEXT =
-	"Tool execution was interrupted before a result was produced.";
-const TRUNCATE_MARKER_DEFAULT = (n: number) =>
-	`\n\n...[truncated ${n} chars]...\n\n`;
-const TRUNCATE_MARKER_BUDGET = (n: number) =>
-	`\n\n...[truncated ${n} chars to fit provider request budget]...\n\n`;
-const TRUNCATE_ASSISTANT_TEXT_MARKER = (n: number) =>
-	`\n\n...[assistant text truncated: omitted ${n} chars]...\n\n`;
-const TRUNCATE_ASSISTANT_TEXT_BUDGET_MARKER = (n: number) =>
-	`\n\n...[assistant text truncated: omitted ${n} chars to fit provider request budget]...\n\n`;
-const TRUNCATE_ASSISTANT_TOOL_MARKUP_MARKER = (n: number) =>
-	`\n\n...[assistant text truncated: omitted ${n} chars due to repeated tool-call markup]...\n\n`;
-
-interface ReadLocator {
-	path: string;
-	startLine: number | null;
-	endLine: number | null;
-}
-
-interface TruncationCandidate {
-	byteLength: number;
-	minBytes: number;
-	makeMarker: (removed: number) => string;
-	get(): string;
-	set(value: string): void;
-}
 
 export interface MessageBuilderOptions {
 	maxToolResultChars?: number;
@@ -166,7 +162,7 @@ export class MessageBuilder {
 	buildForApi(messages: Message[]): Message[] {
 		this.reindex(messages);
 		this.commitOutdatedRewrites(messages);
-		const repairedMessages = this.addMissingToolResults(messages);
+		const repairedMessages = addMissingToolResults(messages);
 
 		const prepared = repairedMessages.map((message) => {
 			if (!Array.isArray(message.content)) {
@@ -200,7 +196,7 @@ export class MessageBuilder {
 			return changed ? { ...message, content } : message;
 		});
 
-		const mediaLimited = this.applyMediaBudget(prepared);
+		const mediaLimited = applyMediaBudget(prepared, this.resolveMediaBudget());
 		return this.truncateToTotalTextBudget(mediaLimited);
 	}
 
@@ -250,17 +246,17 @@ export class MessageBuilder {
 		const toolName = this.resolveToolName(block);
 		let nextContent = block.content;
 
-		if (this.isReadTool(toolName) && block.is_error !== true) {
+		if (isReadTool(toolName) && block.is_error !== true) {
 			const committed = this.committedOutdatedRewrites.get(block.tool_use_id);
 			if (committed && committed.size > 0) {
 				const locators = this.getReadLocators(block);
 				const outdated = locators.filter(
 					(locator) =>
-						committed.has(this.toReadLocatorKey(locator)) &&
+						committed.has(toReadLocatorKey(locator)) &&
 						this.isOutdatedReadLocator(locator, block.tool_use_id),
 				);
 				if (outdated.length > 0) {
-					nextContent = this.replaceOutdatedReadContent(nextContent, outdated);
+					nextContent = replaceOutdatedReadContent(nextContent, outdated);
 				}
 			}
 		}
@@ -300,24 +296,24 @@ export class MessageBuilder {
 				} else if (block.type === "tool_use") {
 					const normalizedName = block.name.toLowerCase();
 					this.toolNameByIdCache.set(block.id, normalizedName);
-					if (this.isReadTool(normalizedName)) {
-						const locators = this.extractLocatorsFromReadToolInput(block.input);
+					if (isReadTool(normalizedName)) {
+						const locators = extractLocatorsFromReadToolInput(block.input);
 						if (locators.length > 0) {
 							this.readLocatorsByToolUseIdCache.set(block.id, locators);
 						}
 					}
 				} else if (block.type === "tool_result") {
 					const toolName = this.resolveToolName(block);
-					if (!this.isReadTool(toolName) || block.is_error === true) {
+					if (!isReadTool(toolName) || block.is_error === true) {
 						continue;
 					}
 					const locators = this.getReadLocators(block);
 					for (const locator of locators) {
 						this.latestReadToolUseByLocatorCache.set(
-							this.toReadLocatorKey(locator),
+							toReadLocatorKey(locator),
 							block.tool_use_id,
 						);
-						if (this.isFullFileRead(locator)) {
+						if (isFullFileRead(locator)) {
 							this.latestFullContentOwnerByPathCache.set(
 								locator.path,
 								block.tool_use_id,
@@ -347,7 +343,7 @@ export class MessageBuilder {
 					continue;
 				}
 				const toolName = this.resolveToolName(block);
-				if (!this.isReadTool(toolName)) {
+				if (!isReadTool(toolName)) {
 					continue;
 				}
 				seenToolUseIds.add(block.tool_use_id);
@@ -355,7 +351,7 @@ export class MessageBuilder {
 				const newKeys = new Set<string>();
 				const validKeys = new Set<string>();
 				for (const locator of this.getReadLocators(block)) {
-					const key = this.toReadLocatorKey(locator);
+					const key = toReadLocatorKey(locator);
 					if (!this.isOutdatedReadLocator(locator, block.tool_use_id)) {
 						continue;
 					}
@@ -422,11 +418,11 @@ export class MessageBuilder {
 		content: ToolResultContent["content"],
 		outdatedKeys: ReadonlySet<string>,
 	): number {
-		const allLocators = this.extractReadLocatorsFromToolResultContent(content);
+		const allLocators = extractReadLocatorsFromToolResultContent(content);
 		const blockFullyOutdated =
 			allLocators.length > 0 &&
 			allLocators.every((locator) =>
-				outdatedKeys.has(this.toReadLocatorKey(locator)),
+				outdatedKeys.has(toReadLocatorKey(locator)),
 			);
 
 		const attributeText = (text: string): number => {
@@ -441,8 +437,8 @@ export class MessageBuilder {
 			const entries = Array.isArray(parsed) ? parsed : [parsed];
 			let total = 0;
 			for (const entry of entries) {
-				const locator = this.extractLocatorFromResultEntry(entry);
-				if (locator && outdatedKeys.has(this.toReadLocatorKey(locator))) {
+				const locator = extractLocatorFromResultEntry(entry);
+				if (locator && outdatedKeys.has(toReadLocatorKey(locator))) {
 					total += this.providerBoundEntryBytes(entry);
 				}
 			}
@@ -457,7 +453,7 @@ export class MessageBuilder {
 		let outdatedImageCount = 0;
 		for (const entry of content) {
 			if (entry.type === "text") {
-				outdatedImageCount += this.countOutdatedImageEntries(
+				outdatedImageCount += countOutdatedImageEntries(
 					entry.text,
 					outdatedKeySet,
 				);
@@ -473,14 +469,14 @@ export class MessageBuilder {
 					total += utf8ByteLength(entry.data);
 				}
 			} else if (isStructuredToolResultEntry(entry)) {
-				const locator = this.extractLocatorFromResultEntry(entry);
-				if (locator && outdatedKeys.has(this.toReadLocatorKey(locator))) {
+				const locator = extractLocatorFromResultEntry(entry);
+				if (locator && outdatedKeys.has(toReadLocatorKey(locator))) {
 					total += this.providerBoundEntryBytes(entry);
 				}
 			} else if (entry.type === "file") {
 				if (
 					outdatedKeys.has(
-						this.toReadLocatorKey({
+						toReadLocatorKey({
 							path: entry.path,
 							startLine: null,
 							endLine: null,
@@ -499,217 +495,6 @@ export class MessageBuilder {
 		return utf8ByteLength(JSON.stringify(providerBound));
 	}
 
-	private addMissingToolResults(messages: Message[]): Message[] {
-		const existingToolResultIds = this.collectToolResultIds(messages);
-		const repaired: Message[] = [];
-		const pendingMissingToolCalls = new Map<string, string>();
-		let changed = false;
-
-		const flushMissing = () => {
-			if (pendingMissingToolCalls.size === 0) {
-				return;
-			}
-			pushRepairedMessage(
-				this.createMissingToolResultMessage(pendingMissingToolCalls),
-			);
-			pendingMissingToolCalls.clear();
-			changed = true;
-		};
-
-		const pushRepairedMessage = (message: Message) => {
-			const previous = repaired.at(-1);
-			if (this.shouldMergeUserAfterToolResults(previous, message)) {
-				repaired[repaired.length - 1] = {
-					...previous,
-					content: [
-						...previous.content,
-						...this.contentBlocksForUserMerge(message.content),
-					],
-				};
-				changed = true;
-				return;
-			}
-			repaired.push(message);
-		};
-
-		for (const message of messages) {
-			if (this.isToolResultOnlyMessage(message)) {
-				pushRepairedMessage(
-					this.appendMissingToolResults(message, pendingMissingToolCalls),
-				);
-				if (pendingMissingToolCalls.size > 0) {
-					pendingMissingToolCalls.clear();
-					changed = true;
-				}
-				continue;
-			}
-
-			if (Array.isArray(message.content)) {
-				const toolResults = message.content.filter(
-					(block): block is ToolResultContent => block.type === "tool_result",
-				);
-				const otherBlocks = message.content.filter(
-					(block) => block.type !== "tool_result",
-				);
-
-				if (toolResults.length > 0) {
-					const toolResultMessage = this.appendMissingToolResults(
-						{
-							...message,
-							role: "user",
-							content: toolResults,
-						},
-						pendingMissingToolCalls,
-					);
-					pushRepairedMessage(toolResultMessage);
-					if (pendingMissingToolCalls.size > 0) {
-						pendingMissingToolCalls.clear();
-					}
-					changed = true;
-				}
-
-				if (otherBlocks.length > 0 || toolResults.length === 0) {
-					if (toolResults.length === 0) {
-						flushMissing();
-					}
-					const nextMessage =
-						toolResults.length > 0
-							? {
-									...message,
-									content: otherBlocks,
-								}
-							: message;
-					pushRepairedMessage(nextMessage);
-					if (nextMessage.role === "assistant") {
-						this.trackMissingToolCalls(
-							nextMessage,
-							existingToolResultIds,
-							pendingMissingToolCalls,
-						);
-					}
-				}
-				continue;
-			}
-
-			flushMissing();
-			pushRepairedMessage(message);
-		}
-
-		flushMissing();
-		return changed ? repaired : messages;
-	}
-
-	private appendMissingToolResults(
-		message: Message,
-		pendingMissingToolCalls: ReadonlyMap<string, string>,
-	): Message {
-		if (pendingMissingToolCalls.size === 0 || !Array.isArray(message.content)) {
-			return message;
-		}
-		return {
-			...message,
-			role: "user",
-			content: [
-				...message.content,
-				...this.createMissingToolResultBlocks(pendingMissingToolCalls),
-			],
-		};
-	}
-
-	private shouldMergeUserAfterToolResults(
-		previous: Message | undefined,
-		next: Message,
-	): previous is Message & { content: ToolResultContent[] } {
-		return (
-			previous?.role === "user" &&
-			next.role === "user" &&
-			this.isToolResultOnlyMessage(previous) &&
-			this.contentBlocksForUserMerge(next.content).length > 0
-		);
-	}
-
-	private contentBlocksForUserMerge(
-		content: Message["content"],
-	): ContentBlock[] {
-		return typeof content === "string"
-			? content.length > 0
-				? [{ type: "text", text: content } satisfies TextContent]
-				: []
-			: content;
-	}
-
-	private collectToolResultIds(messages: Message[]): Set<string> {
-		const ids = new Set<string>();
-		for (const message of messages) {
-			if (!Array.isArray(message.content)) {
-				continue;
-			}
-			for (const block of message.content) {
-				if (block.type === "tool_result") {
-					ids.add(block.tool_use_id);
-				}
-			}
-		}
-		return ids;
-	}
-
-	private isToolResultOnlyMessage(message: Message): boolean {
-		return (
-			message.role === "user" &&
-			Array.isArray(message.content) &&
-			message.content.length > 0 &&
-			message.content.every((block) => block.type === "tool_result")
-		);
-	}
-
-	private trackMissingToolCalls(
-		message: Message,
-		existingToolResultIds: Set<string>,
-		pendingMissingToolCalls: Map<string, string>,
-	): void {
-		if (!Array.isArray(message.content)) {
-			return;
-		}
-		for (const block of message.content) {
-			if (block.type !== "tool_use" || existingToolResultIds.has(block.id)) {
-				continue;
-			}
-			pendingMissingToolCalls.set(block.id, block.name);
-		}
-	}
-
-	private createMissingToolResultMessage(
-		toolCalls: ReadonlyMap<string, string>,
-	): Message {
-		return {
-			role: "user",
-			content: this.createMissingToolResultBlocks(toolCalls),
-		};
-	}
-
-	private createMissingToolResultBlocks(
-		toolCalls: ReadonlyMap<string, string>,
-	): ToolResultContent[] {
-		return Array.from(toolCalls, ([toolUseId, toolName]) => ({
-			type: "tool_result",
-			tool_use_id: toolUseId,
-			name: toolName,
-			content: [
-				{
-					type: "text",
-					text: this.formatMissingToolResultText(toolName),
-				},
-			],
-			is_error: true,
-		}));
-	}
-
-	private formatMissingToolResultText(toolName: string): string {
-		return toolName
-			? `${MISSING_TOOL_RESULT_TEXT} Tool: ${toolName}.`
-			: MISSING_TOOL_RESULT_TEXT;
-	}
-
 	private resetIndexes(): void {
 		this.indexedMessageCount = 0;
 		this.indexedTailRef = undefined;
@@ -724,174 +509,13 @@ export class MessageBuilder {
 		const blockRef = block as unknown as object;
 		let parsed = this.readResultLocatorCache.get(blockRef);
 		if (parsed === undefined) {
-			parsed = this.extractReadLocatorsFromToolResultContent(block.content);
+			parsed = extractReadLocatorsFromToolResultContent(block.content);
 			this.readResultLocatorCache.set(blockRef, parsed);
 		}
 		if (parsed.length > 0) {
 			return parsed;
 		}
 		return this.readLocatorsByToolUseIdCache.get(block.tool_use_id) ?? [];
-	}
-
-	private extractLocatorsFromReadToolInput(input: unknown): ReadLocator[] {
-		if (!input || typeof input !== "object") {
-			return [];
-		}
-
-		const record = input as Record<string, unknown>;
-		const locators: ReadLocator[] = [];
-		const direct = this.extractLocatorFromReadRequest(record);
-		if (direct) {
-			locators.push(direct);
-		}
-
-		if (Array.isArray(record.files)) {
-			for (const value of record.files) {
-				const locator = this.extractLocatorFromReadRequest(value);
-				if (locator) {
-					locators.push(locator);
-				}
-			}
-		}
-
-		if (Array.isArray(record.file_paths)) {
-			for (const value of record.file_paths) {
-				if (typeof value === "string" && value.length > 0) {
-					locators.push({ path: value, startLine: null, endLine: null });
-				}
-			}
-		}
-
-		return this.dedupeReadLocators(locators);
-	}
-
-	private extractReadLocatorsFromToolResultContent(
-		content: ToolResultContent["content"],
-	): ReadLocator[] {
-		if (typeof content === "string") {
-			return this.tryParseReadLocators(content);
-		}
-		const locators: ReadLocator[] = [];
-		for (const entry of content) {
-			if (entry.type === "text") {
-				locators.push(...this.tryParseReadLocators(entry.text));
-				continue;
-			}
-			if (isStructuredToolResultEntry(entry)) {
-				const locator = this.extractLocatorFromResultEntry(entry);
-				if (locator) {
-					locators.push(locator);
-				}
-			}
-		}
-		return this.dedupeReadLocators(locators);
-	}
-
-	private tryParseReadLocators(text: string): ReadLocator[] {
-		try {
-			return this.extractLocatorsFromParsedReadResult(JSON.parse(text));
-		} catch {
-			return [];
-		}
-	}
-
-	private extractLocatorsFromParsedReadResult(value: unknown): ReadLocator[] {
-		if (Array.isArray(value)) {
-			const locators: ReadLocator[] = [];
-			for (const item of value) {
-				const locator = this.extractLocatorFromResultEntry(item);
-				if (locator) {
-					locators.push(locator);
-				}
-			}
-			return this.dedupeReadLocators(locators);
-		}
-		const locator = this.extractLocatorFromResultEntry(value);
-		return locator ? [locator] : [];
-	}
-
-	private extractLocatorFromReadRequest(
-		value: unknown,
-	): ReadLocator | undefined {
-		if (!value || typeof value !== "object") {
-			return undefined;
-		}
-		const record = value as Record<string, unknown>;
-		const path = this.extractPath(record);
-		if (!path) {
-			return undefined;
-		}
-		return {
-			path,
-			startLine: this.extractLineNumber(record.start_line),
-			endLine: this.extractLineNumber(record.end_line),
-		};
-	}
-
-	private extractLocatorFromResultEntry(
-		value: unknown,
-	): ReadLocator | undefined {
-		if (!value || typeof value !== "object") {
-			return undefined;
-		}
-		const record = value as Record<string, unknown>;
-		const path = this.extractPath(record);
-		if (path) {
-			return {
-				path,
-				startLine: this.extractLineNumber(record.start_line),
-				endLine: this.extractLineNumber(record.end_line),
-			};
-		}
-		if (typeof record.query === "string" && record.query.length > 0) {
-			return this.parseReadQuery(record.query);
-		}
-		return undefined;
-	}
-
-	private extractPath(record: Record<string, unknown>): string | undefined {
-		const candidates = [record.path, record.file_path, record.filePath];
-		for (const candidate of candidates) {
-			if (typeof candidate === "string" && candidate.length > 0) {
-				return candidate;
-			}
-		}
-		return undefined;
-	}
-
-	private extractLineNumber(value: unknown): number | null {
-		return typeof value === "number" && Number.isInteger(value) ? value : null;
-	}
-
-	private parseReadQuery(query: string): ReadLocator {
-		const match = /^(.*):(\d+)-(EOF|\d+)$/.exec(query);
-		if (!match) {
-			return { path: query, startLine: null, endLine: null };
-		}
-		return {
-			path: match[1],
-			startLine: Number(match[2]),
-			endLine: match[3] === "EOF" ? null : Number(match[3]),
-		};
-	}
-
-	private dedupeReadLocators(locators: ReadLocator[]): ReadLocator[] {
-		const unique = new Map<string, ReadLocator>();
-		for (const locator of locators) {
-			unique.set(this.toReadLocatorKey(locator), locator);
-		}
-		return Array.from(unique.values());
-	}
-
-	private toReadLocatorKey(locator: ReadLocator): string {
-		if (this.isFullFileRead(locator)) {
-			return locator.path;
-		}
-		return `${locator.path}:${locator.startLine ?? 1}-${locator.endLine ?? "EOF"}`;
-	}
-
-	private isFullFileRead(locator: ReadLocator): boolean {
-		return locator.startLine == null && locator.endLine == null;
 	}
 
 	private isOutdatedReadLocator(
@@ -903,147 +527,9 @@ export class MessageBuilder {
 			return true;
 		}
 		return (
-			this.latestReadToolUseByLocatorCache.get(
-				this.toReadLocatorKey(locator),
-			) !== toolUseId
+			this.latestReadToolUseByLocatorCache.get(toReadLocatorKey(locator)) !==
+			toolUseId
 		);
-	}
-
-	private replaceOutdatedReadContent(
-		content: ToolResultContent["content"],
-		outdated: ReadLocator[],
-	): ToolResultContent["content"] {
-		const outdatedKeys = new Set(outdated.map((l) => this.toReadLocatorKey(l)));
-		const outdatedPaths = new Set(outdated.map((l) => l.path));
-
-		if (typeof content === "string") {
-			return (
-				this.replaceOutdatedInString(content, outdatedKeys) ??
-				OUTDATED_FILE_CONTENT
-			);
-		}
-
-		// Image entries are paired with text result markers, so rewrite them positionally.
-		let pendingImageReplacements = 0;
-		for (const entry of content) {
-			if (entry.type === "text") {
-				pendingImageReplacements += this.countOutdatedImageEntries(
-					entry.text,
-					outdatedKeys,
-				);
-			}
-		}
-
-		return content.map((entry) => {
-			if (entry.type === "file") {
-				if (!outdatedPaths.has(entry.path)) {
-					return entry;
-				}
-				return { ...entry, content: OUTDATED_FILE_CONTENT };
-			}
-			if (entry.type === "image") {
-				if (pendingImageReplacements === 0) {
-					return entry;
-				}
-				pendingImageReplacements -= 1;
-				return {
-					type: "text",
-					text: OUTDATED_FILE_CONTENT,
-				} satisfies TextContent;
-			}
-			if (isStructuredToolResultEntry(entry)) {
-				return this.replaceOutdatedReadEntry(
-					entry,
-					outdatedKeys,
-				) as typeof entry;
-			}
-			if (entry.type !== "text") {
-				return entry;
-			}
-			const replaced = this.replaceOutdatedInString(entry.text, outdatedKeys);
-			if (replaced === null) {
-				return { ...entry, text: OUTDATED_FILE_CONTENT };
-			}
-			return replaced === entry.text ? entry : { ...entry, text: replaced };
-		});
-	}
-
-	private countOutdatedImageEntries(
-		text: string,
-		outdatedKeys: Set<string>,
-	): number {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(text);
-		} catch {
-			return 0;
-		}
-		const entries = Array.isArray(parsed) ? parsed : [parsed];
-		let count = 0;
-		for (const entry of entries) {
-			if (!entry || typeof entry !== "object") {
-				continue;
-			}
-			const record = entry as Record<string, unknown>;
-			const locator = this.extractLocatorFromResultEntry(record);
-			if (!locator) {
-				continue;
-			}
-			if (!outdatedKeys.has(this.toReadLocatorKey(locator))) {
-				continue;
-			}
-			if (
-				record.result === "Successfully read image" ||
-				record.content === "Successfully read image"
-			) {
-				count += 1;
-			}
-		}
-		return count;
-	}
-
-	private replaceOutdatedInString(
-		text: string,
-		outdatedKeys: Set<string>,
-	): string | null {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(text);
-		} catch {
-			return null;
-		}
-		const replaced = Array.isArray(parsed)
-			? parsed.map((entry) =>
-					this.replaceOutdatedReadEntry(entry, outdatedKeys),
-				)
-			: this.replaceOutdatedReadEntry(parsed, outdatedKeys);
-		return JSON.stringify(replaced);
-	}
-
-	private replaceOutdatedReadEntry(
-		entry: unknown,
-		outdatedKeys: Set<string>,
-	): unknown {
-		if (!entry || typeof entry !== "object") {
-			return entry;
-		}
-		const locator = this.extractLocatorFromResultEntry(entry);
-		if (!locator || !outdatedKeys.has(this.toReadLocatorKey(locator))) {
-			return entry;
-		}
-		const record = { ...(entry as Record<string, unknown>) };
-		if (typeof record.result === "string") {
-			record.result = OUTDATED_FILE_CONTENT;
-		} else if (typeof record.content === "string") {
-			record.content = OUTDATED_FILE_CONTENT;
-		} else {
-			record.result = OUTDATED_FILE_CONTENT;
-		}
-		return record;
-	}
-
-	private isReadTool(toolName: string | undefined): boolean {
-		return !!toolName && READ_TOOL_NAMES.has(toolName);
 	}
 
 	/**
@@ -1160,7 +646,7 @@ export class MessageBuilder {
 	}
 
 	private truncateToTotalTextBudget(messages: Message[]): Message[] {
-		let totalBytes = this.countMessageTextBytes(messages);
+		let totalBytes = countMessageTextBytes(messages);
 		if (totalBytes <= this.maxTotalTextBytes) {
 			return messages;
 		}
@@ -1177,7 +663,7 @@ export class MessageBuilder {
 			};
 		});
 
-		const candidates = this.collectTruncationCandidates(next);
+		const candidates = collectTruncationCandidates(next);
 		for (const candidate of candidates) {
 			if (totalBytes <= this.maxTotalTextBytes) {
 				break;
@@ -1200,293 +686,9 @@ export class MessageBuilder {
 		return next;
 	}
 
-	private countMessageTextBytes(messages: Message[]): number {
-		let total = 0;
-		for (const message of messages) {
-			if (typeof message.content === "string") {
-				total += utf8ByteLength(message.content);
-				continue;
-			}
-			for (const block of message.content) {
-				if (block.type === "text") {
-					total += utf8ByteLength(block.text);
-				} else if (block.type === "thinking") {
-					total += utf8ByteLength(block.thinking);
-				} else if (block.type === "file") {
-					total += utf8ByteLength(block.content);
-				} else if (block.type === "tool_use") {
-					// Model-generated tool arguments ship on the wire too. Counting
-					// them keeps the budget honest; if tool results alone cannot
-					// absorb the overflow, oversized argument strings are truncated
-					// as a last resort (see collectTruncationCandidates).
-					total += countNestedStringBytes(block.input);
-				} else if (block.type === "tool_result") {
-					if (typeof block.content === "string") {
-						total += utf8ByteLength(block.content);
-					} else {
-						for (const entry of block.content) {
-							if (entry.type === "text") {
-								total += utf8ByteLength(entry.text);
-							} else if (entry.type === "file") {
-								total += utf8ByteLength(entry.content);
-							} else if (isStructuredToolResultEntry(entry)) {
-								total += countNestedStringBytes(entry);
-							}
-						}
-					}
-				}
-			}
-		}
-		return total;
-	}
-
-	private collectTruncationCandidates(
-		messages: Message[],
-	): TruncationCandidate[] {
-		const resultCandidates: TruncationCandidate[] = [];
-		const inputCandidates: TruncationCandidate[] = [];
-		for (const message of messages) {
-			if (message.role === "assistant" && typeof message.content === "string") {
-				resultCandidates.push({
-					byteLength: utf8ByteLength(message.content),
-					minBytes: MIN_TOTAL_BUDGET_ASSISTANT_TEXT_BYTES,
-					makeMarker: TRUNCATE_ASSISTANT_TEXT_BUDGET_MARKER,
-					get: () => message.content as string,
-					set: (value) => {
-						message.content = value;
-					},
-				});
-				continue;
-			}
-			if (!Array.isArray(message.content)) {
-				continue;
-			}
-			for (const block of message.content) {
-				if (block.type === "tool_use") {
-					collectNestedStringCandidates(block.input, inputCandidates);
-					continue;
-				}
-				if (message.role === "assistant" && block.type === "text") {
-					resultCandidates.push({
-						byteLength: utf8ByteLength(block.text),
-						minBytes: MIN_TOTAL_BUDGET_ASSISTANT_TEXT_BYTES,
-						makeMarker: TRUNCATE_ASSISTANT_TEXT_BUDGET_MARKER,
-						get: () => block.text,
-						set: (value) => {
-							block.text = value;
-						},
-					});
-					continue;
-				}
-				if (block.type !== "tool_result") {
-					continue;
-				}
-				if (typeof block.content === "string") {
-					resultCandidates.push({
-						byteLength: utf8ByteLength(block.content),
-						minBytes: MIN_TOTAL_BUDGET_TOOL_RESULT_BYTES,
-						makeMarker: TRUNCATE_MARKER_BUDGET,
-						get: () => block.content as string,
-						set: (value) => {
-							block.content = value;
-						},
-					});
-					continue;
-				}
-				for (const entry of block.content) {
-					if (entry.type === "text") {
-						resultCandidates.push({
-							byteLength: utf8ByteLength(entry.text),
-							minBytes: MIN_TOTAL_BUDGET_TOOL_RESULT_BYTES,
-							makeMarker: TRUNCATE_MARKER_BUDGET,
-							get: () => entry.text,
-							set: (value) => {
-								entry.text = value;
-							},
-						});
-					} else if (entry.type === "file") {
-						resultCandidates.push({
-							byteLength: utf8ByteLength(entry.content),
-							minBytes: MIN_TOTAL_BUDGET_TOOL_RESULT_BYTES,
-							makeMarker: TRUNCATE_MARKER_BUDGET,
-							get: () => entry.content,
-							set: (value) => {
-								entry.content = value;
-							},
-						});
-					} else if (isStructuredToolResultEntry(entry)) {
-						collectNestedStringCandidates(entry, resultCandidates);
-					}
-				}
-			}
-		}
-		// Tool results and assistant text truncate first; model-generated
-		// tool_use arguments are a last resort because some providers
-		// revalidate or replay them. All three being candidates keeps the
-		// budget reclaimable no matter which side carries the overflow.
-		resultCandidates.sort((l, r) => r.byteLength - l.byteLength);
-		inputCandidates.sort((l, r) => r.byteLength - l.byteLength);
-		return [...resultCandidates, ...inputCandidates];
-	}
-
-	private applyMediaBudget(messages: Message[]): Message[] {
-		const budget = this.resolveMediaBudget();
-		if (
-			budget.maxImageEncodedBytes === Number.POSITIVE_INFINITY &&
-			budget.maxImageDecodedBytes === Number.POSITIVE_INFINITY &&
-			budget.maxTotalMediaBytes === Number.POSITIVE_INFINITY
-		) {
-			return messages;
-		}
-
-		const state = createMediaBudgetState();
-		let changed = false;
-		const next = messages.map((message) => {
-			if (!Array.isArray(message.content)) {
-				return message;
-			}
-			let contentChanged = false;
-			const content = message.content.map((block) => {
-				const out = this.applyMediaBudgetToBlock(block, budget, state);
-				if (out !== block) {
-					contentChanged = true;
-				}
-				return out;
-			});
-			if (!contentChanged) {
-				return message;
-			}
-			changed = true;
-			return { ...message, content };
-		});
-
-		return changed ? next : messages;
-	}
-
 	private resolveMediaBudget(): ResolvedMediaBudget {
 		return resolveMediaBudget(this.mediaBudget);
 	}
-
-	private applyMediaBudgetToBlock(
-		block: ContentBlock,
-		budget: ResolvedMediaBudget,
-		state: MediaBudgetState,
-	): ContentBlock {
-		if (isImageContentLike(block)) {
-			return this.limitImageContent(block, budget, state);
-		}
-
-		if (block.type !== "tool_result" || typeof block.content === "string") {
-			return block;
-		}
-
-		let changed = false;
-		const content = block.content.map((entry) => {
-			const out = this.applyMediaBudgetToToolResultEntry(entry, budget, state);
-			if (out !== entry) {
-				changed = true;
-			}
-			return out as (typeof block.content)[number];
-		});
-
-		return changed
-			? { ...block, content: content as ToolResultContent["content"] }
-			: block;
-	}
-
-	private applyMediaBudgetToToolResultEntry(
-		entry: unknown,
-		budget: ResolvedMediaBudget,
-		state: MediaBudgetState,
-	): unknown {
-		if (isImageContentLike(entry)) {
-			return this.limitImageContent(entry, budget, state);
-		}
-		if (isStructuredToolResultEntry(entry)) {
-			return this.limitNestedMedia(entry, budget, state);
-		}
-		return entry;
-	}
-
-	private limitNestedMedia(
-		value: unknown,
-		budget: ResolvedMediaBudget,
-		state: MediaBudgetState,
-	): unknown {
-		if (isImageContentLike(value)) {
-			const limited = this.limitImageContent(value, budget, state);
-			return limited.type === "text" ? limited.text : limited;
-		}
-
-		if (Array.isArray(value)) {
-			let changed = false;
-			const next = value.map((item) => {
-				const out = this.limitNestedMedia(item, budget, state);
-				if (out !== item) {
-					changed = true;
-				}
-				return out;
-			});
-			return changed ? next : value;
-		}
-
-		if (value !== null && typeof value === "object") {
-			let changed = false;
-			const next: Record<string, unknown> = {};
-			for (const [key, item] of Object.entries(value)) {
-				const out = this.limitNestedMedia(item, budget, state);
-				if (out !== item) {
-					changed = true;
-				}
-				next[key] = out;
-			}
-			return changed ? next : value;
-		}
-
-		return value;
-	}
-
-	private limitImageContent(
-		image: unknown,
-		budget: ResolvedMediaBudget,
-		state: MediaBudgetState,
-	): ImageContent | TextContent {
-		if (!isImageContentWithData(image)) {
-			return { type: "text", text: IMAGE_OMITTED_PLACEHOLDER };
-		}
-
-		const validation = validateAndReserveImageMedia(
-			image.mediaType,
-			image.data,
-			{
-				maxImageEncodedBytes: budget.maxImageEncodedBytes,
-				maxImageDecodedBytes: budget.maxImageDecodedBytes,
-				maxTotalMediaBytes: budget.maxTotalMediaBytes,
-			},
-			state,
-		);
-		if (!validation.ok) {
-			return { type: "text", text: IMAGE_OMITTED_PLACEHOLDER };
-		}
-
-		return {
-			...image,
-			data: validation.base64,
-			mediaType: validation.mediaType,
-		};
-	}
-}
-
-const DSML_BAR = String.raw`[\|\uFF5C]`;
-// Compiled once at module load; String.prototype.matchAll clones the regex
-// per call, so sharing the global-flagged instance is safe.
-const TOOL_CALL_MARKUP_PATTERN = new RegExp(
-	String.raw`<\s*(?:${DSML_BAR}\s*)?DSML\s*(?:${DSML_BAR}\s*)?(?:tool_calls|invoke)\b[^>]*>|<\s*/?\s*(?:tool_calls?|tool_call|function_calls?|function_call|invoke)\b[^>]*>`,
-	"gi",
-);
-
-function utf8ByteLength(text: string): number {
-	return Buffer.byteLength(text, "utf8");
 }
 
 function parsePositiveIntegerEnv(
@@ -1530,198 +732,4 @@ function normalizeNonNegativeLimit(
 		return fallback;
 	}
 	return Number.isFinite(value) ? Math.floor(value) : value;
-}
-
-function truncateMiddleByChars(
-	text: string,
-	maxChars: number,
-	makeMarker: (removed: number) => string,
-): string {
-	if (text.length <= maxChars) {
-		return text;
-	}
-	// Two-pass: marker length depends on the removed-char count, which depends
-	// on the marker length. Compute a tentative marker, derive the final
-	// removed count, then build the real marker.
-	const tentativeMarker = makeMarker(text.length - maxChars);
-	const tentativeKeep = Math.max(
-		0,
-		Math.floor((maxChars - tentativeMarker.length) / 2),
-	);
-	const removed = Math.max(0, text.length - tentativeKeep * 2);
-	const marker = makeMarker(removed);
-	const keep = Math.max(0, Math.floor((maxChars - marker.length) / 2));
-	const start = text.slice(0, keep);
-	const end = keep > 0 ? text.slice(-keep) : "";
-	return `${start}${marker}${end}`;
-}
-
-function truncateMiddleToBytes(
-	text: string,
-	maxBytes: number,
-	makeMarker: (removed: number) => string,
-): string {
-	if (utf8ByteLength(text) <= maxBytes) {
-		return text;
-	}
-	// Binary search the largest char-length whose UTF-8 byte length fits.
-	let low = 0;
-	let high = text.length;
-	let best = truncateMiddleByChars(text, 0, makeMarker);
-	while (low <= high) {
-		const mid = (low + high) >>> 1;
-		const candidate = truncateMiddleByChars(text, mid, makeMarker);
-		if (utf8ByteLength(candidate) <= maxBytes) {
-			best = candidate;
-			low = mid + 1;
-		} else {
-			high = mid - 1;
-		}
-	}
-	return best;
-}
-
-function cloneContentBlockForMutation(block: ContentBlock): ContentBlock {
-	if (block.type === "tool_use") {
-		// Inputs are budget-truncation candidates of last resort, so they need
-		// the same deep-clone treatment as structured results: a shallow copy
-		// would leak truncation mutations back into conversation history.
-		return {
-			...block,
-			input: deepCloneJsonLike(block.input) as typeof block.input,
-		};
-	}
-	if (block.type !== "tool_result" || typeof block.content === "string") {
-		return { ...block };
-	}
-	return {
-		...block,
-		// Structured entries can nest the payload strings arbitrarily deep, so
-		// a shallow copy would leak budget-truncation mutations back into the
-		// original conversation history.
-		content: block.content.map((entry) =>
-			isStructuredToolResultEntry(entry)
-				? (deepCloneJsonLike(entry) as typeof entry)
-				: { ...entry },
-		),
-	};
-}
-
-/**
- * True for tool_result content entries that are not the typed text/image/file
- * blocks — i.e. structured tool outputs such as `ToolOperationResult[]`
- * entries that the runtime stores directly in the content array.
- */
-function isStructuredToolResultEntry(entry: unknown): boolean {
-	if (entry === null || typeof entry !== "object") {
-		return false;
-	}
-	const type = (entry as { type?: unknown }).type;
-	return type !== "text" && type !== "image" && type !== "file";
-}
-
-function isImageContentLike(value: unknown): boolean {
-	return (
-		value !== null &&
-		typeof value === "object" &&
-		(value as { type?: unknown }).type === "image"
-	);
-}
-
-function isImageContentWithData(value: unknown): value is ImageContent {
-	return (
-		value !== null &&
-		typeof value === "object" &&
-		(value as { type?: unknown }).type === "image" &&
-		typeof (value as { data?: unknown }).data === "string" &&
-		typeof (value as { mediaType?: unknown }).mediaType === "string"
-	);
-}
-
-function isBinaryContentLike(value: unknown): boolean {
-	return isImageContentWithData(value);
-}
-
-function countNestedStringBytes(value: unknown): number {
-	if (typeof value === "string") {
-		return utf8ByteLength(value);
-	}
-	if (Array.isArray(value)) {
-		let total = 0;
-		for (const item of value) {
-			total += countNestedStringBytes(item);
-		}
-		return total;
-	}
-	if (value !== null && typeof value === "object") {
-		if (isBinaryContentLike(value)) {
-			return 0;
-		}
-		let total = 0;
-		for (const item of Object.values(value)) {
-			total += countNestedStringBytes(item);
-		}
-		return total;
-	}
-	return 0;
-}
-
-function collectNestedStringCandidates(
-	container: unknown,
-	candidates: TruncationCandidate[],
-): void {
-	if (Array.isArray(container)) {
-		container.forEach((item, index) => {
-			if (typeof item === "string") {
-				candidates.push({
-					byteLength: utf8ByteLength(item),
-					minBytes: MIN_TOTAL_BUDGET_TOOL_RESULT_BYTES,
-					makeMarker: TRUNCATE_MARKER_BUDGET,
-					get: () => container[index] as string,
-					set: (value) => {
-						container[index] = value;
-					},
-				});
-			} else {
-				collectNestedStringCandidates(item, candidates);
-			}
-		});
-		return;
-	}
-	if (container !== null && typeof container === "object") {
-		if (isBinaryContentLike(container)) {
-			return;
-		}
-		const record = container as Record<string, unknown>;
-		for (const key of Object.keys(record)) {
-			const item = record[key];
-			if (typeof item === "string") {
-				candidates.push({
-					byteLength: utf8ByteLength(item),
-					minBytes: MIN_TOTAL_BUDGET_TOOL_RESULT_BYTES,
-					makeMarker: TRUNCATE_MARKER_BUDGET,
-					get: () => record[key] as string,
-					set: (value) => {
-						record[key] = value;
-					},
-				});
-			} else {
-				collectNestedStringCandidates(item, candidates);
-			}
-		}
-	}
-}
-
-function deepCloneJsonLike(value: unknown): unknown {
-	if (Array.isArray(value)) {
-		return value.map(deepCloneJsonLike);
-	}
-	if (value !== null && typeof value === "object") {
-		const out: Record<string, unknown> = {};
-		for (const [key, item] of Object.entries(value)) {
-			out[key] = deepCloneJsonLike(item);
-		}
-		return out;
-	}
-	return value;
 }
