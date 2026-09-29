@@ -1,16 +1,16 @@
 import * as vscode from "vscode"
 
 /** VS Code settings section that holds every `plinycode.spending.*` setting. */
-export const SPENDING_SETTINGS_SECTION = "plinycode.spending"
+const SPENDING_SETTINGS_SECTION = "plinycode.spending"
 
 /**
  * `plinycode.spending.conversationLimit`: the budget in USD that a conversation
  * starts with, and the step a budget stop raises it by. A conversation's own
  * budget (HistoryItem.spendingLimit) takes precedence; see sdk/spending-limit.ts.
  */
-export const CONVERSATION_LIMIT_SETTING = "conversationLimit"
+const CONVERSATION_LIMIT_SETTING = "conversationLimit"
 
-export const DEFAULT_CONVERSATION_SPENDING_LIMIT = 5
+const DEFAULT_CONVERSATION_SPENDING_LIMIT = 5
 
 /**
  * The default conversation budget in USD; 0 turns the limit off. Stored

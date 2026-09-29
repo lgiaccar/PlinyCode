@@ -15,7 +15,7 @@ import { resolveApiKey, resolveBaseUrl, resolveModelId, resolveProviderId } from
 import { toSdkProviderId } from "./model-catalog/sdk-provider-id"
 import { createPlinyFetch, PLINY_REQUEST_TIMEOUT_MS } from "./pliny-fetch"
 
-export interface BuildApiHandlerOptions {
+interface BuildApiHandlerOptions {
 	/**
 	 * Disable extended thinking/reasoning for this handler. Standalone utility
 	 * calls (commit message generation) want fast, cheap,

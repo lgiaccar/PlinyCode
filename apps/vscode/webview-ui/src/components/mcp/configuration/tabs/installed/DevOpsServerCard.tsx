@@ -19,7 +19,7 @@ const STATE_LABEL: Record<string, string> = {
 const EXAMPLES = ["Open a PR for this branch with a summary of the changes", "Why did the last pipeline run fail?"]
 
 /** Read-only smoke test, used by "Try in PlinyCode" and copied for the editor's own chat. */
-export const TEST_PROMPT =
+const TEST_PROMPT =
 	'Use the plinycode-devops MCP tools (not the terminal): call repo_context for this workspace, then pipeline_runs with branch "*" and limit 5. Summarize the repository, the current branch, any open PR and the latest runs in a short table.'
 
 /** Live status of the built-in DevOps server; undefined until the extension has answered. */

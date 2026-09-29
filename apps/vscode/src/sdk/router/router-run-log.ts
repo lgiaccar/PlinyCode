@@ -13,7 +13,7 @@ import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
 import type { RouterRunState } from "./router-health"
 
-export const ROUTER_RUN_LOG_FILENAME = "pliny-free-auto-runs.jsonl"
+const ROUTER_RUN_LOG_FILENAME = "pliny-free-auto-runs.jsonl"
 
 /** How a run came to an end. */
 export type RouterRunEnding =
@@ -41,7 +41,7 @@ export interface RouterRunLogRecord extends Omit<RouterRunState, "guardRules"> {
 	durationMs: number
 }
 
-export function runLogPath(dataDir?: string): string {
+function runLogPath(dataDir?: string): string {
 	return path.join(resolveDataDir(dataDir), ROUTER_RUN_LOG_FILENAME)
 }
 

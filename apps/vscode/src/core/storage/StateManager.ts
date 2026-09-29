@@ -28,7 +28,8 @@ import {
 	readSecretsFromStorage,
 	readWorkspaceStateFromStorage,
 } from "./utils/state-helpers"
-export interface PersistenceErrorEvent {
+
+interface PersistenceErrorEvent {
 	error: Error
 }
 

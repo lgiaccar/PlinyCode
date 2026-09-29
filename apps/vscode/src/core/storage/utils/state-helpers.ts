@@ -22,7 +22,7 @@ import { StateManager } from "../StateManager"
  * Secrets written by features PlinyCode no longer has. They are deleted from
  * the secret store on start-up so old credentials don't linger on disk.
  */
-export const REMOVED_SECRET_KEYS: readonly string[] = [
+const REMOVED_SECRET_KEYS: readonly string[] = [
 	// OCA (Oracle Code Assist) sign-in
 	"ocaApiKey",
 	"ocaRefreshToken",

@@ -29,7 +29,6 @@ export type Platform = "aix" | "darwin" | "freebsd" | "linux" | "openbsd" | "sun
 
 export const DEFAULT_PLATFORM = "unknown"
 
-export const COMMAND_CANCEL_TOKEN = "__cline_command_cancel__"
 export interface ExtensionState {
 	welcomeViewCompleted: boolean
 	apiConfiguration?: ApiConfiguration

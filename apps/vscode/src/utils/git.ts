@@ -10,7 +10,7 @@ const GIT_OUTPUT_LINE_LIMIT = 500
 // (each untracked file is diffed separately against /dev/null).
 const UNTRACKED_DIFF_LABEL = "git diff --no-index (untracked files)"
 
-export interface GitCommit {
+interface GitCommit {
 	hash: string
 	shortHash: string
 	subject: string

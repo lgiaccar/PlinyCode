@@ -26,7 +26,7 @@ export function isCheckpointAnswerMessage(messages: ClineMessage[], index: numbe
 	return false
 }
 
-export function isCheckpointRunUserMessage(messages: ClineMessage[], index: number): boolean {
+function isCheckpointRunUserMessage(messages: ClineMessage[], index: number): boolean {
 	return isVisibleCheckpointUserMessage(messages[index]) && !isCheckpointAnswerMessage(messages, index)
 }
 

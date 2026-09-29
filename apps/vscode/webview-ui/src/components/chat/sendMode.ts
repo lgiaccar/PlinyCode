@@ -11,7 +11,7 @@ export type SendMode = "default" | "steer" | "schedule"
 
 export const SEND_MODES: readonly SendMode[] = ["default", "steer", "schedule"]
 
-export const SEND_MODE_STORAGE_KEY = "plinycode.sendMode"
+const SEND_MODE_STORAGE_KEY = "plinycode.sendMode"
 
 export const SEND_MODE_META: Record<SendMode, { icon: string; label: string; tooltip: string }> = {
 	default: {

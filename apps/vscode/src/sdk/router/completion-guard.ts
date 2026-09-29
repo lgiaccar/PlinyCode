@@ -54,17 +54,17 @@ export const WAIT_BAIL_OUT_REMINDER =
 	"log or run a status command, and repeat until it finishes or you hit a concrete blocker. If the remaining wait " +
 	"is longer than about 30 minutes, ask the user whether to keep polling. Continue now with a tool call."
 
-export const LEAKED_REASONING_REMINDER =
+const LEAKED_REASONING_REMINDER =
 	"[SYSTEM] Your last message reads as unfinished thinking rather than an answer, and it made no tool call. " +
 	"Decide what to do, then do it with a tool call in this reply. If the task is complete, give the final result " +
 	"in a few sentences instead."
 
-export const DEGENERATE_REMINDER =
+const DEGENERATE_REMINDER =
 	"[SYSTEM] Your last message was corrupted (the same characters repeated for thousands of characters) and " +
 	"has been disregarded. Redo the step from the last tool result: continue with the next tool call, or give " +
 	"the final result if the task is complete."
 
-export const READINESS_REMINDER =
+const READINESS_REMINDER =
 	"[SYSTEM] The user asked you to run it, not to prepare it. You said it is ready but did not run it. Run it " +
 	"now with a tool call and report the actual result. Do not ask permission for something the user already asked for."
 
@@ -72,7 +72,7 @@ export const ESCALATED_REMINDER =
 	"[SYSTEM] Second reminder: you again described a step without calling a tool. Emit the tool call in this " +
 	"reply; do not describe it. If you cannot act, end with one sentence stating the blocker as a question to the user."
 
-export function failedCommandReminder(failure: ShellFailure): string {
+function failedCommandReminder(failure: ShellFailure): string {
 	const what = failure.command ? `The command \`${failure.command.slice(0, 120)}\`` : "The last command"
 	const how = failure.exitCode !== undefined ? ` failed with exit code ${failure.exitCode}` : " failed"
 	return (
@@ -82,7 +82,7 @@ export function failedCommandReminder(failure: ShellFailure): string {
 	)
 }
 
-export function detachedCommandReminder(failure: ShellFailure): string {
+function detachedCommandReminder(failure: ShellFailure): string {
 	const where = failure.logPath ? ` Its output is being written to ${failure.logPath}.` : ""
 	return (
 		`[SYSTEM] The last command is still running; it was left in the background.${where} You cannot come back ` +
@@ -91,7 +91,7 @@ export function detachedCommandReminder(failure: ShellFailure): string {
 	)
 }
 
-export function judgeReminder(reason: string | undefined): string {
+function judgeReminder(reason: string | undefined): string {
 	const why = reason ? ` ${reason.trim().replace(/\.?$/, ".")}` : ""
 	return (
 		`[SYSTEM] A check of your reply against the user's request suggests the task is not finished.${why} ` +
@@ -116,7 +116,7 @@ export interface JudgeVerdict {
 	reason?: string
 }
 
-export interface RouterCompletionGuardOptions {
+interface RouterCompletionGuardOptions {
 	/** Evaluated per reply, so a mid-task model switch takes effect. */
 	isActive: () => boolean
 	/** Current mode; the judge only runs in act mode. */

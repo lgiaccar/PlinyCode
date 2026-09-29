@@ -11,7 +11,7 @@ import path from "node:path"
  */
 
 /** Manifest attached to every release, describing its .vsix. */
-export const MANIFEST_FILE_NAME = "latest.json"
+const MANIFEST_FILE_NAME = "latest.json"
 
 const PRODUCT_ID = "plinycode"
 
@@ -73,7 +73,7 @@ export async function verifyStagedVsix(staged: string, manifest: ReleaseManifest
 	return staged
 }
 
-export function sha256File(filePath: string): Promise<string> {
+function sha256File(filePath: string): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const hash = createHash("sha256")
 		createReadStream(filePath)

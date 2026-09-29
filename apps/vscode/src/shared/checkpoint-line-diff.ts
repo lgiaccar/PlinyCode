@@ -1,8 +1,8 @@
 import { diffLines } from "diff"
 
-export type CheckpointFileChangeStatus = "added" | "modified" | "deleted"
+type CheckpointFileChangeStatus = "added" | "modified" | "deleted"
 
-export interface CheckpointLineChangeCounts {
+interface CheckpointLineChangeCounts {
 	added: number
 	removed: number
 }

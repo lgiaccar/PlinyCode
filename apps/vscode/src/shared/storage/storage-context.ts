@@ -38,7 +38,7 @@ export interface StorageContext {
 	readonly workspaceStoragePath: string
 }
 
-export interface StorageContextOptions {
+interface StorageContextOptions {
 	/**
 	 * Override the Cline home directory. When set, the data directory is always
 	 * `<clineDir>/data`. Defaults to env-based resolution: CLINE_DATA_DIR, then

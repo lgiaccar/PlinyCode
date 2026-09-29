@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { getDocumentsPath } from "@/core/storage/documents-path"
 import type * as vscode from "vscode"
+import { getDocumentsPath } from "@/core/storage/documents-path"
 import { updateMcpSettingsFile } from "@/services/mcp/settingsLock"
-import type { StorageContext } from "@/shared/storage/storage-context"
 import { Logger } from "@/shared/services/Logger"
+import type { StorageContext } from "@/shared/storage/storage-context"
 import { getServerAuthHash } from "@/utils/mcpAuth"
 import { arePathsEqual } from "@/utils/path"
 
@@ -14,7 +14,7 @@ const MCP_SETTINGS_MIGRATION_KEY = "__vscodeLegacyMcpSettingsMigration"
 
 type JsonRecord = Record<string, unknown>
 
-export interface LegacyMcpSettingsMigrationResult {
+interface LegacyMcpSettingsMigrationResult {
 	migrated: boolean
 	sourcesChecked: number
 	sourcesMigrated: number
@@ -124,7 +124,7 @@ function getUrlForAuthHash(registration: JsonRecord): string | undefined {
 	return typeof transport.url === "string" ? transport.url : undefined
 }
 
-export function normalizeLegacyMcpServer(
+function normalizeLegacyMcpServer(
 	value: unknown,
 	legacyOAuthSecrets: JsonRecord | undefined,
 	serverName: string,
@@ -234,7 +234,7 @@ async function readLegacyOAuthSecrets(
 	return { ...vscodeSecrets, ...fileBackedSecrets }
 }
 
-export async function getLegacyMcpSettingsSources(vscodeContext: vscode.ExtensionContext): Promise<LegacyMcpSource[]> {
+async function getLegacyMcpSettingsSources(vscodeContext: vscode.ExtensionContext): Promise<LegacyMcpSource[]> {
 	const sources: LegacyMcpSource[] = []
 	const extensionStorageDir = vscodeContext.globalStorageUri?.fsPath
 	if (extensionStorageDir) {
@@ -251,7 +251,7 @@ export async function getLegacyMcpSettingsSources(vscodeContext: vscode.Extensio
 	return sources
 }
 
-export function getSharedMcpSettingsPath(storage: StorageContext): string {
+function getSharedMcpSettingsPath(storage: StorageContext): string {
 	const explicitPath = process.env.CLINE_MCP_SETTINGS_PATH?.trim()
 	if (explicitPath) {
 		return explicitPath

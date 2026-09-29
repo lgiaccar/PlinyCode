@@ -6,7 +6,7 @@ import { buildSessionConfig, type SessionConfigInput } from "./cline-session-fac
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installRouter } from "./router/router-integration"
 
-export interface SdkSessionConfigBuilderOptions {
+interface SdkSessionConfigBuilderOptions {
 	stateManager: StateManager
 	emitHookMessage: HookMessageEmitter
 	onConsecutiveMistakeLimitReached?: CoreSessionConfig["onConsecutiveMistakeLimitReached"]

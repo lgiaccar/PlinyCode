@@ -6,7 +6,7 @@
  */
 import type { McpToolProvider } from "@plinycode/core"
 
-export interface BuiltinMcpSource {
+interface BuiltinMcpSource {
 	serverName: string
 	timeoutMs: number
 	provider: McpToolProvider

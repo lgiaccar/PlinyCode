@@ -29,7 +29,7 @@ const AUTO_APPROVE_PREVIEW_LINGER_MS = 1_500
  */
 const PREVIEW_OPEN_TIMEOUT_MS = 5_000
 
-export interface SdkDiffEditCoordinatorOptions {
+interface SdkDiffEditCoordinatorOptions {
 	/** Workspace root used to resolve relative tool paths. */
 	getCwd: () => Promise<string>
 	/**

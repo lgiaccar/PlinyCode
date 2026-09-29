@@ -33,7 +33,7 @@ const TEXT_PATH_REGEX = /(?<![\w/\\])(?:[A-Za-z]:[\\/][^\s<>"'`|?*]+|\/(?:[\w\-.
 // Sentence punctuation a path in prose is usually followed by.
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}]+$/
 
-export type TextSegment = { type: "text"; value: string } | { type: "path"; value: string }
+type TextSegment = { type: "text"; value: string } | { type: "path"; value: string }
 
 /**
  * Splits prose into text and absolute-path segments. Returns undefined when

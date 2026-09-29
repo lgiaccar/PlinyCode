@@ -8,7 +8,7 @@ import { execa } from "execa"
 import * as path from "path"
 import { getGitRemoteUrls, getLatestGitCommitHash } from "../../utils/git"
 
-export interface WorkspaceContext {
+interface WorkspaceContext {
 	workspaceRoots: WorkspaceRoot[]
 	primaryRoot: WorkspaceRoot
 	currentRoot?: WorkspaceRoot

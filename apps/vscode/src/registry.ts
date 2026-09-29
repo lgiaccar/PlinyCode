@@ -58,7 +58,7 @@ export const ExtensionRegistryInfo = {
 	views: ClineViewIds,
 }
 
-export interface HostInfo {
+interface HostInfo {
 	/**
 	 * The name of the host platform, e.g VSCode, IntelliJ Ultimate Edition, etc.
 	 */

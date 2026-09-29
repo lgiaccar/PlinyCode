@@ -256,7 +256,7 @@ export const workspaceResolver = new WorkspaceResolver()
 /**
  * Result type for multi-root workspace path resolution
  */
-export interface WorkspacePathResult {
+interface WorkspacePathResult {
 	absolutePath: string
 	displayPath: string
 	resolvedPath: string
@@ -265,7 +265,7 @@ export interface WorkspacePathResult {
 /**
  * Configuration for workspace path resolution
  */
-export interface WorkspaceConfig {
+interface WorkspaceConfig {
 	cwd: string
 	isMultiRootEnabled?: boolean
 	workspaceManager?: any

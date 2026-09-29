@@ -12,7 +12,7 @@ import { Logger } from "@/shared/services/Logger"
 import { resolveWorkspacePath } from "./WorkspaceResolver"
 import type { WorkspaceRootManager } from "./WorkspaceRootManager"
 
-export interface WorkspaceAdapterConfig {
+interface WorkspaceAdapterConfig {
 	cwd: string
 	isMultiRootEnabled?: boolean
 	workspaceManager?: WorkspaceRootManager

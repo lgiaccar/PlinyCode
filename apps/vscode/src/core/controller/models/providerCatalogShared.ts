@@ -36,7 +36,7 @@ export interface ProviderCatalogController {
 	getProviderCatalog(): ProviderCatalog
 }
 
-export interface ProviderCatalogStateController extends ProviderCatalogController {
+interface ProviderCatalogStateController extends ProviderCatalogController {
 	stateManager: {
 		setGlobalStateBatch(updates: Partial<GlobalStateAndSettings>): void
 		flushPendingState?(): Promise<void>

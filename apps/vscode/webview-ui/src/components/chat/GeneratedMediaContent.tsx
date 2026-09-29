@@ -7,11 +7,11 @@ import {
 } from "@plinycode/shared/browser"
 import { useEffect, useState } from "react"
 
-export interface GeneratedMediaClassNames extends Partial<Record<GeneratedMediaModality, string>> {
+interface GeneratedMediaClassNames extends Partial<Record<GeneratedMediaModality, string>> {
 	unavailable?: string
 }
 
-export interface GeneratedMediaContentProps {
+interface GeneratedMediaContentProps {
 	media: GeneratedMedia
 	className?: string
 	classNames?: GeneratedMediaClassNames

@@ -19,7 +19,7 @@ type StartInput = Parameters<VscodeSessionHost["start"]>[0]
 type InitialMessages = StartInput["initialMessages"]
 type SessionConfig = Awaited<ReturnType<SdkSessionConfigBuilder["build"]>>
 
-export interface TaskResumeStartInput {
+interface TaskResumeStartInput {
 	config: SessionConfig
 	initialMessages?: InitialMessages
 	sessionMetadata?: ReturnType<typeof historyItemToSessionMetadata>

@@ -4,7 +4,7 @@ import { StreamingResponseHandler } from "./grpc-handler"
 /**
  * Information about a registered gRPC request
  */
-export interface RequestInfo {
+interface RequestInfo {
 	/**
 	 * Function to clean up resources when the request is cancelled or completed
 	 */

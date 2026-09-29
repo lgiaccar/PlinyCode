@@ -1,4 +1,4 @@
-export type ModeToggleDraftAction = "clear" | "restore" | "keep"
+type ModeToggleDraftAction = "clear" | "restore" | "keep"
 
 export function getModeToggleDraftAction(input: {
 	consumed: boolean

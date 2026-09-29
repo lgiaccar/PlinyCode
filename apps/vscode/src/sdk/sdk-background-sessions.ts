@@ -19,15 +19,15 @@ export const MAX_BACKGROUND_SESSIONS = 3
  */
 const IDLE_SETTLE_MS = 750
 
-export type BackgroundTaskStatus = "running" | "needs_attention"
+type BackgroundTaskStatus = "running" | "needs_attention"
 
-export interface BackgroundTaskInfo {
+interface BackgroundTaskInfo {
 	id: string
 	status: BackgroundTaskStatus
 }
 
 /** What a task that was moved back to the foreground was still waiting on. */
-export interface HeldInteractions {
+interface HeldInteractions {
 	approvals: HeldToolApproval[]
 	questions: HeldQuestion[]
 }

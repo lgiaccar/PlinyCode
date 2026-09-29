@@ -14,7 +14,7 @@ const CLINE_AVATAR_URL = "https://avatars.githubusercontent.com/u/184127137"
  * Uses VS Code's Comment API to create inline comment threads on files.
  * Comments appear in VS Code's Comments Panel and inline in editors.
  */
-export class VscodeCommentReviewController extends CommentReviewController implements vscode.Disposable {
+class VscodeCommentReviewController extends CommentReviewController implements vscode.Disposable {
 	private commentController: vscode.CommentController
 	private threads: Map<string, vscode.CommentThread> = new Map()
 

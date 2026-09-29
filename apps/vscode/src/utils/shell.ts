@@ -4,13 +4,13 @@ import * as nodePath from "path"
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
 
-export const WINDOWS_POWERSHELL_7_PATH = "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+const WINDOWS_POWERSHELL_7_PATH = "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
 export const WINDOWS_POWERSHELL_LEGACY_PATH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 // WSL Bash is reached through the wsl.exe launcher, not the guest-side /bin/bash
 // path (which does not exist on the Windows host). wsl.exe runs the command in
 // the default distro and translates the Windows working directory to its
 // /mnt/<drive> mount automatically. getShellArgs() appends the `bash -c` form.
-export const WINDOWS_WSL_PATH = "C:\\Windows\\System32\\wsl.exe"
+const WINDOWS_WSL_PATH = "C:\\Windows\\System32\\wsl.exe"
 
 const SHELL_PATHS = {
 	// Windows paths

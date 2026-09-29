@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { ProviderId } from "@/context/ExtensionStateContext"
 import { ModelsServiceClient } from "@/services/grpc-client"
 
-export type ProviderConfigWritePatch = Partial<Omit<WriteProviderConfigPatch, "headers" | "aws" | "gcp">> & {
+type ProviderConfigWritePatch = Partial<Omit<WriteProviderConfigPatch, "headers" | "aws" | "gcp">> & {
 	headers?: Record<string, string>
 	aws?: Partial<AwsProviderConfig>
 	gcp?: Partial<GcpProviderConfig>

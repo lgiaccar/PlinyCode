@@ -134,5 +134,3 @@ export const ModelDetailsCard: React.FC<ModelDetailsCardProps> = ({ modelId, mod
 		</Card>
 	)
 }
-
-export default ModelDetailsCard

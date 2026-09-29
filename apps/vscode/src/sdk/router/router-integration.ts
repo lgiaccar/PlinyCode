@@ -66,7 +66,7 @@ export interface RouterInstallDeps {
 }
 
 /** Model-facing note appended to a failed shell result, so weak models do not stop on it. */
-export function failedCommandNote(failure: ShellFailure): string {
+function failedCommandNote(failure: ShellFailure): string {
 	const what = failure.command ? `The command \`${failure.command.slice(0, 120)}\`` : "The command above"
 	const how = failure.exitCode !== undefined ? ` failed with exit code ${failure.exitCode}` : " failed"
 	return (
@@ -76,7 +76,7 @@ export function failedCommandNote(failure: ShellFailure): string {
 }
 
 /** Model-facing note appended to a detached shell result. */
-export function detachedCommandNote(failure: ShellFailure): string {
+function detachedCommandNote(failure: ShellFailure): string {
 	const where = failure.logPath ? ` Its output is being written to ${failure.logPath}.` : ""
 	return (
 		`[The command is still running in the background.${where} Do not end your turn to "check later" — you ` +

@@ -3,7 +3,7 @@ import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { sanitizeInitialMessagesForSessionStart } from "./initial-message-sanitizer"
 
-export const LEGACY_RESUME_MODEL_WARNING =
+const LEGACY_RESUME_MODEL_WARNING =
 	"Warning: this is a legacy conversation, which means tool names may have changed. Please use the most up-to-date tools you are aware of."
 
 function anthropicContentBlockToSdkBlock(block: unknown): ContentBlock | undefined {

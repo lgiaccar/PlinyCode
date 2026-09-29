@@ -12,7 +12,7 @@
 
 import { Logger } from "@/shared/services/Logger"
 
-export interface ForegroundCommandHandle {
+interface ForegroundCommandHandle {
 	/**
 	 * Stop waiting for the command: flush the output captured so far to a
 	 * log file, keep appending until the command completes, and resolve the
@@ -21,7 +21,7 @@ export interface ForegroundCommandHandle {
 	detach(): void
 }
 
-export interface SdkForegroundCommandCoordinatorOptions {
+interface SdkForegroundCommandCoordinatorOptions {
 	/** Called whenever isRunning flips; used to push the flag to the webview. */
 	onRunningChanged?: (running: boolean) => void
 	/**

@@ -11,7 +11,7 @@
  *   "@my-app:src/components/Button.tsx" -> { workspaceHint: "my-app", relPath: "src/components/Button.tsx" }
  */
 
-export interface ParsedWorkspacePath {
+interface ParsedWorkspacePath {
 	/**
 	 * The workspace hint extracted from the path (if any)
 	 * This can be a workspace name or partial path to match

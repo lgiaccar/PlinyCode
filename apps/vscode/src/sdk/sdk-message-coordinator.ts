@@ -7,7 +7,7 @@ import { pushMessageToWebview } from "./webview-grpc-bridge"
 
 export type SessionEventListener = (messages: ClineMessage[], event: CoreSessionEvent) => void
 
-export interface SdkMessageCoordinatorOptions {
+interface SdkMessageCoordinatorOptions {
 	getTask: () => TaskProxy | undefined
 	/**
 	 * The process-wide id/seq/epoch authority. When provided, every message flowing to the

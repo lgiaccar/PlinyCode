@@ -46,7 +46,7 @@ export interface BackgroundInteractionSink {
 	holdQuestion(sessionId: string, question: string, options: string[], context: unknown): Promise<string>
 }
 
-export interface SdkInteractionCoordinatorOptions {
+interface SdkInteractionCoordinatorOptions {
 	messages: SdkMessageCoordinator
 	getSessionId: () => string
 	postStateToWebview: () => Promise<void>

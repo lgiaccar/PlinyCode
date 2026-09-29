@@ -2348,7 +2348,7 @@ function finalizePersistedToolUse(
 	)
 }
 
-export interface SdkMessagesToClineMessagesOptions {
+interface SdkMessagesToClineMessagesOptions {
 	/**
 	 * Whether the transcript's LAST agent turn ended cleanly (per the session record's status).
 	 * Only that final turn is ever retagged into the inferred completion row — persisted

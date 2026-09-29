@@ -59,7 +59,7 @@ export const PROCEED_LOG_MAX_BYTES = 10 * 1024 * 1024
 const PROCEED_LOG_FINAL_MESSAGE_MAX_CHARS = 4096
 
 /** Options for creating the VSCode run_commands tool. */
-export interface VscodeRunCommandsToolOptions {
+interface VscodeRunCommandsToolOptions {
 	/** Workspace root directory. */
 	cwd: string
 	/** Lazy factory for the VscodeTerminalManager. Called once on first foreground use. */

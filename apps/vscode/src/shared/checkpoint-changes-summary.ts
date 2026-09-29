@@ -2,7 +2,7 @@ import path from "node:path"
 import type { CheckpointContentDiff } from "@plinycode/core"
 import { countCheckpointLineChanges, getCheckpointFileChangeStatus } from "./checkpoint-line-diff"
 
-export interface BuiltChangedFileSummary {
+interface BuiltChangedFileSummary {
 	filePath: string
 	relativePath: string
 	addedLines: number

@@ -16,7 +16,7 @@ import type {
 	AgentRunResult,
 } from "@plinycode/shared"
 
-export interface RouterHooks {
+interface RouterHooks {
 	afterTool?: (context: AgentAfterToolContext) => AgentAfterToolResult | undefined | Promise<AgentAfterToolResult | undefined>
 	afterRun?: (context: AgentRunLifecycleContext & { result: AgentRunResult }) => void | Promise<void>
 }

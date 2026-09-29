@@ -47,7 +47,7 @@ import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-c
 import type { SdkSessionHost } from "./session-host"
 import { createVscodeExtraTools } from "./vscode-runtime-builder"
 
-export interface VscodeSessionHostOptions {
+interface VscodeSessionHostOptions {
 	mcpHub: McpHub
 	requestToolApproval?: (request: {
 		agentId: string

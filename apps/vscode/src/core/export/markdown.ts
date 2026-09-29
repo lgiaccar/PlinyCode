@@ -7,7 +7,7 @@ import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
 /** Default number of output lines kept before a fenced block is truncated. */
 export const DEFAULT_MAX_OUTPUT_LINES = 200
 
-export interface ExportMarkdownOptions {
+interface ExportMarkdownOptions {
 	/** Render tool/command output blocks. Off leaves just the one-line summary. */
 	includeToolOutput?: boolean
 	/** Render assistant reasoning inside a collapsed <details> block. */

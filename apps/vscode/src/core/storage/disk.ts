@@ -9,10 +9,6 @@ import { HostProvider } from "@/hosts/host-provider"
 import { Logger } from "@/shared/services/Logger"
 import { getDocumentsPath } from "./documents-path"
 
-export { getDocumentsPath } from "./documents-path"
-
-export { getSkillsDirectoriesForScan, type SkillsScanDirectory } from "./skill-directories"
-
 export const GlobalFileNames = {
 	apiConversationHistory: "api_conversation_history.json",
 	contextHistory: "context_history.json",
@@ -46,7 +42,7 @@ function getClineHomePath(): string {
 	return path.join(os.homedir(), ".cline")
 }
 
-export async function ensureTaskDirectoryExists(taskId: string): Promise<string> {
+async function ensureTaskDirectoryExists(taskId: string): Promise<string> {
 	return getGlobalStorageDir("tasks", taskId)
 }
 
@@ -83,7 +79,7 @@ export async function ensureMcpServersDirectoryExists(): Promise<string> {
 	return mcpServersDir
 }
 
-export async function ensureHooksDirectoryExists(): Promise<string> {
+async function ensureHooksDirectoryExists(): Promise<string> {
 	const userDocumentsPath = await getDocumentsPath()
 	const clineHooksDir = path.join(userDocumentsPath, "Cline", "Hooks")
 	try {
@@ -121,10 +117,6 @@ export async function ensureAgentSkillsDirectoryExists(options: { isGlobal: bool
 		return agentSkillsDir
 	}
 	return agentSkillsDir
-}
-
-export async function ensureSettingsDirectoryExists(): Promise<string> {
-	return getGlobalStorageDir("settings")
 }
 
 /**
@@ -179,10 +171,6 @@ export async function saveTaskMetadata(taskId: string, metadata: TaskMetadata) {
 	} catch (error) {
 		Logger.error("Failed to save task metadata:", error)
 	}
-}
-
-export async function ensureCacheDirectoryExists(): Promise<string> {
-	return getGlobalStorageDir("cache")
 }
 
 async function getGlobalStorageDir(...subdirs: string[]) {

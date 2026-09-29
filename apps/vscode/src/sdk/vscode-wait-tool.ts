@@ -17,17 +17,17 @@
 import type { AgentTool, AgentToolContext } from "@plinycode/shared"
 
 export const WAIT_TOOL_NAME = "wait"
-export const WAIT_TOOL_MAX_SECONDS = 600
-export const WAIT_TOOL_MAX_TOTAL_SECONDS_PER_RUN = 3600
+const WAIT_TOOL_MAX_SECONDS = 600
+const WAIT_TOOL_MAX_TOTAL_SECONDS_PER_RUN = 3600
 
-export interface WaitToolInput {
+interface WaitToolInput {
 	/** Seconds to wait, 1..maxSeconds. */
 	seconds: number
 	/** What the agent is waiting for; echoed back and shown in the chat row. */
 	reason?: string
 }
 
-export interface WaitToolOptions {
+interface WaitToolOptions {
 	maxSeconds?: number
 	maxTotalSecondsPerRun?: number
 	/** Injectable for tests. */

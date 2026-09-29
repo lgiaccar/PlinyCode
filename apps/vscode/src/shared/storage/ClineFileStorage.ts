@@ -3,7 +3,7 @@ import * as path from "node:path"
 import { Logger } from "../services/Logger"
 import { ClineSyncStorage } from "./ClineStorage"
 
-export interface ClineFileStorageOptions {
+interface ClineFileStorageOptions {
 	/**
 	 * File permissions mode (e.g., 0o600 for owner read/write only).
 	 * If not set, uses the system default.

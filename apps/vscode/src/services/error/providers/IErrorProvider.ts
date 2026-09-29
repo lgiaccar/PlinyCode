@@ -8,7 +8,7 @@ import type { ClineError } from "../ClineError"
 /**
  * Error settings that control when and how errors are logged
  */
-export interface ErrorSettings {
+interface ErrorSettings {
 	/** Whether error logging is enabled */
 	enabled: boolean
 	/** Whether the host environment's telemetry is enabled */

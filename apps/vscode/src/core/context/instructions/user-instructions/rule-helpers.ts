@@ -154,7 +154,7 @@ type RuleFileController = {
 
 // Prefixes used to make activated conditional rule identifiers self-explanatory in the UI.
 // NOTE: These are display identifiers (not toggle keys).
-export const RULE_SOURCE_PREFIX = {
+const RULE_SOURCE_PREFIX = {
 	workspace: "workspace",
 	global: "global",
 } as const

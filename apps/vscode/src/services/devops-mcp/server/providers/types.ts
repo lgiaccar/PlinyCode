@@ -92,7 +92,7 @@ export type Fetch = (input: string | URL, init?: RequestInit) => Promise<Respons
 
 type Query = Record<string, string | number | undefined>
 
-export interface RequestOptions {
+interface RequestOptions {
 	query?: Query
 	json?: unknown
 	accept?: string

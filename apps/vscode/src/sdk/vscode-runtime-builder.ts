@@ -47,7 +47,7 @@ export class McpHubToolProvider {
 	}
 }
 
-export interface VscodeExtraToolsOptions {
+interface VscodeExtraToolsOptions {
 	cwd?: string
 	/**
 	 * Lazy factory for the VscodeTerminalManager.

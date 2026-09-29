@@ -16,7 +16,7 @@ enum HookErrorType {
  * Structured error information for hook failures.
  * Provides both user-friendly messages and technical details.
  */
-export interface HookErrorInfo {
+interface HookErrorInfo {
 	/** Type of error that occurred */
 	type: HookErrorType
 	/** User-friendly error message */

@@ -1,4 +1,4 @@
-export type LanguageKey =
+type LanguageKey =
 	| "en"
 	| "ar"
 	| "pt-BR"

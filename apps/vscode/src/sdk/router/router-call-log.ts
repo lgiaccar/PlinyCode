@@ -11,7 +11,7 @@ import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
 import type { RouterEffort, RouterTier } from "./router-types"
 
-export const ROUTER_CALL_LOG_FILENAME = "pliny-free-auto-calls.jsonl"
+const ROUTER_CALL_LOG_FILENAME = "pliny-free-auto-calls.jsonl"
 
 export interface RouterCallLogRecord {
 	/** ISO time the call started. */

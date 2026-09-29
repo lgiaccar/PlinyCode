@@ -8,7 +8,7 @@
 // tested in isolation.
 import { Logger } from "@/shared/services/Logger"
 
-export interface StatePostDebouncerOptions {
+interface StatePostDebouncerOptions {
 	/** Trailing debounce window: bursts of post() calls within this window collapse into one flush. */
 	debounceMs: number
 	/** Builds and ships the current state snapshot. Rejections propagate to post() callers. */

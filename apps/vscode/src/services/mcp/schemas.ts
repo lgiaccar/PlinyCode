@@ -14,7 +14,7 @@ const AutoApproveSchema = z.array(z.string()).default([])
 const ReadTimeoutSchema = z.preprocess(resolveMcpTimeoutSeconds, z.number()).optional().default(DEFAULT_MCP_TIMEOUT_SECONDS)
 export const McpTimeoutSecondsSchema = z.number().finite().min(MIN_MCP_TIMEOUT_SECONDS).max(MAX_MCP_TIMEOUT_SECONDS)
 
-export const BaseConfigSchema = z.object({
+const BaseConfigSchema = z.object({
 	autoApprove: AutoApproveSchema.optional(),
 	disabled: z.boolean().optional(),
 	timeout: ReadTimeoutSchema,

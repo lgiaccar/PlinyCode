@@ -286,7 +286,7 @@ export function listTaskIds(dataDir?: string): string[] {
 // ---------------------------------------------------------------------------
 
 /** All legacy state read from disk in a single call */
-export interface LegacyState {
+interface LegacyState {
 	globalState: Partial<GlobalStateAndSettings>
 	secrets: Partial<Secrets>
 	taskHistory: HistoryItem[]

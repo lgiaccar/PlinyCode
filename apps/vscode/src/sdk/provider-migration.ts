@@ -21,7 +21,7 @@ import { resolveDataDir } from "./legacy-state-reader"
 // ---------------------------------------------------------------------------
 
 /** Result of the provider migration process */
-export interface ProviderMigrationResult {
+interface ProviderMigrationResult {
 	/** Whether any providers were migrated */
 	migrated: boolean
 	/** Total number of providers after migration */

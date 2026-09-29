@@ -9,33 +9,155 @@
 				"src/generated/hosts/vscode/hostbridge-grpc-service-config.ts!",
 				"src/dev/debug-harness/server.ts",
 				"src/dev/mcp-oauth-test-server/server.ts",
-				"src/**/*.test.ts",
-				"src/**/__tests__/**/*.ts",
-				"src/test/**/*.ts"
+				// Marked as strict (`!`) entries so exports reachable only from
+				// tests still count as "used" under `--production` — otherwise
+				// knip's production mode drops these entries outright and reports
+				// every test-only-used export as unused. This doesn't cover
+				// `src/sdk/**/*.test.ts`, which vitest.config.ts's `test.include`
+				// causes the Vitest plugin to register as its own (non-strict)
+				// entry, shadowing this glob for that subtree; those findings are
+				// individually documented in `ignore` below instead.
+				"src/**/*.test.ts!",
+				"src/**/__tests__/**/*.ts!",
+				"src/test/**/*.ts!"
 			],
 			"project": [
 				"src/**/*.ts!"
 			],
+			"ignore": [
+				// Consumed only through the `@shared/*` alias from webview-ui, a
+				// separate knip workspace whose imports this workspace's file-reachability
+				// graph can't see across, so knip reports these extension-side files as
+				// unreachable even though the webview genuinely imports them.
+				"src/shared/combineHookSequences.ts",
+				"src/shared/slashCommands.ts",
+				// Every export knip still flags below this point is verified used —
+				// only by that module's own `*.test.ts`, not by shipped code. Most of
+				// these are covered by the strict (`!`) test entries above; the
+				// exceptions are files under `src/sdk/**` whose tests are matched by
+				// `vitest.config.ts`'s `test.include: ["src/sdk/**/*.test.ts", ...]`,
+				// which makes knip's Vitest plugin register them as its own (always
+				// non-strict) entry, overriding the strict glob entry declared above
+				// for that subtree. Whole files are listed here (not individual
+				// exports — knip has no per-export ignore) because every remaining
+				// finding in each one is this same test-only pattern.
+				"src/core/context/instructions/user-instructions/rule-helpers.ts",
+				"src/core/hooks/hook-factory.ts",
+				"src/sdk/cline-session-factory.ts",
+				"src/sdk/legacy-state-reader.ts",
+				"src/sdk/message-translator.ts",
+				"src/sdk/model-catalog/catalog.ts",
+				"src/sdk/provider-migration.ts",
+				"src/sdk/router/completion-guard.ts",
+				"src/sdk/router/routed-agent-model.ts",
+				"src/sdk/router/router-classifier.ts",
+				"src/sdk/router/router-completion-judge.ts",
+				"src/sdk/router/router-health.ts",
+				"src/sdk/router/router-integration.ts",
+				"src/sdk/router/router-policy.ts",
+				"src/sdk/router/router-rules-store.ts",
+				"src/sdk/router/router-rules.ts",
+				"src/sdk/router/unfinished-turn-guard.ts",
+				"src/sdk/sdk-api-handler.ts",
+				"src/sdk/sdk-background-sessions.ts",
+				"src/sdk/sdk-checkpoints.ts",
+				"src/sdk/sdk-compaction-coordinator.ts",
+				"src/sdk/sdk-diff-edit-coordinator.ts",
+				"src/sdk/sdk-followup-coordinator.ts",
+				"src/sdk/sdk-mcp-coordinator.ts",
+				"src/sdk/sdk-mode-coordinator.ts",
+				"src/sdk/sdk-session-event-coordinator.ts",
+				"src/sdk/sdk-session-rebuild-scheduler.ts",
+				"src/sdk/sdk-task-control-coordinator.ts",
+				"src/sdk/sdk-task-history.ts",
+				"src/sdk/sdk-task-resume.ts",
+				"src/sdk/sdk-task-start-coordinator.ts",
+				"src/sdk/sdk-terminal-execution-mode-coordinator.ts",
+				"src/sdk/slash-command-expansion.ts",
+				"src/sdk/tool-approval-denial.ts",
+				"src/sdk/vscode-run-commands-tool.ts",
+				"src/sdk/vscode-runtime-builder.ts",
+				"src/sdk/vscode-wait-tool.ts",
+				"src/sdk/workspace-root.ts",
+				"src/services/search/file-search.ts",
+				"src/shared/messages/metrics.ts",
+				"src/shared/pliny.ts",
+				"src/shared/proto-conversions/models/api-configuration-conversion.ts",
+				"src/shared/tls-trust.ts"
+			],
 			"ignoreDependencies": [
 				"@plinycode/core",
 				"@plinycode/llms",
-				"@plinycode/shared"
+				"@plinycode/shared",
+				// Only imported by the generated `src/shared/proto/**` and
+				// `src/generated/**` files, which are (re)created by `bun run protos`
+				// and gitignored, so knip's static source scan never sees the import.
+				"@bufbuild/protobuf",
+				// Pulled in only via the codicon @font-face/`codicon.ttf` bundling
+				// comment in WebviewProvider.ts and consumed as CSS
+				// (`webview-ui/src/index.css` imports `@vscode/codicons/dist/codicon.css`),
+				// not through a TS import knip can trace.
+				"@vscode/codicons"
 			]
 		},
 		"webview-ui": {
 			"entry": [
 				"src/main.tsx!",
 				"src/services/grpc-client.ts!",
-				"src/**/*.test.{ts,tsx}",
-				"src/**/*.spec.{ts,tsx}",
-				"src/**/__tests__/**/*.{ts,tsx}"
+				"src/**/*.test.{ts,tsx}!",
+				"src/**/*.spec.{ts,tsx}!",
+				"src/**/__tests__/**/*.{ts,tsx}!"
 			],
 			"project": [
 				"src/**/*.{ts,tsx}!",
 				"*.ts"
 			],
+			"ignore": [
+				// Wired into webview-ui/vitest.config.ts's `setupFiles`, which knip's
+				// production mode doesn't count as a use since tests aren't shipped.
+				"src/setupTests.ts",
+				// Storybook's own plugin entries (.storybook/preview.ts, *.stories.tsx)
+				// are only picked up outside --production mode, since Storybook isn't
+				// part of the shipped webview. These 3 files are reachable only from
+				// stories/preview.ts, so --production mode alone can't see them:
+				// - StorybookDecorator.tsx: imported by .storybook/preview.ts
+				// - dialog.tsx: only story-covered (components/ui/dialog.stories.tsx)
+				// - ClineLogoWhite.tsx: used by select.stories.tsx and dialog.stories.tsx
+				"src/config/StorybookDecorator.tsx",
+				"src/components/ui/dialog.tsx",
+				"src/assets/ClineLogoWhite.tsx",
+				// Every export knip still flags below this point is verified used —
+				// only by that module's own `*.test.{ts,tsx}`, not by shipped code.
+				// Whole files are listed (not individual exports — knip has no
+				// per-export ignore) because every remaining finding in each one is
+				// this same test-only pattern.
+				"src/components/chat/ChatTextArea.tsx",
+				"src/components/chat/chat-view/components/messages/ToolGroupRenderer.tsx",
+				"src/components/chat/chat-view/hooks/useThinkingLoaderRow.ts",
+				"src/components/chat/chat-view/messageReducer.ts",
+				"src/components/chat/chat-view/shared/buttonConfig.ts",
+				"src/components/chat/formatChangedFilesSummary.ts",
+				"src/components/chat/scheduleTime.ts",
+				"src/components/chat/task-header/TaskUsageCounter.tsx",
+				"src/components/chat/task-header/TaskWorkingDirectoryBadge.tsx",
+				"src/components/settings/providers/providerSettingsRegistry.ts",
+				// Re-exports primitives from the extension side's `@shared/pliny`
+				// (a separate knip workspace) for this workspace's own test file;
+				// see plinyModelFilter.ts's own top-of-file comment.
+				"src/components/settings/utils/plinyModelFilter.ts",
+				"src/components/settings/utils/pricingUtils.ts",
+				"src/components/ui/select.tsx",
+				"src/context/ExtensionStateContext.tsx",
+				"src/hooks/useProviderConfig.ts",
+				"src/utils/slash-commands.ts"
+			],
 			"ignoreDependencies": [
-				"@plinycode/shared"
+				"@plinycode/shared",
+				// Imported only via `@import url(...)` in src/index.css, not a TS
+				// import, so knip's dependency scan can't see the usage.
+				"@fontsource-variable/geist-mono",
+				// Loaded only via `@plugin "tailwindcss-animate"` in src/index.css.
+				"tailwindcss-animate"
 			],
 			"vite": true
 		}
