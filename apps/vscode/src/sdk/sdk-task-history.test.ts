@@ -207,9 +207,8 @@ describe("SdkTaskHistory", () => {
 
 		expect(result).toMatchObject([
 			{ type: "say", say: "task", text: "Build the feature", partial: false },
-			// Mid-transcript turns are never retagged into the inferred completion row:
-			// history carries no per-turn outcome, so an earlier turn's text stays plain.
-			{ type: "say", say: "text", text: "Done", partial: false },
+			// A turn followed by a real user message ended, so its text gets the completion row.
+			{ type: "say", say: "completion_result", text: "Done", partial: false },
 			{ type: "say", say: "user_feedback", text: "Follow up", partial: false },
 			// A trailing ask:"completion_result" is appended so a reopened task
 			// shows the completion/resume affordance instead of a stuck spinner.
@@ -296,7 +295,7 @@ describe("SdkTaskHistory", () => {
 		})
 	})
 
-	it("retags only the final turn's text, styled by the mode recovered from user_input wrappers", async () => {
+	it("retags each turn's final text, styled by the mode recovered from user_input wrappers", async () => {
 		const { history, readMessages } = makeHistory([makeSessionRecord("task-1")])
 		readMessages.mockResolvedValueOnce([
 			{ role: "user", content: '<user_input mode="plan">plan the feature</user_input>' },
@@ -309,10 +308,9 @@ describe("SdkTaskHistory", () => {
 
 		expect(result).toMatchObject([
 			// The <user_input mode="..."> wrapper is stripped for display but its mode
-			// styles the final turn's inferred completion row. Mid-transcript turns stay
-			// plain — history has no per-turn outcome to trust.
+			// styles that turn's inferred completion row, earlier turns included.
 			{ type: "say", say: "task", text: "plan the feature" },
-			{ type: "say", say: "text", text: "Here is the plan." },
+			{ type: "say", say: "plan_completion_result", text: "Here is the plan." },
 			{ type: "say", say: "user_feedback", text: "looks good, do it" },
 			{ type: "say", say: "completion_result", text: "Implemented." },
 			{ type: "ask", ask: "completion_result" },
@@ -333,7 +331,7 @@ describe("SdkTaskHistory", () => {
 		expect(result).toContainEqual(
 			expect.objectContaining({ type: "say", say: "plan_completion_result", text: "Phase two plan." }),
 		)
-		expect(result).toContainEqual(expect.objectContaining({ type: "say", say: "text", text: "Built." }))
+		expect(result).toContainEqual(expect.objectContaining({ type: "say", say: "completion_result", text: "Built." }))
 	})
 
 	it("hides the plan -> act auto-continuation prompt when rehydrating from history", async () => {
@@ -394,11 +392,10 @@ describe("SdkTaskHistory", () => {
 	})
 
 	it("does not retag the terminal text of a session that did not end cleanly", async () => {
-		// "failed"/"cancelled" runs ended on a dangling response. Non-terminal statuses at
-		// rest mean the process died without recording an outcome — "idle" is also the state
-		// after an aborted turn (markTurnIdle runs for every finish reason), so it cannot be
-		// trusted as a clean ending.
-		for (const status of ["failed", "cancelled", "running", "pending", "idle"] as const) {
+		// "failed"/"cancelled" runs ended on a dangling response, and "running"/"pending" at
+		// rest mean the process died without recording an outcome. Earlier turns still end
+		// at the user's next message, so only the final turn stays plain.
+		for (const status of ["failed", "cancelled", "running", "pending"] as const) {
 			const { history, readMessages } = makeHistory([makeSessionRecord("task-1", { status })])
 			readMessages.mockResolvedValueOnce([
 				{ role: "user", content: "first request" },
@@ -410,8 +407,20 @@ describe("SdkTaskHistory", () => {
 			const result = await history.getClineMessages("task-1")
 
 			expect(result).toContainEqual(expect.objectContaining({ type: "say", say: "text", text: "Dangling partial answer" }))
-			expect(result.filter((m) => m.say === "completion_result" || m.say === "plan_completion_result")).toHaveLength(0)
+			expect(result.filter((m) => m.say === "completion_result" || m.say === "plan_completion_result")).toHaveLength(1)
 		}
+	})
+
+	it("retags the terminal text of an idle session (a conversation at rest)", async () => {
+		const { history, readMessages } = makeHistory([makeSessionRecord("task-1", { status: "idle" })])
+		readMessages.mockResolvedValueOnce([
+			{ role: "user", content: "first request" },
+			{ role: "assistant", content: [{ type: "text", text: "Final answer." }] },
+		] as never)
+
+		const result = await history.getClineMessages("task-1")
+
+		expect(result).toContainEqual(expect.objectContaining({ type: "say", say: "completion_result", text: "Final answer." }))
 	})
 
 	it("does not retag the terminal text when no session record exists (unknown outcome)", async () => {
