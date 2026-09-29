@@ -212,7 +212,6 @@ Module.prototype.require = function (id) {
 			listLocalProviders,
 			resolveProviderConfig: async () => undefined,
 			getProviderConfigFields: () => [],
-			fetchClineRecommendedModels: async () => ({ recommended: [], free: [] }),
 			readGlobalSettings: () => ({ telemetryOptOut: false }),
 			setTelemetryOptOutGlobally: () => undefined,
 			createDefaultExecutors: () => ({}),

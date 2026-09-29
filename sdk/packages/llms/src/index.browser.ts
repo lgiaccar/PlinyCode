@@ -11,7 +11,6 @@ export type {
 } from "./models";
 export {
 	filterImageOutputModels,
-	GENERATED_CLINE_RECOMMENDED_MODELS,
 	getAllProviders,
 	getGeneratedModelsForProvider,
 	getModelOverridesForProvider,
