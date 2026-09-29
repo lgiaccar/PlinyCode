@@ -6,23 +6,14 @@
 // the webview's gRPC streams.
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
-import {
-	type CompareCheckpointResult,
-	createRestoredCheckpointMetadata,
-	createUserInstructionConfigService,
-	ensureChatWorkspace,
-	readSessionCheckpointHistory,
-	resolveDefaultMcpSettingsPath,
-	type UserInstructionConfigService,
-} from "@plinycode/core"
+import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
 import type { ChatContent } from "@shared/ChatContent"
-import { mentionRegexGlobal } from "@shared/context-mentions"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { isPlinyFreeModelId } from "@shared/pliny"
-import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
+import { LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
@@ -32,26 +23,20 @@ import { createTaskApiModelShim } from "@/core/controller/models/taskApiModel"
 import { sendChatButtonClickedEvent } from "@/core/controller/ui/subscribeToChatButtonClicked"
 import { renderConversationMarkdown } from "@/core/export/markdown"
 import { defaultMarkdownExportFilename, saveMarkdownExport } from "@/core/export/save-markdown"
-import { parseMentions } from "@/core/mentions"
 import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { StateManager } from "@/core/storage/StateManager"
-import { RecentWorkspacesStore } from "@/core/workspace/recent-workspaces-store"
-import { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
-import { workspaceRefFromWindow } from "@/core/workspace/workspace-identity"
+import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
 import { HostProvider } from "@/hosts/host-provider"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
-import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { McpHub } from "@/services/mcp/McpHub"
-import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
-import { arePathsEqual, getDesktopDir } from "@/utils/path"
-import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
+import { arePathsEqual } from "@/utils/path"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
@@ -59,11 +44,8 @@ import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigS
 import { createProviderConfigStore } from "./model-catalog/store"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
-import {
-	findVisibleCheckpointUserMessageByRun,
-	getCheckpointRunCountForMessage,
-	isVisibleCheckpointUserMessage,
-} from "./sdk-checkpoints"
+import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
+import { getCheckpointRunCountForMessage } from "./sdk-checkpoints"
 import { SdkCompactionCoordinator } from "./sdk-compaction-coordinator"
 import { SdkDiffEditCoordinator } from "./sdk-diff-edit-coordinator"
 import { SdkFollowupCoordinator } from "./sdk-followup-coordinator"
@@ -77,6 +59,7 @@ import { SdkSessionEventCoordinator } from "./sdk-session-event-coordinator"
 import { SdkSessionHistoryLoader } from "./sdk-session-history-loader"
 import { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
+import { SdkSlashMentionResolver } from "./sdk-slash-mention-resolver"
 import { type ClearTaskOptions, SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
 import {
 	createHistoryItemFromSession,
@@ -99,7 +82,7 @@ import {
 	isSyntheticSdkUserMessage,
 	type SdkUserMessage,
 } from "./sdk-user-message-mapping"
-import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command-expansion"
+import { SdkWorkspaceRootResolver } from "./sdk-workspace-root-resolver"
 import { checkConversationBudget } from "./spending-limit"
 import { StatePostDebouncer } from "./state-post-debouncer"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
@@ -108,7 +91,6 @@ import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
 import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
 import { WebviewGrpcBridge } from "./webview-grpc-bridge"
-import { resolveWorkspaceManagerPaths } from "./workspace-root"
 
 /**
  * Log a stub warning and return undefined.
@@ -202,25 +184,17 @@ export class Controller {
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
 	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
 
-	private latestCheckpointComparisonCache?: {
-		sessionId: string
-		checkpointRunCount: number
-		cwd: string
-		diffs: CompareCheckpointResult["diffs"]
-	}
-
 	private unsubscribeBuiltinMcp?: () => void
 
-	// Watches user-instruction files (workflows/skills/rules). Used to expand
-	// `/workflow` and `/skill` slash commands into their instruction bodies before
-	// the prompt reaches the model — the same mechanism the CLI uses in
-	// `buildUserInputMessage`. The agent loop never auto-expands commands, so this
-	// host-side expansion is required. Created lazily (memoized as a promise to be
-	// race-free under concurrent first sends) and rebuilt if the workspace root
-	// changes.
-	private userInstructionService?: Promise<UserInstructionConfigService>
-	private userInstructionServiceRoot?: string
 	private isDisposed = false
+
+	// Checkpoint restore and "view changes" comparisons — see sdk-checkpoint-coordinator.ts.
+	private checkpoints!: SdkCheckpointCoordinator
+	// Slash-command expansion and @-mention resolution — see sdk-slash-mention-resolver.ts.
+	private readonly slashMentions: SdkSlashMentionResolver
+	// Workspace root / window workspace / WorkspaceRootManager resolution — see
+	// sdk-workspace-root-resolver.ts.
+	private readonly workspaceRootResolver: SdkWorkspaceRootResolver
 
 	// Synchronous snapshot of getWorkspaceRoot()'s latest result, for the message
 	// translator (which runs synchronously and relativizes the tool paths shown in
@@ -234,8 +208,9 @@ export class Controller {
 	 */
 	private activeTaskWorkspace?: { workspace?: WorkspaceRef; cwd: string }
 	/** Most recently used workspaces, shared with the other windows through a file. */
-	readonly recentWorkspaces = new RecentWorkspacesStore()
-	private windowWorkspaceRecorded = false
+	get recentWorkspaces(): SdkWorkspaceRootResolver["recentWorkspaces"] {
+		return this.workspaceRootResolver.recentWorkspaces
+	}
 
 	constructor(readonly context: ClineExtensionContext) {
 		// StateManager must be initialized before creating the Controller
@@ -248,6 +223,17 @@ export class Controller {
 		this.providerCatalog = createProviderCatalog(this.providerConfigStore)
 		this.providerConfigStoreSubscription = this.providerConfigStore.subscribe((event) => {
 			this.handleProviderConfigChange(event)
+		})
+		this.workspaceRootResolver = new SdkWorkspaceRootResolver({
+			getActiveTaskWorkspace: () => this.activeTaskWorkspace,
+			onWorkspaceRootResolved: (workspaceRoot) => {
+				this.lastKnownWorkspaceRoot = workspaceRoot
+			},
+		})
+		this.slashMentions = new SdkSlashMentionResolver({
+			stateManager: this.stateManager,
+			getWorkspaceRoot: () => this.getWorkspaceRoot(),
+			ensureWorkspaceManager: () => this.ensureWorkspaceManager(),
 		})
 
 		// IMPORTANT: Use ~/.cline/data/settings/ for the settings directory,
@@ -627,6 +613,29 @@ export class Controller {
 			getTurnPhase: () => this.turnStateTracker.currentPhase,
 			background: this.background,
 		})
+		this.checkpoints = new SdkCheckpointCoordinator({
+			sessions: this.sessions,
+			messages: this.messages,
+			taskHistory: this.taskHistory,
+			sessionConfigBuilder: this.sessionConfigBuilder,
+			turnStateTracker: this.turnStateTracker,
+			getTask: () => this.task,
+			setTask: (task) => {
+				this.task = task
+			},
+			getWorkspaceRoot: () => this.getWorkspaceRoot(),
+			getMode: () => (this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"),
+			createTempSessionHost: () => this.createTempSessionHost(),
+			askResponse: (text, images, files) => this.askResponse(text, images, files),
+			cancelTask: () => this.cancelTask(),
+			resetMessageTranslatorAndFence: () => this.resetMessageTranslatorAndFence(),
+			clearTurnOutcome: () => this.messageTranslatorState.clearTurnOutcome(),
+			replaceMessages: (messages) => this.messages.replaceMessages(messages),
+			postStateToWebview: () => this.postStateToWebview(),
+			onCheckpointRestoreInput: (input) => {
+				this.checkpointRestoreInput = input
+			},
+		})
 		// Subscribe to MCP tool list changes so we can restart the SDK session
 		// when servers are added/removed/reconnected. The SDK's DefaultSessionBuilder
 		// does not support dynamic MCP tools, so we must restart the session.
@@ -748,13 +757,9 @@ export class Controller {
 		return VscodeSessionHost.create({ mcpHub: this.mcpHub })
 	}
 
+	/** @deprecated kept for API compatibility; delegates to the slash/mention resolver. */
 	async invalidateUserInstructionService(): Promise<void> {
-		const userInstructionServicePromise = this.userInstructionService
-		this.userInstructionService = undefined
-		this.userInstructionServiceRoot = undefined
-		if (userInstructionServicePromise) {
-			await userInstructionServicePromise.then((service) => service.stop()).catch(() => {})
-		}
+		await this.slashMentions.invalidateUserInstructionService()
 	}
 
 	async dispose(): Promise<void> {
@@ -763,7 +768,7 @@ export class Controller {
 		// Tear down the debounced state-post machinery before downstream resources
 		// are disposed below — see StatePostDebouncer.dispose().
 		await this.statePostDebouncer.dispose()
-		await this.invalidateUserInstructionService()
+		await this.slashMentions.dispose()
 		this.messages.cancelPendingSave()
 		// Clear MCP tool list change callback before disposing McpHub
 		this.mcpHub?.clearToolListChangeCallback()
@@ -780,195 +785,45 @@ export class Controller {
 	}
 
 	// ---- Slash command + context mention resolution ----
-
-	/**
-	 * Lazily create (or rebuild on workspace-root change) the user-instruction
-	 * watcher. Pointed at the workspace root so it discovers both local config
-	 * (`.clinerules/workflows`, `.cline/workflows`, …).
-	 *
-	 * `workspaceRoot` is resolved by the caller so the memoization check below runs
-	 * synchronously on entry — there is no `await` before the assignment, so
-	 * concurrent callers cannot create two competing watchers.
-	 */
-	private ensureUserInstructionService(workspaceRoot: string): Promise<UserInstructionConfigService> {
-		// dispose() may have run during an awaited gap in the caller. Don't
-		// resurrect a watcher the dispose path will never stop again.
-		if (this.isDisposed) {
-			return Promise.reject(new Error("Controller disposed"))
-		}
-		if (this.userInstructionService && this.userInstructionServiceRoot === workspaceRoot) {
-			return this.userInstructionService
-		}
-		// Workspace root changed: stop the previous watcher once it settles.
-		const previous = this.userInstructionService
-		if (previous) {
-			previous.then((service) => service.stop()).catch(() => {})
-		}
-		this.userInstructionServiceRoot = workspaceRoot
-		this.userInstructionService = (async () => {
-			const service = createUserInstructionConfigService({
-				workflows: { workspacePath: workspaceRoot },
-				skills: {
-					workspacePath: workspaceRoot,
-					includePluginSkills: true,
-					cwd: workspaceRoot,
-				},
-				rules: { workspacePath: workspaceRoot },
-			})
-			// start() runs the initial scan; await so the snapshot is populated
-			// before the first resolveRuntimeSlashCommand call.
-			await service.start().catch((error) => {
-				Logger.warn("[SdkController] Failed to start user instruction watcher:", error)
-			})
-			return service
-		})()
-		return this.userInstructionService
-	}
-
-	/**
-	 * Expand a `/workflow` or `/skill` slash command into its instruction body.
-	 * Serves the same purpose as the CLI's `buildUserInputMessage`, but is more
-	 * permissive than the SDK's leading-only resolver: it accepts the legacy
-	 * `/my-workflow.md` spelling the webview autocomplete inserts, matches
-	 * commands mid-message (anything the chat input highlights as a command),
-	 * and honors the user's workflow enable/disable toggles. Returns the input
-	 * unchanged if no known command matches or expansion fails.
-	 */
-	private async resolveSlashCommands(text: string): Promise<string> {
-		if (this.isDisposed) {
-			return text
-		}
-		try {
-			const workspaceRoot = await this.getWorkspaceRoot()
-			const service = await this.ensureUserInstructionService(workspaceRoot)
-			const workflowRecords = service.listRecords("workflow").map((record) => ({
-				id: record.id,
-				name: record.item.name,
-				filePath: record.filePath,
-			}))
-			const disabledWorkflowNames = buildDisabledWorkflowNames({
-				records: workflowRecords,
-				globalToggles: this.stateManager.getGlobalSettingsKey("globalWorkflowToggles"),
-				workspaceToggles: this.stateManager.getWorkspaceStateKey("workflowToggles"),
-			})
-			return expandSlashCommands(text, [...service.listRuntimeCommands(), ...BUILTIN_SLASH_COMMANDS], {
-				disabledWorkflowNames,
-				workflowRecords,
-			})
-		} catch (error) {
-			Logger.warn("[SdkController] Slash command resolution failed, using raw text:", error)
-			return text
-		}
-	}
+	// See sdk-slash-mention-resolver.ts for the implementation.
 
 	/**
 	 * Expand slash commands, then resolve `@` context mentions in user text
 	 * before sending to the SDK.
-	 *
-	 * `parseMentions()` inlines file content (`@/path`), URL content
-	 * (`@https://...`), diagnostics (`@problems`), git state (`@git-changes`),
-	 * and commit info (`@hash`) into the prompt text. We do this here because
-	 * the SDK's own mention enricher only handles simple `@path` file mentions
-	 * and does not understand the webview's `@/path` format or special
-	 * mentions, so the LLM would otherwise never see the referenced content.
 	 */
 	private async resolveContextMentions(text: string): Promise<string> {
-		const withCommands = await this.resolveSlashCommands(text)
-
-		// Quick check: skip mention parsing if there are no @ mentions
-		if (!mentionRegexGlobal.test(withCommands)) {
-			return withCommands
-		}
-		// Reset lastIndex since RegExp.test() advances it for global regexes
-		mentionRegexGlobal.lastIndex = 0
-
-		try {
-			const cwd = await this.getWorkspaceRoot()
-			const urlContentFetcher = new UrlContentFetcher()
-			const workspaceManager = await this.ensureWorkspaceManager()
-			const resolved = await parseMentions(withCommands, cwd, urlContentFetcher, undefined, workspaceManager)
-			Logger.log(`[SdkController] Resolved context mentions (${withCommands.length} → ${resolved.length} chars)`)
-			return resolved
-		} catch (error) {
-			Logger.error("[SdkController] Failed to resolve context mentions, using raw text:", error)
-			return withCommands
-		}
+		return this.slashMentions.resolveContextMentions(text)
 	}
 
 	// ---- Workspace root resolution ----
+	// See sdk-workspace-root-resolver.ts for the implementation. Kept as thin
+	// delegating methods here since they're referenced throughout this file and
+	// by external callers (workspace/listRecentWorkspaces.ts, etc.) via the
+	// Controller instance.
 
 	/**
-	 * Get the user's workspace root directory.
-	 *
-	 * In VSCode this resolves to `vscode.workspace.workspaceFolders[0]` via
-	 * `HostProvider.workspace.getWorkspacePaths()`. If no workspace folder is
-	 * open, it falls back to the SDK's shared chat workspace (see
-	 * getNoWorkspaceFallback).
-	 * This avoids using the VS Code extension host's `process.cwd()` (often `/`),
-	 * which produces invalid SDK workspace metadata with an empty hint.
+	 * Get the user's workspace root directory. Warms `lastKnownWorkspaceRoot`,
+	 * the synchronous snapshot the message translator reads for display-path
+	 * relativization.
 	 */
 	private async getWorkspaceRoot(): Promise<string> {
-		if (this.activeTaskWorkspace) {
-			this.lastKnownWorkspaceRoot = this.activeTaskWorkspace.cwd
-			return this.activeTaskWorkspace.cwd
-		}
-		try {
-			const { paths } = await HostProvider.workspace.getWorkspacePaths({})
-			const workspaceRoot = paths?.find((workspacePath) => workspacePath.trim().length > 0)
-			if (workspaceRoot) {
-				this.lastKnownWorkspaceRoot = workspaceRoot
-				return workspaceRoot
-			}
-		} catch (error) {
-			Logger.warn("[SdkController] Failed to get workspace paths, using the no-workspace fallback:", error)
-		}
-		this.lastKnownWorkspaceRoot = await this.getNoWorkspaceFallback()
-		return this.lastKnownWorkspaceRoot
+		return this.workspaceRootResolver.getWorkspaceRoot()
 	}
-
-	private noWorkspaceFallbackPromise?: Promise<string>
 
 	/**
 	 * The workspace this window is open on: its folder, or its .code-workspace
-	 * file when that lists several folders. Undefined in an empty window. The
-	 * first resolution also records it as recently used, so the other windows
-	 * offer it in their pickers.
+	 * file when that lists several folders. Undefined in an empty window.
 	 */
 	async getWindowWorkspace(): Promise<WorkspaceRef | undefined> {
-		try {
-			const { paths, workspaceFile } = await HostProvider.workspace.getWorkspacePaths({})
-			const workspace = workspaceRefFromWindow({ paths: paths ?? [], workspaceFile })
-			if (workspace && !this.windowWorkspaceRecorded) {
-				this.windowWorkspaceRecorded = true
-				void this.recentWorkspaces.touch(workspace)
-			}
-			return workspace
-		} catch (error) {
-			Logger.warn("[SdkController] Failed to resolve the window workspace:", error)
-			return undefined
-		}
+		return this.workspaceRootResolver.getWindowWorkspace()
 	}
 
 	/**
 	 * Directory used when no workspace folder is open: the SDK's shared chat
-	 * workspace (`~/.cline/data/workspaces/chat`, seeded with an AGENTS.md
-	 * etiquette file), matching how the desktop app and CLI host sessions
-	 * started without a project. Desktop is only a last resort when the chat
-	 * workspace cannot be created. Memoized so repeated no-workspace calls
-	 * don't re-touch the filesystem.
+	 * workspace, falling back to Desktop.
 	 */
 	private getNoWorkspaceFallback(): Promise<string> {
-		this.noWorkspaceFallbackPromise ??= (async () => {
-			try {
-				return await ensureChatWorkspace()
-			} catch (error) {
-				Logger.warn("[SdkController] Failed to prepare the chat workspace, falling back to Desktop:", error)
-				// Don't memoize the degraded result; retry the chat workspace next time.
-				this.noWorkspaceFallbackPromise = undefined
-				return getDesktopDir()
-			}
-		})()
-		return this.noWorkspaceFallbackPromise
+		return this.workspaceRootResolver.getNoWorkspaceFallback()
 	}
 
 	// ---- Session event subscription ----
@@ -1428,287 +1283,26 @@ export class Controller {
 		}
 	}
 
+	// ---- Checkpoint restore and changes summary ----
+	// See sdk-checkpoint-coordinator.ts for the implementation.
+
 	async restoreCheckpoint(input: { checkpointRunCount: number; restoreType: ClineCheckpointRestore }): Promise<void> {
-		const restoreMessages = input.restoreType === "task" || input.restoreType === "taskAndWorkspace"
-		const restoreWorkspace = input.restoreType === "workspace" || input.restoreType === "taskAndWorkspace"
-		const checkpointRunCount = Number(input.checkpointRunCount)
-		if (!Number.isInteger(checkpointRunCount) || checkpointRunCount < 1) {
-			throw new Error("checkpointRunCount must be a positive integer")
-		}
-
-		const activeSession = this.sessions.getActiveSession()
-		const currentTask = this.task
-		if (!activeSession || !currentTask) {
-			throw new Error("No active task to restore")
-		}
-		if (activeSession.isRunning) {
-			await this.cancelTask()
-		}
-
-		const currentMessages = currentTask.messageStateHandler.getClineMessages()
-		const target = restoreMessages ? findVisibleCheckpointUserMessageByRun(currentMessages, checkpointRunCount) : undefined
-		if (restoreMessages && !target) {
-			throw new Error(`Could not find user message for checkpoint run ${checkpointRunCount}`)
-		}
-
-		const cwd = await this.getWorkspaceRoot()
-		const mode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
-		const firstUserMessage = currentMessages.find(isVisibleCheckpointUserMessage)
-		const restoredText = target?.message.text ?? ""
-		const historyTitle = checkpointRunCount === 1 ? restoredText : firstUserMessage?.text || restoredText
-		const config = restoreMessages ? await this.sessionConfigBuilder.build({ cwd, mode, prompt: historyTitle }) : undefined
-
-		const startInput = config
-			? {
-					...buildStartSessionInput(config, { prompt: historyTitle, cwd, mode }),
-					sessionMetadata: {
-						title: historyTitle,
-						modelId: config.modelId,
-					},
-				}
-			: undefined
-
-		const restored = await this.sessions.restoreActiveSession({
-			sessionId: activeSession.sessionId,
-			checkpointRunCount,
-			cwd,
-			restore: {
-				messages: restoreMessages,
-				workspace: restoreWorkspace,
-				omitCheckpointMessageFromSession: true,
-			},
-			...(startInput ? { start: startInput } : {}),
-		})
-
-		if (!restoreMessages) {
-			await this.postStateToWebview()
-			return
-		}
-
-		if (!restored.sessionId || !restored.startResult || !target) {
-			throw new Error("Checkpoint restore did not return a new session")
-		}
-
-		this.turnStateTracker.set("idle")
-		this.messageTranslatorState.clearTurnOutcome()
-		this.resetMessageTranslatorAndFence()
-
-		const task = createTaskProxy(
-			restored.sessionId,
-			(text?: string, images?: string[], files?: string[]) => this.askResponse(text, images, files),
-			() => this.cancelTask(),
-		)
-		this.task = task
-
-		const newHistoryItem = createHistoryItemFromSession(
-			restored.sessionId,
-			historyTitle,
-			config?.modelId ?? "",
-			cwd,
-			config?.workspaceRoot ?? cwd,
-		)
-		await this.taskHistory.updateTaskHistoryItem(newHistoryItem)
-
-		const visibleMessages = currentMessages.slice(0, target.index)
-		if (visibleMessages.length > 0) {
-			this.messages.replaceMessages(visibleMessages)
-		}
-
-		this.checkpointRestoreInput = {
-			text: restoredText,
-			images: target.message.images ?? [],
-			files: target.message.files ?? [],
-			sessionId: restored.sessionId,
-		}
-		await this.postStateToWebview()
-	}
-
-	/**
-	 * Diffs the latest checkpoint — snapshotted when the user's last message
-	 * started a run — against the current working tree. Returns undefined when
-	 * no checkpoint exists (e.g. the workspace is not a git repository).
-	 * Throws when there is no task at all.
-	 */
-	private resolveCheckpointRunCountForSummary(input?: { checkpointRunCount?: number; messageTs?: number }): number | undefined {
-		if (input?.checkpointRunCount !== undefined && input.checkpointRunCount > 0) {
-			return input.checkpointRunCount
-		}
-		if (input?.messageTs !== undefined && input.messageTs > 0) {
-			const clineMessages = this.task?.messageStateHandler.getClineMessages() ?? []
-			const targetIndex = clineMessages.findIndex((message) => message.ts === input.messageTs)
-			if (targetIndex === -1) {
-				return undefined
-			}
-			return getCheckpointRunCountForMessage(clineMessages, targetIndex)
-		}
-		return undefined
-	}
-
-	private async loadCheckpointComparison(checkpointRunCount?: number): Promise<
-		| {
-				sessionId: string
-				checkpointRunCount: number
-				cwd: string
-				diffs: CompareCheckpointResult["diffs"]
-		  }
-		| undefined
-	> {
-		const activeSession = this.sessions.getActiveSession()
-		const sessionId = activeSession?.sessionId ?? this.task?.taskId
-		if (!sessionId) {
-			throw new Error("No active task to show changes for")
-		}
-
-		// After a window reload the latest task is shown from history without a
-		// live session, so fall back to a temporary host for the comparison.
-		let tempHost: VscodeSessionHost | undefined
-		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createTempSessionHost())
-		try {
-			if (!sessionHost.compareCheckpoint) {
-				throw new Error("This session host does not support checkpoint comparison")
-			}
-
-			const sessionRecord = await sessionHost.get(sessionId)
-			let resolvedRunCount = checkpointRunCount
-			if (resolvedRunCount === undefined) {
-				const latestCheckpoint = readSessionCheckpointHistory(sessionRecord).reduce(
-					(latest, entry) => (!latest || entry.runCount > latest.runCount ? entry : latest),
-					undefined as ReturnType<typeof readSessionCheckpointHistory>[number] | undefined,
-				)
-				if (!latestCheckpoint) {
-					return undefined
-				}
-				resolvedRunCount = latestCheckpoint.runCount
-			}
-
-			const cached = this.latestCheckpointComparisonCache
-			if (cached?.sessionId === sessionId && cached.checkpointRunCount === resolvedRunCount) {
-				return cached
-			}
-
-			const cwd = sessionRecord?.cwd?.trim() || sessionRecord?.workspaceRoot?.trim() || (await this.getWorkspaceRoot())
-			const { diffs } = await sessionHost.compareCheckpoint({
-				sessionId,
-				checkpointRunCount: resolvedRunCount,
-				cwd,
-			})
-			const result = {
-				sessionId,
-				checkpointRunCount: resolvedRunCount,
-				cwd,
-				diffs,
-			}
-			this.latestCheckpointComparisonCache = result
-			return result
-		} finally {
-			await tempHost?.dispose("viewLatestCheckpointChanges")
-		}
-	}
-
-	private async loadLatestCheckpointComparison(): Promise<
-		| {
-				sessionId: string
-				checkpointRunCount: number
-				cwd: string
-				diffs: CompareCheckpointResult["diffs"]
-		  }
-		| undefined
-	> {
-		return this.loadCheckpointComparison()
-	}
-
-	private buildCheckpointChangesSummary(
-		comparison:
-			| {
-					checkpointRunCount: number
-					cwd: string
-					diffs: CompareCheckpointResult["diffs"]
-			  }
-			| undefined,
-	): LatestChangesSummary {
-		if (!comparison || comparison.diffs.length === 0) {
-			return LatestChangesSummary.create({
-				files: [],
-				totalAdded: 0,
-				totalRemoved: 0,
-				checkpointRunCount: comparison?.checkpointRunCount ?? 0,
-			})
-		}
-		const built = buildChangedFileSummaries(comparison.diffs, comparison.cwd)
-		const totalAdded = built.reduce((sum, file) => sum + file.addedLines, 0)
-		const totalRemoved = built.reduce((sum, file) => sum + file.removedLines, 0)
-		return LatestChangesSummary.create({
-			files: built.map((file) =>
-				ChangedFileSummary.create({
-					filePath: file.filePath,
-					relativePath: file.relativePath,
-					addedLines: file.addedLines,
-					removedLines: file.removedLines,
-					status: file.status,
-				}),
-			),
-			totalAdded,
-			totalRemoved,
-			checkpointRunCount: comparison.checkpointRunCount,
-		})
+		return this.checkpoints.restoreCheckpoint(input)
 	}
 
 	async getCheckpointChangesSummary(input?: {
 		checkpointRunCount?: number
 		messageTs?: number
 	}): Promise<LatestChangesSummary> {
-		try {
-			const resolvedRunCount = this.resolveCheckpointRunCountForSummary(input)
-			if (input?.messageTs !== undefined && input.messageTs > 0 && resolvedRunCount === undefined) {
-				return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })
-			}
-			const comparison = await this.loadCheckpointComparison(resolvedRunCount)
-			return this.buildCheckpointChangesSummary(comparison)
-		} catch (error) {
-			Logger.debug(`[SdkController] Failed to summarize checkpoint changes: ${error}`)
-			return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })
-		}
+		return this.checkpoints.getCheckpointChangesSummary(input)
 	}
 
 	async getLatestCheckpointChangesSummary(): Promise<LatestChangesSummary> {
-		try {
-			const comparison = await this.loadLatestCheckpointComparison()
-			return this.buildCheckpointChangesSummary(comparison)
-		} catch (error) {
-			Logger.debug(`[SdkController] Failed to summarize latest checkpoint changes: ${error}`)
-			return LatestChangesSummary.create({ files: [], totalAdded: 0, totalRemoved: 0, checkpointRunCount: 0 })
-		}
+		return this.checkpoints.getLatestCheckpointChangesSummary()
 	}
 
 	async openCheckpointFileDiff(filePath: string, checkpointRunCount: number): Promise<void> {
-		const comparison = await this.loadLatestCheckpointComparison()
-		if (!comparison) {
-			HostProvider.window.showMessage({
-				type: ShowMessageType.INFORMATION,
-				message: "No checkpoint was taken for this task. Checkpoints require the workspace to be a git repository.",
-			})
-			return
-		}
-		if (comparison.checkpointRunCount !== checkpointRunCount) {
-			Logger.debug(
-				`[SdkController] Stale checkpoint run count for file diff (${checkpointRunCount} vs ${comparison.checkpointRunCount})`,
-			)
-		}
-		const diff = comparison.diffs.find((entry) => entry.filePath === filePath)
-		if (!diff) {
-			HostProvider.window.showMessage({
-				type: ShowMessageType.INFORMATION,
-				message: "That file is not part of the latest PlinyCode changes.",
-			})
-			return
-		}
-		const relativePath = buildChangedFileSummaries([diff], comparison.cwd)[0]?.relativePath ?? path.basename(filePath)
-		await HostProvider.diff.openDiff({
-			path: diff.filePath,
-			leftContent: diff.leftContent,
-			rightContent: diff.rightContent,
-			title: `${relativePath} (PlinyCode changes)`,
-		})
+		return this.checkpoints.openCheckpointFileDiff(filePath, checkpointRunCount)
 	}
 
 	/**
@@ -1717,31 +1311,7 @@ export class Controller {
 	 * the user's last message started this run — and the current working tree.
 	 */
 	async viewLatestCheckpointChanges(): Promise<void> {
-		const comparison = await this.loadLatestCheckpointComparison()
-		const diffs = comparison?.diffs
-		if (diffs === undefined) {
-			HostProvider.window.showMessage({
-				type: ShowMessageType.INFORMATION,
-				message: "No checkpoint was taken for this task. Checkpoints require the workspace to be a git repository.",
-			})
-			return
-		}
-		if (diffs.length === 0) {
-			HostProvider.window.showMessage({
-				type: ShowMessageType.INFORMATION,
-				message: "No file changes found since your last message.",
-			})
-			return
-		}
-
-		await HostProvider.diff.openMultiFileDiff({
-			title: "Changes since your last message",
-			diffs: diffs.map((diff) => ({
-				filePath: diff.filePath,
-				leftContent: diff.leftContent,
-				rightContent: diff.rightContent,
-			})),
-		})
+		return this.checkpoints.viewLatestCheckpointChanges()
 	}
 
 	/**
@@ -2221,40 +1791,9 @@ export class Controller {
 	}
 
 	// ---- Workspace (kept from classic) ----
-
-	private _workspaceManager?: WorkspaceRootManager
-	private _workspaceManagerPathsKey?: string
+	// See sdk-workspace-root-resolver.ts for the implementation.
 
 	async ensureWorkspaceManager(): Promise<WorkspaceRootManager | undefined> {
-		try {
-			// A task started in another workspace than the window's searches and
-			// resolves @-mentions in that workspace's folders, not the window's.
-			const taskFolders = this.activeTaskWorkspace?.workspace?.folders.filter((folder) => folder.trim()) ?? []
-			const { paths } = taskFolders.length > 0 ? { paths: taskFolders } : await HostProvider.workspace.getWorkspacePaths({})
-			// When no workspace folder is open, fall back to the active session's
-			// working directory (if known) or the shared chat workspace, the same
-			// root getWorkspaceRoot() gives sessions. The legacy Controller always
-			// seeded its manager with a fallback root (setupWorkspaceManager →
-			// getCwd(getDesktopDir())), so @-mention file search kept working in
-			// an empty window; returning undefined here instead made searchFiles
-			// emit task.mention_failed (workspace_unavailable) with zero results.
-			const validPaths = resolveWorkspaceManagerPaths(
-				paths,
-				this.lastKnownWorkspaceRoot ?? (await this.getNoWorkspaceFallback()),
-			)
-			if (validPaths.length === 0) {
-				return undefined
-			}
-			// Rebuild only when the set of workspace folders changes
-			const pathsKey = JSON.stringify(validPaths)
-			if (!this._workspaceManager || this._workspaceManagerPathsKey !== pathsKey) {
-				this._workspaceManager = await WorkspaceRootManager.fromPaths(validPaths)
-				this._workspaceManagerPathsKey = pathsKey
-			}
-			return this._workspaceManager
-		} catch (error) {
-			Logger.warn("[SdkController] Failed to build workspace manager:", error)
-			return undefined
-		}
+		return this.workspaceRootResolver.ensureWorkspaceManager(this.lastKnownWorkspaceRoot)
 	}
 }

@@ -45,7 +45,6 @@
 				"src/core/hooks/hook-factory.ts",
 				"src/sdk/cline-session-factory.ts",
 				"src/sdk/legacy-state-reader.ts",
-				"src/sdk/message-translator.ts",
 				"src/sdk/model-catalog/catalog.ts",
 				"src/sdk/provider-migration.ts",
 				"src/sdk/router/completion-guard.ts",
