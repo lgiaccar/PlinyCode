@@ -92,7 +92,7 @@ function hasAttachmentBlocks(message: SdkUserMessage): boolean {
  * attachment-only continuation carries the synthetic text alongside the
  * user's image/file blocks AND a visible bubble, so it must still be counted.
  */
-export interface PersistedHookContextChip {
+interface PersistedHookContextChip {
 	hookName: string
 	toolName?: string
 	status: "completed"

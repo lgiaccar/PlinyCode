@@ -7,27 +7,20 @@ import { Logger } from "@/shared/services/Logger"
 const SETTINGS_LOCK_STALE_MS = 10_000
 const SETTINGS_LOCK_POLL_MS = 25
 
-export interface McpSettingsUpdateOptions {
+interface McpSettingsUpdateOptions {
 	abortSignal?: AbortSignal
 }
 
-export type McpSettingsMutator<T> = (settings: Record<string, unknown>) => T
+type McpSettingsMutator<T> = (settings: Record<string, unknown>) => T
 
-export class McpSettingsUpdateSkippedError extends Error {
-	constructor(message: string) {
-		super(message)
-		this.name = "McpSettingsUpdateSkippedError"
-	}
-}
-
-export class McpSettingsLockAbortedError extends Error {
+class McpSettingsLockAbortedError extends Error {
 	constructor(message: string) {
 		super(message)
 		this.name = "McpSettingsLockAbortedError"
 	}
 }
 
-export class McpSettingsMutatorPurityError extends Error {
+class McpSettingsMutatorPurityError extends Error {
 	constructor(message: string) {
 		super(message)
 		this.name = "McpSettingsMutatorPurityError"

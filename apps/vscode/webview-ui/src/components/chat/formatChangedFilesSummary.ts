@@ -1,4 +1,4 @@
-export interface ChangedFilesSummaryCounts {
+interface ChangedFilesSummaryCounts {
 	fileCount: number
 	totalAdded: number
 	totalRemoved: number

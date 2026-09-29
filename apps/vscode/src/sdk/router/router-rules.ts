@@ -30,10 +30,10 @@ import {
 } from "./router-types"
 
 /** Name of the FreeAuto default profile's rules file in both the global and workspace locations. */
-export const ROUTER_RULES_FILENAME = "pliny-free-auto.md"
+const ROUTER_RULES_FILENAME = "pliny-free-auto.md"
 
 /** Name of BalanceAuto's rules file in both the global and workspace locations. */
-export const BALANCE_RULES_FILENAME = "pliny-balance-auto.md"
+const BALANCE_RULES_FILENAME = "pliny-balance-auto.md"
 
 /** True for the BalanceAuto family, whose rules may name paid models. */
 function isBalanceProfile(profile: string): boolean {

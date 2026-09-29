@@ -35,9 +35,9 @@ export interface TaskUsage {
 const USAGE_METADATA_KEYS = ["totalCost", "tokensIn", "tokensOut", "cacheWrites", "cacheReads"] as const
 
 /** Stored usage totals of a task, as kept in its history metadata. */
-export type TaskUsageTotals = Record<(typeof USAGE_METADATA_KEYS)[number], number>
+type TaskUsageTotals = Record<(typeof USAGE_METADATA_KEYS)[number], number>
 
-export interface SdkTaskHistoryOptions {
+interface SdkTaskHistoryOptions {
 	mcpHub: McpHub
 	sessions: SdkSessionLifecycle
 	/**
@@ -320,7 +320,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
  * When the conversation started. Prefers the `startedTs` pinned in metadata:
  * resuming a task re-creates its session record, which resets `startedAt`.
  */
-export function sessionStartedTs(item: SessionHistoryRecord): number | undefined {
+function sessionStartedTs(item: SessionHistoryRecord): number | undefined {
 	return metadataNumber(item.metadata, "startedTs") || dateStringToTimestamp(item.startedAt) || undefined
 }
 

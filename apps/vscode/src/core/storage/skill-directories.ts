@@ -10,7 +10,7 @@ const SKILL_DIRECTORY_NAMES = {
 	cursorSkillsDir: ".cursor/skills",
 } as const
 
-export type SkillsScanDirectory = {
+type SkillsScanDirectory = {
 	path: string
 	source: "project" | "global"
 }

@@ -151,7 +151,7 @@ export function fitsContext(
  * means "no": sending an image to a text-only model is a hard failure, not a
  * maybe.
  */
-export function supportsImages(modelId: string, knownModels: Record<string, ModelInfo> | undefined): boolean {
+function supportsImages(modelId: string, knownModels: Record<string, ModelInfo> | undefined): boolean {
 	return knownModels?.[modelId]?.capabilities?.includes("images") ?? false
 }
 

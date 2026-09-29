@@ -4,7 +4,7 @@ import { GrpcHandler } from "@/hosts/vscode/hostbridge-grpc-handler"
 import { Logger } from "@/shared/services/Logger"
 
 // Generic type for any protobuf service definition
-export type ProtoService = {
+type ProtoService = {
 	name: string
 	fullName: string
 	methods: {
@@ -20,7 +20,7 @@ export type ProtoService = {
 }
 
 // Define a unified client type that handles both unary and streaming methods
-export type GrpcClientType<T extends ProtoService> = {
+type GrpcClientType<T extends ProtoService> = {
 	[K in keyof T["methods"]]: T["methods"][K]["responseStream"] extends true
 		? (
 				request: InstanceType<T["methods"][K]["requestType"]>,

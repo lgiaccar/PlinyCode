@@ -23,7 +23,7 @@ import {
 import { TokenBroker } from "./token-broker"
 
 /** Name the agent sees: tools are exposed as `plinycode-devops__<tool>`. */
-export const DEVOPS_SERVER_NAME = EDITOR_SERVER_NAME
+const DEVOPS_SERVER_NAME = EDITOR_SERVER_NAME
 const SETTING_ENABLED = "plinycode.devops.enabled"
 const SETTING_EDITOR = "plinycode.devops.registerWithEditor"
 const TOOL_TIMEOUT_MS = 120_000

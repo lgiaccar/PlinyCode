@@ -15,7 +15,7 @@
 
 export const PLINY_BUDGET_PATH = "/api/svc/v1/llm-gateway/budgets/my-usage"
 
-export interface PlinyBudget {
+interface PlinyBudget {
 	/** Spending cap for the period, in USD. */
 	limit: number
 	/** Spent so far in the period, in USD. */

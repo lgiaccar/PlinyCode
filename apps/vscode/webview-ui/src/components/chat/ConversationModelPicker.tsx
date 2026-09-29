@@ -308,5 +308,3 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 		</DropdownContainer>
 	)
 }
-
-export default ConversationModelPicker

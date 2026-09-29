@@ -135,24 +135,12 @@ function createUnlockToggleStore(storageKey: string) {
 const unlockPaidStore = createUnlockToggleStore(PLINY_UNLOCK_PAID_STORAGE_KEY)
 const unlockFreeStore = createUnlockToggleStore(PLINY_UNLOCK_FREE_STORAGE_KEY)
 
-/** Read the current "unlock paid models" preference. */
-export const getPlinyUnlockPaidModels = unlockPaidStore.get
-/** Update the "unlock paid models" preference and notify subscribers. */
-export const setPlinyUnlockPaidModels = unlockPaidStore.set
-/** Subscribe to "unlock paid models" preference changes; returns an unsubscribe function. */
-export const subscribePlinyUnlockPaidModels = unlockPaidStore.subscribe
 /**
  * Reactive hook over the "unlock paid models" preference.
  * Returns `[unlockPaid, setUnlockPaid]`.
  */
 export const usePlinyUnlockPaidModels = unlockPaidStore.useToggle
 
-/** Read the current "unlock free models" preference. */
-export const getPlinyUnlockFreeModels = unlockFreeStore.get
-/** Update the "unlock free models" preference and notify subscribers. */
-export const setPlinyUnlockFreeModels = unlockFreeStore.set
-/** Subscribe to "unlock free models" preference changes; returns an unsubscribe function. */
-export const subscribePlinyUnlockFreeModels = unlockFreeStore.subscribe
 /**
  * Reactive hook over the "unlock free models" preference.
  * Returns `[unlockFree, setUnlockFree]`.
@@ -161,7 +149,7 @@ export const usePlinyUnlockFreeModels = unlockFreeStore.useToggle
 
 // --- model filtering -----------------------------------------------------
 
-export interface FilteredPlinyModels {
+interface FilteredPlinyModels {
 	models: Record<string, ModelInfo>
 	defaultModelId: string
 }

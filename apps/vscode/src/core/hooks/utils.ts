@@ -23,7 +23,7 @@ export const VALID_HOOK_TYPES = [
 /**
  * Type representing a valid hook name
  */
-export type HookType = (typeof VALID_HOOK_TYPES)[number]
+type HookType = (typeof VALID_HOOK_TYPES)[number]
 
 /**
  * Validates if a given hook name is a valid hook type.

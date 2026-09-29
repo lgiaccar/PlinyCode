@@ -10,7 +10,7 @@ export interface ModelPickerSelection {
 	modelInfo: ModelInfo
 }
 
-export interface ModelPickerWithManualEntryProps {
+interface ModelPickerWithManualEntryProps {
 	models: Record<string, ModelInfo>
 	isLoading: boolean
 	isStale: boolean

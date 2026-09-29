@@ -9,7 +9,7 @@ import { compareVersions, parseManifest, type ReleaseManifest, verifyStagedVsix 
  * release's tag, so a newer release published mid-download cannot swap files.
  */
 
-export const GITHUB_REPO = "lgiaccar/PlinyCode"
+const GITHUB_REPO = "lgiaccar/PlinyCode"
 
 /** Always serves latest.json from the newest non-draft, non-prerelease release. */
 export const DEFAULT_RELEASE_URL = `https://github.com/${GITHUB_REPO}/releases/latest/download/latest.json`
@@ -32,7 +32,7 @@ const DOWNLOAD_TIMEOUT_MS = 5 * 60_000
 type Fetch = typeof globalThis.fetch
 
 /** Tag used for a release, e.g. `release_0.1.3`. */
-export function releaseTag(version: string): string {
+function releaseTag(version: string): string {
 	return `release_${version}`
 }
 

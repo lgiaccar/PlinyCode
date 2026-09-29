@@ -25,7 +25,7 @@ function splitRelativePath(relativePath: string): { directory: string; fileName:
 	}
 }
 
-export interface ChangedFilesSummaryProps {
+interface ChangedFilesSummaryProps {
 	/** Reserved for future user_feedback boundaries; defaults to latest checkpoint from the host. */
 	checkpointRunCount?: number
 }

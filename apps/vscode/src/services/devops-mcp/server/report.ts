@@ -11,14 +11,14 @@ const ICONS: Record<string, string> = {
 	action_required: "⚠️",
 }
 
-export function outcome(status: Status, result: Result): string {
+function outcome(status: Status, result: Result): string {
 	if (status !== "completed") {
 		return `⏳ ${status.replace("_", " ")}`
 	}
 	return `${ICONS[result ?? ""] ?? "❔"} ${result ?? "unknown"}`
 }
 
-export function duration(started?: string, finished?: string): string {
+function duration(started?: string, finished?: string): string {
 	const a = started ? Date.parse(started) : Number.NaN
 	const b = finished ? Date.parse(finished) : Number.NaN
 	if (Number.isNaN(a) || Number.isNaN(b)) {

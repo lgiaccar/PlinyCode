@@ -34,31 +34,31 @@ export enum Osc633EventType {
 	Property = 5,
 }
 
-export interface Osc633PromptStartEvent {
+interface Osc633PromptStartEvent {
 	type: Osc633EventType.PromptStart
 }
-export interface Osc633CommandStartEvent {
+interface Osc633CommandStartEvent {
 	type: Osc633EventType.CommandStart
 }
-export interface Osc633CommandExecutedEvent {
+interface Osc633CommandExecutedEvent {
 	type: Osc633EventType.CommandExecuted
 }
-export interface Osc633CommandFinishedEvent {
+interface Osc633CommandFinishedEvent {
 	type: Osc633EventType.CommandFinished
 	exitCode: number | undefined
 }
-export interface Osc633CommandLineEvent {
+interface Osc633CommandLineEvent {
 	type: Osc633EventType.CommandLine
 	commandLine: string
 	nonce: string | undefined
 }
-export interface Osc633PropertyEvent {
+interface Osc633PropertyEvent {
 	type: Osc633EventType.Property
 	key: string
 	value: string
 }
 
-export type Osc633Event =
+type Osc633Event =
 	| Osc633PromptStartEvent
 	| Osc633CommandStartEvent
 	| Osc633CommandExecutedEvent
@@ -71,9 +71,9 @@ export type Osc633Event =
  * event. Segments preserve the original interleaving so consumers can gate text
  * on the surrounding markers (e.g. keep only text between `C` and `D`).
  */
-export type Osc633Segment = { kind: "text"; text: string } | { kind: "event"; event: Osc633Event }
+type Osc633Segment = { kind: "text"; text: string } | { kind: "event"; event: Osc633Event }
 
-export interface Osc633ParseResult {
+interface Osc633ParseResult {
 	/** Input data with all OSC 633 sequences removed (non-633 OSC kept intact). */
 	cleanedData: string
 	/** Events extracted from OSC 633 sequences in this chunk. */

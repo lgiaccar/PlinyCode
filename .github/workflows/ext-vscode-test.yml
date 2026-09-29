@@ -92,26 +92,31 @@ jobs:
             - name: Run Quality Checks (Parallel)
               run: bun run ci:check-all
 
-            # Report only, never blocks: code size and what the shipped extension
-            # and webview don't use (tests don't count as users), written to the
-            # job summary to track the cleanup. knip exits 1 when it finds
-            # something and 2 when it fails; only a failure marks the step.
-            - name: Unused code and size report (non-blocking)
+            # Report only, never blocks: code size, written to the job summary.
+            - name: Code size report (non-blocking)
               continue-on-error: true
+              run: |
+                  {
+                    echo "## Code size"
+                    echo
+                    bun run --cwd "$GITHUB_WORKSPACE" metrics
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            # Blocking: what the shipped extension and webview don't use (tests
+            # don't count as users). Findings and documented false positives are
+            # tracked in apps/vscode/knip.json's `ignore` lists; a real finding
+            # fails the build.
+            - name: Unused code check (knip)
               run: |
                   set +e
                   bun run analyze:unused:prod --no-progress --reporter markdown > knip-report.md
                   status=$?
                   {
-                    echo "## Code size"
-                    echo
-                    bun run --cwd "$GITHUB_WORKSPACE" metrics
-                    echo
-                    echo "## Unused code in the shipped extension and webview (knip, non-blocking)"
+                    echo "## Unused code in the shipped extension and webview (knip)"
                     echo
                     sed -n '/^# Knip report/,$p' knip-report.md | tail -n +2 | sed 's/^## /### /'
                   } >> "$GITHUB_STEP_SUMMARY"
-                  if [ "$status" -gt 1 ]; then exit "$status"; fi
+                  exit "$status"
 
     vscode-test:
         needs: [detect-changes, quality-checks]

@@ -1,7 +1,7 @@
 import { stripUtf8Bom } from "@plinycode/shared"
 import * as yaml from "js-yaml"
 
-export type FrontmatterParseResult = {
+type FrontmatterParseResult = {
 	data: Record<string, unknown>
 	/**
 	 * The markdown content after stripping the `--- frontmatter ---` block.

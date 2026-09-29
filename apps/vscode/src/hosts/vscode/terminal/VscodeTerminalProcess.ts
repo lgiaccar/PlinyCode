@@ -568,7 +568,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 	}
 }
 
-export type TerminalProcessResultPromise = VscodeTerminalProcess & Promise<void>
+type TerminalProcessResultPromise = VscodeTerminalProcess & Promise<void>
 
 // Similar to execa's ResultPromise, this lets us create a mixin of both a TerminalProcess and a Promise: https://github.com/sindresorhus/execa/blob/main/lib/methods/promise.js
 export function mergePromise(process: VscodeTerminalProcess, promise: Promise<void>): TerminalProcessResultPromise {

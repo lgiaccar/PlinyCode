@@ -8,7 +8,7 @@
  * to do instead.
  */
 
-export const ROUTER_MODEL_ADDENDUM = `
+const ROUTER_MODEL_ADDENDUM = `
 # How your turn ends
 
 - Your turn ends the moment you reply without a tool call, and nothing runs for you afterwards. Only reply without a tool call when the task is complete, you are blocked, or you need an answer from the user.

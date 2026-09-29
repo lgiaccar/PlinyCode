@@ -74,7 +74,7 @@ export function requestBrokerToken(
 }
 
 /** Runs a CLI and returns its trimmed stdout, or undefined if it is missing or fails. */
-export function runCli(command: string, args: string[]): Promise<string | undefined> {
+function runCli(command: string, args: string[]): Promise<string | undefined> {
 	return new Promise((resolve) => {
 		const done = (error: Error | null, stdout: string) => resolve(error || !stdout.trim() ? undefined : stdout.trim())
 		const options = { windowsHide: true, timeout: 60_000 }

@@ -4,7 +4,7 @@ import { parseWorkspaceKind, type WorkspaceKind, type WorkspaceRef, workspaceRef
 import { useCallback, useEffect, useState } from "react"
 import { WorkspaceServiceClient } from "@/services/grpc-client"
 
-export function workspaceFromProto(proto: Workspace): WorkspaceRef {
+function workspaceFromProto(proto: Workspace): WorkspaceRef {
 	return {
 		path: proto.path,
 		kind: parseWorkspaceKind(proto.kind),

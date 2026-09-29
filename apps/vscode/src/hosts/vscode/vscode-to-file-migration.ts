@@ -67,7 +67,7 @@ const SKIP_GLOBAL_STATE_KEYS = new Set<string>([
 	"taskHistory", // Already file-based in tasks/taskHistory.json
 ])
 
-export interface MigrationResult {
+interface MigrationResult {
 	migrated: boolean
 	globalStateCount: number
 	secretsCount: number

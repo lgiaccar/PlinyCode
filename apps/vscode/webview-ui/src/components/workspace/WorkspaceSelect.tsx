@@ -6,8 +6,8 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
 import type { WorkspacesState } from "./useWorkspaces"
 
-export const WORKSPACE_SELECT_CURRENT = "__current__"
-export const WORKSPACE_SELECT_ALL = "__all__"
+const WORKSPACE_SELECT_CURRENT = "__current__"
+const WORKSPACE_SELECT_ALL = "__all__"
 const PICK_FOLDER = "__pick_folder__"
 const PICK_FILE = "__pick_file__"
 

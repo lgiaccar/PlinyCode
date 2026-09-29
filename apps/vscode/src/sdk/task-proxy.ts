@@ -49,7 +49,7 @@ export interface TaskProxy {
  * Mirrors the classic MessageStateHandlerEvents from src/core/task/message-state.ts.
  * Uses tuple syntax for EventEmitter compatibility.
  */
-export interface MessageStateHandlerEvents {
+interface MessageStateHandlerEvents {
 	clineMessagesChanged: [change: ClineMessageChange]
 }
 
@@ -156,12 +156,12 @@ interface TaskProxyState {
 /**
  * Callback type for delegating ask responses to the controller.
  */
-export type AskResponseCallback = (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
+type AskResponseCallback = (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
 
 /**
  * Callback type for delegating task cancellation to the controller.
  */
-export type CancelTaskCallback = () => Promise<void>
+type CancelTaskCallback = () => Promise<void>
 
 /**
  * Create a task proxy that delegates to the SdkController.

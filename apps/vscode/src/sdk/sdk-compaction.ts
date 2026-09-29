@@ -24,7 +24,7 @@ import { Logger } from "@/shared/services/Logger"
 // toward. Matches the CLI's FALLBACK_MANUAL_COMPACTION_MAX_INPUT_TOKENS.
 const FALLBACK_MANUAL_COMPACTION_MAX_INPUT_TOKENS = 64_000
 
-export interface CompactSessionMessagesInput {
+interface CompactSessionMessagesInput {
 	/** Provider/model/compaction config for the active session. */
 	config: Pick<CoreSessionConfig, "providerConfig" | "providerId" | "modelId" | "knownModels" | "compaction" | "logger">
 	/** The active session id. */
@@ -38,7 +38,7 @@ export interface CompactSessionMessagesInput {
 	emitStatusNotice?: (message: string, metadata?: Record<string, unknown>) => void
 }
 
-export interface CompactSessionMessagesResult {
+interface CompactSessionMessagesResult {
 	compacted: boolean
 	messages: SdkMessage[]
 	compactionState?: SessionCompactionState

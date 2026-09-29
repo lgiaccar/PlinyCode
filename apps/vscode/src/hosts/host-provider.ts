@@ -150,4 +150,4 @@ export type EditPreviewCreator = () => EditPreview
  */
 export type CommentReviewControllerCreator = () => CommentReviewController
 
-export type LogToChannel = (message: string) => void
+type LogToChannel = (message: string) => void

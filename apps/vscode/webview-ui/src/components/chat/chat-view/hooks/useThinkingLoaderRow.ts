@@ -168,7 +168,7 @@ export function computeIsWaitingForResponse({
  *   reasoning -> tool-call handoff flickered: the reasoning shimmer collapsed, the loader
  *   stayed hidden for the grace period, popped in, then hid again when the tool row landed.
  */
-export function useDebouncedLoaderVisibility(
+function useDebouncedLoaderVisibility(
 	shouldShow: boolean,
 	tailTs: number | undefined,
 	tailIsPartial: boolean,

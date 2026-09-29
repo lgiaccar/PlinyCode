@@ -6,7 +6,7 @@
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 
-export interface ScheduleTimeParts {
+interface ScheduleTimeParts {
 	date: string // YYYY-MM-DD
 	hour: number // 0–23
 	minute: number // 0–59

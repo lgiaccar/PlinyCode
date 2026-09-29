@@ -20,7 +20,7 @@ interface ApiOptionsProps {
 
 // This is necessary to ensure dropdown opens downward, important for when this is used in popup.
 // Above the model picker and the context menu, which use z-index 1000.
-export const DROPDOWN_Z_INDEX = 1_002
+const DROPDOWN_Z_INDEX = 1_002
 
 export const DropdownContainer = styled.div<{ zIndex?: number }>`
 	position: relative;

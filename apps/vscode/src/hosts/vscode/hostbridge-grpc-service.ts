@@ -3,17 +3,17 @@ import { StreamingResponseHandler } from "./hostbridge-grpc-handler"
 /**
  * Generic type for service method handlers
  */
-export type ServiceMethodHandler = (message: any) => Promise<any>
+type ServiceMethodHandler = (message: any) => Promise<any>
 
 /**
  * Type for streaming method handlers
  */
-export type StreamingMethodHandler = (message: any, responseStream: StreamingResponseHandler, requestId?: string) => Promise<void>
+type StreamingMethodHandler = (message: any, responseStream: StreamingResponseHandler, requestId?: string) => Promise<void>
 
 /**
  * Method metadata including streaming information
  */
-export interface MethodMetadata {
+interface MethodMetadata {
 	isStreaming: boolean
 }
 

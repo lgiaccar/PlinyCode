@@ -17,7 +17,7 @@ export type ButtonActionType =
 /**
  * Button configuration for different message states
  */
-export interface ButtonConfig {
+interface ButtonConfig {
 	sendingDisabled: boolean
 	enableButtons: boolean
 	primaryText?: string

@@ -43,7 +43,7 @@ declare const __NODE_PLATFORM__: string
  * Gets the current platform: 'windows', 'mac', or 'linux'
  * Defaults to 'linux' if platform cannot be determined
  */
-export function getCurrentPlatform() {
+function getCurrentPlatform() {
 	// Fallback to linux if platform is not available
 	switch (__NODE_PLATFORM__) {
 		case "win32":

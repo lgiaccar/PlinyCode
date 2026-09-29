@@ -26,7 +26,7 @@ export function parseToolInput(input: unknown): Record<string, unknown> | undefi
 }
 
 /** A single file read request parsed from a read_files/read_file input */
-export interface FileReadRequest {
+interface FileReadRequest {
 	path: string
 	startLine?: number
 	endLine?: number

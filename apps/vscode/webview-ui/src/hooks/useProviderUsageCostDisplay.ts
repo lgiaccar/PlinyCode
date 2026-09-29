@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { useProviderListings } from "./useProviderListings"
 
-export type UsageCostDisplay = "show" | "hide" | "subscription"
+type UsageCostDisplay = "show" | "hide" | "subscription"
 
 const USAGE_COST_DISPLAYS: readonly UsageCostDisplay[] = ["show", "hide", "subscription"]
 

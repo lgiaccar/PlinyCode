@@ -177,34 +177,6 @@ export const fetch: typeof globalThis.fetch = (() => {
 })()
 
 /**
- * Mocks `fetch` for testing and calls `callback`. Then restores `fetch`. If the
- * specified callback returns a Promise, the fetch is restored when that Promise
- * is settled.
- * @param theFetch the replacement function to call to implement `fetch`.
- * @param callback `fetch` will be mocked for the duration of `callback()`.
- * @returns the result of `callback()`.
- */
-export function mockFetchForTesting<T>(theFetch: FetchFunction, callback: () => T): T {
-	const originalMockFetch = mockFetch
-	mockFetch = theFetch
-	let willResetSync = true
-	try {
-		const result = callback()
-		if (result instanceof Promise) {
-			willResetSync = false
-			return result.finally(() => {
-				mockFetch = originalMockFetch
-			}) as typeof result
-		}
-		return result
-	} finally {
-		if (willResetSync) {
-			mockFetch = originalMockFetch
-		}
-	}
-}
-
-/**
  * Returns axios configuration for fetch adapter mode with our configured fetch.
  * This ensures axios uses our platform-specific fetch implementation with
  * proper proxy configuration.

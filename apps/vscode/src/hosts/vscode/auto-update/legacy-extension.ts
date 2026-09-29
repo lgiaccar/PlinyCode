@@ -7,7 +7,7 @@ import { Logger } from "@/shared/services/Logger"
  * unrelated extensions, so upgrading by hand leaves both installed, fighting over
  * the same `cline.*` commands and sidebar view.
  */
-export const LEGACY_EXTENSION_ID = "synopsys-plinycode.claude-dev"
+const LEGACY_EXTENSION_ID = "synopsys-plinycode.claude-dev"
 
 /**
  * Uninstalls the 0.1.0 build if it is still installed. Runs first in `activate`,

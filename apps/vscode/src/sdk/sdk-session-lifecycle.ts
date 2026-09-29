@@ -17,7 +17,7 @@ type EditorExecutorHandler = NonNullable<Parameters<typeof VscodeSessionHost.cre
 type ApplyPatchExecutorHandler = NonNullable<Parameters<typeof VscodeSessionHost.create>[0]["applyPatchExecutor"]>
 type ReadFileExecutorHandler = NonNullable<Parameters<typeof VscodeSessionHost.create>[0]["readFileExecutor"]>
 
-export interface SdkSessionLifecycleOptions {
+interface SdkSessionLifecycleOptions {
 	mcpHub: McpHub
 	requestToolApproval: RequestToolApprovalHandler
 	askQuestion: AskQuestionHandler

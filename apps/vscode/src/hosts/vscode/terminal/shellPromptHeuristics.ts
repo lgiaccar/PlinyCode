@@ -34,7 +34,7 @@ export function getLastLine(output: string): string {
  *   not the first short idle period.
  * - "none": does not look like a prompt at all.
  */
-export type ShellPromptStrength = "strong" | "weak" | "none"
+type ShellPromptStrength = "strong" | "weak" | "none"
 
 /**
  * Classifies whether a line looks like a shell prompt awaiting input, and how

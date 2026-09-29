@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs"
 import path from "node:path"
 import type { Workspace } from "@shared/proto/cline/workspace"
-import { CODE_WORKSPACE_EXTENSION, isCodeWorkspaceFilePath, parseWorkspaceKind, type WorkspaceRef } from "@shared/workspaceRef"
+import { CODE_WORKSPACE_EXTENSION, isCodeWorkspaceFilePath, type WorkspaceRef } from "@shared/workspaceRef"
 import JSON5 from "json5"
 
 /**
@@ -90,7 +90,7 @@ export async function resolveWorkspaceRef(targetPath: string): Promise<Workspace
 }
 
 /** Identity for a `.code-workspace` file whose folders are already known. */
-export function workspaceRefFromFile(workspaceFilePath: string, folders: string[]): WorkspaceRef {
+function workspaceRefFromFile(workspaceFilePath: string, folders: string[]): WorkspaceRef {
 	if (folders.length === 1) {
 		return { path: folders[0], kind: "folder", folders: [folders[0]] }
 	}
@@ -120,14 +120,5 @@ export function workspaceRefToProto(ref: WorkspaceRef): Workspace {
 		kind: ref.kind,
 		folders: [...ref.folders],
 		lastUsedTs: ref.lastUsedTs ?? 0,
-	}
-}
-
-export function workspaceRefFromProto(proto: Workspace): WorkspaceRef {
-	return {
-		path: proto.path,
-		kind: parseWorkspaceKind(proto.kind),
-		folders: [...(proto.folders ?? [])],
-		...(proto.lastUsedTs ? { lastUsedTs: proto.lastUsedTs } : {}),
 	}
 }

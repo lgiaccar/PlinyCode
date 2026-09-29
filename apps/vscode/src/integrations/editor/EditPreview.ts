@@ -36,7 +36,7 @@ export abstract class EditPreview {
 	abstract close(): Promise<void>
 }
 
-export interface EditPreviewFrame {
+interface EditPreviewFrame {
 	/** Full right-side content at this step of the sweep. */
 	content: string
 	/** 0-based line the sweep cursor is on, for decorations/scrolling. */
@@ -47,7 +47,7 @@ export interface EditPreviewFrame {
 	zip: boolean
 }
 
-export interface EditPreviewAnimation {
+interface EditPreviewAnimation {
 	/**
 	 * The sweep, top of file to bottom (legacy diff-view feel): the new content
 	 * replaces the original line by line, zipping fast through unchanged spans and

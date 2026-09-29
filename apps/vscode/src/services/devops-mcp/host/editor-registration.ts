@@ -11,7 +11,7 @@ export interface LaunchSpec {
 
 export const EDITOR_SERVER_NAME = "plinycode-devops"
 /** Must match `contributes.mcpServerDefinitionProviders[].id` in package.json. */
-export const VSCODE_PROVIDER_ID = "plinycode.devops"
+const VSCODE_PROVIDER_ID = "plinycode.devops"
 const LABEL = "PlinyCode DevOps"
 
 interface CursorMcpApi {

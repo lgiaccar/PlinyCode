@@ -19,9 +19,9 @@ for GitHub (Actions) and Azure DevOps (Repos + Pipelines); the backend is chosen
   \`draft: false\`; \`draft: true\` turns a PR back into a draft.
 - Pipeline runs take minutes. Do not loop on pipeline_runs; check again later when asked.`
 
-export type ProviderFactory = (remote: Remote) => Provider
+type ProviderFactory = (remote: Remote) => Provider
 
-export function defaultProviderFactory(): ProviderFactory {
+function defaultProviderFactory(): ProviderFactory {
 	const cache = new Map<string, Provider>()
 	return (remote) => {
 		const key = remoteKey(remote)

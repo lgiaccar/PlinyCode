@@ -112,7 +112,7 @@ export interface RouterRunState {
 	replyTail?: string
 }
 
-export interface RouterSessionState {
+interface RouterSessionState {
 	/** Calls made during the current turn, for the end-of-turn summary. */
 	calls: RouterCallRecord[]
 	/** Model the turn settled on, when sticky routing is enabled. */

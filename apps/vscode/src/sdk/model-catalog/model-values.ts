@@ -2,9 +2,9 @@ import type { ModelInfo } from "@shared/api"
 import { ApiFormat } from "@shared/proto/cline/models"
 
 /** SDK string spelling of an API format (matches @plinycode/shared ApiFormatSchema). */
-export type SdkApiFormatString = "r1" | "openai-responses" | "default"
+type SdkApiFormatString = "r1" | "openai-responses" | "default"
 
-export function finiteNumber(value: unknown): number | undefined {
+function finiteNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 

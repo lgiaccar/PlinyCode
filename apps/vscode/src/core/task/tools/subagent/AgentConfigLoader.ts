@@ -29,7 +29,7 @@ const AgentConfigFrontmatterSchema = z.object({
 	skills: z.union([z.string(), z.array(z.string())]).optional(),
 })
 
-export type AgentBaseConfig = z.infer<typeof AgentBaseConfigSchema>
+type AgentBaseConfig = z.infer<typeof AgentBaseConfigSchema>
 
 function normalizeToolName(toolName: string): ClineDefaultTool {
 	const trimmed = toolName.trim()
@@ -152,7 +152,7 @@ async function readAgentConfigsFromDisk(homeDir = os.homedir()): Promise<Map<str
 	}
 }
 
-export type AgentConfigChangeListener = (configs: ReadonlyMap<string, AgentBaseConfig>, error?: Error) => void
+type AgentConfigChangeListener = (configs: ReadonlyMap<string, AgentBaseConfig>, error?: Error) => void
 
 export class AgentConfigLoader {
 	private static instance?: AgentConfigLoader

@@ -23,7 +23,7 @@ export interface UnobservedTerminalCommand {
 	ownership: "managed" | "continued" | "detached"
 }
 
-export type UnobservedTerminalCommandDisposition = "disposeBeforeNextTerminalAcquisition" | "preserve"
+type UnobservedTerminalCommandDisposition = "disposeBeforeNextTerminalAcquisition" | "preserve"
 
 /** Derive cleanup and reporting policy from the same unobserved-command snapshot. */
 export function getUnobservedTerminalCommandDisposition(

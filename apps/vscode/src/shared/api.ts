@@ -80,7 +80,7 @@ export interface ModelInfo {
 	pricingNote?: string
 }
 
-export interface OpenAiCompatibleModelInfo extends ModelInfo {
+interface OpenAiCompatibleModelInfo extends ModelInfo {
 	temperature?: number
 	systemRole?: "developer" | "system"
 	supportsReasoningEffort?: boolean

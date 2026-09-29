@@ -58,7 +58,7 @@ function formatCompactionLabel(info: ClineCompactionInfo): string {
  * compaction is running; the same message (same ts) is updated in place to
  * its terminal state when it finishes.
  */
-export const CompactionRow = ({ message }: { message: ClineMessage }) => {
+const CompactionRow = ({ message }: { message: ClineMessage }) => {
 	const info = parseCompactionInfo(message.text)
 	if (!info) {
 		// Virtuoso cannot handle zero-height items; render a spacer instead of null.

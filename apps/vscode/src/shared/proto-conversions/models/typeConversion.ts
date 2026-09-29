@@ -101,14 +101,3 @@ export function fromProtobufModels(protoModels: Record<string, OpenRouterModelIn
 	}
 	return result
 }
-
-/**
- * Convert a record of application models to protobuf models
- */
-export function toProtobufModels(models: Record<string, ModelInfo>): Record<string, OpenRouterModelInfo> {
-	const result: Record<string, OpenRouterModelInfo> = {}
-	for (const [key, value] of Object.entries(models)) {
-		result[key] = toProtobufModelInfo(value)
-	}
-	return result
-}

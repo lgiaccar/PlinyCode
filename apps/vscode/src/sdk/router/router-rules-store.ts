@@ -34,7 +34,7 @@ export function globalRulesPath(dataDir?: string, profile = "default"): string {
 }
 
 /** Absolute path of a workspace's optional rules file for a profile's family. */
-export function workspaceRulesPath(workspaceRoot: string, profile = "default"): string {
+function workspaceRulesPath(workspaceRoot: string, profile = "default"): string {
 	return path.join(workspaceRoot, ".cline", workspaceRulesFilenameForProfile(profile))
 }
 
@@ -44,11 +44,6 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>()
-
-/** Drop cached rules. Tests and the "reload rules" path use this. */
-export function clearRulesCache(): void {
-	cache.clear()
-}
 
 async function readRulesFile(filePath: string, profile: string): Promise<RouterRules | undefined> {
 	let stat: Awaited<ReturnType<typeof fs.stat>>

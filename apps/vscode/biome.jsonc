@@ -200,6 +200,18 @@
 			"plugins": [
 				"src/dev/grit/use-cache-service.grit"
 			]
+		},
+		{
+			// knip's own config format is JSONC (comments allowed), which the
+			// default "json" parser below rejects.
+			"includes": [
+				"knip.json"
+			],
+			"json": {
+				"parser": {
+					"allowComments": true
+				}
+			}
 		}
 	]
 }
