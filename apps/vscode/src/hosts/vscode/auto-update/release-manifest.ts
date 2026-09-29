@@ -10,8 +10,11 @@ import path from "node:path"
  * docs/releasing.md for the publishing steps.
  */
 
-/** Manifest attached to every release, describing its .vsix. */
-const MANIFEST_FILE_NAME = "latest.json"
+/**
+ * Manifest attached to every release, describing its .vsix.
+ * @public Used by scripts/release.ts, which knip does not treat as a production entry.
+ */
+export const MANIFEST_FILE_NAME = "latest.json"
 
 const PRODUCT_ID = "plinycode"
 
