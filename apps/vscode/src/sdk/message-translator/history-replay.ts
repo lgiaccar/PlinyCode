@@ -204,6 +204,16 @@ export function sdkMessagesToClineMessages(
 		state.clearTurnOutcome()
 	}
 
+	// A real user message ends the turn before it: retag that turn's terminal text like the
+	// live `done` does, so earlier answers keep their completion styling on reload. A synthetic
+	// runtime prompt (resume after a cancel or crash) follows an interrupted turn, so it does not.
+	const endPrecedingTurn = (nextUserMessage: SdkMessage) => {
+		if (!isSyntheticSdkUserMessage(nextUserMessage)) {
+			endFinalTurn()
+		}
+		state.clearTurnOutcome()
+	}
+
 	for (const { message, sourceIndex } of projectSessionMessagesForDisplay(messages)) {
 		const sourceMessage = messages[sourceIndex]
 		if (message.role === "assistant") {
@@ -319,7 +329,7 @@ export function sdkMessagesToClineMessages(
 				// of the NEW turn from this message's wrapper. Synthetic runtime prompts
 				// (task resumption, plan -> act auto-continue) still advance the turn/mode
 				// state but never had a visible bubble live, so don't emit one here either.
-				state.clearTurnOutcome()
+				endPrecedingTurn(message)
 				currentMode = sourceMessage.uiMode ?? currentMode
 				if (!isSyntheticSdkUserMessage(message)) {
 					clineMessages.push({
@@ -336,7 +346,7 @@ export function sdkMessagesToClineMessages(
 
 		const userText = textContentBlocksToText(message.content)
 		if (userText) {
-			state.clearTurnOutcome()
+			endPrecedingTurn(message)
 			currentMode = sourceMessage.uiMode ?? currentMode
 			if (!isSyntheticSdkUserMessage(message)) {
 				clineMessages.push({

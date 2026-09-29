@@ -1,6 +1,7 @@
 import React from "react"
 import ChatTextArea from "@/components/chat/ChatTextArea"
 import QuotedMessagePreview from "@/components/chat/QuotedMessagePreview"
+import type { ScheduleRepeat } from "@/components/chat/scheduleTime"
 import { NewTaskWorkspacePicker } from "@/components/workspace/NewTaskWorkspacePicker"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { ChatState, MessageHandlers, ScrollBehavior } from "../../types/chatTypes"
@@ -12,7 +13,7 @@ interface InputSectionProps {
 	placeholderText: string
 	shouldDisableFilesAndImages: boolean
 	selectFilesAndImages: () => Promise<void>
-	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number) => void
+	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number, repeat?: ScheduleRepeat) => void
 }
 
 /**

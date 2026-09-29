@@ -10,8 +10,11 @@ import path from "node:path"
  * docs/releasing.md for the publishing steps.
  */
 
-/** Manifest attached to every release, describing its .vsix. */
-const MANIFEST_FILE_NAME = "latest.json"
+/**
+ * Manifest attached to every release, describing its .vsix.
+ * @public Used by scripts/release.ts, which knip does not treat as a production entry.
+ */
+export const MANIFEST_FILE_NAME = "latest.json"
 
 const PRODUCT_ID = "plinycode"
 
@@ -73,7 +76,8 @@ export async function verifyStagedVsix(staged: string, manifest: ReleaseManifest
 	return staged
 }
 
-function sha256File(filePath: string): Promise<string> {
+/** @public Used by scripts/release.ts. */
+export function sha256File(filePath: string): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const hash = createHash("sha256")
 		createReadStream(filePath)

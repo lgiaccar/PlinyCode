@@ -360,7 +360,7 @@ export class ClineApiServerMock {
 				// Pliny gateway path (/api/llm) — OpenAI-compatible, no Cline account auth.
 				// The e2e harness redirects the extension to http://localhost:7777/api/llm via
 				// providers.json pre-seeding in the openVSCode fixture, so requests that would
-				// normally hit https://snps-inference.internal.synopsys.com/api/llm land here.
+				// normally hit the Pliny gateway (/api/llm) land here.
 				if (baseRoute === "/api/llm") {
 					if (endpoint === "/models" && method === "GET") {
 						// Return a minimal OpenAI-compatible model list so the extension can

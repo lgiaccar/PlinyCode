@@ -3,6 +3,7 @@ import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import { AskResponseRequest, NewTaskRequest } from "@shared/proto/cline/task"
 import { IntentEvent } from "@shared/proto/cline/ui"
 import { useCallback, useRef } from "react"
+import type { SendDelivery } from "@/components/chat/sendMode"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { SlashServiceClient, TaskServiceClient, UiServiceClient } from "@/services/grpc-client"
 import type { ButtonActionType } from "../shared/buttonConfig"
@@ -36,7 +37,18 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 
 	// Handle sending a message
 	const handleSendMessage = useCallback(
-		async (text: string, images: string[], files: string[], delivery?: "queue" | "steer") => {
+		async (text: string, images: string[], files: string[], requestedDelivery?: SendDelivery) => {
+			// "interrupt" stops the running turn first, then sends like a plain message.
+			const delivery: "queue" | "steer" | undefined = requestedDelivery === "interrupt" ? undefined : requestedDelivery
+			if (requestedDelivery === "interrupt" && turnState?.phase === "streaming") {
+				if (backgroundCommandRunning) {
+					await TaskServiceClient.cancelBackgroundCommand(EmptyRequest.create({})).catch((err) =>
+						console.error("Failed to cancel background command:", err),
+					)
+				}
+				await TaskServiceClient.cancelTask(EmptyRequest.create({}))
+			}
+
 			let messageToSend = text.trim()
 			const hasContent = messageToSend || images.length > 0 || files.length > 0
 
@@ -319,6 +331,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 			messages,
 			clineAsk,
 			turnState,
+			backgroundCommandRunning,
 			activeQuote,
 			setInputValue,
 			setActiveQuote,

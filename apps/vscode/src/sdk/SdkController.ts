@@ -700,12 +700,16 @@ export class Controller {
 		const spent = getConversationApiMetrics(task.messageStateHandler.getClineMessages()).totalCost
 		const defaultBudget = getConversationSpendingLimit()
 		const historyItem = await this.taskHistory.findHistoryItem(task.taskId)
-		const hit = checkConversationBudget(spent, historyItem?.spendingLimit ?? defaultBudget, defaultBudget)
+		const hit = checkConversationBudget(
+			spent,
+			historyItem?.spendingLimit ?? defaultBudget,
+			historyItem?.spendingStep ?? defaultBudget,
+		)
 		if (!hit) {
 			return undefined
 		}
 		Logger.log(`[SdkController] Budget reached for ${task.taskId}: $${spent.toFixed(4)} of $${hit.budget}`)
-		if (!(await this.taskHistory.setTaskSpendingLimit(task.taskId, hit.nextBudget))) {
+		if (!(await this.taskHistory.setTaskSpendingLimit(task.taskId, hit.nextBudget, false))) {
 			Logger.warn(`[SdkController] Could not raise the budget of ${task.taskId}; it is not in the task history`)
 		}
 		return this.interactions.handleSpendingLimitReached(hit)
@@ -1172,6 +1176,7 @@ export class Controller {
 				activeMs: historyItem?.activeMs,
 				isRenamed: historyItem?.isRenamed,
 				spendingLimit: historyItem?.spendingLimit,
+				spendingStep: historyItem?.spendingStep,
 			}
 			const startInput = {
 				...buildStartSessionInput(config, { prompt: historyTitle, cwd, mode }),
@@ -1184,6 +1189,9 @@ export class Controller {
 					...(carriedHistoryFields.isRenamed ? { isRenamed: true } : {}),
 					...(carriedHistoryFields.spendingLimit !== undefined
 						? { spendingLimit: carriedHistoryFields.spendingLimit }
+						: {}),
+					...(carriedHistoryFields.spendingStep !== undefined
+						? { spendingStep: carriedHistoryFields.spendingStep }
 						: {}),
 					...(checkpointRunCount
 						? { checkpoint: createRestoredCheckpointMetadata(sessionRecord, checkpointRunCount) }

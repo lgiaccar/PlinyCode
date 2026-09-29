@@ -1,6 +1,6 @@
 This is the **PlinyCode** monorepo. Toolchain is **Bun 1.3.13** (package manager + task runner) with **Node >=22** as the runtime. Do not use npm/yarn/pnpm.
 
-PlinyCode is a VS Code / Cursor extension that talks only to Synopsys internal models through the Pliny gateway (`https://snps-inference.internal.synopsys.com`).
+PlinyCode is a VS Code / Cursor extension that talks only to Synopsys internal models through the Pliny gateway.
 
 ## Layout
 

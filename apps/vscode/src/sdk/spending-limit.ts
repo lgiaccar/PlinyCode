@@ -9,8 +9,9 @@
  * Checked before every paid model call. When the conversation's spend reaches
  * its budget the run stops, like the mistake limit: the session stays
  * resumable and the user continues by sending a message. The stop also raises
- * the budget by one step (the default budget), so continuing allows one more
- * round and the header shows the new budget. Free models are never checked.
+ * the budget by one step (what the user last set for this conversation, else the
+ * default budget), so continuing allows one more round and the header shows the
+ * new budget. Free models are never checked.
  */
 
 export interface SpendingLimitHit {

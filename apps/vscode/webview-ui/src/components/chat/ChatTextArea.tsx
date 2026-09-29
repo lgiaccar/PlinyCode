@@ -31,9 +31,9 @@ import {
 import { useSchedulePicker } from "./chat-textarea/hooks/useSchedulePicker"
 import { useSlashCommandMenu } from "./chat-textarea/hooks/useSlashCommandMenu"
 import { getModeToggleDraftAction } from "./chat-textarea-mode-toggle"
-import ScheduleTimeInput from "./ScheduleTimeInput"
-import { defaultScheduleTime } from "./scheduleTime"
-import { deliveryFor, loadSendMode, SEND_MODE_META, SEND_MODES, type SendMode, saveSendMode } from "./sendMode"
+import ScheduleTimeInput, { ScheduleRepeatInput } from "./ScheduleTimeInput"
+import { defaultScheduleTime, type ScheduleRepeat } from "./scheduleTime"
+import { deliveryFor, loadSendMode, SEND_MODE_META, SEND_MODES, type SendDelivery, type SendMode, saveSendMode } from "./sendMode"
 
 // Re-exported so ChatTextArea.test.tsx (and anything else importing from this
 // module) keeps working unchanged after these moved into useResizableRows.
@@ -49,8 +49,8 @@ interface ChatTextAreaProps {
 	selectedImages: string[]
 	setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>
 	setSelectedFiles: React.Dispatch<React.SetStateAction<string[]>>
-	onSend: (delivery?: "queue" | "steer") => void
-	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number) => void
+	onSend: (delivery?: SendDelivery) => void
+	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number, repeat?: ScheduleRepeat) => void
 	onSelectFilesAndImages: () => void
 	shouldDisableFilesAndImages: boolean
 	onHeightChange?: (height: number) => void
@@ -167,7 +167,19 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			shouldDisableFilesAndImages,
 		)
 
-		const { showSchedulePicker, setShowSchedulePicker, scheduleTime, setScheduleTime, confirmSchedule } = useSchedulePicker(
+		const {
+			showSchedulePicker,
+			setShowSchedulePicker,
+			scheduleTime,
+			setScheduleTime,
+			repeatCount,
+			setRepeatCount,
+			repeatEvery,
+			setRepeatEvery,
+			repeatUnit,
+			setRepeatUnit,
+			confirmSchedule,
+		} = useSchedulePicker(
 			inputValue,
 			selectedImages,
 			selectedFiles,
@@ -712,7 +724,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<div
 						className="absolute flex items-end bottom-4.5 right-5 z-10 h-8 text-xs"
 						style={{ height: textAreaBaseHeight }}>
-						<div className="flex flex-row items-center gap-1">
+						<div className="relative flex flex-row items-center gap-1">
 							<div
 								aria-label={SEND_MODE_META[sendMode].label}
 								className={cn(
@@ -765,24 +777,44 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								</div>
 							)}
 							{showSchedulePicker && (
-								<div className="flex items-center gap-1">
-									<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
-									<button
-										className="flex h-5 items-center rounded-[3px] bg-primary px-1.5 text-[10px] text-primary-foreground disabled:opacity-50"
-										disabled={!scheduleTime || sendingDisabled}
-										onClick={confirmSchedule}
-										type="button">
-										Schedule
-									</button>
-									<button
-										className="flex h-5 items-center rounded-[3px] border border-editor-group-border px-1 text-[10px] text-description hover:text-foreground"
-										onClick={() => {
-											setShowSchedulePicker(false)
-											setScheduleTime("")
-										}}
-										type="button">
-										Cancel
-									</button>
+								<div
+									className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-2 rounded-[3px] border border-editor-group-border p-3 shadow-md"
+									style={{
+										backgroundColor:
+											"var(--vscode-editorWidget-background, var(--vscode-sideBar-background))",
+									}}>
+									<div className="flex flex-wrap items-center gap-2">
+										<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
+									</div>
+									<div className="flex flex-wrap items-center gap-2">
+										<ScheduleRepeatInput
+											count={repeatCount}
+											every={repeatEvery}
+											onCountChange={setRepeatCount}
+											onEveryChange={setRepeatEvery}
+											onUnitChange={setRepeatUnit}
+											unit={repeatUnit}
+										/>
+									</div>
+									<div className="flex justify-end gap-2">
+										<button
+											className="flex h-7 items-center rounded-[3px] border border-editor-group-border px-3 text-xs text-description hover:text-foreground"
+											onClick={() => {
+												setShowSchedulePicker(false)
+												setScheduleTime("")
+												setRepeatCount(1)
+											}}
+											type="button">
+											Cancel
+										</button>
+										<button
+											className="flex h-7 items-center rounded-[3px] bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50"
+											disabled={!scheduleTime || sendingDisabled}
+											onClick={confirmSchedule}
+											type="button">
+											Schedule
+										</button>
+									</div>
 								</div>
 							)}
 						</div>
