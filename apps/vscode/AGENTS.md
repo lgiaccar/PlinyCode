@@ -56,7 +56,7 @@ Cheapest first:
 | ---------------------------- | ----------------------------------------------------------------------------------------------------- | -------- |
 | `bun run lint`               | Biome lint and proto lint                                                                             | seconds  |
 | `bun run format`             | Biome format check over the whole extension (`bun run fix:all` applies fixes)                         | seconds  |
-| `bun run check-types`        | `protos`, then `tsc` for the extension, the VS Code API compatibility check and the webview           | ~1 min   |
+| `bun run check-types`        | `protos`, then `tsc` for the extension, the VS Code API compatibility check, and `tsc -b` for the webview (real build-mode typecheck — no separate `cd webview-ui && tsc -b` needed) | ~1 min   |
 | `bun run test:unit`          | every `*.test.ts` that imports from `bun:test`, one `bun` process per file                            | minutes  |
 | `bun run test:vitest`        | the vitest suites listed in `vitest.config.ts` (`src/sdk/**` and a few in `src/shared/`)              | minutes  |
 | `bun run test:webview`       | the webview's vitest suites                                                                           | minutes  |
