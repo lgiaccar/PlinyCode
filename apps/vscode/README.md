@@ -1,27 +1,53 @@
-# PlinyCode extension (`plinycode-dev`)
+# PlinyCode
 
-The PlinyCode VS Code / Cursor extension. It talks only to Synopsys internal models, through the Pliny gateway.
+Synopsys' AI coding agent for VS Code and Cursor — powered by internal models via the Pliny gateway.
 
-This README is for people working on the code. Packaged builds replace it with [README.marketplace.md](README.marketplace.md), which is what users see in the editor (`scripts/release.ts` swaps it in when packaging).
+PlinyCode handles complex development tasks step by step. It creates and edits files, explores large
+projects, and runs terminal commands after you grant permission. Every file change and command is shown to
+you for approval first, so you stay in control of what happens in your workspace.
 
-- **Developing:** start with [AGENTS.md](AGENTS.md) for how the extension is put together and how to test it. The root [AGENTS.md](../../AGENTS.md) covers toolchain and repo layout.
-- **Releasing:** [docs/releasing.md](../../docs/releasing.md).
+All requests go **only** to Synopsys internal models through the Pliny gateway. Your code and prompts do not leave the Synopsys network.
 
-## Quick start
+## How it works
 
-From the repo root:
+1. Describe your task — you can add images to turn mockups into working UI or to report a visual bug.
+2. PlinyCode analyzes your file structure and source code, runs searches, and reads the relevant files to
+   get up to speed on the project without overwhelming the context window.
+3. Once it has what it needs, it can:
+    - Create and edit files, watching linter and compiler errors and fixing issues like missing imports and
+      syntax errors as it goes.
+    - Execute terminal commands and monitor their output, reacting to failures as they happen.
+    - Ask you to approve each change before it is applied.
+4. When the task is done, PlinyCode presents the result along with any command you need to run.
 
-```sh
-bun install
-bun run build:sdk
-```
+## Features
 
-Then, from `apps/vscode`:
+- **Plan & Act modes** — let the agent propose a plan for your approval before it touches any code.
+- **Rules from other agents** — reads the rules you already wrote for GitHub Copilot, Cursor and Windsurf,
+  and the workspace `AGENTS.md`, in place. Enable or disable each one in the Rules panel.
+- **MCP servers** — extend the agent with Model Context Protocol tools.
+- **Editor integrations** — explain or improve a selection from the context menu, generate and improve
+  Jupyter cells, and write git commit messages from your staged diff.
+- **Checkpoints** — review and roll back the workspace as a task progresses.
 
-```sh
-bun run build:webview
-bun esbuild.mjs
-code --extensionDevelopmentPath=. <some-folder>
-```
+## Getting started
 
-Click the PlinyCode icon in the Activity Bar.
+1. Install the extension.
+2. Click the PlinyCode icon in the Activity Bar.
+3. Make sure you are on the Synopsys network so the gateway is reachable.
+4. Enter your first task.
+
+## Settings
+
+| Setting                                | Default | Description                                                        |
+| -------------------------------------- | ------- | ------------------------------------------------------------------ |
+| `plinycode.devops.enabled`             | `true`  | Run the built-in DevOps MCP server for pull requests and pipelines |
+| `plinycode.devops.registerWithEditor`  | `true`  | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
+| `plinycode.spending.conversationLimit` | `5`     | Budget, in US dollars, that each new conversation starts with      |
+| `plinycode.updates.enabled`            | `true`  | Install new PlinyCode releases from GitHub automatically           |
+| `plinycode.updates.prerelease`         | `false` | Also install pre-releases, for developers and testers              |
+| `plinycode.updates.url`                | GitHub  | URL of the `latest.json` that describes the newest release         |
+
+## License
+
+Apache-2.0. PlinyCode is derived from the open-source [Cline](https://github.com/cline/cline) project.

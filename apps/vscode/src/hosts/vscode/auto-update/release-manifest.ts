@@ -76,7 +76,8 @@ export async function verifyStagedVsix(staged: string, manifest: ReleaseManifest
 	return staged
 }
 
-function sha256File(filePath: string): Promise<string> {
+/** @public Used by scripts/release.ts. */
+export function sha256File(filePath: string): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const hash = createHash("sha256")
 		createReadStream(filePath)
