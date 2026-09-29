@@ -67,10 +67,10 @@ describe("live catalog request bounds", () => {
 		vi.stubGlobal("fetch", fetchMock);
 		await getLiveModelsCatalog({ cacheTtlMs: 100 });
 		await getLiveModelsCatalog({ cacheTtlMs: 100 });
-		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 		now.mockReturnValue(1_101);
 		await getLiveModelsCatalog({ cacheTtlMs: 100 });
-		expect(fetchMock).toHaveBeenCalledTimes(4);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 });
 
@@ -110,31 +110,34 @@ describe("resolveProviderConfig", () => {
 		);
 	});
 
-	it("falls back to generated ClinePass models when no live ClinePass models are found", async () => {
-		const fetchMock = vi.fn(async (url: string) => {
-			if (url === "https://models.test/api.json") {
-				return new Response(
-					JSON.stringify({
-						openrouter: {
-							models: {
-								"vendor/live-openrouter-model": {
-									name: "Live OpenRouter Model",
-									tool_call: true,
-								},
+	it("resolves ClinePass models from a single models.dev fetch", async () => {
+		const fetchMock = vi.fn(async () => {
+			return new Response(
+				JSON.stringify({
+					"cline-pass": {
+						id: "cline-pass",
+						npm: "@ai-sdk/openai-compatible",
+						models: {
+							"cline-pass/live-model": {
+								name: "Live ClinePass Model",
+								tool_call: true,
 							},
 						},
-					}),
-					{
-						status: 200,
-						headers: { "content-type": "application/json" },
 					},
-				);
-			}
-
-			return new Response(JSON.stringify({ clinePass: [] }), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			});
+					openrouter: {
+						models: {
+							"vendor/live-openrouter-model": {
+								name: "Live OpenRouter Model",
+								tool_call: true,
+							},
+						},
+					},
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			);
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -145,9 +148,9 @@ describe("resolveProviderConfig", () => {
 			url: "https://models.test/api.json",
 		});
 
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(resolved?.knownModels?.["cline-pass/mimo-v2.5-pro"]?.name).toBe(
-			"MiMo-V2.5-Pro",
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(resolved?.knownModels?.["cline-pass/live-model"]?.name).toBe(
+			"Live ClinePass Model",
 		);
 		expect(
 			resolved?.knownModels?.["vendor/live-openrouter-model"],

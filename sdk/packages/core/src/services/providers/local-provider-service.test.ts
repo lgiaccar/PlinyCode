@@ -132,8 +132,8 @@ describe("live provider model loading", () => {
 		expect(
 			fetchMock.mock.calls.filter(([url]) => url.includes("models.dev")),
 		).toHaveLength(1);
-		// One shared models.dev request plus the Cline recommendation feed.
-		expect(fetchMock).toHaveBeenCalledTimes(2);
+		// A single shared models.dev request covers every provider.
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("keeps explicit model overrides above live metadata", async () => {
@@ -519,41 +519,41 @@ describe("addLocalProvider – model ID parsing via modelsSourceUrl", () => {
 		expect(models.map((m) => m.id).sort()).toEqual(["llama3.1", "qwen3:8b"]);
 	});
 
-	it("falls back to generated ClinePass models when no live ClinePass models are found", async () => {
-		const fetchMock = vi.fn(async (url: string) => {
-			if (url === "https://models.dev/api.json") {
-				return new Response(
-					JSON.stringify({
-						openrouter: {
-							models: {
-								"vendor/live-openrouter-model": {
-									name: "Live OpenRouter Model",
-									tool_call: true,
-								},
+	it("resolves ClinePass models from a single models.dev fetch", async () => {
+		const fetchMock = vi.fn(async () => {
+			return new Response(
+				JSON.stringify({
+					"cline-pass": {
+						id: "cline-pass",
+						npm: "@ai-sdk/openai-compatible",
+						models: {
+							"cline-pass/live-model": {
+								name: "Live ClinePass Model",
+								tool_call: true,
 							},
 						},
-					}),
-					{
-						status: 200,
-						headers: { "content-type": "application/json" },
 					},
-				);
-			}
-
-			return new Response(JSON.stringify({ clinePass: [] }), {
-				status: 200,
-				headers: { "content-type": "application/json" },
-			});
+					openrouter: {
+						models: {
+							"vendor/live-openrouter-model": {
+								name: "Live OpenRouter Model",
+								tool_call: true,
+							},
+						},
+					},
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			);
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
 		const { models } = await getLocalProviderModels("cline-pass");
 
-		// models.dev and the recommended-models feed via the live catalog.
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(models.map((model) => model.id)).toContain(
-			"cline-pass/mimo-v2.5-pro",
-		);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(models.map((model) => model.id)).toContain("cline-pass/live-model");
 		expect(models.map((model) => model.id)).not.toContain(
 			"vendor/live-openrouter-model",
 		);

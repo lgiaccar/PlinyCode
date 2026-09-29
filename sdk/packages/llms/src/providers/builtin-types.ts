@@ -59,3 +59,21 @@ export interface BuiltinSpec {
 	configFields?: readonly ProviderConfigField[];
 	metadata?: GatewayProviderMetadata;
 }
+
+/**
+ * PlinyCode ships only the OpenAI-compatible and Anthropic AI SDK adapters, so
+ * a provider that needs any other adapter (OpenAI Responses, Google,
+ * Bedrock, ...) can't run. Shared by the runtime registry (`builtins.ts`,
+ * filtering `GENERATED_PROVIDER_SPECS`) and the standalone catalog generator
+ * (`catalog-live.ts`, filtering models.dev providers before they are written
+ * to the generated files) so both agree on what PlinyCode can reach.
+ */
+export function usesShippedAdapter(
+	spec: Pick<BuiltinSpec, "family" | "protocol" | "client">,
+): boolean {
+	return (
+		(spec.family === "openai-compatible" || spec.family === "anthropic") &&
+		spec.protocol !== "openai-responses" &&
+		spec.client !== "openai"
+	);
+}

@@ -15,7 +15,6 @@ export {
 	fetchLiveProviderModels,
 	fetchModelsDevProviderModels,
 	filterImageOutputModels,
-	GENERATED_CLINE_RECOMMENDED_MODELS,
 	getAllProviders,
 	getGeneratedModelsForProvider,
 	getGeneratedProviderModels,

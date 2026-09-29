@@ -16,7 +16,11 @@ import type {
 	ProviderClient,
 	ProviderProtocol,
 } from "../catalog/types";
-import type { BuiltinSpec, ProviderApiLine } from "./builtin-types";
+import {
+	type BuiltinSpec,
+	type ProviderApiLine,
+	usesShippedAdapter,
+} from "./builtin-types";
 import { BUILT_IN_PROVIDER, normalizeProviderId } from "./ids";
 import { toGatewayModelCapabilities } from "./model-capabilities";
 import {
@@ -776,19 +780,6 @@ const BUILTIN_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 	},
 	...OPENAI_COMPATIBLE_SPEC_OVERRIDES,
 ];
-
-/**
- * PlinyCode ships only the OpenAI-compatible and Anthropic AI SDK adapters, so
- * a generated provider that needs any other adapter (OpenAI Responses, Google,
- * Bedrock, ...) can't run and is left out of the registry.
- */
-function usesShippedAdapter(spec: BuiltinSpec): boolean {
-	return (
-		(spec.family === "openai-compatible" || spec.family === "anthropic") &&
-		spec.protocol !== "openai-responses" &&
-		spec.client !== "openai"
-	);
-}
 
 export const BUILTIN_SPECS: BuiltinSpec[] = mergeBuiltinSpecs(
 	GENERATED_PROVIDER_SPECS.filter(usesShippedAdapter),

@@ -1,3 +1,4 @@
+import { usesShippedAdapter } from "../providers/builtin-types";
 import {
 	builtinProviderSupportsModelOperation,
 	normalizeBuiltinModelOperationModalities,
@@ -8,10 +9,6 @@ import {
 	MODELS_DEV_CURRENT_BUILTIN_PROVIDER_KEYS,
 	resolveGeneratedProviderIdForModelsDevKey,
 } from "../providers/provider-keys";
-import {
-	fetchClineRecommendedModelsPayload,
-	normalizeClineRecommendedProviderModels,
-} from "./catalog-cline-recommended";
 import {
 	resolveCatalogModelOperation,
 	resolveCatalogModelOperationModes,
@@ -180,6 +177,16 @@ function getSelectedModelsDevProviders(
 		const isCurrentBuiltinProvider =
 			MODELS_DEV_CURRENT_BUILTIN_PROVIDER_KEYS.has(sourceProviderKey);
 		if (!isCurrentBuiltinProvider && !usesSupportedAiSdkProvider(source)) {
+			continue;
+		}
+
+		// PlinyCode ships only the OpenAI-compatible and Anthropic AI SDK
+		// adapters (see usesShippedAdapter), so a models.dev provider that needs
+		// any other adapter can't run at runtime even if it is still listed in
+		// MODELS_DEV_CURRENT_BUILTIN_PROVIDER_KEYS for historical ID-mapping
+		// reasons. Leaving it out of generation keeps the checked-in catalog and
+		// provider files limited to providers PlinyCode can actually reach.
+		if (!usesShippedAdapter({ family: toProviderFamily(source) })) {
 			continue;
 		}
 
@@ -540,25 +547,9 @@ export async function fetchModelsDevCatalog(
 export async function fetchLiveProviderModels(
 	modelsDevUrl: string,
 	fetcher: typeof fetch = fetch,
-	options: { includeClineCloudModels?: boolean } = {},
 ): Promise<Record<string, Record<string, ModelInfo>>> {
 	const emptyProviderModels: Record<string, Record<string, ModelInfo>> = {};
-	const [providerModels, clineRecommendedPayload] = await Promise.all([
-		fetchModelsDevProviderModels(modelsDevUrl, fetcher).catch(
-			() => emptyProviderModels,
-		),
-		fetchClineRecommendedModelsPayload(fetcher).catch(() => undefined),
-	]);
-	const clineRecommended = clineRecommendedPayload
-		? normalizeClineRecommendedProviderModels(
-				clineRecommendedPayload,
-				providerModels.openrouter ?? {},
-				options,
-			)
-		: {};
-
-	return {
-		...providerModels,
-		...clineRecommended,
-	};
+	return fetchModelsDevProviderModels(modelsDevUrl, fetcher).catch(
+		() => emptyProviderModels,
+	);
 }
