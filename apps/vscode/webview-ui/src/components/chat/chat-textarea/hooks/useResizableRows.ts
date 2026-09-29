@@ -4,10 +4,10 @@ import { updateSetting } from "@/components/settings/utils/settingsHandlers"
 
 // Chat prompt textarea max-height drag handle: keeps the resize affordance's clamps
 // and default in one place so the JSX below and any tests agree on the numbers.
-export const DEFAULT_CHAT_INPUT_MAX_ROWS = 10
+const DEFAULT_CHAT_INPUT_MAX_ROWS = 10
 export const MIN_CHAT_INPUT_MAX_ROWS = 3 // never below minRows
 export const MAX_CHAT_INPUT_MAX_ROWS = 40 // generous upper bound so a drag can't cover the whole editor
-export const DEFAULT_ROW_HEIGHT_PX = 18 // fallback if line-height can't be measured (matches ~13px font * 1.35 line-height)
+const DEFAULT_ROW_HEIGHT_PX = 18 // fallback if line-height can't be measured (matches ~13px font * 1.35 line-height)
 
 /**
  * Reads the textarea's line-height in pixels, the same metric

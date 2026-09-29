@@ -45,6 +45,8 @@
 				"src/core/hooks/hook-factory.ts",
 				"src/sdk/cline-session-factory.ts",
 				"src/sdk/legacy-state-reader.ts",
+				"src/sdk/message-translator/index.ts",
+				"src/sdk/message-translator/history-replay.ts",
 				"src/sdk/model-catalog/catalog.ts",
 				"src/sdk/provider-migration.ts",
 				"src/sdk/router/completion-guard.ts",
@@ -59,6 +61,7 @@
 				"src/sdk/router/unfinished-turn-guard.ts",
 				"src/sdk/sdk-api-handler.ts",
 				"src/sdk/sdk-background-sessions.ts",
+				"src/sdk/sdk-checkpoint-coordinator.ts",
 				"src/sdk/sdk-checkpoints.ts",
 				"src/sdk/sdk-compaction-coordinator.ts",
 				"src/sdk/sdk-diff-edit-coordinator.ts",
@@ -72,6 +75,8 @@
 				"src/sdk/sdk-task-resume.ts",
 				"src/sdk/sdk-task-start-coordinator.ts",
 				"src/sdk/sdk-terminal-execution-mode-coordinator.ts",
+				"src/sdk/sdk-slash-mention-resolver.ts",
+				"src/sdk/sdk-workspace-root-resolver.ts",
 				"src/sdk/slash-command-expansion.ts",
 				"src/sdk/tool-approval-denial.ts",
 				"src/sdk/vscode-run-commands-tool.ts",
@@ -82,7 +87,15 @@
 				"src/shared/messages/metrics.ts",
 				"src/shared/pliny.ts",
 				"src/shared/proto-conversions/models/api-configuration-conversion.ts",
-				"src/shared/tls-trust.ts"
+				"src/shared/tls-trust.ts",
+				// McpHub's own host-interface split (PR #98): each Host interface is
+				// the constructor-options shape for one extracted collaborator and is
+				// only referenced within its own file, the same pattern as the
+				// Sdk*CoordinatorOptions interfaces above.
+				"src/services/mcp/capability-fetcher.ts",
+				"src/services/mcp/mcp-settings-store.ts",
+				"src/services/mcp/transport-factory.ts",
+				"src/services/mcp/mcp-rpc-facade.ts"
 			],
 			"ignoreDependencies": [
 				"@plinycode/core",
