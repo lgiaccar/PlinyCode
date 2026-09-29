@@ -123,14 +123,16 @@ describe("built-in provider metadata", () => {
 		);
 		const builtinIds = new Set(BUILTIN_SPECS.map((spec) => spec.id));
 
-		// Only generated providers served by a shipped adapter (Anthropic or
-		// OpenAI-compatible chat completions) become built-ins.
+		// The generator itself only emits providers served by a shipped adapter
+		// (Anthropic or OpenAI-compatible chat completions, usesShippedAdapter in
+		// builtin-types.ts), so every generated spec becomes a built-in.
 		for (const spec of GENERATED_PROVIDER_SPECS) {
-			const shipped =
-				(spec.family === "openai-compatible" || spec.family === "anthropic") &&
-				spec.protocol !== "openai-responses" &&
-				spec.client !== "openai";
-			expect(builtinIds.has(spec.id), spec.id).toBe(shipped);
+			expect(
+				spec.family === "openai-compatible" || spec.family === "anthropic",
+			).toBe(true);
+			expect(spec.protocol).not.toBe("openai-responses");
+			expect(spec.client).not.toBe("openai");
+			expect(builtinIds.has(spec.id), spec.id).toBe(true);
 		}
 		expect(generatedIds.has("alibaba")).toBe(true);
 		expect(generatedIds.has("cohere")).toBe(false);
@@ -144,8 +146,10 @@ describe("built-in provider metadata", () => {
 			"qwen3.7-plus",
 		);
 
-		// Mistral needs its own AI SDK adapter, which PlinyCode does not ship.
-		expect(generatedIds.has("mistral")).toBe(true);
+		// Mistral needs its own AI SDK adapter, which PlinyCode does not ship, so
+		// it is excluded from generation entirely rather than merely left out of
+		// the runtime registry.
+		expect(generatedIds.has("mistral")).toBe(false);
 		expect(builtinIds.has("mistral")).toBe(false);
 	});
 
