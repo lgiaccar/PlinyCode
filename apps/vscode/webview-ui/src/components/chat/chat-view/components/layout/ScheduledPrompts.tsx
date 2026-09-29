@@ -7,6 +7,10 @@ export interface ScheduledPrompt {
 	images: string[]
 	files: string[]
 	scheduledAt: number
+	/** Sends still to come, this one included; absent or 1 means no repeat. */
+	remaining?: number
+	/** Gap between repeats in ms. */
+	intervalMs?: number
 }
 
 interface ScheduledPromptsProps {
@@ -46,6 +50,7 @@ export function ScheduledPrompts({ items, onCancel }: ScheduledPromptsProps) {
 							</span>
 							<span className="flex h-5 shrink-0 items-center rounded-[3px] border border-editor-group-border px-1.5 text-[10px] leading-none text-description">
 								{scheduledTime}
+								{item.remaining && item.remaining > 1 ? ` · ×${item.remaining}` : ""}
 							</span>
 							<button
 								aria-label="Cancel scheduled message"

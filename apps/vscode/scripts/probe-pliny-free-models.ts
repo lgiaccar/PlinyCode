@@ -548,10 +548,7 @@ async function runThinkingProbe(models: CatalogEntry[], repoRoot: string): Promi
 
 	const jsonPath = path.join(repoRoot, "sdk/packages/llms/src/providers/data/pliny-free-auto-thinking-probe.json")
 	const mdPath = path.join(repoRoot, "docs/pliny-free-auto-thinking.md")
-	await writeFile(
-		jsonPath,
-		`${JSON.stringify({ probedAt: new Date().toISOString(), baseURL: BASE_URL, runs: RUNS, reports }, null, 2)}\n`,
-	)
+	await writeFile(jsonPath, `${JSON.stringify({ probedAt: new Date().toISOString(), runs: RUNS, reports }, null, 2)}\n`)
 	await mkdir(path.dirname(mdPath), { recursive: true })
 	await writeFile(mdPath, renderThinkingMarkdown(reports))
 	console.error(`\nWrote ${jsonPath}`)
@@ -587,10 +584,7 @@ async function main(): Promise<void> {
 	const jsonPath = path.join(repoRoot, "sdk/packages/llms/src/providers/data/pliny-free-auto-probe.json")
 	const mdPath = path.join(repoRoot, "docs/pliny-free-auto-router.md")
 
-	await writeFile(
-		jsonPath,
-		`${JSON.stringify({ probedAt: new Date().toISOString(), baseURL: BASE_URL, runs: RUNS, reports }, null, 2)}\n`,
-	)
+	await writeFile(jsonPath, `${JSON.stringify({ probedAt: new Date().toISOString(), runs: RUNS, reports }, null, 2)}\n`)
 	await mkdir(path.dirname(mdPath), { recursive: true })
 	await writeFile(mdPath, renderMarkdown(reports))
 

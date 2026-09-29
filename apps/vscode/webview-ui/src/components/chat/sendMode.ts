@@ -2,33 +2,39 @@
  * Sticky send mode for the chat input's split send button. The main button
  * sends with the selected mode and shows its icon; the dropdown only changes
  * the mode (persisted per webview in localStorage).
- *
- * There is no separate "queue" mode: a plain send while a turn is running is
- * already queued until the turn ends.
  */
 
-export type SendMode = "default" | "steer" | "schedule"
+export type SendMode = "queue" | "steer" | "interrupt" | "schedule"
 
-export const SEND_MODES: readonly SendMode[] = ["default", "steer", "schedule"]
+export const SEND_MODES: readonly SendMode[] = ["queue", "steer", "interrupt", "schedule"]
+
+/** What onSend receives: "interrupt" stops the running turn first, then sends. */
+export type SendDelivery = "queue" | "steer" | "interrupt"
 
 const SEND_MODE_STORAGE_KEY = "plinycode.sendMode"
 
 export const SEND_MODE_META: Record<SendMode, { icon: string; label: string; tooltip: string }> = {
-	default: {
+	queue: {
 		icon: "codicon-send",
-		label: "Send (waits for current turn)",
-		tooltip: "Send: if the agent is busy, sends when the current turn ends",
+		label: "Queue (after the agent finishes)",
+		tooltip:
+			"Queue: sends your message after the agent finishes its current turn. If the agent is idle, it sends right away.",
 	},
 	steer: {
 		icon: "codicon-zap",
-		label: "Send now (steering)",
+		label: "Steer (without interrupting)",
 		tooltip:
-			"Send now (steering): the agent reads your message right away, without stopping the task. A reply in progress, a wait or a long command stops holding it back.",
+			"Steer: injects your message so the agent reads it right away, without stopping the task. A reply in progress, a wait or a long command stops holding it back.",
+	},
+	interrupt: {
+		icon: "codicon-debug-stop",
+		label: "Send (interrupt the agent)",
+		tooltip: "Send (interrupt): stops the agent, then sends your message right away.",
 	},
 	schedule: {
 		icon: "codicon-watch",
 		label: "Schedule (choose a time)",
-		tooltip: "Schedule: pick a time to send",
+		tooltip: "Schedule: pick a time to send this message, and optionally repeat it at an interval.",
 	},
 }
 
@@ -36,13 +42,13 @@ function isSendMode(value: unknown): value is SendMode {
 	return typeof value === "string" && (SEND_MODES as readonly string[]).includes(value)
 }
 
-/** Unknown stored values (including the removed "queue" mode) fall back to Send. */
+/** Unknown stored values fall back to Queue; "default" was the old name of Queue. */
 export function loadSendMode(): SendMode {
 	try {
 		const stored = globalThis.localStorage?.getItem(SEND_MODE_STORAGE_KEY)
-		return isSendMode(stored) ? stored : "default"
+		return isSendMode(stored) ? stored : "queue"
 	} catch {
-		return "default"
+		return "queue"
 	}
 }
 
@@ -54,7 +60,7 @@ export function saveSendMode(mode: SendMode): void {
 	}
 }
 
-/** The delivery passed to onSend for a direct-send mode. Schedule has none. */
-export function deliveryFor(mode: SendMode): "steer" | undefined {
-	return mode === "steer" ? "steer" : undefined
+/** The delivery passed to onSend for a direct-send mode. Queue is the plain send; Schedule has none. */
+export function deliveryFor(mode: SendMode): SendDelivery | undefined {
+	return mode === "steer" || mode === "interrupt" ? mode : undefined
 }

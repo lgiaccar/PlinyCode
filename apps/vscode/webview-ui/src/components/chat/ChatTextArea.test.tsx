@@ -229,13 +229,32 @@ describe("ChatTextArea sticky send mode", () => {
 		expect(screen.getByRole("button", { name: "Schedule" })).toBeInTheDocument()
 	})
 
-	it("offers only Send, Send now (steering) and Schedule", () => {
+	it("offers Queue, Steer, Send (interrupt) and Schedule", () => {
 		const { select } = renderWithSend()
 		const values = Array.from(select.querySelectorAll("option")).map((option) => option.getAttribute("value"))
-		expect(values).toEqual(["default", "steer", "schedule"])
+		expect(values).toEqual(["queue", "steer", "interrupt", "schedule"])
 	})
 
-	it("falls back to Send for the removed queue mode", () => {
+	it("sends with the interrupt delivery in interrupt mode", () => {
+		localStorage.setItem("plinycode.sendMode", "interrupt")
+		const { onSend, button } = renderWithSend()
+		expect(button).toHaveClass("codicon-debug-stop")
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenCalledWith("interrupt")
+	})
+
+	it("shows repeat controls in the schedule picker", () => {
+		localStorage.setItem("plinycode.sendMode", "schedule")
+		const { button } = renderWithSend()
+		fireEvent.click(button)
+		const count = screen.getByLabelText("Number of sends")
+		expect(count).toHaveValue(1)
+		expect(screen.queryByLabelText("Repeat interval")).not.toBeInTheDocument()
+		fireEvent.change(count, { target: { value: "3" } })
+		expect(screen.getByLabelText("Repeat interval")).toBeInTheDocument()
+	})
+
+	it("plain sends with the queue mode", () => {
 		localStorage.setItem("plinycode.sendMode", "queue")
 		const { onSend, button } = renderWithSend()
 		expect(button).toHaveClass("codicon-send")

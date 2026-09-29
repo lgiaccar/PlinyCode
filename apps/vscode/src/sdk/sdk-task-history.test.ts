@@ -597,6 +597,16 @@ describe("SdkTaskHistory", () => {
 		expect((await history.findHistoryItem("task-1"))?.spendingLimit).toBe(0)
 	})
 
+	it("remembers the typed budget as the step, but not a budget raised by a stop", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1")])
+
+		await history.setTaskSpendingLimit("task-1", 10)
+		expect(await history.findHistoryItem("task-1")).toMatchObject({ spendingLimit: 10, spendingStep: 10 })
+
+		await history.setTaskSpendingLimit("task-1", 20.08, false)
+		expect(await history.findHistoryItem("task-1")).toMatchObject({ spendingLimit: 20.08, spendingStep: 10 })
+	})
+
 	it("refuses a negative budget and unknown tasks", async () => {
 		const { history, updateSession } = makeHistory([makeSessionRecord("task-1")])
 

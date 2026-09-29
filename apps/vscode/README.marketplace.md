@@ -6,8 +6,7 @@ PlinyCode handles complex development tasks step by step. It creates and edits f
 projects, and runs terminal commands after you grant permission. Every file change and command is shown to
 you for approval first, so you stay in control of what happens in your workspace.
 
-All requests go **only** to Synopsys internal models through the Pliny gateway
-(`https://snps-inference.internal.synopsys.com`). Your code and prompts do not leave the Synopsys network.
+All requests go **only** to Synopsys internal models through the Pliny gateway. Your code and prompts do not leave the Synopsys network.
 
 ## How it works
 

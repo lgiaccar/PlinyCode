@@ -15,8 +15,7 @@ Synopsys' AI coding agent for VS Code and Cursor — powered by internal models 
 PlinyCode is a VS Code extension that puts an autonomous coding agent in your editor. It plans, reads your
 codebase, edits files, and runs terminal commands — with you approving each step.
 
-It talks **only** to Synopsys internal models through the Pliny gateway at
-`https://snps-inference.internal.synopsys.com`. No code or prompt leaves the Synopsys network.
+It talks **only** to Synopsys internal models through the Pliny gateway. No code or prompt leaves the Synopsys network.
 
 ## Features
 

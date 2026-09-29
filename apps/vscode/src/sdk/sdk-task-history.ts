@@ -197,6 +197,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.activeMs ? { activeMs: item.activeMs } : {}),
 		...(item.isRenamed ? { isRenamed: true } : {}),
 		...(item.spendingLimit !== undefined ? { spendingLimit: item.spendingLimit } : {}),
+		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
 		// The workspace binding, kept across resumes like the fields above.
 		...(item.workspacePath ? { workspacePath: item.workspacePath, workspaceKind: item.workspaceKind ?? "folder" } : {}),
 	}
@@ -307,6 +308,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		activeMs: metadataNumber(metadata, "activeMs"),
 		isRenamed: metadataBoolean(metadata, "isRenamed") === true || undefined,
 		spendingLimit: metadataNumber(metadata, "spendingLimit"),
+		spendingStep: metadataNumber(metadata, "spendingStep"),
 		...(metadataString(metadata, "workspacePath")
 			? {
 					workspacePath: metadataString(metadata, "workspacePath"),
@@ -655,17 +657,12 @@ export class SdkTaskHistory {
 			sanitizeSdkUserMessagesForDisplay(sdkMessages),
 			this.options.getMinter?.(),
 			{
-				// Only retag the transcript's terminal text as an inferred completion when the
-				// session record says its last turn ended cleanly — status "completed", written
-				// by the SDK runtime host's resolveInteractiveStopStatus when the session is
-				// released (task switch, clear, extension dispose). Everything else stays a
-				// plain text row: "failed"/"cancelled" runs ended on a dangling response, and
-				// non-terminal statuses at rest ("idle"/"running"/"pending") mean the process
-				// died without recording an outcome — "idle" in particular is also the state
-				// after an aborted turn (markTurnIdle runs for every finish reason), so it
-				// cannot be trusted as a clean ending. A missing record is likewise an unknown
-				// outcome, so it gets no completion styling either.
-				finalTurnCompleted: sdkRecord?.status === "completed",
+				// Retag the final turn's terminal text as an inferred completion unless the session
+				// record says the run failed or was cancelled (a dangling response, not a completion).
+				// "completed" is written when the session is released; "idle" is the state of a
+				// conversation at rest, so both keep the completion styling on reload. A missing record
+				// or a non-terminal status ("running"/"pending": the process died mid-turn) gets none.
+				finalTurnCompleted: sdkRecord?.status === "completed" || sdkRecord?.status === "idle",
 				// Relativize the absolute tool paths for display, same as the live path.
 				cwd: sdkRecord?.cwd || sdkRecord?.workspaceRoot || undefined,
 			},
@@ -856,8 +853,11 @@ export class SdkTaskHistory {
 		return true
 	}
 
-	/** Sets the conversation's budget in USD (0 = no limit). Returns false when the task is unknown or the amount invalid. */
-	async setTaskSpendingLimit(taskId: string, limit: number): Promise<boolean> {
+	/**
+	 * Sets the conversation's budget in USD (0 = no limit). Returns false when the task is unknown or the amount invalid.
+	 * `remember` (the user typed it) also makes this amount the step a later budget stop raises the budget by.
+	 */
+	async setTaskSpendingLimit(taskId: string, limit: number, remember = true): Promise<boolean> {
 		if (!Number.isFinite(limit) || limit < 0) {
 			return false
 		}
@@ -865,7 +865,11 @@ export class SdkTaskHistory {
 		if (!historyItem) {
 			return false
 		}
-		await this.updateTaskHistoryItem({ ...historyItem, spendingLimit: limit })
+		await this.updateTaskHistoryItem({
+			...historyItem,
+			spendingLimit: limit,
+			...(remember && limit > 0 ? { spendingStep: limit } : {}),
+		})
 		return true
 	}
 

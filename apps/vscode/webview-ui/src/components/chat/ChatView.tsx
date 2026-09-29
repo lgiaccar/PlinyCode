@@ -34,6 +34,7 @@ import {
 	isPendingResponseUnconfirmed,
 	withPendingUserMessage,
 } from "./chat-view/utils/pendingResponse"
+import type { ScheduleRepeat } from "./scheduleTime"
 
 interface ChatViewProps {
 	isHidden: boolean
@@ -77,9 +78,22 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 
 	const [scheduledPrompts, setScheduledPrompts] = useState<ScheduledPrompt[]>([])
 
-	const handleSchedulePrompt = useCallback((text: string, images: string[], files: string[], scheduledAt: number) => {
-		setScheduledPrompts((prev) => [...prev, { id: crypto.randomUUID(), text, images, files, scheduledAt }])
-	}, [])
+	const handleSchedulePrompt = useCallback(
+		(text: string, images: string[], files: string[], scheduledAt: number, repeat?: ScheduleRepeat) => {
+			setScheduledPrompts((prev) => [
+				...prev,
+				{
+					id: crypto.randomUUID(),
+					text,
+					images,
+					files,
+					scheduledAt,
+					...(repeat ? { remaining: repeat.count, intervalMs: repeat.intervalMs } : {}),
+				},
+			])
+		},
+		[],
+	)
 
 	const displayMessages = useMemo(() => withPendingUserMessage(messages, pendingUserMessage), [messages, pendingUserMessage])
 
@@ -231,7 +245,21 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 				for (const p of due) {
 					messageHandlersRef.current.handleSendMessage(p.text, p.images, p.files)
 				}
-				return prev.filter((p) => p.scheduledAt > now)
+				// A repeating prompt stays, moved one interval on, until its sends run out.
+				return prev.flatMap((p) => {
+					if (p.scheduledAt > now) {
+						return [p]
+					}
+					const remaining = (p.remaining ?? 1) - 1
+					if (remaining < 1 || !p.intervalMs) {
+						return []
+					}
+					let next = p.scheduledAt + p.intervalMs
+					while (next <= now) {
+						next += p.intervalMs
+					}
+					return [{ ...p, remaining, scheduledAt: next }]
+				})
 			})
 		}, 5000)
 		return () => clearInterval(interval)

@@ -411,7 +411,7 @@ export const e2e = test
 				// Pre-seed providers.json so the extension's pliny provider points at the
 				// local mock server instead of the real Pliny gateway.  The ProviderSettingsManager
 				// reads this file at startup; writing it before VS Code launches means the
-				// extension never tries to reach snps-inference.internal.synopsys.com.
+				// extension never tries to reach the Pliny gateway.
 				const settingsDir = path.join(clineDataDir, "settings")
 				mkdirSync(settingsDir, { recursive: true })
 				const plinyMockBaseUrl = `${MOCK_CLINE_API_SERVER_URL}/api/llm`

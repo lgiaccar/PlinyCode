@@ -47,6 +47,11 @@ export type HistoryItem = {
 	 */
 	spendingLimit?: number
 	/**
+	 * How much a budget stop raises the budget: the amount the user last typed for this
+	 * conversation. Absent until they set one; then the default budget is the step.
+	 */
+	spendingStep?: number
+	/**
 	 * Transient, never persisted: when the current turn started running (ms since
 	 * epoch). Set only on the webview's `currentTaskItem` while a turn runs, so the
 	 * task header can tick the running time live.

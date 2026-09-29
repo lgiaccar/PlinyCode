@@ -4,6 +4,15 @@
  * shows the time as two 24-hour selects so it never falls back to AM/PM.
  */
 
+/** How a scheduled prompt repeats: it is sent `count` times in total, `intervalMs` apart. */
+export interface ScheduleRepeat {
+	count: number
+	intervalMs: number
+}
+
+export const REPEAT_UNITS = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 } as const
+export type RepeatUnit = keyof typeof REPEAT_UNITS
+
 const pad2 = (n: number) => String(n).padStart(2, "0")
 
 interface ScheduleTimeParts {

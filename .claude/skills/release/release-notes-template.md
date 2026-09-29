@@ -7,7 +7,7 @@ Internal Synopsys release of the PlinyCode VS Code / Cursor extension.
 Otherwise download the `.vsix` from this release, then
 Extensions -> ... -> **Install from VSIX...** and reload the window.
 
-**Gateway:** `https://snps-inference.internal.synopsys.com` (Synopsys network only)
+**Gateway:** the Pliny gateway (Synopsys network only)
 
 ---
 
