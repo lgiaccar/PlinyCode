@@ -412,10 +412,31 @@ export function plinyHostedPoolIds(): string[] {
 }
 
 /**
+ * Input budget the FreeAuto router compacts against. Compaction reads the
+ * virtual router's `ModelInfo`, never the model a call lands on, so this is
+ * what decides when history is summarized. It is sized to the 128k tier, the
+ * largest group of the pool and home of the coding models: the router only
+ * sends a request to a 128k model while it fits with a 32k output reserve and
+ * a 1.15 margin (about 83k tokens), and compaction starts at 90% of this
+ * budget, just under that line. Keeping history below it keeps the whole pool
+ * routable and keeps the small open models out of the range where they
+ * degrade, instead of letting a run grow to ~230k where only GLM-5.2 fits.
+ */
+const FREE_AUTO_MAX_INPUT_TOKENS = 92_000;
+
+/**
+ * Input budget BalanceAuto compacts against: the paid models it prefers take
+ * 200k+, but every call is billed on its whole input, so history is
+ * summarized at about 115k rather than carried to 180k.
+ */
+const BALANCE_AUTO_MAX_INPUT_TOKENS = 128_000;
+
+/**
  * `ModelInfo` for the virtual router. The context window is deliberately the
  * 256k tier rather than GLM-5.2's 512k: it is the window a majority of the pool
- * can honor, so compaction budgets stay valid whichever model a call lands on,
- * while the policy can still route a genuinely huge request to GLM-5.2.
+ * can honor, while the policy can still route a genuinely huge request to
+ * GLM-5.2. `maxInputTokens` is lower on purpose: it only sets when compaction
+ * starts (see FREE_AUTO_MAX_INPUT_TOKENS).
  */
 function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 	return {
@@ -423,7 +444,7 @@ function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 		name: profile.name,
 		description: profile.summary,
 		contextWindow: 256_000,
-		maxInputTokens: 256_000,
+		maxInputTokens: FREE_AUTO_MAX_INPUT_TOKENS,
 		maxTokens: 32_768,
 		capabilities: ["streaming", "tools"],
 		family: "pliny-router",
@@ -454,7 +475,7 @@ function buildBalanceAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 		name: profile.name,
 		description: profile.summary,
 		contextWindow: HOSTED_DEFAULT_CONTEXT,
-		maxInputTokens: HOSTED_DEFAULT_CONTEXT,
+		maxInputTokens: BALANCE_AUTO_MAX_INPUT_TOKENS,
 		maxTokens: 32_768,
 		capabilities: ["streaming", "tools", "images"],
 		family: "pliny-router",

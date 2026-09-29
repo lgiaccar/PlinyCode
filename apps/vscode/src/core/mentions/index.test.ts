@@ -167,6 +167,25 @@ export const main = () => {};
 
 			expect(result).to.equal(expectedOutput)
 		})
+
+		it("names files past the folder budget instead of pasting them", async () => {
+			const text = "Look in @/big/ folder"
+
+			fsStatStub.resolves({ isFile: () => false, isDirectory: () => true })
+			fsReaddirStub.resolves([
+				{ name: "a.ts", isFile: () => true, isDirectory: () => false },
+				{ name: "b.ts", isFile: () => true, isDirectory: () => false },
+			])
+			isBinaryFileStub.resolves(false)
+			extractTextStub.withArgs(path.resolve(cwd, "big/a.ts")).resolves("a".repeat(60_000))
+			extractTextStub.withArgs(path.resolve(cwd, "big/b.ts")).resolves("b".repeat(60_000))
+
+			const result = await parseMentions(text, cwd, urlContentFetcherStub)
+
+			expect(result).to.include('<file_content path="big/a.ts">')
+			expect(result).not.to.include('<file_content path="big/b.ts">')
+			expect(result).to.include("[1 more file(s) not included to save context: big/b.ts.")
+		})
 	})
 
 	describe("URL mentions", () => {

@@ -47,6 +47,7 @@ import {
 	getMessageBuilderOptionsFromEnv,
 	MessageBuilder,
 } from "../../session/services/message-builder";
+import { dropPriorTurnReasoning } from "../../session/services/messages/prior-turn-reasoning";
 import { ConversationStore } from "../../session/stores/conversation-store";
 import type { AgentRuntime } from "../agent";
 import { createAgentRuntime } from "../agent";
@@ -686,6 +687,7 @@ export class SessionRuntime {
 			hooks: this.createRuntimeHooks(),
 			prepareTurn: this.createRuntimePrepareTurn(modelInfo, tools),
 			initialMessages,
+			consumeSystemNotice: () => this.runTracker.consumeSystemNotice(),
 			completionPolicy: toolCallingDisabled ? null : undefined,
 			systemPrompt,
 		});
@@ -857,7 +859,14 @@ export class SessionRuntime {
 
 		return async (context) => {
 			const messages = agentMessagesToMessagesWithMetadata(context.messages);
-			const apiMessages = await this.prepareProviderMessagesForApi(messages);
+			// Size the request the way it will actually be sent (see
+			// prepareMessagesForModelRequest), so earlier turns' reasoning does
+			// not count towards compaction.
+			const apiMessages = await this.prepareProviderMessagesForApi(
+				agentMessagesToMessagesWithMetadata(
+					dropPriorTurnReasoning(context.messages),
+				),
+			);
 			const result = await prepareTurn({
 				agentId: context.agentId,
 				conversationId:
@@ -896,7 +905,7 @@ export class SessionRuntime {
 		messages: readonly AgentMessage[],
 	): Promise<AgentMessage[]> {
 		const providerMessages = await this.prepareProviderMessagesForApi(
-			agentMessagesToMessages(messages),
+			agentMessagesToMessages(dropPriorTurnReasoning(messages)),
 		);
 		return messagesToAgentMessages(providerMessages);
 	}

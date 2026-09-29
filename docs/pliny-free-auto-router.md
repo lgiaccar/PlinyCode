@@ -43,6 +43,13 @@ that answer reliably, models that really call tools, then latency. A model that
 shows as **down** here is still left in the catalog (it may recover), but the
 router benches it automatically after repeated failures at runtime.
 
+FreeAuto advertises a 256k window, but the conversation compacts against a 92k
+input budget, at about 83k estimated tokens. That is where the 128k models
+(the coding route among them) stop fitting a request, so compacting there keeps
+the whole pool routable instead of letting a run grow until only GLM-5.2 fits.
+The timestamped rows (below) are shown in the chat only; they never reach the
+model.
+
 ## Trying it
 
 FreeAuto is the default model, so a fresh install needs no setup. To run the

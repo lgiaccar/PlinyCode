@@ -22,6 +22,7 @@ import {
 	resolveConnectorDataDir,
 	resolveConnectorSettingsPath,
 	resolveDbDataDir,
+	resolveExternalWorkspaceRulesConfigPaths,
 	resolveGlobalAgentsRulesPath,
 	resolveGlobalRulesConfigPaths,
 	resolveGlobalSettingsPath,
@@ -31,10 +32,12 @@ import {
 	resolveProviderSettingsPath,
 	resolveRulesConfigSearchPaths,
 	resolveSessionDataDir,
+	resolveSkillsConfigSearchPaths,
 	resolveTeamDataDir,
 	resolveWorkflowsConfigSearchPaths,
 	resolveWorkspaceRulesConfigPaths,
 	setHomeDir,
+	setInstructionHost,
 } from "./paths";
 
 type EnvSnapshot = {
@@ -615,5 +618,61 @@ describe("Cline plugin discovery boundary", () => {
 		rmSync(join(root, "plugin.json"), { recursive: true, force: true });
 		writeFileSync(join(root, "plugin.json"), "{}");
 		expect(isAgentPluginDirectory(root)).toBe(true);
+	});
+});
+
+describe("instruction host", () => {
+	afterEach(() => {
+		setInstructionHost({});
+	});
+
+	it("loads every editor's files when no editor is set", () => {
+		const external = resolveExternalWorkspaceRulesConfigPaths("/repo");
+		expect(external.copilot).not.toHaveLength(0);
+		expect(external.cursor).not.toHaveLength(0);
+		expect(external.windsurf).not.toHaveLength(0);
+	});
+
+	it("loads only Cursor's rules and skills in Cursor", () => {
+		setInstructionHost({ editor: "cursor" });
+
+		const external = resolveExternalWorkspaceRulesConfigPaths("/repo");
+		expect(external.copilot).toEqual([]);
+		expect(external.windsurf).toEqual([]);
+		expect(external.cursor).toContain(join("/repo", ".cursorrules"));
+
+		const skills = resolveSkillsConfigSearchPaths("/repo");
+		expect(skills).toContain(join("/repo", ".cursor", "skills"));
+		expect(skills).not.toContain(join("/repo", ".github", "skills"));
+		expect(skills).toContain(join("/repo", ".claude", "skills"));
+	});
+
+	it("loads only Copilot's rules and skills in VS Code", () => {
+		setInstructionHost({ editor: "vscode" });
+
+		const external = resolveExternalWorkspaceRulesConfigPaths("/repo");
+		expect(external.cursor).toEqual([]);
+		expect(external.copilot).toContain(
+			join("/repo", ".github", "copilot-instructions.md"),
+		);
+		expect(resolveSkillsConfigSearchPaths("/repo")).not.toContain(
+			join("/repo", ".cursor", "skills"),
+		);
+	});
+
+	it("reads only the host's global rules directory when it is set", () => {
+		const globalRules = join("/home", "me", "Documents", "Cline", "Rules");
+		setInstructionHost({ globalRulesDirectory: globalRules });
+
+		expect(resolveGlobalRulesConfigPaths()).toEqual([globalRules]);
+		const searchPaths = resolveRulesConfigSearchPaths("/repo");
+		expect(searchPaths).toContain(globalRules);
+		expect(
+			searchPaths.some(
+				(path) =>
+					path.endsWith(join(".cline", RULES_CONFIG_DIRECTORY_NAME)) &&
+					!path.startsWith(join("/repo")),
+			),
+		).toBe(false);
 	});
 });

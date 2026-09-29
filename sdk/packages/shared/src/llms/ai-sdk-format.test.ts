@@ -372,13 +372,7 @@ describe("formatMessagesForAiSdk", () => {
 							value: [
 								{
 									type: "text",
-									text: JSON.stringify([
-										{
-											query: "/tmp/image.jpg",
-											result: ["Successfully read image"],
-											success: true,
-										},
-									]),
+									text: '<result query="/tmp/image.jpg">\nSuccessfully read image\n</result>',
 								},
 								{
 									type: "file",
@@ -514,18 +508,9 @@ describe("formatMessagesForAiSdk", () => {
 							value: [
 								{
 									type: "text",
-									text: JSON.stringify([
-										{
-											query: "/tmp/image.jpg",
-											result: ["Successfully read image"],
-											success: true,
-										},
-										{
-											query: "/tmp/image2.png",
-											result: ["Successfully read image"],
-											success: true,
-										},
-									]),
+									text:
+										'<result query="/tmp/image.jpg">\nSuccessfully read image\n</result>\n\n' +
+										'<result query="/tmp/image2.png">\nSuccessfully read image\n</result>',
 								},
 								{
 									type: "file",
@@ -753,6 +738,25 @@ describe("formatMessagesForAiSdk", () => {
 				],
 			},
 		]);
+	});
+
+	it("renders read_files / run_commands operation results as plain text", () => {
+		expect(
+			toAiSdkToolResultOutput([
+				{
+					query: "C:\\repo\\a.ts",
+					result: 'const a = "x";\nconst b = 2;',
+					success: true,
+					duration: 3,
+				},
+				{ query: "missing.ts", result: "", error: "ENOENT", success: false },
+			]),
+		).toEqual({
+			type: "text",
+			value:
+				'<result query="C:\\repo\\a.ts">\nconst a = "x";\nconst b = 2;\n</result>\n\n' +
+				'<result query="missing.ts" status="error">\nENOENT\n</result>',
+		});
 	});
 
 	it("passes through tool result output for compatibility helper", () => {
@@ -1684,17 +1688,8 @@ describe("formatMessagesForAiSdk - models without image support", () => {
 						toolCallId: "call_img",
 						toolName: "read_files",
 						output: {
-							type: "json",
-							value: [
-								{
-									query: "/tmp/image.jpg",
-									result: [
-										"Successfully read image",
-										IMAGE_UNSUPPORTED_PLACEHOLDER,
-									],
-									success: true,
-								},
-							],
+							type: "text",
+							value: `<result query="/tmp/image.jpg">\nSuccessfully read image\n${IMAGE_UNSUPPORTED_PLACEHOLDER}\n</result>`,
 						},
 					},
 				],

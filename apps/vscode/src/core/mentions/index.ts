@@ -11,6 +11,7 @@ import { isBinaryFile } from "isbinaryfile"
 import * as path from "path"
 import { HostProvider } from "@/hosts/host-provider"
 import { getLatestTerminalOutput } from "@/hosts/vscode/terminal/get-latest-output"
+import { MAX_MENTION_FOLDER_CHARS, MAX_MENTION_URL_CHARS, truncateContent } from "@/shared/content-limits"
 import { ShowMessageType } from "@/shared/proto/host/window"
 import { DiagnosticSeverity } from "@/shared/proto/index.cline"
 import { Logger } from "@/shared/services/Logger"
@@ -129,7 +130,7 @@ export async function parseMentions(
 			} else {
 				try {
 					const markdown = await urlContentFetcher.urlToMarkdown(mention)
-					result = markdown
+					result = truncateContent(markdown, MAX_MENTION_URL_CHARS, "PAGE")
 					// Track successful URL mention
 				} catch (error) {
 					HostProvider.window.showMessage({
@@ -344,8 +345,26 @@ async function getFileOrFolderContent(mentionPath: string, cwd: string): Promise
 					folderContent += `${linePrefix}${entry.name}\n`
 				}
 			})
-			const fileContents = (await Promise.all(fileContentPromises)).filter((content) => content)
-			return `${folderContent}\n${fileContents.join("\n\n")}`.trim()
+			const fileContents = (await Promise.all(fileContentPromises)).filter((content): content is string => Boolean(content))
+			// Every file of the folder shares one budget; past it, files are
+			// named but not pasted, and the model can read them itself.
+			const included: string[] = []
+			const omitted: string[] = []
+			let used = 0
+			for (const content of fileContents) {
+				if (used + content.length > MAX_MENTION_FOLDER_CHARS && included.length > 0) {
+					omitted.push(content.match(/^<file_content path="([^"]*)">/)?.[1] ?? "(file)")
+					continue
+				}
+				included.push(content)
+				used += content.length
+			}
+			if (omitted.length > 0) {
+				included.push(
+					`[${omitted.length} more file(s) not included to save context: ${omitted.join(", ")}. Read them with read_files if you need them.]`,
+				)
+			}
+			return `${folderContent}\n${included.join("\n\n")}`.trim()
 		}
 		return `(Failed to read contents of ${mentionPath})`
 	} catch (error) {

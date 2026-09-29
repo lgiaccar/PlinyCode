@@ -49,8 +49,10 @@ Two things the router cannot do for hosted models:
   its 400k), Gemini 3.5 / 2.5 Flash 1M. Entries the page does not list (Claude
   Sonnet 5, the Sonnet 4.6 thinking presets) keep the 200k hosted default, and a
   request beyond roughly 118k estimated tokens (window minus the output reserve)
-  skips them for a model with room. The conversation itself still compacts
-  against BalanceAuto's own 200k window.
+  skips them for a model with room. The conversation itself compacts against
+  BalanceAuto's own 128k input budget (at about 115k estimated tokens), so a
+  run stays within reach of those 200k-default models and each paid call is
+  billed on a smaller input.
 
 Utility jobs (classifier, compaction summaries, commit messages) stay on free
 models by default. The rules file may point any of them at a paid model.

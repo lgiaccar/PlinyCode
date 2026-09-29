@@ -51,7 +51,17 @@ import {
 	utf8ByteLength,
 } from "./messages/truncation";
 
-export const DEFAULT_MAX_TOOL_RESULT_CHARS = 8_000;
+// Per-string cap on tool output. It sits just above the tools' own limits
+// (48k chars per read window, command output and search, 50k per web fetch)
+// so a tool's result reaches the model as the tool shaped it, paging hints
+// included. A tighter cap here middle-cuts every read, and the model can
+// never see the middle of a file however it pages.
+export const DEFAULT_MAX_TOOL_RESULT_CHARS = 50_000;
+// One tool result's large strings share this budget, so a single call that
+// returns many entries (several files, several commands) stays bounded.
+export const DEFAULT_MAX_TOOL_RESULT_BLOCK_CHARS = 64_000;
+// No entry of a shared result is cut below this.
+export const MIN_TOOL_RESULT_ENTRY_CHARS = 8_000;
 export const DEFAULT_MAX_FILE_CONTENT_CHARS = 50_000;
 // The aggregate budget intentionally stays far above what the per-result cap
 // usually produces: budget truncation rewrites bytes mid-transcript, which
@@ -72,6 +82,7 @@ export const MESSAGE_BUILDER_LIMIT_ENV = {
 
 export interface MessageBuilderOptions {
 	maxToolResultChars?: number;
+	maxToolResultBlockChars?: number;
 	maxFileContentChars?: number;
 	maxTotalTextBytes?: number;
 	mediaBudget?: MediaBudgetOptions;
@@ -116,6 +127,7 @@ export class MessageBuilder {
 	>();
 	private readResultLocatorCache = new WeakMap<object, ReadLocator[]>();
 	private readonly maxToolResultChars: number;
+	private readonly maxToolResultBlockChars: number;
 	private readonly maxFileContentChars: number;
 	private readonly maxTotalTextBytes: number;
 	private readonly mediaBudget: MediaBudgetOptions;
@@ -130,6 +142,10 @@ export class MessageBuilder {
 		this.maxToolResultChars = normalizePositiveLimit(
 			options.maxToolResultChars,
 			DEFAULT_MAX_TOOL_RESULT_CHARS,
+		);
+		this.maxToolResultBlockChars = normalizePositiveLimit(
+			options.maxToolResultBlockChars,
+			DEFAULT_MAX_TOOL_RESULT_BLOCK_CHARS,
 		);
 		this.maxFileContentChars = normalizePositiveLimit(
 			options.maxFileContentChars,
@@ -550,23 +566,46 @@ export class MessageBuilder {
 	private truncateToolResultContent(
 		content: ToolResultContent["content"],
 	): ToolResultContent["content"] {
+		const limit = this.toolResultEntryLimit(content);
 		if (typeof content === "string") {
-			return this.truncateMiddle(content);
+			return this.truncateMiddle(content, limit);
 		}
 		return content.map((entry) => {
 			if (entry.type === "file") {
-				const next = this.truncateMiddle(entry.content);
+				const next = this.truncateMiddle(entry.content, limit);
 				return next === entry.content ? entry : { ...entry, content: next };
 			}
 			if (entry.type === "text") {
-				const next = this.truncateMiddle(entry.text);
+				const next = this.truncateMiddle(entry.text, limit);
 				return next === entry.text ? entry : { ...entry, text: next };
 			}
 			if (isStructuredToolResultEntry(entry)) {
-				return this.truncateNestedStrings(entry) as typeof entry;
+				return this.truncateNestedStrings(entry, limit) as typeof entry;
 			}
 			return entry;
 		});
+	}
+
+	/**
+	 * The per-string cap for one tool result. A result with a single large
+	 * string gets the full per-string cap; several large strings split the
+	 * block budget between them, never below MIN_TOOL_RESULT_ENTRY_CHARS.
+	 * Depends only on the block's own content, so it is stable across
+	 * requests and does not disturb provider prefix caches.
+	 */
+	private toolResultEntryLimit(content: ToolResultContent["content"]): number {
+		const floor = Math.min(
+			MIN_TOOL_RESULT_ENTRY_CHARS,
+			this.maxToolResultChars,
+		);
+		const largeStrings = countStringsLongerThan(content, floor);
+		if (largeStrings <= 1) {
+			return this.maxToolResultChars;
+		}
+		return Math.min(
+			this.maxToolResultChars,
+			Math.max(floor, Math.floor(this.maxToolResultBlockChars / largeStrings)),
+		);
 	}
 
 	/**
@@ -575,14 +614,17 @@ export class MessageBuilder {
 	 * payload in untyped `{query, result, ...}` fields rather than text
 	 * blocks. Image blocks are left intact so base64 payloads survive.
 	 */
-	private truncateNestedStrings(value: unknown): unknown {
+	private truncateNestedStrings(
+		value: unknown,
+		limit = this.maxToolResultChars,
+	): unknown {
 		if (typeof value === "string") {
-			return this.truncateMiddle(value);
+			return this.truncateMiddle(value, limit);
 		}
 		if (Array.isArray(value)) {
 			let changed = false;
 			const next = value.map((item) => {
-				const out = this.truncateNestedStrings(item);
+				const out = this.truncateNestedStrings(item, limit);
 				if (out !== item) {
 					changed = true;
 				}
@@ -597,7 +639,7 @@ export class MessageBuilder {
 			let changed = false;
 			const next: Record<string, unknown> = {};
 			for (const [key, item] of Object.entries(value)) {
-				const out = this.truncateNestedStrings(item);
+				const out = this.truncateNestedStrings(item, limit);
 				if (out !== item) {
 					changed = true;
 				}
@@ -608,12 +650,11 @@ export class MessageBuilder {
 		return value;
 	}
 
-	private truncateMiddle(text: string): string {
-		return truncateMiddleByChars(
-			text,
-			this.maxToolResultChars,
-			TRUNCATE_MARKER_DEFAULT,
-		);
+	private truncateMiddle(
+		text: string,
+		limit = this.maxToolResultChars,
+	): string {
+		return truncateMiddleByChars(text, limit, TRUNCATE_MARKER_DEFAULT);
 	}
 
 	private truncateAssistantText(text: string): string {
@@ -732,4 +773,28 @@ function normalizeNonNegativeLimit(
 		return fallback;
 	}
 	return Number.isFinite(value) ? Math.floor(value) : value;
+}
+
+function countStringsLongerThan(value: unknown, threshold: number): number {
+	if (typeof value === "string") {
+		return value.length > threshold ? 1 : 0;
+	}
+	if (Array.isArray(value)) {
+		let count = 0;
+		for (const item of value) {
+			count += countStringsLongerThan(item, threshold);
+		}
+		return count;
+	}
+	if (value !== null && typeof value === "object") {
+		if (isBinaryContentLike(value)) {
+			return 0;
+		}
+		let count = 0;
+		for (const item of Object.values(value)) {
+			count += countStringsLongerThan(item, threshold);
+		}
+		return count;
+	}
+	return 0;
 }

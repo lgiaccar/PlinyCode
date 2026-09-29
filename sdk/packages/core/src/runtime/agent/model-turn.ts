@@ -109,6 +109,13 @@ async function generateAssistantMessageForRequest(
 				messages: [...request.messages, ...cloneMessages([pendingUserMessage])],
 			};
 		}
+		const systemNotice = await consumeSystemNotice(ctx);
+		if (systemNotice) {
+			request = {
+				...request,
+				messages: [...request.messages, ...cloneMessages([systemNotice])],
+			};
+		}
 	}
 
 	request = await prepareTurnForModelRequest(ctx, request, options);
@@ -563,6 +570,30 @@ async function consumePendingUserMessage(
 	}
 	const message = createMessage("user", [{ type: "text", text: pending }], {
 		userRunSpan: 0,
+	});
+	ctx.state.messages.push(message);
+	await ctx.emit({
+		type: "message-added",
+		snapshot: ctx.snapshot(),
+		message,
+	});
+	return message;
+}
+
+async function consumeSystemNotice(
+	ctx: AgentLoopContext,
+): Promise<AgentMessage | undefined> {
+	const notice = ctx.config.consumeSystemNotice?.();
+	const text = notice?.text.trim();
+	if (!text) {
+		return undefined;
+	}
+	// displayRole "system" keeps it out of user-facing transcripts, like the
+	// runtime's own reminders.
+	const message = createMessage("user", [{ type: "text", text }], {
+		userRunSpan: 0,
+		displayRole: "system",
+		...(notice?.kind ? { kind: notice.kind } : {}),
 	});
 	ctx.state.messages.push(message);
 	await ctx.emit({

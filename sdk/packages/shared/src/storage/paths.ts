@@ -159,6 +159,42 @@ export function resolveClineDir(): string {
 	return join(HOME_DIR, ".cline");
 }
 
+/** The editor a host runs in, as far as instruction files are concerned. */
+export type InstructionEditor = "vscode" | "cursor" | "windsurf";
+
+export interface InstructionHost {
+	/**
+	 * Load only this editor's own agent files next to the vendor-neutral ones:
+	 * `.github` (Copilot) in VS Code, `.cursor` in Cursor, `.windsurfrules` in
+	 * Windsurf. Unset loads every editor's files.
+	 */
+	editor?: InstructionEditor;
+	/**
+	 * The one global rules directory to read. Unset falls back to every known
+	 * global location (see resolveGlobalRulesConfigPaths).
+	 */
+	globalRulesDirectory?: string;
+}
+
+let INSTRUCTION_HOST: InstructionHost = {};
+
+/**
+ * Tells rule and skill discovery which editor the host runs in and where its
+ * global rules live. Every resolver below reads it, so the runtime, the Rules
+ * panel and slash-command lookup all see the same set of files.
+ */
+export function setInstructionHost(host: InstructionHost): void {
+	const globalRulesDirectory = host.globalRulesDirectory?.trim();
+	INSTRUCTION_HOST = {
+		...(host.editor ? { editor: host.editor } : {}),
+		...(globalRulesDirectory ? { globalRulesDirectory } : {}),
+	};
+}
+
+export function getInstructionHost(): Readonly<InstructionHost> {
+	return INSTRUCTION_HOST;
+}
+
 export function resolveDocumentsClineDirectoryPath(): string {
 	return join(HOME_DIR, "Documents", "Cline");
 }
@@ -465,6 +501,22 @@ function dedupePaths(paths: ReadonlyArray<string>): string[] {
  */
 export const EXTERNAL_SKILLS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
 
+/**
+ * Editor-owned config roots and the editor each belongs to. With an editor
+ * set (setInstructionHost), another editor's root is skipped: its files were
+ * written for that editor's agent, and loading them everywhere doubles up on
+ * instructions the workspace usually keeps in AGENTS.md too.
+ */
+const EDITOR_OWNED_CONFIG_DIRS: Readonly<Record<string, InstructionEditor>> = {
+	".github": "vscode",
+	".cursor": "cursor",
+};
+
+function isForCurrentEditor(owner: InstructionEditor | undefined): boolean {
+	const editor = INSTRUCTION_HOST.editor;
+	return !editor || !owner || owner === editor;
+}
+
 function getWorkspaceSkillDirectories(workspacePath?: string): string[] {
 	if (!workspacePath) {
 		return [];
@@ -473,7 +525,9 @@ function getWorkspaceSkillDirectories(workspacePath?: string): string[] {
 		DEPRECATED_CONFIG_DIR,
 		CLINE_CONFIG_DIR,
 		LEGACY_AGENT_SKILLS_CONFIG_DIR,
-		...EXTERNAL_SKILLS_CONFIG_DIRS,
+		...EXTERNAL_SKILLS_CONFIG_DIRS.filter((dir) =>
+			isForCurrentEditor(EDITOR_OWNED_CONFIG_DIRS[dir]),
+		),
 	].map((dir) => join(workspacePath, dir, SKILLS_CONFIG_DIRECTORY_NAME));
 }
 
@@ -551,6 +605,9 @@ export function resolveWorkspaceRulesConfigPaths(
  * - Cursor: `.cursor/rules/*.mdc` (`globs:`/`alwaysApply:` frontmatter) and
  *   the legacy root `.cursorrules` file
  * - Windsurf: the root `.windsurfrules` file
+ *
+ * With an editor set (setInstructionHost), only that editor's entry is
+ * filled: Copilot's in VS Code, Cursor's in Cursor, Windsurf's in Windsurf.
  */
 export function resolveExternalWorkspaceRulesConfigPaths(
 	workspacePath: string,
@@ -559,16 +616,18 @@ export function resolveExternalWorkspaceRulesConfigPaths(
 	cursor: string[];
 	windsurf: string[];
 } {
+	const only = (editor: InstructionEditor, paths: string[]) =>
+		isForCurrentEditor(editor) ? paths : [];
 	return {
-		copilot: [
+		copilot: only("vscode", [
 			join(workspacePath, ".github", "copilot-instructions.md"),
 			join(workspacePath, ".github", "instructions"),
-		],
-		cursor: [
+		]),
+		cursor: only("cursor", [
 			join(workspacePath, ".cursor", RULES_CONFIG_DIRECTORY_NAME),
 			join(workspacePath, ".cursorrules"),
-		],
-		windsurf: [join(workspacePath, ".windsurfrules")],
+		]),
+		windsurf: only("windsurf", [join(workspacePath, ".windsurfrules")]),
 	};
 }
 
@@ -596,9 +655,14 @@ function resolveRedirectedDocumentsPaths(): string[] {
 /**
  * Global (user-level) directories rule files may live in, ordered from the
  * SDK-native location to the Documents locations used by the VS Code Rules
- * tab.
+ * tab. A host that knows its one global rules directory (setInstructionHost)
+ * gets only that: guessing four locations let stray copies in `~/.cline/rules`
+ * or a stale Documents folder reach the model without showing in the panel.
  */
 export function resolveGlobalRulesConfigPaths(): string[] {
+	if (INSTRUCTION_HOST.globalRulesDirectory) {
+		return [INSTRUCTION_HOST.globalRulesDirectory];
+	}
 	return dedupePaths([
 		join(resolveClineDir(), RULES_CONFIG_DIRECTORY_NAME),
 		// The VS Code Rules tab resolves Documents via `xdg-user-dir DOCUMENTS`,

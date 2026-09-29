@@ -89,6 +89,12 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	const builtinTools = await Promise.all(
 		getRunningBuiltinMcpSources().map(async (source) => {
 			try {
+				if (options?.cwd && source.appliesTo && !(await source.appliesTo(options.cwd))) {
+					Logger.log(
+						`[VscodeRuntimeTools] Skipping built-in MCP server "${source.serverName}": not used in ${options.cwd}`,
+					)
+					return []
+				}
 				return await createMcpTools({
 					serverName: source.serverName,
 					provider: source.provider,

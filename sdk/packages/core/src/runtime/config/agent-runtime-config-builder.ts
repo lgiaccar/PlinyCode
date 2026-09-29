@@ -67,6 +67,8 @@ export interface CreateAgentRuntimeConfigInput {
 		| undefined;
 	/** Seed messages (usually `session.conversation.getMessages()`). */
 	readonly initialMessages?: readonly AgentMessage[];
+	/** Notices the session raises mid-run (loop detection) for the model. */
+	readonly consumeSystemNotice?: AgentRuntimeConfig["consumeSystemNotice"];
 	/**
 	 * Optional completion-policy override. Pass `null` for model modes that
 	 * cannot call tools (for example image generation).
@@ -113,6 +115,7 @@ export function createAgentRuntimeConfig(
 		hooks,
 		prepareTurn: input.prepareTurn,
 		consumePendingUserMessage: agentConfig.consumePendingUserMessage,
+		consumeSystemNotice: input.consumeSystemNotice,
 		plugins: input.plugins,
 		logger: input.logger ?? agentConfig.logger,
 		initialMessages: input.initialMessages,

@@ -6,7 +6,9 @@ users need no Python, Node, repository checkout or configuration file.
 
 The same server is available to:
 
-- **PlinyCode's agent**, automatically.
+- **PlinyCode's agent**, automatically, in a session whose folder is a git repository with a GitHub or Azure
+  DevOps remote. Elsewhere its tools are left out, since their schemas would be sent with every request for
+  nothing.
 - **Copilot Chat** (agent mode) in VS Code, and **Cursor's agent**. PlinyCode registers the server with the
   editor when it starts.
 - **Any other MCP client**, through a config copied from the PlinyCode GUI.

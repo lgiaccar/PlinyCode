@@ -34,6 +34,7 @@ import { getDistinctId } from "@/services/logging/distinctId"
 import { fetch } from "@/shared/net"
 import { coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { buildAgentHooks } from "./hooks-adapter"
+import { getHostIdeName } from "./instruction-sources"
 import { resolveDataDir } from "./legacy-state-reader"
 import type { ResolvedModelSelection } from "./model-catalog/contracts"
 import { nonNegativeFiniteNumber, positiveFiniteNumber, toSdkApiFormat } from "./model-catalog/model-values"
@@ -480,7 +481,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	try {
 		const workspaceName = resolveWorkspaceName(cwd)
 		systemPrompt = buildClineSystemPrompt({
-			ide: "VS Code",
+			ide: getHostIdeName(),
 			workspaceRoot,
 			workspaceName,
 			mode: mode === "plan" ? "plan" : "act",
@@ -609,7 +610,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 				rootPath: workspaceRoot,
 				cwd,
 				workspaceName: resolveWorkspaceName(workspaceRoot),
-				ide: "VS Code",
+				ide: getHostIdeName(),
 				platform: process.platform,
 				mode: mode === "plan" ? "plan" : "act",
 			},

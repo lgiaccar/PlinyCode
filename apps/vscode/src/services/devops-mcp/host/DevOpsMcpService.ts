@@ -13,6 +13,7 @@ import {
 	registerBuiltinMcpSource,
 	setDevOpsServerControl,
 } from "../builtin-mcp-registry"
+import { hasSupportedRemote } from "../server/repo"
 import {
 	detectEditorIntegration,
 	EDITOR_SERVER_NAME,
@@ -78,6 +79,8 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			provider: service.toolProvider,
 			isRunning: () => service.state === "running",
 			toolNames: () => service.tools.map((t) => t.name),
+			// Its tools only work on a repo with a GitHub or Azure DevOps remote.
+			appliesTo: (cwd) => hasSupportedRemote(cwd),
 		})
 		service.disposables.push(
 			new vscode.Disposable(unregister),

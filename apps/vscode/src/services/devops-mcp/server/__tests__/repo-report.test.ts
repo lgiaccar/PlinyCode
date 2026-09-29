@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test"
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { DevOpsError } from "../errors"
 import { failureExcerpt } from "../providers/github"
-import { parseRemote } from "../repo"
+import { hasSupportedRemote, parseRemote } from "../repo"
 import { setSection } from "../report"
 
 describe("parseRemote", () => {
@@ -109,5 +113,33 @@ describe("failureExcerpt", () => {
 		].join("\n")
 		expect(failureExcerpt(log, 2)).toBe("boom\n##[error]Process completed with exit code 1.")
 		expect(failureExcerpt("a\nb\nc", 2)).toBe("b\nc")
+	})
+})
+
+describe("hasSupportedRemote", () => {
+	it("is true for a repository with a GitHub remote", async () => {
+		const root = mkdtempSync(path.join(tmpdir(), "devops-remote-"))
+		const provider = process.env.DEVOPS_MCP_PROVIDER
+		delete process.env.DEVOPS_MCP_PROVIDER
+		try {
+			execFileSync("git", ["init", "-q"], { cwd: root })
+			expect(await hasSupportedRemote(root)).toBe(false)
+			execFileSync("git", ["remote", "add", "origin", "https://github.com/acme/widgets.git"], { cwd: root })
+			expect(await hasSupportedRemote(root)).toBe(true)
+		} finally {
+			if (provider !== undefined) {
+				process.env.DEVOPS_MCP_PROVIDER = provider
+			}
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("is false outside a git repository", async () => {
+		const root = mkdtempSync(path.join(tmpdir(), "devops-remote-"))
+		try {
+			expect(await hasSupportedRemote(root)).toBe(false)
+		} finally {
+			rmSync(root, { recursive: true, force: true })
+		}
 	})
 })

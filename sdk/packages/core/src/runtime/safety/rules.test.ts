@@ -7,6 +7,8 @@ import {
 	describeRuleScope,
 	formatRulesForSystemPrompt,
 	listEnabledRulesFromWatcher,
+	MAX_RULE_CHARS,
+	MAX_RULES_TOTAL_CHARS,
 	mergeRulesForSystemPrompt,
 } from "./rules";
 
@@ -71,6 +73,55 @@ describe("describeRuleScope", () => {
 			formatRulesForSystemPrompt([rule("py", { applyTo: "**/*.py" })]),
 		).toBe(
 			"\n\n# Rules\n## py\n_Applies only when working with files matching: `**/*.py`_\n\npy body",
+		);
+	});
+});
+
+describe("formatRulesForSystemPrompt budgets", () => {
+	it("lists scoped rules with a known file instead of inlining them", () => {
+		const output = formatRulesForSystemPrompt([
+			{ ...rule("always"), filePath: "/w/always.md" },
+			{ ...rule("py", { applyTo: "**/*.py" }), filePath: "/w/py.md" },
+		]);
+
+		expect(output).toContain("## always\nalways body");
+		expect(output).not.toContain("py body");
+		expect(output).toContain("## Rules to read when they apply");
+		expect(output).toContain(
+			"- **py** (Applies only when working with files matching: `**/*.py`): `/w/py.md`",
+		);
+	});
+
+	it("caps a long rule and points at its file", () => {
+		const output = formatRulesForSystemPrompt([
+			{
+				name: "long",
+				instructions: "x".repeat(MAX_RULE_CHARS + 500),
+				frontmatter: {},
+				filePath: "/w/long.md",
+			},
+		]);
+
+		expect(output).toContain(
+			"[Rule truncated: 500 more characters. Read the rest in `/w/long.md`.]",
+		);
+		expect(output.length).toBeLessThan(MAX_RULE_CHARS + 300);
+	});
+
+	it("lists rules past the total budget by path", () => {
+		const big = (name: string) => ({
+			name,
+			instructions: "y".repeat(MAX_RULE_CHARS),
+			frontmatter: {},
+			filePath: `/w/${name}.md`,
+		});
+		const count = Math.ceil(MAX_RULES_TOTAL_CHARS / MAX_RULE_CHARS) + 1;
+		const output = formatRulesForSystemPrompt(
+			Array.from({ length: count }, (_, i) => big(`r${i}`)),
+		);
+
+		expect(output).toContain(
+			`- **r${count - 1}** (not inlined: the rules budget is used up): \`/w/r${count - 1}.md\``,
 		);
 	});
 });
