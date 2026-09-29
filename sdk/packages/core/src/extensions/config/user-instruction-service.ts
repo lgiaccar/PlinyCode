@@ -230,7 +230,10 @@ export function combineUserInstructionConfigServices(
 											!options.ruleFilter ||
 											options.ruleFilter(record.filePath),
 									)
-									.map((record) => record.item)
+									.map((record) => ({
+										...record.item,
+										filePath: record.filePath,
+									}))
 									.filter((rule) => rule.disabled !== true),
 							),
 					});

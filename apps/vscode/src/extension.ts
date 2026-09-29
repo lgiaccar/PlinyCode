@@ -27,6 +27,8 @@ import { improveWithCline } from "./core/controller/commands/improveWithCline"
 import { sendAddToInputEvent } from "./core/controller/ui/subscribeToAddToInput"
 import { sendShowWebviewEvent } from "./core/controller/ui/subscribeToShowWebview"
 import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
+import { ensureRulesDirectoryExists } from "./core/storage/disk"
+import { StateManager } from "./core/storage/StateManager"
 import {
 	cleanupMcpMarketplaceCatalogFromGlobalState,
 	cleanupOldApiKey,
@@ -50,6 +52,7 @@ import { EDIT_PREVIEW_URI_SCHEME, editPreviewContentProvider, VscodeEditPreview 
 import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { ExtensionRegistryInfo } from "./registry"
+import { configureInstructionSources } from "./sdk/instruction-sources"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
@@ -88,6 +91,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	// 4. Register services and perform common initialization
 	// IMPORTANT: Must be done after host provider is setup and migrations are complete
 	const webview = (await initialize(storageContext)) as VscodeWebviewProvider
+
+	// Before any session starts: which editor's rule and skill files to load,
+	// and the one global rules folder (files in ~/.cline/rules move there).
+	await configureInstructionSources({
+		appName: vscode.env.appName,
+		globalRulesDirectory: await ensureRulesDirectoryExists(),
+		getGlobalToggles: () => StateManager.get().getGlobalSettingsKey("globalClineRulesToggles"),
+		setGlobalToggles: (toggles) => StateManager.get().setGlobalState("globalClineRulesToggles", toggles),
+	}).catch((error) => Logger.error("[instructions] Failed to configure rule sources:", error))
 
 	// 5. Register services and commands specific to VS Code
 	// Initialize hook discovery cache for performance optimization

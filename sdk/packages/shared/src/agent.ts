@@ -626,6 +626,17 @@ export interface AgentRuntimeConfig {
 		| string
 		| undefined
 		| Promise<string | undefined>;
+	// Optional callback returning a model-facing notice raised during the
+	// run (e.g. loop detection) to add before the next model request. Unlike
+	// a steering message it is marked as a system message, so hosts do not
+	// show it as user input.
+	consumeSystemNotice?: () => AgentSystemNotice | undefined;
+}
+
+export interface AgentSystemNotice {
+	text: string;
+	/** Metadata `kind`, e.g. "loop_detection_notice". */
+	kind?: string;
 }
 
 // =============================================================================

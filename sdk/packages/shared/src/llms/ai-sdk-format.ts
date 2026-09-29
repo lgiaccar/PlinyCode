@@ -599,7 +599,8 @@ export function toAiSdkToolResultOutput(
 			const headerText =
 				typeof stripped.value === "string"
 					? sanitizeSurrogates(stripped.value)
-					: JSON.stringify(sanitizeDeepStrings(stripped.value));
+					: (formatToolOperationResultsAsText(stripped.value) ??
+						JSON.stringify(sanitizeDeepStrings(stripped.value)));
 			return {
 				type: "content",
 				value: [
@@ -611,11 +612,20 @@ export function toAiSdkToolResultOutput(
 			};
 		}
 		if (stripped.mediaChanged) {
+			const text = formatToolOperationResultsAsText(stripped.value);
+			if (text !== undefined) {
+				return { type: isError ? "error-text" : "text", value: text };
+			}
 			return {
 				type: isError ? "error-json" : "json",
 				value: sanitizeDeepStrings(stripped.value),
 			};
 		}
+	}
+
+	const operationsText = formatToolOperationResultsAsText(output);
+	if (operationsText !== undefined) {
+		return { type: isError ? "error-text" : "text", value: operationsText };
 	}
 
 	if (
@@ -634,6 +644,76 @@ export function toAiSdkToolResultOutput(
 		type: isError ? "error-text" : "text",
 		value: sanitizeSurrogates(String(output)),
 	};
+}
+
+const TOOL_OPERATION_KEYS = new Set([
+	"query",
+	"result",
+	"error",
+	"success",
+	"duration",
+]);
+
+function isToolOperationResultLike(value: unknown): value is {
+	query: string;
+	result?: unknown;
+	error?: unknown;
+	success: boolean;
+} {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) {
+		return false;
+	}
+	const record = value as Record<string, unknown>;
+	return (
+		typeof record.query === "string" &&
+		typeof record.success === "boolean" &&
+		Object.keys(record).every((key) => TOOL_OPERATION_KEYS.has(key))
+	);
+}
+
+function toolOperationValueText(value: unknown): string {
+	if (value === undefined || value === null) {
+		return "";
+	}
+	if (typeof value === "string") {
+		return value;
+	}
+	if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+		return value.join("\n");
+	}
+	return JSON.stringify(sanitizeDeepStrings(value), null, 2);
+}
+
+/**
+ * Renders the `{query, result, error, success}[]` outputs of read_files,
+ * run_commands and search_codebase as plain text. Sent as JSON, file content
+ * and command output reach the model with every newline, quote and Windows
+ * backslash escaped: more tokens, and harder for small models to read.
+ * Returns undefined for any other shape, which keeps the JSON path.
+ */
+export function formatToolOperationResultsAsText(
+	output: unknown,
+): string | undefined {
+	if (
+		!Array.isArray(output) ||
+		output.length === 0 ||
+		!output.every(isToolOperationResultLike)
+	) {
+		return undefined;
+	}
+	return sanitizeSurrogates(
+		output
+			.map((operation) => {
+				const query = operation.query.replace(/"/g, "&quot;");
+				const body = operation.success
+					? toolOperationValueText(operation.result)
+					: toolOperationValueText(operation.error ?? operation.result) ||
+						"failed";
+				const status = operation.success ? "" : ' status="error"';
+				return `<result query="${query}"${status}>\n${body}\n</result>`;
+			})
+			.join("\n\n"),
+	);
 }
 
 export function formatMessagesForAiSdk(

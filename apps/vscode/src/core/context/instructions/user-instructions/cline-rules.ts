@@ -1,6 +1,6 @@
-import { resolveGlobalRulesConfigPaths, resolveWorkspaceRulesConfigPaths } from "@plinycode/shared/storage"
 import { combineRuleToggles, synchronizeRuleToggles } from "@core/context/instructions/user-instructions/rule-helpers"
 import { ensureRulesDirectoryExists } from "@core/storage/disk"
+import { resolveGlobalRulesConfigPaths, resolveWorkspaceRulesConfigPaths } from "@plinycode/shared/storage"
 import { ClineRulesToggles } from "@shared/cline-rules"
 import { Controller } from "@/core/controller"
 
@@ -43,8 +43,9 @@ export async function refreshClineRulesToggles(
 }> {
 	// Global toggles: the Documents-based directory the Rules tab creates files
 	// in (resolved through the OS, so it follows redirected Documents folders),
-	// plus every global location the shared SDK resolver loads rules from
-	// (e.g. ~/.cline/rules), so the panel shows what actually reaches the model.
+	// plus whatever the shared SDK resolver loads global rules from. At
+	// activation that is narrowed to this one directory (instruction-sources.ts),
+	// so the panel shows what actually reaches the model.
 	const globalClineRulesToggles = controller.stateManager.getGlobalSettingsKey("globalClineRulesToggles")
 	const globalClineRulesFilePath = await ensureRulesDirectoryExists()
 	const globalRuleDirectories = [...new Set([globalClineRulesFilePath, ...resolveGlobalRulesConfigPaths()])]

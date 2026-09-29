@@ -5,6 +5,7 @@ import type {
 	AgentResult,
 	AgentRunResult,
 	AgentRuntimeEvent,
+	AgentSystemNotice,
 	LegacyAgentUsage,
 	ToolCallRecord,
 } from "@plinycode/shared";
@@ -65,6 +66,8 @@ export class SessionRunTracker {
 	activeTrackerWork: Promise<void> = Promise.resolve();
 	/** True when tracker logic has issued an abort for the active run. */
 	private trackerAbortInFlight = false;
+	/** Loop-detection notices waiting for the next model request. */
+	private pendingSystemNotices: string[] = [];
 	private readonly conversation: ConversationStore;
 	private readonly mistakeTracker: MistakeTracker;
 	private readonly loopTracker: LoopDetectionTracker;
@@ -96,6 +99,17 @@ export class SessionRunTracker {
 		this.currentTurnFailureDetails = [];
 		this.activeTrackerWork = Promise.resolve();
 		this.trackerAbortInFlight = false;
+		this.pendingSystemNotices = [];
+	}
+
+	/** Hands queued loop-detection notices to the runtime, once. */
+	consumeSystemNotice(): AgentSystemNotice | undefined {
+		if (this.pendingSystemNotices.length === 0) {
+			return undefined;
+		}
+		const text = this.pendingSystemNotices.join("\n\n");
+		this.pendingSystemNotices = [];
+		return { text, kind: "loop_detection_notice" };
 	}
 
 	/** Record one runtime event before it is translated for listeners. */
@@ -283,11 +297,12 @@ export class SessionRunTracker {
 			return;
 		}
 		if (verdict.kind === "soft") {
+			// Queued for the runtime rather than appended to the conversation
+			// store: the store is rebuilt from the runtime's messages on the next
+			// message-added event, which silently dropped the notice before the
+			// model ever saw it.
 			if (verdict.message) {
-				this.conversation.appendMessage({
-					role: "user",
-					content: [{ type: "text", text: verdict.message }],
-				});
+				this.pendingSystemNotices.push(verdict.message);
 			}
 			return;
 		}

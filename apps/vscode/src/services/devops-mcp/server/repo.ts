@@ -187,6 +187,30 @@ export async function loadContext(workspace?: string): Promise<RepoContext> {
 	return { root, remoteName, remote, branch: branch || undefined }
 }
 
+/**
+ * True when the git repository at `cwd` has a remote this server can work
+ * with (GitHub, Azure DevOps, or any host when DEVOPS_MCP_PROVIDER is set).
+ */
+export async function hasSupportedRemote(cwd: string): Promise<boolean> {
+	const remotes = await git(cwd, ["remote", "-v"])
+	if (!remotes) {
+		return false
+	}
+	for (const line of remotes.split("\n")) {
+		const url = line.trim().split(/\s+/)[1]
+		if (!url) {
+			continue
+		}
+		try {
+			parseRemote(url, process.env.DEVOPS_MCP_PROVIDER)
+			return true
+		} catch {
+			// Not a host this server knows; try the next remote.
+		}
+	}
+	return false
+}
+
 /** Describes why `branch` is not fully pushed, or returns undefined when it is. */
 export async function pushProblem(ctx: RepoContext, branch: string): Promise<string | undefined> {
 	const ref = `refs/remotes/${ctx.remoteName}/${branch}`

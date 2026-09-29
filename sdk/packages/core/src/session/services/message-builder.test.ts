@@ -11,10 +11,12 @@ import {
 } from "../../runtime/config/agent-message-codec";
 import {
 	DEFAULT_MAX_FILE_CONTENT_CHARS,
+	DEFAULT_MAX_TOOL_RESULT_BLOCK_CHARS,
 	DEFAULT_MAX_TOOL_RESULT_CHARS,
 	DEFAULT_MAX_TOTAL_TEXT_BYTES,
 	getMessageBuilderOptionsFromEnv,
 	MessageBuilder,
+	MIN_TOOL_RESULT_ENTRY_CHARS,
 } from "./message-builder";
 
 describe("MessageBuilder", () => {
@@ -210,8 +212,11 @@ describe("MessageBuilder", () => {
 		expect(block.content).toContain("...[truncated");
 	});
 
-	it("uses an aggressive per-result cap and a loose aggregate budget", () => {
-		expect(DEFAULT_MAX_TOOL_RESULT_CHARS).toBe(8_000);
+	it("caps tool results just above the tools' own limits and keeps a loose aggregate budget", () => {
+		// Tools return up to 48k chars per read window / command / search, so
+		// the provider-side cap must not cut below that.
+		expect(DEFAULT_MAX_TOOL_RESULT_CHARS).toBe(50_000);
+		expect(DEFAULT_MAX_TOOL_RESULT_BLOCK_CHARS).toBe(64_000);
 		expect(DEFAULT_MAX_FILE_CONTENT_CHARS).toBe(50_000);
 		// The aggregate budget stays loose on purpose: budget truncation
 		// rewrites mid-transcript bytes and breaks provider prefix caching, so
@@ -739,18 +744,6 @@ describe("MessageBuilder with structured ToolOperationResult content", () => {
 		return 0;
 	}
 
-	function serializeForAiSdk(messages: Message[]): string {
-		const agentMessages = messagesToAgentMessages(messages);
-		const aiSdkMessages = formatMessagesForAiSdk(
-			undefined,
-			agentMessages.map(({ role, content }) => ({
-				role,
-				content,
-			})) as unknown as AiSdkFormatterMessage[],
-		);
-		return JSON.stringify(aiSdkMessages);
-	}
-
 	function firstToolOperationResult(
 		result: Message[],
 	): ToolOperationResultLike {
@@ -802,40 +795,50 @@ describe("MessageBuilder with structured ToolOperationResult content", () => {
 		);
 	});
 
-	it("materially shrinks provider-formatted payloads compared with previous defaults", () => {
-		const messages: Message[] = [];
-		for (let i = 0; i < 20; i++) {
-			messages.push(
-				toolUseMessage(`call_${i}`, "run_commands", {
-					commands: [`python noisy_task_${i}.py`],
-				}),
-				structuredToolResultMessage(`call_${i}`, "run_commands", [
-					{
-						query: `python noisy_task_${i}.py`,
-						result: hugeText(300_000),
-						success: true,
-						duration: 1000 + i,
-					},
-				]),
-			);
+	it("keeps a full read window intact", () => {
+		const window = `${HEAD_MARKER}${"x".repeat(47_000)}${TAIL_MARKER}`;
+		const messages: Message[] = [
+			toolUseMessage("call_1", "read_files", { files: [{ path: "big.ts" }] }),
+			structuredToolResultMessage("call_1", "read_files", [
+				{ query: "big.ts", result: window, success: true },
+			]),
+		];
+
+		const operation = firstToolOperationResult(
+			new MessageBuilder().buildForApi(messages),
+		);
+
+		expect(operation.result).toBe(window);
+	});
+
+	it("shares the block budget between the large entries of one result", () => {
+		const entries = Array.from({ length: 4 }, (_, i) => ({
+			query: `file_${i}.ts`,
+			result: hugeText(40_000),
+			success: true,
+		}));
+		const messages: Message[] = [
+			toolUseMessage("call_1", "read_files", { files: [] }),
+			structuredToolResultMessage("call_1", "read_files", entries),
+		];
+
+		const result = new MessageBuilder().buildForApi(messages);
+		const block = Array.isArray(result[1]?.content)
+			? result[1].content[0]
+			: undefined;
+		if (block?.type !== "tool_result" || typeof block.content === "string") {
+			throw new Error("expected structured tool_result");
 		}
-		const previousDefaults = new MessageBuilder({
-			maxToolResultChars: 50_000,
-			maxTotalTextBytes: 6_000_000,
-		});
-		const currentDefaults = new MessageBuilder();
 
-		const previousPayload = serializeForAiSdk(
-			previousDefaults.buildForApi(messages),
+		expect(sumStringBytes(block.content)).toBeLessThan(
+			DEFAULT_MAX_TOOL_RESULT_BLOCK_CHARS + 1_024,
 		);
-		const currentPayload = serializeForAiSdk(
-			currentDefaults.buildForApi(messages),
-		);
-
-		expect(previousPayload.length).toBeGreaterThan(900_000);
-		expect(currentPayload.length).toBeLessThan(previousPayload.length * 0.25);
-		expect(currentPayload.length).toBeLessThan(250_000);
-		expect(currentPayload).not.toContain(MIDDLE_SENTINEL);
+		for (const entry of block.content as unknown as ToolOperationResultLike[]) {
+			expect(String(entry.result).length).toBeGreaterThanOrEqual(
+				MIN_TOOL_RESULT_ENTRY_CHARS,
+			);
+			expect(entry.result).toContain("...[truncated");
+		}
 	});
 
 	it("truncates a huge nested `result` string in run_commands structured output", () => {
@@ -2019,7 +2022,7 @@ describe("MessageBuilder outdated-read rewrite batching (prefix-cache stability)
 	});
 
 	it("uses provider-bound stale bytes after per-result truncation", () => {
-		const builder = new MessageBuilder({ minOutdatedRewriteBytes: 20_000 });
+		const builder = new MessageBuilder({ minOutdatedRewriteBytes: 60_000 });
 		const messages: Message[] = [
 			{ role: "user", content: "task" },
 			readToolUse("t1"),
@@ -2031,7 +2034,7 @@ describe("MessageBuilder outdated-read rewrite batching (prefix-cache stability)
 		const result = builder.buildForApi(messages);
 
 		// Raw t1 history is ~140KB, but the provider-bound stale entry is capped
-		// near 8KB before threshold accounting. A 20KB threshold must defer.
+		// near 50KB before threshold accounting. A 60KB threshold must defer.
 		expect(JSON.stringify(result[2])).not.toContain("outdated");
 		expect(JSON.stringify(result[2])).toContain("...[truncated");
 	});

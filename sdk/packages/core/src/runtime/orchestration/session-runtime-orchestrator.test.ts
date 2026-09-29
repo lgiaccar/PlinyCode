@@ -2538,6 +2538,59 @@ describe("SessionRuntime.run — tracker wiring (P1 #3)", () => {
 		expect(abortCalls.length).toBeGreaterThanOrEqual(1);
 	});
 
+	it("hands the soft loop-detection notice to the runtime for the next request", async () => {
+		const identical = (i: number): AgentRuntimeEvent => ({
+			type: "tool-started",
+			iteration: i,
+			toolCall: {
+				type: "tool-call",
+				toolCallId: `tc${i}`,
+				toolName: "same",
+				input: { a: 1 },
+			},
+			snapshot: makeSnapshot(),
+		});
+		const { deps } = makeScriptedRuntime({
+			events: [
+				{ type: "turn-started", iteration: 1, snapshot: makeSnapshot() },
+				identical(1),
+				identical(1),
+			],
+		});
+		const notices: unknown[] = [];
+		const session = new SessionRuntime(
+			makeAgentConfig({
+				execution: {
+					maxConsecutiveMistakes: 6,
+					loopDetection: { softThreshold: 2, hardThreshold: 5 },
+				},
+			}),
+			{
+				createAgentRuntimeImpl: (config) => {
+					const runtime = deps.createAgentRuntimeImpl?.(config) as AgentRuntime;
+					const run = runtime.run.bind(runtime);
+					return Object.assign(runtime, {
+						run: async (...args: Parameters<AgentRuntime["run"]>) => {
+							const result = await run(...args);
+							notices.push(config.consumeSystemNotice?.());
+							notices.push(config.consumeSystemNotice?.());
+							return result;
+						},
+					});
+				},
+			},
+		);
+
+		await session.run("loop-me");
+
+		expect(notices[0]).toMatchObject({
+			kind: "loop_detection_notice",
+			text: expect.stringContaining("same"),
+		});
+		// Consumed once.
+		expect(notices[1]).toBeUndefined();
+	});
+
 	it("resets loop detection when run() starts a fresh conversation", async () => {
 		const identical = (i: number): AgentRuntimeEvent => ({
 			type: "tool-started",

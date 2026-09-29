@@ -13,6 +13,12 @@ interface BuiltinMcpSource {
 	isRunning(): boolean
 	/** Current tool names, for building approval policies synchronously. */
 	toolNames(): string[]
+	/**
+	 * Whether the server is any use in a session rooted at `cwd`. Tool schemas
+	 * are sent with every request, so a server that cannot act in this
+	 * workspace should stay out of it. Omitted means always.
+	 */
+	appliesTo?(cwd: string): Promise<boolean>
 }
 
 const sources = new Map<string, BuiltinMcpSource>()
