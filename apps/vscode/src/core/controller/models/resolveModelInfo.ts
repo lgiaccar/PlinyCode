@@ -1,5 +1,4 @@
 import type { ProviderModelsResult } from "@/sdk/model-catalog/contracts"
-import { providerAllowsCustomModelIds } from "@/sdk/model-catalog/custom-model-ids"
 import { ResolveModelInfoRequest, ResolveModelInfoResponse } from "@/shared/proto/cline/models"
 import { toProtobufModelInfo } from "@/shared/proto-conversions/models/typeConversion"
 import { type ProviderCatalogController, parseProviderIdRequest } from "./providerCatalogShared"
@@ -91,18 +90,10 @@ export async function resolveModelInfo(
 		}
 	}
 
-	// Custom-model-id providers (openai-compatible, ollama, lmstudio, litellm,
-	// vertex)
-	// accept arbitrary user-supplied model ids that the SDK catalog does not
-	// list. For these, a catalog lookup must only count as a hit when it matches
-	// the requested id; an unrecognized id is the user's own model and must be
-	// preserved rather than replaced with the catalog default.
-	const allowCustomModelIds = providerAllowsCustomModelIds(providerId)
-
 	const catalog = controller.getProviderCatalog()
 	const cached = catalog.peekModels(providerId)
 	if (cached?.ok) {
-		const hit = pickFromCatalog(cached, requestedModelId, allowCustomModelIds)
+		const hit = pickFromCatalog(cached, requestedModelId)
 		// A default-model substitution answers a question about a different
 		// model; the committed selection, even fallback-grade, is closer.
 		if (hit && (hit.matchedRequested || !fallbackSelection)) {
@@ -120,7 +111,7 @@ export async function resolveModelInfo(
 	// and caches the result, so the per-fingerprint cost is paid once.
 	const resolved = await catalog.resolveModels(providerId).catch(() => undefined)
 	if (resolved?.ok) {
-		const hit = pickFromCatalog(resolved, requestedModelId, allowCustomModelIds)
+		const hit = pickFromCatalog(resolved, requestedModelId)
 		if (hit && (hit.matchedRequested || !fallbackSelection)) {
 			return ResolveModelInfoResponse.create({
 				providerId,
@@ -147,18 +138,8 @@ export async function resolveModelInfo(
 	})
 }
 
-function pickFromCatalog(
-	result: Extract<ProviderModelsResult, { ok: true }>,
-	requestedModelId: string,
-	allowCustomModelIds: boolean,
-) {
+function pickFromCatalog(result: Extract<ProviderModelsResult, { ok: true }>, requestedModelId: string) {
 	const matchedRequested = Boolean(requestedModelId) && result.models.has(requestedModelId)
-
-	// For custom-model-id providers, never substitute the catalog default for an
-	// unrecognized requested id — the user's id is authoritative.
-	if (allowCustomModelIds && requestedModelId && !matchedRequested) {
-		return undefined
-	}
 
 	const modelId = matchedRequested ? requestedModelId : result.defaultModelId
 	const modelInfo = modelId ? result.models.get(modelId) : undefined

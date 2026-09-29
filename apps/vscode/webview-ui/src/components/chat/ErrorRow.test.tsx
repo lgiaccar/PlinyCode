@@ -38,8 +38,6 @@ vi.mock("../../../../src/services/error/ClineError", () => ({
 		Auth: "auth",
 		Entitlement: "entitlement",
 		OrgClinePassRestriction: "orgClinePassRestriction",
-		ClinePassLimit: "clinePassLimit",
-		ClineFreeModelLimit: "clineFreeModelLimit",
 		QuotaExceeded: "quotaExceeded",
 	},
 }))

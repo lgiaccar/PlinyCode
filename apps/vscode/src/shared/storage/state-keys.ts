@@ -1,11 +1,9 @@
 import { AutoApprovalSettings, DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
 import { ApiProvider, DEFAULT_API_PROVIDER } from "@shared/api"
 import { ClineRulesToggles } from "@shared/cline-rules"
-import { DEFAULT_FOCUS_CHAIN_SETTINGS, FocusChainSettings } from "@shared/FocusChainSettings"
 import { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_MCP_DISPLAY_MODE, McpDisplayMode } from "@shared/McpDisplayMode"
 import { Mode } from "@shared/storage/types"
-import { UserInfo } from "@shared/UserInfo"
 import { coerceToPlinyProvider } from "../pliny"
 
 // ============================================================================
@@ -40,7 +38,6 @@ const GLOBAL_STATE_FIELDS = {
 	"cline.generatedMachineId": { default: undefined as string | undefined }, // Note, distinctId reads/writes this directly from/to StorageContext before StateManager is initialized.
 	lastShownAnnouncementId: { default: undefined as string | undefined },
 	taskHistory: { default: [] as HistoryItem[], isAsync: true },
-	userInfo: { default: undefined as UserInfo | undefined },
 	favoritedModelIds: { default: [] as string[] },
 	mcpResponsesCollapsed: { default: false as boolean },
 	// User-dragged max height for the chat prompt textarea, in rows (react-textarea-autosize's maxRows).
@@ -51,10 +48,8 @@ const GLOBAL_STATE_FIELDS = {
 		// chose either mode keep their saved preference.
 		default: "vscodeTerminal" as "vscodeTerminal" | "backgroundExec",
 	},
-	isNewUser: { default: true as boolean },
 	welcomeViewCompleted: { default: undefined as boolean | undefined },
 	mcpDisplayMode: { default: DEFAULT_MCP_DISPLAY_MODE as McpDisplayMode },
-	multiRootEnabled: { default: true as boolean },
 } satisfies FieldDefinitions
 
 // Fields that map directly to ApiHandlerOptions in @shared/api.ts
@@ -105,7 +100,6 @@ const USER_SETTINGS_FIELDS = {
 	subagentsEnabled: { default: true as boolean },
 	preferredLanguage: { default: "English" as string },
 	mode: { default: "act" as Mode },
-	focusChainSettings: { default: DEFAULT_FOCUS_CHAIN_SETTINGS as FocusChainSettings },
 	backgroundEditEnabled: { default: false as boolean },
 	showFeatureTips: { default: false as boolean },
 } satisfies FieldDefinitions

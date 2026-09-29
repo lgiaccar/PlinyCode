@@ -226,9 +226,6 @@ message IntentEvent {
 
 // UiService provides methods for managing UI interactions
 service UiService {
-  // Scrolls to a specific settings section in the settings view
-  rpc scrollToSettings(StringRequest) returns (KeyValuePair);
-
   // Sets the terminal execution mode (vscodeTerminal or backgroundExec)
   rpc setTerminalExecutionMode(BooleanRequest) returns (KeyValuePair);
 
@@ -258,9 +255,6 @@ service UiService {
 
   // Subscribe to show webview events
   rpc subscribeToShowWebview(EmptyRequest) returns (stream ShowWebviewEvent);
-
-  // Returns the HTML for the webview index page. This is only used by external clients, not by the vscode webview.
-  rpc getWebviewHtml(EmptyRequest) returns (String);
 
   // Opens a URL in the default browser
   rpc openUrl(StringRequest) returns (Empty);

@@ -28,7 +28,6 @@ import {
 	isPlinySelfHostedModelId,
 	PLINY_BALANCE_AUTO_MODEL_ID,
 	PLINY_DEFAULT_MODEL_ID,
-	PLINY_FEATURED_MODELS,
 	PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 	PLINY_FREE_AUTO_MODEL_ID,
 	PLINY_FREE_AUTO_RULES_URI,
@@ -134,18 +133,6 @@ describe("resolvePlinyConcreteModelId", () => {
 
 	it("falls back when no model is given", () => {
 		expect(resolvePlinyConcreteModelId(undefined)).toBe(PLINY_FREE_AUTO_FALLBACK_MODEL_ID)
-	})
-})
-
-describe("featured models", () => {
-	it("lists the router first and marks it as the default", () => {
-		expect(PLINY_FEATURED_MODELS[0].id).toBe(PLINY_FREE_AUTO_MODEL_ID)
-		expect(PLINY_FEATURED_MODELS[0].tags as readonly string[]).toContain("DEFAULT")
-	})
-
-	it("marks exactly one model as the default", () => {
-		const defaults = PLINY_FEATURED_MODELS.filter((model) => (model.tags as readonly string[]).includes("DEFAULT"))
-		expect(defaults).toHaveLength(1)
 	})
 })
 

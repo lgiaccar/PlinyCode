@@ -1,9 +1,7 @@
 import {
 	getClineOrgIndividualInferenceSubscriptionMessage,
-	isClineFreeModelLimitMessage,
 	isClineNotSubscribedMessage,
 	isClineOrgIndividualInferenceSubscriptionMessage,
-	isClinePassLimitMessage,
 } from "@plinycode/llms"
 import { serializeError } from "serialize-error"
 
@@ -18,8 +16,6 @@ export enum ClineErrorType {
 	QuotaExceeded = "quotaExceeded",
 	Entitlement = "entitlement",
 	OrgClinePassRestriction = "orgClinePassRestriction",
-	ClinePassLimit = "clinePassLimit",
-	ClineFreeModelLimit = "clineFreeModelLimit",
 }
 
 interface ErrorDetails {
@@ -187,20 +183,6 @@ export class ClineError extends Error {
 			(rawMessage ? isClineNotSubscribedMessage(rawMessage) : false)
 		) {
 			return ClineErrorType.Entitlement
-		}
-
-		if (
-			(detailMessage ? isClineFreeModelLimitMessage(detailMessage) : false) ||
-			(rawMessage ? isClineFreeModelLimitMessage(rawMessage) : false)
-		) {
-			return ClineErrorType.ClineFreeModelLimit
-		}
-
-		if (
-			(detailMessage ? isClinePassLimitMessage(detailMessage) : false) ||
-			(rawMessage ? isClinePassLimitMessage(rawMessage) : false)
-		) {
-			return ClineErrorType.ClinePassLimit
 		}
 
 		// Check auth errors

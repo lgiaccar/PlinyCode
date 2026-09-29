@@ -11,7 +11,6 @@ import {
 	createRestoredCheckpointMetadata,
 	createUserInstructionConfigService,
 	ensureChatWorkspace,
-	getProviderAuthStorageId,
 	readSessionCheckpointHistory,
 	resolveDefaultMcpSettingsPath,
 	type UserInstructionConfigService,
@@ -19,7 +18,7 @@ import {
 import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
 import type { ChatContent } from "@shared/ChatContent"
 import { mentionRegexGlobal } from "@shared/context-mentions"
-import type { ClineApiReqInfo, ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
+import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { isPlinyFreeModelId } from "@shared/pliny"
@@ -45,18 +44,16 @@ import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalMan
 import { ExtensionRegistryInfo } from "@/registry"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
-import { CLINE_ACCOUNT_AUTH_ERROR_MESSAGE, ClineError } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
-import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
 import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
 import { buildStartSessionInput } from "./cline-session-factory"
-import { MessageTranslatorState, normalizeUsageEvent, reshapeErrorForWebview } from "./message-translator"
+import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
@@ -118,10 +115,6 @@ import { resolveWorkspaceManagerPaths } from "./workspace-root"
  */
 function stubWarn(name: string): void {
 	Logger.warn(`[SdkController] STUB: ${name} not yet implemented`)
-}
-
-function usesClineAccountAuth(providerId: string): boolean {
-	return getProviderAuthStorageId(providerId) === "cline"
 }
 
 function historyItemToTaskResponse(item: HistoryItem): TaskResponse {
@@ -206,7 +199,6 @@ export class Controller {
 	// Private state kept for stub compatibility
 	private backgroundCommandRunning = false
 	private backgroundCommandTaskId?: string
-	private pendingClineAuthRetryPrompt?: string
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
 	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
 
@@ -436,31 +428,18 @@ export class Controller {
 				this.emitRouterTurnSummary(sessionId)
 				this.turnStateTracker.set("error")
 				const errorMessage = error instanceof Error ? error.message : String(error)
-				const providerId = this.getSessionProviderId(sessionId) ?? this.getActiveProviderId()
-				const isClineAuthError =
-					isClineManagedProvider(providerId) &&
-					(errorMessage.includes(CLINE_ACCOUNT_AUTH_ERROR_MESSAGE) ||
-						errorMessage.toLowerCase().includes("missing api key") ||
-						errorMessage.toLowerCase().includes("unauthorized"))
-
-				if (isClineAuthError) {
-					this.emitClineAuthError()
-				} else if (isClineManagedProvider(providerId) && this.isClineBalanceError(errorMessage)) {
-					this.emitClineBalanceError(errorMessage)
-				} else {
-					this.messages.emitSessionEvents(
-						[
-							{
-								ts: Date.now(),
-								type: "say",
-								say: "error",
-								text: `Agent error: ${errorMessage}`,
-								partial: false,
-							},
-						],
-						{ type: "status", payload: { sessionId, status: "error" } },
-					)
-				}
+				this.messages.emitSessionEvents(
+					[
+						{
+							ts: Date.now(),
+							type: "say",
+							say: "error",
+							text: `Agent error: ${errorMessage}`,
+							partial: false,
+						},
+					],
+					{ type: "status", payload: { sessionId, status: "error" } },
+				)
 				this.postStateToWebview().catch(() => {})
 			},
 		})
@@ -491,7 +470,6 @@ export class Controller {
 			loadInitialMessages: async (sdkHost, sessionId) =>
 				(await this.sessionHistory.loadInitialMessages(sdkHost, sessionId)) ?? [],
 			buildStartSessionInput,
-			emitClineAuthError: () => this.emitClineAuthError(),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			postStateToWebview: () => this.postStateToWebview(),
 			getTurnPhase: () => this.turnStateTracker.currentPhase,
@@ -548,8 +526,6 @@ export class Controller {
 			loadInitialMessages: (sessionHost, taskId) => this.sessionHistory.loadInitialMessages(sessionHost, taskId),
 			buildStartSessionInput,
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
-			isClineManagedProviderActive: () => this.isClineManagedProviderActive(),
-			emitClineAuthError: () => this.emitClineAuthError(),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			postStateToWebview: () => this.postStateToWebview(),
 			onResumeFailed: () => {
@@ -603,7 +579,6 @@ export class Controller {
 			buildStartSessionInput,
 			createHistoryItemFromSession,
 			clearTask: async (options) => {
-				this.pendingClineAuthRetryPrompt = undefined
 				this.activeTaskWorkspace = undefined
 				await this.taskControl.clearTask(options)
 			},
@@ -626,8 +601,6 @@ export class Controller {
 			createTempSessionHost: () => this.createTempSessionHost(),
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
-			isClineManagedProviderActive: () => this.isClineManagedProviderActive(),
-			emitClineAuthError: (task) => this.emitClineAuthError(task),
 			postStateToWebview: () => this.postStateToWebview(),
 		})
 		this.compaction = new SdkCompactionCoordinator({
@@ -1070,147 +1043,6 @@ export class Controller {
 		}
 	}
 
-	/**
-	 * Check if the active API provider uses Cline account auth for the current mode.
-	 */
-	private isClineManagedProviderActive(): boolean {
-		return isClineManagedProvider(this.getActiveProviderId())
-	}
-
-	/**
-	 * Emit a proper auth error for the 'cline' provider when the user is not
-	 * logged in. The message sequence drives ErrorRow to render the
-	 * "Sign in to Cline" button.
-	 *
-	 * Message sequence:
-	 *   1. say:'task'           – the user's message text
-	 *   2. say:'api_req_started' – opens the API request row
-	 *   3. ask:'api_req_failed'  – ClineError JSON → ErrorRow renders auth UI
-	 */
-	private emitClineAuthError(task?: string): void {
-		const ts = Date.now()
-		this.pendingClineAuthRetryPrompt = task
-
-		if (!this.task) {
-			this.task = createTaskProxy(
-				`auth-error-${ts}`,
-				(text?: string, images?: string[], files?: string[]) => this.askResponse(text, images, files),
-				() => this.cancelTask(),
-			)
-		}
-
-		const clineError = new ClineError(
-			{ message: CLINE_ACCOUNT_AUTH_ERROR_MESSAGE, status: 401 },
-			undefined, // modelId
-			"cline",
-		)
-		const serializedError = clineError.serialize()
-
-		const failedAskTs = ts + 2
-		const messages: ClineMessage[] = [
-			{
-				ts,
-				type: "say",
-				say: "task",
-				text: task ?? "",
-				partial: false,
-			},
-			{
-				ts: ts + 1,
-				type: "say",
-				say: "api_req_started",
-				text: JSON.stringify({
-					streamingFailedMessage: serializedError,
-				} satisfies ClineApiReqInfo),
-				partial: false,
-			},
-			{
-				ts: failedAskTs,
-				type: "ask",
-				ask: "api_req_failed",
-				text: serializedError,
-				partial: false,
-			},
-		]
-
-		this.turnStateTracker.set("error", failedAskTs)
-
-		this.messages.appendAndEmit(messages, {
-			type: "status",
-			payload: {
-				sessionId: this.sessions.getActiveSession()?.sessionId ?? "",
-				status: "error",
-			},
-		})
-
-		this.postStateToWebview().catch(() => {})
-	}
-
-	/**
-	 * Check if an error message indicates an insufficient credits / balance error
-	 * by reshaping it into ClineError format and inspecting the result.
-	 */
-	private isClineBalanceError(errorMessage: string): boolean {
-		try {
-			const shaped = JSON.parse(reshapeErrorForWebview({ message: errorMessage }))
-			return shaped.code === "insufficient_credits"
-		} catch {
-			return false
-		}
-	}
-
-	/**
-	 * Emit a balance error for the 'cline' provider when the user has insufficient
-	 * credits. Produces the same message sequence as emitClineAuthError so the
-	 * webview renders the "Buy Credits" button via CreditLimitError.
-	 *
-	 * Message sequence:
-	 *   1. say:'api_req_started' – streamingFailedMessage holds the ClineError JSON
-	 *   2. ask:'api_req_failed'  – ClineError JSON → ErrorRow renders balance UI
-	 */
-	private emitClineBalanceError(rawErrorMessage: string): void {
-		const ts = Date.now()
-
-		// reshapeErrorForWebview extracts structured fields from the SDK error
-		// message (which may be plain text or embedded JSON) and produces the
-		// ClineError-serialized JSON that the webview's ErrorRow expects.
-		const serializedError = reshapeErrorForWebview({
-			message: rawErrorMessage,
-		})
-
-		const failedAskTs = ts + 1
-		const messages: ClineMessage[] = [
-			{
-				ts,
-				type: "say",
-				say: "api_req_started",
-				text: JSON.stringify({
-					streamingFailedMessage: serializedError,
-				} satisfies ClineApiReqInfo),
-				partial: false,
-			},
-			{
-				ts: failedAskTs,
-				type: "ask",
-				ask: "api_req_failed",
-				text: serializedError,
-				partial: false,
-			},
-		]
-
-		this.turnStateTracker.set("error", failedAskTs)
-
-		this.messages.appendAndEmit(messages, {
-			type: "status",
-			payload: {
-				sessionId: this.sessions.getActiveSession()?.sessionId ?? "",
-				status: "error",
-			},
-		})
-
-		this.postStateToWebview().catch(() => {})
-	}
-
 	// ---- Task lifecycle ----
 
 	async initTask(
@@ -1298,7 +1130,6 @@ export class Controller {
 	 * (New Task). Other callers stop it.
 	 */
 	async clearTask(options: ClearTaskOptions = {}): Promise<void> {
-		this.pendingClineAuthRetryPrompt = undefined
 		this.activeTaskWorkspace = undefined
 		// No active task — UI returns to idle (input enabled, no buttons/thinking).
 		this.turnStateTracker.set("idle")
@@ -1320,13 +1151,6 @@ export class Controller {
 	 * return immediately so the webview stays responsive.
 	 */
 	async askResponse(prompt?: string, images?: string[], files?: string[], delivery?: string): Promise<void> {
-		if (this.pendingClineAuthRetryPrompt !== undefined && this.task?.taskState?.askResponse === "yesButtonClicked") {
-			const retryPrompt = this.pendingClineAuthRetryPrompt
-			this.pendingClineAuthRetryPrompt = undefined
-			await this.initTask(retryPrompt, images, files)
-			return
-		}
-
 		const turnStateBefore = this.turnStateTracker.get()
 
 		// Answering an ask / continuing after completion / resuming a cancelled task all kick off a
@@ -1484,11 +1308,6 @@ export class Controller {
 				fallbackCwd
 			const mode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
 			const config = await this.sessionConfigBuilder.build({ cwd, mode, prompt: historyTitle })
-			if (usesClineAccountAuth(config.providerId) && !config.apiKey) {
-				this.emitClineAuthError(editedText)
-				return
-			}
-
 			const resolvedPrompt = await this.resolveContextMentions(editedText)
 			// Regenerating replaces the session: keep a user-given title and the
 			// conversation's start and running time rather than resetting them.
@@ -1638,10 +1457,6 @@ export class Controller {
 		const restoredText = target?.message.text ?? ""
 		const historyTitle = checkpointRunCount === 1 ? restoredText : firstUserMessage?.text || restoredText
 		const config = restoreMessages ? await this.sessionConfigBuilder.build({ cwd, mode, prompt: historyTitle }) : undefined
-		if (config && usesClineAccountAuth(config.providerId) && !config.apiKey) {
-			this.emitClineAuthError(restoredText)
-			return
-		}
 
 		const startInput = config
 			? {

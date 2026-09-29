@@ -1,11 +1,6 @@
 import type { ApiConfiguration, ApiProvider, ModelInfo } from "@shared/api"
 import { coerceToPlinyProvider } from "@shared/pliny"
 import type { Mode } from "@shared/storage/types"
-import * as reasoningSupport from "@shared/utils/reasoning-support"
-
-export function supportsReasoningEffortForModelId(modelId?: string, _allowShortOpenAiIds = false): boolean {
-	return reasoningSupport.supportsReasoningEffortForModel(modelId)
-}
 
 // Webview components must source provider models via
 // `useProviderModels(providerId)`, which talks to the extension over

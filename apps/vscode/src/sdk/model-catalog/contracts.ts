@@ -19,7 +19,6 @@ import type { Mode } from "@shared/storage/types"
 // ---------------------------------------------------------------------------
 
 declare const ProviderIdBrand: unique symbol
-declare const KnownProviderIdBrand: unique symbol
 declare const FingerprintBrand: unique symbol
 
 /**
@@ -31,14 +30,6 @@ declare const FingerprintBrand: unique symbol
  * config/storage portability.
  */
 export type ProviderId = string & { readonly [ProviderIdBrand]: void }
-
-/**
- * A `ProviderId` we recognize from `ApiProvider`. Sub-brand of `ProviderId`.
- * Distinguishing "known" from "any" lets us write functions that require a
- * known provider without re-validating, while still accepting arbitrary
- * provider ids (e.g. custom SDK providers) where openness is correct.
- */
-export type KnownProviderId = ProviderId & { readonly [KnownProviderIdBrand]: void }
 
 /**
  * Cache-key payload. Branded string. Built only by `computeConfigFingerprint`

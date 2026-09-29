@@ -190,7 +190,6 @@ export const ExtensionStateContextProvider: React.FC<{
 		terminalReuseEnabled: true,
 		vscodeTerminalExecutionMode: "vscodeTerminal",
 		defaultTerminalProfile: "default",
-		isNewUser: false,
 		welcomeViewCompleted: false,
 		mcpResponsesCollapsed: false, // Default value (expanded), will be overwritten by extension state
 		chatInputMaxRows: 10, // Default value, will be overwritten by extension state

@@ -9,7 +9,6 @@ option java_multiple_files = true;
 option java_package = "bot.cline.proto";
 
 service CheckpointsService {
-  rpc checkpointRestore(CheckpointRestoreRequest) returns (Empty);
   // Opens a multi-file diff of everything that changed between the latest
   // checkpoint (snapshotted when the user's last message started a run) and
   // the current working tree.
@@ -20,13 +19,6 @@ service CheckpointsService {
   rpc checkpointLatestChangesSummary(CheckpointChangesSummaryRequest) returns (LatestChangesSummary);
   // Opens a single-file diff for one file from the latest checkpoint comparison.
   rpc checkpointOpenFileDiff(OpenFileDiffRequest) returns (Empty);
-}
-
-message CheckpointRestoreRequest {
-  Metadata metadata = 1;
-  int64 number = 2;
-  string restore_type = 3;
-  optional int64 offset = 4;
 }
 
 message CheckpointChangesSummaryRequest {

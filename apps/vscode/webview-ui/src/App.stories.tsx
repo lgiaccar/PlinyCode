@@ -239,7 +239,7 @@ const createStoryDecorator =
 	}
 
 export const EmptyState: Story = {
-	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: [], isNewUser: true })],
+	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: [] })],
 	parameters: {
 		docs: {
 			description: {
@@ -250,7 +250,7 @@ export const EmptyState: Story = {
 }
 
 export const ReturnUser: Story = {
-	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: mockTaskHistory, isNewUser: true })],
+	decorators: [createStoryDecorator({ clineMessages: [], taskHistory: mockTaskHistory })],
 	parameters: {
 		docs: {
 			description: {
