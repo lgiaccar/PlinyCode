@@ -12,7 +12,7 @@ import {
 	MessageTranslatorState,
 	sdkMessagesToClineMessages,
 	translateSessionEvent,
-} from "./message-translator"
+} from "./index"
 
 // ---------------------------------------------------------------------------
 // MessageTranslatorState
