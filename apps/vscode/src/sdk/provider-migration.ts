@@ -15,6 +15,7 @@ import path from "node:path"
 import { ProviderSettingsManager } from "@plinycode/core"
 import { Logger } from "@shared/services/Logger"
 import { resolveDataDir } from "./legacy-state-reader"
+import { SecretBackedProviderSettingsManager } from "./secret-backed-provider-settings-manager"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,9 +107,25 @@ export function getProviderSettingsManager(dataDir?: string): ProviderSettingsMa
 		return _cachedManager
 	}
 	const filePath = path.join(resolvedDataDir, "settings", "providers.json")
-	_cachedManager = new ProviderSettingsManager({ filePath, dataDir: resolvedDataDir })
+	_cachedManager = new SecretBackedProviderSettingsManager({ filePath, dataDir: resolvedDataDir })
 	_cachedDataDir = resolvedDataDir
 	return _cachedManager
+}
+
+/**
+ * Move a Pliny API key still stored in providers.json into SecretStorage. Run
+ * once SecretStorage is ready (initPlinyKeySecrets); a no-op when the key is
+ * already there or SecretStorage is unavailable.
+ */
+export async function migratePlinyKeyToSecrets(): Promise<void> {
+	try {
+		const manager = getProviderSettingsManager()
+		if (manager instanceof SecretBackedProviderSettingsManager && (await manager.migrateKeyToSecrets())) {
+			Logger.info("[PlinyKeySecrets] Moved the Pliny API key from providers.json to SecretStorage")
+		}
+	} catch (error) {
+		Logger.error("[PlinyKeySecrets] Failed to move the Pliny API key to SecretStorage:", error)
+	}
 }
 
 // ---------------------------------------------------------------------------

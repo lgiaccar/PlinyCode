@@ -28,6 +28,7 @@ import { sendAddToInputEvent } from "./core/controller/ui/subscribeToAddToInput"
 import { sendShowWebviewEvent } from "./core/controller/ui/subscribeToShowWebview"
 import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
 import { ensureRulesDirectoryExists } from "./core/storage/disk"
+import { initPlinyKeySecrets } from "./core/storage/pliny-key-secrets"
 import { StateManager } from "./core/storage/StateManager"
 import {
 	cleanupMcpMarketplaceCatalogFromGlobalState,
@@ -53,6 +54,7 @@ import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { ExtensionRegistryInfo } from "./registry"
 import { configureInstructionSources } from "./sdk/instruction-sources"
+import { migratePlinyKeyToSecrets } from "./sdk/provider-migration"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
@@ -90,7 +92,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// 4. Register services and perform common initialization
 	// IMPORTANT: Must be done after host provider is setup and migrations are complete
+	// The Pliny API key lives in VS Code's SecretStorage, not in providers.json.
+	// Load it before anything reads provider settings.
+	await initPlinyKeySecrets(context.secrets)
 	const webview = (await initialize(storageContext)) as VscodeWebviewProvider
+	// Move a key that an older build left in providers.json into SecretStorage.
+	// Until then the key in the file is used as is.
+	await migratePlinyKeyToSecrets()
 
 	// Before any session starts: which editor's rule and skill files to load,
 	// and the one global rules folder (files in ~/.cline/rules move there).

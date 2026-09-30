@@ -33,6 +33,7 @@ When you add a value to the `ClineSay` or `ClineAsk` enums, update both the Type
 ## State and settings
 
 - Persistent state is declared once, in `src/shared/storage/state-keys.ts`: type, default and metadata. Read and write it through `StateManager` (`src/core/storage/StateManager.ts`: `getGlobalStateKey`, `getGlobalSettingsKey`, `setGlobalState`, `getSecretKey`, …), never through VS Code's `ExtensionContext` storage. Storage is file-backed, and each window caches it in memory from startup, so one window doesn't see another's writes until it restarts.
+- The exception is the Pliny API key: it is kept in VS Code's SecretStorage (`context.secrets`), not in `providers.json`. `SecretBackedProviderSettingsManager` (`src/sdk/secret-backed-provider-settings-manager.ts`) puts it back into the Pliny entry on read and moves it out on write, so callers still read it through `getProviderSettingsManager()`. The logic is in `src/core/storage/pliny-key-secrets.ts`; `extension.ts` initialises it and migrates a key an older build left in the file. If SecretStorage fails (e.g. Linux without a keyring) the key stays in `providers.json`. Other processes that read `providers.json` directly no longer see the key.
 - Changing `state-keys.ts` regenerates `proto/cline/state.proto`. The pre-commit hook does this automatically. If you need it before committing, run `node scripts/generate-state-proto.mjs` and then `bun run protos`.
 - User-facing VS Code settings are declared under `contributes.configuration` in `package.json`. New ones use the `plinycode.*` prefix.
 
