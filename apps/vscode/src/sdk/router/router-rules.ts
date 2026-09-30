@@ -103,6 +103,18 @@ const DEFAULT_UTILITY = {
 	commit: "snps-provider/qwen3-next-80b-a3b-instruct-d79b4",
 } as const
 
+// Free self-hosted models the routes name. Ids the catalog no longer lists are
+// dropped from the pool by `defaultPool`, and a route's `use` list is filtered
+// against the pool at selection time, so a retired id is harmless here.
+const KIMI = "snps-provider/kimi-k2.6"
+const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
+const NEMOTRON_ULTRA = "snps-provider/nemotron-3-ultra-550b-a55"
+const NEMOTRON_SUPER = "snps-provider/nvidia-nemotron-3-super-120b-a12"
+const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
+const QWEN_NEXT = "snps-provider/qwen3-next-80b-a3b-instruct-d79b4"
+const GLM = "snps-provider/GLM-5.2"
+const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
+
 /**
  * Models we want tried first. The rest of the pool follows in catalog order, so
  * a catalog refresh can add models without anyone editing this list, and an id
@@ -110,18 +122,28 @@ const DEFAULT_UTILITY = {
  */
 const PREFERRED_HEAD = [
 	// Ordered from the live probe plus field experience: every model here
-	// answered and really called a tool. kimi-k2.6 leads: a 256k window, the
-	// best throughput, and it keeps calling tools through long multi-step
-	// tasks. The coder model is quick at targeted edits but tends to announce
-	// a step and stop on long tasks, so it leads only the coding route.
+	// answered and really called a tool. kimi-k2.6 leads the default and smart
+	// profiles: a 256k window, the best throughput, and the strongest agentic
+	// coder in the free pool. Its weak spot — ending a reply on an announced
+	// step — is what the completion guard exists for, and the tool-name repair
+	// in the gateway (`resolveMisnamedTool`) removes the failure that used to
+	// take it out of the running: calls emitted as `functions-read_files`.
 	// GLM-5.2 is last: the only 512k option, but far slower than the rest.
-	"snps-provider/kimi-k2.6",
-	"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
-	"snps-provider/nemotron-3-ultra-550b-a55",
-	"snps-provider/nvidia-nemotron-3-super-120b-a12",
-	"snps-provider/qwen3.5-397b-fp8",
-	"snps-provider/GLM-5.2",
+	KIMI,
+	CODER,
+	NEMOTRON_ULTRA,
+	NEMOTRON_SUPER,
+	QWEN_397,
+	GLM,
 ]
+
+/**
+ * The fast profile's head: the Qwen family, coder first. Kimi reasons inside
+ * its content on every call and answers in 2-6 s where the coder answers in
+ * 1-2 s, so it is not what a profile called "fast" should lead with; it stays
+ * in the pool only as a deep fallback.
+ */
+const FAST_PREFERRED_HEAD = [CODER, QWEN_397, QWEN_NEXT, NEMOTRON_SUPER, NEMOTRON_ULTRA, GLM]
 
 // Paid hosted models BalanceAuto routes to. Only ids the catalog verified to
 // call tools; the pool filter below drops any that a catalog refresh retires.
@@ -146,7 +168,8 @@ const BALANCE_PAID_HEAD = [SONNET_5, SONNET_46_THINKING, SONNET_46, GPT_52, HAIK
 export function defaultPool(profile = "default"): string[] {
 	const catalogIds = plinyFreePoolIds()
 	const available = new Set(catalogIds)
-	const head = PREFERRED_HEAD.filter((id) => available.has(id))
+	const preferred = profile === "fast" ? FAST_PREFERRED_HEAD : PREFERRED_HEAD
+	const head = preferred.filter((id) => available.has(id))
 	const tail = catalogIds.filter((id) => !head.includes(id))
 	const free = [...head, ...tail]
 	if (!plinyRouterProfileAllowsPaid(profile)) {
@@ -157,121 +180,137 @@ export function defaultPool(profile = "default"): string[] {
 }
 
 /**
- * Effort follows the thinking probe: reasoning is switched off for everyday
- * work (it multiplies latency on the models that do it by default, GLM-5.2
- * above all) and on for planning. It only applies to models whose switch was
- * measured; every other model keeps its default.
+ * The huge-context route is the same for every profile: both GLM replicas are
+ * 512k. The vmodels replica is load-balanced and measured faster than the
+ * primary, so it leads; the primary is the backup. Reasoning off: at this size
+ * GLM's default thinking dominates the wait.
+ */
+const HUGE_CONTEXT_ROUTE: RouterRoute = {
+	name: "huge-context",
+	tier: "huge",
+	when: { minEstimatedTokens: 180_000 },
+	use: [GLM_VMODELS, GLM],
+	effort: "quick",
+}
+
+const REASONING_PROMPT = "\\b(plan|design|architect|why|explain|review|compare|investigate|analy[sz]e)\\b"
+const CODING_PROMPT =
+	"\\b(fix|implement|refactor|add|edit|write|test|bug|error|compile|patch|rename|conflicts?|merge|rebase|lint|failing)\\b|type ?error|\\.(ts|tsx|py|go|rs|java|cs|js)\\b"
+const QUICK_PROMPT = "^(what|how|where|which|is|does|can|list|show)\\b"
+
+/**
+ * Routes of the default and smart profiles: kimi-k2.6 leads everything that
+ * is multi-step, with the coder as its backup and the escalation target when
+ * it stalls. Effort follows the thinking probe: reasoning is switched off for
+ * everyday work (it multiplies latency on the models that do it by default,
+ * GLM-5.2 above all) and on for planning. It only applies to models whose
+ * switch was measured; every other model keeps its default.
  */
 const DEFAULT_ROUTES: RouterRoute[] = [
-	{
-		name: "huge-context",
-		tier: "huge",
-		when: { minEstimatedTokens: 180_000 },
-		// Both 512k. The vmodels replica is load-balanced and measured faster
-		// than the primary, so it leads; the primary is the backup. Reasoning
-		// off: at this size GLM's default thinking dominates the wait.
-		use: ["snps-provider-vmodels/glm-5.2", "snps-provider/GLM-5.2"],
-		effort: "quick",
-	},
+	HUGE_CONTEXT_ROUTE,
 	{
 		name: "subagent",
 		// Delegated tasks are bounded but multi-step (explore, then report), and
 		// a sub-agent that stops early hands the parent a half result.
 		when: { subAgent: true, maxEstimatedTokens: 100_000 },
-		use: [
-			"snps-provider/kimi-k2.6",
-			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
-			"snps-provider/nvidia-nemotron-3-super-120b-a12",
-		],
+		use: [KIMI, CODER, NEMOTRON_SUPER],
 		effort: "quick",
 	},
 	{
 		name: "plan-and-reasoning",
 		tier: "reason",
-		when: {
-			mode: "plan",
-			promptRegex: "\\b(plan|design|architect|why|explain|review|compare|investigate|analy[sz]e)\\b",
-		},
-		use: ["snps-provider/qwen3.5-397b-fp8", "snps-provider/kimi-k2.6", "snps-provider/nemotron-3-ultra-550b-a55"],
+		when: { mode: "plan", promptRegex: REASONING_PROMPT },
+		// kimi reasons in its content whatever the effort; the 397B is the
+		// backup with a real reasoning switch, turned on here.
+		use: [KIMI, QWEN_397, NEMOTRON_ULTRA],
 		effort: "think",
 		reasoningEffort: "high",
 	},
 	{
 		name: "coding",
 		tier: "code",
-		when: {
-			mode: "act",
-			maxEstimatedTokens: 100_000,
-			promptRegex:
-				"\\b(fix|implement|refactor|add|edit|write|test|bug|error|compile|patch|rename|conflicts?|merge|rebase|lint|failing)\\b|type ?error|\\.(ts|tsx|py|go|rs|java|cs|js)\\b",
-		},
-		use: [
-			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
-			"snps-provider/nemotron-3-ultra-550b-a55",
-			"snps-provider/kimi-k2.6",
-		],
+		when: { mode: "act", maxEstimatedTokens: 100_000, promptRegex: CODING_PROMPT },
+		use: [KIMI, CODER, NEMOTRON_ULTRA],
 		effort: "quick",
 	},
 	{
 		name: "quick",
 		tier: "quick",
-		when: {
-			maxPromptChars: 300,
-			maxEstimatedTokens: 30_000,
-			promptRegex: "^(what|how|where|which|is|does|can|list|show)\\b",
-		},
-		use: [
-			"snps-provider/qwen3-next-80b-a3b-instruct-d79b4",
-			"snps-provider/nvidia-nemotron-3-super-120b-a12",
-			"snps-provider/kimi-k2.6",
-		],
+		when: { maxPromptChars: 300, maxEstimatedTokens: 30_000, promptRegex: QUICK_PROMPT },
+		use: [QWEN_NEXT, NEMOTRON_SUPER, KIMI],
 		effort: "quick",
 	},
 	{
 		name: "default",
-		// The catch-all gets the long multi-step tasks. kimi-k2.6 reasons inside
-		// its content with no off-switch, and past ~80k tokens it tends to end on
-		// its plan instead of acting (0 tool calls in 7 calls on one benchmark
-		// run), so the coder leads and kimi is the fallback.
-		use: [
-			"snps-provider/qwen3-coder-480b-a35b-inst-fp8",
-			"snps-provider/kimi-k2.6",
-			"snps-provider/nemotron-3-ultra-550b-a55",
-			"snps-provider/nvidia-nemotron-3-super-120b-a12",
-		],
+		// The catch-all gets the long multi-step tasks.
+		use: [KIMI, CODER, NEMOTRON_ULTRA, NEMOTRON_SUPER],
 	},
 ]
 
 /**
- * BalanceAuto routes. Difficult work (reasoning, coding, the catch-all) leads
- * with a paid high-end model; simple work (short questions) and sub-agent runs
- * lead with free models and fall back to the cheap paid Haiku; huge requests
- * stay on the free 512k GLM, which no paid model here can hold. The classifier
- * is on, so the verdict, not the keyword heuristics, usually picks the tier.
+ * Routes of the fast profile: the Qwen models only, coder first, reasoning
+ * off everywhere. Kimi is deliberately absent from every route so the two
+ * free profiles behave differently; it remains in the pool as a last resort.
  */
-const BALANCE_ROUTES: RouterRoute[] = [
-	{
-		name: "huge-context",
-		tier: "huge",
-		when: { minEstimatedTokens: 180_000 },
-		use: ["snps-provider-vmodels/glm-5.2", "snps-provider/GLM-5.2"],
-		effort: "quick",
-	},
+const FAST_ROUTES: RouterRoute[] = [
+	HUGE_CONTEXT_ROUTE,
 	{
 		name: "subagent",
-		// Delegated work is bounded: exploring, then reporting. A free model
-		// handles it, with the cheapest paid model as the backup.
-		when: { subAgent: true },
-		use: ["snps-provider/kimi-k2.6", "snps-provider/qwen3-coder-480b-a35b-inst-fp8", HAIKU_45],
+		when: { subAgent: true, maxEstimatedTokens: 100_000 },
+		use: [CODER, QWEN_397, NEMOTRON_SUPER],
 		effort: "quick",
 	},
 	{
 		name: "plan-and-reasoning",
 		tier: "reason",
-		when: {
-			mode: "plan",
-			promptRegex: "\\b(plan|design|architect|why|explain|review|compare|investigate|analy[sz]e)\\b",
-		},
+		when: { mode: "plan", promptRegex: REASONING_PROMPT },
+		use: [QWEN_397, CODER, NEMOTRON_ULTRA],
+		effort: "quick",
+	},
+	{
+		name: "coding",
+		tier: "code",
+		when: { mode: "act", maxEstimatedTokens: 100_000, promptRegex: CODING_PROMPT },
+		use: [CODER, QWEN_397, NEMOTRON_ULTRA],
+		effort: "quick",
+	},
+	{
+		name: "quick",
+		tier: "quick",
+		when: { maxPromptChars: 300, maxEstimatedTokens: 30_000, promptRegex: QUICK_PROMPT },
+		use: [QWEN_NEXT, CODER, NEMOTRON_SUPER],
+		effort: "quick",
+	},
+	{
+		name: "default",
+		use: [CODER, QWEN_397, NEMOTRON_ULTRA],
+		effort: "quick",
+	},
+]
+
+/**
+ * BalanceAuto routes: Sonnet where it earns its price, free models where they
+ * do not lose much. Reasoning (design, planning, review, unknown bugs) and the
+ * unclassified catch-all lead with paid Claude; coding leads with the free
+ * kimi and coder, with Sonnet 5 as the failover and — because the guard's
+ * escalation moves a stalling free model to the default route's lead — as the
+ * model that takes over when a free one stops early. Short questions and
+ * sub-agent runs stay free with the cheap Haiku as backup; huge requests stay
+ * on the free 512k GLM, which no paid model here can hold. The classifier is
+ * on, so its verdict, not the keyword heuristics, usually picks the tier.
+ */
+const BALANCE_ROUTES: RouterRoute[] = [
+	HUGE_CONTEXT_ROUTE,
+	{
+		name: "subagent",
+		when: { subAgent: true },
+		use: [KIMI, CODER, HAIKU_45],
+		effort: "quick",
+	},
+	{
+		name: "plan-and-reasoning",
+		tier: "reason",
+		when: { mode: "plan", promptRegex: REASONING_PROMPT },
 		use: [SONNET_46_THINKING, SONNET_5, GPT_52],
 		effort: "think",
 		reasoningEffort: "high",
@@ -279,45 +318,49 @@ const BALANCE_ROUTES: RouterRoute[] = [
 	{
 		name: "coding",
 		tier: "code",
-		when: {
-			mode: "act",
-			promptRegex:
-				"\\b(fix|implement|refactor|add|edit|write|test|bug|error|compile|patch|rename|conflicts?|merge|rebase|lint|failing)\\b|type ?error|\\.(ts|tsx|py|go|rs|java|cs|js)\\b",
-		},
-		use: [SONNET_5, SONNET_46, "snps-provider/qwen3-coder-480b-a35b-inst-fp8"],
+		when: { mode: "act", promptRegex: CODING_PROMPT },
+		use: [KIMI, CODER, SONNET_5],
 		effort: "quick",
 	},
 	{
 		name: "quick",
 		tier: "quick",
-		when: {
-			maxPromptChars: 300,
-			maxEstimatedTokens: 30_000,
-			promptRegex: "^(what|how|where|which|is|does|can|list|show)\\b",
-		},
-		use: ["snps-provider/kimi-k2.6", "snps-provider/nvidia-nemotron-3-super-120b-a12", HAIKU_45],
+		when: { maxPromptChars: 300, maxEstimatedTokens: 30_000, promptRegex: QUICK_PROMPT },
+		use: [KIMI, NEMOTRON_SUPER, HAIKU_45],
 		effort: "quick",
 	},
 	{
 		name: "default",
-		use: [SONNET_5, SONNET_46, "snps-provider/kimi-k2.6"],
+		use: [SONNET_5, KIMI, SONNET_46],
 	},
 ]
+
+function routesForProfile(profile: string): RouterRoute[] {
+	if (plinyRouterProfileAllowsPaid(profile)) {
+		return BALANCE_ROUTES
+	}
+	return profile === "fast" ? FAST_ROUTES : DEFAULT_ROUTES
+}
 
 /**
  * Built-in rules for a router profile, used when its file does not exist or
  * cannot be parsed, and to seed the file on first activation.
  *
- * - default: heuristic routes, reasoning per route, no classifier.
- * - fast: the same routes with reasoning off everywhere it can be switched off.
+ * - default: kimi-led heuristic routes, reasoning per route, no classifier.
+ * - fast: Qwen-only routes with reasoning off everywhere it can be switched off.
  * - smart: the default routes plus the classifier, which picks the tier and
  *   whether to think once per turn.
- * - balance: paid models for difficult work, free or cheap ones for the rest,
- *   with the classifier on so the split is decided per turn.
+ * - balance: paid Claude for reasoning and the catch-all, free models for
+ *   coding and simple work, with the classifier on so the split is decided
+ *   per turn.
  */
 export function defaultRules(profile = "default"): RouterRules {
 	const balance = plinyRouterProfileAllowsPaid(profile)
-	const routes = (balance ? BALANCE_ROUTES : DEFAULT_ROUTES).map((route) => ({ ...route, use: [...route.use] }))
+	const routes = routesForProfile(profile).map((route) => ({
+		...route,
+		use: [...route.use],
+		...(route.when ? { when: { ...route.when } } : {}),
+	}))
 	if (profile === "fast") {
 		for (const route of routes) {
 			route.effort = "quick"
@@ -349,9 +392,12 @@ export function extractYamlBlock(markdown: string): string | undefined {
 	return markdown.match(YAML_FENCE_PATTERN)?.[1]
 }
 
-/** Prose outside the yaml fence, used as classifier guidance. */
+/** Prose outside the yaml fence, used as classifier guidance. HTML comments (the seed marker) are dropped. */
 export function extractGuidance(markdown: string): string {
-	return markdown.replace(YAML_FENCE_PATTERN_GLOBAL, "").trim()
+	return markdown
+		.replace(YAML_FENCE_PATTERN_GLOBAL, "")
+		.replace(/<!--[\s\S]*?-->/g, "")
+		.trim()
 }
 
 function asString(value: unknown): string | undefined {

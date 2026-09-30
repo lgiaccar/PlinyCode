@@ -44,6 +44,7 @@
 				"src/core/context/instructions/user-instructions/rule-helpers.ts",
 				"src/core/hooks/hook-factory.ts",
 				"src/sdk/cline-session-factory.ts",
+				"src/sdk/instruction-context-rows.ts",
 				"src/sdk/instruction-sources.ts",
 				"src/sdk/legacy-state-reader.ts",
 				"src/sdk/message-translator/index.ts",

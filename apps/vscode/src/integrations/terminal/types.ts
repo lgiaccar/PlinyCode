@@ -50,6 +50,13 @@ export interface TerminalCompletionDetails {
 	 * must both derive from this value.
 	 */
 	unobservedCommand?: UnobservedTerminalCommand
+	/**
+	 * Set when the command stopped on a question waiting for keyboard input
+	 * (the last output line, e.g. "Overwrite? [y/N]") and was interrupted
+	 * with Ctrl+C. The command did not run to completion; callers report it
+	 * as a failure so the model reruns it non-interactively.
+	 */
+	awaitingInput?: string
 }
 
 export interface TerminalProcessEvents {

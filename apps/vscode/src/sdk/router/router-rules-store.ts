@@ -15,12 +15,14 @@
  */
 
 import { PLINY_ROUTER_PROFILES, plinyRouterProfileAllowsPaid } from "@plinycode/llms"
+import { createHash } from "crypto"
 import fs from "fs/promises"
 import path from "path"
 import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
 import {
 	defaultRules,
+	extractYamlBlock,
 	mergeRules,
 	parseRulesMarkdown,
 	rulesFilenameForProfile,
@@ -91,20 +93,70 @@ export async function loadRouterRules(options?: {
 }
 
 /**
- * Write a profile's documented rules file if none exists. Returns the path so a
- * caller can open it. Never throws.
+ * The seed marker: an HTML comment on the first line of a generated rules file
+ * carrying a short hash of the yaml block as it was written. A file whose yaml
+ * still hashes to its marker was never edited, so it can be replaced when the
+ * built-in defaults change; a file that was edited, or that predates the
+ * marker, is left alone. `extractGuidance` strips the comment, so it never
+ * reaches the classifier.
+ */
+const SEED_MARKER = /^<!-- plinycode-defaults: ([0-9a-f]{12}) -->/
+
+function yamlSignature(yamlBlock: string | undefined): string {
+	return createHash("sha1")
+		.update((yamlBlock ?? "").replace(/\r\n/g, "\n").trim())
+		.digest("hex")
+		.slice(0, 12)
+}
+
+/** The seed marker line for a rendered rules document. */
+export function seedMarker(markdown: string): string {
+	return `<!-- plinycode-defaults: ${yamlSignature(extractYamlBlock(markdown))} -->`
+}
+
+/**
+ * True when a rules file is a generated seed that nobody has edited: it starts
+ * with a seed marker and its yaml block still hashes to it.
+ */
+export function isUntouchedSeed(markdown: string): boolean {
+	const marker = markdown.match(SEED_MARKER)?.[1]
+	return marker !== undefined && marker === yamlSignature(extractYamlBlock(markdown))
+}
+
+/**
+ * Write a profile's documented rules file if none exists, or replace it when it
+ * is an untouched seed of older defaults (the previous copy is kept next to it
+ * as `.bak`). Returns the path so a caller can open it. Never throws.
  */
 export async function initialiseDefaultRulesFile(dataDir?: string, profile = "default"): Promise<string | undefined> {
 	const filePath = globalRulesPath(dataDir, profile)
+	const seed = renderDefaultRulesMarkdown(profile)
+	let existing: string | undefined
 	try {
-		await fs.access(filePath)
-		return filePath
+		existing = await fs.readFile(filePath, "utf8")
 	} catch {
 		// Not there yet — fall through and create it.
 	}
+	if (existing !== undefined) {
+		if (!isUntouchedSeed(existing) || seedMarker(existing) === seedMarker(seed)) {
+			return filePath
+		}
+		try {
+			const backupPath = `${filePath}.bak`
+			await fs.copyFile(filePath, backupPath)
+			await fs.writeFile(filePath, seed, "utf8")
+			cache.clear()
+			Logger.log(
+				`[FreeAuto] Refreshed the unedited rules file ${filePath} with the current defaults (previous copy: ${backupPath})`,
+			)
+		} catch (error) {
+			Logger.warn(`[FreeAuto] Failed to refresh rules file ${filePath}: ${error}`)
+		}
+		return filePath
+	}
 	try {
 		await fs.mkdir(path.dirname(filePath), { recursive: true })
-		await fs.writeFile(filePath, renderDefaultRulesMarkdown(profile), "utf8")
+		await fs.writeFile(filePath, seed, "utf8")
 		Logger.log(`[FreeAuto] Created default rules file at ${filePath}`)
 		return filePath
 	} catch (error) {
@@ -145,12 +197,15 @@ large-context model when the conversation is long or many files are attached.
 Prefer a fast small model for short factual questions. When in doubt, choose the
 default route.`
 
-const BALANCE_GUIDANCE = `The quick tier runs on free models and costs nothing; the code and reason tiers
-run on paid high-end models. Choose quick whenever a small model would do:
-short factual questions, one-line or mechanical edits, lookups, reformatting,
-anything a junior engineer would finish in a minute. Choose code for real
-implementation work and reason for design, planning, review, or a bug whose
-cause is unknown. Set think only for design trade-offs and tricky bugs.`
+const BALANCE_GUIDANCE = `The quick and code tiers lead with free models and cost nothing; the reason
+tier runs on paid Claude with thinking on, and anything unclassified goes to
+paid Claude too. Choose quick for short factual questions, one-line or
+mechanical edits, lookups and reformatting. Choose code for implementation
+work: writing, editing, fixing and testing code, even when it is long. Choose
+reason only where a strong model changes the outcome: design and planning,
+reviews, comparing options, a bug whose cause is unknown, or work a free model
+already got wrong in this conversation. Set think only for design trade-offs
+and tricky bugs.`
 
 /**
  * The starter rules document. The prose is deliberately substantial: it is both
@@ -168,7 +223,7 @@ export function renderDefaultRulesMarkdown(profile = "default"): string {
 		? "picks a Pliny model for every request, paid or free according to the routes below,"
 		: "picks a free, self-hosted Pliny model for every request"
 
-	return `# PlinyCode ${router} routing rules
+	const body = `# PlinyCode ${router} routing rules
 
 ${blurb} Each router model in the picker has its own file like
 this one, so strategies can be compared side by side; every routed call is
@@ -279,6 +334,10 @@ routes:
 ${rules.routes.map((route) => renderRouteYaml(route)).join("\n")}
 ${fence}
 `
+	// The marker lets activation tell an untouched seed from an edited file.
+	// It is a comment: Markdown renderers hide it and the guidance extractor
+	// drops it.
+	return `${seedMarker(body)}\n${body}`
 }
 
 function renderRouteYaml(route: RouterRules["routes"][number]): string {

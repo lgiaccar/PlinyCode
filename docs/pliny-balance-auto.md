@@ -30,9 +30,21 @@ decide when the classifier gives no verdict.
 | `huge-context` | request ≥ 180k tokens | free GLM-5.2 (512k), vmodels replica first |
 | `subagent` | any sub-agent call | free kimi-k2.6, free qwen3-coder, then Haiku 4.5 |
 | `plan-and-reasoning` | tier `reason`, or plan mode with a design/review prompt | Claude Sonnet 4.6 high-thinking preset, Claude Sonnet 5, GPT-5.2 |
-| `coding` | tier `code`, or act mode with a coding prompt | Claude Sonnet 5, Claude Sonnet 4.6, free qwen3-coder |
+| `coding` | tier `code`, or act mode with a coding prompt | free kimi-k2.6, free qwen3-coder, then Claude Sonnet 5 |
 | `quick` | tier `quick`, or a short question | free kimi-k2.6, free nemotron super, then Haiku 4.5 |
-| `default` | anything else | Claude Sonnet 5, Claude Sonnet 4.6, free kimi-k2.6 |
+| `default` | anything else | Claude Sonnet 5, free kimi-k2.6, Claude Sonnet 4.6 |
+
+Sonnet is where it earns its price and nowhere else. In the first week of use
+the coding route alone put about seventy percent of BalanceAuto's calls on
+Sonnet, and most of them were routine edits the free coder does as well. The
+coding route now leads with the free models and reaches Sonnet 5 three ways:
+as the failover when both free candidates are down, as the catch-all
+`default` route for turns the classifier could not place, and through the
+completion guard's escalation, which moves a free model that stalled twice to
+the `default` route's lead, Sonnet 5, for the rest of the turn. Reasoning
+turns go straight to the Sonnet 4.6 thinking preset. The classifier guidance
+in the rules file says the same, so it picks `reason` only where a strong
+model changes the outcome.
 
 The pool leads with the paid models, so a turn whose free candidates all fail
 still lands on a strong one. Health benching, context-window checks, sticky

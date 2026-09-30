@@ -13,4 +13,13 @@ export const AGENT_TERMINAL_ENV: Readonly<Record<string, string>> = {
 	GIT_PAGER: "cat",
 	PAGER: "cat",
 	GIT_TERMINAL_PROMPT: "0",
+	// Git Credential Manager: fail instead of opening a credential dialog.
+	GCM_INTERACTIVE: "Never",
+	// pip, apt and npx otherwise stop on a question the model cannot answer.
+	PIP_NO_INPUT: "1",
+	DEBIAN_FRONTEND: "noninteractive",
+	npm_config_yes: "true",
+	// Startup chatter some shells and package managers print before a command.
+	POWERSHELL_UPDATECHECK: "Off",
+	HOMEBREW_NO_AUTO_UPDATE: "1",
 }

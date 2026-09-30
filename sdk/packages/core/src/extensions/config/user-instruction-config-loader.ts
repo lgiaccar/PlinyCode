@@ -37,6 +37,27 @@ import {
 
 const SKILL_FILE_NAME = "SKILL.md";
 const MANAGED_PLUGIN_MANIFEST_FILE_NAME = "managed.json";
+/**
+ * Single-file skills: a `.md`/`.mdc` file placed directly in a skills
+ * directory (`.cursor/skills/git-worktrees.mdc`) instead of the
+ * `<name>/SKILL.md` layout. Named after the file.
+ */
+const FLAT_SKILL_EXTENSIONS = new Set([".md", ".mdc"]);
+const FLAT_SKILL_IGNORED_NAMES = new Set([
+	"readme",
+	"index",
+	"agents",
+	"claude",
+]);
+
+function isFlatSkillFile(fileName: string): boolean {
+	const extension = extname(fileName).toLowerCase();
+	return (
+		fileName !== SKILL_FILE_NAME &&
+		FLAT_SKILL_EXTENSIONS.has(extension) &&
+		!FLAT_SKILL_IGNORED_NAMES.has(basename(fileName, extension).toLowerCase())
+	);
+}
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown", ".txt"]);
 /** Rules also accept Cursor's `.mdc` rule files. */
@@ -557,7 +578,10 @@ async function discoverSkillFiles(
 		const entries = await readdir(directoryPath, { withFileTypes: true });
 		const candidates: UnifiedConfigFileCandidate[] = [];
 		for (const entry of entries) {
-			if (entry.isFile() && entry.name === SKILL_FILE_NAME) {
+			if (
+				entry.isFile() &&
+				(entry.name === SKILL_FILE_NAME || isFlatSkillFile(entry.name))
+			) {
 				candidates.push({
 					directoryPath,
 					fileName: entry.name,
@@ -725,6 +749,9 @@ export function createSkillsConfigDefinition(
 	const managedRoot = options?.workspacePath
 		? join(options.workspacePath, ".cline")
 		: undefined;
+	const skillRoots = new Set(
+		directories.map((directory) => resolve(directory)),
+	);
 
 	return {
 		type: "skill",
@@ -739,15 +766,22 @@ export function createSkillsConfigDefinition(
 				? discoverAgentPluginSkillFile(agentPluginSkill)
 				: discoverSkillFiles(directoryPath);
 		},
-		includeFile: (fileName) => fileName === SKILL_FILE_NAME,
+		includeFile: (fileName, filePath) =>
+			fileName === SKILL_FILE_NAME ||
+			// A flat skill file only counts at the root of a skills directory:
+			// a skill folder's own notes (`<name>/README.md`) are not skills.
+			(isFlatSkillFile(fileName) && skillRoots.has(resolve(dirname(filePath)))),
 		parseFile: (context) => {
 			const agentPluginSkill = agentPluginSkillsByDirectory.get(
 				resolve(context.directoryPath),
 			);
 			if (!agentPluginSkill) {
+				const fileName = basename(context.filePath);
 				return parseSkillConfigFromMarkdown(
 					context.content,
-					basename(context.directoryPath),
+					fileName === SKILL_FILE_NAME
+						? basename(context.directoryPath)
+						: basename(context.filePath, extname(context.filePath)),
 				);
 			}
 			const parsed = parseAgentSkillMarkdown(

@@ -26,7 +26,7 @@ import { ClineTempManager } from "@services/temp"
 import * as fs from "fs"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
-import { MAX_UNRETRIEVED_LINES } from "@/integrations/terminal/constants"
+import { INPUT_PROMPT_IDLE_TIMEOUT, MAX_UNRETRIEVED_LINES } from "@/integrations/terminal/constants"
 import {
 	getUnobservedTerminalCommandDisposition,
 	type ITerminalProcess,
@@ -469,6 +469,22 @@ export async function executeForeground(
 						? `[Command completion could not be observed; the command may still be running and must not be assumed to have succeeded. ${lifecycle}]\n${output}`
 						: `[Command completion could not be observed; the command may still be running and must not be assumed to have succeeded. ${lifecycle}]`
 				throw new CommandExitError(1, result)
+			}
+
+			// A command that stopped on a question for the keyboard never ran to
+			// completion; it was interrupted. Say so, and say what to do instead,
+			// before the exit code: Ctrl+C may leave it 0, or unset.
+			if (completionDetails?.awaitingInput !== undefined) {
+				const note =
+					`[The command stopped and waited for keyboard input (its last line was "${completionDetails.awaitingInput.slice(0, 160)}"), ` +
+					`which PlinyCode cannot type, so it was interrupted with Ctrl+C after ${INPUT_PROMPT_IDLE_TIMEOUT / 1000}s. ` +
+					"It did not complete. Rerun it non-interactively: pass the answer as a flag (for example --yes, -y, --no-input, --force), " +
+					"pipe the input to it, or set the value in an environment variable.]"
+				const exitCode = completionDetails.exitCode
+				throw new CommandExitError(
+					typeof exitCode === "number" && exitCode !== 0 ? exitCode : 1,
+					output.length > 0 ? `${note}\n${output}` : note,
+				)
 			}
 
 			// Plumb the exit code from onDidEndTerminalShellExecution through to the tool

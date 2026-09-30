@@ -4,6 +4,7 @@ import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
+import { installInstructionContextRows } from "./instruction-context-rows"
 import { installRouter } from "./router/router-integration"
 
 interface SdkSessionConfigBuilderOptions {
@@ -97,6 +98,10 @@ export class SdkSessionConfigBuilder {
 			: undefined
 		const nextMessageTs = this.options.nextMessageTs
 		if (emitRow && nextMessageTs) {
+			// Shows which rules and skills each turn's request carries, for
+			// every model: the row is how a user learns a rules file was not
+			// picked up without waiting for the model to ignore it.
+			installInstructionContextRows(config, { emitRow, nextMessageTs })
 			installRouter(config, {
 				sessionId: this.options.getSessionId?.() || input.cwd,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,

@@ -502,16 +502,13 @@ function dedupePaths(paths: ReadonlyArray<string>): string[] {
 export const EXTERNAL_SKILLS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
 
 /**
- * Editor-owned config roots and the editor each belongs to. With an editor
- * set (setInstructionHost), another editor's root is skipped: its files were
- * written for that editor's agent, and loading them everywhere doubles up on
- * instructions the workspace usually keeps in AGENTS.md too.
+ * With an editor set (setInstructionHost), another editor's *rules* are
+ * skipped: they are written in that editor's dialect, and loading them
+ * everywhere doubles up on guidance the workspace usually keeps in AGENTS.md
+ * too. Skills are never filtered: `SKILL.md` is one vendor-neutral format,
+ * and a repository that keeps its skills under `.github/skills` expects them
+ * to work in Cursor as well.
  */
-const EDITOR_OWNED_CONFIG_DIRS: Readonly<Record<string, InstructionEditor>> = {
-	".github": "vscode",
-	".cursor": "cursor",
-};
-
 function isForCurrentEditor(owner: InstructionEditor | undefined): boolean {
 	const editor = INSTRUCTION_HOST.editor;
 	return !editor || !owner || owner === editor;
@@ -525,9 +522,7 @@ function getWorkspaceSkillDirectories(workspacePath?: string): string[] {
 		DEPRECATED_CONFIG_DIR,
 		CLINE_CONFIG_DIR,
 		LEGACY_AGENT_SKILLS_CONFIG_DIR,
-		...EXTERNAL_SKILLS_CONFIG_DIRS.filter((dir) =>
-			isForCurrentEditor(EDITOR_OWNED_CONFIG_DIRS[dir]),
-		),
+		...EXTERNAL_SKILLS_CONFIG_DIRS,
 	].map((dir) => join(workspacePath, dir, SKILLS_CONFIG_DIRECTORY_NAME));
 }
 

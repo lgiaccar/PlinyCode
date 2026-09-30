@@ -36,6 +36,21 @@ export const MARKERLESS_IDLE_TIMEOUT = 3_000
 export const MARKERLESS_MAX_QUIET_TIME = 30_000
 
 // =============================================================================
+// Keyboard-input Detection
+// =============================================================================
+// A command that asks a question ("Overwrite? [y/N]", "Password:") blocks
+// until someone types, and the model cannot type. Once the command has started
+// (the C marker was seen), each quiet gap this long triggers a look at the last
+// output line; a line that reads as a question is answered with Ctrl+C and
+// reported to the model as a failure to rerun non-interactively.
+
+/** Quiet gap after which the last line is checked for an input prompt (8 seconds) */
+export const INPUT_PROMPT_IDLE_TIMEOUT = 8_000
+
+/** How long to wait for the shell to report completion after the interrupt (10 seconds) */
+export const INPUT_PROMPT_INTERRUPT_GRACE = 10_000
+
+// =============================================================================
 // Exit Code Event Race
 // =============================================================================
 // onDidEndTerminalShellExecution fires asynchronously after the read() stream

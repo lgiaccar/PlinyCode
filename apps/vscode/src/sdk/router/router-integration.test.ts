@@ -352,8 +352,9 @@ describe("installRouter profiles, effort and call log", () => {
 				subAgent: false,
 				profile: "default",
 				route: "coding",
-				effort: "quick",
-				model: "snps-provider/qwen3-coder-480b-a35b-inst-fp8",
+				// kimi has no measured reasoning switch, so the route's "quick" is
+				// not applied to it and the record carries no effort.
+				model: "snps-provider/kimi-k2.6",
 				outcome: "success",
 				durationMs: 0,
 				ttftMs: 0,
@@ -387,11 +388,11 @@ describe("installRouter profiles, effort and call log", () => {
 		expect(logged[1]?.classifierError).toBeUndefined()
 	})
 
-	it("routes BalanceAuto's coding work to the paid model and its sub-agents to a free one", async () => {
+	it("routes BalanceAuto's coding work and sub-agents to free models, and reasoning to paid Claude", async () => {
 		const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
 		await run()
 		expect(classifierModel).toHaveBeenCalledTimes(1)
-		expect(rows[0]).toContain("auto-paid-balanced → **global.anthropic.claude-sonnet-5**")
+		expect(rows[0]).toContain("auto-paid-balanced → **kimi-k2.6**")
 		expect(rows[0]).toContain("route: coding")
 		expect(rows[0]).toContain("classifier: code")
 
@@ -399,9 +400,15 @@ describe("installRouter profiles, effort and call log", () => {
 		expect(rows[1]).toContain("↳ sub-agent auto-paid-balanced → **kimi-k2.6**")
 		expect(rows[1]).toContain("route: subagent")
 
+		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
+		await run()
+		expect(rows[2]).toContain("auto-paid-balanced → **claude-4-6-sonnet-high-thinking**")
+		expect(rows[2]).toContain("route: plan-and-reasoning")
+
 		expect(logged.map((record) => [record.profile, record.subAgent, record.model])).toEqual([
-			["balance", false, "snps-aws-bedrock/global.anthropic.claude-sonnet-5"],
+			["balance", false, "snps-provider/kimi-k2.6"],
 			["balance", true, "snps-provider/kimi-k2.6"],
+			["balance", false, "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"],
 		])
 	})
 
@@ -410,8 +417,9 @@ describe("installRouter profiles, effort and call log", () => {
 		// Nothing has run yet: no model to blame, so no nudge.
 		expect(await config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
 
+		// A reasoning turn lands on paid Claude, which does not stop early: no nudge.
+		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
 		await run()
-		// The paid model handled the turn; it does not stop early.
 		expect(await config.completionGuard?.(UNFINISHED_REPLY)).toBeUndefined()
 
 		// The guard only ever judges the root agent's reply (sub-agents get no
@@ -429,7 +437,7 @@ describe("installRouter profiles, effort and call log", () => {
 	})
 
 	it("adds the failed-command note on BalanceAuto only for a tool a free model ran", async () => {
-		const { run, config } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		const { run, config, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
 		const failedShell = (parentAgentId?: string) =>
 			config.hooks?.afterTool?.({
 				snapshot: { agentId: "a", iteration: 1, ...(parentAgentId ? { parentAgentId } : {}) } as never,
@@ -442,8 +450,9 @@ describe("installRouter profiles, effort and call log", () => {
 				durationMs: 0,
 			})
 
+		// A reasoning turn lands on paid Claude: no note.
+		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
 		await run()
-		// Root turn on the paid model: no note.
 		expect(await failedShell()).toBeUndefined()
 
 		await run({ parentAgentId: "parent" })

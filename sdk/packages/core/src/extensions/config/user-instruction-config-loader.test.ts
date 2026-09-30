@@ -360,6 +360,13 @@ Escalation runbook`,
 				`---\nname: ${root.slice(1)}-skill\ndescription: From ${root}\n---\nDo it.`,
 			);
 		}
+		// A single-file skill at the root of a skills directory, named after
+		// the file; a skill folder's README is not a skill.
+		await writeWorkspaceFile(
+			".cursor/skills/git-worktrees.mdc",
+			"---\ndescription: Work in git worktrees\n---\nUse worktrees.",
+		);
+		await writeWorkspaceFile(".cursor/skills/cursor-skill/README.md", "Notes");
 
 		const watcher = createUserInstructionConfigWatcher({
 			skills: { workspacePath: workspaceRoot },
@@ -410,8 +417,18 @@ Escalation runbook`,
 					"github-skill",
 					"cursor-skill",
 					"claude-skill",
+					"git-worktrees",
 				]),
 			);
+			expect(skillNames).not.toContain("README");
+			expect(
+				[...watcher.getSnapshot("skill").values()].find(
+					(record) => record.item.name === "git-worktrees",
+				)?.item,
+			).toMatchObject({
+				description: "Work in git worktrees",
+				instructions: "Use worktrees.",
+			});
 		} finally {
 			setHomeDir(originalHomeDir);
 		}

@@ -38,7 +38,9 @@ const workspace = z
 	.string()
 	.optional()
 	.describe("Absolute path of the git repository. Defaults to DEVOPS_MCP_WORKSPACE or the server's working directory.")
-const prId = z.number().int().optional().describe("PR number/ID. Defaults to the open PR for the current branch.")
+// `coerce`: the free models send numbers as strings (`"limit": "20"`), and a
+// strict schema turned two dozen otherwise-correct calls into validation errors.
+const prId = z.coerce.number().int().optional().describe("PR number/ID. Defaults to the open PR for the current branch.")
 
 export interface ToolDefinition {
 	name: string
@@ -208,12 +210,12 @@ export function createTools(providerFor: ProviderFactory = defaultProviderFactor
 					.string()
 					.optional()
 					.describe("Branch to list runs for. Defaults to the current branch; '*' lists all branches."),
-				pr_id: z
+				pr_id: z.coerce
 					.number()
 					.int()
 					.optional()
 					.describe("List the runs for this PR (its latest commit / PR build) instead of a branch."),
-				limit: z.number().int().min(1).max(50).default(10),
+				limit: z.coerce.number().int().min(1).max(50).default(10),
 				workspace,
 			},
 			run: async (args) => {
@@ -232,12 +234,18 @@ export function createTools(providerFor: ProviderFactory = defaultProviderFactor
 				"Report one CI run as Markdown: job results, failed steps, their error messages and the log lines around the failure.",
 			readOnly: true,
 			inputSchema: {
-				run_id: z
+				run_id: z.coerce
 					.number()
 					.int()
 					.optional()
 					.describe("Run/build ID from pipeline_runs. Defaults to the latest run on the current branch."),
-				log_lines: z.number().int().min(0).max(500).default(40).describe("Lines of log to include per failed step."),
+				log_lines: z.coerce
+					.number()
+					.int()
+					.min(0)
+					.max(500)
+					.default(40)
+					.describe("Lines of log to include per failed step."),
 				workspace,
 			},
 			run: async (args) => {

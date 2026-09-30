@@ -408,6 +408,26 @@ describe("executeForeground", () => {
 		}
 	})
 
+	it("reports a command interrupted while waiting for keyboard input as a failure with the question", async () => {
+		const process = createFakeTerminalProcess({
+			lines: ["Deleting build/", "Are you sure? [y/N]"],
+			completionDetails: { exitCode: 0, awaitingInput: "Are you sure? [y/N]" },
+		})
+		const terminalManager = createFakeTerminalManager(process)
+
+		try {
+			await executeForeground("clean --interactive", "/workspace", terminalManager, 1000)
+			expect.unreachable("expected executeForeground to fail a command that waited for input")
+		} catch (error) {
+			expect(error).toBeInstanceOf(CommandExitError)
+			const exit = error as InstanceType<typeof CommandExitError>
+			expect(exit.exitCode).toBe(1)
+			expect(exit.output).toContain('waited for keyboard input (its last line was "Are you sure? [y/N]")')
+			expect(exit.output).toContain("Rerun it non-interactively")
+			expect(exit.output).toContain("Deleting build/")
+		}
+	})
+
 	it("throws an indeterminate CommandExitError when command completion cannot be observed", async () => {
 		const process = createFakeTerminalProcess({
 			lines: ["partial output"],

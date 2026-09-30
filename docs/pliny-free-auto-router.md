@@ -50,6 +50,43 @@ the whole pool routable instead of letting a run grow until only GLM-5.2 fits.
 The timestamped rows (below) are shown in the chat only; they never reach the
 model.
 
+## The profiles and their routes
+
+The three FreeAuto profiles share one router and one pool but lead their
+routes with different models, so that comparing them on real work says
+something. The built-in defaults (`router-rules.ts`) are, best first:
+
+| Route | `auto-free` and `auto-free-smart` | `auto-free-fast` |
+| --- | --- | --- |
+| `huge-context` (≥ 180k tokens) | GLM-5.2 (vmodels replica, then primary) | the same |
+| `subagent` | kimi-k2.6, qwen3-coder, nemotron super | qwen3-coder, qwen3.5-397b, nemotron super |
+| `plan-and-reasoning` | kimi-k2.6, qwen3.5-397b (thinking on), nemotron ultra | qwen3.5-397b, qwen3-coder, nemotron ultra |
+| `coding` | kimi-k2.6, qwen3-coder, nemotron ultra | qwen3-coder, qwen3.5-397b, nemotron ultra |
+| `quick` | qwen3-next-80b, nemotron super, kimi-k2.6 | qwen3-next-80b, qwen3-coder, nemotron super |
+| `default` | kimi-k2.6, qwen3-coder, nemotron ultra, nemotron super | qwen3-coder, qwen3.5-397b, nemotron ultra |
+
+`auto-free-smart` is `auto-free` plus the classifier. `auto-free-fast` is
+Qwen only, reasoning off everywhere: kimi is not on any of its routes and sits
+at the back of its pool as a last resort.
+
+Kimi leads the default and smart profiles again. It was demoted after a run of
+turns in which it announced a tool call and never made it; the transcripts
+show why: it emits tool names with its chat template's namespace attached
+(`functions-read_files`), the gateway passes that through, and the AI SDK
+rejected every such call as an unavailable tool. A weak model does not recover
+from that error, it apologises and describes the corrected call instead. The
+gateway now repairs the name (`resolveMisnamedTool` in
+`sdk/packages/llms`), also covering hyphenated (`run-commands`) and
+namespaced (`tools.`, `default_api.`) variants, so the call runs. When kimi
+still stops early, the completion guard's escalation hands the turn to the
+coder, the second model of the default route.
+
+The rules files are seeded from these defaults on first activation and carry a
+marker with a hash of their yaml block. A file nobody edited is refreshed when
+the defaults change (the old copy is kept as `.bak`); an edited file, or one
+written before the marker existed, is left alone. To adopt new defaults into
+an old, edited file, delete it and reopen the editor.
+
 ## Trying it
 
 FreeAuto is the default model, so a fresh install needs no setup. To run the
@@ -175,4 +212,29 @@ Commands the model runs go through a terminal with `GIT_PAGER=cat`,
 `PAGER=cat` and `GIT_TERMINAL_PROMPT=0` (`agent-terminal-env.ts`). Without
 them `git branch` or `git log` with more output than the terminal is tall
 hands over to a pager that waits for a keypress the model cannot send, which
-looked like a three-minute hang in one benchmark session.
+looked like a three-minute hang in one benchmark session. The same file tells
+Git Credential Manager, pip, apt and npx not to prompt.
+
+A command that still stops on a question ("Overwrite? [y/N]", "Password:")
+used to block the turn for the five minutes of the auto-proceed timeout, then
+came back as "still running", which the free models often answered by ending
+their turn. Once a command has started, the terminal now looks at its last
+output line after 8 s of silence (`INPUT_PROMPT_IDLE_TIMEOUT`,
+`looksLikeInputPrompt`); a line that reads as a question gets Ctrl+C, and the
+tool result says which question it was and to rerun the command
+non-interactively. The completion guard's failed-command rule then keeps the
+model on the task.
+
+## What the model was given
+
+Every turn starts with a chat row such as `Context: 2 rules in the prompt:
+AGENTS.md, .cursor/rules/git.md · 5 rules to read when relevant: … · 12
+skills: build-skill, …` (`instruction-context-rows.ts`). It is read off the
+request the engine is about to send, for every model, and repeats only when
+the set changes. The `skills` tool's description carries each skill's
+description as well as its name, so a model can match a request to a skill
+whose name does not repeat the user's words. Skills are loaded from every
+editor's folder (`.github/skills`, `.cursor/skills`, `.claude/skills`)
+whatever editor is running, and a single `.md`/`.mdc` file placed directly in
+a skills folder is a skill named after the file; rules stay scoped to the
+running editor.

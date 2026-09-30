@@ -183,8 +183,14 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	const cachedRules = new Map<string, RouterRules>()
 	const rulesFor = (profile: string) => cachedRules.get(profile) ?? defaultRules(profile)
 	let onRulesLoaded: ((rules: RouterRules) => void) | undefined
+	// The first load per profile is awaited by the routed model before its
+	// first call, so the user's file, not the built-in defaults, routes it.
+	// Bounded, so a slow disk can never hold a turn: past the bound the call
+	// proceeds on whatever is cached and the load finishes in the background.
+	const firstLoad = new Map<string, Promise<void>>()
+	const FIRST_LOAD_WAIT_MS = 1_500
 	const refreshRules = (profile: string) => {
-		loadRouterRules({ workspaceRoot: deps.workspaceRoot, profile })
+		const load = loadRouterRules({ workspaceRoot: deps.workspaceRoot, profile })
 			.then((rules) => {
 				cachedRules.set(profile, rules)
 				if (profile === installProfile) {
@@ -192,7 +198,11 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				}
 			})
 			.catch((error) => Logger.warn(`[FreeAuto] Failed to load ${profile} rules: ${error}`))
+		if (!firstLoad.has(profile)) {
+			firstLoad.set(profile, Promise.race([load, new Promise<void>((resolve) => setTimeout(resolve, FIRST_LOAD_WAIT_MS))]))
+		}
 	}
+	const awaitRules = (profile: string) => firstLoad.get(profile) ?? Promise.resolve()
 	if (isRouted()) {
 		refreshRules(installProfile)
 	}
@@ -279,6 +289,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			now,
 			label: routerLabel(profile),
 			rules: () => rulesFor(profile),
+			awaitRules: () => awaitRules(profile),
 			knownModels: () => agentConfig.knownModels as Record<string, ModelInfo> | undefined,
 			isHealthy: (modelId) => isModelHealthy(modelId, now()),
 			createDelegate: (modelId) => createDefault({ modelId }),
