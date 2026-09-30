@@ -11,8 +11,16 @@
  *
  * Escalation instead of resignation: a model that answers a reminder with the
  * same stall gets one stronger reminder and, through `onEscalate`, a different
- * model for the rest of the turn. A third stall in a row is accepted, and at
- * most `maxNudgesPerRun` reminders are sent, so a run can never loop on them.
+ * model for the rest of the turn. So does a model that keeps stalling between
+ * actions — acts when reminded, then stalls again on the next step — once it
+ * has stalled `escalateAfterStalls` times. A third stall in a row is accepted.
+ *
+ * Two budgets keep a run from looping on reminders: at most
+ * `maxUnansweredNudges` reminders the model did not act on, and at most
+ * `maxNudgesPerRun` reminders in all. A reminder the model obeyed (it called a
+ * tool next) does not count against the first. When the guard lets a stalled
+ * reply end the run, `onGiveUp` says why, so the chat can tell the user
+ * instead of showing a plain "Completed".
  */
 
 import type { AgentMessage, CompletionGuard, CompletionGuardContext } from "@plinycode/shared"
@@ -72,6 +80,11 @@ export const ESCALATED_REMINDER =
 	"[SYSTEM] Second reminder: you again described a step without calling a tool. Emit the tool call in this " +
 	"reply; do not describe it. If you cannot act, end with one sentence stating the blocker as a question to the user."
 
+export const REPEATED_STALL_REMINDER =
+	"[SYSTEM] This turn has stopped several times on a step that was described but not carried out. Emit the " +
+	"tool call for the next step in this reply; do not describe it. If the task is complete, reply with a short " +
+	"final summary; if you are blocked, end with one sentence stating the blocker as a question to the user."
+
 function failedCommandReminder(failure: ShellFailure): string {
 	const what = failure.command ? `The command \`${failure.command.slice(0, 120)}\`` : "The last command"
 	const how = failure.exitCode !== undefined ? ` failed with exit code ${failure.exitCode}` : " failed"
@@ -125,14 +138,27 @@ interface RouterCompletionGuardOptions {
 	toolCallsThisRun?: () => number
 	/** Called whenever a reminder is sent, e.g. to show a chat row. */
 	onNudge?: (info: { rule: GuardRule; excerpt: string; nudgesThisRun: number; escalated: boolean; reason?: string }) => void
-	/** Called when a second consecutive stall triggers the stronger reminder. */
+	/** Called when a stall triggers the stronger reminder: a second in a row, or one too many in the run. */
 	onEscalate?: () => void
+	/** Called when a rule fired but the guard let the reply end the run. */
+	onGiveUp?: (info: { rule: GuardRule; excerpt: string; reason: GuardGiveUpReason }) => void
 	/** Asked whether the task is done when no rule fired. Undefined means no verdict. */
 	judge?: (context: JudgeContext) => Promise<JudgeVerdict | undefined>
 	/** Reports each judge consultation's outcome. */
 	onJudge?: (outcome: "done" | "not-done" | "no-verdict", reason?: string) => void
+	/** Reminders per run in all, obeyed or not. Default 8. */
 	maxNudgesPerRun?: number
+	/** Reminders per run the model did not act on. Default 3. */
+	maxUnansweredNudges?: number
+	/** Stalls, in a row or not, after which the guard escalates. Default 3. */
+	escalateAfterStalls?: number
 }
+
+/**
+ * Why the guard let a stalled reply end the run: three stalls in a row, too
+ * many reminders the model ignored, or too many reminders in all.
+ */
+export type GuardGiveUpReason = "repeated-stall" | "unanswered-budget" | "total-budget"
 
 interface RuleHit {
 	rule: GuardRule
@@ -182,20 +208,50 @@ export function evaluateReply(
 }
 
 export function createRouterCompletionGuard(options: RouterCompletionGuardOptions): CompletionGuard {
-	const maxNudges = options.maxNudgesPerRun ?? 3
+	const maxNudges = options.maxNudgesPerRun ?? 8
+	const maxUnanswered = options.maxUnansweredNudges ?? 3
+	const escalateAfter = options.escalateAfterStalls ?? 3
 	let lastIteration = 0
 	let lastNudgeIteration: number | undefined
+	let toolCallsAtNudge = 0
+	/** Every reminder sent this run. */
 	let nudgesThisRun = 0
+	/** Reminders the model did not answer with a tool call. */
+	let unansweredNudges = 0
+	/** The latest reminder is still counted as unanswered. */
+	let pendingNudge = false
 	let consecutiveStalls = 0
+	/** Stalls since the last escalation, whether or not the model acted in between. */
+	let stallsSinceEscalation = 0
 	let judgeRuns = 0
 	let firedRules = new Set<GuardRule>()
 
 	const resetRun = () => {
 		lastNudgeIteration = undefined
+		toolCallsAtNudge = 0
 		nudgesThisRun = 0
+		unansweredNudges = 0
+		pendingNudge = false
 		consecutiveStalls = 0
+		stallsSinceEscalation = 0
 		judgeRuns = 0
 		firedRules = new Set()
+	}
+
+	// The guard only sees replies without tool calls, so a gap in iterations
+	// since the reminder means the model acted in between. The run's tool-call
+	// count says the same more directly when the host provides it.
+	const actedSinceNudge = (iteration: number) =>
+		options.toolCallsThisRun
+			? options.toolCallsThisRun() > toolCallsAtNudge
+			: lastNudgeIteration !== undefined && iteration > lastNudgeIteration + 1
+
+	const recordNudge = (iteration: number) => {
+		nudgesThisRun += 1
+		unansweredNudges += 1
+		pendingNudge = true
+		lastNudgeIteration = iteration
+		toolCallsAtNudge = options.toolCallsThisRun?.() ?? 0
 	}
 
 	return async ({ message, iteration, runMessages, messages }: CompletionGuardContext) => {
@@ -205,32 +261,55 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 		}
 		lastIteration = iteration
 
-		if (!options.isActive() || nudgesThisRun >= maxNudges) {
+		if (!options.isActive()) {
 			return undefined
+		}
+		// A reminder the model obeyed has done its job: it no longer counts
+		// against the unanswered budget.
+		if (pendingNudge && actedSinceNudge(iteration)) {
+			pendingNudge = false
+			unansweredNudges -= 1
 		}
 		const text = replyText(message)
 		const userRequest = latestUserRequest(messages)
 		const rightAfterNudge = lastNudgeIteration !== undefined && iteration === lastNudgeIteration + 1
+		const budgetLeft = nudgesThisRun < maxNudges && unansweredNudges < maxUnanswered
 
 		const hit = evaluateReply(text, { message, runMessages, userRequest, firedRules })
 		if (hit) {
+			const excerpt = lastSentence(text).slice(0, 120)
 			consecutiveStalls = rightAfterNudge ? consecutiveStalls + 1 : 1
-			if (consecutiveStalls >= 3) {
-				// Two reminders did not help; the model's answer stands.
+			if (consecutiveStalls >= 3 || !budgetLeft) {
+				// Two reminders in a row did not help, or the run has had its
+				// share of them; the model's answer stands.
+				const reason: GuardGiveUpReason =
+					consecutiveStalls >= 3
+						? "repeated-stall"
+						: unansweredNudges >= maxUnanswered
+							? "unanswered-budget"
+							: "total-budget"
+				options.onGiveUp?.({ rule: hit.rule, excerpt, reason })
 				return undefined
 			}
-			const escalated = consecutiveStalls === 2
-			nudgesThisRun += 1
-			lastNudgeIteration = iteration
+			stallsSinceEscalation += 1
+			const repeatedStall = stallsSinceEscalation >= escalateAfter
+			const escalated = consecutiveStalls === 2 || repeatedStall
+			if (escalated) {
+				stallsSinceEscalation = 0
+			}
+			recordNudge(iteration)
 			firedRules.add(hit.rule)
-			options.onNudge?.({ rule: hit.rule, excerpt: lastSentence(text).slice(0, 120), nudgesThisRun, escalated })
+			options.onNudge?.({ rule: hit.rule, excerpt, nudgesThisRun, escalated })
 			if (escalated) {
 				options.onEscalate?.()
-				return ESCALATED_REMINDER
+				return consecutiveStalls === 2 ? ESCALATED_REMINDER : REPEATED_STALL_REMINDER
 			}
 			return hit.reminder
 		}
 		consecutiveStalls = 0
+		if (!budgetLeft) {
+			return undefined
+		}
 
 		// The judge weighs in once per run, only on agentic act-mode runs, and
 		// never on the reply that answers a reminder: that reply is the model's
@@ -255,8 +334,7 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 			options.onJudge?.("done", verdict.reason)
 			return undefined
 		}
-		nudgesThisRun += 1
-		lastNudgeIteration = iteration
+		recordNudge(iteration)
 		firedRules.add("judge")
 		options.onJudge?.("not-done", verdict.reason)
 		options.onNudge?.({

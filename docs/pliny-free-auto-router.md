@@ -138,10 +138,16 @@ BalanceAuto, only when the turn's last call ran on a free model — see
 - **Pattern rules** (`unfinished-turn-guard.ts`, applied by
   `completion-guard.ts`) read the reply and, for the shell rule, the tool result
   it follows. A hit sends the model a `[SYSTEM]` reminder naming the problem
-  and the chat shows `↻ … (rule: wait-bail-out, 1/3)`. A model that answers a
+  and the chat shows `↻ … (rule: wait-bail-out, 1/8)`. A model that answers a
   reminder with the same stall gets one firmer reminder and the rest of the turn
   moves to the default route's lead model (`↪ switching to …`); a third stall in
-  a row is accepted. At most three reminders per run.
+  a row is accepted. The same switch happens on the third stall in a run even
+  when the model acted in between: some models (Kimi K2.6 is one) act on every
+  reminder and then stall again on the next step. A run gets at most eight
+  reminders, and at most three the model did not act on; a reminder followed by
+  a tool call does not count against the three. When the guard lets a stalled
+  reply end the run, the chat says why (`⏹ … not asking again: …`) instead of
+  ending on a plain "Completed", and the run log records it as `guardGaveUp`.
 - **The judge** (`router-completion-judge.ts`) runs once per run, only in act
   mode and only when the run made at least one tool call, when no rule fired: a
   small model is shown the request, what the run did and the final reply, and

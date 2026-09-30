@@ -54,6 +54,7 @@ interface RunRecord {
 	guardRules: string[]
 	nudges: number
 	escalated?: boolean
+	guardGaveUp?: "repeated-stall" | "unanswered-budget" | "total-budget"
 	judge?: "done" | "not-done" | "no-verdict" | "skipped"
 	replyChars?: number
 	replyTail?: string
@@ -131,6 +132,7 @@ function summariseRuns(records: RunRecord[]) {
 		text: percent(text.length, records.length),
 		nudged: percent(records.filter((r) => r.nudges > 0).length, records.length),
 		escalated: records.filter((r) => r.escalated).length,
+		gaveUp: records.filter((r) => r.guardGaveUp).length,
 		judgeNotDone: records.filter((r) => r.judge === "not-done").length,
 		afterFailed: records.filter(isUncaughtEarlyStop).length,
 		errors: records.filter((r) => r.ending === "error").length,
@@ -143,13 +145,13 @@ function runsTable(title: string, groups: Map<string, RunRecord[]>): string {
 		.sort((a, b) => b[1].length - a[1].length)
 		.map(([key, records]) => {
 			const s = summariseRuns(records)
-			return `| ${key} | ${s.runs} | ${s.text} | ${s.nudged} | ${s.escalated} | ${s.judgeNotDone} | ${s.afterFailed} | ${s.errors} | ${s.calls} |`
+			return `| ${key} | ${s.runs} | ${s.text} | ${s.nudged} | ${s.escalated} | ${s.gaveUp} | ${s.judgeNotDone} | ${s.afterFailed} | ${s.errors} | ${s.calls} |`
 		})
 	return [
 		`## ${title}`,
 		"",
-		"| | Runs | Text endings | Nudged | Escalated | Judge: not done | Ended after failed cmd, no nudge | Errors | Calls/run (median) |",
-		"| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+		"| | Runs | Text endings | Nudged | Escalated | Guard gave up | Judge: not done | Ended after failed cmd, no nudge | Errors | Calls/run (median) |",
+		"| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 		...rows,
 		"",
 	].join("\n")

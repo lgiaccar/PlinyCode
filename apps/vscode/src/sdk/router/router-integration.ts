@@ -467,7 +467,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// get no completion policy), so both its state and the BalanceAuto "is a
 	// free model answering?" check are the root turn's — never a sub-agent's.
 	const rootState = () => getSessionState(deps.sessionId)
-	const MAX_NUDGES = 3
+	const MAX_NUDGES = 8
 	config.completionGuard = createRouterCompletionGuard({
 		isActive: () => freeModelIsAnswering(deps.sessionId),
 		getMode: deps.getMode,
@@ -523,8 +523,22 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			}
 			Logger.log(`[FreeAuto] completion guard fired (${rule}${escalated ? ", escalated" : ""}): ${excerpt}`)
 		},
+		onGiveUp: ({ rule, excerpt, reason }) => {
+			rootState().run.guardGaveUp = reason
+			const why =
+				reason === "repeated-stall"
+					? "it stalled three times in a row"
+					: reason === "unanswered-budget"
+						? "it ignored too many reminders this turn"
+						: `all ${MAX_NUDGES} reminders for this turn are used up`
+			emitInfo(
+				`\`${formatClock(now())}\` ⏹ The model stopped again after _"${excerpt}"_ · not asking again: ${why}. ` +
+					"The task may be unfinished; send a message to continue.",
+			)
+			Logger.warn(`[FreeAuto] completion guard gave up (${rule}, ${reason}): ${excerpt}`)
+		},
 		onEscalate: () => {
-			// A model that ignores a reminder gets swapped for the default
+			// A model that ignores a reminder, or keeps stalling between steps, gets swapped for the default
 			// route's lead — the one that keeps acting on long tasks.
 			if (!isRouted()) {
 				return
