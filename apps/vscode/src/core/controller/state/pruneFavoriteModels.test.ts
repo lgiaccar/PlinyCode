@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test"
 import type { ModelInfo } from "@shared/api"
+import { describe, expect, it } from "vitest"
 import type { ProviderModelsResult } from "@/sdk/model-catalog/contracts"
 import { pruneFavoriteModels } from "./pruneFavoriteModels"
 
