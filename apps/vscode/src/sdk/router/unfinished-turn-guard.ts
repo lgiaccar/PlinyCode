@@ -94,12 +94,22 @@ const IMPERATIVE_STEP =
 	/^(check|verify|confirm|inspect|examine|look|read|open|list|find|search|locate|get|extract|parse|collect|gather|run|execute|launch|start|kick|rerun|re-run|build|compile|install|test|create|write|add|append|update|edit|modify|fix|remove|delete|move|copy|rename|generate|implement|complete|finish|continue|wait|poll|monitor|watch|report|give|provide|show|display|print|summarize|summarise|compare|analyze|analyse|determine|identify|ensure|make|prepare|load|save|set|use|call|try|apply|clean|reset|restart|stop|kill|switch|checkout|pull|push|commit|merge|clone|fetch|document|review)\b/i
 
 /**
+ * A line that announces a tool action and stops at the colon, leaving the list
+ * below it to say on what: "Let me read:", "I'll check these files:". Verbs
+ * that introduce an answer ("let me summarize:", "I'll explain:") are left out
+ * on purpose.
+ */
+const ACTION_INTRO =
+	/\b(let me|i'll|i will|i need to|i should|i must|i'm going to|i am going to)\s+(?:(?:now|first|also|then|just|quickly)\s+)*(read|check|look|open|inspect|examine|view|run|execute|search|find|fetch|list|verify|test|build|edit|update|create|write|fix)\b[^.!?]*:\s*$/i
+
+/**
  * True when the reply ends with the model's to-do list: an "I need to:" line
  * followed by imperative steps and nothing after. Reasoning models that think
  * in their content end this way — the plan is the whole reply, and the first
  * step's tool call never comes. A results list ("- stage: 476s") or a list of
  * options for the user does not match: it needs both the first-person intro
- * and imperative items.
+ * and imperative items, or an intro that names the action itself ("Let me
+ * read:") above the things it applies to.
  */
 export function endsWithPlanList(text: string): boolean {
 	const lines = text
@@ -117,10 +127,15 @@ export function endsWithPlanList(text: string): boolean {
 		items.unshift(match[1])
 		index -= 1
 	}
+	const intro = lines[index] ?? ""
+	// "Let me read:" followed by the files to read: the items are the verb's
+	// objects, so they need not be steps themselves.
+	if (items.length > 0 && ACTION_INTRO.test(intro)) {
+		return true
+	}
 	if (items.length < 2 || !items.every((item) => IMPERATIVE_STEP.test(item))) {
 		return false
 	}
-	const intro = lines[index] ?? ""
 	return PLAN_INTRO.test(intro)
 }
 

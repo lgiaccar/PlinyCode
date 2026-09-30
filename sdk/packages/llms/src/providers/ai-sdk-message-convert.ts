@@ -17,8 +17,14 @@ import {
 	type ToolSet,
 } from "ai";
 import {
+	parseGluedToolCall,
+	resolveMisnamedTool,
+	withKimiToolCallIds,
+} from "./kimi-tool-calls";
+import {
 	isAnthropicCompatibleModel,
 	isCerebrasProvider,
+	isKimiModel,
 	modelSupportsImageInput,
 	resolveModelFamily,
 } from "./model-facts";
@@ -93,7 +99,15 @@ export function buildAiSdkRequestMessages(
 	context: GatewayProviderContext,
 	systemPrompt?: string,
 ) {
-	const aiMessages = toAiSdkMessages(request.messages, systemPrompt, {
+	// Kimi is shown its earlier calls by id and imitates what it sees, so the
+	// ids in its history must be the ones it writes itself.
+	const messages = isKimiModel(request, context)
+		? withKimiToolCallIds(
+				request.messages,
+				(request.tools ?? []).map((tool) => tool.name),
+			)
+		: request.messages;
+	const aiMessages = toAiSdkMessages(messages, systemPrompt, {
 		includeReasoning: shouldIncludeReasoningHistory(request, context),
 		supportedInputModalities:
 			context.model.modalities?.input ??
@@ -361,55 +375,15 @@ interface RepairableToolCall {
 }
 
 /**
- * Namespaces some models glue onto a tool name. Kimi K2.6's chat template
- * leaks its `functions` namespace into the name it emits
- * (`functions-read_files`, `functions.read_files`), and the gateway passes
- * that through as the tool name; other open models hyphenate
- * (`run-commands`). The AI SDK then rejects the call as an unavailable tool,
- * and a weak model rarely recovers from that error: it apologises in text,
- * announces the corrected call, and never makes it.
- */
-const TOOL_NAME_NAMESPACE =
-	/^(?:functions|function|tools|tool|default_api|namespace|multi_tool_use)[.:/_-]+/i;
-
-/**
- * The available tool a misnamed call most plausibly meant: the name with its
- * namespace stripped, compared case-insensitively and with hyphens read as
- * underscores. Undefined when nothing matches, or when the name was fine.
- */
-export function resolveMisnamedTool(
-	toolName: string,
-	availableTools: readonly string[],
-): string | undefined {
-	const requested = toolName.trim();
-	if (!requested || availableTools.includes(requested)) {
-		return undefined;
-	}
-	const normalize = (name: string) => name.toLowerCase().replace(/-/g, "_");
-	const byNormalized = new Map(
-		availableTools.map((name) => [normalize(name), name] as const),
-	);
-	for (const candidate of [
-		requested,
-		requested.replace(TOOL_NAME_NAMESPACE, ""),
-	]) {
-		if (availableTools.includes(candidate)) {
-			return candidate;
-		}
-		const match = byNormalized.get(normalize(candidate));
-		if (match) {
-			return match;
-		}
-	}
-	return undefined;
-}
-
-/**
  * Last-chance repair for tool calls the AI SDK could not accept.
  *
  * - An unavailable tool name is mapped onto the tool the model meant when the
- *   name only differs by a leaked namespace, case or hyphens
- *   (`resolveMisnamedTool`). Anything else stays an unavailable-tool error.
+ *   name only differs by a leaked namespace, case, hyphens or a call index
+ *   (`resolveMisnamedTool`).
+ * - A whole call glued into the name — Kimi's call id, its JSON arguments and
+ *   its control tokens, with the arguments themselves empty — is taken apart
+ *   again (`parseGluedToolCall`). Anything else stays an unavailable-tool
+ *   error.
  * - Arguments that are not valid JSON (truncated payloads, single quotes,
  *   unescaped newlines — common with weaker models) are run through the
  *   shared jsonrepair strategies. Already-valid JSON is a schema mismatch,
@@ -431,7 +405,21 @@ export async function repairMalformedToolCall<T extends RepairableToolCall>({
 			(error as { availableTools?: readonly string[] }).availableTools ??
 			Object.keys(tools ?? {});
 		const toolName = resolveMisnamedTool(toolCall.toolName, available);
-		return toolName ? { ...toolCall, toolName } : null;
+		if (toolName) {
+			return { ...toolCall, toolName };
+		}
+		const glued = parseGluedToolCall(toolCall.toolName, available);
+		if (!glued) {
+			return null;
+		}
+		// The arguments travelled in the name; the call's own are empty.
+		return {
+			...toolCall,
+			toolName: glued.toolName,
+			...(glued.input && hasNoArguments(toolCall.input)
+				? { input: glued.input }
+				: {}),
+		};
 	}
 	if (typeof toolCall.input !== "string" || toolCall.input.trim() === "") {
 		return null;
@@ -450,6 +438,22 @@ export async function repairMalformedToolCall<T extends RepairableToolCall>({
 		return null;
 	}
 	return { ...toolCall, input: JSON.stringify(repaired) };
+}
+
+/** True for a call whose arguments are missing, blank or `{}`. */
+function hasNoArguments(input: unknown): boolean {
+	if (typeof input !== "string" || input.trim() === "") {
+		return true;
+	}
+	try {
+		const parsed = JSON.parse(input);
+		return (
+			parsed === null ||
+			(typeof parsed === "object" && Object.keys(parsed).length === 0)
+		);
+	} catch {
+		return false;
+	}
 }
 
 function normalizeAiSdkToolInputSchema(

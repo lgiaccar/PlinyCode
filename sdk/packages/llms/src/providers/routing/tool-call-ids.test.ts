@@ -75,6 +75,27 @@ describe("withSafeToolCallIds", () => {
 		expect(withSafeToolCallIds(body)).toBe(body);
 	});
 
+	it.each([
+		"snps-provider/kimi-k2.6",
+		"moonshotai/Kimi-K2.6",
+	])("leaves the ids of a request to %s as they are", (model) => {
+		// Kimi reads the tool's name from the id of its earlier calls.
+		const body = {
+			model,
+			messages: [
+				{ role: "assistant", tool_calls: [{ id: "functions.read_files:3" }] },
+				{ role: "tool", tool_call_id: "functions.read_files:3", content: "ok" },
+			],
+		};
+		expect(withSafeToolCallIds(body)).toBe(body);
+		// The same history on its way to any other model is still rewritten.
+		const other = withSafeToolCallIds({
+			...body,
+			model: "snps-provider/glm-5.2",
+		});
+		expect(JSON.stringify(other)).not.toContain("functions.read_files:3");
+	});
+
 	it("ignores bodies without messages", () => {
 		const body = { input: "x" };
 		expect(withSafeToolCallIds(body)).toBe(body);

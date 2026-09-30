@@ -29,6 +29,8 @@ import {
 	isRetryableBeyondSdkRetries,
 } from "./error-classification";
 import { extractErrorMessage } from "./format";
+import { createLeakedToolCallFilter, displayToolName } from "./kimi-tool-calls";
+import { isKimiModel } from "./model-facts";
 import type {
 	AiSdkStreamPart,
 	AiSdkStreamResult,
@@ -89,8 +91,11 @@ export function describeUnavailableToolCall(input: {
 	modelId: string;
 }): string {
 	const suggestion = suggestToolName(input.toolName, input.availableTools);
+	// A model can glue a whole call into the name; quoting all of it back
+	// twice only gives the model more of it to imitate.
+	const toolName = displayToolName(input.toolName);
 	return [
-		`Tool call ${input.toolName} was rejected before execution: no tool is named "${input.toolName}" (emitted by ${input.providerId}/${input.modelId}).`,
+		`Tool call ${toolName} was rejected before execution: no tool is named "${toolName}" (emitted by ${input.providerId}/${input.modelId}).`,
 		suggestion ? `Did you mean "${suggestion}"?` : undefined,
 		"Call a tool by its exact name, without any namespace or prefix.",
 		input.availableTools.length
@@ -303,6 +308,13 @@ export async function* emitAiSdkEvents(
 	// error parts are matched by ID because some providers omit the
 	// providerExecuted flag on the result half of the pair.
 	const observationalProviderToolCallIds = new Set<string>();
+	// Kimi's server sometimes leaves a tool call it could not parse in the
+	// reply text. The section is held back and, once the reply is complete,
+	// read as the tool calls it was meant to be.
+	const leakedToolCalls =
+		request.tools?.length && isKimiModel(request, context)
+			? createLeakedToolCallFilter(request.tools.map((tool) => tool.name))
+			: undefined;
 
 	try {
 		if (stream.fullStream) {
@@ -312,9 +324,11 @@ export async function* emitAiSdkEvents(
 						(part.textDelta as string | undefined) ??
 						(part.text as string | undefined) ??
 						(part.delta as string | undefined);
-					if (text) {
+					const shown =
+						text && leakedToolCalls ? leakedToolCalls.push(text) : text;
+					if (shown) {
 						sawVisibleContent = true;
-						yield { type: "text-delta", text };
+						yield { type: "text-delta", text: shown };
 					}
 					continue;
 				}
@@ -661,6 +675,42 @@ export async function* emitAiSdkEvents(
 		// Prefer the real provider error from onError over the generic
 		// NoOutputGeneratedError the AI SDK throws when 0 steps are recorded.
 		streamError = capturedError?.current ?? captureStreamError(error);
+	}
+
+	if (leakedToolCalls) {
+		// A reply that failed or was cut short may hold half a call: show it
+		// as the text it arrived as.
+		const leaked = leakedToolCalls.finish({
+			recover: !streamError && !streamAborted,
+		});
+		if (leaked.text) {
+			sawVisibleContent = true;
+			yield { type: "text-delta", text: leaked.text };
+		}
+		for (const call of leaked.calls) {
+			sawToolCalls = true;
+			sawVisibleContent = true;
+			const toolCallId = `tool_${nanoid()}`;
+			emittedToolCallIds.add(toolCallId);
+			context.logger?.log("Recovered a tool call left in the reply text", {
+				severity: "warn",
+				providerId: request.providerId,
+				modelId: request.modelId,
+				toolName: call.toolName,
+			});
+			yield {
+				type: "tool-call-delta",
+				toolCallId,
+				toolName: call.toolName,
+				input: call.input,
+				inputText: JSON.stringify(call.input),
+				metadata: buildToolCallMetadata({
+					metadata: undefined,
+					request,
+					context,
+				}),
+			};
+		}
 	}
 
 	if (!streamError) {

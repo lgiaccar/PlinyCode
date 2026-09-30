@@ -85,6 +85,25 @@ describe("looksUnfinished", () => {
 		).toBe(false)
 		expect(endsWithPlanList("I need to:\n1. Check the logs")).toBe(false)
 	})
+
+	// Kimi K2.6, right after a reminder: the verb is in the intro and the list only names the files.
+	it("flags an announced action whose list names what it applies to", () => {
+		const reply =
+			"I need to read the relevant files to understand where the token is stored and how to refresh it. Let me read:\n" +
+			"1. `scripts\\conan\\Conan_Installation.bat`\n" +
+			"2. `scripts\\repo\\setup_lfs_credentials.bat` (or `.sh`)\n" +
+			"3. Any related credential storage scripts"
+		expect(endsWithPlanList(reply)).toBe(true)
+		expect(looksUnfinished(reply)).toBe(true)
+		expect(looksUnfinished("I'll now check these files:\n- src/a.ts")).toBe(true)
+	})
+
+	it("accepts a list that an answer introduces", () => {
+		expect(looksUnfinished("Let me summarize what changed:\n1. The guard counts stalls\n2. The docs say so")).toBe(false)
+		expect(
+			looksUnfinished("I checked both scripts. The token is stored in:\n- the Windows credential manager\n- ~/.conan"),
+		).toBe(false)
+	})
 })
 
 const PLAN_LISTS = [
