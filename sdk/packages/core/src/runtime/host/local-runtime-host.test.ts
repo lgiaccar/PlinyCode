@@ -541,6 +541,63 @@ describe("LocalRuntimeHost", () => {
 		expect(sessionService.writeSessionManifest).not.toHaveBeenCalled();
 	});
 
+	it("shows metadata written through updateSession to readers of a loaded session", async () => {
+		const sessionId = "sess-metadata-update-live";
+		const manifest = createManifest(sessionId);
+		const sessionService = {
+			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
+			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
+				manifestPath: "/tmp/manifest.json",
+				messagesPath: "/tmp/messages.json",
+				manifest,
+			}),
+			persistSessionMessages: vi.fn(),
+			updateSessionStatus: vi.fn().mockResolvedValue({ updated: true }),
+			updateSession: vi.fn().mockResolvedValue({ updated: true }),
+			writeSessionManifest: vi.fn(),
+			listSessions: vi.fn().mockResolvedValue([]),
+			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
+		};
+		const agent = {
+			run: vi.fn().mockResolvedValue(createResult()),
+			continue: vi.fn().mockResolvedValue(createResult()),
+			getMessages: vi.fn().mockReturnValue([]),
+			getAgentId: vi.fn().mockReturnValue("agent-root-1"),
+			getConversationId: vi.fn().mockReturnValue("conv-root-1"),
+			abort: vi.fn(),
+			subscribeEvents: vi.fn().mockReturnValue(() => {}),
+			updateConnection: vi.fn(),
+			canStartRun: vi.fn().mockReturnValue(true),
+			shutdown: vi.fn().mockResolvedValue(undefined),
+		};
+		const manager = new RuntimeHostUnderTest({
+			distinctId,
+			sessionService: sessionService as never,
+			runtimeBuilder: {
+				build: vi.fn().mockReturnValue({ tools: [], shutdown: vi.fn() }),
+			} as never,
+			createAgent: vi.fn(() => agent as never),
+		});
+		await manager.startSession(
+			normalizeStartInput({
+				config: createConfig({ sessionId }),
+				prompt: "hello",
+				interactive: true,
+			}),
+		);
+
+		// The host sets the conversation's budget while the session is loaded.
+		const metadata = { spendingLimit: 10, spendingStep: 10 };
+		(sessionService as Record<string, unknown>).readSessionManifest = vi
+			.fn()
+			.mockResolvedValue({ ...manifest, metadata });
+		await manager.updateSession(sessionId, { metadata });
+
+		expect((await manager.getSession(sessionId))?.metadata).toMatchObject(
+			metadata,
+		);
+	});
+
 	it("persists thinking budget token connection updates", async () => {
 		const sessionId = "sess-thinking-budget-update";
 		const manifest = createManifest(sessionId);

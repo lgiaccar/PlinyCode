@@ -49,6 +49,11 @@ export class ClineFileStorage<T = any> extends ClineSyncStorage<T> {
 	 * since it only writes to disk once.
 	 */
 	public setBatch(entries: Record<string, T | undefined>): Thenable<void> {
+		// Every VS Code window keeps its own instance on the same file. Start
+		// from what is on disk now, so this write replaces only `entries` and
+		// never puts back keys another window has changed since this one loaded
+		// (which is how favorites and other global settings were lost).
+		this.reload()
 		const changedKeys: string[] = []
 		for (const [key, value] of Object.entries(entries)) {
 			if (value === undefined) {
@@ -56,7 +61,7 @@ export class ClineFileStorage<T = any> extends ClineSyncStorage<T> {
 					delete this.data[key]
 					changedKeys.push(key)
 				}
-			} else {
+			} else if (JSON.stringify(this.data[key]) !== JSON.stringify(value)) {
 				this.data[key] = value
 				changedKeys.push(key)
 			}
@@ -70,19 +75,35 @@ export class ClineFileStorage<T = any> extends ClineSyncStorage<T> {
 		return Promise.resolve()
 	}
 
+	/** Takes in what other writers of the file have saved since this instance last read it. */
+	public reload(): void {
+		const onDisk = this.tryReadFromDisk()
+		if (onDisk) {
+			this.data = onDisk
+		}
+	}
+
 	protected _keys(): readonly string[] {
 		return Object.keys(this.data)
 	}
 
 	private readFromDisk(): Record<string, T> {
+		return this.tryReadFromDisk() ?? {}
+	}
+
+	/** The file's contents; undefined when it is missing or unreadable, so a bad read never wipes the store. */
+	private tryReadFromDisk(): Record<string, T> | undefined {
 		try {
 			if (fs.existsSync(this.fsPath)) {
-				return JSON.parse(fs.readFileSync(this.fsPath, "utf-8"))
+				const parsed = JSON.parse(fs.readFileSync(this.fsPath, "utf-8"))
+				if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+					return parsed
+				}
 			}
 		} catch (error) {
 			Logger.error(`[${this.name}] failed to read from ${this.fsPath}:`, error)
 		}
-		return {}
+		return undefined
 	}
 
 	private writeToDisk(): void {

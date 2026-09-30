@@ -219,7 +219,35 @@ describe("ai-sdk adapter malformed tool calls", () => {
 			[RUN_COMMANDS_TOOL, READ_FILES_TOOL],
 		);
 
-		expect(findParseError(events)).toContain("unavailable tool 'editor'");
+		const error = findParseError(events);
+		expect(error).toContain('no tool is named "editor"');
+		expect(error).toContain("emitted by openai-compatible/test-model");
+		expect(error).toContain("Available tools: run_commands, read_files.");
+	});
+
+	it("suggests the closest tool for a misspelled name", async () => {
+		const events = await streamToolCallEvents(
+			sseToolCall("read_file", '{"files": [{"path": "/tmp/a.txt"}]}'),
+			[RUN_COMMANDS_TOOL, READ_FILES_TOOL],
+		);
+
+		expect(findParseError(events)).toContain('Did you mean "read_files"?');
+	});
+
+	it.each([
+		"functions-read_files",
+		"functions.read_files",
+	])("runs a call emitted as %s as read_files", async (emitted) => {
+		const events = await streamToolCallEvents(
+			sseToolCall(emitted, '{"files": [{"path": "/tmp/a.txt"}]}'),
+			[RUN_COMMANDS_TOOL, READ_FILES_TOOL],
+		);
+
+		expect(findParseError(events)).toBeUndefined();
+		const call = events.find(
+			(event) => event.type === "tool-call-delta" && event.input !== undefined,
+		);
+		expect(call).toMatchObject({ toolName: "read_files" });
 	});
 });
 

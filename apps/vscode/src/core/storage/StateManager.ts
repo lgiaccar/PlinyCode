@@ -226,6 +226,25 @@ export class StateManager {
 	}
 
 	/**
+	 * Re-reads one global key from disk into the cache and returns it, unless this
+	 * window has an unsaved change to it. Use it before a read-modify-write of a
+	 * key other windows also change (favorites), so their changes are kept.
+	 */
+	reloadGlobalStateKey<K extends keyof GlobalState>(key: K): GlobalState[K] {
+		if (!this.isInitialized) {
+			throw new Error(STATE_MANAGER_NOT_INITIALIZED)
+		}
+		if (!this.pendingGlobalState.has(key)) {
+			this.storage.globalStateBackingStore.reload()
+			const stored = this.storage.globalStateBackingStore.get<GlobalStateAndSettings[K]>(key)
+			if (stored !== undefined) {
+				this.globalStateCache[key] = stored
+			}
+		}
+		return this.getGlobalStateKey(key)
+	}
+
+	/**
 	 * Batch set method for global state keys - updates cache immediately and schedules debounced persistence
 	 */
 	setGlobalStateBatch(updates: Partial<GlobalStateAndSettings>): void {

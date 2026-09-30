@@ -1153,7 +1153,33 @@ export class LocalRuntimeHost implements RuntimeHost {
 				title: updates.title,
 			},
 		);
-		return { updated: result?.updated === true };
+		const updated = result?.updated === true;
+		const active = this.sessions.get(sessionId);
+		if (
+			updated &&
+			active &&
+			(updates.metadata !== undefined ||
+				updates.title !== undefined ||
+				updates.prompt !== undefined)
+		) {
+			// A loaded session answers getSession() from memory and writes that
+			// copy back at turn boundaries. Take the stored metadata into it, or
+			// host edits made mid-session (a conversation's budget, its title)
+			// are invisible to readers and later overwritten.
+			const manifest = await this.invokeOptionalValue<SessionManifest>(
+				"readSessionManifest",
+				sessionId,
+			);
+			const metadata =
+				(manifest?.metadata as Record<string, unknown> | undefined) ??
+				updates.metadata ??
+				undefined;
+			active.sessionMetadata = metadata;
+			if (active.artifacts) {
+				active.artifacts.manifest.metadata = metadata;
+			}
+		}
+		return { updated };
 	}
 
 	async updateSessionCompactionState(

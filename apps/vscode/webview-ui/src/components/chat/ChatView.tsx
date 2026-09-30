@@ -34,6 +34,7 @@ import {
 	isPendingResponseUnconfirmed,
 	withPendingUserMessage,
 } from "./chat-view/utils/pendingResponse"
+import { bindScheduledPromptsToTask, isScheduledForTask, takeDueScheduledPrompts } from "./chat-view/utils/scheduledPrompts"
 import type { ScheduleRepeat } from "./scheduleTime"
 
 interface ChatViewProps {
@@ -55,6 +56,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		editMessageRestartFocus,
 		queuedPrompts,
 		turnState,
+		currentTaskItem,
 	} = useExtensionState()
 
 	// Use custom hooks for state management
@@ -76,7 +78,18 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		textAreaRef,
 	} = chatState
 
+	// Scheduled prompts belong to the conversation they were scheduled in: only
+	// that conversation shows them, and they are sent only while it is on screen.
 	const [scheduledPrompts, setScheduledPrompts] = useState<ScheduledPrompt[]>([])
+	const currentTaskId = currentTaskItem?.id
+	const currentTaskIdRef = useRef(currentTaskId)
+	currentTaskIdRef.current = currentTaskId
+	const scheduledPromptsRef = useRef(scheduledPrompts)
+	scheduledPromptsRef.current = scheduledPrompts
+	const visibleScheduledPrompts = useMemo(
+		() => scheduledPrompts.filter((p) => isScheduledForTask(p, currentTaskId)),
+		[scheduledPrompts, currentTaskId],
+	)
 
 	const handleSchedulePrompt = useCallback(
 		(text: string, images: string[], files: string[], scheduledAt: number, repeat?: ScheduleRepeat) => {
@@ -88,12 +101,19 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 					images,
 					files,
 					scheduledAt,
+					taskId: currentTaskIdRef.current,
 					...(repeat ? { remaining: repeat.count, intervalMs: repeat.intervalMs } : {}),
 				},
 			])
 		},
 		[],
 	)
+
+	useEffect(() => {
+		if (currentTaskId) {
+			setScheduledPrompts((prev) => bindScheduledPromptsToTask(prev, currentTaskId))
+		}
+	}, [currentTaskId])
 
 	const displayMessages = useMemo(() => withPendingUserMessage(messages, pendingUserMessage), [messages, pendingUserMessage])
 
@@ -240,27 +260,16 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 	useEffect(() => {
 		const interval = setInterval(() => {
 			const now = Date.now()
-			setScheduledPrompts((prev) => {
-				const due = prev.filter((p) => p.scheduledAt <= now)
-				for (const p of due) {
-					messageHandlersRef.current.handleSendMessage(p.text, p.images, p.files)
-				}
-				// A repeating prompt stays, moved one interval on, until its sends run out.
-				return prev.flatMap((p) => {
-					if (p.scheduledAt > now) {
-						return [p]
-					}
-					const remaining = (p.remaining ?? 1) - 1
-					if (remaining < 1 || !p.intervalMs) {
-						return []
-					}
-					let next = p.scheduledAt + p.intervalMs
-					while (next <= now) {
-						next += p.intervalMs
-					}
-					return [{ ...p, remaining, scheduledAt: next }]
-				})
-			})
+			const taskId = currentTaskIdRef.current
+			const { due } = takeDueScheduledPrompts(scheduledPromptsRef.current, now, taskId)
+			if (due.length === 0) {
+				return
+			}
+			// Sent outside the state updater, which React may run twice.
+			setScheduledPrompts((prev) => takeDueScheduledPrompts(prev, now, taskId).rest)
+			for (const p of due) {
+				messageHandlersRef.current.handleSendMessage(p.text, p.images, p.files)
+			}
 		}, 5000)
 		return () => clearInterval(interval)
 	}, [])
@@ -478,7 +487,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 					task={task}
 				/>
 				<ScheduledPrompts
-					items={scheduledPrompts}
+					items={visibleScheduledPrompts}
 					onCancel={(id) => setScheduledPrompts((prev) => prev.filter((p) => p.id !== id))}
 				/>
 				<QueuedPrompts items={queuedPrompts} />
