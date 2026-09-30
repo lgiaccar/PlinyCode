@@ -12,6 +12,7 @@
  * user messages.
  */
 
+import type { GuardGiveUpReason } from "./completion-guard"
 import type { RouterCallRecord, RouterClassification } from "./router-types"
 
 interface ModelHealth {
@@ -103,8 +104,10 @@ export interface RouterRunState {
 	guardRules: string[]
 	/** Reminders sent this run. */
 	nudges: number
-	/** A second consecutive stall made the guard escalate (and switch model). */
+	/** A second consecutive stall, or one stall too many, made the guard escalate (and switch model). */
 	escalated?: boolean
+	/** The guard let a stalled reply end the run, and why. */
+	guardGaveUp?: GuardGiveUpReason
 	/** Outcome of the completion judge, when it was consulted. */
 	judge?: "done" | "not-done" | "no-verdict" | "skipped"
 	/** Length and tail of the reply that ended the run, for the run log. */

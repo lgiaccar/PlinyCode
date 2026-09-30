@@ -40,8 +40,8 @@ Sonnet, and most of them were routine edits the free coder does as well. The
 coding route now leads with the free models and reaches Sonnet 5 three ways:
 as the failover when both free candidates are down, as the catch-all
 `default` route for turns the classifier could not place, and through the
-completion guard's escalation, which moves a free model that stalled twice to
-the `default` route's lead, Sonnet 5, for the rest of the turn. Reasoning
+completion guard's escalation, which moves a free model that stalled twice in
+a row, or three times in the run, to the `default` route's lead, Sonnet 5, for the rest of the turn. Reasoning
 turns go straight to the Sonnet 4.6 thinking preset. The classifier guidance
 in the rules file says the same, so it picks `reason` only where a strong
 model changes the outcome.
@@ -105,7 +105,8 @@ the main agent's last call: a free sub-agent run inside a turn does not make a
 paid reply look like a free one. The command note follows whichever agent ran
 the command.
 
-When a free model ignores a reminder and stalls again, the rest of the turn moves
+When a free model ignores a reminder and stalls again, or keeps stalling between
+steps (three stalls in the run), the rest of the turn moves
 to the lead of the `default` route — on BalanceAuto that is Claude Sonnet 5, so
 the escalation hands the stuck step to a paid model that does not stall.
 

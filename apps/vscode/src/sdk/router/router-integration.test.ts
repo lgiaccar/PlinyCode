@@ -179,8 +179,27 @@ describe("installRouter completion guard", () => {
 		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
 		expect(state.run.escalated).toBe(true)
 		expect(state.run.guardRules).toEqual(["announcement", "announcement"])
-		// A third stall in a row is taken at its word.
+		// A third stall in a row is taken at its word, and the chat says so.
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 5 })).toBeUndefined()
+		expect(state.run.guardGaveUp).toBe("repeated-stall")
+		expect(rows.at(-1)).toContain("not asking again: it stalled three times in a row")
+	})
+
+	it("switches away from a model that stalls between every step, even though it acts when reminded", async () => {
+		const { config, rows } = install()
+		const state = getSessionState("s")
+		state.calls.push({ modelId: "snps-provider/kimi-k2.6", startedAt: NOW, routeName: "default" })
+		state.stickyModelId = "snps-provider/kimi-k2.6"
+
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 1 })).toContain("did not call a tool")
+		state.run.toolCalls += 1
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
+		state.run.toolCalls += 1
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 5 })).toContain("stopped several times")
+		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(state.run.escalated).toBe(true)
+		expect(state.run.guardGaveUp).toBeUndefined()
+		expect(rows.at(-2)).toContain("(3/8)")
 	})
 
 	it("appends a note to a failed shell result and remembers it for the guard", async () => {

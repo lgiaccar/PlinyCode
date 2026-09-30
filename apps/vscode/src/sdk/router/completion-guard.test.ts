@@ -5,6 +5,7 @@ import {
 	ESCALATED_REMINDER,
 	evaluateReply,
 	type GuardRule,
+	REPEATED_STALL_REMINDER,
 	UNFINISHED_TURN_REMINDER,
 	WAIT_BAIL_OUT_REMINDER,
 } from "./completion-guard"
@@ -132,12 +133,86 @@ describe("createRouterCompletionGuard", () => {
 	})
 
 	it("caps reminders per run and resets on the next run", async () => {
-		const guard = createRouterCompletionGuard({ isActive: () => true, maxNudgesPerRun: 2 })
+		const onGiveUp = vi.fn()
+		const guard = createRouterCompletionGuard({ isActive: () => true, maxNudgesPerRun: 2, onGiveUp })
 		expect(await guard({ message: unfinished, iteration: 2 })).toBeDefined()
 		expect(await guard({ message: unfinished, iteration: 5 })).toBeDefined()
 		expect(await guard({ message: unfinished, iteration: 8 })).toBeUndefined()
+		expect(onGiveUp).toHaveBeenCalledWith({ rule: "announcement", excerpt: "Let me check the log:", reason: "total-budget" })
 		// Iterations restart: a new run.
 		expect(await guard({ message: unfinished, iteration: 1 })).toBeDefined()
+	})
+
+	it("keeps a model going that acts on each reminder but stalls again on the next step", async () => {
+		// The Kimi pattern: announce a step, act when reminded, announce the
+		// next step, act when reminded… Each reminder works, so none of them
+		// may use up the run's patience; the third stall hands the turn to
+		// another model.
+		let toolCalls = 0
+		const onEscalate = vi.fn()
+		const onGiveUp = vi.fn()
+		const nudges: Array<{ nudgesThisRun: number; escalated: boolean }> = []
+		const guard = createRouterCompletionGuard({
+			isActive: () => true,
+			toolCallsThisRun: () => toolCalls,
+			onEscalate,
+			onGiveUp,
+			onNudge: (info) => nudges.push(info),
+		})
+		const reminders: Array<string | undefined> = []
+		for (let iteration = 1; iteration <= 15; iteration += 2) {
+			reminders.push(await guard({ message: unfinished, iteration }))
+			toolCalls += 1 // the model obeys: the next reply calls a tool
+		}
+		expect(reminders).toEqual([
+			UNFINISHED_TURN_REMINDER,
+			UNFINISHED_TURN_REMINDER,
+			REPEATED_STALL_REMINDER,
+			UNFINISHED_TURN_REMINDER,
+			UNFINISHED_TURN_REMINDER,
+			REPEATED_STALL_REMINDER,
+			UNFINISHED_TURN_REMINDER,
+			UNFINISHED_TURN_REMINDER,
+		])
+		expect(onEscalate).toHaveBeenCalledTimes(2)
+		expect(nudges.map((n) => n.nudgesThisRun)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+		expect(onGiveUp).not.toHaveBeenCalled()
+		// The total budget still ends a run that never finishes.
+		expect(await guard({ message: unfinished, iteration: 17 })).toBeUndefined()
+		expect(onGiveUp).toHaveBeenCalledWith(expect.objectContaining({ reason: "total-budget" }))
+	})
+
+	it("stops after too many reminders the model did not act on", async () => {
+		let toolCalls = 0
+		const onGiveUp = vi.fn()
+		const guard = createRouterCompletionGuard({
+			isActive: () => true,
+			toolCallsThisRun: () => toolCalls,
+			escalateAfterStalls: 99,
+			onGiveUp,
+		})
+		// Stall, stall again (escalated, unanswered), then act: the escalated
+		// reminder is refunded, the first one is not.
+		expect(await guard({ message: unfinished, iteration: 1 })).toBe(UNFINISHED_TURN_REMINDER)
+		expect(await guard({ message: unfinished, iteration: 2 })).toBe(ESCALATED_REMINDER)
+		toolCalls += 1
+		expect(await guard({ message: unfinished, iteration: 4 })).toBe(UNFINISHED_TURN_REMINDER)
+		expect(await guard({ message: unfinished, iteration: 5 })).toBe(ESCALATED_REMINDER)
+		toolCalls += 1
+		expect(await guard({ message: unfinished, iteration: 7 })).toBe(UNFINISHED_TURN_REMINDER)
+		expect(await guard({ message: unfinished, iteration: 8 })).toBeUndefined()
+		expect(onGiveUp).toHaveBeenCalledWith(expect.objectContaining({ reason: "unanswered-budget" }))
+	})
+
+	it("reports giving up on a third stall in a row, and never on a finished reply", async () => {
+		const onGiveUp = vi.fn()
+		const guard = createRouterCompletionGuard({ isActive: () => true, onGiveUp })
+		expect(await guard({ message: done, iteration: 1 })).toBeUndefined()
+		expect(onGiveUp).not.toHaveBeenCalled()
+		await guard({ message: unfinished, iteration: 2 })
+		await guard({ message: unfinished, iteration: 3 })
+		expect(await guard({ message: unfinished, iteration: 4 })).toBeUndefined()
+		expect(onGiveUp).toHaveBeenCalledWith(expect.objectContaining({ rule: "announcement", reason: "repeated-stall" }))
 	})
 
 	it("does nothing while inactive", async () => {
