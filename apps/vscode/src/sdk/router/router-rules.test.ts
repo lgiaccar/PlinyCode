@@ -213,13 +213,35 @@ describe("default routes", () => {
 		expect(route("huge-context")?.use).toContain(GLM)
 	})
 
-	it("leads the coding and default routes with the coder model and the sub-agent route with kimi", () => {
+	it("leads the coding, default and sub-agent routes with kimi, the coder as its backup", () => {
 		const KIMI = "snps-provider/kimi-k2.6"
-		expect(route("coding")?.use[0]).toBe(CODER)
-		expect(route("default")?.use[0]).toBe(CODER)
-		expect(route("default")?.use[1]).toBe(KIMI)
+		expect(route("coding")?.use[0]).toBe(KIMI)
+		expect(route("coding")?.use[1]).toBe(CODER)
+		expect(route("default")?.use[0]).toBe(KIMI)
+		expect(route("default")?.use[1]).toBe(CODER)
 		expect(route("subagent")?.use[0]).toBe(KIMI)
+		expect(route("plan-and-reasoning")?.use[0]).toBe(KIMI)
 		expect(defaultPool()[0]).toBe(KIMI)
+	})
+
+	it("gives the smart profile the same routes as the default one", () => {
+		expect(defaultRules("smart").routes).toEqual(defaultRules().routes)
+	})
+
+	it("routes the fast profile on the Qwen models and never leads a route with kimi", () => {
+		const KIMI = "snps-provider/kimi-k2.6"
+		const fast = defaultRules("fast")
+		const lead = (name: string) => fast.routes.find((r) => r.name === name)?.use[0]
+		expect(lead("coding")).toBe(CODER)
+		expect(lead("default")).toBe(CODER)
+		expect(lead("subagent")).toBe(CODER)
+		expect(lead("plan-and-reasoning")).toBe("snps-provider/qwen3.5-397b-fp8")
+		expect(lead("quick")).toBe("snps-provider/qwen3-next-80b-a3b-instruct-d79b4")
+		expect(fast.routes.every((r) => !r.use.includes(KIMI))).toBe(true)
+		// Still a deep fallback, never a preferred model.
+		expect(fast.pool).toContain(KIMI)
+		expect(fast.pool.indexOf(KIMI)).toBeGreaterThan(fast.pool.indexOf(CODER))
+		expect(fast.pool[0]).toBe(CODER)
 	})
 
 	it("sends merge-conflict prompts to the coding route", () => {
@@ -329,7 +351,10 @@ describe("balance profile", () => {
 	})
 
 	it("leads difficult work with a paid model and simple work with a free one", () => {
-		expect(route("coding")?.use[0]).toBe(SONNET_5)
+		// Coding leads free and keeps Sonnet 5 as the failover and escalation
+		// target; reasoning and the catch-all lead with paid Claude.
+		expect(route("coding")?.use[0]).toBe(KIMI)
+		expect(route("coding")?.use).toContain(SONNET_5)
 		expect(route("default")?.use[0]).toBe(SONNET_5)
 		expect(route("plan-and-reasoning")?.use[0]).toBe("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")
 		expect(route("quick")?.use[0]).toBe(KIMI)

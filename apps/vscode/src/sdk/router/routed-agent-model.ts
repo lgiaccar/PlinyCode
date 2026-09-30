@@ -56,6 +56,12 @@ export interface RoutedAgentModelDeps {
 	/** Router name used in user-facing errors; defaults to FreeAuto. */
 	label?: string
 	rules: () => RouterRules
+	/**
+	 * Resolves once the rules file has been read for the first time, so the
+	 * turn's first call follows the user's file rather than the built-in
+	 * defaults. Never rejects; a slow or missing file resolves to the defaults.
+	 */
+	awaitRules?: () => Promise<void>
 	features: (request: AgentModelRequest) => RouterRequestFeatures
 	knownModels: () => Record<string, ModelInfo> | undefined
 	isHealthy: (modelId: string) => boolean
@@ -217,6 +223,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 
 	return {
 		async *stream(request: AgentModelRequest): AsyncGenerator<AgentModelEvent> {
+			await deps.awaitRules?.()
 			const rules = deps.rules()
 			const features = deps.features(request)
 			const classification = features.hasImages ? undefined : await deps.classify?.(request, features, rules)

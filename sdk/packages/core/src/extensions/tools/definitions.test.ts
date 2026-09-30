@@ -55,7 +55,7 @@ describe("default skills tool", () => {
 		expect(toolsWithExecutor.map((tool) => tool.name)).toContain("skills");
 	});
 
-	it("includes configured skill names in description", () => {
+	it("includes configured skill names and descriptions in description", () => {
 		const executor = createMockSkillsExecutor(
 			async () => "ok",
 			[
@@ -70,7 +70,9 @@ describe("default skills tool", () => {
 			],
 		);
 		const tool = createSkillsTool(executor);
-		expect(tool.description).toContain("Available skills: commit, review-pr.");
+		expect(tool.description).toContain(
+			"Available skills: commit; review-pr (Review a PR).",
+		);
 		expect(tool.description).not.toContain("disabled-skill");
 	});
 

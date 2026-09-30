@@ -361,21 +361,77 @@ interface RepairableToolCall {
 }
 
 /**
- * Last-chance repair for tool calls whose arguments are not valid JSON
- * (truncated payloads, single quotes, unescaped newlines — common with
- * weaker models). Runs the raw argument text through the shared jsonrepair
- * strategies; unknown tool names and already-valid JSON are not repairable
- * here, and returning null preserves the AI SDK's original error behavior.
+ * Namespaces some models glue onto a tool name. Kimi K2.6's chat template
+ * leaks its `functions` namespace into the name it emits
+ * (`functions-read_files`, `functions.read_files`), and the gateway passes
+ * that through as the tool name; other open models hyphenate
+ * (`run-commands`). The AI SDK then rejects the call as an unavailable tool,
+ * and a weak model rarely recovers from that error: it apologises in text,
+ * announces the corrected call, and never makes it.
+ */
+const TOOL_NAME_NAMESPACE =
+	/^(?:functions|function|tools|tool|default_api|namespace|multi_tool_use)[.:/_-]+/i;
+
+/**
+ * The available tool a misnamed call most plausibly meant: the name with its
+ * namespace stripped, compared case-insensitively and with hyphens read as
+ * underscores. Undefined when nothing matches, or when the name was fine.
+ */
+export function resolveMisnamedTool(
+	toolName: string,
+	availableTools: readonly string[],
+): string | undefined {
+	const requested = toolName.trim();
+	if (!requested || availableTools.includes(requested)) {
+		return undefined;
+	}
+	const normalize = (name: string) => name.toLowerCase().replace(/-/g, "_");
+	const byNormalized = new Map(
+		availableTools.map((name) => [normalize(name), name] as const),
+	);
+	for (const candidate of [
+		requested,
+		requested.replace(TOOL_NAME_NAMESPACE, ""),
+	]) {
+		if (availableTools.includes(candidate)) {
+			return candidate;
+		}
+		const match = byNormalized.get(normalize(candidate));
+		if (match) {
+			return match;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Last-chance repair for tool calls the AI SDK could not accept.
+ *
+ * - An unavailable tool name is mapped onto the tool the model meant when the
+ *   name only differs by a leaked namespace, case or hyphens
+ *   (`resolveMisnamedTool`). Anything else stays an unavailable-tool error.
+ * - Arguments that are not valid JSON (truncated payloads, single quotes,
+ *   unescaped newlines — common with weaker models) are run through the
+ *   shared jsonrepair strategies. Already-valid JSON is a schema mismatch,
+ *   which the tool's own lenient schemas handle, so it is left alone.
+ *
+ * Returning null preserves the AI SDK's original error behavior.
  */
 export async function repairMalformedToolCall<T extends RepairableToolCall>({
 	toolCall,
+	tools,
 	error,
 }: {
 	toolCall: T;
+	tools?: Record<string, unknown>;
 	error: unknown;
 }): Promise<T | null> {
 	if (NoSuchToolError.isInstance(error)) {
-		return null;
+		const available =
+			(error as { availableTools?: readonly string[] }).availableTools ??
+			Object.keys(tools ?? {});
+		const toolName = resolveMisnamedTool(toolCall.toolName, available);
+		return toolName ? { ...toolCall, toolName } : null;
 	}
 	if (typeof toolCall.input !== "string" || toolCall.input.trim() === "") {
 		return null;

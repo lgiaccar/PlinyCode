@@ -263,12 +263,51 @@ describe("repairMalformedToolCall", () => {
 		expect(repaired).toBeNull();
 	});
 
-	it("returns null for unknown-tool errors", async () => {
+	it("returns null for unknown-tool errors that no available tool explains", async () => {
 		const repaired = await repairMalformedToolCall({
-			toolCall: toolCall('{"commands": ["ls"]}'),
-			error: new NoSuchToolError({ toolName: "run_commands" }),
+			toolCall: {
+				...toolCall('{"commands": ["ls"]}'),
+				toolName: "deploy_to_prod",
+			},
+			error: new NoSuchToolError({
+				toolName: "deploy_to_prod",
+				availableTools: ["run_commands", "read_files"],
+			}),
 		});
 		expect(repaired).toBeNull();
+	});
+
+	it.each([
+		["functions-read_files", "read_files"],
+		["functions.read_files", "read_files"],
+		["functions:run_commands", "run_commands"],
+		["run-commands", "run_commands"],
+		["Read_Files", "read_files"],
+		["default_api.plinycode-devops__pr_get", "plinycode-devops__pr_get"],
+	])("maps the misnamed tool %s onto %s", async (emitted, expected) => {
+		const available = [
+			"run_commands",
+			"read_files",
+			"plinycode-devops__pr_get",
+		];
+		const repaired = await repairMalformedToolCall({
+			toolCall: { ...toolCall('{"paths": ["a.ts"]}'), toolName: emitted },
+			error: new NoSuchToolError({
+				toolName: emitted,
+				availableTools: available,
+			}),
+		});
+		expect(repaired?.toolName).toBe(expected);
+		expect(repaired?.input).toBe('{"paths": ["a.ts"]}');
+	});
+
+	it("reads the available tools from the tool set when the error does not carry them", async () => {
+		const repaired = await repairMalformedToolCall({
+			toolCall: { ...toolCall("{}"), toolName: "functions-wait" },
+			tools: { wait: {}, read_files: {} },
+			error: new NoSuchToolError({ toolName: "functions-wait" }),
+		});
+		expect(repaired?.toolName).toBe("wait");
 	});
 
 	it("returns null for unrepairable garbage", async () => {

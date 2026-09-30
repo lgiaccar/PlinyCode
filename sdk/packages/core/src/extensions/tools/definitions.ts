@@ -710,6 +710,32 @@ export function createEditorTool(
 	});
 }
 
+/** Longest skill description carried into the tool description. */
+const SKILL_DESCRIPTION_MAX_CHARS = 160;
+
+/**
+ * `name (what it does)` for the tool description. A bare name list left the
+ * model guessing what `build-skill` or `grilling` covers, and the smaller
+ * models never picked a skill whose name did not repeat the user's words; the
+ * description is what tells them which skill a request matches.
+ */
+export function describeSkillForTool(skill: {
+	id: string;
+	name: string;
+	description?: string;
+}): string {
+	const name = skill.id.includes(":") ? skill.id : skill.name;
+	const description = skill.description?.replace(/\s+/g, " ").trim();
+	if (!description) {
+		return name;
+	}
+	const clipped =
+		description.length > SKILL_DESCRIPTION_MAX_CHARS
+			? `${description.slice(0, SKILL_DESCRIPTION_MAX_CHARS - 1).trimEnd()}…`
+			: description;
+	return `${name} (${clipped.replace(/[();]/g, " ").replace(/\s+/g, " ").trim()})`;
+}
+
 /**
  * Create the skills tool
  *
@@ -754,9 +780,9 @@ export function createSkillsTool(
 		get() {
 			const skills = executor.configuredSkills
 				?.filter((s) => !s.disabled)
-				.map((s) => (s.id.includes(":") ? s.id : s.name));
+				.map((s) => describeSkillForTool(s));
 			if (skills && skills.length > 0) {
-				return `${baseDescription} Available skills: ${skills.join(", ")}.`;
+				return `${baseDescription} Available skills: ${skills.join("; ")}.`;
 			}
 			return baseDescription;
 		},

@@ -75,6 +75,41 @@ export function classifyShellPrompt(lastLine: string): ShellPromptStrength {
 }
 
 /**
+ * Shapes of a program asking the keyboard a question. Matched against the last
+ * line of a command's output once it has been quiet for a while, so the odd
+ * log line that happens to end in "?" only matters if nothing follows it.
+ */
+const INPUT_PROMPT_PATTERNS: readonly RegExp[] = [
+	// "Overwrite? [y/N]", "Continue (yes/no)?", "Proceed [Y/n/a]:"
+	/[[(]\s*(?:y(?:es)?|no?)\s*\/\s*(?:y(?:es)?|no?)(?:\s*\/\s*[a-z]+)*\s*[\])]\s*[:?]?\s*$/i,
+	/\?\s*[[(][^\])]{1,24}[\])]\s*$/,
+	// Credentials: "Password:", "Enter passphrase for key:", "Username for 'https://…':"
+	/\b(?:password|passphrase|passcode|pin|otp|one-time (?:code|password)|verification code|access token|api key|username|user ?name|login|e-?mail)\b[^\n]{0,60}[:?]\s*$/i,
+	// "Press any key to continue . . .", "Press Enter to exit"
+	/\b(?:press|hit)\b[^\n]{0,30}\b(?:any key|enter|return|a key|space)\b/i,
+	// "Are you sure you want to delete it?", "Do you want to continue?"
+	/\b(?:are you sure|do you want|would you like|is (?:this|that) (?:ok|okay|correct)|continue|proceed|overwrite|replace|abort|retry|confirm)\b[^\n]{0,80}\?\s*$/i,
+	// "Enter a value:", "Select an option:", "Choose your preset >"
+	/\b(?:enter|type|input|choose|select|pick|specify|provide|what is|which)\b[^\n]{0,80}[:?>]\s*$/i,
+	// "(default: main)", "[default=yes]"
+	/[[(]default[^\])]{0,40}[\])]\s*[:?]?\s*$/i,
+]
+
+/**
+ * Whether the last output line of a quiet command reads as a question waiting
+ * for the keyboard. A shell prompt is not one (the command is over), nor is a
+ * long line: real prompts are short. Callers act on this only after the
+ * command has produced nothing for a while, see INPUT_PROMPT_IDLE_TIMEOUT.
+ */
+export function looksLikeInputPrompt(lastLine: string): boolean {
+	const line = lastLine.replace(/\s+$/, "")
+	if (!line || line.length > 200 || classifyShellPrompt(line) === "strong") {
+		return false
+	}
+	return INPUT_PROMPT_PATTERNS.some((pattern) => pattern.test(line))
+}
+
+/**
  * Whether a line looks like a shell prompt awaiting input, at any confidence.
  *
  * @deprecated Prefer {@link classifyShellPrompt} so callers can gate weak

@@ -633,7 +633,7 @@ describe("instruction host", () => {
 		expect(external.windsurf).not.toHaveLength(0);
 	});
 
-	it("loads only Cursor's rules and skills in Cursor", () => {
+	it("loads only Cursor's rules in Cursor, but every editor's skills", () => {
 		setInstructionHost({ editor: "cursor" });
 
 		const external = resolveExternalWorkspaceRulesConfigPaths("/repo");
@@ -641,13 +641,15 @@ describe("instruction host", () => {
 		expect(external.windsurf).toEqual([]);
 		expect(external.cursor).toContain(join("/repo", ".cursorrules"));
 
+		// SKILL.md is one format for every agent: a repo that keeps its skills
+		// under .github/skills must not lose them in Cursor.
 		const skills = resolveSkillsConfigSearchPaths("/repo");
 		expect(skills).toContain(join("/repo", ".cursor", "skills"));
-		expect(skills).not.toContain(join("/repo", ".github", "skills"));
+		expect(skills).toContain(join("/repo", ".github", "skills"));
 		expect(skills).toContain(join("/repo", ".claude", "skills"));
 	});
 
-	it("loads only Copilot's rules and skills in VS Code", () => {
+	it("loads only Copilot's rules in VS Code, but every editor's skills", () => {
 		setInstructionHost({ editor: "vscode" });
 
 		const external = resolveExternalWorkspaceRulesConfigPaths("/repo");
@@ -655,7 +657,7 @@ describe("instruction host", () => {
 		expect(external.copilot).toContain(
 			join("/repo", ".github", "copilot-instructions.md"),
 		);
-		expect(resolveSkillsConfigSearchPaths("/repo")).not.toContain(
+		expect(resolveSkillsConfigSearchPaths("/repo")).toContain(
 			join("/repo", ".cursor", "skills"),
 		);
 	});

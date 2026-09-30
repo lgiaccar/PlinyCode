@@ -1,5 +1,43 @@
 import { describe, expect, it } from "bun:test"
-import { classifyShellPrompt, getLastLine, looksLikeShellPrompt } from "./shellPromptHeuristics"
+import { classifyShellPrompt, getLastLine, looksLikeInputPrompt, looksLikeShellPrompt } from "./shellPromptHeuristics"
+
+describe("looksLikeInputPrompt", () => {
+	it.each([
+		["yes/no in brackets", "Overwrite existing file? [y/N]"],
+		["yes/no in parentheses", "Do you want to continue? (yes/no)"],
+		["three-way choice", "Replace file.txt? [Y/n/a]:"],
+		["password", "Password:"],
+		["passphrase", "Enter passphrase for key '/home/me/.ssh/id_ed25519':"],
+		["git username", "Username for 'https://github.com':"],
+		["press any key", "Press any key to continue . . ."],
+		["press enter", "Press ENTER to exit"],
+		["are you sure", "Are you sure you want to delete the branch?"],
+		["proceed", "Proceed with installation?"],
+		["select", "Select an option:"],
+		["choose with angle bracket", "Choose your preset >"],
+		["default value", "Project name (default: my-app):"],
+		["inquirer default", "Which package manager? [default=npm]"],
+		["question with options", "Continue? [Y/n]"],
+	])("detects %s", (_name, line) => {
+		expect(looksLikeInputPrompt(line)).toBe(true)
+	})
+
+	it.each([
+		["empty", ""],
+		["plain progress", "Compiling module foo"],
+		["log line ending in colon", "Building target GPUSurfer:"],
+		["shell prompt", "PS C:\\Users\\me> "],
+		["bash prompt", "user@host:~$ "],
+		[
+			"a question in prose that is long",
+			"The question is whether the cache should be invalidated when the configuration file changes, or only when the schema version bumps; that decision affects every consumer of the settings service and its tests?",
+		],
+		["timestamped log", "12:34:56 INFO waiting for the database to accept connections"],
+		["test summary", "Tests: 12 passed, 0 failed"],
+	])("ignores %s", (_name, line) => {
+		expect(looksLikeInputPrompt(line)).toBe(false)
+	})
+})
 
 describe("getLastLine", () => {
 	it("returns the whole string when there are no newlines", () => {

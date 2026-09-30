@@ -4,6 +4,8 @@ import { stripAnsi } from "@/hosts/vscode/terminal/ansiUtils"
 import { getLatestTerminalOutput } from "@/hosts/vscode/terminal/get-latest-output"
 import {
 	EXIT_CODE_EVENT_TIMEOUT_MS,
+	INPUT_PROMPT_IDLE_TIMEOUT,
+	INPUT_PROMPT_INTERRUPT_GRACE,
 	isCompilingOutput,
 	MARKERLESS_FIRST_DATA_TIMEOUT,
 	MARKERLESS_IDLE_TIMEOUT,
@@ -22,7 +24,7 @@ import type {
 } from "@/integrations/terminal/types"
 import { Logger } from "@/shared/services/Logger"
 import { Osc633EventType, Osc633Parser } from "./osc633Parser"
-import { classifyShellPrompt, getLastLine } from "./shellPromptHeuristics"
+import { classifyShellPrompt, getLastLine, looksLikeInputPrompt } from "./shellPromptHeuristics"
 
 /** Outcome of racing one stream read against command-completion signals. */
 type StreamReadOutcome =
@@ -58,6 +60,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 	private exitCode: number | null | undefined = undefined
 	private signal: NodeJS.Signals | null = null
 	private terminalClosedMidCommand = false
+	private awaitingInput: string | undefined
 	private unobservedCommand: UnobservedTerminalCommand | undefined
 	private ownership: "managed" | "continued" | "detached" = "managed"
 	private activeCloseDisposable: vscode.Disposable | undefined
@@ -68,6 +71,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 		this.exitCode = undefined
 		this.signal = null
 		this.unobservedCommand = undefined
+		this.awaitingInput = undefined
 
 		// The pty may already be dead (exitStatus is set when the shell process
 		// terminates). executeCommand()/sendText() on a dead terminal never
@@ -198,14 +202,19 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			let markerlessQuietMs = 0
 			let receivedAnyData = false
 
+			// Set once the command was interrupted for waiting on the keyboard;
+			// the shell then gets a bounded grace period to report completion.
+			let interruptedAt: number | undefined
+
 			while (true) {
 				// Until the C marker arrives, shell integration may not actually
 				// be working, so bound each read with an idle timeout. Once C is
 				// seen the markers are trusted to delimit the command — however
 				// long and quiet it runs — and only terminal closure can
-				// interrupt the read.
+				// interrupt the read; the idle reads then only serve to notice a
+				// command that stopped on a question for the keyboard.
 				const idleTimeoutMs = didSeeCommandExecuted
-					? undefined
+					? INPUT_PROMPT_IDLE_TIMEOUT
 					: receivedAnyData
 						? MARKERLESS_IDLE_TIMEOUT
 						: MARKERLESS_FIRST_DATA_TIMEOUT
@@ -217,6 +226,33 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 				if (outcome.kind === "terminalClosed") {
 					Logger.warn("[TerminalProcess] Terminal closed while a command was running")
 					break
+				}
+				if (outcome.kind === "idle" && didSeeCommandExecuted) {
+					if (interruptedAt !== undefined) {
+						// Interrupted already: give the shell a bounded time to
+						// end the execution, then stop waiting for it.
+						if (Date.now() - interruptedAt >= INPUT_PROMPT_INTERRUPT_GRACE) {
+							Logger.warn(
+								"[TerminalProcess] Shell did not report completion after the interrupt; giving up on the command",
+							)
+							break
+						}
+						continue
+					}
+					const lastLine = getLastLine(this.fullOutput)
+					if (looksLikeInputPrompt(lastLine)) {
+						// The model cannot answer, so nothing would ever happen.
+						// Ctrl+C ends the command; the shell then reports the
+						// execution's end like any other, and the tool reports
+						// the question to the model.
+						this.awaitingInput = lastLine.trim()
+						interruptedAt = Date.now()
+						Logger.warn(
+							`[TerminalProcess] Command is waiting for keyboard input ("${this.awaitingInput}"); sending Ctrl+C`,
+						)
+						terminal.sendText("\u0003", false)
+					}
+					continue
 				}
 				if (outcome.kind === "idle") {
 					markerlessQuietMs += idleTimeoutMs ?? 0
@@ -552,6 +588,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			signal: this.signal,
 			terminalClosed: this.terminalClosedMidCommand,
 			unobservedCommand: this.unobservedCommand,
+			...(this.awaitingInput !== undefined ? { awaitingInput: this.awaitingInput } : {}),
 		}
 	}
 
