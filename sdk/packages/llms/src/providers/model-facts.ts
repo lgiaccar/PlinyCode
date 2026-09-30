@@ -404,6 +404,22 @@ export function isMiniMaxM3Model(
 	return modelId === "minimax-m3" || modelId === "minimax/minimax-m3";
 }
 
+/**
+ * Any Kimi model, whatever serves it. These models share a tool-call format
+ * whose call ids carry the tool name (see `kimi-tool-calls.ts`).
+ */
+export function isKimiModel(
+	request: Pick<GatewayStreamRequest, "modelId">,
+	context: GatewayProviderContext,
+): boolean {
+	// Dynamic provider fallback: the Pliny gateway's catalog gives its
+	// self-hosted models an id (`snps-provider/kimi-k2.6`) and no family.
+	return (
+		normalizedFamily(context).includes("kimi") ||
+		normalizedModelId(request).includes("kimi")
+	);
+}
+
 export function isKimiK26Family(context: GatewayProviderContext): boolean {
 	return normalizedFamily(context) === "kimi-k2.6";
 }

@@ -81,6 +81,52 @@ namespaced (`tools.`, `default_api.`) variants, so the call runs. When kimi
 still stops early, the completion guard's escalation hands the turn to the
 coder, the second model of the default route.
 
+### Kimi and tool-call ids
+
+The namespaced names were a symptom. The cause was the tool-call ids in the
+history PlinyCode sent. Kimi writes a call as
+`<|tool_call_begin|>functions.read_files:3<|tool_call_argument_begin|>{…}`:
+the call's id holds the tool's name and a running index, and the model's chat
+template shows it its earlier calls by that id. Since 0.1.5-test.7 every id on
+the wire was rewritten to `[a-zA-Z0-9-]` plus a hash, because Claude on Bedrock
+rejects anything else. Kimi then read its own earlier calls as
+`functions-read-files-3-9tb01v`, imitated that, and its server could no longer
+parse the result. Depending on how far the imitation went, the call came back
+with the whole section glued into the tool name and empty arguments ("no tool
+is named …"), sat in the reply text as raw tokens, or never arrived, which is
+the "announced a step and stopped" that the completion guard kept catching.
+
+`apps/vscode/scripts/probe-kimi-tool-call-ids.ts` replays one history (six earlier calls, the next
+step is another call) with three id styles, 24 runs each, against
+`snps-provider/kimi-k2.6`:
+
+| Ids in the history                              | Usable tool call |
+| ----------------------------------------------- | ---------------- |
+| rewritten for Bedrock, as sent until 0.1.7-test.9 | 6 / 24         |
+| another model's ids (`call-…`, `toolu-…`)       | 17 / 24          |
+| Kimi's own, `functions.<tool>:<index>`          | 23 / 24          |
+
+So three things now happen for Kimi models (`isKimiModel`; code in
+`sdk/packages/llms/src/providers/kimi-tool-calls.ts`):
+
+- **Its history carries its own ids.** `withKimiToolCallIds` renumbers every
+  call in the outgoing request as `functions.<tool>:<index>`, whichever model
+  made it, and `withSafeToolCallIds` leaves a Kimi request's ids alone. Stored
+  messages keep the ids they had.
+- **A call glued into the tool name is taken apart.** The repair hook reads
+  the tool and the JSON arguments back out of a name like
+  ` functions-read_files-2-4wzk2r {"files": […]} <|tool_call_end|>`, and the
+  name resolver also accepts a call id (`functions.read_files:3`) or camelCase
+  (`readFiles`) for a tool.
+- **A call left in the reply text is run.** The text from
+  `<|tool_calls_section_begin|>` on is held back; when the reply ends, the
+  calls that name a real tool and carry JSON arguments are executed and the
+  section is not shown. Text no call can be read from is shown as it arrived.
+
+When a name still resolves to nothing, the error quoted back to the model is
+cut to 80 characters and stripped of control tokens, so it does not hand the
+model another copy of the bad call to imitate.
+
 The rules files are seeded from these defaults on first activation and carry a
 marker with a hash of their yaml block. A file nobody edited is refreshed when
 the defaults change (the old copy is kept as `.bak`); an edited file, or one

@@ -125,9 +125,10 @@ const PREFERRED_HEAD = [
 	// answered and really called a tool. kimi-k2.6 leads the default and smart
 	// profiles: a 256k window, the best throughput, and the strongest agentic
 	// coder in the free pool. Its weak spot — ending a reply on an announced
-	// step — is what the completion guard exists for, and the tool-name repair
-	// in the gateway (`resolveMisnamedTool`) removes the failure that used to
-	// take it out of the running: calls emitted as `functions-read_files`.
+	// step — is what the completion guard exists for. The failure that used to
+	// take it out of the running, calls emitted as `functions-read_files` or
+	// not at all, came from the tool-call ids in its history: it now gets them
+	// in its own `functions.<tool>:<index>` form (`kimi-tool-calls.ts`).
 	// GLM-5.2 is last: the only 512k option, but far slower than the rest.
 	KIMI,
 	CODER,

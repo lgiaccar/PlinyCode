@@ -13,6 +13,13 @@
  * `tool_calls[].id` and the matching `role:"tool"` `tool_call_id` always map
  * to the same value, in this request and every later one. Stored history
  * keeps the original ids; only the wire body is rewritten.
+ *
+ * Kimi is the exception. Its chat template shows the model its earlier calls
+ * by id, and the id is where it reads the tool's name: `functions.read_files:3`.
+ * Rewritten to `functions-read-files-3-9tb01v`, the history teaches the model
+ * a format its own server cannot parse, and its next calls come back mangled
+ * or not at all. A request to a Kimi model keeps its ids, which
+ * `withKimiToolCallIds` has already put in that form.
  */
 
 const SAFE_TOOL_CALL_ID = /^[a-zA-Z0-9-]+$/;
@@ -39,6 +46,11 @@ export function toSafeToolCallId(id: string): string {
 	return `${cleaned || "call"}-${fnv1a(id)}`;
 }
 
+/** True for a request to a Kimi model, whatever prefix the gateway gives its id. */
+function readsToolNamesFromCallIds(body: Record<string, unknown>): boolean {
+	return typeof body.model === "string" && /kimi/i.test(body.model);
+}
+
 type WireToolCall = { id?: unknown } & Record<string, unknown>;
 type WireMessage = {
 	tool_calls?: unknown;
@@ -53,7 +65,7 @@ type WireMessage = {
 export function withSafeToolCallIds(
 	body: Record<string, unknown>,
 ): Record<string, unknown> {
-	if (!Array.isArray(body.messages)) {
+	if (!Array.isArray(body.messages) || readsToolNamesFromCallIds(body)) {
 		return body;
 	}
 	let changed = false;
