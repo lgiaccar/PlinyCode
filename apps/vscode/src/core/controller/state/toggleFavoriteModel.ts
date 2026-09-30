@@ -16,7 +16,8 @@ export async function toggleFavoriteModel(controller: Controller, request: Strin
 
 		const modelId = request.value
 
-		const favoritedModelIds = controller.stateManager.getGlobalStateKey("favoritedModelIds")
+		// Another window may have changed the favorites since this one loaded them.
+		const favoritedModelIds = controller.stateManager.reloadGlobalStateKey("favoritedModelIds")
 
 		// Toggle favorite status
 		const updatedFavorites = favoritedModelIds.includes(modelId)

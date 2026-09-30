@@ -11,6 +11,10 @@ export interface ScheduledPrompt {
 	remaining?: number
 	/** Gap between repeats in ms. */
 	intervalMs?: number
+	/** The conversation the prompt was scheduled in; undefined for the welcome screen. */
+	taskId?: string
+	/** Repeats of a prompt that started a new conversation, bound to it once its id arrives. */
+	bindToNextTask?: boolean
 }
 
 interface ScheduledPromptsProps {

@@ -14,6 +14,7 @@ import {
 	generatedMediaModalityFromMediaType,
 	validateAndReserveBase64Media,
 } from "@plinycode/shared";
+import { NoSuchToolError } from "ai";
 import { nanoid } from "nanoid";
 import {
 	extractGeneratedImage,
@@ -74,6 +75,72 @@ function buildToolCallMetadata(input: {
 	});
 }
 
+/**
+ * What the model (and the log) is told about a call to a tool that does not
+ * exist. Names that only differ by a leaked namespace, case or hyphens were
+ * already repaired (`repairMalformedToolCall`), so reaching this means the
+ * name is really unknown: say which model emitted it, point at the closest
+ * real tool, and list the exact names to use.
+ */
+export function describeUnavailableToolCall(input: {
+	toolName: string;
+	availableTools: readonly string[];
+	providerId: string;
+	modelId: string;
+}): string {
+	const suggestion = suggestToolName(input.toolName, input.availableTools);
+	return [
+		`Tool call ${input.toolName} was rejected before execution: no tool is named "${input.toolName}" (emitted by ${input.providerId}/${input.modelId}).`,
+		suggestion ? `Did you mean "${suggestion}"?` : undefined,
+		"Call a tool by its exact name, without any namespace or prefix.",
+		input.availableTools.length
+			? `Available tools: ${input.availableTools.join(", ")}.`
+			: undefined,
+	]
+		.filter(Boolean)
+		.join(" ");
+}
+
+/** The available tool whose name is closest to a misspelled one, if any is close. */
+function suggestToolName(
+	toolName: string,
+	availableTools: readonly string[],
+): string | undefined {
+	const normalize = (name: string) =>
+		name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+	const requested = normalize(toolName);
+	let best: { name: string; distance: number } | undefined;
+	for (const name of availableTools) {
+		const candidate = normalize(name);
+		const distance =
+			requested.endsWith(candidate) || candidate.endsWith(requested)
+				? 0
+				: editDistance(requested, candidate);
+		if (!best || distance < best.distance) {
+			best = { name, distance };
+		}
+	}
+	return best && best.distance <= Math.max(2, Math.floor(requested.length / 4))
+		? best.name
+		: undefined;
+}
+
+function editDistance(a: string, b: string): number {
+	let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+	for (let i = 1; i <= a.length; i++) {
+		const current = [i];
+		for (let j = 1; j <= b.length; j++) {
+			current[j] = Math.min(
+				previous[j] + 1,
+				current[j - 1] + 1,
+				previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+			);
+		}
+		previous = current;
+	}
+	return previous[b.length];
+}
+
 function buildRecoverableToolErrorMetadata(input: {
 	part: AiSdkStreamPart;
 	errorMessage: string;
@@ -81,9 +148,30 @@ function buildRecoverableToolErrorMetadata(input: {
 	context: GatewayProviderContext;
 	toolName: string;
 }): Record<string, unknown> {
+	let inputParseError = `Tool call ${input.toolName} was rejected before execution: ${input.errorMessage}`;
+	// The stream carries the error as its message string, not the instance.
+	if (
+		NoSuchToolError.isInstance(input.part.error) ||
+		input.errorMessage.includes("AI_NoSuchToolError")
+	) {
+		const availableTools = (input.request.tools ?? []).map((tool) => tool.name);
+		inputParseError = describeUnavailableToolCall({
+			toolName: input.toolName,
+			availableTools,
+			providerId: input.request.providerId,
+			modelId: input.request.modelId,
+		});
+		input.context.logger?.log("Model called an unavailable tool", {
+			severity: "warn",
+			providerId: input.request.providerId,
+			modelId: input.request.modelId,
+			toolName: input.toolName,
+			availableTools,
+		});
+	}
 	return buildToolCallMetadata({
 		metadata: mergeToolCallMetadata(extractGoogleThoughtMetadata(input.part), {
-			inputParseError: `Tool call ${input.toolName} was rejected before execution: ${input.errorMessage}`,
+			inputParseError,
 			aiSdkToolError: input.errorMessage,
 		}),
 		request: input.request,
