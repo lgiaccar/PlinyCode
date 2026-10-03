@@ -245,14 +245,16 @@ Use the review guidance.`,
 		await runtime.shutdown("test");
 	});
 
-	it("uses readonly preset in plan mode", async () => {
+	it("keeps the editor in plan mode for markdown plan files", async () => {
 		const runtime = await new DefaultRuntimeBuilder().build({
 			config: makeBaseConfig({
 				mode: "plan",
 			}),
 		});
 
-		expect(runtime.tools.map((tool) => tool.name)).not.toContain("editor");
+		// The plan-mode command guard limits it to markdown paths.
+		expect(runtime.tools.map((tool) => tool.name)).toContain("editor");
+		expect(runtime.tools.map((tool) => tool.name)).not.toContain("apply_patch");
 	});
 
 	it("registers the plan-mode command-guard hook only in plan mode", async () => {

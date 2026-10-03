@@ -17,27 +17,40 @@ const WORKSPACE_CONFIGURATION_MARKER = "# Workspace Configuration";
  */
 export const MODE_TAG_INSTRUCTIONS = `# Plan / Act Modes
 
-User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and align on a plan -- no edits or state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened.`;
+User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and write the plan -- no edits except markdown plan files, no state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened.`;
 
 /**
  * Plan-mode behavioral contract, appended when the session mode is "plan".
- * run_commands intentionally stays available in plan mode -- it is essential
- * for read-only investigation -- so the contract must spell out that it is
- * inspection-only there. Prompting is the first line of defense; the
- * plan-mode command-guard hook (registered by the core runtime builder for
- * plan-mode sessions) is the hard backstop that rejects file-editing
- * run_commands calls with a tool error before approval or execution.
+ * The plan is written as markdown files (a root plans/<slug>/PLAN.md plus
+ * optional sub-files) so the user can edit it and act mode can execute it
+ * from disk. run_commands intentionally stays available in plan mode -- it
+ * is essential for read-only investigation -- so the contract must spell out
+ * that it is inspection-only there. Prompting is the first line of defense;
+ * the plan-mode command-guard hook (registered by the core runtime builder
+ * for plan-mode sessions) is the hard backstop that rejects file-editing
+ * run_commands calls and non-markdown editor writes with a tool error before
+ * approval or execution.
  */
 const PLAN_MODE_INSTRUCTIONS_BASE = `# Plan Mode
 
-You are in Plan mode. Your role is to explore, analyze, and plan -- not to execute.
+You are in Plan mode. Your role is to explore, analyze, and write a plan -- not to execute it.
 
 - Read files, search the codebase, and gather context to understand the problem
 - Ask clarifying questions when requirements are ambiguous
-- Present your plan as a structured outline with clear steps
 - Explain tradeoffs between different approaches when they exist
-- Do NOT edit files, write code, run destructive commands, or make any changes
+- Do NOT edit source, config, or any other non-markdown file, run destructive commands, or make any changes
 - Do NOT implement anything -- focus on understanding and alignment first
+
+## Writing the plan
+
+Write the plan as markdown files with the editor tool, using workspace-relative paths under plans/<short-kebab-slug>/:
+
+1. Create the root file plans/<slug>/PLAN.md first. It coordinates the whole plan: the goal, the relevant context, the ordered steps or phases, how to verify the result, and links to any sub-files.
+2. When a part of the plan is large or independent, put it in its own file in the same folder (for example plans/<slug>/01-backend.md) and link it from PLAN.md. A small plan needs only PLAN.md.
+3. When the user gives feedback on the plan, update the existing plan files instead of starting a new folder.
+4. End your turn with a short summary that names the root file (plans/<slug>/PLAN.md). Do not paste the whole plan into the chat.
+
+In plan mode the editor tool only accepts markdown (.md) paths; writes to any other file are rejected with a tool error. If you are only answering a question or asking for clarification, you do not need to write a plan file.
 
 The run_commands tool remains available in plan mode strictly for read-only inspection -- listing files, searching (grep), reading configs, inspecting git history and diffs, checking tool versions, and the like. Never use it to change anything: no creating, modifying, or deleting files, no writing scripts that make changes, and no state-changing commands (installs, migrations, database or schema changes, container commands that mutate state, etc.). File-editing commands (rm/mv/cp, in-place edits like sed -i, output redirection to files outside /tmp, git commands that change the working tree, package installs) are hard-blocked in plan mode: they are not executed and return a tool error instead, so do not attempt them. If the task requires a mutation, put it in the plan; it happens only after the user switches to act mode.`;
 
@@ -53,7 +66,7 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
  */
 export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BASE}
 
-Once you have presented your plan, end your turn and wait for the user's response. You do NOT have the ability to switch to act mode yourself -- the user must do it manually with the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
+Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
 
 function redactRemoteUrlCredentials(remote: string): string {
 	const schemeEnd = remote.indexOf("://");

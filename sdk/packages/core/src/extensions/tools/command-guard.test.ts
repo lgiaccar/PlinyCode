@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
 	findFileEditingCommand,
+	findPatchFilePaths,
 	formatPlanModeBlockedCommandError,
+	formatPlanModeBlockedWriteError,
+	isMarkdownPath,
 } from "./command-guard";
 
 /** Convenience: true when the guard blocks the command. */
@@ -378,5 +381,41 @@ describe("formatPlanModeBlockedCommandError", () => {
 		expect(message).toContain("PLAN MODE");
 		expect(message).toContain("not executed");
 		expect(message).toContain("act mode");
+	});
+});
+
+describe("plan-mode markdown writes", () => {
+	it("recognizes markdown paths", () => {
+		expect(isMarkdownPath("plans/x/PLAN.md")).toBe(true);
+		expect(isMarkdownPath("C:\\repo\\plans\\x\\notes.Markdown")).toBe(true);
+		expect(isMarkdownPath("src/index.ts")).toBe(false);
+		expect(isMarkdownPath("README")).toBe(false);
+		expect(isMarkdownPath("PLAN.md.bak")).toBe(false);
+	});
+
+	it("collects every file a patch touches", () => {
+		const patch = [
+			"*** Begin Patch",
+			"*** Add File: plans/a.md",
+			"+x",
+			"*** Update File: src/b.ts",
+			"*** Move to: src/c.ts",
+			"*** Delete File: old.md",
+			"*** End Patch",
+		].join("\n");
+		expect(findPatchFilePaths(patch)).toEqual([
+			"plans/a.md",
+			"src/b.ts",
+			"src/c.ts",
+			"old.md",
+		]);
+		expect(findPatchFilePaths("no headers")).toEqual([]);
+	});
+
+	it("names the rejected path in the write error", () => {
+		expect(formatPlanModeBlockedWriteError("src/a.ts")).toContain("`src/a.ts`");
+		expect(formatPlanModeBlockedWriteError(undefined)).toContain(
+			"without a path",
+		);
 	});
 });

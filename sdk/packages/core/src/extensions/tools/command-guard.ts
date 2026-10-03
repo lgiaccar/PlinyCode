@@ -519,3 +519,39 @@ export function formatPlanModeBlockedCommandError(reason: string): string {
 		"and if this change is part of the task, put it in your plan so it can run after the user approves switching to act mode."
 	);
 }
+
+/**
+ * Plan mode may write markdown plan files (and nothing else) through the
+ * file-writing tools; see command-guard-extension.ts.
+ */
+export function isMarkdownPath(path: string): boolean {
+	return /\.(md|markdown)$/i.test(path.trim());
+}
+
+/**
+ * File paths an apply_patch payload touches: every `*** Add File:`,
+ * `*** Update File:`, `*** Delete File:` and `*** Move to:` header.
+ */
+export function findPatchFilePaths(patch: string): string[] {
+	const paths: string[] = [];
+	for (const match of patch.matchAll(
+		/^\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$/gm,
+	)) {
+		paths.push(match[1]);
+	}
+	return paths;
+}
+
+/**
+ * Tool error returned in place of a non-markdown file write in plan mode.
+ */
+export function formatPlanModeBlockedWriteError(
+	path: string | undefined,
+): string {
+	const target = path ? `\`${path}\`` : "a file without a path";
+	return (
+		`Write rejected: ${target} is not a markdown file. ` +
+		"You are in PLAN MODE — only markdown plan files (.md) can be written, under plans/<slug>/ with PLAN.md as the root. " +
+		"Do not change source, config, or other files; put that change in the plan so it can run after the user switches to act mode."
+	);
+}

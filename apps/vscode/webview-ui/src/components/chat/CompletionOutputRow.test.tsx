@@ -14,12 +14,16 @@ vi.mock("@/components/common/MarkdownBlock", () => ({
 const checkpointLatestChangesSummary = vi.fn()
 const checkpointOpenFileDiff = vi.fn()
 const checkpointViewLatestChanges = vi.fn()
+const openFileRelativePath = vi.fn(() => Promise.resolve())
 
 vi.mock("@/services/grpc-client", () => ({
 	CheckpointsServiceClient: {
 		checkpointLatestChangesSummary: (...args: unknown[]) => checkpointLatestChangesSummary(...args),
 		checkpointOpenFileDiff: (...args: unknown[]) => checkpointOpenFileDiff(...args),
 		checkpointViewLatestChanges: (...args: unknown[]) => checkpointViewLatestChanges(...args),
+	},
+	FileServiceClient: {
+		openFileRelativePath: (...args: unknown[]) => openFileRelativePath(...args),
 	},
 }))
 
@@ -223,5 +227,28 @@ describe("PlanCompletionOutputRow", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Copy plan response" }))
 
 		await waitFor(() => expect(writeText).toHaveBeenCalledWith("Here is the plan"))
+	})
+
+	it("hides the execute footer unless both the root file and the handler are given", () => {
+		const { rerender } = render(<PlanCompletionOutputRow text="Plan" />)
+		expect(screen.queryByRole("button", { name: "Execute plan" })).toBeNull()
+
+		rerender(<PlanCompletionOutputRow rootPlanFile="plans/x/PLAN.md" text="Plan" />)
+		expect(screen.queryByRole("button", { name: "Execute plan" })).toBeNull()
+
+		rerender(<PlanCompletionOutputRow onExecutePlan={vi.fn()} text="Plan" />)
+		expect(screen.queryByRole("button", { name: "Execute plan" })).toBeNull()
+	})
+
+	it("executes the plan and opens the root plan file from the footer", () => {
+		openFileRelativePath.mockClear()
+		const onExecutePlan = vi.fn()
+		render(<PlanCompletionOutputRow onExecutePlan={onExecutePlan} rootPlanFile="plans/x/PLAN.md" text="Plan" />)
+
+		fireEvent.click(screen.getByRole("button", { name: "Execute plan" }))
+		expect(onExecutePlan).toHaveBeenCalledTimes(1)
+
+		fireEvent.click(screen.getByRole("button", { name: "plans/x/PLAN.md" }))
+		expect(openFileRelativePath).toHaveBeenCalledWith(expect.objectContaining({ value: "plans/x/PLAN.md" }))
 	})
 })
