@@ -58,6 +58,69 @@ export function describeRuleScope(rule: RuleConfig): string | undefined {
 /** A rule plus the file it was loaded from, when the caller knows it. */
 export type RuleForPrompt = RuleConfig & { filePath?: string };
 
+function isCursorRuleFile(filePath: string | undefined): boolean {
+	return !!filePath && /[\\/]\.cursor[\\/]rules[\\/]/.test(filePath);
+}
+
+/**
+ * Scope of a rule in Cursor's `.cursor/rules` folder that describeRuleScope
+ * left unscoped. Cursor applies such a file on every request only with
+ * `alwaysApply: true`; with just a description the agent pulls it in when
+ * relevant, and with neither ("Manual") only when the user @-mentions it.
+ * Inlining the last two put rules Cursor itself would leave out into every
+ * request.
+ */
+function describeCursorRuleScope(rule: RuleForPrompt): string | undefined {
+	const frontmatter = rule.frontmatter ?? {};
+	if (!isCursorRuleFile(rule.filePath) || frontmatter.alwaysApply === true) {
+		return undefined;
+	}
+	const description =
+		typeof frontmatter.description === "string"
+			? frontmatter.description.trim()
+			: "";
+	return description
+		? `Apply only when relevant: ${description}`
+		: "Manual Cursor rule: read it when the user mentions it or the task is about it";
+}
+
+/**
+ * Pushes a rule body's markdown headings two levels down, so they nest under
+ * the rule's own `## name` heading. A body opening with `# Title` otherwise
+ * reads as a new top-level section of the system prompt, outside `# Rules`
+ * (and the chat's context row counted only the rules before it). Fenced code
+ * is left alone: `# comment` lines in shell snippets are not headings.
+ */
+export function nestRuleHeadings(body: string): string {
+	let fence: string | undefined;
+	return body
+		.split("\n")
+		.map((line) => {
+			if (fence) {
+				const close = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+				if (
+					close &&
+					close[1][0] === fence[0] &&
+					close[1].length >= fence.length
+				) {
+					fence = undefined;
+				}
+				return line;
+			}
+			const open = line.match(/^ {0,3}(`{3,}|~{3,})/);
+			if (open) {
+				fence = open[1];
+				return line;
+			}
+			return line.replace(
+				/^( {0,3})(#{1,6})(?=\s|$)/,
+				(_match, indent: string, hashes: string) =>
+					`${indent}${"#".repeat(Math.min(6, hashes.length + 2))}`,
+			);
+		})
+		.join("\n");
+}
+
 /** Longest body one always-on rule may put in the system prompt. */
 export const MAX_RULE_CHARS = 12_000;
 /** Budget for all always-on rule bodies together. */
@@ -73,6 +136,10 @@ export const MAX_RULES_TOTAL_CHARS = 40_000;
  *   way Cursor treats agent-requested rules. Inlining them put guidance for
  *   files the task never touches into every request.
  * - Rules with no known file stay inline, since the model could not read them.
+ * - Files in `.cursor/rules` follow Cursor's rule types: only
+ *   `alwaysApply: true` is inlined, the rest are listed (describeCursorRuleScope).
+ * - Inlined bodies have their headings nested under the rule's own heading
+ *   (nestRuleHeadings).
  */
 export function formatRulesForSystemPrompt(
 	rules: ReadonlyArray<RuleForPrompt>,
@@ -85,7 +152,7 @@ export function formatRulesForSystemPrompt(
 	const onDemand: string[] = [];
 	let remaining = MAX_RULES_TOTAL_CHARS;
 	for (const rule of rules) {
-		const scope = describeRuleScope(rule);
+		const scope = describeRuleScope(rule) ?? describeCursorRuleScope(rule);
 		if (scope && rule.filePath) {
 			onDemand.push(`- **${rule.name}** (${scope}): \`${rule.filePath}\``);
 			continue;
@@ -97,7 +164,7 @@ export function formatRulesForSystemPrompt(
 			continue;
 		}
 		const body = capRuleBody(
-			rule,
+			{ ...rule, instructions: nestRuleHeadings(rule.instructions) },
 			Math.max(0, Math.min(MAX_RULE_CHARS, remaining)),
 		);
 		remaining -= body.length;

@@ -20,18 +20,36 @@ export interface InstructionContextSummary {
 	onDemandRules: string[]
 	/** Skills the `skills` tool offers. */
 	skills: string[]
+	/** Characters the `# Rules` section adds to every request. */
+	rulesChars?: number
+	/** Characters the skill list adds to the `skills` tool description. */
+	skillsChars?: number
 }
 
 const RULES_HEADING = "# Rules"
 const ON_DEMAND_HEADING = "## Rules to read when they apply"
 
-/** The text of the `# Rules` section, up to the next top-level heading. */
+/**
+ * Blanks out fenced code blocks, keeping every offset: a `# comment` line in a
+ * rule's shell snippet is not a heading.
+ */
+function maskFencedCode(text: string): string {
+	return text.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$/gm, (block) => block.replace(/[^\n]/g, " "))
+}
+
+/**
+ * The `# Rules` section, up to the next top-level heading, with fenced code
+ * blanked out. The engine nests each inlined rule's own headings below its
+ * `## name`, so a `# Title` inside a rule does not end the section early, and
+ * the only `## ` lines before the on-demand list are rule names.
+ */
 function rulesSection(systemPrompt: string): string | undefined {
-	const start = systemPrompt.indexOf(`\n${RULES_HEADING}\n`)
+	const masked = maskFencedCode(systemPrompt)
+	const start = masked.indexOf(`\n${RULES_HEADING}\n`)
 	if (start < 0) {
 		return undefined
 	}
-	const body = systemPrompt.slice(start + RULES_HEADING.length + 2)
+	const body = masked.slice(start + RULES_HEADING.length + 2)
 	const next = body.search(/\n# /)
 	return next < 0 ? body : body.slice(0, next)
 }
@@ -51,11 +69,13 @@ export function summarizeInstructionContext(request: AgentModelRequest): Instruc
 		for (const match of onDemandPart.matchAll(/^- \*\*(.+?)\*\*/gm)) {
 			summary.onDemandRules.push(match[1].trim())
 		}
+		summary.rulesChars = section.length
 	}
 
 	const skillsTool = request.tools.find((tool) => tool.name === "skills")
 	const available = skillsTool?.description.match(/Available skills: (.+?)\.?\s*$/)?.[1]
 	if (available) {
+		summary.skillsChars = available.length
 		summary.skills = available
 			.split(/;\s*/)
 			.map((entry) => entry.replace(/\s*\(.*$/, "").trim())
@@ -65,6 +85,8 @@ export function summarizeInstructionContext(request: AgentModelRequest): Instruc
 }
 
 const MAX_NAMES = 5
+/** Rough characters per token, enough for a "how big is this" hint. */
+const CHARS_PER_TOKEN = 4
 
 function nameList(names: string[]): string {
 	const shown = names.slice(0, MAX_NAMES).map((name) => `\`${name}\``)
@@ -72,12 +94,22 @@ function nameList(names: string[]): string {
 	return more > 0 ? `${shown.join(", ")} +${more} more` : shown.join(", ")
 }
 
+/** ` (~6.7k tokens)`, or nothing when the size is unknown. */
+function tokenHint(chars: number | undefined): string {
+	if (!chars) {
+		return ""
+	}
+	const tokens = Math.ceil(chars / CHARS_PER_TOKEN)
+	const text = tokens < 1000 ? String(tokens) : `${(tokens / 1000).toFixed(1).replace(/\.0$/, "")}k`
+	return ` (~${text} tokens)`
+}
+
 /** The row's text, or undefined when there is nothing to report. */
 export function formatInstructionContextRow(summary: InstructionContextSummary): string | undefined {
 	const parts: string[] = []
 	if (summary.inlineRules.length > 0) {
 		parts.push(
-			`${summary.inlineRules.length} rule${summary.inlineRules.length === 1 ? "" : "s"} in the prompt: ${nameList(summary.inlineRules)}`,
+			`${summary.inlineRules.length} rule${summary.inlineRules.length === 1 ? "" : "s"} in the prompt${tokenHint(summary.rulesChars)}: ${nameList(summary.inlineRules)}`,
 		)
 	}
 	if (summary.onDemandRules.length > 0) {
@@ -86,7 +118,9 @@ export function formatInstructionContextRow(summary: InstructionContextSummary):
 		)
 	}
 	if (summary.skills.length > 0) {
-		parts.push(`${summary.skills.length} skill${summary.skills.length === 1 ? "" : "s"}: ${nameList(summary.skills)}`)
+		parts.push(
+			`${summary.skills.length} skill${summary.skills.length === 1 ? "" : "s"}${tokenHint(summary.skillsChars)}: ${nameList(summary.skills)}`,
+		)
 	}
 	if (parts.length === 0) {
 		return "Context: no rules or skills were loaded for this workspace."

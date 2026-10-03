@@ -301,6 +301,7 @@ message SkillInfo {
   reserved 5; // was always_enabled (remote skills only; remote config removed)
   reserved "always_enabled";
   int32 tokens = 6; // Estimated tokens of the full SKILL.md, loaded when the skill is used
+  repeated string warnings = 7; // Problems that load the skill but weaken it, e.g. no description
 }
 
 // Response for refreshSkills operation

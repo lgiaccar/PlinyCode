@@ -10,6 +10,7 @@ import {
 	MAX_RULE_CHARS,
 	MAX_RULES_TOTAL_CHARS,
 	mergeRulesForSystemPrompt,
+	nestRuleHeadings,
 } from "./rules";
 
 function rule(
@@ -152,5 +153,92 @@ describe("listEnabledRulesFromWatcher", () => {
 		expect(
 			listEnabledRulesFromWatcher(watcher).map((item) => item.name),
 		).toEqual(["drop", "keep"]);
+	});
+});
+
+describe("Cursor rule types", () => {
+	const cursorRule = (
+		name: string,
+		frontmatter: Record<string, unknown> = {},
+	) => ({
+		...rule(name, frontmatter),
+		filePath: `/w/.cursor/rules/${name}`,
+	});
+
+	it("inlines only alwaysApply rules from .cursor/rules and lists the rest", () => {
+		const output = formatRulesForSystemPrompt([
+			cursorRule("always.mdc", { alwaysApply: true, globs: "*.cpp" }),
+			cursorRule("manual.md"),
+			cursorRule("requested.mdc", { description: "Profiling" }),
+		]);
+
+		expect(output).toContain("## always.mdc\nalways.mdc body");
+		expect(output).not.toContain("manual.md body");
+		expect(output).not.toContain("requested.mdc body");
+		expect(output).toContain(
+			"- **manual.md** (Manual Cursor rule: read it when the user mentions it or the task is about it): `/w/.cursor/rules/manual.md`",
+		);
+		expect(output).toContain(
+			"- **requested.mdc** (Apply only when relevant: Profiling): `/w/.cursor/rules/requested.mdc`",
+		);
+	});
+
+	it("keeps rules without frontmatter outside .cursor/rules inline", () => {
+		expect(
+			formatRulesForSystemPrompt([
+				{ ...rule("team.md"), filePath: "C:\\w\\.clinerules\\team.md" },
+			]),
+		).toContain("## team.md\nteam.md body");
+	});
+
+	it("recognises Windows paths", () => {
+		expect(
+			formatRulesForSystemPrompt([
+				{
+					...rule("testing.md"),
+					filePath: "D:\\w\\.cursor\\rules\\testing.md",
+				},
+			]),
+		).not.toContain("testing.md body");
+	});
+});
+
+describe("nestRuleHeadings", () => {
+	it("nests a rule's headings under its own and leaves fenced code alone", () => {
+		const body = [
+			"# Agent Output",
+			"Intro #not-a-heading",
+			"## Do",
+			"```bash",
+			"# a shell comment",
+			"```",
+			"###### Deep",
+			"~~~",
+			"## still code",
+			"~~~",
+			"#",
+		].join("\n");
+		expect(nestRuleHeadings(body)).toBe(
+			[
+				"### Agent Output",
+				"Intro #not-a-heading",
+				"#### Do",
+				"```bash",
+				"# a shell comment",
+				"```",
+				"###### Deep",
+				"~~~",
+				"## still code",
+				"~~~",
+				"###",
+			].join("\n"),
+		);
+	});
+
+	it("is applied to inlined rule bodies", () => {
+		const output = formatRulesForSystemPrompt([
+			{ name: "out", instructions: "# Title\nText", frontmatter: {} },
+		]);
+		expect(output).toBe("\n\n# Rules\n## out\n### Title\nText");
 	});
 });

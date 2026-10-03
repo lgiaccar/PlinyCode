@@ -554,6 +554,7 @@ export class CoreSettingsService {
 							pluginOwner?.source ??
 							detectSource(record.filePath, workspaceRoot),
 						description: skill.description,
+						...(skill.warnings ? { warnings: skill.warnings } : {}),
 						pluginName: pluginOwner?.pluginName,
 						pluginPath: pluginOwner?.pluginPath,
 						toggleable: true,

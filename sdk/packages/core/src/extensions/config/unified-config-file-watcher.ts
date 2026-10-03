@@ -29,6 +29,15 @@ export interface UnifiedConfigDefinition<
 	includeFile?: (fileName: string, filePath: string) => boolean;
 	parseFile: (context: UnifiedConfigFileContext<TType>) => TItem;
 	resolveId: (item: TItem, context: UnifiedConfigFileContext<TType>) => string;
+	/**
+	 * Decides a clash between two files resolving to the same id. Return true
+	 * to keep the record already loaded; by default the file loaded later
+	 * (later directory) wins.
+	 */
+	keepExisting?: (
+		existing: { item: TItem; filePath: string },
+		next: { item: TItem; filePath: string },
+	) => boolean;
 }
 
 export interface UnifiedConfigWatcherOptions {
@@ -70,6 +79,50 @@ export type UnifiedConfigWatcherEvent<
 interface InternalRecord<TType extends string, TItem>
 	extends UnifiedConfigRecord<TType, TItem> {
 	fingerprint: string;
+}
+
+/**
+ * Decodes a config file as UTF-8, or as UTF-16 when it is one. PowerShell's
+ * `Out-File` and redirection write UTF-16LE, often without a byte order mark,
+ * and editors read such files fine; read as UTF-8 they turned into text full
+ * of NULs whose frontmatter never parsed, so the skill or rule lost its
+ * description and scope. Text config files never contain NUL bytes, so NULs
+ * at every other byte mark UTF-16 even without the mark.
+ */
+export function decodeConfigText(buffer: Buffer): string {
+	if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+		return buffer.subarray(2).toString("utf16le");
+	}
+	if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+		return swapBytes(buffer.subarray(2)).toString("utf16le");
+	}
+	const sample = buffer.subarray(0, Math.min(buffer.length, 512) & ~1);
+	let evenNuls = 0;
+	let oddNuls = 0;
+	for (let index = 0; index < sample.length; index++) {
+		if (sample[index] === 0) {
+			if (index % 2 === 0) {
+				evenNuls++;
+			} else {
+				oddNuls++;
+			}
+		}
+	}
+	const pairs = sample.length / 2;
+	if (pairs > 0 && oddNuls > pairs / 2 && evenNuls === 0) {
+		return buffer.subarray(0, buffer.length & ~1).toString("utf16le");
+	}
+	if (pairs > 0 && evenNuls > pairs / 2 && oddNuls === 0) {
+		return swapBytes(buffer.subarray(0, buffer.length & ~1)).toString(
+			"utf16le",
+		);
+	}
+	return buffer.toString("utf8");
+}
+
+function swapBytes(buffer: Buffer): Buffer {
+	const swapped = Buffer.from(buffer.subarray(0, buffer.length & ~1));
+	return swapped.swap16();
 }
 
 function toFingerprint(content: string): string {
@@ -414,7 +467,7 @@ export class UnifiedConfigFileWatcher<
 					continue;
 				}
 				try {
-					const content = await readFile(filePath, "utf8");
+					const content = decodeConfigText(await readFile(filePath));
 					const context: UnifiedConfigFileContext<TType> = {
 						type: definition.type,
 						directoryPath: candidate.directoryPath,
@@ -425,6 +478,13 @@ export class UnifiedConfigFileWatcher<
 					const parsed = definition.parseFile(context);
 					const id = definition.resolveId(parsed, context).trim();
 					if (!id) {
+						continue;
+					}
+					const existing = records.get(id);
+					if (
+						existing &&
+						definition.keepExisting?.(existing, { item: parsed, filePath })
+					) {
 						continue;
 					}
 					records.set(id, {

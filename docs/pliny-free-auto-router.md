@@ -279,14 +279,29 @@ model on the task.
 
 ## What the model was given
 
-Every turn starts with a chat row such as `Context: 2 rules in the prompt:
-AGENTS.md, .cursor/rules/git.md · 5 rules to read when relevant: … · 12
-skills: build-skill, …` (`instruction-context-rows.ts`). It is read off the
-request the engine is about to send, for every model, and repeats only when
-the set changes. The `skills` tool's description carries each skill's
-description as well as its name, so a model can match a request to a skill
-whose name does not repeat the user's words. Skills are loaded from every
-editor's folder (`.github/skills`, `.cursor/skills`, `.claude/skills`)
-whatever editor is running, and a single `.md`/`.mdc` file placed directly in
-a skills folder is a skill named after the file; rules stay scoped to the
-running editor.
+Every turn starts with a chat row such as `Context: 2 rules in the prompt
+(~3.4k tokens): AGENTS.md, .cursor/rules/git.md · 5 rules to read when
+relevant: … · 12 skills (~1.1k tokens): build-skill, …`
+(`instruction-context-rows.ts`). It is read off the request the engine is
+about to send, for every model, and repeats only when the set changes. The
+engine nests an inlined rule's own headings under the rule's `## name`
+(`nestRuleHeadings`), so a rule whose body opens with `# Title` neither looks
+like a new top-level section to the model nor cuts the row's count short.
+
+The `skills` tool's description carries each skill's description as well as
+its name, so a model can match a request to a skill whose name does not
+repeat the user's words. It asks the model to invoke a skill when the user
+wants the skill's task carried out, not whenever a request shares a topic with
+it. Skills are loaded from every editor's folder (`.github/skills`,
+`.cursor/skills`, `.claude/skills`) whatever editor is running, and a single
+`.md`/`.mdc` file placed directly in a skills folder is a skill named after
+the file. When a flat file and a `<name>/SKILL.md` folder share a name, the
+folder wins, so a short pointer file never stands in for the real skill. The
+Skills panel flags a skill with no description, or whose `name:` differs from
+its folder. Rule and skill files saved as UTF-16 (PowerShell's default) are
+decoded as such (`decodeConfigText`).
+
+Rules stay scoped to the running editor. Files in `.cursor/rules` follow
+Cursor's rule types: only `alwaysApply: true` is inlined; a rule with only a
+description, or with no frontmatter at all (Cursor's "Manual" rules), is
+listed for the model to read when it applies.
