@@ -1,6 +1,6 @@
 import { StringRequest } from "@shared/proto/cline/common"
 import { DeleteSkillRequest, RuleFileRequest } from "@shared/proto/index.cline"
-import { InfoIcon, PenIcon, Trash2Icon } from "lucide-react"
+import { InfoIcon, PenIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -38,11 +38,15 @@ const RuleRow: React.FC<{
 	/** Estimated tokens this file adds to the context; hidden when undefined. */
 	tokens?: number
 	tokensTitle?: string
-}> = ({ rulePath, enabled, isGlobal, toggleRule, ruleType, onDeleteSkill, tokens, tokensTitle }) => {
+	/** The name the model knows the entry by; defaults to one taken from the path. */
+	name?: string
+	/** Problems that load the entry but weaken it, shown behind a warning icon. */
+	warnings?: string[]
+}> = ({ rulePath, enabled, isGlobal, toggleRule, ruleType, onDeleteSkill, tokens, tokensTitle, name, warnings }) => {
 	const displayName = getDisplayNameFromPath(rulePath)
 	const skillDisplayName = getSkillDisplayNameFromSkillMdPath(rulePath)
 
-	const finalDisplayName = ruleType === "skill" ? skillDisplayName : displayName
+	const finalDisplayName = name || (ruleType === "skill" ? skillDisplayName : displayName)
 
 	const getRuleTypeIcon = () => {
 		switch (ruleType) {
@@ -134,6 +138,22 @@ const RuleRow: React.FC<{
 				<span className="flex-1 overflow-hidden break-all whitespace-normal flex items-center mr-1" title={rulePath}>
 					{getRuleTypeIcon() && <span className="mr-1.5">{getRuleTypeIcon()}</span>}
 					<span className="ph-no-capture">{finalDisplayName}</span>
+					{warnings && warnings.length > 0 && (
+						<Tooltip>
+							<TooltipTrigger asChild className="cursor-help">
+								<TriangleAlertIcon
+									aria-label="Warnings"
+									className="ml-1.5 shrink-0 size-[0.85rem]"
+									style={{ color: "var(--vscode-editorWarning-foreground)" }}
+								/>
+							</TooltipTrigger>
+							<TooltipContent>
+								{warnings.map((warning) => (
+									<div key={warning}>{warning}</div>
+								))}
+							</TooltipContent>
+						</Tooltip>
+					)}
 					{ruleType === "agents" && (
 						<Tooltip>
 							<TooltipTrigger asChild className="cursor-help">

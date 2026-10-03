@@ -11,6 +11,7 @@ async function coreSkillToSkillInfo(skill: CoreSettingsItem): Promise<SkillInfo>
 		path: skill.path,
 		enabled: skill.enabled !== false,
 		tokens: skill.path ? await estimateFileTokens(skill.path) : 0,
+		warnings: skill.warnings ?? [],
 	})
 }
 
