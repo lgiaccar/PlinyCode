@@ -11,6 +11,7 @@ import {
 	COMPLETION_RESULT_CHANGES_FLAG,
 } from "@shared/ExtensionMessage"
 import { BooleanRequest, StringRequest } from "@shared/proto/cline/common"
+import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
 import { Mode } from "@shared/storage/types"
 import deepEqual from "fast-deep-equal"
 import {
@@ -36,6 +37,7 @@ import {
 import { MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSize } from "react-use"
 import { canRestoreWorkspaceFromMessage, getRestoreWorkspaceDisabledReason } from "@/components/chat/chat-view/utils/messageUtils"
+import { executePlanPrompt, findPlanRootFile, isLatestPlanResult } from "@/components/chat/chat-view/utils/planFiles"
 import { GeneratedMediaContent } from "@/components/chat/GeneratedMediaContent"
 import { OptionsButtons } from "@/components/chat/OptionsButtons"
 import { WithCopyButton } from "@/components/common/CopyButton"
@@ -45,7 +47,7 @@ import McpResourceRow from "@/components/mcp/configuration/tabs/installed/server
 import McpToolRow from "@/components/mcp/configuration/tabs/installed/server-row/McpToolRow"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
-import { FileServiceClient, UiServiceClient } from "@/services/grpc-client"
+import { FileServiceClient, StateServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { findMatchingResourceOrTemplate } from "@/utils/mcp"
 import CodeAccordian, { cleanPathPrefix } from "../common/CodeAccordian"
 import { CommandOutputContent, CommandOutputRow } from "./CommandOutputRow"
@@ -260,6 +262,17 @@ const ChatRowContent = memo(
 			window.getSelection()?.removeAllRanges() // Clear the browser selection
 			setQuoteButtonState({ visible: false, top: 0, left: 0, selectedText: "" })
 		}, [onSetQuote, quoteButtonState.selectedText]) // <-- Use onSetQuote from props
+
+		// Switch to act mode and run the root plan file. The mode coordinator sends
+		// the prompt as the act-mode continuation of the presented plan.
+		const executePlan = useCallback((rootPlanFile: string) => {
+			StateServiceClient.togglePlanActModeProto(
+				TogglePlanActModeRequest.create({
+					mode: PlanActMode.ACT,
+					chatContent: { message: executePlanPrompt(rootPlanFile), images: [], files: [] },
+				}),
+			).catch((err) => console.error("Failed to execute plan:", err))
+		}, [])
 
 		const handleMouseUp = useCallback((event: MouseEvent<HTMLDivElement>) => {
 			// Get the target element immediately, before the timeout
@@ -985,9 +998,24 @@ const ChatRowContent = memo(
 							/>
 						)
 					}
-					case "plan_completion_result":
-						// Turn-final plan-mode response inferred at turn end (SDK path)
-						return <PlanCompletionOutputRow text={message.text || ""} />
+					case "plan_completion_result": {
+						// Turn-final plan-mode response inferred at turn end (SDK path).
+						// When the plan was written to markdown files, offer to execute
+						// the root file while this is still the plan awaiting a decision.
+						const rootPlanFile = findPlanRootFile(clineMessages, message.ts)
+						const canExecutePlan =
+							!!rootPlanFile &&
+							mode === "plan" &&
+							message.partial !== true &&
+							isLatestPlanResult(clineMessages, message.ts)
+						return (
+							<PlanCompletionOutputRow
+								onExecutePlan={canExecutePlan && rootPlanFile ? () => executePlan(rootPlanFile) : undefined}
+								rootPlanFile={rootPlanFile}
+								text={message.text || ""}
+							/>
+						)
+					}
 					case "shell_integration_warning":
 						return (
 							<div className="flex flex-col bg-warning/20 p-2 rounded-xs border border-error">

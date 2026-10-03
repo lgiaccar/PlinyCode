@@ -107,6 +107,98 @@ describe("plan-mode command-guard extension", () => {
 		expect(result?.reason).toContain("`git checkout`");
 	});
 
+	it("allows editor writes to markdown files", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		for (const path of [
+			"plans/auth/PLAN.md",
+			"plans/auth/01-api.md",
+			"NOTES.MARKDOWN",
+		]) {
+			const result = await runBeforeTool(
+				extension,
+				makeContext("editor", { path, new_text: "# Plan" }),
+			);
+			expect(result).toBeUndefined();
+		}
+	});
+
+	it("rejects editor writes to non-markdown files", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		for (const path of ["src/index.ts", "README", "plans/PLAN.md.bak"]) {
+			const result = await runBeforeTool(
+				extension,
+				makeContext("editor", { path, new_text: "x" }),
+			);
+			expect(result?.skip).toBe(true);
+			expect(result?.reason).toContain("PLAN MODE");
+			expect(result?.reason).toContain(`\`${path}\``);
+		}
+	});
+
+	it("rejects editor calls without a path", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		const result = await runBeforeTool(
+			extension,
+			makeContext("editor", { new_text: "x" }),
+		);
+
+		expect(result?.skip).toBe(true);
+		expect(result?.reason).toContain("without a path");
+	});
+
+	it("allows apply_patch when every file is markdown", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		const patch = [
+			"*** Begin Patch",
+			"*** Add File: plans/x/PLAN.md",
+			"+# Plan",
+			"*** Update File: plans/x/01-step.md",
+			"@@",
+			"-a",
+			"+b",
+			"*** End Patch",
+		].join("\n");
+
+		expect(
+			await runBeforeTool(
+				extension,
+				makeContext("apply_patch", { input: patch }),
+			),
+		).toBeUndefined();
+		expect(
+			await runBeforeTool(extension, makeContext("apply_patch", patch)),
+		).toBeUndefined();
+	});
+
+	it("rejects apply_patch touching a non-markdown file", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		const patch = [
+			"*** Begin Patch",
+			"*** Add File: plans/x/PLAN.md",
+			"+# Plan",
+			"*** Update File: src/app.ts",
+			"*** Move to: src/app.md",
+			"*** End Patch",
+		].join("\n");
+		const result = await runBeforeTool(
+			extension,
+			makeContext("apply_patch", { input: patch }),
+		);
+
+		expect(result?.skip).toBe(true);
+		expect(result?.reason).toContain("`src/app.ts`");
+	});
+
+	it("rejects apply_patch with no parseable file header", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		const result = await runBeforeTool(
+			extension,
+			makeContext("apply_patch", { input: "garbage" }),
+		);
+
+		expect(result?.skip).toBe(true);
+	});
+
 	it("ignores other tools", async () => {
 		const extension = createPlanModeCommandGuardExtension();
 		const result = await runBeforeTool(
