@@ -434,6 +434,86 @@ Escalation runbook`,
 		}
 	});
 
+	it("prefers a <name>/SKILL.md folder over a flat skill file of the same name", async () => {
+		const tempRoot = await mkdtemp(
+			join(tmpdir(), "core-user-instructions-flat-"),
+		);
+		tempRoots.push(tempRoot);
+		const originalHomeDir = process.env.HOME?.trim() || homedir();
+		setHomeDir(join(tempRoot, "home"));
+		const workspaceRoot = join(tempRoot, "workspace");
+		const write = async (relativePath: string, content: string) => {
+			const filePath = join(workspaceRoot, relativePath);
+			await mkdir(join(filePath, ".."), { recursive: true });
+			await writeFile(filePath, content);
+		};
+		// `.cursor` is scanned after `.github`, so the flat pointer used to win.
+		await write(
+			".github/skills/grilling/SKILL.md",
+			"---\nname: grilling\ndescription: Interview the user\n---\nFULL grilling steps.",
+		);
+		await write(
+			".cursor/skills/grilling.mdc",
+			"---\ndescription: Pointer\n---\n→ skill: `.github/skills/grilling/SKILL.md`",
+		);
+		// Folder and flat file side by side in one directory.
+		await write(
+			".cursor/skills/paraview.mdc",
+			"---\ndescription: Pointer\n---\nSee the folder.",
+		);
+		await write(
+			".cursor/skills/paraview/SKILL.md",
+			"---\nname: paraview\ndescription: Load into ParaView\n---\nFULL paraview steps.",
+		);
+		// Two flat files: the later directory still wins, as before.
+		await write(".github/skills/notes.md", "---\ndescription: A\n---\nFirst.");
+		await write(".cursor/skills/notes.md", "---\ndescription: B\n---\nSecond.");
+
+		const watcher = createUserInstructionConfigWatcher({
+			skills: { workspacePath: workspaceRoot },
+			rules: { workspacePath: workspaceRoot },
+			workflows: { workspacePath: workspaceRoot },
+		});
+		try {
+			await watcher.refreshAll();
+			const skills = watcher.getSnapshot("skill");
+			expect(skills.get("grilling")?.item.instructions).toBe(
+				"FULL grilling steps.",
+			);
+			expect(skills.get("paraview")?.item.instructions).toBe(
+				"FULL paraview steps.",
+			);
+			expect(skills.get("notes")?.item.instructions).toBe("Second.");
+		} finally {
+			setHomeDir(originalHomeDir);
+		}
+	});
+
+	it("warns about skills with no description or a name unlike their folder", () => {
+		expect(
+			parseSkillConfigFromMarkdown(
+				"# Benchmark Branches\n\nRun the benchmark script.",
+				"benchmark-branches",
+			).warnings,
+		).toEqual([
+			"No description in the frontmatter: the model sees only the name, so it cannot tell when to use this skill.",
+		]);
+		expect(
+			parseSkillConfigFromMarkdown(
+				"---\nname: commit\ndescription: Commit conventions\n---\nSteps.",
+				"git-commit",
+			).warnings,
+		).toEqual([
+			'Its name "commit" differs from "git-commit": the model and slash commands know it as "commit".',
+		]);
+		expect(
+			parseSkillConfigFromMarkdown(
+				"---\nname: Debugging\ndescription: Debug\n---\nSteps.",
+				"debugging",
+			).warnings,
+		).toBeUndefined();
+	});
+
 	it("loads global and workspace AGENTS.md rules without clobbering either source", async () => {
 		const tempRoot = await mkdtemp(
 			join(tmpdir(), "core-user-instructions-agents-"),

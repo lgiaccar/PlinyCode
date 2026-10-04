@@ -659,11 +659,13 @@ const ClineRulesToggleModal: React.FC = () => {
 													enabled={skill.enabled}
 													isGlobal={true}
 													key={skill.path}
+													name={skill.name}
 													rulePath={skill.path}
 													ruleType="skill"
 													toggleRule={(_path, enabled) => toggleSkill(true, skill.path, enabled)}
 													tokens={skill.tokens}
 													tokensTitle={SKILL_TOKENS_TITLE}
+													warnings={skill.warnings}
 												/>
 											))}
 										<NewRuleRow isGlobal={true} ruleType="skill" />
@@ -681,11 +683,13 @@ const ClineRulesToggleModal: React.FC = () => {
 													enabled={skill.enabled}
 													isGlobal={false}
 													key={skill.path}
+													name={skill.name}
 													rulePath={skill.path}
 													ruleType="skill"
 													toggleRule={(path, enabled) => toggleSkill(false, path, enabled)}
 													tokens={skill.tokens}
 													tokensTitle={SKILL_TOKENS_TITLE}
+													warnings={skill.warnings}
 												/>
 											))}
 										<NewRuleRow isGlobal={false} ruleType="skill" />

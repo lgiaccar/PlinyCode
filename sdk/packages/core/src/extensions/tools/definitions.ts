@@ -747,13 +747,19 @@ export function createSkillsTool(
 ): AgentTool<SkillsInput, string> {
 	const timeoutMs = config.skillsTimeoutMs ?? 15000;
 
+	// A skill is a procedure for one kind of task. The wording used to make a
+	// match "a blocking requirement before any other response", which, with a
+	// couple of dozen skills listed, invites a model to run `benchmark-branches`
+	// when asked only to tabulate benchmark numbers the user pasted. Matching
+	// is on the task, not the topic.
 	const baseDescription =
 		"Execute a skill within the main conversation. " +
-		"When users ask you to perform tasks, check if any available skills match. " +
+		"A skill is a step-by-step procedure for one kind of task. " +
+		"When the user asks you to carry out the task a skill describes, invoke it before you start, and follow what it returns. " +
 		"When users reference a slash command, invoke it with this tool. " +
+		"Do not invoke a skill only because the request shares a topic or a word with it: answering a question, explaining, or reformatting information the user already gave you rarely needs one. " +
 		'Input: `skill` (required) and optional `args`. Example: `skill: "pdf"`, `skill: "commit", args: "-m \\"Fix bug\\""`, `skill: "review-pr", args: "123"`, `skill: "ms-office-suite:pdf"`. ' +
-		"When a skill matches the user's request, invoking this tool is a blocking requirement before any other response. " +
-		"Never mention a skill without invoking this tool.";
+		"Never claim to have used a skill without invoking this tool.";
 
 	const tool = createTool<SkillsInput, string>({
 		name: "skills",

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	decodeConfigText,
 	UnifiedConfigFileWatcher,
 	type UnifiedConfigWatcherEvent,
 } from "./unified-config-file-watcher";
@@ -189,5 +190,29 @@ Escalation playbook`,
 		} finally {
 			unsubscribe();
 		}
+	});
+});
+
+describe("decodeConfigText", () => {
+	const text = "---\ndescription: Clean the repo — untracked only\n---\nBody";
+
+	it("reads UTF-8 as before", () => {
+		expect(decodeConfigText(Buffer.from(text, "utf8"))).toBe(text);
+	});
+
+	it("reads UTF-16LE with and without a byte order mark", () => {
+		const le = Buffer.from(text, "utf16le");
+		expect(decodeConfigText(le)).toBe(text);
+		expect(
+			decodeConfigText(Buffer.concat([Buffer.from([0xff, 0xfe]), le])),
+		).toBe(text);
+	});
+
+	it("reads UTF-16BE with and without a byte order mark", () => {
+		const be = Buffer.from(text, "utf16le").swap16();
+		expect(decodeConfigText(be)).toBe(text);
+		expect(
+			decodeConfigText(Buffer.concat([Buffer.from([0xfe, 0xff]), be])),
+		).toBe(text);
 	});
 });

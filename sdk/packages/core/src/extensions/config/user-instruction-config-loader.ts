@@ -99,6 +99,8 @@ export interface SkillConfig {
 	disabled?: boolean;
 	instructions: string;
 	frontmatter: Record<string, unknown>;
+	/** Problems that load the skill but weaken it, shown in the Skills panel. */
+	warnings?: string[];
 	source?: {
 		type: "agent-plugin";
 		pluginName: string;
@@ -444,15 +446,45 @@ export function parseSkillConfigFromMarkdown(
 		throw new Error("Missing skill name.");
 	}
 
+	const description = parseStringField(data.description, "description", false);
+	const warnings = describeSkillWarnings(name, description, fallbackName);
+
 	return {
 		name,
-		description: parseStringField(data.description, "description", false),
+		description,
 		disabled:
 			parseBooleanField(data.disabled, "disabled") ??
 			(parseBooleanField(data.enabled, "enabled") === false ? true : undefined),
 		instructions,
 		frontmatter: data,
+		...(warnings.length > 0 ? { warnings } : {}),
 	};
+}
+
+/**
+ * What a skill file gets wrong without failing to load. The model picks a
+ * skill by its name and description alone, so a missing description leaves it
+ * guessing, and a `name:` that differs from the folder is the name the model
+ * and slash commands know the skill by.
+ */
+function describeSkillWarnings(
+	name: string,
+	description: string | undefined,
+	folderName: string,
+): string[] {
+	const warnings: string[] = [];
+	if (!description?.trim()) {
+		warnings.push(
+			"No description in the frontmatter: the model sees only the name, so it cannot tell when to use this skill.",
+		);
+	}
+	const folder = folderName.trim();
+	if (folder && normalizeName(name) !== normalizeName(folder)) {
+		warnings.push(
+			`Its name "${name}" differs from "${folder}": the model and slash commands know it as "${name}".`,
+		);
+	}
+	return warnings;
 }
 
 /**
@@ -806,6 +838,14 @@ export function createSkillsConfigDefinition(
 			skill.source?.type === "agent-plugin"
 				? `${normalizeName(skill.source.pluginName)}:${normalizeName(skill.name)}`
 				: normalizeName(skill.name),
+		// A `<name>/SKILL.md` folder beats a flat `<name>.md`/`.mdc` file of the
+		// same name wherever each lives. Repositories keep short flat pointers
+		// (`.cursor/skills/grilling.mdc` → `.github/skills/grilling/SKILL.md`)
+		// next to the real skill, and the pointer used to win as the later
+		// directory, so invoking the skill returned only the pointer.
+		keepExisting: (existing, next) =>
+			basename(existing.filePath) === SKILL_FILE_NAME &&
+			basename(next.filePath) !== SKILL_FILE_NAME,
 	};
 }
 

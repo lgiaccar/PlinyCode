@@ -39,6 +39,8 @@ export interface CoreSettingsItem {
 	agentPlugin?: boolean;
 	/** Loader diagnostics associated with this item, if any. */
 	loadError?: string;
+	/** Problems that load the item but weaken it (e.g. a skill with no description). */
+	warnings?: string[];
 	contributions?: CorePluginContributions;
 }
 

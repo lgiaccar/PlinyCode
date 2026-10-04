@@ -43,16 +43,49 @@ function request(overrides: Partial<AgentModelRequest> = {}): AgentModelRequest 
 
 describe("summarizeInstructionContext", () => {
 	it("reads inline rules, on-demand rules and skills off the request", () => {
-		expect(summarizeInstructionContext(request())).toEqual({
+		expect(summarizeInstructionContext(request())).toMatchObject({
 			inlineRules: ["Workspace AGENTS.md", ".cursor/rules/git.md"],
 			onDemandRules: ["profile-nsight", "python"],
 			skills: ["build-skill", "grilling", "azure-mcp"],
 		})
 	})
 
+	it("counts every rule when a rule's nested headings and code blocks look like sections", () => {
+		// What the engine sends for a rule whose body opens with `# Title`:
+		// headings nested under the rule, fenced code left as written.
+		const systemPrompt = [
+			"You are PlinyCode.",
+			"",
+			"# Rules",
+			"## .cursor/rules/ai-output.mdc",
+			"### Agent Output Directory",
+			"#### Do",
+			"```bash",
+			"# not a section",
+			"## not a rule",
+			"```",
+			"",
+			"## .cursor/rules/code-generation.mdc",
+			"### Code Generation",
+			"",
+			"## Workspace AGENTS.md",
+			"Use bun.",
+			"",
+			"# Plan / Act Modes",
+			"## Not a rule",
+		].join("\n")
+		const summary = summarizeInstructionContext(request({ systemPrompt }))
+		expect(summary.inlineRules).toEqual([
+			".cursor/rules/ai-output.mdc",
+			".cursor/rules/code-generation.mdc",
+			"Workspace AGENTS.md",
+		])
+		expect(summary.rulesChars).toBeGreaterThan(100)
+	})
+
 	it("reports nothing when the prompt has no rules and no skills tool", () => {
 		const summary = summarizeInstructionContext(request({ systemPrompt: "You are PlinyCode.", tools: [] }))
-		expect(summary).toEqual({ inlineRules: [], onDemandRules: [], skills: [] })
+		expect(summary).toMatchObject({ inlineRules: [], onDemandRules: [], skills: [] })
 		expect(formatInstructionContextRow(summary)).toBe("Context: no rules or skills were loaded for this workspace.")
 	})
 
@@ -63,6 +96,17 @@ describe("summarizeInstructionContext", () => {
 			skills: ["a", "b", "c", "d", "e", "f", "g"],
 		})
 		expect(text).toBe("Context: 1 rule in the prompt: `AGENTS.md` · 7 skills: `a`, `b`, `c`, `d`, `e` +2 more")
+	})
+
+	it("adds the approximate size when known", () => {
+		const text = formatInstructionContextRow({
+			inlineRules: ["AGENTS.md"],
+			onDemandRules: [],
+			skills: ["a"],
+			rulesChars: 26_800,
+			skillsChars: 400,
+		})
+		expect(text).toBe("Context: 1 rule in the prompt (~6.7k tokens): `AGENTS.md` · 1 skill (~100 tokens): `a`")
 	})
 })
 
@@ -79,9 +123,9 @@ describe("installInstructionContextRows", () => {
 		const result = await config.hooks?.beforeModel?.(root)
 		expect(result).toEqual({ options: { marker: true } })
 		expect(rows).toHaveLength(1)
-		expect(rows[0]).toContain("2 rules in the prompt: `Workspace AGENTS.md`, `.cursor/rules/git.md`")
+		expect(rows[0]).toMatch(/2 rules in the prompt \(~\d+ tokens\): `Workspace AGENTS\.md`, `\.cursor\/rules\/git\.md`/)
 		expect(rows[0]).toContain("2 rules to read when relevant")
-		expect(rows[0]).toContain("3 skills: `build-skill`, `grilling`, `azure-mcp`")
+		expect(rows[0]).toMatch(/3 skills \(~\d+ tokens\): `build-skill`, `grilling`, `azure-mcp`/)
 
 		// Same set on the next call of the turn: no second row.
 		await config.hooks?.beforeModel?.(root)
