@@ -36,7 +36,10 @@ import {
 	ToolPresets,
 	type ToolRoutingRule,
 } from "../../extensions/tools";
-import { createPlanModeCommandGuardExtension } from "../../extensions/tools/command-guard-extension";
+import {
+	createAskModeCommandGuardExtension,
+	createPlanModeCommandGuardExtension,
+} from "../../extensions/tools/command-guard-extension";
 import {
 	AgentTeamsRuntime,
 	bootstrapAgentTeams,
@@ -365,7 +368,9 @@ function normalizeConfig(
 	return {
 		sessionId: config.sessionId || "",
 		mode:
-			config.mode === "plan" ? "plan" : config.mode === "yolo" ? "yolo" : "act",
+			config.mode === "plan" || config.mode === "ask" || config.mode === "yolo"
+				? config.mode
+				: "act",
 		enableTools: config.enableTools !== false,
 		enableSpawnAgent:
 			config.enableSpawnAgent ?? preset.enableSpawnAgent ?? true,
@@ -546,15 +551,18 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 		// rides the shared hook merge for the lead agent, host-provided
 		// run_commands replacements (e.g. the VS Code terminal tool), and
 		// delegated sub-agents alike. Mode switches rebuild the runtime, so
-		// the guard appears/disappears with the mode.
-		const planModeCommandGuard =
-			normalized.mode === "plan" && normalized.enableTools
+		// the guard appears/disappears with the mode. Ask mode gets the
+		// stricter guard: no file write at all, markdown included.
+		const modeCommandGuard = !normalized.enableTools
+			? undefined
+			: normalized.mode === "plan"
 				? createPlanModeCommandGuardExtension()
-				: undefined;
-		const injectedExtensions = [
-			userInstructionPlugin,
-			planModeCommandGuard,
-		].filter((extension) => extension !== undefined);
+				: normalized.mode === "ask"
+					? createAskModeCommandGuardExtension()
+					: undefined;
+		const injectedExtensions = [userInstructionPlugin, modeCommandGuard].filter(
+			(extension) => extension !== undefined,
+		);
 		const runtimeExtensions =
 			injectedExtensions.length > 0
 				? [...(extensions ?? config.extensions ?? []), ...injectedExtensions]

@@ -93,7 +93,7 @@ export class SdkModeCoordinator {
 	}
 
 	private recordModeSwitchNotice(sessionId: string, from: Mode | undefined, to: Mode): void {
-		if (from !== "plan" && from !== "act") {
+		if (from !== "plan" && from !== "act" && from !== "ask") {
 			return
 		}
 		if (this.modeSwitchNoticeSessionId !== sessionId) {

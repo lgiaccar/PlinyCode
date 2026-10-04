@@ -5,7 +5,7 @@ import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
 
 /**
- * Toggles between Plan and Act modes
+ * Switches to Plan, Act or Ask mode
  * @param controller The controller instance
  * @param request The request containing the chat settings and optional chat content
  * @returns An empty response
@@ -17,6 +17,8 @@ export async function togglePlanActModeProto(controller: Controller, request: To
 			mode = "plan"
 		} else if (request.mode === PlanActMode.ACT) {
 			mode = "act"
+		} else if (request.mode === PlanActMode.ASK_MODE) {
+			mode = "ask"
 		} else {
 			throw new Error(`Invalid mode value: ${request.mode}`)
 		}

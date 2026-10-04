@@ -15,10 +15,10 @@ The E2E test suite consists of several key components:
 
 > `auth.test.ts` (onboarding/multi-provider picker) and `codex-oauth.test.ts` (OpenAI Codex OAuth) were **removed** — they tested features dropped in the Pliny-only refactor.
 
-- **`chat.test.ts`** - chat message sending, mode switching (Plan/Act), slash commands, @ mentions
+- **`chat.test.ts`** - chat message sending, mode switching (Plan/Act/Ask), slash commands, @ mentions
 - **`editor.test.ts`** - code actions, editor panel integration, code selection
 - **`file-edit.test.ts`** - file-edit auto-approval via the SDK `editor` tool
-- **`history.test.ts`** - (disabled) history cost-display suppression for `openai-codex` subscription billing — a removed-feature-adjacent assertion; see the disable comment at the top of the file
+- **`history.test.ts`** - history view filters (favorites, search, date) and pinning a conversation; plus (disabled) history cost-display suppression for `openai-codex` subscription billing — a removed-feature-adjacent assertion; see the disable comment at the top of the file
 - **`hooks.test.ts`** - workspace hook execution from the window's workspace root
 - **`powershell-background.test.ts`** - (Windows-only) background terminal execution profile
 

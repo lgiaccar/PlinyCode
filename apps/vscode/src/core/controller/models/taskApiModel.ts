@@ -1,6 +1,6 @@
 import type { ApiConfiguration, ApiProvider } from "@/shared/api"
 import { getProviderDefaultModelId, getProviderModelIdKey } from "@/shared/storage/provider-keys"
-import type { Mode } from "@/shared/storage/types"
+import { type Mode, modelSettingsMode } from "@/shared/storage/types"
 
 type TaskApiModel = {
 	getModel: () => { id: string }
@@ -16,7 +16,7 @@ export function resolveActiveModelIdFromApiConfiguration(config: ApiConfiguratio
 	const genericModelKey = mode === "plan" ? "planModeApiModelId" : "actModeApiModelId"
 
 	if (provider) {
-		const providerModelKey = getProviderModelIdKey(provider as ApiProvider, mode) as keyof ApiConfiguration
+		const providerModelKey = getProviderModelIdKey(provider as ApiProvider, modelSettingsMode(mode)) as keyof ApiConfiguration
 		return (
 			readString(config, providerModelKey) ??
 			readString(config, genericModelKey) ??

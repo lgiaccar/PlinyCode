@@ -1,7 +1,7 @@
 import { PLINY_FREE_AUTO_RULES_URI } from "@shared/pliny"
 import { StringRequest } from "@shared/proto/cline/common"
 import { UpdateSettingsRequest } from "@shared/proto/cline/state"
-import { Mode } from "@shared/storage/types"
+import { modelSettingsMode } from "@shared/storage/types"
 import { VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import { useState } from "react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
@@ -20,7 +20,8 @@ interface ApiConfigurationSectionProps {
 
 const ApiConfigurationSection = ({ renderSectionHeader, initialModelTab }: ApiConfigurationSectionProps) => {
 	const { planActSeparateModelsSetting, mode, apiConfiguration } = useExtensionState()
-	const [currentTab, setCurrentTab] = useState<Mode>(mode)
+	// Ask mode runs on the act-mode model, so it opens the Act tab.
+	const [currentTab, setCurrentTab] = useState<"plan" | "act">(modelSettingsMode(mode))
 	const { handleFieldsChange } = useApiConfigurationHandlers()
 	const [unlockPlinyPaid, setUnlockPlinyPaid] = usePlinyUnlockPaidModels()
 	const [unlockPlinyFree, setUnlockPlinyFree] = usePlinyUnlockFreeModels()

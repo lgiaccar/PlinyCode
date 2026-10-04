@@ -52,6 +52,9 @@ offers **All workspaces** and the recent workspaces in a dropdown. The welcome p
 only the current workspace's conversations. `TaskItem` and `HistoryItem` expose the binding, and labels show a
 folder as `parent/folder` and a `.code-workspace` file by its name.
 
+The other filters of the history view (favorites, search, date) and pinned conversations are described in
+[conversation-history.md](conversation-history.md).
+
 ## Starting a conversation elsewhere
 
 While no conversation is open, a **Start in** dropdown above the prompt box lists the window's workspace
@@ -72,7 +75,7 @@ Conversations already live on disk under `~/.cline/data/sessions`, and every win
 they all see the same conversations. To notice the other windows' changes, `SdkTaskHistory.watchSessionChanges`
 watches the directory (recursively where the platform allows it), drops the metadata cache and re-posts state
 after a one-second quiet period. The history view reloads when the set of conversations, their titles or their
-favorite flags change in that state; usage totals ticking during a run do not trigger a reload.
+favorite or pin flags change in that state; usage totals ticking during a run do not trigger a reload.
 
 The watcher also fires for this window's own writes. That is harmless: state posts are debounced, and the
 cache is rebuilt at most about once a second while a task streams.

@@ -36,6 +36,8 @@ service TaskService {
   rpc exportTaskToMarkdown(ExportTaskRequest) returns (ExportTaskResult);
   // Toggles the favorite status of a task
   rpc toggleTaskFavorite(TaskFavoriteRequest) returns (Empty);
+  // Pins a conversation to the top of the history list, or unpins it
+  rpc toggleTaskPin(TaskPinRequest) returns (Empty);
   // Renames a task (its history title). A blank title is ignored.
   rpc renameTask(RenameTaskRequest) returns (Empty);
   // Sets a conversation's budget in USD (0 = no limit). A negative amount is ignored.
@@ -87,6 +89,13 @@ message TaskFavoriteRequest {
   bool is_favorited = 3;
 }
 
+// Request message for pinning or unpinning a conversation
+message TaskPinRequest {
+  Metadata metadata = 1;
+  string task_id = 2;
+  bool is_pinned = 3;
+}
+
 // Request message for renaming a task
 message RenameTaskRequest {
   Metadata metadata = 1;
@@ -131,6 +140,11 @@ message GetTaskHistoryRequest {
   // path). Ignored when current_workspace_only is set. Empty with
   // current_workspace_only false lists every workspace.
   string workspace_path = 8;
+  // Only conversations active in this period (ms since epoch): one that
+  // started before to_ts and was last active after from_ts. 0 leaves that
+  // side of the period open.
+  int64 from_ts = 9;
+  int64 to_ts = 10;
 }
 
 // Response for task history
@@ -170,6 +184,8 @@ message TaskItem {
   string workspace_path = 17;
   // "folder" or "workspaceFile". Empty when unknown (treated as folder).
   string workspace_kind = 18;
+  // Pinned conversations are listed first, in their own section.
+  bool is_pinned = 19;
 }
 
 // Request for ask response operation

@@ -7,6 +7,8 @@
 // Zod Utilities
 export { validateWithZod, zodToJsonSchema } from "@plinycode/shared";
 export {
+	ASK_MODE_COMMAND_GUARD_EXTENSION_NAME,
+	createAskModeCommandGuardExtension,
 	createPlanModeCommandGuardExtension,
 	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
 } from "./command-guard-extension";

@@ -33,9 +33,16 @@ e2e("Chat - can send messages and switch between modes", async ({ helper, sideba
 	await expect(actButton).toHaveAttribute("aria-checked", "true")
 	await expect(planButton).not.toHaveAttribute("aria-checked", "true")
 
+	// Each segment of the switch selects its own mode
+	const askButton = sidebar.getByRole("switch", { name: "Ask" })
+	await askButton.click()
+	await expect(askButton).toHaveAttribute("aria-checked", "true")
+	await expect(actButton).not.toHaveAttribute("aria-checked", "true")
+
 	await planButton.click()
 	await expect(planButton).toHaveAttribute("aria-checked", "true")
 	await expect(actButton).not.toHaveAttribute("aria-checked", "true")
+	await expect(askButton).not.toHaveAttribute("aria-checked", "true")
 
 	// === slash commands preserve following text ===
 	await expect(inputbox).toHaveValue("")

@@ -466,6 +466,8 @@ message TogglePlanActModeRequest {
 enum PlanActMode {
   PLAN = 0;
   ACT = 1;
+  // Read-only question answering: no file edits.
+  ASK_MODE = 2;
 }
 
 enum OpenaiReasoningEffort {

@@ -2,6 +2,7 @@ import * as path from "node:path"
 import { type CompareCheckpointResult, readSessionCheckpointHistory } from "@plinycode/core"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { ChangedFileSummary, LatestChangesSummary } from "@shared/proto/cline/checkpoints"
+import type { Mode } from "@shared/storage/types"
 import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
 import { HostProvider } from "@/hosts/host-provider"
 import { buildChangedFileSummaries } from "@/shared/checkpoint-changes-summary"
@@ -38,7 +39,7 @@ export interface SdkCheckpointCoordinatorOptions {
 	getTask: () => TaskProxy | undefined
 	setTask: (task: TaskProxy | undefined) => void
 	getWorkspaceRoot: () => Promise<string>
-	getMode: () => "plan" | "act"
+	getMode: () => Mode
 	createTempSessionHost: () => Promise<VscodeSessionHost>
 	askResponse: (text?: string, images?: string[], files?: string[]) => Promise<void>
 	cancelTask: () => Promise<void>
@@ -103,6 +104,11 @@ export class SdkCheckpointCoordinator {
 				}
 			: undefined
 
+		// The restore starts a new session; its history record keeps the star and the pin.
+		const previousHistoryItem = restoreMessages
+			? await this.options.taskHistory.findHistoryItem(activeSession.sessionId).catch(() => undefined)
+			: undefined
+
 		const restored = await this.options.sessions.restoreActiveSession({
 			sessionId: activeSession.sessionId,
 			checkpointRunCount,
@@ -135,13 +141,17 @@ export class SdkCheckpointCoordinator {
 		)
 		this.options.setTask(task)
 
-		const newHistoryItem = createHistoryItemFromSession(
-			restored.sessionId,
-			historyTitle,
-			config?.modelId ?? "",
-			cwd,
-			config?.workspaceRoot ?? cwd,
-		)
+		const newHistoryItem = {
+			...createHistoryItemFromSession(
+				restored.sessionId,
+				historyTitle,
+				config?.modelId ?? "",
+				cwd,
+				config?.workspaceRoot ?? cwd,
+			),
+			isFavorited: previousHistoryItem?.isFavorited,
+			isPinned: previousHistoryItem?.isPinned,
+		}
 		await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 
 		const visibleMessages = currentMessages.slice(0, target.index)

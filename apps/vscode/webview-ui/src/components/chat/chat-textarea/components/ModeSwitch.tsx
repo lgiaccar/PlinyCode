@@ -4,8 +4,27 @@ import styled from "styled-components"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-export const PLAN_MODE_COLOR = "var(--vscode-activityWarningBadge-background)"
+const PLAN_MODE_COLOR = "var(--vscode-activityWarningBadge-background)"
 const ACT_MODE_COLOR = "var(--vscode-focusBorder)"
+const ASK_MODE_COLOR = "var(--vscode-statusBarItem-remoteBackground, #16825d)"
+
+/** The modes, in the order the switch shows them and the shortcut cycles through them. */
+const MODES: readonly Mode[] = ["plan", "act", "ask"]
+
+const MODE_DETAILS: Record<Mode, { label: string; color: string; description: string }> = {
+	plan: { label: "Plan", color: PLAN_MODE_COLOR, description: "gather information to architect a plan" },
+	act: { label: "Act", color: ACT_MODE_COLOR, description: "complete the task immediately" },
+	ask: { label: "Ask", color: ASK_MODE_COLOR, description: "answer your questions without editing any file" },
+}
+
+export function modeColor(mode: Mode): string {
+	return MODE_DETAILS[mode].color
+}
+
+/** The mode the keyboard shortcut switches to from `mode`. */
+export function nextMode(mode: Mode): Mode {
+	return MODES[(MODES.indexOf(mode) + 1) % MODES.length]
+}
 
 const SwitchContainer = styled.div<{ disabled: boolean }>`
 	display: flex;
@@ -23,55 +42,57 @@ const SwitchContainer = styled.div<{ disabled: boolean }>`
 `
 
 const Slider = styled.div.withConfig({
-	shouldForwardProp: (prop) => !["isAct", "isPlan"].includes(prop),
-})<{ isAct: boolean; isPlan?: boolean }>`
+	shouldForwardProp: (prop) => !["index", "color"].includes(prop),
+})<{ index: number; color: string }>`
 	position: absolute;
 	height: 100%;
-	width: 50%;
-	background-color: ${(props) => (props.isPlan ? PLAN_MODE_COLOR : ACT_MODE_COLOR)};
+	width: ${100 / MODES.length}%;
+	background-color: ${(props) => props.color};
 	transition: transform 0.2s ease;
-	transform: translateX(${(props) => (props.isAct ? "100%" : "0%")});
+	transform: translateX(${(props) => props.index * 100}%);
 `
 
 interface ModeSwitchProps {
 	mode: Mode
-	onModeToggle: () => void
+	onModeSelect: (mode: Mode) => void
 	togglePlanActKeys: string
 }
 
 /**
- * The Plan/Act mode toggle: a two-state switch with a tooltip explaining what
- * each mode does, and the keyboard shortcut to switch. `shownTooltipMode`
- * tracks which half of the switch the pointer is hovering, purely to decide
- * the tooltip's copy — it's local to this component since nothing outside it
- * needs that value.
+ * The Plan/Act/Ask mode switch: one segment per mode, with a tooltip
+ * explaining what the hovered mode does and the keyboard shortcut that cycles
+ * through them. `shownTooltipMode` tracks which segment the pointer is
+ * hovering, purely to decide the tooltip's copy — it's local to this component
+ * since nothing outside it needs that value.
  */
-export function ModeSwitch({ mode, onModeToggle, togglePlanActKeys }: ModeSwitchProps) {
+export function ModeSwitch({ mode, onModeSelect, togglePlanActKeys }: ModeSwitchProps) {
 	const [shownTooltipMode, setShownTooltipMode] = useState<Mode | null>(null)
 
 	return (
 		<Tooltip>
 			<TooltipContent className="text-xs px-2 flex flex-col gap-1" hidden={shownTooltipMode === null} side="top">
-				{`In ${shownTooltipMode === "act" ? "Act" : "Plan"}  mode, PlinyCode will ${shownTooltipMode === "act" ? "complete the task immediately" : "gather information to architect a plan"}`}
+				{shownTooltipMode &&
+					`In ${MODE_DETAILS[shownTooltipMode].label} mode, PlinyCode will ${MODE_DETAILS[shownTooltipMode].description}`}
 				<p className="text-description/80 text-xs mb-0">
-					Toggle w/ <kbd className="text-muted-foreground mx-1">{togglePlanActKeys}</kbd>
+					Switch w/ <kbd className="text-muted-foreground mx-1">{togglePlanActKeys}</kbd>
 				</p>
 			</TooltipContent>
 			<TooltipTrigger>
-				<SwitchContainer data-testid="mode-switch" disabled={false} onClick={onModeToggle}>
-					<Slider isAct={mode === "act"} isPlan={mode === "plan"} />
-					{["Plan", "Act"].map((m) => (
+				<SwitchContainer data-testid="mode-switch" disabled={false}>
+					<Slider color={modeColor(mode)} index={MODES.indexOf(mode)} />
+					{MODES.map((m) => (
 						<div
-							aria-checked={mode === m.toLowerCase()}
+							aria-checked={mode === m}
 							className={cn(
-								"pt-0.5 pb-px px-2 z-10 text-xs w-1/2 text-center bg-transparent",
-								mode === m.toLowerCase() ? "text-white" : "text-input-foreground",
+								"pt-0.5 pb-px px-2 z-10 text-xs w-1/3 text-center bg-transparent",
+								mode === m ? "text-white" : "text-input-foreground",
 							)}
 							key={m}
+							onClick={() => onModeSelect(m)}
 							onMouseLeave={() => setShownTooltipMode(null)}
-							onMouseOver={() => setShownTooltipMode(m.toLowerCase() === "plan" ? "plan" : "act")}
+							onMouseOver={() => setShownTooltipMode(m)}
 							role="switch">
-							{m}
+							{MODE_DETAILS[m].label}
 						</div>
 					))}
 				</SwitchContainer>

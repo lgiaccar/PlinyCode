@@ -17,7 +17,7 @@ const WORKSPACE_CONFIGURATION_MARKER = "# Workspace Configuration";
  */
 export const MODE_TAG_INSTRUCTIONS = `# Plan / Act Modes
 
-User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and write the plan -- no edits except markdown plan files, no state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened.`;
+User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and write the plan -- no edits except markdown plan files, no state-changing commands), "ask" means ask-mode constraints applied (answer the question -- no file edits at all, no state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened.`;
 
 /**
  * Plan-mode behavioral contract, appended when the session mode is "plan".
@@ -67,6 +67,30 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
 export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BASE}
 
 Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
+
+/**
+ * Ask-mode behavioral contract, appended when the session mode is "ask".
+ * Ask mode answers questions about the code and never changes a file. As in
+ * plan mode, run_commands stays available for read-only investigation, and
+ * the ask-mode command-guard hook (registered by the core runtime builder for
+ * ask-mode sessions) is the hard backstop that rejects file-editing
+ * run_commands calls and every editor or apply_patch write.
+ */
+export const ASK_MODE_INSTRUCTIONS = `# Ask Mode
+
+You are in Ask mode. Your role is to answer the user's question -- not to change anything.
+
+- Read files, search the codebase, and gather the context you need to answer accurately
+- Answer directly and concretely, citing the files and lines your answer is based on
+- When the answer involves a code change, show it in your reply as a code block or a diff; do not apply it
+- Ask a clarifying question when the request is ambiguous
+- Do NOT create, edit, or delete any file, markdown files included, and do NOT make any other change
+
+File edits are blocked in ask mode: the file-writing tools are not available, and any attempt to write a file is rejected with a tool error.
+
+The run_commands tool remains available in ask mode strictly for read-only inspection -- listing files, searching (grep), reading configs, inspecting git history and diffs, checking tool versions, and the like. Never use it to change anything: no creating, modifying, or deleting files, no writing scripts that make changes, and no state-changing commands (installs, migrations, database or schema changes, container commands that mutate state, etc.). File-editing commands (rm/mv/cp, in-place edits like sed -i, output redirection to files outside /tmp, git commands that change the working tree, package installs) are hard-blocked in ask mode: they are not executed and return a tool error instead, so do not attempt them.
+
+You do NOT have the ability to switch modes yourself. If the user asks for a change to be made, explain what you would change and ask them to "toggle to Act mode" (use those words) to apply it.`;
 
 function redactRemoteUrlCredentials(remote: string): string {
 	const schemeEnd = remote.indexOf("://");
@@ -210,7 +234,9 @@ export function buildClineSystemPrompt(
 			? planModeSwitchTool
 				? PLAN_MODE_INSTRUCTIONS
 				: PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH
-			: undefined,
+			: mode === "ask"
+				? ASK_MODE_INSTRUCTIONS
+				: undefined,
 	]
 		.filter(Boolean)
 		.join("\n\n");

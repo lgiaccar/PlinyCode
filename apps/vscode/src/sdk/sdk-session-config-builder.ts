@@ -105,7 +105,8 @@ export class SdkSessionConfigBuilder {
 			installRouter(config, {
 				sessionId: this.options.getSessionId?.() || input.cwd,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,
-				getMode: () => (this.options.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"),
+				// Ask mode routes like plan mode: both read and reason, neither edits.
+				getMode: () => (this.options.stateManager.getGlobalSettingsKey("mode") === "act" ? "act" : "plan"),
 				emitRow,
 				nextMessageTs,
 			})

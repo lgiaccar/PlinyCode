@@ -15,7 +15,7 @@ import { normalizeOpenaiReasoningEffort } from "../state/reasoningEffort"
  */
 export async function newTask(controller: Controller, request: NewTaskRequest): Promise<String> {
 	const convertPlanActMode = (mode: PlanActMode): string => {
-		return mode === PlanActMode.PLAN ? "plan" : "act"
+		return mode === PlanActMode.PLAN ? "plan" : mode === PlanActMode.ASK_MODE ? "ask" : "act"
 	}
 
 	const filteredTaskSettings: Partial<Settings> = Object.fromEntries(

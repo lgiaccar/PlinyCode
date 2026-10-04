@@ -633,6 +633,24 @@ describe("buildSessionConfig", () => {
 		})
 	})
 
+	it("builds ask-mode sessions on the act-mode model with the ask contract", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({
+			actModeApiProvider: "pliny",
+			actModeApiModelId: "act-model",
+			planModeApiProvider: "pliny",
+			planModeApiModelId: "plan-model",
+		} as any)
+
+		const askConfig = await buildSessionConfig({ cwd: "/tmp/workspace", mode: "ask" })
+
+		// The engine picks the tool preset and the write guard from the mode.
+		expect(askConfig.mode).toBe("ask")
+		expect(askConfig.modelId).toBe("act-model")
+		expect(askConfig.systemPrompt).toContain("# Ask Mode\n")
+		expect(askConfig.systemPrompt).toContain("File edits are blocked in ask mode")
+		expect(askConfig.systemPrompt).not.toContain("# Plan Mode\n")
+	})
+
 	it("emits the shared mode-tag instructions in both act and plan system prompts", async () => {
 		mocks.stateManager.getApiConfiguration.mockReturnValue({} as any)
 

@@ -1,9 +1,9 @@
 /**
- * Plan-Mode Command Guard Extension
+ * Plan-Mode and Ask-Mode Command Guard Extensions
  *
- * Runtime extension that enforces plan mode's write rules as a `beforeTool`
- * hook. The runtime builder registers it for plan-mode sessions, making them
- * session policy in one shared place: the hook fires for every matching tool
+ * Runtime extensions that enforce a mode's write rules as a `beforeTool`
+ * hook. The runtime builder registers the matching one for plan-mode and
+ * ask-mode sessions, making them session policy in one shared place: the hook fires for every matching tool
  * in the runtime — the SDK built-ins and host-provided replacements like the
  * VS Code extension's terminal-backed tool — without threading a flag through
  * each layer.
@@ -11,11 +11,12 @@
  * - `run_commands`: rejects commands on the file-editing blacklist
  *   (./command-guard.ts).
  * - `editor` / `apply_patch`: plan mode writes its plan as markdown files, so
- *   these are allowed only when every target path is a markdown file.
+ *   these are allowed only when every target path is a markdown file. Ask
+ *   mode answers questions and writes nothing, so it rejects them all.
  *
  * Because `beforeTool` hooks run before tool policies and user approval,
  * a blocked call is rejected up front: the user is never asked to approve a
- * call that would only fail, and the model receives the plan-mode error
+ * call that would only fail, and the model receives the mode's error
  * as the tool result (`skip`, not `stop`, so the run continues).
  */
 
@@ -27,6 +28,8 @@ import type {
 import {
 	findFileEditingCommand,
 	findPatchFilePaths,
+	formatAskModeBlockedCommandError,
+	formatAskModeBlockedWriteError,
 	formatPlanModeBlockedCommandError,
 	formatPlanModeBlockedWriteError,
 	isMarkdownPath,
@@ -36,8 +39,13 @@ import { normalizeRunCommandsInput } from "./helpers";
 
 export const PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME =
 	"core.plan-mode-command-guard";
+export const ASK_MODE_COMMAND_GUARD_EXTENSION_NAME =
+	"core.ask-mode-command-guard";
 
-function guardRunCommands(input: unknown): AgentBeforeToolResult | undefined {
+function guardRunCommands(
+	input: unknown,
+	formatError: (reason: string) => string,
+): AgentBeforeToolResult | undefined {
 	let commands: ReturnType<typeof normalizeRunCommandsInput>;
 	try {
 		commands = normalizeRunCommandsInput(input);
@@ -51,7 +59,7 @@ function guardRunCommands(input: unknown): AgentBeforeToolResult | undefined {
 		if (blocked) {
 			return {
 				skip: true,
-				reason: formatPlanModeBlockedCommandError(blocked),
+				reason: formatError(blocked),
 			};
 		}
 	}
@@ -101,7 +109,10 @@ export function createPlanModeCommandGuardExtension(): AgentExtension {
 	): AgentBeforeToolResult | undefined => {
 		switch (context.tool.name) {
 			case DefaultToolNames.RUN_COMMANDS:
-				return guardRunCommands(context.input);
+				return guardRunCommands(
+					context.input,
+					formatPlanModeBlockedCommandError,
+				);
 			case DefaultToolNames.EDITOR:
 				return guardEditor(context.input);
 			case DefaultToolNames.APPLY_PATCH:
@@ -113,6 +124,64 @@ export function createPlanModeCommandGuardExtension(): AgentExtension {
 
 	return {
 		name: PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
+		manifest: {
+			capabilities: ["hooks"],
+		},
+		hooks: {
+			beforeTool,
+		},
+	};
+}
+
+/** The file an `editor` or `apply_patch` call would write, for the error text. */
+function findWriteTarget(toolName: string, input: unknown): string | undefined {
+	if (toolName === DefaultToolNames.EDITOR) {
+		const path =
+			input && typeof input === "object"
+				? (input as { path?: unknown }).path
+				: undefined;
+		return typeof path === "string" && path.trim() ? path : undefined;
+	}
+	const patch =
+		typeof input === "string"
+			? input
+			: input && typeof input === "object"
+				? (input as { input?: unknown }).input
+				: undefined;
+	return typeof patch === "string" ? findPatchFilePaths(patch)[0] : undefined;
+}
+
+/**
+ * Ask mode answers questions and never writes a file. Its preset already
+ * leaves the editor and apply_patch tools out; this guard is the backstop for
+ * a host or sub-agent that still exposes one, and for file-editing shell
+ * commands.
+ */
+export function createAskModeCommandGuardExtension(): AgentExtension {
+	const beforeTool = (
+		context: AgentBeforeToolContext,
+	): AgentBeforeToolResult | undefined => {
+		switch (context.tool.name) {
+			case DefaultToolNames.RUN_COMMANDS:
+				return guardRunCommands(
+					context.input,
+					formatAskModeBlockedCommandError,
+				);
+			case DefaultToolNames.EDITOR:
+			case DefaultToolNames.APPLY_PATCH:
+				return {
+					skip: true,
+					reason: formatAskModeBlockedWriteError(
+						findWriteTarget(context.tool.name, context.input),
+					),
+				};
+			default:
+				return undefined;
+		}
+	};
+
+	return {
+		name: ASK_MODE_COMMAND_GUARD_EXTENSION_NAME,
 		manifest: {
 			capabilities: ["hooks"],
 		},
