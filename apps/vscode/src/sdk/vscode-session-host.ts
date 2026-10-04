@@ -12,6 +12,7 @@ import {
 	type CompareCheckpointInput,
 	type CompareCheckpointResult,
 	type CoreSessionEvent,
+	createSearchExecutor,
 	type EditorExecutor,
 	type HookEventPayload,
 	type PendingPromptMutationResult,
@@ -43,6 +44,7 @@ import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTermin
 import { getDistinctId } from "@/services/logging/distinctId"
 import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
+import { getBinaryLocation } from "@/utils/fs"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import type { SdkSessionHost } from "./session-host"
 import { createVscodeExtraTools } from "./vscode-runtime-builder"
@@ -122,6 +124,10 @@ export class VscodeSessionHost implements SdkSessionHost {
 		if (options.readFileExecutor) {
 			toolExecutors.readFile = options.readFileExecutor
 		}
+		// search_codebase runs ripgrep, which is rarely on PATH (never on a stock Windows
+		// install): point it at the copy VS Code ships, or it falls back to reading every
+		// file in the extension host.
+		toolExecutors.search = createSearchExecutor({ rgPath: () => getBinaryLocation("rg") })
 		if (options.getTerminalManager) {
 			// Setting bash to undefined suppresses the SDK's createShellTool():
 			// createDefaultTools() checks `enableBash && executors.bash` — falsy
@@ -168,7 +174,7 @@ export class VscodeSessionHost implements SdkSessionHost {
 				requestToolApproval: options.requestToolApproval as
 					| ((request: ToolApprovalRequest) => Promise<ToolApprovalResult>)
 					| undefined,
-				toolExecutors: Object.keys(toolExecutors).length > 0 ? toolExecutors : undefined,
+				toolExecutors,
 			},
 			toolPolicies: options.toolPolicies,
 			distinctId: getDistinctId() || undefined,

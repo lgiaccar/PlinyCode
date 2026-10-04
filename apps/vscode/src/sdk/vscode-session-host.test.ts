@@ -80,7 +80,20 @@ describe("VscodeSessionHost", () => {
 		})
 
 		const capabilities = mockClineCoreCreate.mock.calls[0][0].capabilities
-		expect(capabilities.toolExecutors).toBeUndefined()
+		expect(capabilities.toolExecutors.editor).toBeUndefined()
+		expect(capabilities.toolExecutors.applyPatch).toBeUndefined()
+	})
+
+	// ripgrep is rarely on PATH, so the default search executor would fall back to
+	// reading every file; the host always supplies one that knows VS Code's own copy.
+	it("always provides a search executor", async () => {
+		await VscodeSessionHost.create({
+			// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
+			mcpHub: {} as any,
+		})
+
+		const capabilities = mockClineCoreCreate.mock.calls[0][0].capabilities
+		expect(capabilities.toolExecutors.search).toBeTypeOf("function")
 	})
 
 	it("appends VS Code extra tools after the tools already in the start input", async () => {

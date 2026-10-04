@@ -136,6 +136,8 @@ export {
 } from "../../../../sdk/packages/core/src/extensions/tools/executors/apply-patch"
 export { PATCH_MARKERS, PatchActionType } from "../../../../sdk/packages/core/src/extensions/tools/executors/apply-patch-parser"
 export { createEditorExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/editor"
+export { createSearchExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/search"
+export { replaceTextInContent } from "../../../../sdk/packages/core/src/extensions/tools/executors/text-replace"
 export type { EditFileInput } from "../../../../sdk/packages/core/src/extensions/tools/schemas"
 export type { ApplyPatchExecutor, EditorExecutor, ToolExecutors } from "../../../../sdk/packages/core/src/extensions/tools/types"
 export { projectSessionMessagesForDisplay } from "../../../../sdk/packages/core/src/session/display-messages"

@@ -9,11 +9,8 @@ import * as path from "node:path";
 import type { AgentToolContext } from "@plinycode/shared";
 import type { EditFileInput } from "../schemas";
 import type { EditorExecutor } from "../types";
-import {
-	detectLineEnding,
-	normalizeLineEndings,
-	normalizeNewFileLineEndings,
-} from "./line-endings";
+import { detectLineEnding, normalizeNewFileLineEndings } from "./line-endings";
+import { replaceTextInContent } from "./text-replace";
 
 /**
  * Options for the editor executor
@@ -63,16 +60,6 @@ function resolveFilePath(
 	}
 	return resolved;
 }
-
-function countOccurrences(content: string, needle: string): number {
-	if (needle.length === 0) return 0;
-	return content.split(needle).length - 1;
-}
-
-// Reads produced via readline strip "\r", so models emit LF-only text even
-// for CRLF files; edits must be normalized to the file's own EOL (see
-// ./line-endings) or they create mixed line endings and break subsequent
-// exact-match replacements.
 
 function createLineDiff(
 	oldContent: string,
@@ -167,24 +154,7 @@ async function replaceInFile(
 	maxDiffLines: number,
 ): Promise<string> {
 	const content = await fs.readFile(filePath, encoding);
-	const eol = detectLineEnding(content);
-	const normalizedOldStr = normalizeLineEndings(oldStr, eol);
-	const normalizedNewStr = normalizeLineEndings(newStr ?? "", eol);
-	const occurrences = countOccurrences(content, normalizedOldStr);
-
-	if (occurrences === 0) {
-		throw new Error(`No replacement performed: text not found in ${filePath}.`);
-	}
-
-	if (occurrences > 1) {
-		throw new Error(
-			`No replacement performed: multiple occurrences of text found in ${filePath}.`,
-		);
-	}
-
-	// Replacer function so "$"-sequences in new_text ($&, $', $`, $$, $n)
-	// are inserted literally instead of being expanded by String.replace.
-	const updated = content.replace(normalizedOldStr, () => normalizedNewStr);
+	const updated = replaceTextInContent(content, oldStr, newStr, filePath);
 	await fs.writeFile(filePath, updated, { encoding });
 
 	const diff = createLineDiff(content, updated, maxDiffLines);

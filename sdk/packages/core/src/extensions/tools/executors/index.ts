@@ -47,6 +47,7 @@ export {
 	type RunningCommandRegistration,
 } from "./run-command-execution-controller";
 export { createSearchExecutor, type SearchExecutorOptions } from "./search";
+export { replaceTextInContent } from "./text-replace";
 export {
 	createWebFetchExecutor,
 	type WebFetchExecutorOptions,

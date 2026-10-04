@@ -4,13 +4,37 @@ import * as path from "node:path";
 import type { AgentToolContext } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { MAX_SEARCH_OUTPUT_CHARS } from "./output-limits";
-import { createSearchExecutor } from "./search";
+import { createSearchExecutor, parseRipgrepEvents } from "./search";
 
 const ctx: AgentToolContext = {
 	agentId: "agent-1",
 	conversationId: "conv-1",
 	iteration: 1,
 };
+
+/**
+ * A ripgrep that cannot run, so the executor uses its own scan whether or not
+ * the machine running the tests has `rg` on PATH. Lookahead patterns do the
+ * same on machines that do: ripgrep rejects them.
+ */
+const NO_RIPGREP = path.join(os.tmpdir(), "no-such-ripgrep-binary");
+
+async function withWorkspace(
+	files: Record<string, string>,
+	run: (dir: string) => Promise<void>,
+): Promise<void> {
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "agents-search-"));
+	try {
+		for (const [name, content] of Object.entries(files)) {
+			const filePath = path.join(dir, name);
+			await fs.mkdir(path.dirname(filePath), { recursive: true });
+			await fs.writeFile(filePath, content, "utf-8");
+		}
+		await run(dir);
+	} finally {
+		await fs.rm(dir, { recursive: true, force: true });
+	}
+}
 
 describe("createSearchExecutor", () => {
 	it("middle-truncates oversized search output with recovery guidance", async () => {
@@ -25,7 +49,10 @@ describe("createSearchExecutor", () => {
 		await fs.writeFile(filePath, rows.join("\n"), "utf-8");
 
 		try {
-			const search = createSearchExecutor({ contextLines: 0 });
+			const search = createSearchExecutor({
+				contextLines: 0,
+				maxMatchesPerFile: 200,
+			});
 			// Lookahead is unsupported by ripgrep, forcing the fallback scan.
 			const result = await search("(?=needle)", dir, ctx);
 
@@ -64,5 +91,174 @@ describe("createSearchExecutor", () => {
 		} finally {
 			await fs.rm(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("searches source files whatever their extension", async () => {
+		await withWorkspace(
+			{
+				"src/engine.cc": "int Solve() {\n  return 1;\n}\n",
+				"rtl/top.sv": "module top;\n  // calls Solve\nendmodule\n",
+				"flow/run.tcl": "proc solve_all {} {}\n",
+				"image.png": "solve\u0000binary",
+			},
+			async (dir) => {
+				const search = createSearchExecutor({ rgPath: NO_RIPGREP });
+				const result = await search("(?=solve)", dir, ctx);
+
+				expect(result).toContain("src/engine.cc:1:5");
+				expect(result).toContain("rtl/top.sv:2:12");
+				expect(result).toContain("flow/run.tcl:1:6");
+				expect(result).not.toContain("image.png");
+			},
+		);
+	});
+
+	it("shows the matching line, marked, between its context lines", async () => {
+		await withWorkspace(
+			{ "a.txt": "one\ntwo\nNEEDLE here\nfour\nfive\nsix\n" },
+			async (dir) => {
+				const search = createSearchExecutor({ contextLines: 1 });
+				const result = await search("(?=needle)", dir, ctx);
+
+				expect(result).toContain(
+					["a.txt:3:1", "  2: two", "> 3: NEEDLE here", "  4: four"].join("\n"),
+				);
+			},
+		);
+	});
+
+	it("caps the matches shown per file and names the files that have more", async () => {
+		const many = Array.from({ length: 30 }, (_, i) => `hit ${i}`).join("\n");
+		await withWorkspace(
+			{ "many.txt": many, "few.txt": "hit once\n" },
+			async (dir) => {
+				const search = createSearchExecutor({
+					contextLines: 0,
+					maxMatchesPerFile: 3,
+				});
+				const result = await search("(?=hit)", dir, ctx);
+
+				expect(result).toContain("Found 4 results for pattern");
+				expect(result).toContain("few.txt:1:1");
+				expect(result).toContain("many.txt:3:1");
+				expect(result).not.toContain("many.txt:4:1");
+				expect(result).toContain(
+					"(Only the first 3 matches per file are shown. More exist in: many.txt.",
+				);
+			},
+		);
+	});
+
+	it("reports no results with the number of files it looked at", async () => {
+		await withWorkspace({ "a.txt": "one\n", "b.txt": "two\n" }, async (dir) => {
+			const search = createSearchExecutor({ rgPath: NO_RIPGREP });
+
+			await expect(search("absent", dir, ctx)).resolves.toBe(
+				"No results found for pattern: absent\nSearched 2 files.",
+			);
+		});
+	});
+});
+
+describe("parseRipgrepEvents", () => {
+	const event = (
+		type: "context" | "match",
+		file: string,
+		line: number,
+		text: string,
+	) =>
+		JSON.stringify({
+			type,
+			data: {
+				path: { text: file },
+				lines: { text: `${text}\n` },
+				line_number: line,
+				submatches:
+					type === "match"
+						? [{ match: { text: "needle" }, start: text.indexOf("needle") }]
+						: [],
+			},
+		});
+	const begin = (file: string) =>
+		JSON.stringify({ type: "begin", data: { path: { text: file } } });
+	const end = (file: string) =>
+		JSON.stringify({ type: "end", data: { path: { text: file } } });
+	const stdout = (...events: string[]) => `${events.join("\n")}\n`;
+	const limits = { maxResults: 100, maxMatchesPerFile: 10, contextLines: 2 };
+
+	it("puts the matching line and its leading context under the right file", () => {
+		const { matches } = parseRipgrepEvents(
+			stdout(
+				begin("src\\b.ts"),
+				event("context", "src\\b.ts", 2, "b2"),
+				event("context", "src\\b.ts", 3, "b3"),
+				event("match", "src\\b.ts", 4, "  needle three"),
+				event("context", "src\\b.ts", 5, "b5"),
+				end("src\\b.ts"),
+				begin("a.ts"),
+				event("context", "a.ts", 1, "a1"),
+				event("match", "a.ts", 2, "needle one"),
+				end("a.ts"),
+			),
+			limits,
+		);
+
+		expect(matches).toEqual([
+			{
+				file: "src/b.ts",
+				line: 4,
+				column: 3,
+				match: "needle",
+				context: ["  2: b2", "  3: b3", "> 4:   needle three", "  5: b5"],
+			},
+			{
+				file: "a.ts",
+				line: 2,
+				column: 1,
+				match: "needle",
+				context: ["  1: a1", "> 2: needle one"],
+			},
+		]);
+	});
+
+	it("gives a line between two close matches to the first one only", () => {
+		const { matches } = parseRipgrepEvents(
+			stdout(
+				begin("a.ts"),
+				event("match", "a.ts", 1, "needle one"),
+				event("context", "a.ts", 2, "between"),
+				event("match", "a.ts", 3, "needle two"),
+				end("a.ts"),
+			),
+			limits,
+		);
+
+		expect(matches.map((match) => match.context)).toEqual([
+			["> 1: needle one", "  2: between"],
+			["> 3: needle two"],
+		]);
+	});
+
+	it("drops matches past the per-file cap and records the file", () => {
+		const { matches, cappedFiles } = parseRipgrepEvents(
+			stdout(
+				begin("a.ts"),
+				event("match", "a.ts", 1, "needle"),
+				event("match", "a.ts", 2, "needle"),
+				event("match", "a.ts", 3, "needle"),
+				end("a.ts"),
+				begin("b.ts"),
+				event("match", "b.ts", 1, "needle"),
+				end("b.ts"),
+			),
+			{ ...limits, maxMatchesPerFile: 2 },
+		);
+
+		expect(matches.map((match) => `${match.file}:${match.line}`)).toEqual([
+			"a.ts:1",
+			"a.ts:2",
+			"b.ts:1",
+		]);
+		expect(cappedFiles).toEqual(["a.ts"]);
 	});
 });

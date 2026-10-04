@@ -49,6 +49,7 @@ export {
 	type PatchFileChange,
 	RunCommandExecutionController,
 	type RunningCommandRegistration,
+	replaceTextInContent,
 	type SearchExecutorOptions,
 	type ShellExecutorOptions,
 	type WebFetchExecutorOptions,
