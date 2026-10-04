@@ -89,7 +89,7 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 		}
 
 		if (request.mode !== undefined) {
-			const mode = request.mode === PlanActMode.PLAN ? "plan" : "act"
+			const mode = request.mode === PlanActMode.PLAN ? "plan" : request.mode === PlanActMode.ASK_MODE ? "ask" : "act"
 			controller.stateManager.setGlobalState("mode", mode)
 		}
 

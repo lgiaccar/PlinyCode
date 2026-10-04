@@ -1,5 +1,5 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
-import type { Mode } from "@shared/storage/types"
+import { type Mode, toMode } from "@shared/storage/types"
 import type { StateManager } from "@/core/storage/StateManager"
 import { Logger } from "@/shared/services/Logger"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
@@ -60,8 +60,7 @@ export class SdkMcpCoordinator {
 
 		try {
 			const cwd = await this.options.getWorkspaceRoot()
-			const modeValue = this.options.stateManager.getGlobalSettingsKey("mode")
-			const mode: Mode = modeValue === "plan" || modeValue === "act" ? modeValue : "act"
+			const mode = toMode(this.options.stateManager.getGlobalSettingsKey("mode"))
 			const config = await this.options.sessionConfigBuilder.build({ cwd, mode })
 			config.sessionId = oldSessionId
 

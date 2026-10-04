@@ -29,6 +29,8 @@ Design and operations notes are in `docs/`:
 - [docs/pliny-free-auto-router.md](docs/pliny-free-auto-router.md), [docs/pliny-free-auto-thinking.md](docs/pliny-free-auto-thinking.md) and [docs/pliny-balance-auto.md](docs/pliny-balance-auto.md): how the FreeAuto and BalanceAuto models route and keep runs going.
 - [docs/devops-mcp.md](docs/devops-mcp.md): the built-in DevOps MCP server for GitHub and Azure DevOps.
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
+- [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to plan and act, which answers questions and blocks every file edit.
+- [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.

@@ -41,6 +41,7 @@ function makeItem(overrides: Partial<TaskItem> = {}): TaskItem {
 		task: "Fix the build",
 		ts: Date.now(),
 		isFavorited: false,
+		isPinned: false,
 		size: 0,
 		totalCost: 0,
 		tokensIn: 0,
@@ -76,6 +77,7 @@ describe("HistoryViewItem", () => {
 				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 	}
@@ -108,6 +110,7 @@ describe("HistoryViewItem", () => {
 				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
@@ -127,6 +130,7 @@ describe("HistoryViewItem", () => {
 				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
@@ -144,6 +148,7 @@ describe("HistoryViewItem", () => {
 				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
@@ -161,6 +166,7 @@ describe("HistoryViewItem", () => {
 				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
@@ -179,6 +185,7 @@ describe("HistoryViewItem", () => {
 				renameTask={renameTask}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
@@ -203,6 +210,7 @@ describe("HistoryViewItem", () => {
 				renameTask={renameTask}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
@@ -225,10 +233,38 @@ describe("HistoryViewItem", () => {
 				renameTask={noop}
 				selectedItems={[]}
 				toggleFavorite={noop}
+				togglePin={noop}
 			/>,
 		)
 
 		expect(screen.getByText(/^Started /)).toBeDefined()
 		expect(screen.getByText("· ran 2m 5s")).toBeDefined()
+	})
+
+	it("pins an unpinned conversation and unpins a pinned one", () => {
+		const togglePin = vi.fn()
+		const renderWith = (isPinned: boolean) =>
+			render(
+				<HistoryViewItem
+					handleDeleteHistoryItem={noop}
+					handleHistorySelect={noop}
+					index={0}
+					item={makeItem({ isPinned })}
+					pendingFavoriteToggles={{}}
+					renameTask={noop}
+					selectedItems={[]}
+					toggleFavorite={noop}
+					togglePin={togglePin}
+				/>,
+			)
+
+		const unpinned = renderWith(false)
+		fireEvent.click(screen.getByRole("button", { name: "Pin conversation" }))
+		expect(togglePin).toHaveBeenLastCalledWith("task-1", false)
+		unpinned.unmount()
+
+		renderWith(true)
+		fireEvent.click(screen.getByRole("button", { name: "Unpin conversation" }))
+		expect(togglePin).toHaveBeenLastCalledWith("task-1", true)
 	})
 })

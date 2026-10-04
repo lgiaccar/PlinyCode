@@ -652,6 +652,25 @@ describe("SdkModeCoordinator", () => {
 			expect(coordinator.consumeModeSwitchNotice("new-session")).toBeNull()
 		})
 
+		it("rebuilds the session in ask mode and records the switch", async () => {
+			const activeSession = makeActiveSession()
+			const task = makeTask("old-session", planMessages())
+			const { coordinator, options } = makeCoordinator({ activeSession, task, mode: "plan" })
+
+			// Even with a plan on screen, ask mode never starts a run on its own.
+			await expect(
+				coordinator.togglePlanActMode("ask", { message: "what does this do?", images: [], files: [] }),
+			).resolves.toBe(false)
+
+			expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(expect.objectContaining({ mode: "ask" }))
+			expect(options.stateManager.setGlobalState).toHaveBeenCalledWith("mode", "ask")
+			expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
+			expect(coordinator.consumeModeSwitchNotice("new-session")).toEqual({ from: "plan", to: "ask" })
+
+			await coordinator.togglePlanActMode("act")
+			expect(coordinator.consumeModeSwitchNotice("new-session")).toEqual({ from: "ask", to: "act" })
+		})
+
 		it("makes the notice available before the auto-continue send fires", async () => {
 			const activeSession = makeActiveSession()
 			const task = makeTask("old-session", planMessages())

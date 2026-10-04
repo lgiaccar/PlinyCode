@@ -3,6 +3,7 @@
 // message-translator.ts (see message-translator/index.ts).
 
 import { truncateCommandOutput } from "@plinycode/core"
+import type { UserInputMode } from "@plinycode/shared"
 import type { ClineContextBreakdown, ClineMessage, ClineSaySubagentStatus, SubagentStatusItem } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
 import { isDeniedToolApprovalMistake } from "../tool-approval-denial"
@@ -114,7 +115,7 @@ export class MessageTranslatorState {
 	constructor(
 		minter: MessageIdMinter = new MessageIdMinter(),
 		private readonly getActiveProviderId?: () => string | undefined,
-		private readonly getUiMode?: () => "plan" | "act" | "yolo" | undefined,
+		private readonly getUiMode?: () => UserInputMode | undefined,
 		private readonly getCwd?: () => string | undefined,
 		private readonly getActiveModelId?: () => string | undefined,
 	) {

@@ -2,7 +2,7 @@ import { existsSync, type FSWatcher, watch } from "node:fs"
 import path from "node:path"
 import type { ClineCoreListHistoryOptions, SessionHistoryRecord } from "@plinycode/core"
 import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
-import { formatDisplayUserInput, parseUserInputMode } from "@plinycode/shared"
+import { formatDisplayUserInput, parseUserInputMode, type UserInputMode } from "@plinycode/shared"
 import { resolveSessionDataDir } from "@plinycode/shared/storage"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
@@ -196,6 +196,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.startedTs ? { startedTs: item.startedTs } : {}),
 		...(item.activeMs ? { activeMs: item.activeMs } : {}),
 		...(item.isRenamed ? { isRenamed: true } : {}),
+		...(item.isPinned ? { isPinned: true } : {}),
 		...(item.spendingLimit !== undefined ? { spendingLimit: item.spendingLimit } : {}),
 		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
 		// The workspace binding, kept across resumes like the fields above.
@@ -241,10 +242,10 @@ function historyItemToSessionHistoryRecord(item: HistoryItem): SessionHistoryRec
 	}
 }
 
-/** SdkMessage plus the plan/act mode recovered from its <user_input mode="..."> wrapper. */
-type SdkDisplayMessage = SdkMessage & { uiMode?: "plan" | "act" | "yolo" }
+/** SdkMessage plus the mode recovered from its <user_input mode="..."> wrapper. */
+type SdkDisplayMessage = SdkMessage & { uiMode?: UserInputMode }
 
-function parseUserMessageMode(content: SdkMessage["content"]): "plan" | "act" | "yolo" | undefined {
+function parseUserMessageMode(content: SdkMessage["content"]): UserInputMode | undefined {
 	if (typeof content === "string") {
 		return parseUserInputMode(content)
 	}
@@ -298,6 +299,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		totalCost: metadataNumber(metadata, "totalCost") ?? 0,
 		size: metadataNumber(metadata, "size"),
 		isFavorited: metadataBoolean(metadata, "isFavorited") ?? metadataBoolean(metadata, "is_favorited") ?? false,
+		isPinned: metadataBoolean(metadata, "isPinned") === true || undefined,
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		apiProvider: item.provider || undefined,
 		cwdOnTaskInitialization: item.cwd || item.workspaceRoot || undefined,
@@ -746,11 +748,18 @@ export class SdkTaskHistory {
 	 * every other write keeps the stored ones. Callers such as rename, favorite
 	 * and active-time pass a HistoryItem read earlier, and letting its stale
 	 * totals through made the history list's cost drift from the task header.
+	 *
+	 * The favorite and pin flags work the same way: they change only through
+	 * `flags` (their toggles). Every other write keeps the stored flag, because
+	 * its HistoryItem was read earlier or built from scratch, and letting that
+	 * through un-starred or unpinned the conversation. `item`'s flags count
+	 * only for a record that has none yet.
 	 */
 	private async updateSession(
 		sessionId: string,
 		item: HistoryItem,
 		nextUsage?: (stored: TaskUsageTotals) => TaskUsageTotals,
+		flags?: { isFavorited?: boolean; isPinned?: boolean },
 	): Promise<void> {
 		const {
 			metadata: writtenMetadata,
@@ -772,6 +781,14 @@ export class SdkTaskHistory {
 					metadata,
 					nextUsage(Object.fromEntries(USAGE_METADATA_KEYS.map((key) => [key, item[key] || 0])) as TaskUsageTotals),
 				)
+			}
+			const storedFavorite =
+				metadataBoolean(existing?.metadata, "isFavorited") ?? metadataBoolean(existing?.metadata, "is_favorited")
+			metadata.isFavorited = flags?.isFavorited ?? storedFavorite ?? item.isFavorited ?? false
+			if (flags?.isPinned ?? metadataBoolean(existing?.metadata, "isPinned") ?? item.isPinned ?? false) {
+				metadata.isPinned = true
+			} else {
+				delete metadata.isPinned
 			}
 			if (item.size === undefined) {
 				const existingSize = existing?.metadata?.size
@@ -837,6 +854,26 @@ export class SdkTaskHistory {
 
 	async updateTaskHistoryItem(item: HistoryItem): Promise<void> {
 		await this.updateSession(item.id, item)
+	}
+
+	/** Stars or un-stars the conversation. Returns false when the task is unknown. */
+	async setTaskFavorite(taskId: string, isFavorited: boolean): Promise<boolean> {
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateSession(taskId, { ...historyItem, isFavorited }, undefined, { isFavorited })
+		return true
+	}
+
+	/** Pins the conversation to the top of the history list, or unpins it. Returns false when the task is unknown. */
+	async setTaskPinned(taskId: string, isPinned: boolean): Promise<boolean> {
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateSession(taskId, { ...historyItem, isPinned }, undefined, { isPinned })
+		return true
 	}
 
 	/** Sets the task's history title. Returns false when the task is unknown or the title is blank. */

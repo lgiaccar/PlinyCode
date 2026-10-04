@@ -484,7 +484,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			ide: getHostIdeName(),
 			workspaceRoot,
 			workspaceName,
-			mode: mode === "plan" ? "plan" : "act",
+			mode,
 			providerId,
 			platform: process.platform,
 			// The extension never exposes switch_to_act_mode (unlike the CLI):
@@ -591,7 +591,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 				}
 			: {}),
 		disableMcpSettingsTools: true,
-		mode: mode === "plan" ? "plan" : "act",
+		mode,
 		...reasoningConfig,
 		...(maxTokensPerTurn !== undefined ? { maxTokensPerTurn } : {}),
 		...(temperature !== undefined ? { temperature } : {}),
@@ -612,7 +612,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 				workspaceName: resolveWorkspaceName(workspaceRoot),
 				ide: getHostIdeName(),
 				platform: process.platform,
-				mode: mode === "plan" ? "plan" : "act",
+				mode,
 			},
 			logger: sdkLogger,
 		},

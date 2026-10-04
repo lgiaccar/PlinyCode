@@ -2,9 +2,15 @@ export function formatFileContentBlock(path: string, content: string): string {
 	return `<file_content path="${path}">\n${content}\n</file_content>`;
 }
 
+/** Modes a user message can be stamped with in its <user_input mode="..."> wrapper. */
+export type UserInputMode = "act" | "plan" | "ask" | "yolo";
+
+/** Modes the user can switch between in the UI. */
+export type InteractiveMode = "act" | "plan" | "ask";
+
 export function formatUserInputBlock(
 	input: string,
-	mode: "act" | "plan" | "yolo" = "act",
+	mode: UserInputMode = "act",
 ): string {
 	return `<user_input mode="${mode}">${input}</user_input>`;
 }
@@ -17,37 +23,35 @@ export function formatUserCommandBlock(input: string, slash: string): string {
 // mode values), but searches rather than anchors: persisted user content can
 // carry prepended <mode_notice> elements or trailing attachment blocks
 // around the wrapper.
-const USER_INPUT_MODE_RE = /<user_input\b[^>]*\bmode="(act|plan|yolo)"/;
+const USER_INPUT_MODE_RE = /<user_input\b[^>]*\bmode="(act|plan|ask|yolo)"/;
 
 /**
  * Recovers the agent mode a persisted user message was sent in from its
  * <user_input mode="..."> wrapper. Returns undefined when the input isn't
  * wrapped (plain text, user_command envelopes, older transcripts).
  */
-export function parseUserInputMode(
-	input?: string,
-): "act" | "plan" | "yolo" | undefined {
+export function parseUserInputMode(input?: string): UserInputMode | undefined {
 	const match = USER_INPUT_MODE_RE.exec(input ?? "");
-	return match ? (match[1] as "act" | "plan" | "yolo") : undefined;
+	return match ? (match[1] as UserInputMode) : undefined;
 }
 
 /**
  * Marks the exact point in the conversation where the user switched between
- * plan and act modes. Prepended to the first user message sent after the
+ * plan, act and ask modes. Prepended to the first user message sent after the
  * switch. It survives normalizeUserInput (so the outbound sanitize in
  * prepareTurnInput delivers it to the model) and is hidden from transcript
  * display by stripModeNotices at display boundaries.
  */
 export function formatModeSwitchNotice(
-	from: "act" | "plan",
-	to: "act" | "plan",
+	from: InteractiveMode,
+	to: InteractiveMode,
 ): string {
 	return `<mode_notice>The user switched from ${from} mode to ${to} mode before sending this message.</mode_notice>`;
 }
 
 export type ModeSwitchNotice = {
-	from: "act" | "plan";
-	to: "act" | "plan";
+	from: InteractiveMode;
+	to: InteractiveMode;
 };
 
 /**
@@ -61,7 +65,7 @@ export type ModeSwitchNotice = {
 export function createModeSwitchNoticeTracker() {
 	let pending: ModeSwitchNotice | null = null;
 	return {
-		record(from: "act" | "plan", to: "act" | "plan"): void {
+		record(from: InteractiveMode, to: InteractiveMode): void {
 			if (from === to) {
 				return;
 			}

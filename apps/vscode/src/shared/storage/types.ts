@@ -11,4 +11,17 @@ export function normalizeOpenaiReasoningEffort(effort?: string): OpenaiReasoning
 	return isOpenaiReasoningEffort(value) ? value : "medium"
 }
 
-export type Mode = "plan" | "act"
+export type Mode = "plan" | "act" | "ask"
+
+/** Reads a stored or wire value as a mode. Anything unknown is act mode. */
+export function toMode(value: unknown): Mode {
+	return value === "plan" || value === "ask" ? value : "act"
+}
+
+/**
+ * The mode whose model settings a mode runs on. Only plan and act have their
+ * own model selection; ask mode answers with the act-mode model.
+ */
+export function modelSettingsMode(mode: Mode): "plan" | "act" {
+	return mode === "plan" ? "plan" : "act"
+}

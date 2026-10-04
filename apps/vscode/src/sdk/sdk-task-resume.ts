@@ -8,7 +8,7 @@
 // migrated into an SDK session. Deriving both callers from one function keeps
 // resume and compaction from drifting apart.
 
-import type { Mode } from "@shared/storage/types"
+import { toMode } from "@shared/storage/types"
 import type { StateManager } from "@/core/storage/StateManager"
 import type { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 import { historyItemToSessionMetadata, type SdkTaskHistory } from "./sdk-task-history"
@@ -46,8 +46,7 @@ export async function prepareTaskResumeStartInput(
 	const historyItem = await deps.taskHistory.findHistoryItem(taskId)
 	const cwd = historyItem?.cwdOnTaskInitialization ?? (await deps.getWorkspaceRoot())
 
-	const modeValue = deps.stateManager.getGlobalSettingsKey("mode")
-	const mode: Mode = modeValue === "plan" || modeValue === "act" ? modeValue : "act"
+	const mode = toMode(deps.stateManager.getGlobalSettingsKey("mode"))
 	const config = await deps.sessionConfigBuilder.build({ cwd, mode })
 	config.sessionId = taskId
 

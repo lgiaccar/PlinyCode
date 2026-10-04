@@ -13,6 +13,7 @@ import {
 	FolderIcon,
 	FolderOpenIcon,
 	PencilIcon,
+	PinIcon,
 	StarIcon,
 	TrashIcon,
 } from "lucide-react"
@@ -34,6 +35,7 @@ type HistoryViewItemProps = {
 	pendingFavoriteToggles: Record<string, boolean>
 	handleDeleteHistoryItem: (id: string) => void
 	toggleFavorite: (id: string, isCurrentlyFavorited: boolean) => void
+	togglePin: (id: string, isCurrentlyPinned: boolean) => void
 	renameTask: (id: string, title: string) => void
 	handleHistorySelect: (itemId: string, checked: boolean) => void
 }
@@ -43,6 +45,7 @@ const HistoryViewItem = ({
 	pendingFavoriteToggles,
 	handleDeleteHistoryItem,
 	toggleFavorite,
+	togglePin,
 	renameTask,
 	handleHistorySelect,
 	selectedItems,
@@ -150,6 +153,28 @@ const HistoryViewItem = ({
 							variant="icon">
 							<TrashIcon className="opacity-70" />
 						</Button>
+						<Tooltip>
+							<TooltipContent>
+								{item.isPinned ? "Unpin conversation" : "Pin conversation to the top"}
+							</TooltipContent>
+							<TooltipTrigger asChild>
+								<Button
+									aria-label={item.isPinned ? "Unpin conversation" : "Pin conversation"}
+									aria-pressed={item.isPinned}
+									className="p-0"
+									onClick={(e) => {
+										e.stopPropagation()
+										togglePin(item.id, item.isPinned)
+									}}
+									variant="icon">
+									<PinIcon
+										className={cn("opacity-70", {
+											"text-button-background fill-button-background opacity-100": item.isPinned,
+										})}
+									/>
+								</Button>
+							</TooltipTrigger>
+						</Tooltip>
 						<Button
 							aria-label={isFavoritedItem ? "Remove from favorites" : "Add to favorites"}
 							className="p-0"

@@ -24,6 +24,8 @@ export type HistoryItem = {
 	workspaceKind?: WorkspaceKind
 	conversationHistoryDeletedRange?: [number, number]
 	isFavorited?: boolean
+	/** Pinned conversations are listed first in the history view, in their own section. */
+	isPinned?: boolean
 
 	modelId?: string
 	/**

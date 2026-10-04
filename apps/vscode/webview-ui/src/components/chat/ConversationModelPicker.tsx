@@ -1,7 +1,7 @@
 import type { ModelInfo } from "@shared/api"
 import { isPlinyRouterModelId } from "@shared/pliny"
 import { StringRequest } from "@shared/proto/cline/common"
-import type { Mode } from "@shared/storage/types"
+import { type Mode, modelSettingsMode } from "@shared/storage/types"
 import { ChevronDown } from "lucide-react"
 import type React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -221,7 +221,7 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 	}, [sortedModels.rest, searchTerm])
 
 	const handleSelectModel = (modelId: string) => {
-		commitSelection(mode, { providerId: PLINY_PROVIDER_ID, modelId }).catch((error) =>
+		commitSelection(modelSettingsMode(mode), { providerId: PLINY_PROVIDER_ID, modelId }).catch((error) =>
 			console.error("Failed to commit model selection:", error),
 		)
 		setIsOpen(false)

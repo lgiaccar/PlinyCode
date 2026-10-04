@@ -521,6 +521,32 @@ export function formatPlanModeBlockedCommandError(reason: string): string {
 }
 
 /**
+ * Tool error returned in place of executing a blocked command in ask mode.
+ */
+export function formatAskModeBlockedCommandError(reason: string): string {
+	return (
+		`Command not executed: ${reason} can modify files, and file modifications are blocked in ask mode. ` +
+		"You are in ASK MODE — answer the user's question; do not make changes. " +
+		"Use read-only commands to inspect the project (redirecting output to /tmp, or %TEMP% on Windows, is allowed), " +
+		"and if the user wants this change made, tell them to switch to Act mode."
+	);
+}
+
+/**
+ * Tool error returned in place of any file write in ask mode.
+ */
+export function formatAskModeBlockedWriteError(
+	path: string | undefined,
+): string {
+	const target = path ? `\`${path}\`` : "the file";
+	return (
+		`Write rejected: ${target} was not changed, because file edits are blocked in ask mode. ` +
+		"You are in ASK MODE — answer the user's question; do not create, edit or delete files. " +
+		"Show the proposed change in your reply instead, and if the user wants it applied, tell them to switch to Act mode."
+	);
+}
+
+/**
  * Plan mode may write markdown plan files (and nothing else) through the
  * file-writing tools; see command-guard-extension.ts.
  */
