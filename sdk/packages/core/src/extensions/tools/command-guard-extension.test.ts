@@ -5,6 +5,8 @@ import type {
 } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import {
+	ASK_MODE_COMMAND_GUARD_EXTENSION_NAME,
+	createAskModeCommandGuardExtension,
 	createPlanModeCommandGuardExtension,
 	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
 } from "./command-guard-extension";
@@ -217,5 +219,77 @@ describe("plan-mode command-guard extension", () => {
 		);
 
 		expect(result).toBeUndefined();
+	});
+});
+
+describe("ask-mode command-guard extension", () => {
+	it("declares the hooks capability under a stable name", () => {
+		const extension = createAskModeCommandGuardExtension();
+		expect(extension.name).toBe(ASK_MODE_COMMAND_GUARD_EXTENSION_NAME);
+		expect(extension.manifest.capabilities).toContain("hooks");
+	});
+
+	it("rejects every editor write, markdown included", async () => {
+		const extension = createAskModeCommandGuardExtension();
+		for (const path of ["src/app.ts", "plans/x/PLAN.md", "README.md"]) {
+			const result = await runBeforeTool(
+				extension,
+				makeContext("editor", { path, new_text: "x" }),
+			);
+
+			expect(result?.skip).toBe(true);
+			expect(result?.stop).toBeUndefined();
+			expect(result?.reason).toContain("ASK MODE");
+			expect(result?.reason).toContain(`\`${path}\``);
+		}
+	});
+
+	it("rejects apply_patch and names the first file it touches", async () => {
+		const extension = createAskModeCommandGuardExtension();
+		const patch = [
+			"*** Begin Patch",
+			"*** Add File: docs/notes.md",
+			"+# Notes",
+			"*** End Patch",
+		].join("\n");
+		const result = await runBeforeTool(
+			extension,
+			makeContext("apply_patch", { input: patch }),
+		);
+
+		expect(result?.skip).toBe(true);
+		expect(result?.reason).toContain("`docs/notes.md`");
+		expect(
+			(await runBeforeTool(extension, makeContext("apply_patch", "garbage")))
+				?.skip,
+		).toBe(true);
+	});
+
+	it("skips run_commands calls containing a file-editing command", async () => {
+		const extension = createAskModeCommandGuardExtension();
+		const result = await runBeforeTool(
+			extension,
+			makeContext("run_commands", { commands: ["echo hi > out.txt"] }),
+		);
+
+		expect(result?.skip).toBe(true);
+		expect(result?.reason).toContain("ASK MODE");
+		expect(result?.reason).not.toContain("PLAN MODE");
+	});
+
+	it("lets read-only commands and other tools through", async () => {
+		const extension = createAskModeCommandGuardExtension();
+		expect(
+			await runBeforeTool(
+				extension,
+				makeContext("run_commands", { commands: ["git status", "ls -la"] }),
+			),
+		).toBeUndefined();
+		expect(
+			await runBeforeTool(
+				extension,
+				makeContext("read_files", { files: [{ path: "src/app.ts" }] }),
+			),
+		).toBeUndefined();
 	});
 });

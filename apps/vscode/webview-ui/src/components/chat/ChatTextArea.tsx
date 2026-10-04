@@ -1,5 +1,6 @@
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
+import type { Mode } from "@shared/storage/types"
 import { TriangleAlertIcon } from "lucide-react"
 import type React from "react"
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -17,7 +18,7 @@ import { shouldShowContextMenu } from "@/utils/context-mentions"
 import { useMetaKeyDetection, useShortcut } from "@/utils/hooks"
 import { shouldShowSlashCommandsMenu, slashCommandRegexGlobal, validateSlashCommand } from "@/utils/slash-commands"
 import { ModelButton } from "./chat-textarea/components/ModelButton"
-import { ModeSwitch, PLAN_MODE_COLOR } from "./chat-textarea/components/ModeSwitch"
+import { ModeSwitch, modeColor, nextMode } from "./chat-textarea/components/ModeSwitch"
 import { useComposerKeyboardHandler } from "./chat-textarea/hooks/useComposerKeyboardHandler"
 import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hooks/useContextMenu"
 import { useDropHandling } from "./chat-textarea/hooks/useDropHandling"
@@ -38,6 +39,12 @@ import { deliveryFor, loadSendMode, SEND_MODE_META, SEND_MODES, type SendDeliver
 // Re-exported so ChatTextArea.test.tsx (and anything else importing from this
 // module) keeps working unchanged after these moved into useResizableRows.
 export { getRowHeightPx, rowsFromDrag }
+
+const PROTO_MODES: Record<Mode, PlanActMode> = {
+	plan: PlanActMode.PLAN,
+	act: PlanActMode.ACT,
+	ask: PlanActMode.ASK_MODE,
+}
 
 interface ChatTextAreaProps {
 	inputValue: string
@@ -403,62 +410,70 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			[updateCursorPosition],
 		)
 
-		const onModeToggle = useCallback(() => {
-			void (async () => {
-				const convertedProtoMode = mode === "plan" ? PlanActMode.ACT : PlanActMode.PLAN
-				const submittedText = inputValue
-				const submittedImages = selectedImages
-				const submittedFiles = selectedFiles
-				const response = await StateServiceClient.togglePlanActModeProto(
-					TogglePlanActModeRequest.create({
-						mode: convertedProtoMode,
-						chatContent: {
-							message: submittedText.trim() ? submittedText : undefined,
-							images: submittedImages,
-							files: submittedFiles,
-						},
-					}),
-				)
-				// Focus the textarea after mode toggle with slight delay
-				setTimeout(() => {
-					const consumedComposerContent = response.value === true
-					const currentText = textAreaRef.current?.value ?? ""
-					// Reconcile only the submitted draft: the rebuild can take a moment
-					// and the user may have typed new content in the meantime.
-					const draftAction = getModeToggleDraftAction({
-						consumed: consumedComposerContent,
-						currentText,
-						submittedText,
-					})
+		const onModeSelect = useCallback(
+			(targetMode: Mode) => {
+				if (targetMode === mode) {
+					return
+				}
+				void (async () => {
+					const convertedProtoMode = PROTO_MODES[targetMode]
+					const submittedText = inputValue
+					const submittedImages = selectedImages
+					const submittedFiles = selectedFiles
+					const response = await StateServiceClient.togglePlanActModeProto(
+						TogglePlanActModeRequest.create({
+							mode: convertedProtoMode,
+							chatContent: {
+								message: submittedText.trim() ? submittedText : undefined,
+								images: submittedImages,
+								files: submittedFiles,
+							},
+						}),
+					)
+					// Focus the textarea after mode toggle with slight delay
+					setTimeout(() => {
+						const consumedComposerContent = response.value === true
+						const currentText = textAreaRef.current?.value ?? ""
+						// Reconcile only the submitted draft: the rebuild can take a moment
+						// and the user may have typed new content in the meantime.
+						const draftAction = getModeToggleDraftAction({
+							consumed: consumedComposerContent,
+							currentText,
+							submittedText,
+						})
 
-					switch (draftAction) {
-						case "clear":
-							setInputValue("")
-							break
-						case "restore":
-							setInputValue(submittedText)
-							break
-						case "keep":
-							break
-					}
-
-					if (consumedComposerContent) {
-						setSelectedImages((current) => (current === submittedImages ? [] : current))
-						setSelectedFiles((current) => (current === submittedFiles ? [] : current))
-					} else {
-						if (submittedImages.length > 0) {
-							setSelectedImages((current) => (current.length === 0 ? submittedImages : current))
+						switch (draftAction) {
+							case "clear":
+								setInputValue("")
+								break
+							case "restore":
+								setInputValue(submittedText)
+								break
+							case "keep":
+								break
 						}
-						if (submittedFiles.length > 0) {
-							setSelectedFiles((current) => (current.length === 0 ? submittedFiles : current))
-						}
-					}
-					textAreaRef.current?.focus()
-				}, 100)
-			})()
-		}, [mode, inputValue, selectedImages, selectedFiles, setInputValue, setSelectedImages, setSelectedFiles])
 
-		useShortcut(usePlatform().togglePlanActKeys, onModeToggle, { disableTextInputs: false }) // important that we don't disable the text input here
+						if (consumedComposerContent) {
+							setSelectedImages((current) => (current === submittedImages ? [] : current))
+							setSelectedFiles((current) => (current === submittedFiles ? [] : current))
+						} else {
+							if (submittedImages.length > 0) {
+								setSelectedImages((current) => (current.length === 0 ? submittedImages : current))
+							}
+							if (submittedFiles.length > 0) {
+								setSelectedFiles((current) => (current.length === 0 ? submittedFiles : current))
+							}
+						}
+						textAreaRef.current?.focus()
+					}, 100)
+				})()
+			},
+			[mode, inputValue, selectedImages, selectedFiles, setInputValue, setSelectedImages, setSelectedFiles],
+		)
+
+		// The shortcut cycles Plan -> Act -> Ask.
+		const onModeCycle = useCallback(() => onModeSelect(nextMode(mode)), [mode, onModeSelect])
+		useShortcut(usePlatform().togglePlanActKeys, onModeCycle, { disableTextInputs: false }) // important that we don't disable the text input here
 
 		const handleContextButtonClick = useCallback(() => {
 			// Focus the textarea first
@@ -692,7 +707,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								isDraggingOver && !showUnsupportedFileError // Only show drag outline if not showing error
 									? "2px dashed var(--vscode-focusBorder)"
 									: isTextAreaFocused
-										? `1px solid ${mode === "plan" ? PLAN_MODE_COLOR : "var(--vscode-focusBorder)"}`
+										? `1px solid ${modeColor(mode)}`
 										: "none",
 							outlineOffset: isDraggingOver && !showUnsupportedFileError ? "1px" : "0px", // Add offset for drag-over outline
 						}}
@@ -852,8 +867,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
 						/>
 					</div>
-					{/* Tooltip for Plan/Act toggle remains outside the conditional rendering */}
-					<ModeSwitch mode={mode} onModeToggle={onModeToggle} togglePlanActKeys={togglePlanActKeys} />
+					{/* Tooltip for the mode switch remains outside the conditional rendering */}
+					<ModeSwitch mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
 				</div>
 			</div>
 		)

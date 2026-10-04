@@ -176,6 +176,16 @@ const HistoryPreview = ({ showHistoryView }: HistoryPreviewProps) => {
 							return (
 								<div className="history-preview-item" key={item.id} onClick={() => handleHistorySelect(item.id)}>
 									<div className="history-task-content">
+										{item.isPinned && (
+											<span
+												aria-label="Pinned"
+												className="codicon codicon-pinned"
+												style={{
+													color: "var(--vscode-button-background)",
+													flexShrink: 0,
+												}}
+											/>
+										)}
 										{item.isFavorited && (
 											<span
 												aria-label="Favorited"

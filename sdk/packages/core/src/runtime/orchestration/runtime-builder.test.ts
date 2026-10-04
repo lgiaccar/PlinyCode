@@ -17,7 +17,10 @@ import {
 import { setHomeDir } from "@plinycode/shared/storage";
 import { afterEach, describe, expect, it } from "vitest";
 import { createUserInstructionConfigService } from "../../extensions/config";
-import { PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME } from "../../extensions/tools/command-guard-extension";
+import {
+	ASK_MODE_COMMAND_GUARD_EXTENSION_NAME,
+	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
+} from "../../extensions/tools/command-guard-extension";
 import type { CoreSessionConfig } from "../../types/config";
 import { DefaultRuntimeBuilder } from "./runtime-builder";
 
@@ -288,6 +291,34 @@ Use the review guidance.`,
 		expect(
 			(runtime.extensions ?? []).map((extension) => extension.name),
 		).not.toContain(PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME);
+	});
+
+	it("leaves the file-writing tools out of ask mode and registers its guard", async () => {
+		const askRuntime = await new DefaultRuntimeBuilder().build({
+			config: makeBaseConfig({
+				mode: "ask",
+			}),
+		});
+		const actRuntime = await new DefaultRuntimeBuilder().build({
+			config: makeBaseConfig(),
+		});
+
+		const toolNames = askRuntime.tools.map((tool) => tool.name);
+		expect(toolNames).not.toContain("editor");
+		expect(toolNames).not.toContain("apply_patch");
+		expect(toolNames).toContain("read_files");
+		expect(toolNames).toContain("run_commands");
+
+		const extensionNames = (askRuntime.extensions ?? []).map(
+			(extension) => extension.name,
+		);
+		expect(extensionNames).toContain(ASK_MODE_COMMAND_GUARD_EXTENSION_NAME);
+		expect(extensionNames).not.toContain(
+			PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
+		);
+		expect(
+			(actRuntime.extensions ?? []).map((extension) => extension.name),
+		).not.toContain(ASK_MODE_COMMAND_GUARD_EXTENSION_NAME);
 	});
 
 	it("uses yolo preset only when yolo mode is explicit", async () => {

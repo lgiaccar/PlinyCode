@@ -4,7 +4,7 @@
 
 import { projectSessionMessagesForDisplay } from "@plinycode/core"
 import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
-import type { AgentEvent } from "@plinycode/shared"
+import type { AgentEvent, UserInputMode } from "@plinycode/shared"
 import type { ClineApiReqInfo, ClineMessage } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
 import { extractPersistedHookContextChips, isSyntheticSdkUserMessage } from "../sdk-user-message-mapping"
@@ -20,7 +20,7 @@ type SdkMessageWithMetrics = SdkMessage & {
 	 * sanitization strips it (see sanitizeSdkUserMessagesForDisplay in sdk-task-history.ts).
 	 * Only meaningful on user messages; governs the turn that follows.
 	 */
-	uiMode?: "plan" | "act" | "yolo"
+	uiMode?: UserInputMode
 }
 
 function textContentBlocksToText(content: SdkMessage["content"]): string {
@@ -158,7 +158,7 @@ export function sdkMessagesToClineMessages(
 	const clineMessages: ClineMessage[] = []
 	// Plan/act mode of the turn currently being replayed, recovered from each user message's
 	// persisted <user_input mode="..."> wrapper (stamped as `uiMode` before sanitization).
-	let currentMode: "plan" | "act" | "yolo" | undefined
+	let currentMode: UserInputMode | undefined
 	// Use the process-wide minter when provided so regenerated history ids are globally unique
 	// and never overlap live-session ids. Falls back to a private minter for standalone tests.
 	const state = new MessageTranslatorState(

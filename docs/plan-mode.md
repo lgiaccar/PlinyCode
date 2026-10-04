@@ -2,6 +2,8 @@
 
 In plan mode the agent explores the code and writes its plan as markdown files, which the user can edit before running them. When the plan is ready, an **Execute plan** button switches to act mode and asks the agent to carry it out.
 
+Ask mode, which answers questions and writes nothing at all, is described in [ask-mode.md](ask-mode.md).
+
 ## Plan files
 
 The agent writes plans under `plans/<slug>/`, relative to the workspace root:

@@ -16,7 +16,7 @@ import { isPlinyFreeModelId } from "@shared/pliny"
 import { LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
 import type { Settings } from "@shared/storage/state-keys"
-import type { Mode } from "@shared/storage/types"
+import { type Mode, toMode } from "@shared/storage/types"
 import type { ClineAskResponse, ClineCheckpointRestore } from "@shared/WebviewMessage"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { createTaskApiModelShim } from "@/core/controller/models/taskApiModel"
@@ -36,7 +36,6 @@ import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
-import { arePathsEqual } from "@/utils/path"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
@@ -63,14 +62,11 @@ import { SdkSlashMentionResolver } from "./sdk-slash-mention-resolver"
 import { type ClearTaskOptions, SdkTaskControlCoordinator } from "./sdk-task-control-coordinator"
 import {
 	createHistoryItemFromSession,
-	dateStringToTimestamp,
 	mergeTaskHistoryIntoState,
 	metadataBoolean,
 	metadataNumber,
-	metadataString,
 	SdkTaskHistory,
 	sessionHistoryRecordToTaskItemFields,
-	sessionRecordWorkspacePath,
 } from "./sdk-task-history"
 import { SdkTaskStartCoordinator } from "./sdk-task-start-coordinator"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
@@ -85,6 +81,15 @@ import {
 import { SdkWorkspaceRootResolver } from "./sdk-workspace-root-resolver"
 import { checkConversationBudget } from "./spending-limit"
 import { StatePostDebouncer } from "./state-post-debouncer"
+import {
+	isSessionRecordFavorited,
+	isSessionRecordPinned,
+	queryTaskHistory,
+	sessionRecordLastActiveTs,
+	sessionRecordTitle,
+	type TaskHistoryQuery,
+	taskHistoryRowMatches,
+} from "./task-history-query"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
 import { TurnStateTracker } from "./turn-state-tracker"
 import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
@@ -624,7 +629,7 @@ export class Controller {
 				this.task = task
 			},
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
-			getMode: () => (this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"),
+			getMode: () => toMode(this.stateManager.getGlobalSettingsKey("mode")),
 			createTempSessionHost: () => this.createTempSessionHost(),
 			askResponse: (text, images, files) => this.askResponse(text, images, files),
 			cancelTask: () => this.cancelTask(),
@@ -891,7 +896,7 @@ export class Controller {
 			emitTurnSummary(
 				{
 					sessionId: sessionId ?? this.sessions.getActiveSession()?.sessionId ?? "",
-					getMode: () => (this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"),
+					getMode: () => (this.stateManager.getGlobalSettingsKey("mode") === "act" ? "act" : "plan"),
 					emitRow: (msg) => this.messages.emitHookMessage(msg),
 					nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 				},
@@ -1165,13 +1170,15 @@ export class Controller {
 				sessionRecord?.workspaceRoot?.trim() ||
 				historyItem?.cwdOnTaskInitialization?.trim() ||
 				fallbackCwd
-			const mode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
+			const mode = toMode(this.stateManager.getGlobalSettingsKey("mode"))
 			const config = await this.sessionConfigBuilder.build({ cwd, mode, prompt: historyTitle })
 			const resolvedPrompt = await this.resolveContextMentions(editedText)
 			// Regenerating replaces the session: keep a user-given title and the
 			// conversation's start and running time rather than resetting them.
 			const displayTitle = historyItem?.isRenamed ? historyItem.task : historyTitle
 			const carriedHistoryFields = {
+				isFavorited: historyItem?.isFavorited,
+				isPinned: historyItem?.isPinned,
 				startedTs: historyItem?.startedTs,
 				activeMs: historyItem?.activeMs,
 				isRenamed: historyItem?.isRenamed,
@@ -1184,6 +1191,8 @@ export class Controller {
 				sessionMetadata: {
 					title: displayTitle,
 					modelId: config.modelId,
+					...(carriedHistoryFields.isFavorited ? { isFavorited: true } : {}),
+					...(carriedHistoryFields.isPinned ? { isPinned: true } : {}),
 					...(carriedHistoryFields.startedTs ? { startedTs: carriedHistoryFields.startedTs } : {}),
 					...(carriedHistoryFields.activeMs ? { activeMs: carriedHistoryFields.activeMs } : {}),
 					...(carriedHistoryFields.isRenamed ? { isRenamed: true } : {}),
@@ -1359,7 +1368,7 @@ export class Controller {
 	}
 
 	async getTaskHistory(request: GetTaskHistoryRequest): Promise<TaskHistoryArray> {
-		const { favoritesOnly, currentWorkspaceOnly, searchQuery, sortBy } = request
+		const { currentWorkspaceOnly } = request
 		const limit = request.limit > 0 ? Math.min(request.limit, 100) : 50
 		const offset = request.offset > 0 ? request.offset : 0
 		// Conversations are bound to a workspace identity (docs/workspace-conversations.md).
@@ -1368,80 +1377,26 @@ export class Controller {
 		const workspacePath = currentWorkspaceOnly
 			? ((await this.getWindowWorkspace())?.path ?? (await this.getNoWorkspaceFallback()))
 			: request.workspacePath?.trim() || undefined
-		const sessionHistory = await this.taskHistory.listHistory({
-			hydrate: false,
-			limit: limit + 1,
-			offset,
-		})
-
-		let filteredTasks = sessionHistory.filter((item) => {
-			const ts = dateStringToTimestamp(item.updatedAt ?? item.endedAt ?? item.startedAt)
-			const task = metadataString(item.metadata, "title") ?? item.prompt ?? ""
-
-			if (!ts || !task) {
-				return false
-			}
-
-			const isFavorited =
-				metadataBoolean(item.metadata, "isFavorited") ?? metadataBoolean(item.metadata, "is_favorited") ?? false
-			if (favoritesOnly && !isFavorited) {
-				return false
-			}
-
-			if (workspacePath) {
-				const sessionWorkspacePath = sessionRecordWorkspacePath(item)
-				if (!sessionWorkspacePath || !arePathsEqual(sessionWorkspacePath, workspacePath)) {
-					return false
-				}
-			}
-
-			return true
-		})
-
-		if (searchQuery) {
-			const query = searchQuery.toLowerCase()
-			filteredTasks = filteredTasks.filter((item) => {
-				const task = metadataString(item.metadata, "title") ?? item.prompt ?? ""
-				return task.toLowerCase().includes(query)
-			})
+		const query: TaskHistoryQuery = {
+			favoritesOnly: request.favoritesOnly,
+			searchQuery: request.searchQuery,
+			sortBy: request.sortBy,
+			workspacePath,
+			fromTs: request.fromTs,
+			toTs: request.toTs,
 		}
-
-		filteredTasks.sort((a, b) => {
-			switch (sortBy) {
-				case "oldest":
-					return (
-						dateStringToTimestamp(a.updatedAt ?? a.endedAt ?? a.startedAt) -
-						dateStringToTimestamp(b.updatedAt ?? b.endedAt ?? b.startedAt)
-					)
-				case "mostExpensive":
-					return (metadataNumber(b.metadata, "totalCost") ?? 0) - (metadataNumber(a.metadata, "totalCost") ?? 0)
-				case "mostTokens":
-					return (
-						(metadataNumber(b.metadata, "tokensIn") ?? 0) +
-						(metadataNumber(b.metadata, "tokensOut") ?? 0) +
-						(metadataNumber(b.metadata, "cacheWrites") ?? 0) +
-						(metadataNumber(b.metadata, "cacheReads") ?? 0) -
-						((metadataNumber(a.metadata, "tokensIn") ?? 0) +
-							(metadataNumber(a.metadata, "tokensOut") ?? 0) +
-							(metadataNumber(a.metadata, "cacheWrites") ?? 0) +
-							(metadataNumber(a.metadata, "cacheReads") ?? 0))
-					)
-				default:
-					return (
-						dateStringToTimestamp(b.updatedAt ?? b.endedAt ?? b.startedAt) -
-						dateStringToTimestamp(a.updatedAt ?? a.endedAt ?? a.startedAt)
-					)
-			}
-		})
-
-		const hasMore = sessionHistory.length > limit
-		const tasks = filteredTasks.slice(0, limit).map((item) => {
+		// Filter the whole history and page the result. Paging first hid every
+		// match older than the newest page, e.g. favorites from last month.
+		const matching = queryTaskHistory(await this.taskHistory.listHistory({ hydrate: false }), query)
+		const hasMore = matching.length > offset + limit
+		const tasks = matching.slice(offset, offset + limit).map((item) => {
 			const metadata = item.metadata
 			return {
 				id: item.sessionId,
-				task: formatDisplayUserInput(metadataString(metadata, "title") ?? item.prompt ?? ""),
-				ts: dateStringToTimestamp(item.updatedAt ?? item.endedAt ?? item.startedAt),
-				isFavorited: metadataBoolean(metadata, "isFavorited") ?? metadataBoolean(metadata, "is_favorited") ?? false,
+				task: formatDisplayUserInput(sessionRecordTitle(item)),
+				ts: sessionRecordLastActiveTs(item),
+				isFavorited: isSessionRecordFavorited(item),
+				isPinned: isSessionRecordPinned(item),
 				size: metadataNumber(metadata, "size") ?? 0,
 				totalCost: metadataNumber(metadata, "totalCost") ?? 0,
 				tokensIn: metadataNumber(metadata, "tokensIn") ?? 0,
@@ -1452,27 +1407,43 @@ export class Controller {
 			}
 		})
 
-		if (offset === 0 && !favoritesOnly && this.task?.taskId && !tasks.some((task) => task.id === this.task?.taskId)) {
-			const taskMessage = this.task.messageStateHandler
+		// A conversation that just started may not be in the persisted history yet.
+		const activeTask = this.task
+		if (offset === 0 && activeTask?.taskId && !matching.some((item) => item.sessionId === activeTask.taskId)) {
+			const taskMessage = activeTask.messageStateHandler
 				.getClineMessages()
 				.find((message) => message.type === "say" && message.say === "task" && message.text)
-			const matchesSearch = !searchQuery || taskMessage?.text?.toLowerCase().includes(searchQuery.toLowerCase())
 			const activeWorkspace = this.activeTaskWorkspace?.workspace
 			const activeWorkspacePath = activeWorkspace?.path ?? (await this.getWorkspaceRoot())
-			const matchesWorkspace = !workspacePath || arePathsEqual(activeWorkspacePath, workspacePath)
-			if (taskMessage?.text && matchesSearch && matchesWorkspace) {
-				tasks.unshift({
-					id: this.task.taskId,
+			const startedTs = taskMessage?.ts || Date.now()
+			if (
+				taskMessage?.text &&
+				taskHistoryRowMatches(
+					{
+						title: taskMessage.text,
+						workspacePath: activeWorkspacePath,
+						lastActiveTs: Date.now(),
+						startedTs,
+						isFavorited: false,
+					},
+					query,
+				)
+			) {
+				// Below the pinned conversations, which lead the list.
+				const firstUnpinned = tasks.findIndex((task) => !task.isPinned)
+				tasks.splice(firstUnpinned === -1 ? tasks.length : firstUnpinned, 0, {
+					id: activeTask.taskId,
 					task: formatDisplayUserInput(taskMessage.text),
-					ts: taskMessage.ts || Date.now(),
+					ts: startedTs,
 					isFavorited: false,
+					isPinned: false,
 					size: 0,
 					totalCost: 0,
 					tokensIn: 0,
 					tokensOut: 0,
 					cacheWrites: 0,
 					cacheReads: 0,
-					modelId: this.task.api?.getModel?.().id ?? "",
+					modelId: activeTask.api?.getModel?.().id ?? "",
 					apiProvider: "",
 					workspaceRoot: await this.getWorkspaceRoot(),
 					workspacePath: activeWorkspacePath,
@@ -1625,16 +1596,19 @@ export class Controller {
 	}
 
 	async toggleTaskFavorite(taskId: string, isFavorited: boolean): Promise<void> {
-		const historyItem = await this.taskHistory.findHistoryItem(taskId)
-		if (!historyItem) {
+		if (!(await this.taskHistory.setTaskFavorite(taskId, isFavorited))) {
 			Logger.log(`[toggleTaskFavorite] Task not found in history: ${taskId}`)
 			return
 		}
+		await this.postStateToWebview()
+	}
 
-		await this.taskHistory.updateTaskHistory({
-			...historyItem,
-			isFavorited,
-		})
+	/** Pins the conversation to the top of the history list, or unpins it. */
+	async toggleTaskPin(taskId: string, isPinned: boolean): Promise<void> {
+		if (!(await this.taskHistory.setTaskPinned(taskId, isPinned))) {
+			Logger.log(`[toggleTaskPin] Task not found in history: ${taskId}`)
+			return
+		}
 		await this.postStateToWebview()
 	}
 

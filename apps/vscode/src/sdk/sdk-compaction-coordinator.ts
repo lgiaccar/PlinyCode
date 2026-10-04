@@ -26,7 +26,7 @@
 
 import type { Message as SdkMessage } from "@plinycode/llms"
 import type { ClineCompactionInfo, ClineMessage } from "@shared/ExtensionMessage"
-import type { Mode } from "@shared/storage/types"
+import { type Mode, toMode } from "@shared/storage/types"
 import type { StateManager } from "@/core/storage/StateManager"
 import { Logger } from "@/shared/services/Logger"
 import { buildCompactionMessage, parseCompactionNoticeMetadata } from "./message-translator"
@@ -285,8 +285,7 @@ export class SdkCompactionCoordinator {
 	}
 
 	private getCurrentMode(): Mode {
-		const m = this.options.stateManager.getGlobalSettingsKey("mode")
-		return m === "plan" ? m : "act"
+		return toMode(this.options.stateManager.getGlobalSettingsKey("mode"))
 	}
 
 	/** Append or update-in-place (same ts) the compaction divider row. */

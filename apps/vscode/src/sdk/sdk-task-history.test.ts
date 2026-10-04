@@ -666,8 +666,9 @@ describe("SdkTaskHistory", () => {
 
 		await history.setTaskUsage("task-1", { totalCost: 1.25, tokensIn: 100, tokensOut: 20, cacheReads: 5, cacheWrites: 3 })
 		await history.updateTaskUsage("task-1", { tokensIn: 10, tokensOut: 2, totalCost: 0.25 })
-		// A rename or favorite toggle carrying the pre-run item (cost 0) must not roll the totals back.
-		await history.updateTaskHistoryItem({ ...stale!, totalCost: 0, tokensIn: 0, isFavorited: true })
+		// A rename carrying the pre-run item (cost 0), or a favorite toggle, must not roll the totals back.
+		await history.updateTaskHistoryItem({ ...stale!, totalCost: 0, tokensIn: 0 })
+		await history.setTaskFavorite("task-1", true)
 
 		expect(await history.findHistoryItem("task-1")).toMatchObject({
 			totalCost: 1.5,
@@ -677,6 +678,40 @@ describe("SdkTaskHistory", () => {
 			cacheWrites: 3,
 			isFavorited: true,
 		})
+	})
+
+	it("changes the favorite and pin flags only through their toggles", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1")])
+		const stale = await history.findHistoryItem("task-1")
+
+		await expect(history.setTaskFavorite("task-1", true)).resolves.toBe(true)
+		await expect(history.setTaskPinned("task-1", true)).resolves.toBe(true)
+		// A usage update or rename holding the item read before the toggles, and a
+		// task (re)start writing an item built from scratch, must not undo them.
+		await history.updateTaskHistoryItem({ ...stale!, isFavorited: false, isPinned: false })
+		await history.updateTaskUsage("task-1", { tokensIn: 10, tokensOut: 0 })
+		await history.updateTaskHistoryItem(makeHistoryItem("task-1"))
+
+		expect(await history.findHistoryItem("task-1")).toMatchObject({ isFavorited: true, isPinned: true })
+
+		await history.setTaskFavorite("task-1", false)
+		await history.setTaskPinned("task-1", false)
+		const cleared = await history.findHistoryItem("task-1")
+		expect(cleared?.isFavorited).toBe(false)
+		expect(cleared?.isPinned).toBeUndefined()
+
+		await expect(history.setTaskPinned("missing-task", true)).resolves.toBe(false)
+		await expect(history.setTaskFavorite("missing-task", true)).resolves.toBe(false)
+	})
+
+	it("takes the flags from the item for a record that has none yet", async () => {
+		// A checkpoint restore or an edit-and-regenerate starts a new session and
+		// carries the old conversation's star and pin over on the first write.
+		const { history } = makeHistory([makeSessionRecord("restored")])
+
+		await history.updateTaskHistoryItem(makeHistoryItem("restored", { isFavorited: true, isPinned: true }))
+
+		expect(await history.findHistoryItem("restored")).toMatchObject({ isFavorited: true, isPinned: true })
 	})
 
 	it("keeps cached SDK task size when updating history without measuring artifacts", async () => {

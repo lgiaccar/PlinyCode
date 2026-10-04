@@ -2,7 +2,6 @@ import type { ApiConfiguration, ModelInfo } from "@shared/api"
 import { filterChatModelMap, resolveChatModelDefault } from "@/sdk/model-catalog/chat-models"
 import type {
 	EffectiveProviderConfig,
-	Mode,
 	ModelSelection,
 	ModelSelectionOverrides,
 	ProviderCatalog,
@@ -60,11 +59,15 @@ export function parseProviderIdRequest(rawProviderId: string | undefined, fieldN
 	return parseProviderId(providerId)
 }
 
-export function parseModeRequest(rawMode: string | undefined): Mode {
+/** The mode whose model selection a request names. Ask mode runs on act mode's selection. */
+export function parseModeRequest(rawMode: string | undefined): "plan" | "act" {
 	if (rawMode === "plan" || rawMode === "act") {
 		return rawMode
 	}
-	throw new Error('mode must be "plan" or "act"')
+	if (rawMode === "ask") {
+		return "act"
+	}
+	throw new Error('mode must be "plan", "act" or "ask"')
 }
 
 export function toProviderListingProto(listing: ProviderListing): ProviderListingProto {

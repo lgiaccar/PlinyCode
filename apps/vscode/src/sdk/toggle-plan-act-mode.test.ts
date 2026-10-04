@@ -55,6 +55,15 @@ describe("togglePlanActModeProto", () => {
 		expect(toggleSpy).toHaveBeenCalledWith("act", undefined)
 	})
 
+	it("decodes ASK mode and passes it to the controller", async () => {
+		toggleSpy.mockResolvedValue(false)
+		const request = TogglePlanActModeRequest.create({ mode: PlanActMode.ASK_MODE })
+
+		await togglePlanActModeProto(mockController, request)
+
+		expect(toggleSpy).toHaveBeenCalledWith("ask", undefined)
+	})
+
 	it("passes chatContent through to the controller", async () => {
 		toggleSpy.mockResolvedValue(false)
 		const request = TogglePlanActModeRequest.create({

@@ -1,7 +1,7 @@
 import { type ModelInfo, openAiModelInfoSafeDefaults } from "@shared/api"
 import type { ProviderConfigResponse } from "@shared/proto/cline/models"
 import { fromProtobufModelInfo } from "@shared/proto-conversions/models/typeConversion"
-import type { Mode } from "@shared/storage/types"
+import { type Mode, modelSettingsMode } from "@shared/storage/types"
 import { useCallback } from "react"
 import type { ProviderId } from "@/context/ExtensionStateContext"
 import type { ProviderModelSelection } from "./useProviderConfig"
@@ -52,7 +52,7 @@ export function useProviderModelSelection(
 
 	const commitModelSelection = useCallback(
 		(selection: ProviderModelSelectionInput) => {
-			return commitSelection(currentMode, {
+			return commitSelection(modelSettingsMode(currentMode), {
 				providerId,
 				modelId: selection.modelId,
 				...(selection.overrides !== undefined ? { overrides: selection.overrides } : {}),

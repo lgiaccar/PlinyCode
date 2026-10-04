@@ -282,14 +282,17 @@ export { formatHumanReadableDate, formatUptime } from "./parse/time";
 export { validateWithZod, zodToJsonSchema } from "./parse/zod";
 export type { ClineSystemPromptOptions } from "./prompt/cline";
 export {
+	ASK_MODE_INSTRUCTIONS,
 	buildClineSystemPrompt,
 	MODE_TAG_INSTRUCTIONS,
 	PLAN_MODE_INSTRUCTIONS,
 	PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH,
 } from "./prompt/cline";
 export type {
+	InteractiveMode,
 	ModeSwitchNotice,
 	ModeSwitchNoticeTracker,
+	UserInputMode,
 } from "./prompt/format";
 export {
 	createModeSwitchNoticeTracker,

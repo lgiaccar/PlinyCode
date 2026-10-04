@@ -59,6 +59,28 @@ export const ToolPresets = {
 	},
 
 	/**
+	 * Ask mode (read-only question answering)
+	 * The agent reads, searches and inspects to answer the user's question and
+	 * never writes a file: the editor and apply_patch tools are off, and the
+	 * ask-mode command-guard hook the runtime builder registers hard-blocks
+	 * file-editing shell commands and any write tool a host or sub-agent
+	 * still exposes.
+	 */
+	ask: {
+		enableReadFiles: true,
+		enableSearch: true,
+		enableBash: true,
+		enableWebFetch: true,
+		enableApplyPatch: false,
+		enableEditor: false,
+		enableSkills: true,
+		enableAskQuestion: true,
+		enableSubmitAndExit: false,
+		enableSpawnAgent: true,
+		enableAgentTeams: false,
+	},
+
+	/**
 	 * Search-focused tools (read_files + search_codebase)
 	 * Good for code exploration and analysis agents
 	 */
@@ -122,6 +144,9 @@ export function resolveToolPresetName(options: {
 }): ToolPresetName {
 	if (options.mode === "plan") {
 		return "plan";
+	}
+	if (options.mode === "ask") {
+		return "ask";
 	}
 	if (options.mode === "yolo") {
 		return "yolo";

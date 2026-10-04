@@ -1,19 +1,27 @@
 import { EmptyRequest, StringArrayRequest } from "@shared/proto/cline/common"
-import { GetTaskHistoryRequest, RenameTaskRequest, TaskFavoriteRequest, type TaskItem } from "@shared/proto/cline/task"
+import {
+	GetTaskHistoryRequest,
+	RenameTaskRequest,
+	TaskFavoriteRequest,
+	type TaskItem,
+	TaskPinRequest,
+} from "@shared/proto/cline/task"
 import { VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 import Fuse from "fuse.js"
-import { FunnelIcon } from "lucide-react"
+import { ArrowUpDownIcon, CalendarIcon, StarIcon } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { GroupedVirtuoso } from "react-virtuoso"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { useExtensionState } from "@/context/ExtensionStateContext"
+import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { formatSize } from "@/utils/format"
 import ViewHeader from "../common/ViewHeader"
 import { useWorkspaces } from "../workspace/useWorkspaces"
 import { WorkspaceSelect, type WorkspaceSelection } from "../workspace/WorkspaceSelect"
 import HistoryViewItem from "./HistoryViewItem"
+import { type CustomDateRange, DATE_FILTERS, type DateFilter, dateFilterRange, groupHistoryTasks } from "./historyFilters"
 
 type HistoryViewProps = {
 	onDone: () => void
@@ -21,19 +29,18 @@ type HistoryViewProps = {
 
 type SortOption = "newest" | "oldest" | "mostExpensive" | "mostTokens" | "mostRelevant"
 
-const isToday = (timestamp: number): boolean => {
-	const date = new Date(timestamp)
-	const today = new Date()
-	return today.toDateString() === date.toDateString()
-}
-
-const HISTORY_FILTERS = {
+const SORT_OPTIONS: Record<SortOption, string> = {
 	newest: "Newest",
 	oldest: "Oldest",
 	mostExpensive: "Most Expensive",
 	mostTokens: "Most Tokens",
 	mostRelevant: "Most Relevant",
-	favoritesOnly: "Favorites Only",
+}
+
+const DATE_INPUT_CLASS = "h-6 rounded-[3px] border border-editor-group-border px-1 text-xs focus:outline-none"
+const DATE_INPUT_STYLE: React.CSSProperties = {
+	backgroundColor: "var(--vscode-input-background, var(--vscode-sideBar-background))",
+	color: "var(--vscode-input-foreground, var(--vscode-foreground))",
 }
 
 const HISTORY_PAGE_SIZE = 50
@@ -47,6 +54,8 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 	const [deleteAllDisabled, setDeleteAllDisabled] = useState(false)
 	const [selectedItems, setSelectedItems] = useState<string[]>([])
 	const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+	const [dateFilter, setDateFilter] = useState<DateFilter>("any")
+	const [customDateRange, setCustomDateRange] = useState<CustomDateRange>({ from: "", to: "" })
 	// Conversations are bound to workspaces; the window's own is shown by default.
 	const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceSelection>({ kind: "current" })
 	const workspaces = useWorkspaces()
@@ -75,9 +84,12 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 			setIsLoadingHistory(true)
 			try {
 				const startedAt = performance.now()
+				const { fromTs, toTs } = dateFilterRange(dateFilter, customDateRange)
 				const response = await TaskServiceClient.getTaskHistory(
 					GetTaskHistoryRequest.create({
 						favoritesOnly: showFavoritesOnly,
+						fromTs,
+						toTs,
 						searchQuery: searchQuery || undefined,
 						sortBy: sortOption,
 						currentWorkspaceOnly: workspaceFilter.kind === "current",
@@ -115,7 +127,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 				}
 			}
 		},
-		[showFavoritesOnly, workspaceFilter, searchQuery, sortOption],
+		[showFavoritesOnly, workspaceFilter, searchQuery, sortOption, dateFilter, customDateRange],
 	)
 
 	const loadMoreTaskHistory = useCallback(() => {
@@ -134,12 +146,13 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 	}, [loadTaskHistory])
 
 	// Other PlinyCode windows share the same conversations: when the extension
-	// notices a change to the set (a conversation added, renamed, favorited or
-	// deleted elsewhere) it pushes new state, and the list reloads. Keyed on
+	// notices a change to the set (a conversation added, renamed, favorited,
+	// pinned or deleted elsewhere) it pushes new state, and the list reloads. Keyed on
 	// membership and titles rather than the array itself, which changes on
 	// every state post (usage totals tick while a task streams).
 	const taskHistorySignature = useMemo(
-		() => taskHistory.map((item) => `${item.id}:${item.task}:${item.isFavorited ? 1 : 0}`).join("\n"),
+		() =>
+			taskHistory.map((item) => `${item.id}:${item.task}:${item.isFavorited ? 1 : 0}:${item.isPinned ? 1 : 0}`).join("\n"),
 		[taskHistory],
 	)
 	const lastTaskHistorySignatureRef = useRef(taskHistorySignature)
@@ -194,6 +207,20 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 			}
 		},
 		[showFavoritesOnly, workspaceFilter, loadTaskHistory],
+	)
+
+	const togglePin = useCallback(
+		async (taskId: string, currentValue: boolean) => {
+			const nextValue = !currentValue
+			try {
+				await TaskServiceClient.toggleTaskPin(TaskPinRequest.create({ taskId, isPinned: nextValue }))
+				// Pinned conversations lead the list, so the order comes from the extension.
+				await loadTaskHistory(0)
+			} catch (err) {
+				console.error(`Failed to ${nextValue ? "pin" : "unpin"} task ${taskId}:`, err)
+			}
+		},
+		[loadTaskHistory],
 	)
 
 	const renameTask = useCallback((taskId: string, title: string) => {
@@ -314,77 +341,32 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 		})
 	}, [tasks])
 
+	// The extension filters, sorts and pages the list, pinned conversations
+	// first. Only the relevance ranking of a search happens here.
 	const taskHistorySearchResults = useMemo(() => {
-		const results = searchQuery
-			? fuse
-					.search(searchQuery)
-					?.filter(({ matches }) => matches?.length)
-					.map(({ item }) => item)
-			: tasks
-
-		results.sort((a, b) => {
-			switch (sortOption) {
-				case "oldest":
-					return a.ts - b.ts
-				case "mostExpensive":
-					return (b.totalCost || 0) - (a.totalCost || 0)
-				case "mostTokens":
-					return (
-						(b.tokensIn || 0) +
-						(b.tokensOut || 0) +
-						(b.cacheWrites || 0) +
-						(b.cacheReads || 0) -
-						((a.tokensIn || 0) + (a.tokensOut || 0) + (a.cacheWrites || 0) + (a.cacheReads || 0))
-					)
-				case "mostRelevant":
-					// NOTE: you must never sort directly on object since it will cause members to be reordered
-					return searchQuery ? 0 : b.ts - a.ts // Keep fuse order if searching, otherwise sort by newest
-				default:
-					return b.ts - a.ts
-			}
-		})
-
-		return results
+		if (!searchQuery || sortOption !== "mostRelevant") {
+			return tasks
+		}
+		const ranked = fuse.search(searchQuery).map(({ item }) => item)
+		const rankedIds = new Set(ranked.map((task) => task.id))
+		return [...ranked, ...tasks.filter((task) => !rankedIds.has(task.id))]
 	}, [tasks, searchQuery, fuse, sortOption])
 
-	// Group tasks into "Today" and "Older" (only for date-based sorts)
+	// Sections: "Pinned", then "Today" and "Older" for the date-based sorts.
 	const { groupedTasks, groupCounts, groupLabels } = useMemo(() => {
-		const isDateSort = sortOption === "newest" || sortOption === "oldest"
-
-		if (!isDateSort) {
-			// No grouping for non-date sorts
-			return {
-				groupedTasks: taskHistorySearchResults,
-				groupCounts: [taskHistorySearchResults.length],
-				groupLabels: [] as string[],
-			}
-		}
-
-		const todayTasks: any[] = []
-		const olderTasks: any[] = []
-
-		taskHistorySearchResults.forEach((task) => {
-			if (isToday(task.ts)) {
-				todayTasks.push(task)
-			} else {
-				olderTasks.push(task)
-			}
+		const grouped = groupHistoryTasks(taskHistorySearchResults, {
+			groupByDay: sortOption === "newest" || sortOption === "oldest",
 		})
-
-		const groups: { tasks: any[]; label: string }[] = []
-		if (todayTasks.length > 0) {
-			groups.push({ tasks: todayTasks, label: "Today" })
-		}
-		if (olderTasks.length > 0) {
-			groups.push({ tasks: olderTasks, label: "Older" })
-		}
-
-		return {
-			groupedTasks: groups.flatMap((g) => g.tasks),
-			groupCounts: groups.map((g) => g.tasks.length),
-			groupLabels: groups.map((g) => g.label),
-		}
+		return { groupedTasks: grouped.tasks, groupCounts: grouped.groupCounts, groupLabels: grouped.groupLabels }
 	}, [taskHistorySearchResults, sortOption])
+
+	const hasActiveFilters = showFavoritesOnly || dateFilter !== "any" || searchQuery !== ""
+	const clearFilters = useCallback(() => {
+		setShowFavoritesOnly(false)
+		setDateFilter("any")
+		setCustomDateRange({ from: "", to: "" })
+		setSearchQuery("")
+	}, [])
 
 	// Calculate total size of selected items
 	const selectedItemsSize = useMemo(() => {
@@ -426,7 +408,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 								setSortOption("mostRelevant")
 							}
 						}}
-						placeholder="Fuzzy search history..."
+						placeholder="Search history..."
 						value={searchQuery}>
 						<div className="codicon codicon-search opacity-80 mt-0.5 !text-sm" slot="start" />
 						{searchQuery && (
@@ -440,65 +422,106 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 					</VSCodeTextField>
 					<Select
 						onValueChange={(value) => {
-							// Handle sort options
-							if (
-								value === "newest" ||
-								value === "oldest" ||
-								value === "mostExpensive" ||
-								value === "mostTokens" ||
-								value === "mostRelevant"
-							) {
-								if (value === "mostRelevant" && !searchQuery) {
-									// Don't allow selecting mostRelevant without a search query
-									return
-								}
-								setSortOption(value as SortOption)
-								if (value !== "mostRelevant") {
-									setLastNonRelevantSort(value as SortOption)
-								}
+							if (value === "mostRelevant" && !searchQuery) {
+								// Don't allow selecting mostRelevant without a search query
+								return
 							}
-							// Handle filter toggles
-							else if (value === "favoritesOnly") {
-								setShowFavoritesOnly(!showFavoritesOnly)
+							setSortOption(value as SortOption)
+							if (value !== "mostRelevant") {
+								setLastNonRelevantSort(value as SortOption)
 							}
 						}}
 						value={sortOption}>
-						<SelectTrigger className="border-0 cursor-pointer" showIcon={false}>
-							<FunnelIcon className="!size-2 text-foreground" />
+						<SelectTrigger aria-label="Sort history" className="border-0 cursor-pointer" showIcon={false}>
+							<ArrowUpDownIcon className="!size-2 text-foreground" />
 						</SelectTrigger>
 						<SelectContent position="popper">
-							{Object.entries(HISTORY_FILTERS).map(([key, value]) => {
-								const isSortOption = ["newest", "oldest", "mostExpensive", "mostTokens", "mostRelevant"].includes(
-									key,
-								)
-								const isFilterOption = key === "favoritesOnly"
-								const isSelected = isSortOption
-									? sortOption === key
-									: key === "favoritesOnly"
-										? showFavoritesOnly
-										: false
-								const isDisabled = key === "mostRelevant" && !searchQuery
-
-								return (
-									<SelectItem
-										className={isSelected ? "bg-button-background/30" : ""}
-										disabled={isDisabled}
-										key={key}
-										value={key}>
-										<span className="flex items-center gap-2">
-											{isFilterOption && (
-												<span
-													className={`codicon codicon-star-full ${isSelected ? "text-button-background" : ""}`}
-												/>
-											)}
-											{value}
-										</span>
-									</SelectItem>
-								)
-							})}
+							{Object.entries(SORT_OPTIONS).map(([key, label]) => (
+								<SelectItem
+									className={sortOption === key ? "bg-button-background/30" : ""}
+									disabled={key === "mostRelevant" && !searchQuery}
+									key={key}
+									value={key}>
+									{label}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</div>
+				{/* FAVORITES AND DATE FILTERS */}
+				<div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-description">
+					<button
+						aria-label="Show only favorites"
+						aria-pressed={showFavoritesOnly}
+						className={cn(
+							"flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs cursor-pointer bg-transparent",
+							showFavoritesOnly
+								? "border-button-background text-foreground"
+								: "border-editor-group-border text-description hover:text-foreground",
+						)}
+						onClick={() => setShowFavoritesOnly((current) => !current)}
+						type="button">
+						<StarIcon
+							className={cn("size-3", { "text-button-background fill-button-background": showFavoritesOnly })}
+						/>
+						Favorites
+					</button>
+					<div className="flex items-center gap-1">
+						<span className="shrink-0">Date</span>
+						<Select onValueChange={(value) => setDateFilter(value as DateFilter)} value={dateFilter}>
+							<SelectTrigger
+								aria-label="Filter history by date"
+								className="h-6 gap-1 border-0 px-1.5 py-0 text-xs text-description hover:text-foreground"
+								data-size="sm">
+								<CalendarIcon className="shrink-0 opacity-70" size={11} />
+								<span className="whitespace-nowrap">{DATE_FILTERS[dateFilter]}</span>
+							</SelectTrigger>
+							<SelectContent align="start" position="popper">
+								{Object.entries(DATE_FILTERS).map(([key, label]) => (
+									<SelectItem key={key} value={key}>
+										{label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					{hasActiveFilters && (
+						<button
+							className="ml-auto bg-transparent border-0 p-0 text-xs text-link cursor-pointer hover:underline"
+							onClick={clearFilters}
+							type="button">
+							Clear filters
+						</button>
+					)}
+				</div>
+				{dateFilter === "custom" && (
+					<div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-description">
+						<label className="flex items-center gap-1">
+							From
+							<input
+								aria-label="Active from"
+								className={DATE_INPUT_CLASS}
+								max={customDateRange.to || undefined}
+								onChange={(e) => setCustomDateRange((range) => ({ ...range, from: e.target.value }))}
+								style={DATE_INPUT_STYLE}
+								type="datetime-local"
+								value={customDateRange.from}
+							/>
+						</label>
+						<label className="flex items-center gap-1">
+							To
+							<input
+								aria-label="Active until"
+								className={DATE_INPUT_CLASS}
+								min={customDateRange.from || undefined}
+								onChange={(e) => setCustomDateRange((range) => ({ ...range, to: e.target.value }))}
+								style={DATE_INPUT_STYLE}
+								type="datetime-local"
+								value={customDateRange.to}
+							/>
+						</label>
+					</div>
+				)}
 				{/* WORKSPACE FILTER */}
 				<div className="flex items-center gap-1 text-xs text-description">
 					<span className="shrink-0">Workspace</span>
@@ -518,6 +541,12 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 				<GroupedVirtuoso
 					className="flex-grow overflow-y-scroll"
 					components={{
+						EmptyPlaceholder: () =>
+							isLoadingHistory ? null : (
+								<div className="px-4 py-6 text-center text-xs text-description">
+									{hasActiveFilters ? "No conversations match these filters." : "No conversations here yet."}
+								</div>
+							),
 						Footer: () =>
 							hasMoreTasks ? (
 								<div className="px-4 py-3 text-center text-xs text-description">
@@ -544,6 +573,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 								renameTask={renameTask}
 								selectedItems={selectedItems}
 								toggleFavorite={toggleFavorite}
+								togglePin={togglePin}
 							/>
 						)
 					}}

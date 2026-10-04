@@ -2,7 +2,7 @@ import { createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import type { Settings } from "@shared/storage/state-keys"
-import type { Mode } from "@shared/storage/types"
+import { type Mode, toMode } from "@shared/storage/types"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import type { StateManager } from "@/core/storage/StateManager"
 import { Logger } from "@/shared/services/Logger"
@@ -248,8 +248,7 @@ export class SdkTaskStartCoordinator {
 	}
 
 	private getCurrentMode(): Mode {
-		const m = this.options.stateManager.getGlobalSettingsKey("mode")
-		return m === "plan" ? m : "act"
+		return toMode(this.options.stateManager.getGlobalSettingsKey("mode"))
 	}
 
 	private createAndSetTask(sessionId: string): TaskProxy {

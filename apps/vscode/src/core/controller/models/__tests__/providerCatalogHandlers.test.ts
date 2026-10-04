@@ -474,7 +474,7 @@ describe("provider model catalog handlers", () => {
 				modelId: "deepseek-v4-flash",
 				overrides: ModelOverrides.create({ capabilities: ["prompt-cache"] }),
 			}),
-		).rejects.toThrow('mode must be "plan" or "act"')
+		).rejects.toThrow('mode must be "plan", "act" or "ask"')
 		expect(store.commitSelection).not.toHaveBeenCalled()
 	})
 })

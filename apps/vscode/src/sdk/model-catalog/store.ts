@@ -10,6 +10,7 @@ import { ModelCapabilitySchema } from "@plinycode/shared"
 import { type ApiConfiguration, type ApiProvider, type ModelInfo, openAiModelInfoSafeDefaults } from "@shared/api"
 import { getProviderModelIdKey } from "@shared/storage/provider-keys"
 import type { SettingsKey } from "@shared/storage/state-keys"
+import { modelSettingsMode } from "@shared/storage/types"
 import { StateManager } from "@/core/storage/StateManager"
 import { getProviderSettingsManager } from "../provider-migration"
 import type {
@@ -481,7 +482,10 @@ function writeProviderSettingsFields(providerId: ProviderId, patch: ProviderConf
 }
 
 function getModelIdKey(providerId: ProviderId, mode: Mode): keyof ApiConfiguration & SettingsKey {
-	return getProviderModelIdKey(providerForStorage(providerId) ?? "anthropic", mode) as keyof ApiConfiguration & SettingsKey
+	return getProviderModelIdKey(
+		providerForStorage(providerId) ?? "anthropic",
+		modelSettingsMode(mode),
+	) as keyof ApiConfiguration & SettingsKey
 }
 
 function syncedModes(mode: Mode): Mode[] {
@@ -551,7 +555,7 @@ export function createProviderConfigStore(): ProviderConfigStore {
 		},
 
 		readSelection(providerId: ProviderId, mode: Mode): ResolvedModelSelection | undefined {
-			return readSelectionFromState(providerId, mode)
+			return readSelectionFromState(providerId, modelSettingsMode(mode))
 		},
 
 		subscribe(listener: ProviderConfigChangeListener): Disposable {
@@ -567,7 +571,9 @@ export function createProviderConfigStore(): ProviderConfigStore {
 			return config
 		},
 
-		commitSelection(providerId: ProviderId, mode: Mode, selection: ModelSelection, baseModelInfoHint?: ModelInfo): void {
+		commitSelection(providerId: ProviderId, anyMode: Mode, selection: ModelSelection, baseModelInfoHint?: ModelInfo): void {
+			// Ask mode has no model selection of its own: it runs on act mode's.
+			const mode = modelSettingsMode(anyMode)
 			writeSelectionToProviderSettings(providerId, selection)
 			if (selection.overrides !== undefined) {
 				writeModelOverrides(providerId, selection.modelId, selection.overrides)

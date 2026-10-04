@@ -53,6 +53,9 @@ describe("prompt format helpers", () => {
 		expect(parseUserInputMode(formatUserInputBlock("hello", "act"))).toBe(
 			"act",
 		);
+		expect(parseUserInputMode(formatUserInputBlock("hello", "ask"))).toBe(
+			"ask",
+		);
 	});
 
 	it("parses the mode when a mode notice precedes the wrapper", () => {

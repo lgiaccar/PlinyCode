@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	ASK_MODE_INSTRUCTIONS,
 	buildClineSystemPrompt,
 	MODE_TAG_INSTRUCTIONS,
 	PLAN_MODE_INSTRUCTIONS,
@@ -55,6 +56,22 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		expect(prompt.indexOf(MODE_TAG_INSTRUCTIONS)).toBeLessThan(
 			prompt.indexOf(PLAN_MODE_INSTRUCTIONS),
 		);
+	});
+
+	it("appends the ask-mode contract only in ask mode", () => {
+		const prompt = buildClineSystemPrompt({ ...BASE_OPTIONS, mode: "ask" });
+		expect(prompt).toContain(MODE_TAG_INSTRUCTIONS);
+		expect(prompt).toContain(ASK_MODE_INSTRUCTIONS);
+		expect(prompt).not.toContain(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH);
+		expect(ASK_MODE_INSTRUCTIONS).toContain("toggle to Act mode");
+		// Ask mode cannot switch modes itself, on any host.
+		expect(ASK_MODE_INSTRUCTIONS).not.toContain("switch_to_act_mode");
+
+		for (const mode of ["act", "plan"] as const) {
+			expect(buildClineSystemPrompt({ ...BASE_OPTIONS, mode })).not.toContain(
+				ASK_MODE_INSTRUCTIONS,
+			);
+		}
 	});
 
 	it("keeps run_commands available-but-read-only in the plan contract", () => {
