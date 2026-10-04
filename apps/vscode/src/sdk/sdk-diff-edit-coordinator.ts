@@ -7,6 +7,7 @@ import {
 	type EditFileInput,
 	type EditorExecutor,
 	PatchActionType,
+	replaceTextInContent,
 } from "@plinycode/core"
 import type { AgentToolContext } from "@plinycode/shared"
 import * as fs from "fs/promises"
@@ -377,21 +378,17 @@ function detectLineEnding(content: string): "\r\n" | "\n" {
 	return content.includes("\r\n") ? "\r\n" : "\n"
 }
 
-function normalizeLineEndings(text: string, eol: "\r\n" | "\n"): string {
-	return text.split(/\r\n|\n/).join(eol)
-}
-
 /**
  * Computes the full proposed file content for an `editor` tool input, mirroring the
  * SDK executor's semantics (sdk/packages/core/src/extensions/tools/executors/editor.ts)
  * so the preview shows exactly what the executor will write. Inputs the SDK would
  * reject throw here too, and the preview is simply skipped.
  *
- * Like the executor, old/new text are normalized to the file's own line endings
- * before matching: reads strip "\r", so models emit LF-only text even for CRLF
- * files, and an exact match would fail on every multi-line old_text in a CRLF
- * file — silently skipping the preview while the executor applies the edit
- * (github.com/cline/cline/issues/13296).
+ * Replacement edits go through the executor's own `replaceTextInContent`, so the
+ * preview matches `old_text` the way the write will, including normalizing it to the
+ * file's line endings: reads strip "\r", so models emit LF-only text even for CRLF
+ * files, and a preview that matched it literally was silently skipped while the
+ * executor applied the edit (github.com/cline/cline/issues/13296).
  */
 export function computeNewEditorContent(
 	originalContent: string,
@@ -420,18 +417,7 @@ export function computeNewEditorContent(
 		throw new Error("Parameter `old_text` is required when editing an existing file without `insert_line`")
 	}
 
-	const eol = detectLineEnding(originalContent)
-	const normalizedOldText = normalizeLineEndings(input.old_text, eol)
-	const normalizedNewText = normalizeLineEndings(input.new_text ?? "", eol)
-	const occurrences = normalizedOldText.length === 0 ? 0 : originalContent.split(normalizedOldText).length - 1
-	if (occurrences === 0) {
-		throw new Error(`No replacement performed: text not found in ${filePath}.`)
-	}
-	if (occurrences > 1) {
-		throw new Error(`No replacement performed: multiple occurrences of text found in ${filePath}.`)
-	}
-	// Replacer function so "$"-sequences in new_text are inserted literally, as the executor does.
-	return originalContent.replace(normalizedOldText, () => normalizedNewText)
+	return replaceTextInContent(originalContent, input.old_text, input.new_text, filePath)
 }
 
 /** Mirrors the SDK executor's resolveFilePath (restrictToCwd=true): absolute paths pass through. */
