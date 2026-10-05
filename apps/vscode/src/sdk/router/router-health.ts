@@ -13,6 +13,7 @@
  */
 
 import type { GuardGiveUpReason } from "./completion-guard"
+import type { ReviewRecord } from "./router-review"
 import type { RouterCallRecord, RouterClassification } from "./router-types"
 
 interface ModelHealth {
@@ -110,6 +111,8 @@ export interface RouterRunState {
 	guardGaveUp?: GuardGiveUpReason
 	/** Outcome of the completion judge, when it was consulted. */
 	judge?: "done" | "not-done" | "no-verdict" | "skipped"
+	/** What the reviewer pass did when the run was about to end: its findings, or why it did not run. */
+	review?: ReviewRecord
 	/** Length and tail of the reply that ended the run, for the run log. */
 	replyChars?: number
 	replyTail?: string

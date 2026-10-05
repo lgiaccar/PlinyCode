@@ -92,6 +92,15 @@ export class MessageTranslatorState {
 	private streamingToolInput: unknown | undefined
 	/** Stored tool name from content_start — used at content_end for consistency */
 	private streamingToolName: string | undefined
+	/** Call id of the tool held in the streaming-tool fields above. */
+	private streamingToolCallId: string | undefined
+	/**
+	 * Every tool that has started and not finished, by call id. Read-only tools run
+	 * concurrently: a second one can start before the first ends, and they can end in
+	 * either order. The streaming-tool fields hold only the tool touched last, so
+	 * content_end restores the right one from here before finalizing its row.
+	 */
+	private openToolsByCallId = new Map<string, { toolName: string; input: unknown; ts: number | undefined }>()
 	/** Output snapshot for the active command tool's partial row. */
 	private streamingCommandOutput: { toolCallId: string | undefined; text: string; totalChars: number } | undefined
 	/** Approved tool-call ids mapped to the approval row that should be updated in place. */
@@ -213,15 +222,51 @@ export class MessageTranslatorState {
 	/** Get streaming tool ts */
 	getStreamingToolTs(): number {
 		if (!this.streamingToolTs) {
-			this.streamingToolTs = this.nextTs()
+			this.setStreamingToolTs(this.nextTs())
 		}
-		return this.streamingToolTs
+		return this.streamingToolTs as number
 	}
 
 	/** Store tool input from content_start for use at content_end */
 	setStreamingToolContext(toolName: string, toolCallId: string | undefined, input: unknown): void {
+		if (this.streamingToolName !== undefined && this.streamingToolCallId !== toolCallId) {
+			// The previous tool is still running, so this one needs a row of its own
+			// rather than the previous tool's timestamp.
+			this.streamingToolTs = undefined
+		}
 		this.streamingToolName = toolName
 		this.streamingToolInput = input
+		this.streamingToolCallId = toolCallId
+		this.streamingCommandOutput = { toolCallId, text: "", totalChars: 0 }
+		if (toolCallId !== undefined) {
+			this.openToolsByCallId.set(toolCallId, { toolName, input, ts: this.streamingToolTs })
+		}
+	}
+
+	/**
+	 * Make the tool with this call id the one the streaming-tool fields describe.
+	 * A no-op when it already is, or when the id is unknown (events without ids, or
+	 * a tool that never emitted content_start), which leaves the fields as they were.
+	 *
+	 * Also a no-op while a command is the active tool. Commands never run alongside
+	 * other tools, so an event for another call id is then a stale completion of an
+	 * older call, which must not displace the command's streaming row.
+	 */
+	selectStreamingTool(toolCallId: string | undefined): void {
+		if (toolCallId === undefined || toolCallId === this.streamingToolCallId) {
+			return
+		}
+		if (this.streamingToolName === "run_commands" || this.streamingToolName === "execute_command") {
+			return
+		}
+		const open = this.openToolsByCallId.get(toolCallId)
+		if (!open) {
+			return
+		}
+		this.streamingToolName = open.toolName
+		this.streamingToolInput = open.input
+		this.streamingToolTs = open.ts
+		this.streamingToolCallId = toolCallId
 		this.streamingCommandOutput = { toolCallId, text: "", totalChars: 0 }
 	}
 
@@ -274,6 +319,10 @@ export class MessageTranslatorState {
 	/** Force the active tool stream to update a known row instead of minting a new row. */
 	setStreamingToolTs(ts: number): void {
 		this.streamingToolTs = ts
+		const open = this.streamingToolCallId !== undefined ? this.openToolsByCallId.get(this.streamingToolCallId) : undefined
+		if (open) {
+			open.ts = ts
+		}
 	}
 
 	/** Get the stored tool input (from content_start) */
@@ -309,9 +358,13 @@ export class MessageTranslatorState {
 	/** Clear streaming tool */
 	clearStreamingTool(): number {
 		const ts = this.streamingToolTs ?? this.nextTs()
+		if (this.streamingToolCallId !== undefined) {
+			this.openToolsByCallId.delete(this.streamingToolCallId)
+		}
 		this.streamingToolTs = undefined
 		this.streamingToolInput = undefined
 		this.streamingToolName = undefined
+		this.streamingToolCallId = undefined
 		this.streamingCommandOutput = undefined
 		return ts
 	}
@@ -492,6 +545,8 @@ export class MessageTranslatorState {
 		this.streamingToolTs = undefined
 		this.streamingToolInput = undefined
 		this.streamingToolName = undefined
+		this.streamingToolCallId = undefined
+		this.openToolsByCallId.clear()
 		this.streamingCommandOutput = undefined
 		this.clearApprovedToolMessageTs()
 		this.deniedToolApprovalsByCallId.clear()

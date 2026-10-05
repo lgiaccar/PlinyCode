@@ -16,8 +16,11 @@ import type {
 	ClineSubagentUsageInfo,
 } from "@shared/ExtensionMessage"
 import { Logger } from "@shared/services/Logger"
+import type { TodoListMessage } from "@shared/todo-list"
 import { isSyntheticUserPrompt } from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
+import { normalizeTodoList, TODO_TOOL_NAME } from "../vscode-todo-tool"
+import { advisorQuestionMessage, advisorResultMessages, isAdvisorTool } from "./advisor-rows"
 import { buildCompactionMessage, finalizeDanglingCompaction, parseCompactionNoticeMetadata } from "./ask-builders"
 import { reshapeErrorForWebview } from "./error-reshape"
 import {
@@ -125,6 +128,11 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 						break
 					}
 
+					// The task list has no tool row: content_end emits the list itself.
+					if (toolName === TODO_TOOL_NAME) {
+						break
+					}
+
 					// The completion tool (attempt_completion / submit_and_exit) is handled specially:
 					// it drives the green completion box. We emit say:"completion_result"
 					// here (partial) and finalize it at content_end. Recording attemptCompletionSeen
@@ -189,6 +197,12 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 
 						// Clear the generic streaming tool so it doesn't also emit say:"tool"
 						state.clearStreamingTool()
+						break
+					}
+
+					// ask_advisor → "asked the advisor" row with the question; content_end adds the advice.
+					if (isAdvisorTool(toolName)) {
+						messages.push(advisorQuestionMessage(input, state.getStreamingToolTs(), true))
 						break
 					}
 
@@ -345,6 +359,9 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					break
 				}
 				case "tool": {
+					// Tools that ran concurrently end in any order; bring this one's
+					// stored input and row back before finalizing it.
+					state.selectStreamingTool(event.toolCallId)
 					const toolName = event.toolName ?? state.getStreamingToolName() ?? "unknown"
 					if (state.isMismatchedStreamingCommand(toolName, event.toolCallId)) {
 						break
@@ -362,6 +379,23 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					// ask_question is serviced by the interaction coordinator (see content_start);
 					// it produces no transcript row of its own, so its content_end is a no-op.
 					if (toolName === "ask_question" || toolName === "ask_followup_question") {
+						break
+					}
+
+					// update_todo_list → the list as the user should see it. A call the
+					// tool rejected changed nothing, so it shows nothing.
+					if (toolName === TODO_TOOL_NAME) {
+						const todos = event.error ? [] : normalizeTodoList(state.getStreamingToolInput())
+						const ts = state.clearStreamingTool()
+						if (todos.length > 0) {
+							messages.push({
+								ts,
+								type: "say",
+								say: "task_progress",
+								text: JSON.stringify({ todos } satisfies TodoListMessage),
+								partial: false,
+							})
+						}
 						break
 					}
 
@@ -479,6 +513,22 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 							partial: false,
 							commandCompleted: true,
 						})
+						break
+					}
+
+					// ask_advisor → the advice (or why there is none) and its cost.
+					if (isAdvisorTool(toolName)) {
+						const storedInput = state.getStreamingToolInput()
+						const questionTs = state.clearStreamingTool()
+						messages.push(
+							...advisorResultMessages({
+								input: storedInput,
+								output: event.output,
+								error: event.error,
+								questionTs,
+								nextTs: () => state.nextTs(),
+							}),
+						)
 						break
 					}
 

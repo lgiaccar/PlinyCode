@@ -7,7 +7,7 @@
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath } from "@plinycode/core"
-import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
+import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
@@ -27,6 +27,8 @@ import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { StateManager } from "@/core/storage/StateManager"
 import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { getAdvisorSettings } from "@/hosts/vscode/advisor-settings"
+import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -36,7 +38,10 @@ import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
+import { checkAdvisorBudget } from "./advisor/advisor-budget"
+import type { AdvisorUsage } from "./advisor/advisor-tool"
 import { buildStartSessionInput } from "./cline-session-factory"
+import { type ConversationContext, createConversationContext } from "./context"
 import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
@@ -45,6 +50,7 @@ import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
 import { getCheckpointRunCountForMessage } from "./sdk-checkpoints"
+import { SdkCiWatchCoordinator } from "./sdk-ci-watch-coordinator"
 import { SdkCompactionCoordinator } from "./sdk-compaction-coordinator"
 import { SdkDiffEditCoordinator } from "./sdk-diff-edit-coordinator"
 import { SdkFollowupCoordinator } from "./sdk-followup-coordinator"
@@ -183,6 +189,10 @@ export class Controller {
 	// one. Created in the constructor; its callbacks reach session state lazily.
 	private readonly background: SdkBackgroundSessions
 
+	// CI watches started with the watch_ci tool, and the delivery of their
+	// reports into conversations — see sdk-ci-watch-coordinator.ts.
+	private readonly ciWatch: SdkCiWatchCoordinator
+
 	// Private state kept for stub compatibility
 	private backgroundCommandRunning = false
 	private backgroundCommandTaskId?: string
@@ -200,6 +210,11 @@ export class Controller {
 	// Workspace root / window workspace / WorkspaceRootManager resolution — see
 	// sdk-workspace-root-resolver.ts.
 	private readonly workspaceRootResolver: SdkWorkspaceRootResolver
+	// Git snapshot in the system prompt and editor state on user messages — see context/index.ts.
+	private readonly conversationContext: ConversationContext = createConversationContext({
+		readSessionMetadata: (conversationId) => this.taskHistory.getSessionMetadata(conversationId),
+		getWorkspaceRoot: () => this.getWorkspaceRoot(),
+	})
 
 	// Synchronous snapshot of getWorkspaceRoot()'s latest result, for the message
 	// translator (which runs synchronously and relativizes the tool paths shown in
@@ -321,6 +336,39 @@ export class Controller {
 				void this.postStateToWebview()
 			},
 		})
+		this.ciWatch = new SdkCiWatchCoordinator({
+			getDisplayedTaskId: () => this.task?.taskId,
+			getActiveSession: () => this.sessions.getActiveSession(),
+			getTurnPhase: () => this.turnStateTracker.currentPhase,
+			hasPendingInteraction: () => this.interactions.hasPending,
+			queueToActiveSession: (session, prompt) =>
+				this.sessions.fireAndForgetSend(session.sdkHost, session.sessionId, prompt, undefined, undefined, "queue"),
+			queueToBackgroundTask: (conversationId, prompt) => this.background.queuePrompt(conversationId, prompt),
+			startTurn: (prompt) => this.askResponse(prompt),
+			emitRow: (text) =>
+				this.messages.emitHookMessage({
+					ts: this.messageTranslatorState.getMinter().nextId(),
+					type: "say",
+					say: "info",
+					text,
+					partial: false,
+				}),
+			notify: (message, onOpen) => {
+				void HostProvider.window
+					.showMessage({ type: ShowMessageType.INFORMATION, message, options: { items: ["Open"] } })
+					.then((response) => {
+						if (response.selectedOption === "Open") {
+							onOpen()
+						}
+					})
+					.catch((error) => Logger.warn("[SdkController] Failed to show CI watcher notification:", error))
+			},
+			openTask: (conversationId) => {
+				void this.showTaskWithId(conversationId)
+					.then(() => sendChatButtonClickedEvent())
+					.catch((error) => Logger.warn(`[SdkController] Failed to open watched task ${conversationId}:`, error))
+			},
+		})
 		this.sessionConfigBuilder = new SdkSessionConfigBuilder({
 			stateManager: this.stateManager,
 			emitHookMessage: (msg) => this.messages.emitHookMessage(msg),
@@ -333,11 +381,21 @@ export class Controller {
 			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 			checkSpendingLimit: () => this.checkSpendingLimit(),
+			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
+			gitSnapshots: this.conversationContext.gitSnapshots,
+			getConversationId: () => this.task?.taskId,
+			advisor: {
+				getSettings: getAdvisorSettings,
+				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
+				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
+			},
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
 			isBackgroundEditEnabled: (sessionId) =>
 				!!this.stateManager.getGlobalSettingsKey("backgroundEditEnabled") || this.background.has(sessionId),
+			diagnostics: createVscodeEditDiagnosticsSource(),
+			isReportNewProblemsEnabled,
 		})
 		this.interactions = new SdkInteractionCoordinator({
 			messages: this.messages,
@@ -404,6 +462,8 @@ export class Controller {
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
 			consumeModeSwitchNotice: (sessionId) => this.mode.consumeModeSwitchNotice(sessionId),
+			getSessionStartMetadata: (sessionId) => this.conversationContext.gitSnapshots.sessionMetadata(sessionId),
+			editorState: this.conversationContext.editorState,
 			onSendComplete: async (sessionId) => {
 				// Normal flows close their diff sessions inline; anything left here is orphaned.
 				void this.diffEdits.discardAllPreviews("turn complete")
@@ -720,6 +780,45 @@ export class Controller {
 		return this.interactions.handleSpendingLimitReached(hit)
 	}
 
+	/**
+	 * The conversation budget, checked before each advisor call (sdk/advisor/).
+	 * Unlike checkSpendingLimit it also applies on a free model and to a
+	 * background task, and it refuses the call instead of pausing the run; see
+	 * advisor-budget.ts. Returns why the call may not be made, or undefined.
+	 * A background task has no chat rows; its history record has its cost.
+	 */
+	private checkAdvisorBudget(sessionId: string): Promise<string | undefined> {
+		return checkAdvisorBudget(sessionId, {
+			findHistoryItem: (id) => this.taskHistory.findHistoryItem(id),
+			openTaskMessages: (id) =>
+				this.task?.taskId === id && !this.background.has(id)
+					? this.task.messageStateHandler.getClineMessages()
+					: undefined,
+			defaultBudget: getConversationSpendingLimit,
+		})
+	}
+
+	/**
+	 * The open task gets an advisor call's cost from the usage row the
+	 * translator derives from the tool result. A background task has no
+	 * transcript until it is reopened, so its history record is updated here,
+	 * like its model usage.
+	 */
+	private recordBackgroundAdvisorUsage(sessionId: string, usage: AdvisorUsage): void {
+		if (!this.background.has(sessionId)) {
+			return
+		}
+		this.taskHistory
+			.updateTaskUsage(sessionId, {
+				tokensIn: usage.inputTokens,
+				tokensOut: usage.outputTokens,
+				cacheReads: usage.cacheReadTokens,
+				cacheWrites: usage.cacheWriteTokens,
+				totalCost: usage.totalCost,
+			})
+			.catch((error) => Logger.error("[SdkController] Failed to persist background advisor usage:", error))
+	}
+
 	/** True when the active mode's model costs nothing: a free self-hosted model or a FreeAuto router. */
 	private isFreeModelSelected(): boolean {
 		const mode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
@@ -784,8 +883,10 @@ export class Controller {
 		this.unsubscribeBuiltinMcp?.()
 		await this.diffEdits.discardAllPreviews("controller dispose")
 		await this.clearTask()
+		this.ciWatch.dispose()
 		await this.background.stopAll("SdkController.dispose")
 		await this.sessions.dispose("SdkController.dispose")
+		this.diffEdits.dispose()
 		this._terminalManager?.disposeAll()
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()
@@ -1015,6 +1116,7 @@ export class Controller {
 	 * return immediately so the webview stays responsive.
 	 */
 	async askResponse(prompt?: string, images?: string[], files?: string[], delivery?: string): Promise<void> {
+		this.ciWatch.noteFollowUp(prompt, images, files)
 		const turnStateBefore = this.turnStateTracker.get()
 
 		// Answering an ask / continuing after completion / resuming a cancelled task all kick off a
@@ -1260,6 +1362,7 @@ export class Controller {
 				...carriedHistoryFields,
 			}
 			if (sourceSessionId !== startResult.sessionId) {
+				this.ciWatch.manager.removeConversation(sourceSessionId)
 				try {
 					await this.taskHistory.deleteTaskFromState(sourceSessionId)
 				} catch (error) {
@@ -1358,6 +1461,8 @@ export class Controller {
 		if (!historyItem) {
 			throw new Error(`Task not found in history: ${taskId}`)
 		}
+		// A CI report that arrived while this conversation was not loaded is sent now.
+		this.ciWatch.manager.conversationOpened(taskId)
 		return historyItemToTaskResponse(historyItem)
 	}
 
@@ -1527,6 +1632,7 @@ export class Controller {
 
 	async deleteTaskFromState(id: string): Promise<HistoryItem[]> {
 		await this.background.stopTask(id, "task deleted")
+		this.ciWatch.manager.removeConversation(id)
 		return this.taskHistory.deleteTaskFromState(id)
 	}
 
@@ -1553,6 +1659,7 @@ export class Controller {
 			return DeleteAllTaskHistoryCount.create({ tasksDeleted: 0 })
 		}
 		await this.background.stopAll("task history deleted")
+		this.ciWatch.manager.clear()
 
 		if (userChoice === "Delete All Except Favorites") {
 			const hasFavoritedTasks = taskHistory.some(
@@ -1703,7 +1810,9 @@ export class Controller {
 			const activeSession = this.sessions.getActiveSession()
 			if (activeSession) {
 				try {
-					queuedPrompts = await activeSession.sdkHost.pendingPrompts("list", { sessionId: activeSession.sessionId })
+					const pending = await activeSession.sdkHost.pendingPrompts("list", { sessionId: activeSession.sessionId })
+					// The queue shows what the user typed, without the model-only elements attached on send.
+					queuedPrompts = pending.map((queued) => ({ ...queued, prompt: stripModeNotices(queued.prompt) }))
 				} catch (error) {
 					Logger.error("[SdkController] Failed to list pending prompts for webview state:", error)
 				}

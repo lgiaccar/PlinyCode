@@ -139,6 +139,7 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *   delete_file                        → fileDeleted
  *   run_commands/execute_command       → (uses say="command", NOT say="tool")
  *   search_codebase/search_files       → searchFiles
+ *   find_files                         → listFilesRecursive
  *   fetch_web_content/web_fetch        → webFetch
  *   web_search                         → webSearch
  *   skills/use_skill                   → useSkill
@@ -256,12 +257,36 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 				regex = input
 			}
 			const path = getStringField(parsedInput, "path")
-			const filePattern = getStringField(parsedInput, "file_pattern") ?? getStringField(parsedInput, "filePattern")
+			const filePattern =
+				getStringField(parsedInput, "glob") ??
+				getStringField(parsedInput, "file_pattern") ??
+				getStringField(parsedInput, "filePattern")
 			return {
 				tool: "searchFiles",
 				regex,
 				path,
 				filePattern,
+			}
+		}
+
+		case "find_files": {
+			// Shown as a recursive listing of what was looked for: the patterns, under
+			// the directory when one was given. Bare-string and bare-array inputs are
+			// accepted, as for search_codebase.
+			const patterns = parsedInput
+				? (getArrayField(parsedInput, "patterns")?.join(", ") ??
+					getStringField(parsedInput, "patterns") ??
+					getStringField(parsedInput, "pattern") ??
+					"")
+				: Array.isArray(input)
+					? input.map(String).join(", ")
+					: typeof input === "string"
+						? input
+						: ""
+			const dirPath = getStringField(parsedInput, "path")
+			return {
+				tool: "listFilesRecursive",
+				path: dirPath ? `${dirPath.replace(/[/]+$/, "")}/${patterns}` : patterns,
 			}
 		}
 

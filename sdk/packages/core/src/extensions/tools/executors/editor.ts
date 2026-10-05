@@ -61,6 +61,11 @@ function resolveFilePath(
 	return resolved;
 }
 
+// Reads produced via readline strip "\r", so models emit LF-only text even
+// for CRLF files; edits must be normalized to the file's own EOL (see
+// ./line-endings) or they create mixed line endings and break subsequent
+// exact-match replacements.
+
 function createLineDiff(
 	oldContent: string,
 	newContent: string,
@@ -150,14 +155,33 @@ async function replaceInFile(
 	filePath: string,
 	oldStr: string,
 	newStr: string | null | undefined,
+	replaceAll: boolean | null | undefined,
 	encoding: BufferEncoding,
 	maxDiffLines: number,
 ): Promise<string> {
 	const content = await fs.readFile(filePath, encoding);
-	const updated = replaceTextInContent(content, oldStr, newStr, filePath);
+	const { updated, replacedAtLines, whitespaceAdjusted } = replaceTextInContent(
+		content,
+		oldStr,
+		newStr,
+		{ filePath, replaceAll },
+	);
 	await fs.writeFile(filePath, updated, { encoding });
 
+	if (replacedAtLines.length > 1) {
+		// One diff spanning every occurrence would mostly be unchanged lines.
+		return `Edited ${filePath}: replaced ${replacedAtLines.length} occurrences, at lines ${replacedAtLines.join(", ")} of the previous content.`;
+	}
+
 	const diff = createLineDiff(content, updated, maxDiffLines);
+	if (whitespaceAdjusted) {
+		// Say so, or the model goes on believing the file is indented as it wrote.
+		const adjustment =
+			whitespaceAdjusted === "reindented"
+				? "old_text matched once indentation depth was ignored, so new_text was shifted to the file's indentation"
+				: "old_text matched once trailing whitespace was ignored";
+		return `Edited ${filePath} (${adjustment})\n${diff}`;
+	}
 	return `Edited ${filePath}\n${diff}`;
 }
 
@@ -231,6 +255,7 @@ export function createEditorExecutor(
 			filePath,
 			input.old_text,
 			input.new_text,
+			input.replace_all,
 			encoding,
 			maxDiffLines,
 		);

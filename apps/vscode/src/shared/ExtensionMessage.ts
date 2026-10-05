@@ -9,6 +9,7 @@ import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
+import type { PlanExecutionChoice } from "./planExecution"
 import { Mode } from "./storage/types"
 import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
@@ -114,6 +115,8 @@ export interface ExtensionState {
 	prereleaseUpdatesEnabled?: boolean
 	/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 	conversationSpendingLimit?: number
+	/** `plinycode.plan.executeWith`: the model the Execute plan button runs a plan on; the last choice made in its menu. */
+	planExecutionChoice?: PlanExecutionChoice
 	subagentsEnabled?: boolean
 	favoritedModelIds: string[]
 	/**
@@ -396,12 +399,15 @@ export interface ClineCompactionInfo {
 }
 
 export interface ClineSubagentUsageInfo {
-	source: "subagents"
+	/** Whose usage the row adds to the conversation's: a sub-agent batch, or one advisor call (`ask_advisor`). */
+	source: "subagents" | "advisor"
 	tokensIn: number
 	tokensOut: number
 	cacheWrites: number
 	cacheReads: number
 	cost: number
+	/** True when the figures were estimated rather than reported by the provider. */
+	estimated?: boolean
 }
 
 type ClineApiReqCancelReason = "streaming_failed" | "user_cancelled" | "retries_exhausted"

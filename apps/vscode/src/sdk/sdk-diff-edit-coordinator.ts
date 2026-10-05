@@ -15,6 +15,13 @@ import * as path from "path"
 import { HostProvider } from "@/hosts/host-provider"
 import type { EditPreview } from "@/integrations/editor/EditPreview"
 import { Logger } from "@/shared/services/Logger"
+import {
+	type EditDiagnosticsSource,
+	type EditedFile,
+	type EditProblemCheck,
+	EditProblemsReporter,
+	type EditProblemTimings,
+} from "./edit-problems"
 
 /**
  * How long an auto-approved edit's preview stays visible after the write, so the
@@ -50,6 +57,15 @@ interface SdkDiffEditCoordinatorOptions {
 	previewOpenTimeoutMs?: number
 	/** Injectable for tests. Defaults to opening the file via the host's showTextDocument. */
 	showEditedFile?: (absolutePath: string) => Promise<void>
+	/**
+	 * The editor's diagnostics. With it, an edit's result also lists the errors the
+	 * edit introduced (see edit-problems.ts); without it, results are the executor's own.
+	 */
+	diagnostics?: EditDiagnosticsSource
+	/** The `plinycode.edits.reportNewProblems` setting. Defaults to on. */
+	isReportNewProblemsEnabled?: () => boolean
+	/** Test seam: overrides how long an edit waits for diagnostics. */
+	editProblemTimings?: Partial<EditProblemTimings>
 }
 
 interface DiffEditSession {
@@ -68,7 +84,8 @@ interface DiffEditSession {
  * rejecting an edit only closes a tab, and multiple previews (even of the same file)
  * can't interfere with each other. The actual write is always the SDK's default
  * disk-writing executor, which the overridden executors delegate to after closing
- * the preview; its results and error strings reach the model unchanged.
+ * the preview; its error strings reach the model unchanged, and so do its results,
+ * followed by the errors the editor reports that the edit introduced (edit-problems.ts).
  *
  * Previews open at approval time (the SDK surfaces tool input only after the model's
  * stream completes, so the approval callback is the only pre-execution point with
@@ -85,8 +102,16 @@ export class SdkDiffEditCoordinator {
 	private readonly fallbackApplyPatchExecutor: ApplyPatchExecutor
 	private readonly autoApprovePreviewLingerMs: number
 	private readonly previewOpenTimeoutMs: number
+	private readonly problemsReporter: EditProblemsReporter | undefined
 
 	constructor(private readonly options: SdkDiffEditCoordinatorOptions) {
+		this.problemsReporter = options.diagnostics
+			? new EditProblemsReporter({
+					source: options.diagnostics,
+					isEnabled: options.isReportNewProblemsEnabled ?? (() => true),
+					timings: options.editProblemTimings,
+				})
+			: undefined
 		this.fallbackEditorExecutor = options.fallbackEditorExecutor ?? createEditorExecutor()
 		this.fallbackApplyPatchExecutor = options.fallbackApplyPatchExecutor ?? createApplyPatchExecutor()
 		this.autoApprovePreviewLingerMs = options.autoApprovePreviewLingerMs ?? AUTO_APPROVE_PREVIEW_LINGER_MS
@@ -120,6 +145,25 @@ export class SdkDiffEditCoordinator {
 	 * get a brief preview that lingers shortly after the write so the user sees it land.
 	 */
 	async executeEditorTool(input: EditFileInput, cwd: string, context: AgentToolContext): Promise<string> {
+		const problems = this.beginProblemCheck(() => [
+			{ absolutePath: resolveEditPath(cwd, input.path), displayPath: input.path },
+		])
+		try {
+			const result = await this.applyEditorTool(input, cwd, context, problems)
+			// By now the preview has closed and the edited file is shown, which is when
+			// a language server analyses it.
+			return problems ? result + (await problems.report(context.signal)) : result
+		} finally {
+			problems?.dispose()
+		}
+	}
+
+	private async applyEditorTool(
+		input: EditFileInput,
+		cwd: string,
+		context: AgentToolContext,
+		problems: EditProblemCheck | undefined,
+	): Promise<string> {
 		const toolCallId = context.toolCallId ?? ""
 		const hadPreApprovalPreview = this.sessions.has(toolCallId)
 		const headless = this.options.isBackgroundEditEnabled(context.sessionId)
@@ -134,6 +178,7 @@ export class SdkDiffEditCoordinator {
 				}
 			}
 			const result = await this.fallbackEditorExecutor(input, cwd, context)
+			problems?.written()
 			if (!hadPreApprovalPreview && this.sessions.get(toolCallId)?.preview) {
 				// Keep the auto-approve preview visible briefly after the write; an abort
 				// just cuts the linger short (the edit has already been applied).
@@ -154,6 +199,22 @@ export class SdkDiffEditCoordinator {
 	 * around execution, matching the `editor` tool behavior.
 	 */
 	async executeApplyPatchTool(input: ApplyPatchInput, cwd: string, context: AgentToolContext): Promise<string> {
+		const patchedFiles = this.problemsReporter?.isEnabled() ? await listPatchedFiles(input, cwd) : []
+		const problems = this.beginProblemCheck(() => patchedFiles)
+		try {
+			const result = await this.applyPatchTool(input, cwd, context, problems)
+			return problems ? result + (await problems.report(context.signal)) : result
+		} finally {
+			problems?.dispose()
+		}
+	}
+
+	private async applyPatchTool(
+		input: ApplyPatchInput,
+		cwd: string,
+		context: AgentToolContext,
+		problems: EditProblemCheck | undefined,
+	): Promise<string> {
 		const toolCallId = context.toolCallId ?? ""
 		const hadPreApprovalPreview = this.sessions.has(toolCallId)
 		// The pre-approval preview is discarded before the patch applies, so remember
@@ -172,6 +233,7 @@ export class SdkDiffEditCoordinator {
 			}
 
 			const result = await this.fallbackApplyPatchExecutor(input, cwd, context)
+			problems?.written()
 			if (!hadPreApprovalPreview && this.sessions.get(toolCallId)?.preview) {
 				await lingerDelay(this.autoApprovePreviewLingerMs, context.signal)
 			}
@@ -182,6 +244,25 @@ export class SdkDiffEditCoordinator {
 		} finally {
 			await this.discardPreview(toolCallId)
 		}
+	}
+
+	/**
+	 * Records the errors of the files an edit is about to write, so the ones the edit
+	 * adds can be told apart afterwards. Never throws: without a check the edit just
+	 * returns the executor's result.
+	 */
+	private beginProblemCheck(listFiles: () => EditedFile[]): EditProblemCheck | undefined {
+		try {
+			return this.problemsReporter?.begin(listFiles())
+		} catch {
+			// An input the executor will reject (a path outside the cwd, say) has no file to check.
+			return undefined
+		}
+	}
+
+	/** Stops watching the editor's diagnostics. Called on controller dispose. */
+	dispose(): void {
+		this.problemsReporter?.dispose()
 	}
 
 	/**
@@ -388,7 +469,8 @@ function detectLineEnding(content: string): "\r\n" | "\n" {
  * preview matches `old_text` the way the write will, including normalizing it to the
  * file's line endings: reads strip "\r", so models emit LF-only text even for CRLF
  * files, and a preview that matched it literally was silently skipped while the
- * executor applied the edit (github.com/cline/cline/issues/13296).
+ * executor applied the edit (github.com/cline/cline/issues/13296). The same goes for
+ * an `old_text` that differs only in indentation, and for `replace_all`.
  */
 export function computeNewEditorContent(
 	originalContent: string,
@@ -417,7 +499,29 @@ export function computeNewEditorContent(
 		throw new Error("Parameter `old_text` is required when editing an existing file without `insert_line`")
 	}
 
-	return replaceTextInContent(originalContent, input.old_text, input.new_text, filePath)
+	return replaceTextInContent(originalContent, input.old_text, input.new_text, {
+		filePath,
+		replaceAll: input.replace_all,
+	}).updated
+}
+
+/**
+ * The files a patch creates or updates, at the paths they have once it is applied.
+ * Empty for a patch the executor will reject.
+ */
+async function listPatchedFiles(input: ApplyPatchInput, cwd: string): Promise<EditedFile[]> {
+	try {
+		const { changes } = await computePatchChanges(input.input, cwd)
+		return Object.entries(changes)
+			.filter(([, change]) => change.type !== PatchActionType.DELETE)
+			.map(([filePath, change]) => ({
+				absolutePath: resolveEditPath(cwd, change.movePath ?? filePath),
+				displayPath: change.movePath ?? filePath,
+				previousPath: change.movePath ? resolveEditPath(cwd, filePath) : undefined,
+			}))
+	} catch {
+		return []
+	}
 }
 
 /** Mirrors the SDK executor's resolveFilePath (restrictToCwd=true): absolute paths pass through. */

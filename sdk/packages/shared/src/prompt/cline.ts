@@ -1,6 +1,7 @@
 import type { WorkspaceContext } from "../extensions/context";
 import { isClineProvider } from "../providers/utils";
 import type { WorkspaceInfo } from "../session/workspace";
+import { formatGitSnapshotForEnv, type GitSnapshot } from "./git-snapshot";
 import { DEFAULT_CLINE_SYSTEM_PROMPTS } from "./system";
 
 const WORKSPACE_CONFIGURATION_MARKER = "# Workspace Configuration";
@@ -63,8 +64,14 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
  * (the VS Code extension, matching the legacy extension's behavior). The model
  * must direct the user to flip the Plan/Act toggle instead of calling a tool
  * that does not exist in its toolset.
+ *
+ * The extension's Execute plan button can run the plan on a different, cheaper
+ * model than the one that wrote it, so the contract also asks for a plan that
+ * stands on its own. Kept to one sentence: it is paid for on every call.
  */
 export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BASE}
+
+Write the plan for an executor that has not seen this conversation and may be a weaker model than you: give exact file paths, the steps in order, the command that verifies each step, the decisions already made with their reasons, and anything you discovered while exploring that the executor would otherwise have to rediscover.
 
 Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
 
@@ -159,6 +166,28 @@ function buildWorkspaceMetadata(
 	return `\n${WORKSPACE_CONFIGURATION_MARKER}\n${body}`;
 }
 
+// The <env> block's entries are numbered; git follows the working directory.
+const GIT_ENV_ENTRY_NUMBER = 5;
+
+/**
+ * The git data for the <env> block. A host that gathered a snapshot passes it
+ * as `gitSnapshot`; one that only has the WorkspaceInfo git fields gets the
+ * branch and HEAD from those, so both feed the same block for every provider.
+ */
+function resolveGitSnapshot(
+	options: ClineSystemPromptOptions,
+): GitSnapshot | undefined {
+	if (options.gitSnapshot) {
+		return options.gitSnapshot;
+	}
+	const branch = options.latestGitBranchName?.trim();
+	const head = options.latestGitCommitHash?.trim().slice(0, 7);
+	if (!branch && !head) {
+		return undefined;
+	}
+	return { ...(branch ? { branch } : {}), ...(head ? { head } : {}) };
+}
+
 /**
  * Options for building the Cline system prompt.
  *
@@ -241,6 +270,14 @@ export function buildClineSystemPrompt(
 		.filter(Boolean)
 		.join("\n\n");
 
+	// Branch names, paths and commit subjects are repository content. They go
+	// in last and through a function, so they are neither read as replacement
+	// patterns ("$&") nor scanned for the other placeholders.
+	const gitEnv = formatGitSnapshotForEnv(
+		resolveGitSnapshot(options),
+		GIT_ENV_ENTRY_NUMBER,
+	);
+
 	return basePrompt
 		.replace("{{PLATFORM_NAME}}", platform)
 		.replace("{{CWD}}", workspaceRoot)
@@ -253,5 +290,6 @@ export function buildClineSystemPrompt(
 				: "",
 		)
 		.replace("{{CLINE_RULES}}", effectiveRules)
+		.replace("{{GIT_SNAPSHOT}}", () => (gitEnv ? `\n${gitEnv}` : ""))
 		.trim();
 }

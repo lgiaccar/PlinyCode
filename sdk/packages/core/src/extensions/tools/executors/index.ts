@@ -17,6 +17,10 @@ import {
 	createFileReadExecutor,
 	type FileReadExecutorOptions,
 } from "./file-read";
+import {
+	createFindFilesExecutor,
+	type FindFilesExecutorOptions,
+} from "./find-files";
 import { createSearchExecutor, type SearchExecutorOptions } from "./search";
 import {
 	createWebFetchExecutor,
@@ -43,11 +47,19 @@ export {
 	type FileReadExecutorOptions,
 } from "./file-read";
 export {
+	createFindFilesExecutor,
+	type FindFilesExecutorOptions,
+} from "./find-files";
+export {
 	RunCommandExecutionController,
 	type RunningCommandRegistration,
 } from "./run-command-execution-controller";
 export { createSearchExecutor, type SearchExecutorOptions } from "./search";
-export { replaceTextInContent } from "./text-replace";
+export {
+	type ReplaceTextOptions,
+	type ReplaceTextResult,
+	replaceTextInContent,
+} from "./text-replace";
 export {
 	createWebFetchExecutor,
 	type WebFetchExecutorOptions,
@@ -59,6 +71,7 @@ export {
 export interface DefaultExecutorsOptions {
 	fileRead?: FileReadExecutorOptions;
 	search?: SearchExecutorOptions;
+	findFiles?: FindFilesExecutorOptions;
 	bash?: ShellExecutorOptions;
 	webFetch?: WebFetchExecutorOptions;
 	applyPatch?: ApplyPatchExecutorOptions;
@@ -100,6 +113,11 @@ export function createDefaultExecutors(
 	return {
 		readFile: createFileReadExecutor(options.fileRead),
 		search: createSearchExecutor(options.search),
+		// The host that points search at its own ripgrep means it for both.
+		findFiles: createFindFilesExecutor({
+			rgPath: options.search?.rgPath,
+			...options.findFiles,
+		}),
 		bash: createDefaultShellExecutor(options.bash),
 		webFetch: createWebFetchExecutor(options.webFetch),
 		applyPatch: createApplyPatchExecutor(options.applyPatch),

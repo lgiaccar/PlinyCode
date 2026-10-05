@@ -136,6 +136,7 @@ export {
 } from "../../../../sdk/packages/core/src/extensions/tools/executors/apply-patch"
 export { PATCH_MARKERS, PatchActionType } from "../../../../sdk/packages/core/src/extensions/tools/executors/apply-patch-parser"
 export { createEditorExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/editor"
+export { createFindFilesExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/find-files"
 export { createSearchExecutor } from "../../../../sdk/packages/core/src/extensions/tools/executors/search"
 export { replaceTextInContent } from "../../../../sdk/packages/core/src/extensions/tools/executors/text-replace"
 export type { EditFileInput } from "../../../../sdk/packages/core/src/extensions/tools/schemas"

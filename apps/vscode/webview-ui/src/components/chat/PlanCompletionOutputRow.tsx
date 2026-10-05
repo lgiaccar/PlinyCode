@@ -1,17 +1,21 @@
+import type { PlanExecutionChoice } from "@shared/planExecution"
 import { StringRequest } from "@shared/proto/cline/common"
-import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
 import { FileTextIcon } from "lucide-react"
 import { memo } from "react"
 import { CopyButton } from "@/components/common/CopyButton"
 import MarkdownBlock from "@/components/common/MarkdownBlock"
 import { FileServiceClient } from "@/services/grpc-client"
+import ExecutePlanButton from "./ExecutePlanButton"
 
 interface PlanCompletionOutputProps {
 	text: string
 	/** Workspace-relative root plan file (plans/<slug>/PLAN.md) written this plan. */
 	rootPlanFile?: string
-	/** Shown only together with rootPlanFile, while the plan can still be executed. */
-	onExecutePlan?: () => void
+	/**
+	 * Runs the plan on the model the choice names. Shown only together with
+	 * rootPlanFile, while the plan can still be executed.
+	 */
+	onExecutePlan?: (choice: PlanExecutionChoice) => void
 }
 
 /**
@@ -24,7 +28,8 @@ interface PlanCompletionOutputProps {
  *
  * When the plan was written to markdown files, a footer links the root plan
  * file (so the user can open and edit it) and offers "Execute plan", which
- * switches to act mode and asks the agent to run that file.
+ * switches to act mode and asks the agent to run that file, on the model the
+ * button names or one picked from its menu.
  */
 const PlanCompletionOutputRow = memo(({ text, rootPlanFile, onExecutePlan }: PlanCompletionOutputProps) => {
 	return (
@@ -39,9 +44,11 @@ const PlanCompletionOutputRow = memo(({ text, rootPlanFile, onExecutePlan }: Pla
 				</div>
 			</div>
 			{rootPlanFile && onExecutePlan && (
-				<div className="flex items-center justify-between gap-2 border-t border-warning/20 px-2 py-1.5">
+				// Wraps: the button names its model, so in a narrow panel it takes
+				// its own line instead of squeezing the file link to nothing.
+				<div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-t border-warning/20 px-2 py-1.5">
 					<button
-						className="flex min-w-0 items-center gap-1 bg-transparent border-0 p-0 cursor-pointer text-xs text-link hover:underline"
+						className="flex min-w-0 max-w-full items-center gap-1 bg-transparent border-0 p-0 cursor-pointer text-xs text-link hover:underline"
 						onClick={() =>
 							FileServiceClient.openFileRelativePath(StringRequest.create({ value: rootPlanFile })).catch((err) =>
 								console.error("Failed to open plan file:", err),
@@ -52,9 +59,7 @@ const PlanCompletionOutputRow = memo(({ text, rootPlanFile, onExecutePlan }: Pla
 						<FileTextIcon className="size-3 shrink-0" />
 						<span className="truncate">{rootPlanFile}</span>
 					</button>
-					<VSCodeButton className="shrink-0" onClick={onExecutePlan}>
-						Execute plan
-					</VSCodeButton>
+					<ExecutePlanButton onExecute={onExecutePlan} />
 				</div>
 			)}
 		</div>

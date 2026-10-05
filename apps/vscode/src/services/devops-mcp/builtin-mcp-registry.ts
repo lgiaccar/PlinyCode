@@ -5,6 +5,8 @@
  * session code can depend on it.
  */
 import type { McpToolProvider } from "@plinycode/core"
+import type { AgentTool } from "@plinycode/shared"
+import type { CiWatchManager } from "./ci-watch/ci-watch-manager"
 
 interface BuiltinMcpSource {
 	serverName: string
@@ -19,6 +21,12 @@ interface BuiltinMcpSource {
 	 * workspace should stay out of it. Omitted means always.
 	 */
 	appliesTo?(cwd: string): Promise<boolean>
+	/**
+	 * Tools that run in the extension rather than in the server process, offered
+	 * to a session rooted at `cwd` together with the server's own (e.g. `watch_ci`,
+	 * which has to reach the conversation later).
+	 */
+	extraTools?(cwd: string): AgentTool[]
 }
 
 const sources = new Map<string, BuiltinMcpSource>()
@@ -81,4 +89,15 @@ export function setDevOpsServerControl(control: DevOpsServerControl | undefined)
 
 export function getDevOpsServerControl(): DevOpsServerControl | undefined {
 	return devOpsControl
+}
+
+let ciWatchManager: CiWatchManager | undefined
+
+/** The controller owns the CI watches (it delivers their reports); the DevOps service builds `watch_ci` on them. */
+export function setCiWatchManager(manager: CiWatchManager | undefined): void {
+	ciWatchManager = manager
+}
+
+export function getCiWatchManager(): CiWatchManager | undefined {
+	return ciWatchManager
 }

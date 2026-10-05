@@ -9,10 +9,13 @@ import {
 	type DevOpsServerControl,
 	type DevOpsServerState,
 	type DevOpsServerStatus,
+	getCiWatchManager,
 	notifyBuiltinMcpToolsChanged,
 	registerBuiltinMcpSource,
 	setDevOpsServerControl,
 } from "../builtin-mcp-registry"
+import { createCiWatchRepoOpener } from "../ci-watch/ci-watch-source"
+import { ciWatchTools } from "../ci-watch/watch-ci-tool"
 import { hasSupportedRemote } from "../server/repo"
 import {
 	detectEditorIntegration,
@@ -27,6 +30,7 @@ import { TokenBroker } from "./token-broker"
 const DEVOPS_SERVER_NAME = EDITOR_SERVER_NAME
 const SETTING_ENABLED = "plinycode.devops.enabled"
 const SETTING_EDITOR = "plinycode.devops.registerWithEditor"
+const SETTING_CI_WATCH = "plinycode.ci.watch"
 const TOOL_TIMEOUT_MS = 120_000
 const MAX_AUTO_RESTARTS = 3
 
@@ -81,12 +85,21 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			toolNames: () => service.tools.map((t) => t.name),
 			// Its tools only work on a repo with a GitHub or Azure DevOps remote.
 			appliesTo: (cwd) => hasSupportedRemote(cwd),
+			extraTools: (cwd) =>
+				ciWatchTools({ enabled: service.ciWatchEnabled, manager: getCiWatchManager(), cwd, openRepo: service.openRepo }),
 		})
 		service.disposables.push(
 			new vscode.Disposable(unregister),
 			vscode.workspace.onDidChangeConfiguration((event) => {
 				if (event.affectsConfiguration(SETTING_ENABLED) || event.affectsConfiguration(SETTING_EDITOR)) {
 					void service.applySettings()
+				}
+				if (event.affectsConfiguration(SETTING_CI_WATCH)) {
+					if (!service.ciWatchEnabled) {
+						getCiWatchManager()?.clear()
+					}
+					// Sessions fix their tools when they start; this makes the active one pick up the change.
+					notifyBuiltinMcpToolsChanged()
 				}
 			}),
 		)
@@ -109,6 +122,13 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 	private get shareWithEditor(): boolean {
 		return vscode.workspace.getConfiguration().get<boolean>(SETTING_EDITOR, true)
 	}
+
+	private get ciWatchEnabled(): boolean {
+		return vscode.workspace.getConfiguration().get<boolean>(SETTING_CI_WATCH, true)
+	}
+
+	/** Repositories as the CI watcher reads them: in this process, with the editor's existing sign-in. */
+	private readonly openRepo = createCiWatchRepoOpener((provider, host) => this.broker.silentToken(provider, host))
 
 	private workspaceFolder(): string | undefined {
 		return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath

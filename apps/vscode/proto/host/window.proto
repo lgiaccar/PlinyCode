@@ -137,4 +137,11 @@ message GetActiveEditorRequest {}
 
 message GetActiveEditorResponse {
   optional string file_path = 1;
+  // The primary selection as 1-based line numbers. Both are the cursor's line
+  // when nothing is selected.
+  optional int32 selection_start_line = 2;
+  optional int32 selection_end_line = 3;
+  // Whether the editor shows a file on disk, as opposed to an untitled
+  // document, an output channel or a diff view.
+  optional bool is_file = 4;
 }

@@ -4,7 +4,11 @@ import * as path from "node:path";
 import type { AgentToolContext } from "@plinycode/shared";
 import { describe, expect, it } from "vitest";
 import { MAX_SEARCH_OUTPUT_CHARS } from "./output-limits";
-import { createSearchExecutor, parseRipgrepEvents } from "./search";
+import {
+	createGlobMatcher,
+	createSearchExecutor,
+	parseRipgrepEvents,
+} from "./search";
 
 const ctx: AgentToolContext = {
 	agentId: "agent-1",
@@ -149,6 +153,67 @@ describe("createSearchExecutor", () => {
 		);
 	});
 
+	it("shows every match when the search is scoped to one file", async () => {
+		const many = Array.from({ length: 30 }, (_, i) => `hit ${i}`).join("\n");
+		await withWorkspace(
+			{ "src/many.txt": many, "few.txt": "hit once\n" },
+			async (dir) => {
+				const search = createSearchExecutor({
+					contextLines: 0,
+					maxMatchesPerFile: 3,
+				});
+				const result = await search("(?=hit)", dir, ctx, {
+					path: "src/many.txt",
+				});
+
+				expect(result).toContain(
+					"Found 30 results for pattern: (?=hit) in src/many.txt",
+				);
+				expect(result).toContain("src/many.txt:30:1");
+				expect(result).not.toContain("few.txt");
+			},
+		);
+	});
+
+	it("limits the search to a directory and to files matching a glob", async () => {
+		await withWorkspace(
+			{
+				"src/a.ts": "needle\n",
+				"src/a.test.ts": "needle\n",
+				"src/deep/b.ts": "needle\n",
+				"docs/a.md": "needle\n",
+			},
+			async (dir) => {
+				const search = createSearchExecutor({ rgPath: NO_RIPGREP });
+
+				const inSrc = await search("needle", dir, ctx, { path: "src" });
+				expect(inSrc).toContain("src/a.ts:1:1");
+				expect(inSrc).toContain("src/deep/b.ts:1:1");
+				expect(inSrc).not.toContain("docs/a.md");
+
+				const tests = await search("needle", dir, ctx, { glob: "*.test.ts" });
+				expect(tests).toContain("Found 1 result for pattern");
+				expect(tests).toContain("src/a.test.ts:1:1");
+
+				const notMarkdown = await search("needle", dir, ctx, {
+					glob: "!*.md",
+				});
+				expect(notMarkdown).toContain("Found 3 results for pattern");
+				expect(notMarkdown).not.toContain("docs/a.md");
+			},
+		);
+	});
+
+	it("rejects a search path that does not exist", async () => {
+		await withWorkspace({ "a.txt": "needle\n" }, async (dir) => {
+			const search = createSearchExecutor({ rgPath: NO_RIPGREP });
+
+			await expect(
+				search("needle", dir, ctx, { path: "missing/dir" }),
+			).rejects.toThrow("Search path not found: missing/dir");
+		});
+	});
+
 	it("reports no results with the number of files it looked at", async () => {
 		await withWorkspace({ "a.txt": "one\n", "b.txt": "two\n" }, async (dir) => {
 			const search = createSearchExecutor({ rgPath: NO_RIPGREP });
@@ -260,5 +325,30 @@ describe("parseRipgrepEvents", () => {
 			"b.ts:1",
 		]);
 		expect(cappedFiles).toEqual(["a.ts"]);
+	});
+});
+
+describe("createGlobMatcher", () => {
+	it("matches a bare file-name glob in any directory", () => {
+		const matches = createGlobMatcher("*.ts");
+
+		expect(matches("a.ts")).toBe(true);
+		expect(matches("src/deep/a.ts")).toBe(true);
+		expect(matches("src/a.tsx")).toBe(false);
+	});
+
+	it("anchors a glob with a slash at the workspace root", () => {
+		const matches = createGlobMatcher("src/**/*.test.ts");
+
+		expect(matches("src/a.test.ts")).toBe(true);
+		expect(matches("src/deep/er/a.test.ts")).toBe(true);
+		expect(matches("lib/src/a.test.ts")).toBe(false);
+	});
+
+	it("supports alternatives and exclusion", () => {
+		expect(createGlobMatcher("*.{c,cc,h}")("src/x.cc")).toBe(true);
+		expect(createGlobMatcher("*.{c,cc,h}")("src/x.cpp")).toBe(false);
+		expect(createGlobMatcher("!*.md")("README.md")).toBe(false);
+		expect(createGlobMatcher("!*.md")("a.ts")).toBe(true);
 	});
 });

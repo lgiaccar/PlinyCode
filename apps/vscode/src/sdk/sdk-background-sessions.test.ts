@@ -176,6 +176,27 @@ describe("SdkBackgroundSessions", () => {
 		expect(registry.list()).toEqual([])
 	})
 
+	it("queues a prompt on a background task and reports whether the task was there", async () => {
+		const send = vi.fn(async () => undefined)
+		const session = {
+			...makeSession("a"),
+			sdkHost: { send, pendingPrompts: vi.fn(async () => []) },
+		} as unknown as ActiveSession
+		registry.add(session, "Task A")
+
+		expect(registry.queuePrompt("a", "[CI WATCHER] CI passed")).toBe(true)
+		expect(send).toHaveBeenCalledWith({ sessionId: "a", prompt: "[CI WATCHER] CI passed", delivery: "queue" })
+		expect(registry.queuePrompt("gone", "[CI WATCHER] CI passed")).toBe(false)
+		expect(send).toHaveBeenCalledTimes(1)
+
+		// The engine submits the queued prompt as the turn ends, which keeps the task in the background.
+		registry.handleEvent(agentEvent("a", { type: "done", reason: "completed" }))
+		registry.handleEvent({ type: "pending_prompt_submitted", payload: { sessionId: "a", prompt: "x" } } as never)
+		await vi.advanceTimersByTimeAsync(100)
+		expect(registry.has("a")).toBe(true)
+		expect(stopSession).not.toHaveBeenCalled()
+	})
+
 	it("treats a send settling in the background as a turn end", async () => {
 		registry.add(makeSession("a"), "Task A")
 		registry.handleSendSettled("a", new Error("boom"))

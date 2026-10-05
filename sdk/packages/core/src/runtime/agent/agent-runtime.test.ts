@@ -1545,6 +1545,40 @@ describe("AgentRuntime", () => {
 		]);
 	});
 
+	it("hands completionGuard a signal that aborts when the run is cancelled", async () => {
+		const model = new ScriptedModel([
+			() => [
+				{ type: "text-delta", text: "All done." },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		let abortedWhileWaiting = false;
+		const runtime: AgentRuntime = new AgentRuntime({
+			model,
+			completionPolicy: {
+				completionGuard: async ({ signal }) => {
+					expect(signal?.aborted).toBe(false);
+					await new Promise<void>((resolve) => {
+						signal?.addEventListener(
+							"abort",
+							() => {
+								abortedWhileWaiting = true;
+								resolve();
+							},
+							{ once: true },
+						);
+						runtime.abort("cancelled by the user");
+					});
+					return undefined;
+				},
+			},
+		});
+
+		await runtime.run("Start");
+
+		expect(abortedWhileWaiting).toBe(true);
+	});
+
 	it("awaits an async completionGuard and hands it the run's messages", async () => {
 		const lookup: AgentTool<{ q: string }, string> = {
 			name: "lookup",

@@ -6,6 +6,7 @@ import {
 	E2E_MOCK_CLINE_MODELS,
 	E2E_MOCK_CLINE_RECOMMENDED_MODELS,
 	E2E_MOCK_EDITOR_TOOL_CALL,
+	E2E_MOCK_PLAN_TOOL_CALL,
 	E2E_MOCK_POWERSHELL_TOOL_CALL,
 	E2E_REGISTERED_MOCK_ENDPOINTS,
 } from "./api"
@@ -384,14 +385,29 @@ export class ClineApiServerMock {
 						const { messages, model = "snps-aws-bedrock/aws-claude-sonnet-4.6", stream = true } = parsed
 
 						let responseText = E2E_MOCK_API_RESPONSES.DEFAULT
-						let toolCall: typeof E2E_MOCK_EDITOR_TOOL_CALL | typeof E2E_MOCK_POWERSHELL_TOOL_CALL | null = null
+						let toolCall:
+							| typeof E2E_MOCK_EDITOR_TOOL_CALL
+							| typeof E2E_MOCK_POWERSHELL_TOOL_CALL
+							| typeof E2E_MOCK_PLAN_TOOL_CALL
+							| null = null
 
+						const isPlanRequest = body.includes("plan_request")
 						const hasToolResult =
-							(body.includes("edit_request") || body.includes("powershell_background_request")) &&
+							(body.includes("edit_request") || body.includes("powershell_background_request") || isPlanRequest) &&
 							Array.isArray(messages) &&
 							messages.some((m: { role?: string }) => m?.role === "tool")
 
-						if (hasToolResult) {
+						if (isPlanRequest && body.includes("execute the plan in")) {
+							// The act-mode turn that Execute plan starts. Checked first: it
+							// runs in the plan's conversation, so the plan turn's prompt and
+							// tool result are still in the transcript.
+							responseText = E2E_MOCK_API_RESPONSES.PLAN_EXECUTED
+						} else if (hasToolResult && isPlanRequest) {
+							responseText = E2E_MOCK_API_RESPONSES.PLAN_REQUEST_COMPLETE
+						} else if (isPlanRequest) {
+							responseText = E2E_MOCK_API_RESPONSES.PLAN_REQUEST_LEAD_IN
+							toolCall = E2E_MOCK_PLAN_TOOL_CALL
+						} else if (hasToolResult) {
 							responseText = body.includes("powershell_background_request")
 								? E2E_MOCK_API_RESPONSES.POWERSHELL_REQUEST_COMPLETE
 								: E2E_MOCK_API_RESPONSES.EDIT_REQUEST_COMPLETE

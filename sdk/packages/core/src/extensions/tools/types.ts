@@ -60,13 +60,41 @@ export type FileReadExecutor = (
  * @param query - Regex pattern to search for
  * @param cwd - Current working directory for the search
  * @param context - Tool execution context
+ * @param scope - Optional file, directory or glob to limit the search to
  * @returns Search results as a formatted string
  */
 export type SearchExecutor = (
 	query: string,
 	cwd: string,
 	context: AgentToolContext,
+	scope?: SearchScope,
 ) => Promise<string>;
+
+/**
+ * Executor for finding files by name
+ *
+ * @param pattern - A glob, or text the path must contain
+ * @param cwd - Current working directory for the lookup
+ * @param context - Tool execution context
+ * @param scope - Optional directory to look in
+ * @returns Matching paths as a formatted string
+ */
+export type FindFilesExecutor = (
+	pattern: string,
+	cwd: string,
+	context: AgentToolContext,
+	scope?: Pick<SearchScope, "path">,
+) => Promise<string>;
+
+/**
+ * What a search is limited to. Both are optional and combine.
+ */
+export interface SearchScope {
+	/** A file or directory, relative to cwd or absolute. */
+	path?: string | null;
+	/** A glob that the searched files must match, relative to cwd. */
+	glob?: string | null;
+}
 
 /**
  * Executor for running shell commands
@@ -200,6 +228,8 @@ export interface ToolExecutors {
 	readFile?: FileReadExecutor;
 	/** Codebase search implementation */
 	search?: SearchExecutor;
+	/** File name lookup implementation */
+	findFiles?: FindFilesExecutor;
 	/** Shell command execution implementation */
 	bash?: ShellExecutor;
 	/** Web content fetching implementation */
@@ -226,6 +256,7 @@ export interface ToolExecutors {
 export type DefaultToolName =
 	| "read_files"
 	| "search_codebase"
+	| "find_files"
 	| "run_commands"
 	| "fetch_web_content"
 	| "apply_patch"
@@ -245,7 +276,7 @@ export interface DefaultToolsConfig {
 	enableReadFiles?: boolean;
 
 	/**
-	 * Enable the search_codebase tool
+	 * Enable the search_codebase and find_files tools
 	 * @default true
 	 */
 	enableSearch?: boolean;

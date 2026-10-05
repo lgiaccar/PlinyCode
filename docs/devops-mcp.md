@@ -40,6 +40,62 @@ which uses the same token.
 Azure DevOps limits PR descriptions to 4000 characters (GitHub: 65536). Longer ones are refused with a message
 telling the agent to shorten them; they are never truncated silently.
 
+## Watching CI (`watch_ci`)
+
+After the agent pushes a change, it can call `watch_ci` instead of polling `pipeline_runs` or calling `wait`.
+The tool returns at once and the agent ends its turn. PlinyCode then checks CI in the background, without the
+model, and sends the result into the conversation as a new message when the runs end. That message starts a
+turn, so the agent can look at a failure and fix it.
+
+`watch_ci` is a PlinyCode tool, not one of the server's: Copilot Chat and Cursor have no way to receive a result
+later, so the server's own instructions don't mention it. PlinyCode offers it wherever it offers the DevOps
+tools, while `plinycode.ci.watch` is on.
+
+| Argument | Meaning                                                                                              |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| `pr`     | Pull request to watch. Default: the open PR of `branch`.                                            |
+| `branch` | Branch to watch: its open PR, or its pushed head commit when it has none. Default: the current branch. |
+| `until`  | `finished` (default) waits for every run; `first_failure` reports as soon as one run fails.          |
+| `cancel` | `true` stops the conversation's watch.                                                               |
+
+How a watch runs:
+
+- It watches the head commit it saw when it started. If the PR or branch moves to a new commit (another push),
+  it follows the new one and the report says so. A bare branch's head is read from the remote-tracking ref, so a
+  push from this checkout moves it; a pull request's head comes from GitHub or Azure DevOps.
+- It checks every 30 seconds, and every 60 seconds after the first 10 minutes. It reports when every run for
+  the commit has completed on two checks in a row (workflows of one push don't all appear at once).
+- No run for the commit within 10 minutes: it reports that no CI run started. After 2 hours it reports that CI
+  is still running and stops. Failed API calls are retried; five in a row end the watch with a report.
+- It signs in with the editor's existing GitHub or Microsoft session, a token in the environment or a `gh` /
+  `az` login, and never shows a sign-in prompt.
+
+The report says how many runs passed and failed, names the failed jobs and steps, and for failures carries the
+error messages and the last log lines of each failed step (about 4000 characters in all, the same excerpt
+`pipeline_report` reads), then asks the agent to investigate and fix the failure if its change caused it. In the
+chat it appears under a **CI watcher** heading rather than as a message from you; while a watch runs, an info
+row says what it is watching.
+
+Where the report goes depends on the conversation when CI ends:
+
+| Conversation                                  | What happens                                                                        |
+| --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Open and idle                                 | The report starts a new turn.                                                       |
+| Open, agent mid-turn or waiting for approval  | The report is queued (it shows under the input box) and runs when the turn ends.    |
+| Running in the background                     | The report is queued on that task, which keeps it running.                         |
+| Not loaded in this window                     | A notification with **Open**; the report is sent when you open the conversation.    |
+
+Limits:
+
+- One watch per conversation. A new `watch_ci` call replaces the previous watch; deleting the conversation
+  stops it.
+- At most 5 reports in a row wake a conversation without a message from you, so a fix → push → watch loop can't
+  run unattended for ever. The sixth is shown as a notification and a chat row instead, saying why; any message
+  you send resets the count.
+- Watches live in memory: reloading or closing the window loses them, and a report that was waiting for its
+  conversation to be opened.
+- Turning `plinycode.ci.watch` off removes the tool and stops the running watches.
+
 ## In the PlinyCode GUI
 
 The server is listed first wherever PlinyCode lists MCP servers: the server icon in the chat input, and
@@ -90,6 +146,7 @@ servers are usually PAT-only, not Azure AD).
 | -------------------------------------- | ------- | ----------------------------------------------------------------- |
 | `plinycode.devops.enabled`             | `true`  | Run the server.                                                   |
 | `plinycode.devops.registerWithEditor`  | `true`  | Offer it to Copilot Chat (VS Code) or Cursor's agent.             |
+| `plinycode.ci.watch`                   | `true`  | Offer PlinyCode's agent the `watch_ci` tool.                      |
 
 Environment variables read by the server: `DEVOPS_MCP_WORKSPACE` (repository when a call has none),
 `DEVOPS_MCP_REMOTE` (default `origin`) and `DEVOPS_MCP_PROVIDER` (`github` or `ado`).
@@ -113,6 +170,7 @@ The code is in `apps/vscode/src/services/devops-mcp/`:
 | `host/DevOpsMcpService.ts` | Starts the server, tracks its status, feeds its tools to the agent, registers it with the editor. |
 | `host/token-broker.ts`     | Local pipe that hands the editor's sign-in tokens to the server process.                   |
 | `builtin-mcp-registry.ts`  | How the agent session and the GUI handlers reach the service without importing `vscode`.   |
+| `ci-watch/`                | `watch_ci`: the watcher, its report, and the per-conversation watches. Runs in the extension host and reuses the server's providers. Delivery into conversations is `src/sdk/sdk-ci-watch-coordinator.ts`. |
 
 The built-in server is deliberately not in McpHub, which only manages servers from the user's MCP settings
 file. Tests: `bun test src/services/devops-mcp` (from `apps/vscode`), which needs `git` on `PATH` but no

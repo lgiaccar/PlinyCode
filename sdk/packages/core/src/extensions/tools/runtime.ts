@@ -60,6 +60,12 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		headlessToolNames: ["search_codebase"],
 	},
 	{
+		id: "find_files",
+		description:
+			"Find files by name with glob patterns or part of a file name, instead of shell commands such as find or ls -R.",
+		headlessToolNames: ["find_files"],
+	},
+	{
 		id: "run_commands",
 		description:
 			"Run shell commands from the root of the workspace for listing files, checking git status, builds, tests, and similar tasks.",
@@ -129,6 +135,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 > = {
 	read_files: "enableReadFiles",
 	search_codebase: "enableSearch",
+	find_files: "enableSearch",
 	run_commands: "enableBash",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",

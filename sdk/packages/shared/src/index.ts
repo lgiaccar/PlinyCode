@@ -323,7 +323,9 @@ export type {
 } from "./prompt/format";
 export {
 	createModeSwitchNoticeTracker,
+	extractEditorStateBlock,
 	formatDisplayUserInput,
+	formatEditorStateBlock,
 	formatFileContentBlock,
 	formatModeSwitchNotice,
 	formatSessionSearchPreview,
@@ -338,6 +340,8 @@ export {
 	stripModeNotices,
 	xmlTagsRemoval,
 } from "./prompt/format";
+export type { GitSnapshot } from "./prompt/git-snapshot";
+export { formatGitSnapshotForEnv } from "./prompt/git-snapshot";
 export { CLINE_DEFAULT_MODEL_ID } from "./providers/defaults";
 export { isClineProvider } from "./providers/utils";
 export {

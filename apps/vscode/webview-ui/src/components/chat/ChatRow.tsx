@@ -1,3 +1,4 @@
+import { isCiWatchReport } from "@shared/ciWatch"
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import {
 	BrowserActionResult,
@@ -10,6 +11,7 @@ import {
 	ClineSayTool,
 	COMPLETION_RESULT_CHANGES_FLAG,
 } from "@shared/ExtensionMessage"
+import type { PlanExecutionChoice } from "@shared/planExecution"
 import { BooleanRequest, StringRequest } from "@shared/proto/cline/common"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
 import { Mode } from "@shared/storage/types"
@@ -50,6 +52,7 @@ import { cn } from "@/lib/utils"
 import { FileServiceClient, StateServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { findMatchingResourceOrTemplate } from "@/utils/mcp"
 import CodeAccordian, { cleanPathPrefix } from "../common/CodeAccordian"
+import { CiWatchRow } from "./CiWatchRow"
 import { CommandOutputContent, CommandOutputRow } from "./CommandOutputRow"
 import CompactionRow from "./CompactionRow"
 import { CompletionOutputRow } from "./CompletionOutputRow"
@@ -66,6 +69,7 @@ import { RequestStartRow } from "./RequestStartRow"
 import SearchResultsDisplay from "./SearchResultsDisplay"
 import SubagentStatusRow from "./SubagentStatusRow"
 import { ThinkingRow } from "./ThinkingRow"
+import TodoListRow from "./TodoListRow"
 import UserMessage from "./UserMessage"
 
 const HEADER_CLASSNAMES = "flex items-center gap-2.5 mb-3"
@@ -264,12 +268,14 @@ const ChatRowContent = memo(
 		}, [onSetQuote, quoteButtonState.selectedText]) // <-- Use onSetQuote from props
 
 		// Switch to act mode and run the root plan file. The mode coordinator sends
-		// the prompt as the act-mode continuation of the presented plan.
-		const executePlan = useCallback((rootPlanFile: string) => {
+		// the prompt as the act-mode continuation of the presented plan, after the
+		// extension has pointed act mode at the model the choice names.
+		const executePlan = useCallback((rootPlanFile: string, executePlanWith: PlanExecutionChoice) => {
 			StateServiceClient.togglePlanActModeProto(
 				TogglePlanActModeRequest.create({
 					mode: PlanActMode.ACT,
 					chatContent: { message: executePlanPrompt(rootPlanFile), images: [], files: [] },
+					executePlanWith,
 				}),
 			).catch((err) => console.error("Failed to execute plan:", err))
 		}, [])
@@ -943,6 +949,9 @@ const ChatRowContent = memo(
 						)
 					}
 					case "user_feedback":
+						if (isCiWatchReport(message.text)) {
+							return <CiWatchRow text={message.text ?? ""} />
+						}
 						return (
 							<UserMessage
 								canRestoreWorkspace={canRestoreWorkspaceFromMessage(clineMessages, message.ts)}
@@ -1010,7 +1019,9 @@ const ChatRowContent = memo(
 							isLatestPlanResult(clineMessages, message.ts)
 						return (
 							<PlanCompletionOutputRow
-								onExecutePlan={canExecutePlan && rootPlanFile ? () => executePlan(rootPlanFile) : undefined}
+								onExecutePlan={
+									canExecutePlan && rootPlanFile ? (choice) => executePlan(rootPlanFile, choice) : undefined
+								}
 								rootPlanFile={rootPlanFile}
 								text={message.text || ""}
 							/>
@@ -1084,7 +1095,7 @@ const ChatRowContent = memo(
 					case "browser_action_result":
 						return <LegacyBrowserRow message={message} />
 					case "task_progress":
-						return <InvisibleSpacer /> // task_progress messages should be displayed in TaskHeader only, not in chat
+						return <TodoListRow message={message} />
 					case "compaction":
 						return <CompactionRow message={message} />
 					default:

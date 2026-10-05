@@ -4359,3 +4359,115 @@ describe("tool display paths are relativized to the cwd", () => {
 		)
 	})
 })
+
+describe("tools that run concurrently keep their own rows", () => {
+	const toolEvent = (type: "content_start" | "content_end", toolCallId: string, extra: Record<string, unknown>) =>
+		({
+			type: "agent_event",
+			payload: {
+				sessionId: "s1",
+				event: { type, contentType: "tool", toolCallId, ...extra } as AgentEvent,
+			},
+		}) as CoreSessionEvent
+
+	it("finalizes each tool with its own input and row, whatever order they end in", () => {
+		const state = new MessageTranslatorState()
+		const startRead = translateSessionEvent(
+			toolEvent("content_start", "read-1", { toolName: "read_files", input: { files: [{ path: "/repo/a.ts" }] } }),
+			state,
+		)
+		const startSearch = translateSessionEvent(
+			toolEvent("content_start", "search-1", { toolName: "search_codebase", input: { queries: ["needle"] } }),
+			state,
+		)
+		expect(startSearch.messages[0].ts).not.toBe(startRead.messages[0].ts)
+
+		// The read started first and ends first, while the search is the tool touched last.
+		const endRead = translateSessionEvent(toolEvent("content_end", "read-1", { toolName: "read_files", output: "A" }), state)
+		const endSearch = translateSessionEvent(
+			toolEvent("content_end", "search-1", { toolName: "search_codebase", output: "found" }),
+			state,
+		)
+
+		expect(endRead.messages).toHaveLength(1)
+		expect(endRead.messages[0].ts).toBe(startRead.messages[0].ts)
+		expect(endRead.messages[0].partial).toBe(false)
+		expect(JSON.parse(endRead.messages[0].text!)).toMatchObject({ tool: "readFile", path: "/repo/a.ts" })
+
+		expect(endSearch.messages).toHaveLength(1)
+		expect(endSearch.messages[0].ts).toBe(startSearch.messages[0].ts)
+		expect(JSON.parse(endSearch.messages[0].text!)).toMatchObject({ tool: "searchFiles", regex: "needle" })
+	})
+
+	it("handles the later tool ending first", () => {
+		const state = new MessageTranslatorState()
+		const startA = translateSessionEvent(
+			toolEvent("content_start", "a", { toolName: "find_files", input: { patterns: ["*.sv"] } }),
+			state,
+		)
+		const startB = translateSessionEvent(
+			toolEvent("content_start", "b", { toolName: "find_files", input: { patterns: ["*.tcl"], path: "flow" } }),
+			state,
+		)
+
+		const endB = translateSessionEvent(toolEvent("content_end", "b", { toolName: "find_files", output: "x" }), state)
+		const endA = translateSessionEvent(toolEvent("content_end", "a", { toolName: "find_files", output: "y" }), state)
+
+		expect(endB.messages[0].ts).toBe(startB.messages[0].ts)
+		expect(JSON.parse(endB.messages[0].text!)).toMatchObject({ tool: "listFilesRecursive", path: "flow/*.tcl" })
+		expect(endA.messages[0].ts).toBe(startA.messages[0].ts)
+		expect(JSON.parse(endA.messages[0].text!)).toMatchObject({ tool: "listFilesRecursive", path: "*.sv" })
+	})
+
+	it("still reuses nothing from a finished tool for the next one", () => {
+		const state = new MessageTranslatorState()
+		const first = translateSessionEvent(
+			toolEvent("content_start", "one", { toolName: "search_codebase", input: { queries: ["a"], glob: "*.ts" } }),
+			state,
+		)
+		translateSessionEvent(toolEvent("content_end", "one", { toolName: "search_codebase", output: "" }), state)
+		const second = translateSessionEvent(
+			toolEvent("content_start", "two", { toolName: "search_codebase", input: { queries: ["b"] } }),
+			state,
+		)
+
+		expect(JSON.parse(first.messages[0].text!)).toMatchObject({ regex: "a", filePattern: "*.ts" })
+		expect(second.messages[0].ts).not.toBe(first.messages[0].ts)
+		expect(JSON.parse(second.messages[0].text!)).toMatchObject({ regex: "b" })
+	})
+})
+
+describe("update_todo_list shows the task list, not a tool row", () => {
+	const todoEvent = (type: "content_start" | "content_end", extra: Record<string, unknown>) =>
+		({
+			type: "agent_event",
+			payload: {
+				sessionId: "s1",
+				event: { type, contentType: "tool", toolName: "update_todo_list", toolCallId: "todo-1", ...extra } as AgentEvent,
+			},
+		}) as CoreSessionEvent
+	const input = {
+		todos: [
+			{ content: "Read the router", status: "completed" },
+			{ content: "Add the route", status: "in_progress" },
+		],
+	}
+
+	it("emits nothing when the call starts and the whole list when it ends", () => {
+		const state = new MessageTranslatorState()
+
+		expect(translateSessionEvent(todoEvent("content_start", { input }), state).messages).toEqual([])
+
+		const end = translateSessionEvent(todoEvent("content_end", { output: "Todo list updated" }), state)
+		expect(end.messages).toHaveLength(1)
+		expect(end.messages[0]).toMatchObject({ type: "say", say: "task_progress", partial: false })
+		expect(JSON.parse(end.messages[0].text ?? "")).toEqual(input)
+	})
+
+	it("shows nothing for a call the tool rejected", () => {
+		const state = new MessageTranslatorState()
+		translateSessionEvent(todoEvent("content_start", { input: { todos: [] } }), state)
+
+		expect(translateSessionEvent(todoEvent("content_end", { error: "No tasks found." }), state).messages).toEqual([])
+	})
+})

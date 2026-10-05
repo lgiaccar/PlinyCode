@@ -108,10 +108,28 @@ export const ReadFilesInputUnionSchema = z.union([
 /**
  * Schema for search_codebase tool input
  */
+const SearchScopeShape = {
+	path: z
+		.string()
+		.nullable()
+		.optional()
+		.describe(
+			"Optional file or directory to search in, relative to the workspace root or absolute. Omit to search the whole workspace. Give a single file to see every match in it.",
+		),
+	glob: z
+		.string()
+		.nullable()
+		.optional()
+		.describe(
+			"Optional glob that limits which files are searched, e.g. `*.ts`, `src/**/*.test.ts` or `!*.md`.",
+		),
+};
+
 export const SearchCodebaseInputSchema = z.object({
 	queries: z
 		.array(z.string())
 		.describe("Array of regex search queries to execute"),
+	...SearchScopeShape,
 });
 
 /**
@@ -121,7 +139,36 @@ export const SearchCodebaseUnionInputSchema = z.union([
 	SearchCodebaseInputSchema,
 	z.array(z.string()),
 	z.string(),
-	z.object({ queries: z.string() }),
+	z.object({ queries: z.string(), ...SearchScopeShape }),
+]);
+
+/**
+ * Schema for find_files tool input
+ */
+export const FindFilesInputSchema = z.object({
+	patterns: z
+		.array(z.string())
+		.describe(
+			"File name patterns. A pattern with wildcards is a glob: `*.test.ts` matches by file name in any directory, `src/**/*.proto` matches from the workspace root. A pattern without wildcards matches any path that contains it, e.g. `router-policy`.",
+		),
+	path: z
+		.string()
+		.nullable()
+		.optional()
+		.describe(
+			"Optional directory to look in, relative to the workspace root or absolute. Omit to look in the whole workspace.",
+		),
+});
+
+/**
+ * Union schema for find_files tool input, as lenient as search_codebase's
+ */
+export const FindFilesUnionInputSchema = z.union([
+	FindFilesInputSchema,
+	z.object({ patterns: z.string(), path: FindFilesInputSchema.shape.path }),
+	z.object({ pattern: z.string(), path: FindFilesInputSchema.shape.path }),
+	z.array(z.string()),
+	z.string(),
 ]);
 
 const CommandInputSchema = z
@@ -202,7 +249,7 @@ export const EditFileInputSchema = z
 			.nullable()
 			.optional()
 			.describe(
-				`Exact text to replace (must match exactly once). Omit this when creating a missing file or inserting via insert_line. Keep this at or below ${INPUT_ARG_CHAR_LIMIT} characters when possible; larger payloads should be split across multiple tool calls to avoid timeouts.`,
+				`Exact text to replace (must match exactly once unless replace_all is true). Omit this when creating a missing file or inserting via insert_line. Keep this at or below ${INPUT_ARG_CHAR_LIMIT} characters when possible; larger payloads should be split across multiple tool calls to avoid timeouts.`,
 			),
 		new_text: z
 			.string()
@@ -217,6 +264,16 @@ export const EditFileInputSchema = z
 			.optional()
 			.describe(
 				"Optional positive one-based boundary line. When provided, the tool inserts new_text before that line instead of performing a replacement edit; use line_count + 1 to append at EOF.",
+			),
+		// Preprocessed so a stringified boolean still applies, as with insert_line.
+		replace_all: z
+			.preprocess(
+				(value) =>
+					value === "true" ? true : value === "false" ? false : value,
+				z.boolean().nullable().optional(),
+			)
+			.describe(
+				"Optional. Set to true to replace every occurrence of old_text, for example to rename an identifier throughout the file.",
 			),
 	})
 	.describe(
@@ -306,6 +363,11 @@ export type ReadFilesInput = z.infer<typeof ReadFilesInputSchema>;
  * Input for the search_codebase tool
  */
 export type SearchCodebaseInput = z.infer<typeof SearchCodebaseInputSchema>;
+
+/**
+ * Input for the find_files tool
+ */
+export type FindFilesInput = z.infer<typeof FindFilesInputSchema>;
 
 /**
  * Input for the run_commands tool

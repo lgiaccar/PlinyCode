@@ -51,6 +51,20 @@ export const E2E_MOCK_POWERSHELL_TOOL_CALL = {
 	},
 }
 
+/**
+ * `editor` tool call streamed in response to the `plan_request` prompt, which
+ * the test sends in plan mode. It creates the root plan file, and a plan row
+ * that follows a written PLAN.md is what offers Execute plan.
+ */
+export const E2E_MOCK_PLAN_TOOL_CALL = {
+	id: "call_e2e_plan_1",
+	name: "editor",
+	arguments: {
+		path: "plans/e2e-plan/PLAN.md",
+		new_text: "# E2E plan\n\n1. Reply to the user.\n",
+	},
+}
+
 const edit_request_complete = `I successfully replaced "john" with "cline" in the test.ts file. The change has been completed and the file now contains:
 
 \`\`\`typescript
@@ -67,6 +81,10 @@ export const E2E_MOCK_API_RESPONSES = {
 	EDIT_REQUEST_COMPLETE: edit_request_complete,
 	POWERSHELL_REQUEST_LEAD_IN: "I'll inspect the PowerShell process used for background execution.",
 	POWERSHELL_REQUEST_COMPLETE: "PowerShell background execution diagnostic completed.",
+	PLAN_REQUEST_LEAD_IN: "I'll write the plan to a markdown file.",
+	PLAN_REQUEST_COMPLETE: "The plan is in plans/e2e-plan/PLAN.md.",
+	/** The act-mode turn that Execute plan starts. */
+	PLAN_EXECUTED: "The mock plan has been executed.",
 }
 
 export const E2E_MOCK_CLINE_RECOMMENDED_MODELS = {
