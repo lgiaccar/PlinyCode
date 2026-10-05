@@ -94,7 +94,9 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		expect(prompt).not.toContain("switch_to_act_mode");
 		// The read-only run_commands contract is shared by both variants.
 		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("run_commands");
-		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("toggle to Agent mode");
+		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain(
+			"toggle to Agent mode",
+		);
 	});
 
 	it("asks the manual-switch host for a plan another model can execute", () => {
