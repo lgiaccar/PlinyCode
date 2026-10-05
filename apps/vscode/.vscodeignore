@@ -88,6 +88,16 @@ old_docs/**
 # Include icons
 !assets/icons/**
 
+# Local build leftovers and release outputs. dist-standalone/ is the build
+# of the removed standalone host, still present in older checkouts (it put
+# 1,000 files and ~100 MB into 0.1.8's package); dist/release/ holds each
+# release's notes and latest.json, which are published on GitHub instead.
+dist-standalone/**
+dist/release/**
+# Notes for agents working on this package, not for users.
+AGENTS.md
+skills-lock.json
+
 # Ignore E2E build files
 e2e-build.mjs
 e2e.vsix
