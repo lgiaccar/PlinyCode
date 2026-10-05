@@ -1,5 +1,7 @@
+import { formatDisplayUserInput, formatSessionSearchTitle, formatUserInputBlock } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { isAbortError, SdkSessionLifecycle } from "./sdk-session-lifecycle"
+import { ACT_MODE_CONTINUATION_PROMPT } from "./sdk-user-message-mapping"
 
 type StartInput = Parameters<SdkSessionLifecycle["startNewSession"]>[0]
 type SendHost = Parameters<SdkSessionLifecycle["fireAndForgetSend"]>[0]
@@ -623,6 +625,164 @@ describe("SdkSessionLifecycle", () => {
 
 		expect(send).toHaveBeenCalledWith(expect.objectContaining({ prompt: "hello" }))
 	})
+
+	describe("editor state", () => {
+		const BLOCK = "<editor_state>\nActive file: src/app.ts (cursor at line 3)\n</editor_state>"
+
+		function makeEditorState(blocks: Array<string | undefined>) {
+			return {
+				nextBlock: vi.fn(async (_sessionId: string) => blocks.shift()),
+				syncWithTranscript: vi.fn(),
+			}
+		}
+
+		it("appends the block to a message the user typed, where no display surface shows it", async () => {
+			const send = vi.fn().mockResolvedValue(undefined)
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const editorState = makeEditorState([BLOCK])
+			const lifecycle = makeLifecycle({
+				editorState,
+				consumeModeSwitchNotice: vi.fn(() => ({ from: "plan" as const, to: "act" as const })),
+			})
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "fix the failing test")
+			await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+
+			const { prompt } = send.mock.calls[0][0] as { prompt: string }
+			expect(prompt).toBe(
+				`<mode_notice>The user switched from plan mode to act mode before sending this message.</mode_notice>\nfix the failing test\n\n${BLOCK}`,
+			)
+			expect(editorState.nextBlock).toHaveBeenCalledWith("session-123")
+			// What the chat, a reopened conversation and the history list render.
+			expect(formatDisplayUserInput(formatUserInputBlock(prompt, "act"))).toBe("fix the failing test")
+			expect(formatSessionSearchTitle(formatUserInputBlock(prompt, "act"))).toBe("fix the failing test")
+		})
+
+		it("sends the prompt as typed when there is no new block", async () => {
+			const send = vi.fn().mockResolvedValue(undefined)
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle({ editorState: makeEditorState([BLOCK, undefined]) })
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "first")
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "second", undefined, undefined, "queue")
+			await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2))
+
+			// In the order they were made, although reading the editor is asynchronous.
+			expect(send.mock.calls.map(([input]) => (input as { prompt: string }).prompt)).toEqual([
+				`first\n\n${BLOCK}`,
+				"second",
+			])
+		})
+
+		it("does not read the editor for prompts the extension writes itself", async () => {
+			const send = vi.fn().mockResolvedValue(undefined)
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const editorState = makeEditorState([BLOCK, BLOCK, BLOCK])
+			const lifecycle = makeLifecycle({ editorState })
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			const synthetic = ["[TASK RESUMPTION] Please continue where you left off.", ACT_MODE_CONTINUATION_PROMPT, ""]
+			for (const prompt of synthetic) {
+				// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+				lifecycle.fireAndForgetSend(sdkHost as any, "session-123", prompt)
+			}
+			await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(synthetic.length))
+
+			expect(editorState.nextBlock).not.toHaveBeenCalled()
+			expect(send.mock.calls.map(([input]) => (input as { prompt: string }).prompt)).toEqual(synthetic)
+		})
+
+		it("still sends the message when the editor cannot be read", async () => {
+			const send = vi.fn().mockResolvedValue(undefined)
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle({
+				editorState: { nextBlock: vi.fn().mockRejectedValue(new Error("host bridge down")), syncWithTranscript: vi.fn() },
+			})
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "hello")
+			await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+
+			expect(send).toHaveBeenCalledWith(expect.objectContaining({ prompt: "hello" }))
+		})
+
+		it("tells the tracker which transcript a session starts from", async () => {
+			const sdkHost = makeSdkHost({ startResult: { sessionId: "session-123" } })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const editorState = makeEditorState([])
+			const lifecycle = makeLifecycle({ editorState })
+			const initialMessages = [{ role: "user", content: "hello" }]
+
+			await lifecycle.startNewSession({ initialMessages } as StartInput)
+			expect(editorState.syncWithTranscript).toHaveBeenLastCalledWith("session-123", initialMessages)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+			expect(editorState.syncWithTranscript).toHaveBeenLastCalledWith("session-123", undefined)
+		})
+	})
+
+	describe("session start metadata", () => {
+		it("stores the conversation's metadata with every session start", async () => {
+			const sdkHost = makeSdkHost({ startResult: { sessionId: "task-1" } })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const getSessionStartMetadata = vi.fn((sessionId: string | undefined) =>
+				sessionId === "task-1" ? { gitSnapshot: { branch: "main" } } : undefined,
+			)
+			const lifecycle = makeLifecycle({ getSessionStartMetadata })
+
+			await lifecycle.startNewSession({
+				config: { sessionId: "task-1" },
+				sessionMetadata: { title: "hello" },
+			} as unknown as StartInput)
+			expect(sdkHost.start).toHaveBeenLastCalledWith(
+				expect.objectContaining({ sessionMetadata: { title: "hello", gitSnapshot: { branch: "main" } } }),
+			)
+
+			// A session with nothing to store starts with its input untouched.
+			await lifecycle.startNewSession({ config: { sessionId: "task-2" } } as unknown as StartInput)
+			expect(sdkHost.start.mock.calls.at(-1)?.[0]).not.toHaveProperty("sessionMetadata")
+		})
+
+		it("stores it with the session a checkpoint restore starts", async () => {
+			const sdkHost = makeSdkHost({ startResult: { sessionId: "task-1" } })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle({
+				getSessionStartMetadata: (sessionId) =>
+					sessionId === "task-2" ? { gitSnapshot: { branch: "main" } } : undefined,
+			})
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			await lifecycle.restoreActiveSession({
+				sessionId: "task-1",
+				checkpointRunCount: 1,
+				start: { config: { sessionId: "task-2" }, sessionMetadata: { title: "hello" } },
+				// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			} as any)
+
+			expect(sdkHost.restore).toHaveBeenCalledWith(
+				expect.objectContaining({
+					start: expect.objectContaining({ sessionMetadata: { title: "hello", gitSnapshot: { branch: "main" } } }),
+				}),
+			)
+		})
+	})
+
 	describe("background sessions", () => {
 		it("detaches the active session without stopping it and can adopt it back", async () => {
 			const sdkHost = makeSdkHost({ startResult: { sessionId: "task-1" } })

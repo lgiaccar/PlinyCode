@@ -149,16 +149,46 @@ export function normalizeUserInput(input?: string): string {
 	return next;
 }
 
+const EDITOR_STATE_OPEN = "<editor_state>";
+const EDITOR_STATE_CLOSE = "</editor_state>";
+
 /**
- * Removes runtime-generated <mode_notice> elements (content included): they
- * are not user-typed text and must not render as such. Deliberately NOT part
+ * Wraps the editor state (active file, open tabs) a host appends to a message
+ * the user typed. Like <mode_notice> it survives normalizeUserInput, so the
+ * model sees it, and stripModeNotices removes it at every display boundary.
+ */
+export function formatEditorStateBlock(body: string): string {
+	return `${EDITOR_STATE_OPEN}\n${body.trim()}\n${EDITOR_STATE_CLOSE}`;
+}
+
+/**
+ * The last <editor_state> element in a persisted user message, tags included,
+ * or undefined when it has none. Hosts use it to tell what a conversation's
+ * transcript already carries.
+ */
+export function extractEditorStateBlock(input?: string): string | undefined {
+	if (!input) return undefined;
+	const start = input.lastIndexOf(EDITOR_STATE_OPEN);
+	if (start === -1) return undefined;
+	const end = input.indexOf(EDITOR_STATE_CLOSE, start);
+	if (end === -1) return undefined;
+	return input.slice(start, end + EDITOR_STATE_CLOSE.length);
+}
+
+/**
+ * Removes the elements the runtime and the host add to a user message for the
+ * model only -- <mode_notice> and <editor_state> -- content included: they are
+ * not user-typed text and must not render as such. Deliberately NOT part
  * of normalizeUserInput -- that function also sanitizes outbound prompts
  * before the host wraps them (prepareTurnInput), and stripping there deletes
  * the notice before the model ever sees it.
  */
 export function stripModeNotices(input?: string): string {
 	if (!input?.trim()) return "";
-	return removeTagElements(input, "mode_notice").trim();
+	return removeTagElements(
+		removeTagElements(input, "mode_notice"),
+		"editor_state",
+	).trim();
 }
 
 // indexOf-based rather than a regex: a lazy dot-all pattern re-scans to the

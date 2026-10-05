@@ -7,7 +7,7 @@
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath } from "@plinycode/core"
-import { type AgentStopControl, formatDisplayUserInput } from "@plinycode/shared"
+import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
@@ -37,6 +37,7 @@ import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { buildStartSessionInput } from "./cline-session-factory"
+import { type ConversationContext, createConversationContext } from "./context"
 import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
@@ -200,6 +201,11 @@ export class Controller {
 	// Workspace root / window workspace / WorkspaceRootManager resolution — see
 	// sdk-workspace-root-resolver.ts.
 	private readonly workspaceRootResolver: SdkWorkspaceRootResolver
+	// Git snapshot in the system prompt and editor state on user messages — see context/index.ts.
+	private readonly conversationContext: ConversationContext = createConversationContext({
+		readSessionMetadata: (conversationId) => this.taskHistory.getSessionMetadata(conversationId),
+		getWorkspaceRoot: () => this.getWorkspaceRoot(),
+	})
 
 	// Synchronous snapshot of getWorkspaceRoot()'s latest result, for the message
 	// translator (which runs synchronously and relativizes the tool paths shown in
@@ -334,6 +340,8 @@ export class Controller {
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 			checkSpendingLimit: () => this.checkSpendingLimit(),
 			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
+			gitSnapshots: this.conversationContext.gitSnapshots,
+			getConversationId: () => this.task?.taskId,
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
@@ -405,6 +413,8 @@ export class Controller {
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
 			consumeModeSwitchNotice: (sessionId) => this.mode.consumeModeSwitchNotice(sessionId),
+			getSessionStartMetadata: (sessionId) => this.conversationContext.gitSnapshots.sessionMetadata(sessionId),
+			editorState: this.conversationContext.editorState,
 			onSendComplete: async (sessionId) => {
 				// Normal flows close their diff sessions inline; anything left here is orphaned.
 				void this.diffEdits.discardAllPreviews("turn complete")
@@ -1704,7 +1714,9 @@ export class Controller {
 			const activeSession = this.sessions.getActiveSession()
 			if (activeSession) {
 				try {
-					queuedPrompts = await activeSession.sdkHost.pendingPrompts("list", { sessionId: activeSession.sessionId })
+					const pending = await activeSession.sdkHost.pendingPrompts("list", { sessionId: activeSession.sessionId })
+					// The queue shows what the user typed, without the model-only elements attached on send.
+					queuedPrompts = pending.map((queued) => ({ ...queued, prompt: stripModeNotices(queued.prompt) }))
 				} catch (error) {
 					Logger.error("[SdkController] Failed to list pending prompts for webview state:", error)
 				}

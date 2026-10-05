@@ -314,6 +314,7 @@ export function previousShellFailure(
 function unwrapUserInput(text: string): string {
 	return text
 		.replace(/<mode_notice>[\s\S]*?<\/mode_notice>/g, "")
+		.replace(/<editor_state>[\s\S]*?<\/editor_state>/g, "")
 		.replace(/^\s*<user_input[^>]*>/, "")
 		.replace(/<\/user_input>\s*$/, "")
 		.trim()

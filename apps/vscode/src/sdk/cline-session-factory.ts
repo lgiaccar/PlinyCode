@@ -18,7 +18,7 @@ import {
 } from "@plinycode/core"
 import type { ModelInfo as SdkModelInfo } from "@plinycode/llms"
 import { getGeneratedModelsForProvider, getModelsForProvider, MODEL_COLLECTIONS_BY_PROVIDER_ID } from "@plinycode/llms"
-import { buildClineSystemPrompt } from "@plinycode/shared"
+import { buildClineSystemPrompt, type GitSnapshot } from "@plinycode/shared"
 import type { ApiConfiguration } from "@shared/api"
 import { ClineClient } from "@shared/cline"
 import type { HistoryItem } from "@shared/HistoryItem"
@@ -66,6 +66,12 @@ export interface SessionConfigInput {
 	workspaceRoot?: string
 	/** Current mode (act/plan) */
 	mode?: Mode
+	/**
+	 * The conversation's git snapshot for the system prompt's <env> block. The
+	 * same one on every build for a conversation; see
+	 * context/conversation-git-snapshots.ts.
+	 */
+	gitSnapshot?: GitSnapshot
 }
 
 /** Active session state tracked by the factory */
@@ -487,6 +493,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			mode,
 			providerId,
 			platform: process.platform,
+			gitSnapshot: input.gitSnapshot,
 			// The extension never exposes switch_to_act_mode (unlike the CLI):
 			// matching the legacy extension, the user must flip the Plan/Act
 			// toggle themselves, so the plan contract must not tell the model to

@@ -1,6 +1,7 @@
 import type { WorkspaceContext } from "../extensions/context";
 import { isClineProvider } from "../providers/utils";
 import type { WorkspaceInfo } from "../session/workspace";
+import { formatGitSnapshotForEnv, type GitSnapshot } from "./git-snapshot";
 import { DEFAULT_CLINE_SYSTEM_PROMPTS } from "./system";
 
 const WORKSPACE_CONFIGURATION_MARKER = "# Workspace Configuration";
@@ -159,6 +160,28 @@ function buildWorkspaceMetadata(
 	return `\n${WORKSPACE_CONFIGURATION_MARKER}\n${body}`;
 }
 
+// The <env> block's entries are numbered; git follows the working directory.
+const GIT_ENV_ENTRY_NUMBER = 5;
+
+/**
+ * The git data for the <env> block. A host that gathered a snapshot passes it
+ * as `gitSnapshot`; one that only has the WorkspaceInfo git fields gets the
+ * branch and HEAD from those, so both feed the same block for every provider.
+ */
+function resolveGitSnapshot(
+	options: ClineSystemPromptOptions,
+): GitSnapshot | undefined {
+	if (options.gitSnapshot) {
+		return options.gitSnapshot;
+	}
+	const branch = options.latestGitBranchName?.trim();
+	const head = options.latestGitCommitHash?.trim().slice(0, 7);
+	if (!branch && !head) {
+		return undefined;
+	}
+	return { ...(branch ? { branch } : {}), ...(head ? { head } : {}) };
+}
+
 /**
  * Options for building the Cline system prompt.
  *
@@ -241,6 +264,14 @@ export function buildClineSystemPrompt(
 		.filter(Boolean)
 		.join("\n\n");
 
+	// Branch names, paths and commit subjects are repository content. They go
+	// in last and through a function, so they are neither read as replacement
+	// patterns ("$&") nor scanned for the other placeholders.
+	const gitEnv = formatGitSnapshotForEnv(
+		resolveGitSnapshot(options),
+		GIT_ENV_ENTRY_NUMBER,
+	);
+
 	return basePrompt
 		.replace("{{PLATFORM_NAME}}", platform)
 		.replace("{{CWD}}", workspaceRoot)
@@ -253,5 +284,6 @@ export function buildClineSystemPrompt(
 				: "",
 		)
 		.replace("{{CLINE_RULES}}", effectiveRules)
+		.replace("{{GIT_SNAPSHOT}}", () => (gitEnv ? `\n${gitEnv}` : ""))
 		.trim();
 }

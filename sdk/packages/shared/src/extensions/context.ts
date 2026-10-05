@@ -1,4 +1,5 @@
 import type { BasicLogger } from "../logging/logger";
+import type { GitSnapshot } from "../prompt/git-snapshot";
 import type { WorkspaceInfo } from "../session/workspace";
 import type {
 	AgentExtensionAutomationContext,
@@ -66,6 +67,12 @@ export interface WorkspaceContext extends WorkspaceInfo {
 	 * in the system prompt template.
 	 */
 	metadata?: string;
+	/**
+	 * Git state captured when the conversation started, shown in the system
+	 * prompt's <env> block. Without it the block falls back to
+	 * `latestGitBranchName` and `latestGitCommitHash`.
+	 */
+	gitSnapshot?: GitSnapshot;
 	/** Agent mode: "act" | "plan" | "yolo" */
 	mode?: string;
 	/** Additional rules/instructions injected into the system prompt */

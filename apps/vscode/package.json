@@ -345,6 +345,16 @@
 		"configuration": {
 			"title": "PlinyCode",
 			"properties": {
+				"plinycode.context.editorState": {
+					"type": "boolean",
+					"default": true,
+					"description": "Tell the model what you are looking at: with each message you send, PlinyCode adds the active file, the cursor line or selected lines, and the open tabs (up to 20). File contents are not included, and the chat does not show the addition."
+				},
+				"plinycode.context.gitSnapshot": {
+					"type": "boolean",
+					"default": true,
+					"description": "Tell the model the state of the git repository when a conversation starts: the current and default branch, a short status (up to 20 entries) and the last 5 commits. The snapshot is taken once per conversation and is not updated afterwards."
+				},
 				"plinycode.devops.enabled": {
 					"type": "boolean",
 					"default": true,
