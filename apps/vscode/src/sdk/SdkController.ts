@@ -27,6 +27,7 @@ import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { StateManager } from "@/core/storage/StateManager"
 import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -338,6 +339,8 @@ export class Controller {
 			getCwd: () => this.getWorkspaceRoot(),
 			isBackgroundEditEnabled: (sessionId) =>
 				!!this.stateManager.getGlobalSettingsKey("backgroundEditEnabled") || this.background.has(sessionId),
+			diagnostics: createVscodeEditDiagnosticsSource(),
+			isReportNewProblemsEnabled,
 		})
 		this.interactions = new SdkInteractionCoordinator({
 			messages: this.messages,
@@ -786,6 +789,7 @@ export class Controller {
 		await this.clearTask()
 		await this.background.stopAll("SdkController.dispose")
 		await this.sessions.dispose("SdkController.dispose")
+		this.diffEdits.dispose()
 		this._terminalManager?.disposeAll()
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()

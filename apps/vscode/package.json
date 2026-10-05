@@ -355,6 +355,11 @@
 					"default": true,
 					"description": "Also offer the PlinyCode DevOps MCP server to the editor's own AI chat: Copilot Chat agent mode in VS Code, or the agent in Cursor."
 				},
+				"plinycode.edits.reportNewProblems": {
+					"type": "boolean",
+					"default": true,
+					"description": "After PlinyCode edits a file, tell the model which new errors the editor reports for that file, so it can fix them right away. An edit waits up to 3 seconds for the language server; when PlinyCode edits a file that is not open in a tab, as with Background Edit, the file is opened in a background tab while it is checked."
+				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",
 					"default": 5,
