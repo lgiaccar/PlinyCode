@@ -288,6 +288,7 @@ export class AgentRuntime {
 				iteration: this.state.iteration,
 				runMessages: this.state.messages.slice(this.runStartMessageIndex),
 				messages: this.state.messages,
+				signal: this.abortController?.signal,
 			}),
 		].filter((reminder): reminder is string => Boolean(reminder));
 	}

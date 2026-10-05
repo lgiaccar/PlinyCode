@@ -41,6 +41,8 @@ import {
 	recordSuccess,
 } from "./router-health"
 import { composeHooks } from "./router-hooks"
+import { createReviewPass, type ReviewPassOptions } from "./router-review"
+import { isSuccessfulEdit } from "./router-review-diff"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import { appendRunLog, type RouterRunEnding, type RouterRunLogRecord } from "./router-run-log"
@@ -61,6 +63,14 @@ export interface RouterInstallDeps {
 	logCall?: (record: RouterCallLogRecord) => void
 	/** Where the run log goes; defaults to the run log next to the rules files. */
 	logRun?: (record: RouterRunLogRecord) => void
+	/** Whether the reviewer pass is on (`plinycode.review.beforeFinish`); on when not given. */
+	reviewEnabled?: () => boolean
+	/**
+	 * What the current run changed, from the checkpoint taken when it started.
+	 * Without it, or when there is no checkpoint, the reviewer pass falls back
+	 * to the run's own edit calls.
+	 */
+	getRunChanges?: ReviewPassOptions["loadCheckpointDiff"]
 	/** Injectable for tests. */
 	now?: () => number
 }
@@ -230,6 +240,10 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// The judge needs a gateway model for the utility id; the factory is the
 	// only place one can be built, so remember how from the latest run.
 	let createUtilityModel: ((modelId: string) => AgentModel) | undefined
+	// File edits of the current root turn, sub-agents' included, and the models
+	// that made them: the reviewer pass must know a turn changed files even
+	// when only a sub-agent did, and must not pick one of the authors.
+	let turnEdits = { bySubAgents: 0, authors: new Set<string>() }
 
 	config.agentModelFactory = ({ config: agentConfig, createDefault }) => {
 		createUtilityModel = (modelId) => createDefault({ modelId })
@@ -241,6 +255,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		const turnKey = isSubAgent ? `${deps.sessionId}:sub:${++subRunCounter}` : deps.sessionId
 		if (!isSubAgent) {
 			forgetSessionsWithPrefix(`${deps.sessionId}:sub:`)
+			turnEdits = { bySubAgents: 0, authors: new Set() }
 		}
 		activeTurnKey = turnKey
 		activeProfile = profile
@@ -468,7 +483,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// free model answering?" check are the root turn's — never a sub-agent's.
 	const rootState = () => getSessionState(deps.sessionId)
 	const MAX_NUDGES = 8
-	config.completionGuard = createRouterCompletionGuard({
+	const stallGuard = createRouterCompletionGuard({
 		isActive: () => freeModelIsAnswering(deps.sessionId),
 		getMode: deps.getMode,
 		toolCallsThisRun: () => rootState().run.toolCalls,
@@ -556,11 +571,93 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		},
 	})
 
+	// Once the guard accepts the reply that would end the run, a second free
+	// model reads what the run changed. It is asked after the guard, and outside
+	// it, so its one reminder neither spends the guard's reminder budgets nor is
+	// held back by them.
+	const reviewPass = createReviewPass({
+		isActive: isRouted,
+		isEnabled: () => deps.reviewEnabled?.() ?? true,
+		getMode: deps.getMode,
+		freeModelIsAnswering: () => freeModelIsAnswering(deps.sessionId),
+		guardGaveUp: () => rootState().run.guardGaveUp !== undefined,
+		recorded: () => rootState().run.review,
+		record: (review) => {
+			rootState().run.review = review
+		},
+		rules: () => rulesFor(activeProfile),
+		knownModels: () => config.knownModels as Record<string, ModelInfo> | undefined,
+		isHealthy: (modelId) => isModelHealthy(modelId, now()),
+		authors: () =>
+			new Set([
+				...rootState()
+					.calls.filter((call) => !call.failure)
+					.map((call) => call.modelId),
+				...turnEdits.authors,
+			]),
+		subAgentEdits: () => turnEdits.bySubAgents,
+		createModel: (modelId) => createUtilityModel?.(modelId),
+		...(deps.getRunChanges ? { loadCheckpointDiff: deps.getRunChanges } : {}),
+		...(deps.workspaceRoot ? { cwd: deps.workspaceRoot } : {}),
+		now,
+		onStart: ({ modelId, files, added, removed }) => {
+			emitInfo(
+				`\`${formatClock(now())}\` 🔎 **${modelLabel(modelId)}** is reviewing this turn's changes ` +
+					`(${files} file${files === 1 ? "" : "s"}, +${added} −${removed})`,
+			)
+		},
+		onResult: ({ modelId, record, issues, raw }) => {
+			const clock = `\`${formatClock(now())}\``
+			const took = formatDuration(record.durationMs ?? 0)
+			if (record.outcome === "no-verdict") {
+				emitInfo(
+					`${clock} 🔎 The review by **${modelLabel(modelId)}** gave no result (_${record.reason}_) · finishing without it`,
+				)
+				Logger.warn(
+					`[FreeAuto] review (${modelId}) gave no verdict after ${record.durationMs}ms: ${record.reason}` +
+						(raw ? ` · raw reply: ${JSON.stringify(raw)}` : ""),
+				)
+				return
+			}
+			emitInfo(
+				issues.length > 0
+					? `${clock} 🔎 **${modelLabel(modelId)}** flagged ${issues.length} possible problem${issues.length === 1 ? "" : "s"} ` +
+							`(${took}) · asked the model to check ${issues.length === 1 ? "it" : "them"}`
+					: `${clock} 🔎 **${modelLabel(modelId)}** found no problems (${took})`,
+			)
+			Logger.log(
+				`[FreeAuto] review (${modelId}, ${record.durationMs}ms, ${record.source}, ${record.files} files): ` +
+					`${issues.length} issues${issues.map((issue) => ` · ${issue.file ?? "?"}: ${issue.problem}`).join("")}`,
+			)
+		},
+		onReviewerError: (modelId, error) => {
+			// A reviewer that cannot be reached is down for routing too.
+			const rules = rulesFor(activeProfile)
+			recordFailure(modelId, {
+				error,
+				failuresBeforeCooldown: rules.health.failuresBeforeCooldown,
+				cooldownMs: rules.health.cooldownMs,
+				now: now(),
+			})
+		},
+	})
+	config.completionGuard = async (context) => (await stallGuard(context)) ?? (await reviewPass(context))
+
 	// Observe tool results and run endings: the shell-result note stops weak
 	// models from ending on a failed command, and the run record is what the
 	// summary script reads to compare early-stop rates per model.
 	config.hooks = composeHooks(config.hooks, {
 		afterTool: ({ snapshot, tool, toolCall, result }) => {
+			if (isRouted() && isSuccessfulEdit(tool.name, result)) {
+				const calls = getSessionState(snapshot.parentAgentId ? activeTurnKey : deps.sessionId).calls
+				const author = calls[calls.length - 1]?.modelId
+				if (author) {
+					turnEdits.authors.add(author)
+				}
+				if (snapshot.parentAgentId) {
+					turnEdits.bySubAgents += 1
+				}
+			}
 			// Hooks run in sub-agents too; judge by the agent that ran the tool.
 			if (!freeModelIsAnswering(snapshot.parentAgentId ? activeTurnKey : deps.sessionId)) {
 				return undefined
@@ -618,6 +715,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				iterations: result.iterations,
 				ending,
 				...run,
+				// Core consults the completion guard, and so the reviewer, for the root agent only.
+				...(subAgent ? { review: { outcome: "skipped" as const, reason: "sub-agent" } } : {}),
 				guardRules: [...guardRules],
 				replyChars: reply.length,
 				replyTail: reply.trim().slice(-120),

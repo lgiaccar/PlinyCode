@@ -239,13 +239,16 @@ export interface AgentTool<TInput = unknown, TOutput = unknown>
  * is its 1-based position in the current run. `runMessages` are the messages
  * appended during this run, oldest first, including the tool results the
  * reply follows; `messages` is the whole conversation. Both are live,
- * read-only references into the runtime's transcript, not copies.
+ * read-only references into the runtime's transcript, not copies. `signal`
+ * aborts when the run is cancelled, so a guard that waits on something slow
+ * (a model call) can give up at once instead of holding the cancel back.
  */
 export interface CompletionGuardContext {
 	message: AgentMessage;
 	iteration: number;
 	runMessages?: readonly AgentMessage[];
 	messages?: readonly AgentMessage[];
+	signal?: AbortSignal;
 }
 
 /**

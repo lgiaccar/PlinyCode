@@ -2,10 +2,11 @@ import type { CoreSessionConfig } from "@plinycode/core"
 import { type AgentStopControl, createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
+import { isReviewBeforeFinishEnabled } from "@/hosts/vscode/review-settings"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
-import { installRouter } from "./router/router-integration"
+import { installRouter, type RouterInstallDeps } from "./router/router-integration"
 
 interface SdkSessionConfigBuilderOptions {
 	stateManager: StateManager
@@ -31,6 +32,12 @@ interface SdkSessionConfigBuilderOptions {
 	 * stop control ends the run there (the conversation spending limit).
 	 */
 	checkSpendingLimit?: () => Promise<AgentStopControl | undefined>
+	/**
+	 * What a session's current run has changed, from its checkpoint. The
+	 * reviewer pass reads it before a routed run ends; without it, or without
+	 * a checkpoint, the pass works from the run's edit calls.
+	 */
+	getRunChanges?: (sessionId: string) => ReturnType<NonNullable<RouterInstallDeps["getRunChanges"]>>
 }
 
 /**
@@ -102,6 +109,7 @@ export class SdkSessionConfigBuilder {
 			// every model: the row is how a user learns a rules file was not
 			// picked up without waiting for the model to ignore it.
 			installInstructionContextRows(config, { emitRow, nextMessageTs })
+			const getRunChanges = this.options.getRunChanges
 			installRouter(config, {
 				sessionId: this.options.getSessionId?.() || input.cwd,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,
@@ -109,6 +117,9 @@ export class SdkSessionConfigBuilder {
 				getMode: () => (this.options.stateManager.getGlobalSettingsKey("mode") === "act" ? "act" : "plan"),
 				emitRow,
 				nextMessageTs,
+				reviewEnabled: isReviewBeforeFinishEnabled,
+				// The id is read when the review runs: a new session's is only final once it has started.
+				...(getRunChanges ? { getRunChanges: () => getRunChanges(config.sessionId ?? "") } : {}),
 			})
 		}
 
