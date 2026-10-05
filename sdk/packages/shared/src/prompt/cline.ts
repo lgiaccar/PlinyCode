@@ -63,8 +63,14 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
  * (the VS Code extension, matching the legacy extension's behavior). The model
  * must direct the user to flip the Plan/Act toggle instead of calling a tool
  * that does not exist in its toolset.
+ *
+ * The extension's Execute plan button can run the plan on a different, cheaper
+ * model than the one that wrote it, so the contract also asks for a plan that
+ * stands on its own. Kept to one sentence: it is paid for on every call.
  */
 export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BASE}
+
+Write the plan for an executor that has not seen this conversation and may be a weaker model than you: give exact file paths, the steps in order, the command that verifies each step, the decisions already made with their reasons, and anything you discovered while exploring that the executor would otherwise have to rediscover.
 
 Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
 

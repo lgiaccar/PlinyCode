@@ -27,6 +27,13 @@ vi.mock("@/services/grpc-client", () => ({
 	},
 }))
 
+// The plan row's Execute plan button reads the two modes' models from state.
+vi.mock("@/context/ExtensionStateContext", () => ({
+	useExtensionState: () => ({
+		apiConfiguration: { planModeApiModelId: "pliny/auto-free", actModeApiModelId: "pliny/auto-free" },
+	}),
+}))
+
 vi.mock("@vscode/webview-ui-toolkit/react", async (importOriginal) => {
 	const actual = await importOriginal<Record<string, unknown>>()
 	return {
@@ -231,13 +238,13 @@ describe("PlanCompletionOutputRow", () => {
 
 	it("hides the execute footer unless both the root file and the handler are given", () => {
 		const { rerender } = render(<PlanCompletionOutputRow text="Plan" />)
-		expect(screen.queryByRole("button", { name: "Execute plan" })).toBeNull()
+		expect(screen.queryByRole("button", { name: /^Execute/ })).toBeNull()
 
 		rerender(<PlanCompletionOutputRow rootPlanFile="plans/x/PLAN.md" text="Plan" />)
-		expect(screen.queryByRole("button", { name: "Execute plan" })).toBeNull()
+		expect(screen.queryByRole("button", { name: /^Execute/ })).toBeNull()
 
 		rerender(<PlanCompletionOutputRow onExecutePlan={vi.fn()} text="Plan" />)
-		expect(screen.queryByRole("button", { name: "Execute plan" })).toBeNull()
+		expect(screen.queryByRole("button", { name: /^Execute/ })).toBeNull()
 	})
 
 	it("executes the plan and opens the root plan file from the footer", () => {
@@ -245,8 +252,11 @@ describe("PlanCompletionOutputRow", () => {
 		const onExecutePlan = vi.fn()
 		render(<PlanCompletionOutputRow onExecutePlan={onExecutePlan} rootPlanFile="plans/x/PLAN.md" text="Plan" />)
 
-		fireEvent.click(screen.getByRole("button", { name: "Execute plan" }))
+		// The button names the model it runs on; the split button itself is
+		// covered by ExecutePlanButton.test.tsx.
+		fireEvent.click(screen.getByRole("button", { name: "Execute plan · FreeAuto" }))
 		expect(onExecutePlan).toHaveBeenCalledTimes(1)
+		expect(onExecutePlan).toHaveBeenCalledWith("actModel")
 
 		fireEvent.click(screen.getByRole("button", { name: "plans/x/PLAN.md" }))
 		expect(openFileRelativePath).toHaveBeenCalledWith(expect.objectContaining({ value: "plans/x/PLAN.md" }))

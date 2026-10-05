@@ -355,6 +355,23 @@
 					"default": true,
 					"description": "Also offer the PlinyCode DevOps MCP server to the editor's own AI chat: Copilot Chat agent mode in VS Code, or the agent in Cursor."
 				},
+				"plinycode.plan.executeWith": {
+					"type": "string",
+					"enum": [
+						"actModel",
+						"freeAuto",
+						"balanceAuto",
+						"planModel"
+					],
+					"enumDescriptions": [
+						"The model act mode is set to. Executing a plan changes no model.",
+						"FreeAuto (auto-free): free models only.",
+						"BalanceAuto (auto-paid-balanced): paid models for hard steps, free models for simple ones.",
+						"The model plan mode is set to, which wrote the plan."
+					],
+					"default": "actModel",
+					"markdownDescription": "The model the **Execute plan** button runs a plan on, so that a strong model can write the plan and a cheaper one can carry it out. The button names the model it will use, and choosing another one in its menu changes this setting. Any value other than `actModel` switches act mode to that model when a plan is executed."
+				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",
 					"default": 5,

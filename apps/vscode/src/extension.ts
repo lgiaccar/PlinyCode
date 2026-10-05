@@ -43,6 +43,7 @@ import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extensi
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
+import { PLAN_EXECUTE_WITH_SETTING_ID } from "./hosts/vscode/plan-settings"
 import {
 	disposeVscodeCommentReviewController,
 	getVscodeCommentReviewController,
@@ -199,8 +200,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerAutoUpdater(context)
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			// Keep the Settings view's pre-release checkbox in step with edits made in VS Code's settings.
-			if (event.affectsConfiguration("plinycode.updates.prerelease")) {
+			// Keep the Settings view's pre-release checkbox, and the model named on the Execute plan
+			// button, in step with edits made in VS Code's settings.
+			if (
+				event.affectsConfiguration("plinycode.updates.prerelease") ||
+				event.affectsConfiguration(PLAN_EXECUTE_WITH_SETTING_ID)
+			) {
 				void WebviewProvider.getInstance()?.controller.postStateToWebview()
 			}
 		}),
