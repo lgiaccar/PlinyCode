@@ -282,6 +282,66 @@ describe("createEditorExecutor", () => {
 		});
 	});
 
+	it("replaces every occurrence with replace_all and lists where", async () => {
+		await withTempFile("old\nkeep\nold\nold", async (filePath, dir) => {
+			const editor = createEditorExecutor();
+			const result = await editor(
+				{ path: filePath, old_text: "old", new_text: "new", replace_all: true },
+				dir,
+				context,
+			);
+
+			expect(result).toBe(
+				`Edited ${filePath}: replaced 3 occurrences, at lines 1, 3, 4 of the previous content.`,
+			);
+			await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(
+				"new\nkeep\nnew\nnew",
+			);
+		});
+	});
+
+	it("applies an edit whose old_text only differs in indentation, and says so", async () => {
+		await withTempFile(
+			"function f() {\n\tif (a) {\n\t\tgo();\n\t}\n}",
+			async (filePath, dir) => {
+				const editor = createEditorExecutor();
+				const result = await editor(
+					{
+						path: filePath,
+						old_text: "if (a) {\n\tgo();\n}",
+						new_text: "if (a && b) {\n\tgo();\n}",
+					},
+					dir,
+					context,
+				);
+
+				expect(result).toBe(
+					`Edited ${filePath} (old_text matched once indentation depth was ignored, so new_text was shifted to the file's indentation)\n\`\`\`diff\n-2: \tif (a) {\n+2: \tif (a && b) {\n\`\`\``,
+				);
+				await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(
+					"function f() {\n\tif (a && b) {\n\t\tgo();\n\t}\n}",
+				);
+			},
+		);
+	});
+
+	it("leaves the file untouched and quotes the closest lines when old_text is stale", async () => {
+		await withTempFile("alpha\nbeta = 1\ngamma", async (filePath, dir) => {
+			const editor = createEditorExecutor();
+
+			await expect(
+				editor(
+					{ path: filePath, old_text: "alpha\nbeta = 2", new_text: "x" },
+					dir,
+					context,
+				),
+			).rejects.toThrow(/The closest text is at lines 1-2[\s\S]*2: beta = 1/);
+			await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(
+				"alpha\nbeta = 1\ngamma",
+			);
+		});
+	});
+
 	it("rejects insert_line 0 with the valid one-based boundary range", async () => {
 		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "agents-editor-"));
 		const filePath = path.join(dir, "example.txt");

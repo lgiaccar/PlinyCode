@@ -48,6 +48,7 @@ const TOOL_NAME_TO_FLAG: Record<
 > = {
 	read_files: "enableReadFiles",
 	search_codebase: "enableSearch",
+	find_files: "enableSearch",
 	run_commands: "enableBash",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",

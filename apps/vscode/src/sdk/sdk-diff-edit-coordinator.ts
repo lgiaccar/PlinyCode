@@ -388,7 +388,8 @@ function detectLineEnding(content: string): "\r\n" | "\n" {
  * preview matches `old_text` the way the write will, including normalizing it to the
  * file's line endings: reads strip "\r", so models emit LF-only text even for CRLF
  * files, and a preview that matched it literally was silently skipped while the
- * executor applied the edit (github.com/cline/cline/issues/13296).
+ * executor applied the edit (github.com/cline/cline/issues/13296). The same goes for
+ * an `old_text` that differs only in indentation, and for `replace_all`.
  */
 export function computeNewEditorContent(
 	originalContent: string,
@@ -417,7 +418,10 @@ export function computeNewEditorContent(
 		throw new Error("Parameter `old_text` is required when editing an existing file without `insert_line`")
 	}
 
-	return replaceTextInContent(originalContent, input.old_text, input.new_text, filePath)
+	return replaceTextInContent(originalContent, input.old_text, input.new_text, {
+		filePath,
+		replaceAll: input.replace_all,
+	}).updated
 }
 
 /** Mirrors the SDK executor's resolveFilePath (restrictToCwd=true): absolute paths pass through. */

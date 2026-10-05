@@ -9,8 +9,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentToolContext } from "@plinycode/shared";
 import { getFileIndex } from "../../../services/workspace/file-indexer";
-import type { SearchExecutor } from "../types";
+import type { SearchExecutor, SearchScope } from "../types";
 import { MAX_LINE_CHARS, MAX_SEARCH_OUTPUT_CHARS } from "./output-limits";
+import { createRipgrepResolver, type RipgrepPath } from "./ripgrep";
 
 /**
  * Cap on buffered `rg --json` stdout. Each event embeds the full text of its
@@ -49,7 +50,8 @@ export interface SearchExecutorOptions {
 
 	/**
 	 * Maximum number of results shown per file, so that one file full of
-	 * matches does not crowd out every other file.
+	 * matches does not crowd out every other file. Not applied when the
+	 * search is scoped to a single file.
 	 * @default 10
 	 */
 	maxMatchesPerFile?: number;
@@ -66,12 +68,8 @@ export interface SearchExecutorOptions {
 	 */
 	maxDepth?: number;
 
-	/**
-	 * A ripgrep binary to prefer over `rg` on PATH, for hosts that ship one.
-	 * A function is called once, on first use; if it throws or the binary
-	 * does not run, `rg` on PATH is tried next.
-	 */
-	rgPath?: string | (() => string | undefined | Promise<string | undefined>);
+	/** A ripgrep binary to prefer over `rg` on PATH, for hosts that ship one. */
+	rgPath?: RipgrepPath;
 
 	/**
 	 * How long ripgrep may run before the fallback scan takes over.
@@ -141,7 +139,7 @@ const BINARY_EXTENSIONS = new Set([
 	"zip",
 ]);
 
-const DEFAULT_EXCLUDE_DIRS = [
+export const DEFAULT_EXCLUDE_DIRS = [
 	"node_modules",
 	".git",
 	"dist",
@@ -179,37 +177,6 @@ interface SearchOutcome {
 	filesSearched?: number;
 }
 
-const rgRunnable = new Map<string, Promise<boolean>>();
-
-function canRunRipgrep(command: string): Promise<boolean> {
-	let known = rgRunnable.get(command);
-	if (!known) {
-		known = new Promise<boolean>((resolve) => {
-			const child = spawn(command, ["--version"], {
-				stdio: ["ignore", "pipe", "pipe"],
-				// Prevent a console window from flashing on Windows.
-				windowsHide: true,
-			});
-			const timeout = setTimeout(() => {
-				if (!child.killed) {
-					child.kill("SIGTERM");
-				}
-				resolve(false);
-			}, 1000);
-			child.on("close", (code) => {
-				clearTimeout(timeout);
-				resolve(code === 0);
-			});
-			child.on("error", () => {
-				clearTimeout(timeout);
-				resolve(false);
-			});
-		});
-		rgRunnable.set(command, known);
-	}
-	return known;
-}
-
 function contextLine(marker: ">" | " ", lineNumber: number, text: string) {
 	return `${marker} ${lineNumber}: ${text.replace(/\r?\n$/, "").slice(0, MAX_LINE_CHARS)}`;
 }
@@ -218,6 +185,9 @@ interface RipgrepRequest {
 	command: string;
 	query: string;
 	cwd: string;
+	/** File or directory to search, as ripgrep should be given it. */
+	target?: string;
+	glob?: string;
 	maxResults: number;
 	maxMatchesPerFile: number;
 	contextLines: number;
@@ -320,9 +290,11 @@ function searchWithRipgrep(
 			// One more than is shown, to learn that a file has more.
 			`--max-count=${request.maxMatchesPerFile + 1}`,
 			"-i",
+			...(request.glob ? ["--glob", request.glob] : []),
 			// -e keeps a pattern that starts with "-" from being read as a flag.
 			"-e",
 			request.query,
+			...(request.target ? [request.target] : []),
 		];
 		const child = spawn(request.command, args, {
 			cwd: request.cwd,
@@ -398,6 +370,64 @@ function searchWithRipgrep(
 	});
 }
 
+/**
+ * A small gitignore-style glob, for the fallback scan to filter files the way
+ * ripgrep's --glob does: `*`, `?`, `**`, `{a,b}` and a leading `!` to
+ * exclude. A glob without a slash matches the file name in any directory; one
+ * with a slash matches the path from the workspace root.
+ */
+export function createGlobMatcher(
+	glob: string,
+	options: { ignoreCase?: boolean } = {},
+): (filePath: string) => boolean {
+	const ignoreCase = options.ignoreCase ?? process.platform === "win32";
+	const trimmed = glob.trim();
+	const negated = trimmed.startsWith("!");
+	let pattern = (negated ? trimmed.slice(1) : trimmed)
+		.replace(/\\/g, "/")
+		.replace(/^\.\//, "");
+	const anchored = pattern.includes("/");
+	pattern = pattern.replace(/^\//, "");
+
+	let source = "";
+	let braceDepth = 0;
+	for (let index = 0; index < pattern.length; index++) {
+		const char = pattern[index];
+		if (char === "*") {
+			if (pattern[index + 1] === "*") {
+				index++;
+				if (pattern[index + 1] === "/") {
+					index++;
+					source += "(?:.*/)?";
+				} else {
+					source += ".*";
+				}
+			} else {
+				source += "[^/]*";
+			}
+		} else if (char === "?") {
+			source += "[^/]";
+		} else if (char === "{") {
+			braceDepth++;
+			source += "(?:";
+		} else if (char === "}" && braceDepth > 0) {
+			braceDepth--;
+			source += ")";
+		} else if (char === "," && braceDepth > 0) {
+			source += "|";
+		} else {
+			source += char.replace(/[.+^$()|[\]\\{}]/g, "\\$&");
+		}
+	}
+	source += ")".repeat(braceDepth);
+
+	const regex = new RegExp(
+		`^${anchored ? "" : "(?:.*/)?"}${source}$`,
+		ignoreCase ? "i" : "",
+	);
+	return (filePath) => regex.test(filePath) !== negated;
+}
+
 function shouldIncludeFile(
 	relativePath: string,
 	excludeDirs: Set<string>,
@@ -423,6 +453,62 @@ function shouldIncludeFile(
 		return includeExtensions.has(ext) || (!ext && !fileName.startsWith("."));
 	}
 	return !BINARY_EXTENSIONS.has(ext);
+}
+
+export interface ResolvedScope {
+	/** Directory the search walks, or the directory holding `file`. */
+	root: string;
+	/** Set when the search is scoped to one file. */
+	file?: string;
+	/** What ripgrep is given, relative to cwd when the scope is inside it. */
+	target?: string;
+	/** Prefix that turns a path relative to `root` into the path to report. */
+	displayPrefix: string;
+	glob?: (filePath: string) => boolean;
+	rawGlob?: string;
+}
+
+export async function resolveScope(
+	cwd: string,
+	scope: SearchScope | undefined,
+): Promise<ResolvedScope> {
+	const rawGlob = scope?.glob?.trim() || undefined;
+	const glob = rawGlob ? createGlobMatcher(rawGlob) : undefined;
+	const rawPath = scope?.path?.trim();
+	if (!rawPath || rawPath === ".") {
+		return { root: cwd, displayPrefix: "", glob, rawGlob };
+	}
+
+	const absolute = path.resolve(cwd, rawPath);
+	const stats = await fs.stat(absolute).catch(() => undefined);
+	if (!stats) {
+		throw new Error(
+			`Search path not found: ${rawPath}. Give a file or directory that exists, relative to ${cwd} or absolute.`,
+		);
+	}
+
+	// Report paths the way the rest of the tools take them: relative to cwd
+	// inside the workspace, absolute outside it.
+	const relative = path.relative(cwd, absolute);
+	const inside = !relative.startsWith("..") && !path.isAbsolute(relative);
+	const display = (inside ? relative : absolute).split(path.sep).join("/");
+	if (stats.isFile()) {
+		return {
+			root: path.dirname(absolute),
+			file: absolute,
+			target: display,
+			displayPrefix: display,
+			glob,
+			rawGlob,
+		};
+	}
+	return {
+		root: absolute,
+		target: display || undefined,
+		displayPrefix: display ? `${display.replace(/\/$/, "")}/` : "",
+		glob,
+		rawGlob,
+	};
 }
 
 /**
@@ -456,49 +542,40 @@ export function createSearchExecutor(
 		? new Set(includeExtensions.map((extension) => extension.toLowerCase()))
 		: undefined;
 
-	let rgCommand: Promise<string | null> | undefined;
-	const resolveRipgrep = (): Promise<string | null> => {
-		rgCommand ??= (async () => {
-			const preferred = await Promise.resolve(
-				typeof rgPath === "function" ? rgPath() : rgPath,
-			).catch(() => undefined);
-			for (const command of [preferred, "rg"]) {
-				if (command && (await canRunRipgrep(command))) {
-					return command;
-				}
-			}
-			return null;
-		})();
-		return rgCommand;
-	};
+	const resolveRipgrep = createRipgrepResolver(rgPath);
 
 	const scanFiles = async (
 		regex: RegExp,
-		cwd: string,
+		scope: ResolvedScope,
+		perFileLimit: number,
 		signal: AbortSignal | undefined,
 	): Promise<SearchOutcome> => {
 		const matches: SearchMatch[] = [];
 		const cappedFiles: string[] = [];
 		let filesSearched = 0;
 
-		// Search files from the fast index.
-		for (const relativePath of await getFileIndex(cwd)) {
+		const candidates = scope.file
+			? [""]
+			: Array.from(await getFileIndex(scope.root)).filter(
+					(relativePath) =>
+						shouldIncludeFile(
+							relativePath,
+							excludeDirsSet,
+							includeExtensionsSet,
+							maxDepth,
+						) &&
+						(!scope.glob ||
+							scope.glob(`${scope.displayPrefix}${relativePath}`)),
+				);
+
+		for (const relativePath of candidates) {
 			if (signal?.aborted) {
 				throw new Error("Search operation aborted");
 			}
-			if (
-				!shouldIncludeFile(
-					relativePath,
-					excludeDirsSet,
-					includeExtensionsSet,
-					maxDepth,
-				)
-			) {
-				continue;
-			}
 			if (matches.length >= maxResults) break;
 
-			const filePath = path.join(cwd, relativePath);
+			const filePath = scope.file ?? path.join(scope.root, relativePath);
+			const displayPath = `${scope.displayPrefix}${relativePath}`;
 			let content: string;
 			try {
 				const stats = await fs.stat(filePath);
@@ -526,8 +603,8 @@ export function createSearchExecutor(
 					continue;
 				}
 				countInFile++;
-				if (countInFile > maxMatchesPerFile) {
-					cappedFiles.push(relativePath);
+				if (countInFile > perFileLimit) {
+					cappedFiles.push(displayPath);
 					break;
 				}
 				if (matches.length >= maxResults) {
@@ -541,7 +618,7 @@ export function createSearchExecutor(
 					context.push(contextLine(i === lineIdx ? ">" : " ", i + 1, lines[i]));
 				}
 				matches.push({
-					file: relativePath,
+					file: displayPath,
 					line: lineIdx + 1,
 					column: match.index + 1,
 					match: match[0],
@@ -557,11 +634,15 @@ export function createSearchExecutor(
 		query: string,
 		cwd: string,
 		context: AgentToolContext,
+		searchScope?: SearchScope,
 	): Promise<string> => {
 		// Check for abort before starting
 		if (context.signal?.aborted) {
 			throw new Error("Search operation aborted");
 		}
+
+		const scope = await resolveScope(cwd, searchScope);
+		const perFileLimit = scope.file ? maxResults : maxMatchesPerFile;
 
 		// Try ripgrep first if available
 		let outcome: SearchOutcome | null = null;
@@ -571,8 +652,10 @@ export function createSearchExecutor(
 				command,
 				query,
 				cwd,
+				target: scope.target,
+				glob: scope.rawGlob,
 				maxResults,
-				maxMatchesPerFile,
+				maxMatchesPerFile: perFileLimit,
 				contextLines,
 				timeoutMs: rgTimeoutMs,
 				abortSignal: context.signal,
@@ -589,11 +672,11 @@ export function createSearchExecutor(
 					`Invalid regex pattern: ${query}. ${error instanceof Error ? error.message : ""}`,
 				);
 			}
-			outcome = await scanFiles(regex, cwd, context.signal);
+			outcome = await scanFiles(regex, scope, perFileLimit, context.signal);
 		}
 
 		return capSearchOutput(
-			formatOutcome(outcome, query, maxResults, maxMatchesPerFile),
+			formatOutcome(outcome, query, searchScope, maxResults, perFileLimit),
 		);
 	};
 }
@@ -601,19 +684,26 @@ export function createSearchExecutor(
 function formatOutcome(
 	outcome: SearchOutcome,
 	query: string,
+	scope: SearchScope | undefined,
 	maxResults: number,
-	maxMatchesPerFile: number,
+	perFileLimit: number,
 ): string {
 	const { matches, cappedFiles, filesSearched } = outcome;
+	const where = [
+		scope?.path?.trim() ? ` in ${scope.path.trim()}` : "",
+		scope?.glob?.trim() ? ` (files matching ${scope.glob.trim()})` : "",
+	].join("");
 	const searched =
 		filesSearched === undefined ? [] : [`Searched ${filesSearched} files.`];
 
 	if (matches.length === 0) {
-		return [`No results found for pattern: ${query}`, ...searched].join("\n");
+		return [`No results found for pattern: ${query}${where}`, ...searched].join(
+			"\n",
+		);
 	}
 
 	const resultLines: string[] = [
-		`Found ${matches.length} result${matches.length === 1 ? "" : "s"} for pattern: ${query}`,
+		`Found ${matches.length} result${matches.length === 1 ? "" : "s"} for pattern: ${query}${where}`,
 		...searched,
 		"",
 	];
@@ -633,7 +723,7 @@ function formatOutcome(
 		const listed = cappedFiles.slice(0, 20).join(", ");
 		const rest = cappedFiles.length - 20;
 		resultLines.push(
-			`(Only the first ${maxMatchesPerFile} matches per file are shown. More exist in: ${listed}${rest > 0 ? ` and ${rest} more files` : ""}. Read those files, or search for a narrower pattern, to see the rest.)`,
+			`(Only the first ${perFileLimit} matches per file are shown. More exist in: ${listed}${rest > 0 ? ` and ${rest} more files` : ""}. Set path to one of these files to see all of its matches.)`,
 		);
 	}
 

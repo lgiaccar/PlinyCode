@@ -4,6 +4,7 @@ import {
 	buildRunCommandsDescription,
 	createDefaultTools,
 	createEditorTool,
+	createFindFilesTool,
 	createReadFilesTool,
 	createSearchTool,
 	createShellTool,
@@ -410,6 +411,154 @@ describe("default search_codebase tool", () => {
 				success: false,
 			},
 		]);
+	});
+
+	it("passes path and glob to every query, and advertises them", async () => {
+		const execute = vi.fn(async () => "ok");
+		const tool = createSearchTool(execute, { cwd: "/repo" });
+		const context = {
+			agentId: "agent-1",
+			conversationId: "conv-1",
+			iteration: 1,
+		};
+
+		await tool.execute(
+			{ queries: ["one", "two"], path: "src", glob: "*.ts" },
+			context,
+		);
+
+		expect(execute).toHaveBeenCalledWith("one", "/repo", context, {
+			path: "src",
+			glob: "*.ts",
+		});
+		expect(execute).toHaveBeenCalledWith("two", "/repo", context, {
+			path: "src",
+			glob: "*.ts",
+		});
+		const schema = tool.inputSchema as {
+			properties: Record<string, unknown>;
+			required: string[];
+		};
+		expect(schema.properties).toHaveProperty("path");
+		expect(schema.properties).toHaveProperty("glob");
+		expect(schema.required).toEqual(["queries"]);
+	});
+
+	it("searches the whole workspace when given a bare query", async () => {
+		const execute = vi.fn(async () => "ok");
+		const tool = createSearchTool(execute, { cwd: "/repo" });
+		const context = {
+			agentId: "agent-1",
+			conversationId: "conv-1",
+			iteration: 1,
+		};
+
+		await tool.execute(
+			"needle" as unknown as Parameters<typeof tool.execute>[0],
+			context,
+		);
+
+		expect(execute).toHaveBeenCalledWith("needle", "/repo", context, undefined);
+	});
+});
+
+describe("default find_files tool", () => {
+	const context = {
+		agentId: "agent-1",
+		conversationId: "conv-1",
+		iteration: 1,
+	};
+
+	it("runs each pattern with the directory, and reports them separately", async () => {
+		const execute = vi.fn(async (pattern: string) =>
+			pattern === "bad"
+				? Promise.reject(new Error("nope"))
+				: `found ${pattern}`,
+		);
+		const tool = createFindFilesTool(execute, { cwd: "/repo" });
+
+		const result = await tool.execute(
+			{ patterns: ["*.sv", "bad"], path: "rtl" },
+			context,
+		);
+
+		expect(execute).toHaveBeenCalledWith("*.sv", "/repo", context, {
+			path: "rtl",
+		});
+		expect(result).toEqual([
+			{ query: "*.sv", result: "found *.sv", success: true },
+			{
+				query: "bad",
+				result: "",
+				error: "Find files failed: nope",
+				success: false,
+			},
+		]);
+	});
+
+	it("accepts a bare string, a bare array and a single pattern field", async () => {
+		const execute = vi.fn(async () => "ok");
+		const tool = createFindFilesTool(execute, { cwd: "/repo" });
+		const loose = (input: unknown) =>
+			tool.execute(input as Parameters<typeof tool.execute>[0], context);
+
+		await loose("router");
+		await loose(["a", "b"]);
+		await loose({ pattern: "*.ts", path: "src" });
+		await loose({ patterns: "*.md" });
+
+		expect(execute.mock.calls.map((call) => (call as unknown[])[0])).toEqual([
+			"router",
+			"a",
+			"b",
+			"*.ts",
+			"*.md",
+		]);
+		expect((execute.mock.calls[3] as unknown[])[3]).toEqual({ path: "src" });
+	});
+
+	it("comes with search_codebase, and only when a find executor is given", () => {
+		const names = (options: Parameters<typeof createDefaultTools>[0]) =>
+			createDefaultTools(options).map((tool) => tool.name);
+		const search = vi.fn(async () => "");
+		const findFiles = vi.fn(async () => "");
+
+		expect(names({ executors: { search, findFiles } })).toEqual([
+			"search_codebase",
+			"find_files",
+		]);
+		expect(names({ executors: { search } })).toEqual(["search_codebase"]);
+		expect(
+			names({ executors: { search, findFiles }, enableSearch: false }),
+		).toEqual([]);
+	});
+});
+
+describe("tools that only read run concurrently", () => {
+	it("marks the read-only tools parallel and leaves the others sequential", () => {
+		const noop = vi.fn(async () => "");
+		const tools = createDefaultTools({
+			executors: {
+				readFile: noop as never,
+				search: noop,
+				findFiles: noop,
+				webFetch: noop,
+				bash: noop,
+				editor: noop,
+			},
+		});
+		const modes = Object.fromEntries(
+			tools.map((tool) => [tool.name, tool.executionMode]),
+		);
+
+		expect(modes).toEqual({
+			read_files: "parallel",
+			search_codebase: "parallel",
+			find_files: "parallel",
+			fetch_web_content: "parallel",
+			run_commands: undefined,
+			editor: undefined,
+		});
 	});
 });
 
@@ -1779,6 +1928,36 @@ describe("zod schema conversion", () => {
 });
 
 describe("default editor tool", () => {
+	it("accepts replace_all as a boolean or a stringified boolean", async () => {
+		const execute = vi.fn(async () => "patched");
+		const tool = createEditorTool(execute);
+		const context = {
+			agentId: "agent-1",
+			conversationId: "conv-1",
+			iteration: 1,
+		};
+		const edit = { path: "/tmp/example.ts", old_text: "a", new_text: "b" };
+
+		await tool.execute({ ...edit, replace_all: true }, context);
+		await tool.execute(
+			{ ...edit, replace_all: "true" } as unknown as Parameters<
+				typeof tool.execute
+			>[0],
+			context,
+		);
+
+		expect(execute).toHaveBeenCalledTimes(2);
+		for (const call of execute.mock.calls as unknown[][]) {
+			expect(call[0]).toMatchObject({ replace_all: true });
+		}
+		const schema = tool.inputSchema as {
+			properties: Record<string, { type?: unknown; anyOf?: unknown }>;
+			required: string[];
+		};
+		expect(JSON.stringify(schema.properties.replace_all)).toContain("boolean");
+		expect(schema.required).not.toContain("replace_all");
+	});
+
 	it("accepts replacement edits without insert fields", async () => {
 		const execute = vi.fn(async () => "patched");
 		const tools = createDefaultTools({

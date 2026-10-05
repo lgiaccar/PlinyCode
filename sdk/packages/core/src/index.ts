@@ -304,6 +304,7 @@ export {
 	createDefaultTools,
 	createDefaultToolsWithPreset,
 	createEditorExecutor,
+	createFindFilesExecutor,
 	createSearchExecutor,
 	createShellExecutor,
 	createShellTool,

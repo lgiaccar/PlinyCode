@@ -102,6 +102,18 @@ describe("computeNewEditorContent", () => {
 		)
 	})
 
+	// The executor tolerates an indentation-only mismatch and honors replace_all; a
+	// preview that did not would be skipped for exactly the edits most worth seeing.
+	it("previews an edit whose old_text only differs in indentation, re-indented like the write", () => {
+		const input: EditFileInput = { path: filePath, old_text: "go();\nstop();", new_text: "go();\nwait();" }
+		expect(computeNewEditorContent("{\n\tgo();\n\tstop();\n}", input, filePath, "modify")).toBe("{\n\tgo();\n\twait();\n}")
+	})
+
+	it("previews every replacement for replace_all", () => {
+		const input: EditFileInput = { path: filePath, old_text: "a", new_text: "x", replace_all: true }
+		expect(computeNewEditorContent("a\nb\na", input, filePath, "modify")).toBe("x\nb\nx")
+	})
+
 	it("throws for missing old_text on an existing file", () => {
 		const input: EditFileInput = { path: filePath, new_text: "x" }
 		expect(() => computeNewEditorContent("a", input, filePath, "modify")).toThrow(

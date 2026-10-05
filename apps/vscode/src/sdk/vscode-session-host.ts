@@ -12,6 +12,7 @@ import {
 	type CompareCheckpointInput,
 	type CompareCheckpointResult,
 	type CoreSessionEvent,
+	createFindFilesExecutor,
 	createSearchExecutor,
 	type EditorExecutor,
 	type HookEventPayload,
@@ -124,10 +125,12 @@ export class VscodeSessionHost implements SdkSessionHost {
 		if (options.readFileExecutor) {
 			toolExecutors.readFile = options.readFileExecutor
 		}
-		// search_codebase runs ripgrep, which is rarely on PATH (never on a stock Windows
-		// install): point it at the copy VS Code ships, or it falls back to reading every
-		// file in the extension host.
-		toolExecutors.search = createSearchExecutor({ rgPath: () => getBinaryLocation("rg") })
+		// search_codebase and find_files run ripgrep, which is rarely on PATH (never on a
+		// stock Windows install): point them at the copy VS Code ships, or they fall back
+		// to walking and reading every file in the extension host.
+		const rgPath = () => getBinaryLocation("rg")
+		toolExecutors.search = createSearchExecutor({ rgPath })
+		toolExecutors.findFiles = createFindFilesExecutor({ rgPath })
 		if (options.getTerminalManager) {
 			// Setting bash to undefined suppresses the SDK's createShellTool():
 			// createDefaultTools() checks `enableBash && executors.bash` — falsy

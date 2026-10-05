@@ -103,6 +103,8 @@ const CONFIGURED_AGENT_TOOL_NAME_ALIASES: Record<string, string> = {
 	apply_diff: "editor",
 	attempt_completion: "submit_and_exit",
 	bash: "run_commands",
+	find: "find_files",
+	glob: "find_files",
 	execute_command: "run_commands",
 	list_code_definition_names: "search_codebase",
 	list_files: "run_commands",
@@ -131,6 +133,11 @@ function filterToolsForConfiguredAgent(
 	);
 	if (agent.skills !== undefined) {
 		allowedToolNames.add("skills");
+	}
+	// find_files came after agent files were written; an agent allowed to
+	// search file contents is allowed to look files up by name.
+	if (allowedToolNames.has("search_codebase")) {
+		allowedToolNames.add("find_files");
 	}
 	return tools.filter((tool) => allowedToolNames.has(tool.name));
 }

@@ -345,6 +345,9 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					break
 				}
 				case "tool": {
+					// Tools that ran concurrently end in any order; bring this one's
+					// stored input and row back before finalizing it.
+					state.selectStreamingTool(event.toolCallId)
 					const toolName = event.toolName ?? state.getStreamingToolName() ?? "unknown"
 					if (state.isMismatchedStreamingCommand(toolName, event.toolCallId)) {
 						break

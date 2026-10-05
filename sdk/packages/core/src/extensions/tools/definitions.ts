@@ -45,6 +45,9 @@ import {
 	EditFileInputSchema,
 	type FetchWebContentInput,
 	FetchWebContentInputSchema,
+	type FindFilesInput,
+	FindFilesInputSchema,
+	FindFilesUnionInputSchema,
 	type ReadFileRequest,
 	type ReadFilesInput,
 	ReadFilesInputSchema,
@@ -66,6 +69,7 @@ import type {
 	DefaultToolsConfig,
 	EditorExecutor,
 	FileReadExecutor,
+	FindFilesExecutor,
 	SearchExecutor,
 	ShellExecutor,
 	SkillsExecutorWithMetadata,
@@ -224,6 +228,13 @@ async function executeShellCommands(
 // =============================================================================
 
 /**
+ * Tools that only read can run at the same time as each other. When a model
+ * asks for several in one response (reads, searches, page fetches), running
+ * them one after another only adds their latencies together.
+ */
+const READ_ONLY_EXECUTION_MODE = "parallel" as const;
+
+/**
  * Create the read_files tool
  *
  * Reads the content of one or more files from the filesystem.
@@ -246,6 +257,7 @@ export function createReadFilesTool(
 		timeoutMs: timeoutMs * 2, // Account for multiple files
 		retryable: true,
 		maxRetries: 1,
+		executionMode: READ_ONLY_EXECUTION_MODE,
 		execute: async (input, context) => {
 			const validate = validateWithZod(
 				ReadFilesInputUnionSchema,
@@ -337,12 +349,14 @@ export function createSearchTool(
 			"Perform regex pattern searches across the codebase. " +
 			"Supports multiple parallel searches. When several search patterns could be useful and do not depend on each other, run them together in one call, and call this tool in the same response as other independent tool calls. " +
 			"Use for finding code patterns, function definitions, class names, imports, etc. " +
-			"Matching is case-insensitive. Each result shows the matching line, marked `>`, with the lines around it; only the first matches in each file are shown. " +
+			"Matching is case-insensitive. Each result shows the matching line, marked `>`, with the lines around it. " +
+			"Set `path` to search one directory or file, and `glob` to limit the file names; a whole-workspace search shows only the first matches in each file, and a search of a single file shows them all. " +
 			`Output beyond ~${Math.round(MAX_SEARCH_OUTPUT_CHARS / 1000)}k characters per query is middle-truncated; narrow patterns beat broad ones.`,
 		inputSchema: zodToJsonSchema(SearchCodebaseInputSchema),
 		timeoutMs: timeoutMs * 2,
 		retryable: true,
 		maxRetries: 1,
+		executionMode: READ_ONLY_EXECUTION_MODE,
 		execute: async (input, context) => {
 			// Validate input with Zod schema
 			const validate = validateWithZod(SearchCodebaseUnionInputSchema, input);
@@ -353,12 +367,16 @@ export function createSearchTool(
 						? validate.queries
 						: [validate.queries]
 					: [validate];
+			const scope =
+				typeof validate === "object" && !Array.isArray(validate)
+					? { path: validate.path, glob: validate.glob }
+					: undefined;
 
 			return Promise.all(
 				queries.map(async (query): Promise<ToolOperationResult> => {
 					try {
 						const results = await withTimeout(
-							executor(query, cwd, context),
+							executor(query, cwd, context, scope),
 							timeoutMs,
 							`Search timed out after ${timeoutMs}ms`,
 						);
@@ -440,6 +458,75 @@ export function buildRunCommandsDescription(
 		`Output beyond ~${Math.round(MAX_COMMAND_OUTPUT_CHARS / 1000)}k characters is middle-truncated (start and end preserved); pipe through grep/head/tail when you need specific sections of large output. ` +
 		"For long-running commands, run them in background and redirect output to a tmp file that you can read from later."
 	);
+}
+
+/**
+ * Create the find_files tool
+ *
+ * Finds files by name.
+ */
+export function createFindFilesTool(
+	executor: FindFilesExecutor,
+	config: Pick<DefaultToolsConfig, "cwd" | "searchTimeoutMs"> = {},
+): AgentTool<FindFilesInput, ToolOperationResult[]> {
+	const timeoutMs = config.searchTimeoutMs ?? 30000;
+	const cwd = config.cwd ?? process.cwd();
+
+	return createTool<FindFilesInput, ToolOperationResult[]>({
+		name: "find_files",
+		description:
+			"Find files by name. Each pattern is a glob (`*.test.ts`, `src/**/*.proto`) or, without wildcards, text the path must contain (`router-policy`). Matching ignores case. " +
+			"Returns paths relative to the workspace root, sorted, up to 200 per pattern. " +
+			"Use this to locate files instead of shell commands such as find, ls -R or dir; use search_codebase to search inside files. " +
+			"Several patterns can go in one call.",
+		inputSchema: zodToJsonSchema(FindFilesInputSchema),
+		timeoutMs: timeoutMs * 2,
+		retryable: true,
+		maxRetries: 1,
+		executionMode: READ_ONLY_EXECUTION_MODE,
+		execute: async (input, context) => {
+			const validate = validateWithZod(FindFilesUnionInputSchema, input);
+			const patterns =
+				typeof validate === "string"
+					? [validate]
+					: Array.isArray(validate)
+						? validate
+						: "pattern" in validate
+							? [validate.pattern]
+							: Array.isArray(validate.patterns)
+								? validate.patterns
+								: [validate.patterns];
+			const scope =
+				typeof validate === "object" && !Array.isArray(validate)
+					? { path: validate.path }
+					: undefined;
+
+			return Promise.all(
+				patterns.map(async (pattern): Promise<ToolOperationResult> => {
+					try {
+						const results = await withTimeout(
+							executor(pattern, cwd, context, scope),
+							timeoutMs,
+							`Find files timed out after ${timeoutMs}ms`,
+						);
+						return {
+							query: pattern,
+							result: results,
+							success: true,
+						};
+					} catch (error) {
+						const msg = formatError(error);
+						return {
+							query: pattern,
+							result: "",
+							error: `Find files failed: ${msg}`,
+							success: false,
+						};
+					}
+				}),
+			);
+		},
+	});
 }
 
 /**
@@ -527,6 +614,7 @@ export function createWebFetchTool(
 		timeoutMs: timeoutMs * 2,
 		retryable: true,
 		maxRetries: 2,
+		executionMode: READ_ONLY_EXECUTION_MODE,
 		execute: async (input, context) => {
 			// Validate input with Zod schema
 			const validatedInput = validateWithZod(FetchWebContentInputSchema, input);
@@ -666,6 +754,7 @@ export function createEditorTool(
 			"An editor for controlled filesystem edits on the text file at the provided path. " +
 			"Provide `insert_line` to insert `new_text` at a specific line number. " +
 			"Otherwise, the tool replaces `old_text` with `new_text`, or creates the file with `new_text` if file does not exist. " +
+			"`old_text` must match one place in the file; set `replace_all` to replace every occurrence instead. " +
 			"Use this tool for making small, precise edits to existing files or creating new files over shell commands. If several edits to different files or non-overlapping regions are already known, emit multiple editor tool calls in the same response instead of serializing them across turns.",
 
 		inputSchema: zodToJsonSchema(EditFileInputSchema),
@@ -929,6 +1018,11 @@ export function createDefaultTools(
 	// Add search_codebase tool if enabled and executor provided
 	if (enableSearch && executors.search) {
 		tools.push(createSearchTool(executors.search, config));
+	}
+
+	// find_files goes with search_codebase: both locate things in the workspace
+	if (enableSearch && executors.findFiles) {
+		tools.push(createFindFilesTool(executors.findFiles, config));
 	}
 
 	// Add run_commands tool if enabled and executor provided
