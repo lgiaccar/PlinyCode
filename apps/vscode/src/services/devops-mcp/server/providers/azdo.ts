@@ -126,6 +126,7 @@ export class AzureDevOpsProvider implements Provider {
 			result: d.status === "completed" ? result(d.result) : undefined,
 			branch: short(d.sourceBranch),
 			commit: d.sourceVersion,
+			headCommit: d.triggerInfo?.["pr.sourceSha"],
 			url: d._links?.web?.href ?? `${this.projectUrl}/_build/results?buildId=${d.id}`,
 			started: d.startTime ?? d.queueTime,
 			finished: d.finishTime,

@@ -91,6 +91,15 @@ export class TokenBroker implements vscode.Disposable {
 		})
 	}
 
+	/** A token from an existing editor sign-in, for code in the extension host. Never prompts. */
+	async silentToken(provider: BrokerRequest["provider"], host: string): Promise<string | undefined> {
+		try {
+			return await this.token({ secret: this.secret, provider, host, interactive: false })
+		} catch {
+			return undefined
+		}
+	}
+
 	private authorized(secret: unknown): boolean {
 		if (typeof secret !== "string" || secret.length !== this.secret.length) {
 			return false

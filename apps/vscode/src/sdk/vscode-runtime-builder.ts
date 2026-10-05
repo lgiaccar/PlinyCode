@@ -95,11 +95,13 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 					)
 					return []
 				}
-				return await createMcpTools({
+				const serverTools = await createMcpTools({
 					serverName: source.serverName,
 					provider: source.provider,
 					timeoutMs: source.timeoutMs,
 				})
+				// Tools the server's host side adds (watch_ci) go wherever its own tools go.
+				return [...serverTools, ...(options?.cwd ? (source.extraTools?.(options.cwd) ?? []) : [])]
 			} catch (error) {
 				Logger.warn(
 					`[VscodeRuntimeTools] Failed to load tools from built-in MCP server "${source.serverName}": ${

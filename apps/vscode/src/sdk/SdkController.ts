@@ -45,6 +45,7 @@ import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
 import { getCheckpointRunCountForMessage } from "./sdk-checkpoints"
+import { SdkCiWatchCoordinator } from "./sdk-ci-watch-coordinator"
 import { SdkCompactionCoordinator } from "./sdk-compaction-coordinator"
 import { SdkDiffEditCoordinator } from "./sdk-diff-edit-coordinator"
 import { SdkFollowupCoordinator } from "./sdk-followup-coordinator"
@@ -183,6 +184,10 @@ export class Controller {
 	// one. Created in the constructor; its callbacks reach session state lazily.
 	private readonly background: SdkBackgroundSessions
 
+	// CI watches started with the watch_ci tool, and the delivery of their
+	// reports into conversations — see sdk-ci-watch-coordinator.ts.
+	private readonly ciWatch: SdkCiWatchCoordinator
+
 	// Private state kept for stub compatibility
 	private backgroundCommandRunning = false
 	private backgroundCommandTaskId?: string
@@ -319,6 +324,39 @@ export class Controller {
 			},
 			onChanged: () => {
 				void this.postStateToWebview()
+			},
+		})
+		this.ciWatch = new SdkCiWatchCoordinator({
+			getDisplayedTaskId: () => this.task?.taskId,
+			getActiveSession: () => this.sessions.getActiveSession(),
+			getTurnPhase: () => this.turnStateTracker.currentPhase,
+			hasPendingInteraction: () => this.interactions.hasPending,
+			queueToActiveSession: (session, prompt) =>
+				this.sessions.fireAndForgetSend(session.sdkHost, session.sessionId, prompt, undefined, undefined, "queue"),
+			queueToBackgroundTask: (conversationId, prompt) => this.background.queuePrompt(conversationId, prompt),
+			startTurn: (prompt) => this.askResponse(prompt),
+			emitRow: (text) =>
+				this.messages.emitHookMessage({
+					ts: this.messageTranslatorState.getMinter().nextId(),
+					type: "say",
+					say: "info",
+					text,
+					partial: false,
+				}),
+			notify: (message, onOpen) => {
+				void HostProvider.window
+					.showMessage({ type: ShowMessageType.INFORMATION, message, options: { items: ["Open"] } })
+					.then((response) => {
+						if (response.selectedOption === "Open") {
+							onOpen()
+						}
+					})
+					.catch((error) => Logger.warn("[SdkController] Failed to show CI watcher notification:", error))
+			},
+			openTask: (conversationId) => {
+				void this.showTaskWithId(conversationId)
+					.then(() => sendChatButtonClickedEvent())
+					.catch((error) => Logger.warn(`[SdkController] Failed to open watched task ${conversationId}:`, error))
 			},
 		})
 		this.sessionConfigBuilder = new SdkSessionConfigBuilder({
@@ -784,6 +822,7 @@ export class Controller {
 		this.unsubscribeBuiltinMcp?.()
 		await this.diffEdits.discardAllPreviews("controller dispose")
 		await this.clearTask()
+		this.ciWatch.dispose()
 		await this.background.stopAll("SdkController.dispose")
 		await this.sessions.dispose("SdkController.dispose")
 		this._terminalManager?.disposeAll()
@@ -1015,6 +1054,7 @@ export class Controller {
 	 * return immediately so the webview stays responsive.
 	 */
 	async askResponse(prompt?: string, images?: string[], files?: string[], delivery?: string): Promise<void> {
+		this.ciWatch.noteFollowUp(prompt, images, files)
 		const turnStateBefore = this.turnStateTracker.get()
 
 		// Answering an ask / continuing after completion / resuming a cancelled task all kick off a
@@ -1260,6 +1300,7 @@ export class Controller {
 				...carriedHistoryFields,
 			}
 			if (sourceSessionId !== startResult.sessionId) {
+				this.ciWatch.manager.removeConversation(sourceSessionId)
 				try {
 					await this.taskHistory.deleteTaskFromState(sourceSessionId)
 				} catch (error) {
@@ -1358,6 +1399,8 @@ export class Controller {
 		if (!historyItem) {
 			throw new Error(`Task not found in history: ${taskId}`)
 		}
+		// A CI report that arrived while this conversation was not loaded is sent now.
+		this.ciWatch.manager.conversationOpened(taskId)
 		return historyItemToTaskResponse(historyItem)
 	}
 
@@ -1527,6 +1570,7 @@ export class Controller {
 
 	async deleteTaskFromState(id: string): Promise<HistoryItem[]> {
 		await this.background.stopTask(id, "task deleted")
+		this.ciWatch.manager.removeConversation(id)
 		return this.taskHistory.deleteTaskFromState(id)
 	}
 
@@ -1553,6 +1597,7 @@ export class Controller {
 			return DeleteAllTaskHistoryCount.create({ tasksDeleted: 0 })
 		}
 		await this.background.stopAll("task history deleted")
+		this.ciWatch.manager.clear()
 
 		if (userChoice === "Delete All Except Favorites") {
 			const hasFavoritedTasks = taskHistory.some(

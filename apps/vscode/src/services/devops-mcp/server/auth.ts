@@ -119,10 +119,16 @@ const FOREVER = Number.POSITIVE_INFINITY
 // Editor sessions refresh themselves; asking again every few minutes keeps a long-lived server on a fresh token.
 const BROKER_REUSE_MS = 10 * 60_000
 
-export function githubAuth(host: string): Auth {
+/**
+ * Asks the editor for a sign-in token. The server process goes through the
+ * broker pipe; code that runs in the extension host asks the broker directly.
+ */
+export type EditorTokenSource = typeof requestBrokerToken
+
+export function githubAuth(host: string, editorToken: EditorTokenSource = requestBrokerToken): Auth {
 	const bearer = (token: string, expiresAt: number): Credential => ({ header: `Bearer ${token}`, expiresAt })
 	const broker = (interactive: boolean) => async () => {
-		const token = await requestBrokerToken("github", host, interactive)
+		const token = await editorToken("github", host, interactive)
 		return token ? bearer(token, Date.now() + BROKER_REUSE_MS) : undefined
 	}
 	return new ChainedAuth(
@@ -142,9 +148,9 @@ export function githubAuth(host: string): Auth {
 	)
 }
 
-export function adoAuth(): Auth {
+export function adoAuth(editorToken: EditorTokenSource = requestBrokerToken): Auth {
 	const broker = (interactive: boolean) => async () => {
-		const token = await requestBrokerToken("ado", "dev.azure.com", interactive)
+		const token = await editorToken("ado", "dev.azure.com", interactive)
 		return token ? { header: `Bearer ${token}`, expiresAt: Date.now() + BROKER_REUSE_MS } : undefined
 	}
 	return new ChainedAuth(

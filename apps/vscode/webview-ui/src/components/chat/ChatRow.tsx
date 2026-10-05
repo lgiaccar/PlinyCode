@@ -1,3 +1,4 @@
+import { isCiWatchReport } from "@shared/ciWatch"
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import {
 	BrowserActionResult,
@@ -50,6 +51,7 @@ import { cn } from "@/lib/utils"
 import { FileServiceClient, StateServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { findMatchingResourceOrTemplate } from "@/utils/mcp"
 import CodeAccordian, { cleanPathPrefix } from "../common/CodeAccordian"
+import { CiWatchRow } from "./CiWatchRow"
 import { CommandOutputContent, CommandOutputRow } from "./CommandOutputRow"
 import CompactionRow from "./CompactionRow"
 import { CompletionOutputRow } from "./CompletionOutputRow"
@@ -943,6 +945,9 @@ const ChatRowContent = memo(
 						)
 					}
 					case "user_feedback":
+						if (isCiWatchReport(message.text)) {
+							return <CiWatchRow text={message.text ?? ""} />
+						}
 						return (
 							<UserMessage
 								canRestoreWorkspace={canRestoreWorkspaceFromMessage(clineMessages, message.ts)}

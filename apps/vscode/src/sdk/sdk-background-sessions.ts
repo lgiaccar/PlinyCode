@@ -209,6 +209,22 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 		this.scheduleIdleCheck(sessionId, entry)
 	}
 
+	/**
+	 * Queue a prompt on a background task; the engine runs it when the task's
+	 * current turn ends, which keeps the task going. Returns false when the task
+	 * is not in the background (any more).
+	 */
+	queuePrompt(sessionId: string, prompt: string): boolean {
+		const entry = this.entries.get(sessionId)
+		if (!entry) {
+			return false
+		}
+		entry.session.sdkHost.send({ sessionId, prompt, delivery: "queue" }).catch((error) => {
+			Logger.warn(`[BackgroundSessions] Failed to queue a prompt for ${sessionId}:`, error)
+		})
+		return true
+	}
+
 	/** Stop one background session, e.g. because its task was deleted. */
 	async stopTask(sessionId: string, reason: string): Promise<void> {
 		const entry = this.entries.get(sessionId)

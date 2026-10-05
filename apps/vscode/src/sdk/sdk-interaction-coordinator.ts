@@ -281,6 +281,11 @@ export class SdkInteractionCoordinator {
 		return true
 	}
 
+	/** A tool approval or an ask_question is waiting, so the next follow-up would be taken as the answer to it. */
+	get hasPending(): boolean {
+		return this.pendingToolApprovalResolve !== undefined || this.pendingAskResolve !== undefined
+	}
+
 	resolvePendingAskQuestion(prompt: string | undefined): boolean {
 		if (!this.pendingAskResolve) {
 			return false

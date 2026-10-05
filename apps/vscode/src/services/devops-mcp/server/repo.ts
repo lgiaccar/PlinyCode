@@ -211,6 +211,11 @@ export async function hasSupportedRemote(cwd: string): Promise<boolean> {
 	return false
 }
 
+/** The commit `branch` points at on the remote as of the last push or fetch, or undefined when it was never pushed. */
+export function remoteBranchHead(ctx: RepoContext, branch: string): Promise<string | undefined> {
+	return git(ctx.root, ["rev-parse", "--verify", "--quiet", `refs/remotes/${ctx.remoteName}/${branch}^{commit}`])
+}
+
 /** Describes why `branch` is not fully pushed, or returns undefined when it is. */
 export async function pushProblem(ctx: RepoContext, branch: string): Promise<string | undefined> {
 	const ref = `refs/remotes/${ctx.remoteName}/${branch}`
