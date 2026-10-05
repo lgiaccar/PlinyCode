@@ -97,6 +97,33 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("Plan/Act toggle");
 	});
 
+	it("asks the manual-switch host for a plan another model can execute", () => {
+		// The Execute plan button can hand the plan files to a cheaper model
+		// than the one that wrote them, so the plan has to stand on its own.
+		const prompt = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			mode: "plan",
+			planModeSwitchTool: false,
+		});
+		expect(prompt).toContain(
+			"an executor that has not seen this conversation and may be a weaker model",
+		);
+		for (const requirement of [
+			"exact file paths",
+			"the steps in order",
+			"the command that verifies each step",
+			"the decisions already made with their reasons",
+			"would otherwise have to rediscover",
+		]) {
+			expect(prompt).toContain(requirement);
+		}
+		// One short paragraph: the plan contract is sent with every plan-mode call.
+		const handoff = PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH.split("\n\n").find(
+			(paragraph) => paragraph.includes("has not seen this conversation"),
+		);
+		expect(handoff?.length).toBeLessThan(400);
+	});
+
 	it("emits mode instructions for both mode: undefined and yolo", () => {
 		// After a switch the transcript still contains messages tagged with the
 		// other mode, so the explanation is unconditional.

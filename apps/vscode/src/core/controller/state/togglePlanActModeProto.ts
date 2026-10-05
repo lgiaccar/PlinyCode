@@ -1,6 +1,8 @@
+import { parsePlanExecutionChoice } from "@shared/planExecution"
 import { Boolean } from "@shared/proto/cline/common"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
 import { Mode } from "@shared/storage/types"
+import { preparePlanExecution } from "@/sdk/plan-execution"
 import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
 
@@ -23,6 +25,14 @@ export async function togglePlanActModeProto(controller: Controller, request: To
 			throw new Error(`Invalid mode value: ${request.mode}`)
 		}
 		const chatContent = request.chatContent
+
+		// Execute plan can name the model to run the plan on. Only for a real
+		// plan -> act switch: when the mode is already act the toggle below does
+		// nothing, and changing the model would retarget the session that is running.
+		const executePlanWith = mode === "act" ? parsePlanExecutionChoice(request.executePlanWith) : undefined
+		if (executePlanWith && controller.stateManager.getGlobalSettingsKey("mode") === "plan") {
+			await preparePlanExecution(controller, executePlanWith)
+		}
 
 		// Call the existing controller implementation
 		const sentMessage = await controller.togglePlanActMode(mode, chatContent)

@@ -9,6 +9,7 @@ import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@pli
 import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
+import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
@@ -59,6 +60,7 @@ export async function getStateToPostToWebview(controller: {
 	const webSearchEnabled = isModelToolEnabledGlobally("web_search")
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
+	const planExecutionChoice = getPlanExecutionChoice()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
 	const mcpDisplayMode = stateManager.getGlobalStateKey("mcpDisplayMode")
 	const planActSeparateModelsSetting = stateManager.getGlobalSettingsKey("planActSeparateModelsSetting")
@@ -121,6 +123,7 @@ export async function getStateToPostToWebview(controller: {
 		webSearchEnabled,
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,
+		planExecutionChoice,
 		subagentsEnabled,
 		mcpDisplayMode,
 		planActSeparateModelsSetting,

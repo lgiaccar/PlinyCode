@@ -20,6 +20,11 @@ vi.mock("@/shared/services/Logger", () => ({
 	},
 }))
 
+// The model switch itself is covered by plan-execution.test.ts; here only
+// when the handler asks for it, and in what order.
+const preparePlanExecution = vi.hoisted(() => vi.fn())
+vi.mock("@/sdk/plan-execution", () => ({ preparePlanExecution }))
+
 // We don't need the full Controller — just a mock that implements togglePlanActMode.
 import { togglePlanActModeProto } from "../core/controller/state/togglePlanActModeProto"
 
@@ -116,5 +121,87 @@ describe("togglePlanActModeProto", () => {
 		const request = TogglePlanActModeRequest.create({ mode: PlanActMode.ACT })
 
 		await expect(togglePlanActModeProto(mockController, request)).rejects.toThrow("oops")
+	})
+
+	describe("Execute plan on a chosen model", () => {
+		const executeRequest = (executePlanWith: string, mode = PlanActMode.ACT) =>
+			TogglePlanActModeRequest.create({
+				mode,
+				chatContent: { message: "execute the plan in plans/x/PLAN.md", images: [], files: [] },
+				executePlanWith,
+			})
+		const inMode = (mode: string) => {
+			mockController.stateManager = { getGlobalSettingsKey: vi.fn(() => mode) }
+		}
+
+		beforeEach(() => {
+			preparePlanExecution.mockReset()
+			preparePlanExecution.mockResolvedValue(undefined)
+			toggleSpy.mockResolvedValue(true)
+		})
+
+		it("switches act mode's model before it switches the mode", async () => {
+			inMode("plan")
+
+			const response = await togglePlanActModeProto(mockController, executeRequest("freeAuto"))
+
+			expect(preparePlanExecution).toHaveBeenCalledWith(mockController, "freeAuto")
+			expect(toggleSpy).toHaveBeenCalledWith(
+				"act",
+				expect.objectContaining({ message: "execute the plan in plans/x/PLAN.md" }),
+			)
+			// The act-mode session is built from the model in state, so the model comes first.
+			expect(preparePlanExecution.mock.invocationCallOrder[0]).toBeLessThan(toggleSpy.mock.invocationCallOrder[0])
+			expect(response.value).toBe(true)
+		})
+
+		it("leaves the models alone when the request names no choice", async () => {
+			inMode("plan")
+			const request = TogglePlanActModeRequest.create({ mode: PlanActMode.ACT })
+
+			await togglePlanActModeProto(mockController, request)
+
+			expect(preparePlanExecution).not.toHaveBeenCalled()
+			expect(toggleSpy).toHaveBeenCalledWith("act", undefined)
+		})
+
+		it("ignores a choice it does not know", async () => {
+			inMode("plan")
+
+			await togglePlanActModeProto(mockController, executeRequest("snps-aws-bedrock/some-model"))
+
+			expect(preparePlanExecution).not.toHaveBeenCalled()
+			expect(toggleSpy).toHaveBeenCalledOnce()
+		})
+
+		it("does not change the model of an act-mode session that is already running", async () => {
+			// A second click that arrives after the first one switched the mode.
+			inMode("act")
+
+			await togglePlanActModeProto(mockController, executeRequest("freeAuto"))
+
+			expect(preparePlanExecution).not.toHaveBeenCalled()
+		})
+
+		it("ignores the choice on a switch to plan mode", async () => {
+			inMode("act")
+
+			await togglePlanActModeProto(mockController, executeRequest("freeAuto", PlanActMode.PLAN))
+
+			expect(preparePlanExecution).not.toHaveBeenCalled()
+			expect(toggleSpy).toHaveBeenCalledWith("plan", expect.anything())
+		})
+
+		it("does not execute the plan when the model switch fails", async () => {
+			inMode("plan")
+			preparePlanExecution.mockRejectedValue(new Error("could not commit"))
+
+			await expect(togglePlanActModeProto(mockController, executeRequest("balanceAuto"))).rejects.toThrow(
+				"could not commit",
+			)
+
+			// Otherwise the plan would run on a model the user did not pick.
+			expect(toggleSpy).not.toHaveBeenCalled()
+		})
 	})
 })

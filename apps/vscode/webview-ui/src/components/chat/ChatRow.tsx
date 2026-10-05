@@ -10,6 +10,7 @@ import {
 	ClineSayTool,
 	COMPLETION_RESULT_CHANGES_FLAG,
 } from "@shared/ExtensionMessage"
+import type { PlanExecutionChoice } from "@shared/planExecution"
 import { BooleanRequest, StringRequest } from "@shared/proto/cline/common"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
 import { Mode } from "@shared/storage/types"
@@ -265,12 +266,14 @@ const ChatRowContent = memo(
 		}, [onSetQuote, quoteButtonState.selectedText]) // <-- Use onSetQuote from props
 
 		// Switch to act mode and run the root plan file. The mode coordinator sends
-		// the prompt as the act-mode continuation of the presented plan.
-		const executePlan = useCallback((rootPlanFile: string) => {
+		// the prompt as the act-mode continuation of the presented plan, after the
+		// extension has pointed act mode at the model the choice names.
+		const executePlan = useCallback((rootPlanFile: string, executePlanWith: PlanExecutionChoice) => {
 			StateServiceClient.togglePlanActModeProto(
 				TogglePlanActModeRequest.create({
 					mode: PlanActMode.ACT,
 					chatContent: { message: executePlanPrompt(rootPlanFile), images: [], files: [] },
+					executePlanWith,
 				}),
 			).catch((err) => console.error("Failed to execute plan:", err))
 		}, [])
@@ -1011,7 +1014,9 @@ const ChatRowContent = memo(
 							isLatestPlanResult(clineMessages, message.ts)
 						return (
 							<PlanCompletionOutputRow
-								onExecutePlan={canExecutePlan && rootPlanFile ? () => executePlan(rootPlanFile) : undefined}
+								onExecutePlan={
+									canExecutePlan && rootPlanFile ? (choice) => executePlan(rootPlanFile, choice) : undefined
+								}
 								rootPlanFile={rootPlanFile}
 								text={message.text || ""}
 							/>

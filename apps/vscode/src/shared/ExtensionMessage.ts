@@ -9,6 +9,7 @@ import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
+import type { PlanExecutionChoice } from "./planExecution"
 import { Mode } from "./storage/types"
 import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
@@ -114,6 +115,8 @@ export interface ExtensionState {
 	prereleaseUpdatesEnabled?: boolean
 	/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 	conversationSpendingLimit?: number
+	/** `plinycode.plan.executeWith`: the model the Execute plan button runs a plan on; the last choice made in its menu. */
+	planExecutionChoice?: PlanExecutionChoice
 	subagentsEnabled?: boolean
 	favoritedModelIds: string[]
 	/**

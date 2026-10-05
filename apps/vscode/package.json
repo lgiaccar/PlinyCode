@@ -370,6 +370,23 @@
 					"default": true,
 					"markdownDescription": "Before a run on an auto router (`auto-free`, `auto-paid-balanced`) that changed files ends, have a second free model read the diff. Problems it is confident about go back to the working model once, to check and fix; the chat shows which model reviewed and how many problems it flagged. The review itself costs nothing."
 				},
+				"plinycode.plan.executeWith": {
+					"type": "string",
+					"enum": [
+						"actModel",
+						"freeAuto",
+						"balanceAuto",
+						"planModel"
+					],
+					"enumDescriptions": [
+						"The model act mode is set to. Executing a plan changes no model.",
+						"FreeAuto (auto-free): free models only.",
+						"BalanceAuto (auto-paid-balanced): paid models for hard steps, free models for simple ones.",
+						"The model plan mode is set to, which wrote the plan."
+					],
+					"default": "actModel",
+					"markdownDescription": "The model the **Execute plan** button runs a plan on, so that a strong model can write the plan and a cheaper one can carry it out. The button names the model it will use, and choosing another one in its menu changes this setting. Any value other than `actModel` switches act mode to that model when a plan is executed."
+				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",
 					"default": 5,

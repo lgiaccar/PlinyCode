@@ -461,6 +461,10 @@ message TogglePlanActModeRequest {
   Metadata metadata = 1;
   PlanActMode mode = 2;
   optional ChatContent chat_content = 3;
+  // Execute plan only: the model to run the plan on, as a PlanExecutionChoice
+  // ("actModel", "freeAuto", "balanceAuto", "planModel"). Act mode is switched
+  // to it before the mode changes, and the choice is remembered.
+  optional string execute_plan_with = 4;
 }
 
 enum PlanActMode {
