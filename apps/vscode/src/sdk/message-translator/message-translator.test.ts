@@ -4287,6 +4287,22 @@ describe("tool display paths are relativized to the cwd", () => {
 		expect(clineMessages.some((m) => m.say === "completion_result" || m.ask === "completion_result")).toBe(true)
 	})
 
+	it("keeps the side-question mark on a reloaded user message", () => {
+		const messages = [
+			{ role: "user", content: "build the parser" },
+			{ role: "assistant", content: "done" },
+			{ role: "user", content: [{ type: "text", text: "what is a lexer?" }], metadata: { offTheRecord: true } },
+			{ role: "assistant", content: "it tokenizes" },
+		] as SdkMessage[]
+
+		const rows = sdkMessagesToClineMessages(messages).filter((m) => m.say === "task" || m.say === "user_feedback")
+
+		expect(rows.map((m) => [m.text, m.offTheRecord])).toEqual([
+			["build the parser", undefined],
+			["what is a lexer?", true],
+		])
+	})
+
 	it("relativizes persisted-history tool paths via options.cwd", () => {
 		const messages: SdkMessage[] = [
 			{

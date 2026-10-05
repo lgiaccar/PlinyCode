@@ -14,6 +14,7 @@ import {
 	type CoreSessionConfig,
 	createContextCompactionPrepareTurn,
 	createSessionCompactionState,
+	dropOffTheRecordTurns,
 	type SessionCompactionState,
 } from "@plinycode/core"
 import type { Message as SdkMessage, ModelInfo as SdkModelInfo } from "@plinycode/llms"
@@ -51,7 +52,12 @@ interface CompactSessionMessagesResult {
  * nothing to compact or the configured strategy declines to compact.
  */
 export async function compactSessionMessages(input: CompactSessionMessagesInput): Promise<CompactSessionMessagesResult> {
-	if (input.messages.length === 0) {
+	// Off-the-record side questions are not part of the context: the summary
+	// must not mention them, and the saved state's source prefix has to match
+	// the filtered list the session projects it onto (see
+	// sdk/packages/core/src/session/off-the-record.ts).
+	const messages = dropOffTheRecordTurns(input.messages)
+	if (messages.length === 0) {
 		return { compacted: false, messages: input.messages }
 	}
 
@@ -92,8 +98,8 @@ export async function compactSessionMessages(input: CompactSessionMessagesInput)
 		conversationId: input.sessionId,
 		parentAgentId: null,
 		iteration: 0,
-		messages: input.messages,
-		apiMessages: input.messages,
+		messages,
+		apiMessages: messages,
 		abortSignal: new AbortController().signal,
 		systemPrompt: "",
 		tools: [],
@@ -111,7 +117,7 @@ export async function compactSessionMessages(input: CompactSessionMessagesInput)
 		compacted: true,
 		messages: result.messages,
 		compactionState: createSessionCompactionState({
-			sourceMessages: input.messages,
+			sourceMessages: messages,
 			compactedMessages: result.messages,
 			conversationId: input.sessionId,
 			systemPrompt: result.systemPrompt,

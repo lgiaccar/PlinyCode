@@ -528,7 +528,7 @@ export function formatAskModeBlockedCommandError(reason: string): string {
 		`Command not executed: ${reason} can modify files, and file modifications are blocked in ask mode. ` +
 		"You are in ASK MODE — answer the user's question; do not make changes. " +
 		"Use read-only commands to inspect the project (redirecting output to /tmp, or %TEMP% on Windows, is allowed), " +
-		"and if the user wants this change made, tell them to switch to Act mode."
+		"and if the user wants this change made, tell them to switch to Agent mode."
 	);
 }
 
@@ -542,7 +542,19 @@ export function formatAskModeBlockedWriteError(
 	return (
 		`Write rejected: ${target} was not changed, because file edits are blocked in ask mode. ` +
 		"You are in ASK MODE — answer the user's question; do not create, edit or delete files. " +
-		"Show the proposed change in your reply instead, and if the user wants it applied, tell them to switch to Act mode."
+		"Show the proposed change in your reply instead, and if the user wants it applied, tell them to switch to Agent mode."
+	);
+}
+
+/**
+ * Tool error returned in place of a blocked call while answering an
+ * off-the-record question; `what` says what was not done.
+ */
+export function formatOffTheRecordBlockedError(what: string): string {
+	return (
+		`Not executed: ${what}. This message is an off-the-record side question, which changes nothing: ` +
+		"answer it from what you can read, search and run read-only, and show any proposed change in your reply instead. " +
+		"If the user wants the change made, tell them to send it as a normal message."
 	);
 }
 

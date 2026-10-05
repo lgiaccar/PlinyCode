@@ -29,6 +29,8 @@ interface SdkSessionConfigBuilderOptions {
 	 * mistake-limit rows are dropped instead of landing in the displayed task.
 	 */
 	isBackgroundSession?: (sessionId: string | undefined) => boolean
+	/** True while the running turn answers an off-the-record side question, which edits nothing. */
+	isOffTheRecordTurn?: () => boolean
 	/**
 	 * Called before every model call of a foreground session. Returning a
 	 * stop control ends the run there (the conversation spending limit).
@@ -132,8 +134,13 @@ export class SdkSessionConfigBuilder {
 			installRouter(config, {
 				sessionId: this.options.getSessionId?.() || input.cwd,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,
-				// Ask mode routes like plan mode: both read and reason, neither edits.
-				getMode: () => (this.options.stateManager.getGlobalSettingsKey("mode") === "act" ? "act" : "plan"),
+				// Ask mode routes like plan mode: both read and reason, neither edits. So does a
+				// side question, which runs under ask mode's rules whatever the mode is: it gets
+				// no completion judge and no review.
+				getMode: () =>
+					this.options.stateManager.getGlobalSettingsKey("mode") === "act" && !this.options.isOffTheRecordTurn?.()
+						? "act"
+						: "plan",
 				emitRow,
 				nextMessageTs,
 				reviewEnabled: isReviewBeforeFinishEnabled,

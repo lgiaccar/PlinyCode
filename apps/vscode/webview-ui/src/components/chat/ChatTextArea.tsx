@@ -19,6 +19,7 @@ import { useMetaKeyDetection, useShortcut } from "@/utils/hooks"
 import { shouldShowSlashCommandsMenu, slashCommandRegexGlobal, validateSlashCommand } from "@/utils/slash-commands"
 import { ModelButton } from "./chat-textarea/components/ModelButton"
 import { ModeSwitch, modeColor, nextMode } from "./chat-textarea/components/ModeSwitch"
+import { SideQuestionToggle } from "./chat-textarea/components/SideQuestionToggle"
 import { useComposerKeyboardHandler } from "./chat-textarea/hooks/useComposerKeyboardHandler"
 import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hooks/useContextMenu"
 import { useDropHandling } from "./chat-textarea/hooks/useDropHandling"
@@ -34,7 +35,16 @@ import { useSlashCommandMenu } from "./chat-textarea/hooks/useSlashCommandMenu"
 import { getModeToggleDraftAction } from "./chat-textarea-mode-toggle"
 import ScheduleTimeInput, { ScheduleRepeatInput } from "./ScheduleTimeInput"
 import { defaultScheduleTime, type ScheduleRepeat } from "./scheduleTime"
-import { deliveryFor, loadSendMode, SEND_MODE_META, SEND_MODES, type SendDelivery, type SendMode, saveSendMode } from "./sendMode"
+import {
+	deliveryFor,
+	loadSendMode,
+	SEND_MODE_META,
+	SEND_MODES,
+	type SendDelivery,
+	type SendMode,
+	type SendOptions,
+	saveSendMode,
+} from "./sendMode"
 
 // Re-exported so ChatTextArea.test.tsx (and anything else importing from this
 // module) keeps working unchanged after these moved into useResizableRows.
@@ -56,7 +66,9 @@ interface ChatTextAreaProps {
 	selectedImages: string[]
 	setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>
 	setSelectedFiles: React.Dispatch<React.SetStateAction<string[]>>
-	onSend: (delivery?: SendDelivery) => void
+	onSend: (delivery?: SendDelivery, options?: SendOptions) => void
+	/** Whether a side question can be sent now; the checkbox is disabled otherwise. */
+	sideQuestionAvailable?: boolean
 	onSchedulePrompt?: (text: string, images: string[], files: string[], scheduledAt: number, repeat?: ScheduleRepeat) => void
 	onSelectFilesAndImages: () => void
 	shouldDisableFilesAndImages: boolean
@@ -81,6 +93,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			shouldDisableFilesAndImages,
 			onHeightChange,
 			onFocusChange,
+			sideQuestionAvailable = false,
 		},
 		ref,
 	) => {
@@ -103,6 +116,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [justDeletedSpaceAfterSlashCommand, setJustDeletedSpaceAfterSlashCommand] = useState(false)
 
 		const [sendMode, setSendMode] = useState<SendMode>(loadSendMode)
+		// The "Side question" checkbox. It applies to one message and clears after it is sent.
+		const [sideQuestionChecked, setSideQuestionChecked] = useState(false)
+		const sideQuestion = sideQuestionChecked && sideQuestionAvailable
 
 		const [, metaKeyChar] = useMetaKeyDetection(platform)
 		const { selectedModelId, selectedModelInfo } = useNormalizedApiConfiguration(mode)
@@ -208,8 +224,27 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 				return
 			}
+			if (sideQuestion) {
+				onSend(deliveryFor(sendMode), { offTheRecord: true })
+				if (inputValue.trim() || selectedImages.length > 0 || selectedFiles.length > 0) {
+					setSideQuestionChecked(false)
+				}
+				return
+			}
 			onSend(deliveryFor(sendMode))
-		}, [sendMode, showSchedulePicker, scheduleTime, confirmSchedule, onSend, setScheduleTime, setShowSchedulePicker])
+		}, [
+			sendMode,
+			showSchedulePicker,
+			scheduleTime,
+			confirmSchedule,
+			onSend,
+			setScheduleTime,
+			setShowSchedulePicker,
+			sideQuestion,
+			inputValue,
+			selectedImages,
+			selectedFiles,
+		])
 
 		const handleKeyDown = useComposerKeyboardHandler({
 			inputValue,
@@ -707,7 +742,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								isDraggingOver && !showUnsupportedFileError // Only show drag outline if not showing error
 									? "2px dashed var(--vscode-focusBorder)"
 									: isTextAreaFocused
-										? `1px solid ${modeColor(mode)}`
+										? // A side question gets a dashed outline, so it is clear before sending that it stays off the record.
+											`1px ${sideQuestion ? "dashed" : "solid"} ${modeColor(mode)}`
 										: "none",
 							outlineOffset: isDraggingOver && !showUnsupportedFileError ? "1px" : "0px", // Add offset for drag-over outline
 						}}
@@ -867,6 +903,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
 						/>
 					</div>
+					<SideQuestionToggle
+						available={sideQuestionAvailable}
+						checked={sideQuestionChecked}
+						onChange={setSideQuestionChecked}
+					/>
 					{/* Tooltip for the mode switch remains outside the conditional rendering */}
 					<ModeSwitch mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
 				</div>

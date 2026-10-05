@@ -20,6 +20,8 @@ export interface PendingPromptEntry {
 	delivery: PendingPromptDelivery;
 	userImages?: string[];
 	userFiles?: string[];
+	/** Ask the prompt off the record (see session/off-the-record.ts). */
+	offTheRecord?: boolean;
 }
 
 export interface PendingPromptQueueState {
@@ -35,6 +37,7 @@ export interface PendingPromptsControllerDeps {
 		mode?: AgentMode;
 		userImages?: string[];
 		userFiles?: string[];
+		offTheRecord?: boolean;
 	}): Promise<unknown>;
 }
 
@@ -44,6 +47,8 @@ export interface PendingPromptEnqueueInput {
 	delivery: PendingPromptDelivery;
 	userImages?: string[];
 	userFiles?: string[];
+	/** Ask the prompt off the record (see session/off-the-record.ts). */
+	offTheRecord?: boolean;
 }
 
 export interface PendingPromptConsumeResult {
@@ -138,7 +143,8 @@ export class PendingPromptService {
 		state: PendingPromptQueueState,
 		input: PendingPromptEnqueueInput,
 	): SessionPendingPrompt[] {
-		const { prompt, mode, delivery, userImages, userFiles } = input;
+		const { prompt, mode, delivery, userImages, userFiles, offTheRecord } =
+			input;
 		const existingIndex = state.pendingPrompts.findIndex(
 			(queued) => queued.prompt === prompt,
 		);
@@ -150,6 +156,7 @@ export class PendingPromptService {
 				mode: mode ?? existing.mode,
 				userImages: userImages ?? existing.userImages,
 				userFiles: userFiles ?? existing.userFiles,
+				offTheRecord: offTheRecord ?? existing.offTheRecord,
 			};
 			if (delivery === "steer" || existing.delivery === "steer") {
 				state.pendingPrompts.unshift({ ...next, delivery: "steer" });
@@ -164,6 +171,7 @@ export class PendingPromptService {
 				delivery,
 				userImages,
 				userFiles,
+				...(offTheRecord ? { offTheRecord } : {}),
 			};
 			if (delivery === "steer") {
 				state.pendingPrompts.unshift(newEntry);
@@ -261,6 +269,7 @@ export class PendingPromptsController {
 			delivery: "queue" | "steer";
 			userImages?: string[];
 			userFiles?: string[];
+			offTheRecord?: boolean;
 		},
 	): void {
 		const session = this.deps.getSession(sessionId);
@@ -346,6 +355,7 @@ export class PendingPromptsController {
 				...(next.mode ? { mode: next.mode } : {}),
 				userImages: next.userImages,
 				userFiles: next.userFiles,
+				...(next.offTheRecord ? { offTheRecord: true } : {}),
 			});
 			// A turn that resolves with an error finish ran (the prompt is in
 			// the conversation and the error is surfaced), so the entry is not

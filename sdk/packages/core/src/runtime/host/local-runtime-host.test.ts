@@ -4243,11 +4243,17 @@ describe("LocalRuntimeHost", () => {
 			prompt: "second",
 			mode: "plan",
 		});
+		await manager.runTurn({
+			sessionId,
+			prompt: "side question",
+			mode: "plan",
+			offTheRecord: true,
+		});
 
 		expect(first?.text).toBe("first");
 		expect(second?.text).toBe("second");
 		expect(run).toHaveBeenCalledTimes(1);
-		expect(continueFn).toHaveBeenCalledTimes(1);
+		expect(continueFn).toHaveBeenCalledTimes(2);
 		expect(run).toHaveBeenCalledWith(
 			'<user_input mode="act">first</user_input>',
 			undefined,
@@ -4258,7 +4264,15 @@ describe("LocalRuntimeHost", () => {
 			undefined,
 			undefined,
 		);
-		expect(sessionService.persistSessionMessages).toHaveBeenCalledTimes(2);
+		// An off-the-record question is answered under ask mode's rules,
+		// whatever mode it was sent in.
+		expect(continueFn).toHaveBeenLastCalledWith(
+			'<user_input mode="ask">side question</user_input>',
+			undefined,
+			undefined,
+			{ offTheRecord: true },
+		);
+		expect(sessionService.persistSessionMessages).toHaveBeenCalledTimes(3);
 	});
 
 	it("keeps an interactive session reusable when abort makes the run reject", async () => {

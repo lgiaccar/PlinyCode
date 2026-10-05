@@ -53,7 +53,7 @@ import { getCheckpointRunCountForMessage } from "./sdk-checkpoints"
 import { SdkCiWatchCoordinator } from "./sdk-ci-watch-coordinator"
 import { SdkCompactionCoordinator } from "./sdk-compaction-coordinator"
 import { SdkDiffEditCoordinator } from "./sdk-diff-edit-coordinator"
-import { SdkFollowupCoordinator } from "./sdk-followup-coordinator"
+import { type FollowUpOptions, SdkFollowupCoordinator } from "./sdk-followup-coordinator"
 import { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"
 import { SdkMcpCoordinator } from "./sdk-mcp-coordinator"
@@ -380,6 +380,7 @@ export class Controller {
 			emitRow: (msg) => this.messages.emitHookMessage(msg),
 			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
+			isOffTheRecordTurn: () => this.sessions.isOffTheRecordTurn(),
 			checkSpendingLimit: () => this.checkSpendingLimit(),
 			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
 			gitSnapshots: this.conversationContext.gitSnapshots,
@@ -599,7 +600,7 @@ export class Controller {
 			setTask: (task) => {
 				this.task = task
 			},
-			onAskResponse: (text, images, files, delivery) => this.askResponse(text, images, files, delivery),
+			onAskResponse: (text, images, files, delivery, options) => this.askResponse(text, images, files, delivery, options),
 			resetMessageTranslator: () => this.resetMessageTranslatorAndFence(),
 			// Bump the epoch synchronously before abort so straggler events from the cancelled
 			// turn carry the old epoch and are dropped by the webview. The resumable phase is set
@@ -636,7 +637,7 @@ export class Controller {
 			setTask: (task) => {
 				this.task = task
 			},
-			onAskResponse: (text, images, files, delivery) => this.askResponse(text, images, files, delivery),
+			onAskResponse: (text, images, files, delivery, options) => this.askResponse(text, images, files, delivery, options),
 			onCancelTask: () => this.cancelTask(),
 			getWorkspaceRoot: () => this.getWorkspaceRoot(),
 			getWindowWorkspace: () => this.getWindowWorkspace(),
@@ -1115,7 +1116,13 @@ export class Controller {
 	 * subscription. We do NOT await the send — the gRPC handler needs to
 	 * return immediately so the webview stays responsive.
 	 */
-	async askResponse(prompt?: string, images?: string[], files?: string[], delivery?: string): Promise<void> {
+	async askResponse(
+		prompt?: string,
+		images?: string[],
+		files?: string[],
+		delivery?: string,
+		options?: FollowUpOptions,
+	): Promise<void> {
 		this.ciWatch.noteFollowUp(prompt, images, files)
 		const turnStateBefore = this.turnStateTracker.get()
 
@@ -1141,6 +1148,7 @@ export class Controller {
 			this.task?.taskState?.askResponse,
 			turnStateBefore.phase,
 			delivery as "queue" | "steer" | undefined,
+			options,
 		)
 	}
 
@@ -1171,11 +1179,12 @@ export class Controller {
 		images?: string[],
 		files?: string[],
 		delivery?: string,
+		options?: FollowUpOptions,
 	): Promise<boolean> {
 		if (!this.task) {
 			return false
 		}
-		await this.task.handleWebviewAskResponse(askResponse, text, images, files, delivery)
+		await this.task.handleWebviewAskResponse(askResponse, text, images, files, delivery, options)
 		return true
 	}
 

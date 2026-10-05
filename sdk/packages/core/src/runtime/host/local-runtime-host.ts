@@ -950,6 +950,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 				delivery,
 				userImages: input.userImages,
 				userFiles: input.userFiles,
+				...(input.offTheRecord ? { offTheRecord: true } : {}),
 			});
 			return undefined;
 		}
@@ -959,6 +960,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 				mode: input.mode,
 				userImages: input.userImages,
 				userFiles: input.userFiles,
+				offTheRecord: input.offTheRecord,
 			});
 			if (!session.interactive) {
 				await this.finalizeSingleRun(session, result.finishReason);

@@ -104,6 +104,12 @@ function userMessageText(message: unknown): string {
 	if (!message || typeof message !== "object" || (message as { role?: unknown }).role !== "user") {
 		return ""
 	}
+	// An off-the-record side question is left out of later requests, so the model
+	// working on the conversation never saw the block it carried.
+	const metadata = (message as { metadata?: { offTheRecord?: unknown } }).metadata
+	if (metadata?.offTheRecord === true) {
+		return ""
+	}
 	const { content } = message as { content?: unknown }
 	if (typeof content === "string") {
 		return content
@@ -148,9 +154,11 @@ export class ConversationEditorState {
 	/**
 	 * The block to append to the session's next user message, or undefined when
 	 * the setting is off, the editor could not be read, or nothing changed
-	 * since the last block the conversation was sent.
+	 * since the last block the conversation was sent. With `remember: false`
+	 * (an off-the-record side question) the block is not recorded as sent, so
+	 * the next message on the record still gets it.
 	 */
-	async nextBlock(sessionId: string): Promise<string | undefined> {
+	async nextBlock(sessionId: string, options: { remember?: boolean } = {}): Promise<string | undefined> {
 		try {
 			if (!this.options.isEnabled()) {
 				return undefined
@@ -167,7 +175,9 @@ export class ConversationEditorState {
 			if (!block || block === last) {
 				return undefined
 			}
-			this.remember(sessionId, block)
+			if (options.remember !== false) {
+				this.remember(sessionId, block)
+			}
 			return block
 		} catch (error) {
 			Logger.debug("[EditorState] Failed to read the editor state:", error)

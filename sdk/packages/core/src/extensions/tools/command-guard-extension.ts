@@ -30,6 +30,7 @@ import {
 	findPatchFilePaths,
 	formatAskModeBlockedCommandError,
 	formatAskModeBlockedWriteError,
+	formatOffTheRecordBlockedError,
 	formatPlanModeBlockedCommandError,
 	formatPlanModeBlockedWriteError,
 	isMarkdownPath,
@@ -189,4 +190,55 @@ export function createAskModeCommandGuardExtension(): AgentExtension {
 			beforeTool,
 		},
 	};
+}
+
+/**
+ * Tools an off-the-record turn may not call even though they write no file:
+ * the task list is shown to the user and kept across turns, and sub-agents
+ * and teammates run outside this guard.
+ */
+function isOffTheRecordBlockedTool(name: string): boolean {
+	return (
+		name === "update_todo_list" ||
+		name === "spawn_agent" ||
+		name.startsWith("subagent_") ||
+		name.startsWith("team_")
+	);
+}
+
+/**
+ * The `beforeTool` check for a run that answers an off-the-record message
+ * (see session/off-the-record.ts). The turn is left out of the context
+ * afterwards, so a change it made would be one the conversation was never
+ * told about: like ask mode, it rejects file writes and file-editing
+ * commands, and also tools that change state kept across turns. The session
+ * runtime applies it only during such runs, whatever the session's mode.
+ */
+export function guardOffTheRecordTool(
+	context: AgentBeforeToolContext,
+): AgentBeforeToolResult | undefined {
+	const name = context.tool.name;
+	switch (name) {
+		case DefaultToolNames.RUN_COMMANDS:
+			return guardRunCommands(context.input, (reason) =>
+				formatOffTheRecordBlockedError(`${reason} can modify files`),
+			);
+		case DefaultToolNames.EDITOR:
+		case DefaultToolNames.APPLY_PATCH: {
+			const target = findWriteTarget(name, context.input);
+			return {
+				skip: true,
+				reason: formatOffTheRecordBlockedError(
+					`${target ? `\`${target}\`` : "the file"} was not changed`,
+				),
+			};
+		}
+		default:
+			return isOffTheRecordBlockedTool(name)
+				? {
+						skip: true,
+						reason: formatOffTheRecordBlockedError(`${name} was not called`),
+					}
+				: undefined;
+	}
 }

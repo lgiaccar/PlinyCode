@@ -3044,3 +3044,147 @@ describe("SessionRuntime onRunError recovery", () => {
 		expect(onRunError).not.toHaveBeenCalled();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Off-the-record turns
+// ---------------------------------------------------------------------------
+
+describe("SessionRuntime — off-the-record turns", () => {
+	function makeSession() {
+		let recorded: ReturnType<typeof makeRecordingRuntimeFactory>["configs"] =
+			[];
+		// Each run answers with one assistant message on top of its seed.
+		const factory = makeRecordingRuntimeFactory((call) => {
+			const seed = recorded[call - 1]?.initialMessages ?? [];
+			return {
+				outputText: `answer ${call}`,
+				messages: [
+					...seed,
+					makeAgentMessage(`a${call}`, "assistant", `answer ${call}`),
+				],
+			};
+		});
+		recorded = factory.configs;
+		const session = new SessionRuntime(makeAgentConfig(), factory.deps);
+		return { session, configs: factory.configs };
+	}
+
+	const texts = (messages: readonly AgentMessage[] | undefined) =>
+		(messages ?? []).flatMap((message) =>
+			message.content.flatMap((part) =>
+				part.type === "text" ? [part.text] : [],
+			),
+		);
+
+	async function requestTexts(
+		config: ReturnType<typeof makeSession>["configs"][number] | undefined,
+		messages: readonly AgentMessage[],
+	) {
+		const beforeModel = config?.hooks?.beforeModel;
+		if (!beforeModel) {
+			throw new Error("expected beforeModel hook");
+		}
+		const result = await beforeModel({
+			snapshot: makeSnapshot(),
+			request: { systemPrompt: "system", messages, tools: [] },
+		});
+		return texts(result?.messages);
+	}
+
+	function beforeTool(
+		config: ReturnType<typeof makeSession>["configs"][number] | undefined,
+		toolName: string,
+		input: unknown,
+	) {
+		const hook = config?.hooks?.beforeTool;
+		if (!hook) {
+			throw new Error("expected beforeTool hook");
+		}
+		return hook({
+			snapshot: makeSnapshot(),
+			tool: { name: toolName } as AgentTool,
+			toolCall: { type: "tool-call", toolCallId: "c1", toolName, input },
+			input,
+		} as Parameters<typeof hook>[0]);
+	}
+
+	it("tags the message, blocks writes while answering it, and leaves it out of later requests", async () => {
+		const { session, configs } = makeSession();
+		await session.run("build the parser");
+		await session.continue("what does lexer.ts do?", undefined, undefined, {
+			offTheRecord: true,
+		});
+
+		const messages = session.getMessages();
+		const side = messages.find((message) =>
+			JSON.stringify(message.content).includes("what does lexer.ts do?"),
+		);
+		expect(side?.metadata).toMatchObject({ offTheRecord: true });
+
+		// The side question's own requests still see it.
+		const sideRequest = await requestTexts(
+			configs[1],
+			configs[1]?.initialMessages ?? [],
+		);
+		expect(sideRequest).toContain("what does lexer.ts do?");
+
+		await session.continue("now add tests");
+		const nextSeed = configs[2]?.initialMessages ?? [];
+		// The transcript keeps the side question, so the chat can replay it...
+		expect(texts(nextSeed)).toContain("what does lexer.ts do?");
+		// ...but the model no longer receives it, nor its answer.
+		const nextRequest = await requestTexts(configs[2], nextSeed);
+		expect(nextRequest).toEqual([
+			"build the parser",
+			"answer 1",
+			"now add tests",
+		]);
+	});
+
+	it("applies the read-only guard only during the off-the-record run", async () => {
+		const write = { path: "src/a.ts", new_text: "x" };
+		// Each run tries one editor write while it is in flight.
+		const verdicts: unknown[] = [];
+		const session = new SessionRuntime(makeAgentConfig(), {
+			createAgentRuntimeImpl: (config) => {
+				const attempt = async () => {
+					verdicts.push(await beforeTool(config, "editor", write));
+					return {
+						agentId: "agent_fake",
+						runId: "run_fake",
+						status: "completed",
+						iterations: 1,
+						outputText: "",
+						messages: [...(config.initialMessages ?? [])],
+						usage: {
+							inputTokens: 0,
+							outputTokens: 0,
+							cacheReadTokens: 0,
+							cacheWriteTokens: 0,
+							totalCost: 0,
+						},
+					} satisfies AgentRunResult;
+				};
+				return {
+					run: attempt,
+					continue: attempt,
+					abort() {},
+					subscribe() {
+						return () => {};
+					},
+					snapshot: makeSnapshot,
+				} as unknown as AgentRuntime;
+			},
+		});
+
+		await session.run("task");
+		await session.continue("side?", undefined, undefined, {
+			offTheRecord: true,
+		});
+		await session.continue("back to work");
+
+		expect(verdicts[0]).toBeUndefined();
+		expect(verdicts[1]).toMatchObject({ skip: true });
+		expect(verdicts[2]).toBeUndefined();
+	});
+});

@@ -958,6 +958,7 @@ const ChatRowContent = memo(
 								files={message.files}
 								images={message.images}
 								messageTs={message.ts}
+								offTheRecord={message.offTheRecord}
 								restoreWorkspaceDisabledReason={getRestoreWorkspaceDisabledReason(clineMessages, message.ts)}
 								sendMessageFromChatRow={sendMessageFromChatRow}
 								text={message.text}

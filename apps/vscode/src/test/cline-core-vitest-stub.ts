@@ -142,6 +142,11 @@ export { replaceTextInContent } from "../../../../sdk/packages/core/src/extensio
 export type { EditFileInput } from "../../../../sdk/packages/core/src/extensions/tools/schemas"
 export type { ApplyPatchExecutor, EditorExecutor, ToolExecutors } from "../../../../sdk/packages/core/src/extensions/tools/types"
 export { projectSessionMessagesForDisplay } from "../../../../sdk/packages/core/src/session/display-messages"
+export {
+	dropOffTheRecordTurns,
+	isOffTheRecordMessage,
+	OFF_THE_RECORD_METADATA_KEY,
+} from "../../../../sdk/packages/core/src/session/off-the-record"
 
 // Real file-read executor (dependency-light: node:fs/node:path + @plinycode/shared/storage)
 // so the workspace read override and its tests exercise the actual read semantics.

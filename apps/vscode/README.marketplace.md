@@ -23,6 +23,8 @@ All requests go **only** to Synopsys internal models through the Pliny gateway. 
 ## Features
 
 - **Plan, Agent & Ask modes** — let the agent propose a plan for your approval before it touches any code.
+- **Side questions** — tick **Side question** to ask something without adding it to the conversation's
+  context; the agent answers read-only.
 - **Rules from other agents** — reads the rules you already wrote for GitHub Copilot, Cursor and Windsurf,
   and the workspace `AGENTS.md`, in place. Enable or disable each one in the Rules panel.
 - **MCP servers** — extend the agent with Model Context Protocol tools.

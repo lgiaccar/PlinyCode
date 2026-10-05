@@ -733,6 +733,11 @@ export {
 } from "./session/models/session-graph";
 export type { SessionManifest } from "./session/models/session-manifest";
 export type { SessionRow } from "./session/models/session-row";
+export {
+	dropOffTheRecordTurns,
+	isOffTheRecordMessage,
+	OFF_THE_RECORD_METADATA_KEY,
+} from "./session/off-the-record";
 export * from "./session/search";
 export type {
 	CreateRootSessionWithArtifactsInput,

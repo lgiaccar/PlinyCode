@@ -3,7 +3,7 @@ import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import { AskResponseRequest, NewTaskRequest } from "@shared/proto/cline/task"
 import { IntentEvent } from "@shared/proto/cline/ui"
 import { useCallback, useRef } from "react"
-import type { SendDelivery } from "@/components/chat/sendMode"
+import type { SendDelivery, SendOptions } from "@/components/chat/sendMode"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { SlashServiceClient, TaskServiceClient, UiServiceClient } from "@/services/grpc-client"
 import type { ButtonActionType } from "../shared/buttonConfig"
@@ -37,9 +37,12 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 
 	// Handle sending a message
 	const handleSendMessage = useCallback(
-		async (text: string, images: string[], files: string[], requestedDelivery?: SendDelivery) => {
+		async (text: string, images: string[], files: string[], requestedDelivery?: SendDelivery, options?: SendOptions) => {
 			// "interrupt" stops the running turn first, then sends like a plain message.
 			const delivery: "queue" | "steer" | undefined = requestedDelivery === "interrupt" ? undefined : requestedDelivery
+			// Only messages that start a turn of their own can be side questions; the extension
+			// ignores the flag on approvals, answers to a pending question and queued messages.
+			const sideQuestion = options?.offTheRecord ? { offTheRecord: true } : {}
 			if (requestedDelivery === "interrupt" && turnState?.phase === "streaming") {
 				if (backgroundCommandRunning) {
 					await TaskServiceClient.cancelBackgroundCommand(EmptyRequest.create({})).catch((err) =>
@@ -167,6 +170,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 									images: request.images,
 									files: request.files,
 									partial: false,
+									...(request.offTheRecord ? { offTheRecord: true } : {}),
 								}
 							: undefined,
 					)
@@ -234,6 +238,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 								images,
 								files,
 								delivery,
+								...sideQuestion,
 							}),
 							{ showPendingMessage: turnState?.phase !== "streaming" },
 						)
@@ -270,6 +275,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 										images,
 										files,
 										delivery,
+										...(clineAsk === "followup" ? {} : sideQuestion),
 									}),
 									{ showPendingMessage },
 								)
@@ -307,6 +313,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 								images,
 								files,
 								delivery,
+								...(turnState?.phase === "streaming" ? {} : sideQuestion),
 							}),
 							{
 								showPendingMessage: turnState?.phase === "completed" || turnState?.phase === "awaiting_followup",

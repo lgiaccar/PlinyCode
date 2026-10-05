@@ -82,11 +82,18 @@ export class SdkSessionLifecycle {
 	private readonly pendingStops = new Map<string, Promise<void>>()
 	/** Orders the sends that wait on the editor state; see fireAndForgetSend. */
 	private outboundSends: Promise<void> = Promise.resolve()
+	/** Set while an off-the-record send's turn runs; the token is that send's own. */
+	private offTheRecordTurn: object | undefined
 
 	constructor(private readonly options: SdkSessionLifecycleOptions) {}
 
 	getActiveSession(): ActiveSession | undefined {
 		return this.activeSession
+	}
+
+	/** True while the running turn answers an off-the-record side question. */
+	isOffTheRecordTurn(): boolean {
+		return this.offTheRecordTurn !== undefined
 	}
 
 	setRunning(isRunning: boolean): void {
@@ -426,7 +433,11 @@ export class SdkSessionLifecycle {
 		images?: string[],
 		files?: string[],
 		delivery?: "queue" | "steer",
+		options: { offTheRecord?: boolean } = {},
 	): void {
+		// A side question starts a turn of its own; a queued or steering message
+		// joins someone else's turn, so the flag does not apply to it.
+		const offTheRecord = options.offTheRecord === true && delivery === undefined
 		// Captured by object identity, not sessionId: rebuilds (mode change) reuse
 		// the same sessionId for the replacement session, so only reference
 		// equality can tell this send's session apart from a successor. If the
@@ -449,9 +460,15 @@ export class SdkSessionLifecycle {
 		// run-interactive stamping). The notice survives prepareTurnInput's
 		// normalizeUserInput sanitize and is hidden from display surfaces by
 		// stripModeNotices.
-		const notice = this.options.consumeModeSwitchNotice?.(sessionId)
+		// An off-the-record turn is left out of later requests, so it must not use
+		// up the notice: the next message on the record carries it instead.
+		const notice = offTheRecord ? undefined : this.options.consumeModeSwitchNotice?.(sessionId)
 		const noticedPrompt = notice ? `${formatModeSwitchNotice(notice.from, notice.to)}\n${prompt}` : prompt
 		this.options.onSendStart?.(sessionId)
+		const offTheRecordTurn = offTheRecord ? {} : undefined
+		if (delivery === undefined) {
+			this.offTheRecordTurn = offTheRecordTurn
+		}
 		const send = (outboundPrompt: string): void => {
 			sdkHost
 				.send({
@@ -460,6 +477,12 @@ export class SdkSessionLifecycle {
 					userImages: images,
 					userFiles: files,
 					delivery,
+					...(offTheRecord ? { offTheRecord: true } : {}),
+				})
+				.finally(() => {
+					if (offTheRecordTurn && this.offTheRecordTurn === offTheRecordTurn) {
+						this.offTheRecordTurn = undefined
+					}
 				})
 				.then(async () => {
 					if (delivery === "queue" || delivery === "steer") {
@@ -499,7 +522,11 @@ export class SdkSessionLifecycle {
 		const userTyped = prompt.trim().length > 0 && !isSyntheticUserPrompt(prompt)
 		this.outboundSends = this.outboundSends
 			.then(async () => {
-				const block = userTyped ? await editorState.nextBlock(sessionId).catch(() => undefined) : undefined
+				// A side question sees the editor too, but is not remembered as having been
+				// told: the next message on the record still gets any change.
+				const read = () =>
+					offTheRecord ? editorState.nextBlock(sessionId, { remember: false }) : editorState.nextBlock(sessionId)
+				const block = userTyped ? await read().catch(() => undefined) : undefined
 				send(block ? `${noticedPrompt}\n\n${block}` : noticedPrompt)
 			})
 			.catch(async (error: unknown) => {

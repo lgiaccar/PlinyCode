@@ -11,6 +11,16 @@ export const SEND_MODES: readonly SendMode[] = ["queue", "steer", "interrupt", "
 /** What onSend receives: "interrupt" stops the running turn first, then sends. */
 export type SendDelivery = "queue" | "steer" | "interrupt"
 
+/** Per-message choices that go with a send. */
+export interface SendOptions {
+	/**
+	 * Ask the message as an off-the-record side question: it is answered without
+	 * changing any file, and later requests leave the question and its answer out
+	 * of the context. See docs/side-questions.md.
+	 */
+	offTheRecord?: boolean
+}
+
 const SEND_MODE_STORAGE_KEY = "plinycode.sendMode"
 
 export const SEND_MODE_META: Record<SendMode, { icon: string; label: string; tooltip: string }> = {

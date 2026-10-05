@@ -78,7 +78,7 @@ describe("InputSection", () => {
 		expect(composer).not.toBeDisabled()
 
 		fireEvent.keyDown(composer, { key: "Enter" })
-		expect(handleSendMessage).toHaveBeenCalledWith("queue this", [], [], undefined)
+		expect(handleSendMessage).toHaveBeenCalledWith("queue this", [], [], undefined, undefined)
 	})
 
 	it("allows submit while approval is pending so typed feedback can reject the approval", () => {
@@ -100,7 +100,7 @@ describe("InputSection", () => {
 		expect(composer).not.toBeDisabled()
 
 		fireEvent.keyDown(composer, { key: "Enter" })
-		expect(handleSendMessage).toHaveBeenCalledWith("queue this", [], [], undefined)
+		expect(handleSendMessage).toHaveBeenCalledWith("queue this", [], [], undefined, undefined)
 	})
 
 	it("allows submit for legacy active-task state when turnState is unavailable", () => {
@@ -125,7 +125,7 @@ describe("InputSection", () => {
 		expect(composer).not.toBeDisabled()
 
 		fireEvent.keyDown(composer, { key: "Enter" })
-		expect(handleSendMessage).toHaveBeenCalledWith("queue this", [], [], undefined)
+		expect(handleSendMessage).toHaveBeenCalledWith("queue this", [], [], undefined, undefined)
 	})
 
 	it("keeps submit disabled for non-active blocked states", () => {

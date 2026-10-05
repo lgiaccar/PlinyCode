@@ -208,6 +208,28 @@ describe("ConversationEditorState", () => {
 		expect(await tracker.nextBlock("task-1")).toBe(FIRST_BLOCK)
 	})
 
+	it("gives a side question the block without counting it as told", async () => {
+		const { tracker } = makeTracker()
+
+		expect(await tracker.nextBlock("task-1", { remember: false })).toBe(FIRST_BLOCK)
+		// The side question is left out of later requests, so the next message still gets it.
+		expect(await tracker.nextBlock("task-1")).toBe(FIRST_BLOCK)
+		expect(await tracker.nextBlock("task-1")).toBeUndefined()
+	})
+
+	it("skips blocks carried by side questions in a resumed transcript", () => {
+		const transcript = [
+			{ role: "user", content: formatUserInputBlock(`first\n\n${block("Open tabs:", "- old.ts")}`, "act") },
+			{
+				role: "user",
+				content: formatUserInputBlock(`side?\n\n${FIRST_BLOCK}`, "ask"),
+				metadata: { offTheRecord: true },
+			},
+		]
+
+		expect(findLastEditorStateBlock(transcript)).toBe(block("Open tabs:", "- old.ts"))
+	})
+
 	it("attaches nothing when the editor cannot be read in time", async () => {
 		const hanging = makeTracker({ read: vi.fn(() => new Promise<EditorState>(() => {})), readTimeoutMs: 20 })
 		expect(await hanging.tracker.nextBlock("task-1")).toBeUndefined()

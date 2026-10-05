@@ -6,7 +6,7 @@ import type { SdkInteractionCoordinator } from "./sdk-interaction-coordinator"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import { isAbortError, type SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import type { SdkTaskHistory } from "./sdk-task-history"
-import { createTaskProxy, type TaskProxy } from "./task-proxy"
+import { type AskResponseCallback, createTaskProxy, type TaskProxy } from "./task-proxy"
 
 export interface SdkTaskControlCoordinatorOptions {
 	sessions: SdkSessionLifecycle
@@ -15,7 +15,7 @@ export interface SdkTaskControlCoordinatorOptions {
 	taskHistory: SdkTaskHistory
 	getTask: () => TaskProxy | undefined
 	setTask: (task: TaskProxy | undefined) => void
-	onAskResponse: (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
+	onAskResponse: AskResponseCallback
 	resetMessageTranslator: () => void
 	postStateToWebview: () => Promise<void>
 	/**

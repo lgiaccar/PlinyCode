@@ -15,6 +15,83 @@ describe("SdkFollowupCoordinator", () => {
 		vi.clearAllMocks()
 	})
 
+	describe("side questions", () => {
+		it("asks an off-the-record question on an idle session and marks its bubble", async () => {
+			const activeSession = makeActiveSession()
+			const { coordinator, options } = makeCoordinator({ activeSession })
+
+			await coordinator.askResponse("why?", undefined, undefined, "messageResponse", "completed", undefined, {
+				offTheRecord: true,
+			})
+
+			expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
+				[expect.objectContaining({ say: "user_feedback", text: "why?", offTheRecord: true })],
+				expect.anything(),
+			)
+			expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
+				activeSession.sdkHost,
+				"session-123",
+				"resolved: why?",
+				undefined,
+				undefined,
+				undefined,
+				{ offTheRecord: true },
+			)
+		})
+
+		it("keeps the flag when the conversation is resumed from history first", async () => {
+			const task = makeTask("task-1")
+			const { coordinator, options } = makeCoordinator({ task })
+
+			await coordinator.askResponse("why?", undefined, undefined, "messageResponse", undefined, undefined, {
+				offTheRecord: true,
+			})
+
+			expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
+				expect.anything(),
+				"resumed-session",
+				"resolved: why?",
+				undefined,
+				undefined,
+				undefined,
+				{ offTheRecord: true },
+			)
+		})
+
+		it("ignores the flag for a message that joins a running turn, and for a bare resume", async () => {
+			const running = makeCoordinator({ activeSession: makeActiveSession({ isRunning: true }) })
+			await running.coordinator.askResponse("later", undefined, undefined, "messageResponse", "streaming", undefined, {
+				offTheRecord: true,
+			})
+			expect(running.options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
+				expect.anything(),
+				"session-123",
+				"resolved: later",
+				undefined,
+				undefined,
+				"queue",
+			)
+
+			const idle = makeCoordinator({ activeSession: makeActiveSession() })
+			await idle.coordinator.askResponse("", undefined, undefined, "messageResponse", "completed", undefined, {
+				offTheRecord: true,
+			})
+			expect(idle.options.sessions.fireAndForgetSend.mock.calls[0]).toHaveLength(5)
+		})
+
+		it("never applies to an answer to a pending approval or question", async () => {
+			const { coordinator, options } = makeCoordinator()
+			options.interactions.resolvePendingAskQuestion.mockReturnValue(true)
+
+			await coordinator.askResponse("option A", undefined, undefined, "messageResponse", undefined, undefined, {
+				offTheRecord: true,
+			})
+
+			expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
+			expect(options.messages.appendAndEmit).not.toHaveBeenCalled()
+		})
+	})
+
 	it("resolves pending tool approvals without sending a follow-up", async () => {
 		const { coordinator, options } = makeCoordinator()
 		options.interactions.resolvePendingToolApproval.mockReturnValue(true)

@@ -195,6 +195,11 @@ export interface ClineMessage {
 	conversationHistoryIndex?: number
 	conversationHistoryDeletedRange?: [number, number] // for when conversation history is truncated for API requests
 	modelInfo?: ClineMessageModelInfo
+	/**
+	 * A user message asked as an off-the-record side question: it and its answer are left
+	 * out of later model requests (docs/side-questions.md).
+	 */
+	offTheRecord?: boolean
 }
 
 export type ClineAsk =

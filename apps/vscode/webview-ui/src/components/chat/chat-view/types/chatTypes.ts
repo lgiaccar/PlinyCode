@@ -5,7 +5,7 @@
 import { ClineAsk, ClineMessage } from "@shared/ExtensionMessage"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { ListRange, VirtuosoHandle } from "react-virtuoso"
-import type { SendDelivery } from "@/components/chat/sendMode"
+import type { SendDelivery, SendOptions } from "@/components/chat/sendMode"
 import { ButtonActionType } from "../shared/buttonConfig"
 
 export interface PendingUserMessage {
@@ -79,7 +79,13 @@ export interface ChatState {
  */
 export interface MessageHandlers {
 	executeButtonAction: (action: ButtonActionType, text?: string, images?: string[], files?: string[]) => Promise<void>
-	handleSendMessage: (text: string, images: string[], files: string[], delivery?: SendDelivery) => Promise<void>
+	handleSendMessage: (
+		text: string,
+		images: string[],
+		files: string[],
+		delivery?: SendDelivery,
+		options?: SendOptions,
+	) => Promise<void>
 	handleTaskCloseButtonClick: () => void
 	startNewTask: () => Promise<void>
 }

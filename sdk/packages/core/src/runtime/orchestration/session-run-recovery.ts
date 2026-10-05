@@ -22,6 +22,7 @@ interface SessionRunInput {
 	userImages?: string[];
 	userFiles?: string[];
 	isContinue: boolean;
+	offTheRecord?: boolean;
 }
 
 interface SessionRunRecoveryDeps {
@@ -121,12 +122,7 @@ export class SessionRunRecovery {
 	 * already written to the conversation store — and its deltas were already
 	 * streamed to the UI, where they cannot be retracted.
 	 */
-	async executeRunWithRecovery(input: {
-		userMessage?: string;
-		userImages?: string[];
-		userFiles?: string[];
-		isContinue: boolean;
-	}): Promise<AgentResult> {
+	async executeRunWithRecovery(input: SessionRunInput): Promise<AgentResult> {
 		let result = await this.executeRunInternal(input);
 
 		for (let attempt = 1; attempt <= MAX_RUN_RECOVERY_ATTEMPTS; attempt += 1) {

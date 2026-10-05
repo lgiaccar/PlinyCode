@@ -23,6 +23,7 @@ import {
 } from "../../../session/team";
 import type { SessionStatus } from "../../../types/common";
 import type { ActiveSession, PreparedTurnInput } from "../../../types/session";
+import type { SessionRunOptions } from "../../orchestration/session-runtime-orchestrator";
 import type { PendingPromptsController } from "../../turn-queue/pending-prompt-service";
 import type {
 	SendSessionInput,
@@ -65,9 +66,15 @@ export async function executeTurn(
 		mode?: SendSessionInput["mode"];
 		userImages?: string[];
 		userFiles?: string[];
+		offTheRecord?: boolean;
 	},
 ): Promise<AgentResult> {
-	const preparedInput = await prepareTurnInput(session, input);
+	// An off-the-record question is answered under ask mode's rules, so its
+	// <user_input> tag says so whatever the session's mode is.
+	const preparedInput = await prepareTurnInput(
+		session,
+		input.offTheRecord ? { ...input, mode: "ask" } : input,
+	);
 	const prompt = preparedInput.prompt.trim();
 	const images = preparedInput?.userImages?.length;
 	const files = preparedInput?.userFiles?.length;
@@ -109,6 +116,7 @@ export async function executeTurn(
 			prompt,
 			preparedInput.userImages,
 			preparedInput.userFiles,
+			input.offTheRecord ? { offTheRecord: true } : undefined,
 		);
 
 		while (shouldAutoContinueTeamRuns(session, result.finishReason)) {
@@ -232,6 +240,7 @@ async function executeAgentTurn(
 	prompt: string,
 	userImages?: string[],
 	userFiles?: string[],
+	runOptions?: SessionRunOptions,
 ): Promise<AgentResult> {
 	const shouldContinue =
 		session.started || session.agent.getMessages().length > 0;
@@ -248,9 +257,13 @@ async function executeAgentTurn(
 	session.turnUsageByAgent = new Map<string, SessionAccumulatedUsage>();
 
 	try {
+		// Options are passed only when there are any, so an ordinary turn calls
+		// run/continue exactly as before they existed.
+		const optionArgs: [SessionRunOptions] | [] = runOptions ? [runOptions] : [];
 		const runFn = shouldContinue
-			? () => session.agent.continue(prompt, userImages, userFiles)
-			: () => session.agent.run(prompt, userImages, userFiles);
+			? () =>
+					session.agent.continue(prompt, userImages, userFiles, ...optionArgs)
+			: () => session.agent.run(prompt, userImages, userFiles, ...optionArgs);
 		const result = await runWithAuthRetry(
 			host,
 			session,
