@@ -22,7 +22,7 @@ All of these must hold:
 - the turn made at least one successful `editor` or `apply_patch` call;
 - the turn has not been reviewed yet. One user turn is reviewed at most once: the reply that follows the fix-up is not reviewed again, also when a failed run was recovered in between;
 - the completion guard did not give up on the reply. A run that ends on a stall the guard stopped reminding about is unfinished, and the chat already says so;
-- on BalanceAuto, the turn's last call ran on a free model. The review itself is free, but the round of checking it sets off is billed when a paid model answers, so the pass stays out there, as the completion guard does.
+- the round of checking the findings set off may be billed. The review itself is always free, but when a paid model is answering, so is the round of fixes after it. On BalanceAuto, where paid models are expected, that is allowed and paid turns are reviewed too. On the FreeAuto profiles, which must stay free, a turn answered by a paid model (only possible through a rules file that names one) is not reviewed.
 
 Then the change itself must be worth reading: at least 3 changed lines of code. Markdown and other prose (`.md`, `.mdx`, `.rst`, `.txt`, `.adoc`, `README`, `CHANGELOG`, …), lockfiles, binary files and files too large to diff are not reviewed. In a mixed change they are named for the reviewer but not shown.
 
@@ -83,7 +83,7 @@ Each root run's line in `pliny-free-auto-runs.jsonl` carries a `review` object o
 | Field | Meaning |
 | --- | --- |
 | `outcome` | `issues`, `clean`, `no-verdict` (the reviewer failed) or `skipped` |
-| `reason` | for `skipped`: `setting-off`, `not-act-mode`, `paid-model`, `already-reviewed`, `guard-gave-up`, `no-changes`, `docs-only`, `small-change`, `no-reviewer`, `cancelled`, `sub-agent`. For `no-verdict`: the error |
+| `reason` | for `skipped`: `setting-off`, `not-act-mode`, `paid-model` (a paid model would do the fix-up outside BalanceAuto), `already-reviewed`, `guard-gave-up`, `no-changes`, `docs-only`, `small-change`, `no-reviewer`, `cancelled`, `sub-agent`. For `no-verdict`: the error |
 | `model` | the reviewing model |
 | `issues` | how many it flagged |
 | `durationMs` | how long it took |

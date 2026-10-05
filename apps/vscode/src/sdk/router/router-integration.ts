@@ -579,7 +579,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		isActive: isRouted,
 		isEnabled: () => deps.reviewEnabled?.() ?? true,
 		getMode: deps.getMode,
-		freeModelIsAnswering: () => freeModelIsAnswering(deps.sessionId),
+		// A paid model's fix-up round is billed, which BalanceAuto users signed up for and FreeAuto users did not.
+		fixRoundAllowed: () => isPlinyBalanceAutoModelId(config.modelId) || freeModelIsAnswering(deps.sessionId),
 		guardGaveUp: () => rootState().run.guardGaveUp !== undefined,
 		recorded: () => rootState().run.review,
 		record: (review) => {

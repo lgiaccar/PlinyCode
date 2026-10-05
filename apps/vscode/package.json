@@ -395,7 +395,7 @@
 				"plinycode.review.beforeFinish": {
 					"type": "boolean",
 					"default": true,
-					"markdownDescription": "Before a run on an auto router (`auto-free`, `auto-paid-balanced`) that changed files ends, have a second free model read the diff. Problems it is confident about go back to the working model once, to check and fix; the chat shows which model reviewed and how many problems it flagged. The review itself costs nothing."
+					"markdownDescription": "Before a run on an auto router (`auto-free`, `auto-paid-balanced`) that changed files ends, have a second free model read the diff. Problems it is confident about go back to the working model once, to check and fix; the chat shows which model reviewed and how many problems it flagged. The review itself costs nothing. On `auto-paid-balanced`, when a paid model is answering, the round of fixes it asks for is billed like any other call; on `auto-free` nothing is billed."
 				},
 				"plinycode.plan.executeWith": {
 					"type": "string",

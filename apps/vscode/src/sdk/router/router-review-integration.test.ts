@@ -1,5 +1,5 @@
 import type { CoreSessionConfig } from "@plinycode/core"
-import { PLINY_BALANCE_AUTO_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
+import { isPlinySelfHostedModelId, PLINY_BALANCE_AUTO_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
 import type { AgentMessage, AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getSessionState, isModelHealthy, resetHealth, resetSessions } from "./router-health"
@@ -340,7 +340,7 @@ describe("installRouter reviewer pass", () => {
 		expect(runs).toEqual([])
 	})
 
-	it("on BalanceAuto, reviews a free model's work with a free model and leaves a paid model's alone", async () => {
+	it("on BalanceAuto, reviews both a free and a paid model's work, always with a free reviewer", async () => {
 		const { askedAtEnd, classifier, reviewer, runs, run, afterEdit, finish, endRun } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
 		// The coding route leads with kimi; the reasoning route is all paid, so the free pool reviews.
 		await run()
@@ -349,16 +349,21 @@ describe("installRouter reviewer pass", () => {
 		expect(await finish()).toContain(REVIEW_NUDGE_PREFIX)
 		expect(askedAtEnd).toEqual([UTILITY, CODER])
 
-		// A turn that paid Claude answers: its fix-up round would be billed.
+		// A turn that paid Claude answers: its fix-up round is billed, which BalanceAuto allows.
 		classifier.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
 		await run()
-		expect(getSessionState("s").calls[0]?.modelId).toBe("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")
+		const author = "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"
+		expect(getSessionState("s").calls[0]?.modelId).toBe(author)
 		await afterEdit()
 		reviewer.mockClear()
-		expect(await finish()).toBeUndefined()
-		expect(reviewer).not.toHaveBeenCalled()
+		askedAtEnd.length = 0
+		expect(await finish()).toContain(REVIEW_NUDGE_PREFIX)
+		expect(reviewer).toHaveBeenCalledTimes(1)
+		const reviewedBy = askedAtEnd.at(-1) ?? ""
+		expect(isPlinySelfHostedModelId(reviewedBy)).toBe(true)
+		expect(reviewedBy).not.toBe(author)
 		await endRun()
-		expect(runs[0]?.review).toEqual({ outcome: "skipped", reason: "paid-model" })
+		expect(runs[0]?.review).toMatchObject({ outcome: "issues", model: reviewedBy })
 	})
 
 	it("counts a reviewer that cannot be reached against its health, and asks the next one afterwards", async () => {

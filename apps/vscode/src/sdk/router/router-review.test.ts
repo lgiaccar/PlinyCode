@@ -395,7 +395,7 @@ describe("createReviewPass", () => {
 	it.each([
 		["the setting is off", { isEnabled: () => false }, "setting-off"],
 		["plan or ask mode", { getMode: () => "plan" as const }, "not-act-mode"],
-		["a paid model is answering", { freeModelIsAnswering: () => false }, "paid-model"],
+		["a paid model would do the fix-up outside BalanceAuto", { fixRoundAllowed: () => false }, "paid-model"],
 		["the guard gave up on a stalled reply", { guardGaveUp: () => true }, "guard-gave-up"],
 		[
 			"no other free model is available",

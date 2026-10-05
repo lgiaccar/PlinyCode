@@ -12,7 +12,9 @@
  * It can only add one more round of work, never block a finish: a skipped
  * review, a reviewer that times out, fails or answers with something
  * unreadable, and a cancelled run all end the run exactly as before. The
- * reviewer is always a free model, so the pass itself costs nothing.
+ * reviewer is always a free model, so the pass itself costs nothing. The
+ * round of checking it sets off is billed when a paid model is answering,
+ * which only BalanceAuto allows: free profiles stay free.
  *
  * The pass keeps no state of its own. "Once per turn" is read off the
  * transcript (the reminder is in it) and the run record, so it also holds when
@@ -298,12 +300,13 @@ export interface ReviewPassOptions {
 	/** Ask mode arrives here as "plan": neither edits code. */
 	getMode: () => "plan" | "act"
 	/**
-	 * Whether the model that would get the findings is a free one. The review
-	 * itself is free, but the round of checking it sets off is billed when a
-	 * paid model (BalanceAuto) is answering, so there the pass stays out, as
-	 * the completion guard does. Taken as true when not given.
+	 * Whether the round of checking the findings set off may run: always when
+	 * a free model would do it, and on BalanceAuto, the one profile where a
+	 * paid model answering, and so billing, is expected. A free profile that a
+	 * rules file pointed at a paid model gets no review, so it stays free.
+	 * Taken as true when not given.
 	 */
-	freeModelIsAnswering?: () => boolean
+	fixRoundAllowed?: () => boolean
 	/** The completion guard let this reply through only because it had run out of reminders. */
 	guardGaveUp?: () => boolean
 	/** The review already recorded for the current run, if any. */
@@ -388,7 +391,7 @@ export function createReviewPass(options: ReviewPassOptions): CompletionGuard {
 		if (options.getMode() !== "act") {
 			return skip("not-act-mode")
 		}
-		if (options.freeModelIsAnswering?.() === false) {
+		if (options.fixRoundAllowed?.() === false) {
 			return skip("paid-model")
 		}
 		if (options.guardGaveUp?.()) {
