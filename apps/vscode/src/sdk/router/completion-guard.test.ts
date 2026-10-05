@@ -220,6 +220,43 @@ describe("createRouterCompletionGuard", () => {
 		expect(await guard({ message: unfinished, iteration: 1 })).toBeUndefined()
 	})
 
+	describe("after watch_ci", () => {
+		const watchCi = (output: string, isError = false): AgentMessage => ({
+			id: "t",
+			role: "tool",
+			content: [{ type: "tool-result", toolCallId: "c1", toolName: "watch_ci", output, isError }],
+			createdAt: 0,
+		})
+		const waiting = reply("I pushed the fix and I'll wait for CI to finish.")
+		const started = watchCi(
+			"Watching CI for PR #7 (feature → main) at commit aaaaaaaa on GitHub, until every run has finished.",
+		)
+
+		it("lets the turn end on a promise to wait, without consulting the judge", async () => {
+			const judge = vi.fn(async () => ({ done: false }))
+			const guard = createRouterCompletionGuard({ isActive: () => true, toolCallsThisRun: () => 3, judge })
+			const messages = [user("fix the build and make CI green"), started, waiting]
+			expect(await guard({ message: waiting, iteration: 4, runMessages: messages, messages })).toBeUndefined()
+			expect(judge).not.toHaveBeenCalled()
+		})
+
+		it("still steps in when no watch was started or other work came after it", async () => {
+			const guard = () => createRouterCompletionGuard({ isActive: () => true })
+			const cancelled = [watchCi("Stopped watching CI for PR #7 (feature → main)."), waiting]
+			expect(await guard()({ message: waiting, iteration: 2, runMessages: cancelled, messages: cancelled })).toBe(
+				UNFINISHED_TURN_REMINDER,
+			)
+			const failed = [watchCi("Branch 'feature' has not been pushed", true), waiting]
+			expect(await guard()({ message: waiting, iteration: 2, runMessages: failed, messages: failed })).toBe(
+				UNFINISHED_TURN_REMINDER,
+			)
+			const later = [started, shell([{ query: "ls", result: "a.txt", success: true }]), waiting]
+			expect(await guard()({ message: waiting, iteration: 3, runMessages: later, messages: later })).toBe(
+				UNFINISHED_TURN_REMINDER,
+			)
+		})
+	})
+
 	describe("judge", () => {
 		const messages = [user("build and run the benchmark"), done]
 

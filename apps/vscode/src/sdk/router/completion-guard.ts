@@ -26,6 +26,7 @@
 import type { AgentMessage, CompletionGuard, CompletionGuardContext } from "@plinycode/shared"
 import {
 	endsWithHandBack,
+	followsCiWatchStart,
 	lastSentence,
 	latestUserRequest,
 	looksDegenerate,
@@ -271,6 +272,12 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 			unansweredNudges -= 1
 		}
 		const text = replyText(message)
+		// watch_ci told the model to stop here; the CI watcher wakes the
+		// conversation with the result, so neither the rules nor the judge apply.
+		if (followsCiWatchStart(runMessages, message) && !looksDegenerate(text)) {
+			consecutiveStalls = 0
+			return undefined
+		}
 		const userRequest = latestUserRequest(messages)
 		const rightAfterNudge = lastNudgeIteration !== undefined && iteration === lastNudgeIteration + 1
 		const budgetLeft = nudgesThisRun < maxNudges && unansweredNudges < maxUnanswered

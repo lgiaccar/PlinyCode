@@ -387,6 +387,11 @@
 					"default": "actModel",
 					"markdownDescription": "The model the **Execute plan** button runs a plan on, so that a strong model can write the plan and a cheaper one can carry it out. The button names the model it will use, and choosing another one in its menu changes this setting. Any value other than `actModel` switches act mode to that model when a plan is executed."
 				},
+				"plinycode.ci.watch": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Let the agent watch CI with the `watch_ci` tool: after it pushes a change, PlinyCode checks the GitHub Actions or Azure Pipelines runs in the background, without using the model, and sends the result into the conversation when they finish. Turning this off also stops the watches that are running."
+				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",
 					"default": 5,

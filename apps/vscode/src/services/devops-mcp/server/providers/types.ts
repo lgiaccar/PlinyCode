@@ -26,6 +26,8 @@ export interface PipelineRun {
 	result: Result
 	branch: string
 	commit?: string
+	/** The pull request's source commit, when `commit` is a merge commit built for the PR (Azure DevOps). */
+	headCommit?: string
 	url: string
 	started?: string
 	finished?: string

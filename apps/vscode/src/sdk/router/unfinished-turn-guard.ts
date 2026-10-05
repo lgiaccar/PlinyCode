@@ -21,6 +21,7 @@
  */
 
 import type { AgentMessage, AgentToolResultPart } from "@plinycode/shared"
+import { WATCH_CI_STARTED_PREFIX, WATCH_CI_TOOL_NAME } from "@shared/ciWatch"
 
 /** Announcements of a next step, matched in the reply's last sentence. */
 const ANNOUNCEMENT =
@@ -308,6 +309,29 @@ export function previousShellFailure(
 		}
 	}
 	return undefined
+}
+
+/**
+ * True when the reply directly follows a `watch_ci` call that started a watch.
+ * That tool tells the model to end its turn and wait: the CI watcher sends the
+ * result into the conversation later, so "I'll wait for CI" is not a stall.
+ */
+export function followsCiWatchStart(runMessages: readonly AgentMessage[] | undefined, reply: AgentMessage): boolean {
+	if (!runMessages) {
+		return false
+	}
+	const index = runMessages.lastIndexOf(reply)
+	const previous = runMessages[index >= 0 ? index - 1 : runMessages.length - 1]
+	if (!previous || previous.role !== "tool") {
+		return false
+	}
+	return previous.content.some(
+		(part) =>
+			part.type === "tool-result" &&
+			part.toolName === WATCH_CI_TOOL_NAME &&
+			!part.isError &&
+			resultText(part.output).includes(WATCH_CI_STARTED_PREFIX),
+	)
 }
 
 /** Strip the `<user_input mode="…">` wrapper the host puts around prompts. */
