@@ -66,6 +66,7 @@ import { RequestStartRow } from "./RequestStartRow"
 import SearchResultsDisplay from "./SearchResultsDisplay"
 import SubagentStatusRow from "./SubagentStatusRow"
 import { ThinkingRow } from "./ThinkingRow"
+import TodoListRow from "./TodoListRow"
 import UserMessage from "./UserMessage"
 
 const HEADER_CLASSNAMES = "flex items-center gap-2.5 mb-3"
@@ -1084,7 +1085,7 @@ const ChatRowContent = memo(
 					case "browser_action_result":
 						return <LegacyBrowserRow message={message} />
 					case "task_progress":
-						return <InvisibleSpacer /> // task_progress messages should be displayed in TaskHeader only, not in chat
+						return <TodoListRow message={message} />
 					case "compaction":
 						return <CompactionRow message={message} />
 					default:

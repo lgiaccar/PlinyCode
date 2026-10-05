@@ -4436,3 +4436,38 @@ describe("tools that run concurrently keep their own rows", () => {
 		expect(JSON.parse(second.messages[0].text!)).toMatchObject({ regex: "b" })
 	})
 })
+
+describe("update_todo_list shows the task list, not a tool row", () => {
+	const todoEvent = (type: "content_start" | "content_end", extra: Record<string, unknown>) =>
+		({
+			type: "agent_event",
+			payload: {
+				sessionId: "s1",
+				event: { type, contentType: "tool", toolName: "update_todo_list", toolCallId: "todo-1", ...extra } as AgentEvent,
+			},
+		}) as CoreSessionEvent
+	const input = {
+		todos: [
+			{ content: "Read the router", status: "completed" },
+			{ content: "Add the route", status: "in_progress" },
+		],
+	}
+
+	it("emits nothing when the call starts and the whole list when it ends", () => {
+		const state = new MessageTranslatorState()
+
+		expect(translateSessionEvent(todoEvent("content_start", { input }), state).messages).toEqual([])
+
+		const end = translateSessionEvent(todoEvent("content_end", { output: "Todo list updated" }), state)
+		expect(end.messages).toHaveLength(1)
+		expect(end.messages[0]).toMatchObject({ type: "say", say: "task_progress", partial: false })
+		expect(JSON.parse(end.messages[0].text ?? "")).toEqual(input)
+	})
+
+	it("shows nothing for a call the tool rejected", () => {
+		const state = new MessageTranslatorState()
+		translateSessionEvent(todoEvent("content_start", { input: { todos: [] } }), state)
+
+		expect(translateSessionEvent(todoEvent("content_end", { error: "No tasks found." }), state).messages).toEqual([])
+	})
+})

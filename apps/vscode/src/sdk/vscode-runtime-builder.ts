@@ -7,6 +7,7 @@ import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
 import { Logger } from "@/shared/services/Logger"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
+import { createTodoTool } from "./vscode-todo-tool"
 import { createWaitTool } from "./vscode-wait-tool"
 
 interface McpToolDescriptor {
@@ -138,6 +139,10 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	// `wait` gives the agent a way to pass time between checks on a long-running
 	// command, instead of ending its turn with "I'll check back later".
 	tools.push(createWaitTool())
+
+	// A task list the model keeps and the user sees, so long runs do not lose
+	// track of what is left.
+	tools.push(createTodoTool())
 
 	Logger.log(`[VscodeRuntimeTools] Prepared ${tools.length} VSCode extra tools`)
 	return tools

@@ -139,7 +139,7 @@ const BINARY_EXTENSIONS = new Set([
 	"zip",
 ]);
 
-export const DEFAULT_EXCLUDE_DIRS = [
+const DEFAULT_EXCLUDE_DIRS = [
 	"node_modules",
 	".git",
 	"dist",

@@ -16,8 +16,10 @@ import type {
 	ClineSubagentUsageInfo,
 } from "@shared/ExtensionMessage"
 import { Logger } from "@shared/services/Logger"
+import type { TodoListMessage } from "@shared/todo-list"
 import { isSyntheticUserPrompt } from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
+import { normalizeTodoList, TODO_TOOL_NAME } from "../vscode-todo-tool"
 import { buildCompactionMessage, finalizeDanglingCompaction, parseCompactionNoticeMetadata } from "./ask-builders"
 import { reshapeErrorForWebview } from "./error-reshape"
 import {
@@ -122,6 +124,11 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					// message. Emitting a generic say:"tool" here would leave an orphan partial
 					// row that never finalizes. Suppress it (the CLI does the same).
 					if (toolName === "ask_question" || toolName === "ask_followup_question") {
+						break
+					}
+
+					// The task list has no tool row: content_end emits the list itself.
+					if (toolName === TODO_TOOL_NAME) {
 						break
 					}
 
@@ -365,6 +372,23 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					// ask_question is serviced by the interaction coordinator (see content_start);
 					// it produces no transcript row of its own, so its content_end is a no-op.
 					if (toolName === "ask_question" || toolName === "ask_followup_question") {
+						break
+					}
+
+					// update_todo_list → the list as the user should see it. A call the
+					// tool rejected changed nothing, so it shows nothing.
+					if (toolName === TODO_TOOL_NAME) {
+						const todos = event.error ? [] : normalizeTodoList(state.getStreamingToolInput())
+						const ts = state.clearStreamingTool()
+						if (todos.length > 0) {
+							messages.push({
+								ts,
+								type: "say",
+								say: "task_progress",
+								text: JSON.stringify({ todos } satisfies TodoListMessage),
+								partial: false,
+							})
+						}
 						break
 					}
 
