@@ -345,6 +345,33 @@
 		"configuration": {
 			"title": "PlinyCode",
 			"properties": {
+				"plinycode.advisor.maxCallsPerConversation": {
+					"type": "integer",
+					"default": 5,
+					"minimum": 0,
+					"maximum": 50,
+					"markdownDescription": "How many times the model may ask the advisor in one conversation. Further calls are refused and the model carries on by itself. See `#plinycode.advisor.use#`."
+				},
+				"plinycode.advisor.model": {
+					"type": "string",
+					"default": "snps-aws-bedrock/global.anthropic.claude-sonnet-5",
+					"markdownDescription": "The Pliny model that answers when the model asks the advisor: a concrete model id, not a router. The default is Claude Sonnet 5. The model must have a price in the PlinyCode model list, so that each call's cost can be shown. See `#plinycode.advisor.use#`."
+				},
+				"plinycode.advisor.use": {
+					"type": "string",
+					"enum": [
+						"balance",
+						"always",
+						"never"
+					],
+					"default": "balance",
+					"markdownEnumDescriptions": [
+						"Only in conversations that run on `auto-paid-balanced`, where paid calls are already expected.",
+						"In every conversation whose model is not the advisor model itself, including `auto-free` and the free models. **This spends money on an otherwise free conversation.**",
+						"Never."
+					],
+					"markdownDescription": "When the model is given the `ask_advisor` tool, which lets a free or cheaper model ask a stronger one (`#plinycode.advisor.model#`) for advice at a hard decision instead of running the whole task on the expensive model. Each call is a paid call of a few cents: its cost is added to the conversation's cost, and it is refused once the conversation has reached its budget (`#plinycode.spending.conversationLimit#`) or its number of calls (`#plinycode.advisor.maxCallsPerConversation#`)."
+				},
 				"plinycode.devops.enabled": {
 					"type": "boolean",
 					"default": true,

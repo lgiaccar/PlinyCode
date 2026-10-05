@@ -2,6 +2,7 @@ import type { CoreSessionConfig } from "@plinycode/core"
 import { type AgentStopControl, createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
+import { type AdvisorInstallDeps, installAdvisor } from "./advisor/advisor-install"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
@@ -31,6 +32,8 @@ interface SdkSessionConfigBuilderOptions {
 	 * stop control ends the run there (the conversation spending limit).
 	 */
 	checkSpendingLimit?: () => Promise<AgentStopControl | undefined>
+	/** The advisor tool's settings, budget check and usage sink; the tool is installed when given. */
+	advisor?: Pick<AdvisorInstallDeps, "getSettings" | "checkBudget" | "onUsage">
 }
 
 /**
@@ -109,6 +112,15 @@ export class SdkSessionConfigBuilder {
 				getMode: () => (this.options.stateManager.getGlobalSettingsKey("mode") === "act" ? "act" : "plan"),
 				emitRow,
 				nextMessageTs,
+			})
+		}
+
+		// After the router, so the advisor's model factory wraps the router's.
+		if (this.options.advisor) {
+			installAdvisor(config, {
+				...this.options.advisor,
+				// The same key installRouter is given above.
+				routerSessionKey: this.options.getSessionId?.() || input.cwd,
 			})
 		}
 

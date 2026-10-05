@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { DEFAULT_ADVISOR_SETTINGS } from "./advisor/advisor-settings"
 import { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 
 const mocks = vi.hoisted(() => ({
@@ -114,5 +115,34 @@ describe("SdkSessionConfigBuilder", () => {
 		})
 		expect(decision).toMatchObject({ action: "stop" })
 		expect(onConsecutiveMistakeLimitReached).not.toHaveBeenCalled()
+	})
+
+	it("installs the advisor tool, hidden from the model unless the conversation is offered it", async () => {
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			advisor: { getSettings: () => DEFAULT_ADVISOR_SETTINGS, checkBudget: async () => undefined },
+		})
+		const tools = [
+			{ name: "read_files", description: "", inputSchema: {} },
+			{ name: "ask_advisor", description: "", inputSchema: {} },
+		]
+		const shownTo = async (modelId: string) => {
+			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, modelId, extraTools: [] })
+			const config = await builder.build({ cwd: "/workspace", mode: "act" })
+			expect(config.extraTools?.map((tool) => tool.name)).toEqual(["ask_advisor"])
+			const result = await config.hooks?.beforeModel?.({ snapshot: {}, request: { messages: [], tools } } as never)
+			return (result?.tools ?? tools).map((tool) => tool.name)
+		}
+
+		expect(await shownTo("pliny/auto-paid-balanced")).toEqual(["read_files", "ask_advisor"])
+		expect(await shownTo("pliny/auto-free")).toEqual(["read_files"])
+	})
+
+	it("adds no advisor tool when the host does not provide one", async () => {
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, modelId: "pliny/auto-paid-balanced", extraTools: [] })
+		const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, emitHookMessage: vi.fn() })
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+		expect(config.extraTools).toEqual([])
 	})
 })
