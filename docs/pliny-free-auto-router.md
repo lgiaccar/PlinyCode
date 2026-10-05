@@ -210,6 +210,12 @@ A reply that collapses into repetition is cut off mid-stream by the routed model
 and treated like any other post-output failure: the run continues on another
 model with a prompt to redo the step.
 
+The guard and the judge check that the work was done, not that it is right.
+Once they accept a reply, the reviewer pass has a second free model read the
+diff of what the run changed and hands likely defects back to the working
+model once; its outcome is the `review` field of the run log line. See
+[review-pass.md](review-pass.md).
+
 Every run appends one line to `pliny-free-auto-runs.jsonl` next to the rules
 files: how it ended, the last model and tool, which rules fired, what the judge
 said, and the reply's tail. `bun apps/vscode/scripts/summarize-free-auto-log.ts

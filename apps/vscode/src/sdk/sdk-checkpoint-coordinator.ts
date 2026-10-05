@@ -243,6 +243,46 @@ export class SdkCheckpointCoordinator {
 		}
 	}
 
+	/**
+	 * What a session's current run has changed so far: its latest checkpoint —
+	 * snapshotted when the user's last message started the run — against the
+	 * working tree as it is now. For the reviewer pass, which reads it before
+	 * the run ends, so it is never served from the "View Changes" cache.
+	 * Returns undefined when the session has no checkpoint.
+	 */
+	async getRunChanges(sessionId: string): Promise<Pick<CheckpointComparison, "cwd" | "diffs"> | undefined> {
+		const activeSession = this.options.sessions.getActiveSession()
+		// A background session is not the active one; its record is read through a temporary host.
+		let tempHost: VscodeSessionHost | undefined
+		const sessionHost =
+			activeSession?.sessionId === sessionId
+				? activeSession.sdkHost
+				: (tempHost = await this.options.createTempSessionHost())
+		try {
+			if (!sessionHost.compareCheckpoint) {
+				return undefined
+			}
+			const sessionRecord = await sessionHost.get(sessionId)
+			const latestCheckpoint = readSessionCheckpointHistory(sessionRecord).reduce(
+				(latest, entry) => (!latest || entry.runCount > latest.runCount ? entry : latest),
+				undefined as ReturnType<typeof readSessionCheckpointHistory>[number] | undefined,
+			)
+			if (!latestCheckpoint) {
+				return undefined
+			}
+			const cwd =
+				sessionRecord?.cwd?.trim() || sessionRecord?.workspaceRoot?.trim() || (await this.options.getWorkspaceRoot())
+			const { diffs } = await sessionHost.compareCheckpoint({
+				sessionId,
+				checkpointRunCount: latestCheckpoint.runCount,
+				cwd,
+			})
+			return { cwd, diffs }
+		} finally {
+			await tempHost?.dispose("getRunChanges")
+		}
+	}
+
 	private async loadLatestCheckpointComparison(): Promise<CheckpointComparison | undefined> {
 		return this.loadCheckpointComparison()
 	}

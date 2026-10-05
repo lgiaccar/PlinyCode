@@ -333,6 +333,7 @@ export class Controller {
 			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 			checkSpendingLimit: () => this.checkSpendingLimit(),
+			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),

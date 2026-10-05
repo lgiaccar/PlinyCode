@@ -355,6 +355,11 @@
 					"default": true,
 					"description": "Also offer the PlinyCode DevOps MCP server to the editor's own AI chat: Copilot Chat agent mode in VS Code, or the agent in Cursor."
 				},
+				"plinycode.review.beforeFinish": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Before a run on an auto router (`auto-free`, `auto-paid-balanced`) that changed files ends, have a second free model read the diff. Problems it is confident about go back to the working model once, to check and fix; the chat shows which model reviewed and how many problems it flagged. The review itself costs nothing."
+				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",
 					"default": 5,
