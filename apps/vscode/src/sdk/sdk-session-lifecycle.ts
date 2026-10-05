@@ -5,9 +5,11 @@ import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTermin
 import { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import type { ActiveSession } from "./cline-session-factory"
+import type { ConversationEditorState } from "./context/editor-state"
 import { forgetSession } from "./router/router-health"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { buildToolPolicies } from "./sdk-tool-policies"
+import { isSyntheticUserPrompt } from "./sdk-user-message-mapping"
 import type { SdkSessionHost } from "./session-host"
 import { VscodeSessionHost } from "./vscode-session-host"
 
@@ -50,6 +52,18 @@ interface SdkSessionLifecycleOptions {
 	 * background). The background registry treats it as a turn end.
 	 */
 	onDetachedSendSettled?: (sessionId: string, error?: unknown) => void
+	/**
+	 * Metadata to store with a session's record whenever that session starts.
+	 * Carries the conversation's git snapshot (context/conversation-git-snapshots.ts),
+	 * so the engine persists it with the record and a later resume finds it.
+	 */
+	getSessionStartMetadata?: (sessionId: string | undefined) => Record<string, unknown> | undefined
+	/**
+	 * Editor state appended to the messages the user types
+	 * (context/editor-state.ts). Not consulted for prompts the extension
+	 * writes itself (task resumption, the plan -> act continuation).
+	 */
+	editorState?: Pick<ConversationEditorState, "nextBlock" | "syncWithTranscript">
 }
 
 export class SdkSessionLifecycle {
@@ -66,6 +80,8 @@ export class SdkSessionLifecycle {
 	 * sequencing the CLI uses.
 	 */
 	private readonly pendingStops = new Map<string, Promise<void>>()
+	/** Orders the sends that wait on the editor state; see fireAndForgetSend. */
+	private outboundSends: Promise<void> = Promise.resolve()
 
 	constructor(private readonly options: SdkSessionLifecycleOptions) {}
 
@@ -200,9 +216,10 @@ export class SdkSessionLifecycle {
 		const sdkHost = await this.getOrCreateSharedHost()
 
 		const startResult = await sdkHost.start({
-			...startInput,
+			...this.withSessionStartMetadata(startInput),
 			...(toolPolicies ? { toolPolicies } : {}),
 		})
+		this.options.editorState?.syncWithTranscript(startResult.sessionId, startInput.initialMessages)
 		this.activeSession = {
 			sessionId: startResult.sessionId,
 			startConfig: startInput.config
@@ -261,10 +278,15 @@ export class SdkSessionLifecycle {
 		}
 
 		const sourceSessionId = activeSession.sessionId
-		const restored = await activeSession.sdkHost.restore(input)
+		const restored = await activeSession.sdkHost.restore(
+			input.start ? { ...input, start: this.withSessionStartMetadata(input.start) } : input,
+		)
 		if (!restored.startResult || !restored.sessionId) {
 			return restored
 		}
+		// The restored session's transcript was cut back to the checkpoint, and
+		// is not in hand here; the next message states the editor again.
+		this.options.editorState?.syncWithTranscript(restored.sessionId, undefined)
 
 		this.activeSession = {
 			...activeSession,
@@ -430,38 +452,72 @@ export class SdkSessionLifecycle {
 		const notice = this.options.consumeModeSwitchNotice?.(sessionId)
 		const noticedPrompt = notice ? `${formatModeSwitchNotice(notice.from, notice.to)}\n${prompt}` : prompt
 		this.options.onSendStart?.(sessionId)
-		sdkHost
-			.send({
-				sessionId,
-				prompt: noticedPrompt,
-				userImages: images,
-				userFiles: files,
-				delivery,
-			})
+		const send = (outboundPrompt: string): void => {
+			sdkHost
+				.send({
+					sessionId,
+					prompt: outboundPrompt,
+					userImages: images,
+					userFiles: files,
+					delivery,
+				})
+				.then(async () => {
+					if (delivery === "queue" || delivery === "steer") {
+						Logger.log(`[SdkController] Message queued for session: ${sessionId}`)
+						return
+					}
+					if (isSuperseded("completion")) {
+						return
+					}
+					Logger.log(`[SdkController] Agent turn completed for session: ${sessionId}`)
+					this.setRunning(false)
+					await this.options.onSendComplete(sessionId)
+				})
+				.catch(async (error: unknown) => {
+					if (isAbortError(error)) {
+						Logger.debug(`[SdkController] Agent turn aborted (expected): ${sessionId}`)
+						return
+					}
+					if (isSuperseded("failure", error)) {
+						return
+					}
+					Logger.error("[SdkController] Agent turn failed:", error)
+					this.setRunning(false)
+					await this.options.onSendError(error, sessionId)
+				})
+		}
+
+		const editorState = this.options.editorState
+		if (!editorState) {
+			send(noticedPrompt)
+			return
+		}
+		// Reading the editor is asynchronous, so sends go through one chain and
+		// leave in the order they were made. The block goes after the user's
+		// text, like a mode notice goes before it: both reach the model and
+		// stripModeNotices keeps both out of every display surface.
+		const userTyped = prompt.trim().length > 0 && !isSyntheticUserPrompt(prompt)
+		this.outboundSends = this.outboundSends
 			.then(async () => {
-				if (delivery === "queue" || delivery === "steer") {
-					Logger.log(`[SdkController] Message queued for session: ${sessionId}`)
-					return
-				}
-				if (isSuperseded("completion")) {
-					return
-				}
-				Logger.log(`[SdkController] Agent turn completed for session: ${sessionId}`)
-				this.setRunning(false)
-				await this.options.onSendComplete(sessionId)
+				const block = userTyped ? await editorState.nextBlock(sessionId).catch(() => undefined) : undefined
+				send(block ? `${noticedPrompt}\n\n${block}` : noticedPrompt)
 			})
 			.catch(async (error: unknown) => {
-				if (isAbortError(error)) {
-					Logger.debug(`[SdkController] Agent turn aborted (expected): ${sessionId}`)
-					return
-				}
+				Logger.error(`[SdkController] Failed to hand a message to session ${sessionId}:`, error)
 				if (isSuperseded("failure", error)) {
 					return
 				}
-				Logger.error("[SdkController] Agent turn failed:", error)
 				this.setRunning(false)
 				await this.options.onSendError(error, sessionId)
 			})
+	}
+
+	/** Adds getSessionStartMetadata's entries to a start input's session metadata. */
+	private withSessionStartMetadata<T extends { config?: { sessionId?: string }; sessionMetadata?: Record<string, unknown> }>(
+		startInput: T,
+	): T {
+		const metadata = this.options.getSessionStartMetadata?.(startInput.config?.sessionId?.trim() || undefined)
+		return metadata ? { ...startInput, sessionMetadata: { ...(startInput.sessionMetadata ?? {}), ...metadata } } : startInput
 	}
 }
 

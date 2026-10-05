@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	createModeSwitchNoticeTracker,
+	extractEditorStateBlock,
 	formatDisplayUserInput,
+	formatEditorStateBlock,
 	formatModeSwitchNotice,
 	formatSessionSearchPreview,
 	formatSessionSearchTitle,
@@ -114,6 +116,34 @@ describe("prompt format helpers", () => {
 		const result = stripModeNotices(hostile);
 		expect(performance.now() - started).toBeLessThan(1_000);
 		expect(result).toBe(hostile);
+	});
+
+	it("hides the editor state block from every display surface", () => {
+		const block = formatEditorStateBlock(
+			"Active file: src/app.ts (cursor at line 12)\nOpen tabs:\n- src/app.ts",
+		);
+		const prompt = `fix the failing test\n\n${block}`;
+		const wrapped = formatUserInputBlock(prompt, "act");
+
+		expect(formatDisplayUserInput(wrapped)).toBe("fix the failing test");
+		expect(formatSessionSearchTitle(wrapped)).toBe("fix the failing test");
+		expect(formatSessionSearchPreview("user", wrapped)).toBe(
+			"fix the failing test",
+		);
+		// The model-bound sanitize keeps it, like a mode notice.
+		expect(normalizeUserInput(prompt)).toBe(prompt);
+	});
+
+	it("extracts the last editor state block of a message", () => {
+		const first = formatEditorStateBlock("Active file: a.ts");
+		const last = formatEditorStateBlock("Active file: b.ts");
+
+		expect(
+			extractEditorStateBlock(formatUserInputBlock(`one\n${first}\n${last}`)),
+		).toBe(last);
+		expect(extractEditorStateBlock("no block here")).toBeUndefined();
+		expect(extractEditorStateBlock("<editor_state>dangling")).toBeUndefined();
+		expect(extractEditorStateBlock(undefined)).toBeUndefined();
 	});
 
 	it("bounds and unwraps session search display text", () => {

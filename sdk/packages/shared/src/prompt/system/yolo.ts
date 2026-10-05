@@ -17,7 +17,7 @@ Environment you are running in:
 1. Platform: {{PLATFORM_NAME}}
 2. Date: {{CURRENT_DATE}}
 3. IDE: {{IDE_NAME}}
-4. Working Directory: {{CWD}}
+4. Working Directory: {{CWD}}{{GIT_SNAPSHOT}}
 </env>
 
 IMPORTANT:

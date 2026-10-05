@@ -147,3 +147,151 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		expect(prompt).toBe("You are a custom agent.");
 	});
 });
+
+function envBlock(prompt: string): string {
+	const start = prompt.indexOf("<env>");
+	const end = prompt.indexOf("</env>");
+	expect(start).toBeGreaterThan(-1);
+	expect(end).toBeGreaterThan(start);
+	return prompt.slice(start, end + "</env>".length);
+}
+
+describe("buildClineSystemPrompt env block", () => {
+	it("has only the four base entries without git data", () => {
+		for (const mode of ["act", "plan", "yolo"] as const) {
+			const env = envBlock(buildClineSystemPrompt({ ...BASE_OPTIONS, mode }));
+			expect(env).toContain("4. Working Directory: /workspace/project\n</env>");
+			expect(env).not.toContain("Git");
+			expect(env).not.toContain("{{");
+		}
+	});
+
+	it("adds the git snapshot after the working directory", () => {
+		const env = envBlock(
+			buildClineSystemPrompt({
+				...BASE_OPTIONS,
+				mode: "act",
+				gitSnapshot: {
+					branch: "feature/env",
+					defaultBranch: "main",
+					status: [" M src/app.ts", "?? notes.md"],
+					statusOmitted: 3,
+					recentCommits: ["abc1234 Add the env block", "def5678 Fix a typo"],
+				},
+			}),
+		);
+
+		expect(env).toBe(
+			[
+				"<env>",
+				"1. Platform: linux",
+				`2. Date: ${new Date().toLocaleDateString()}`,
+				"3. IDE: VS Code",
+				"4. Working Directory: /workspace/project",
+				"5. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state.)",
+				"   Current branch: feature/env",
+				"   Default branch: main",
+				"   Status:",
+				"      M src/app.ts",
+				"     ?? notes.md",
+				"     ... and 3 more",
+				"   Recent commits:",
+				"     abc1234 Add the env block",
+				"     def5678 Fix a typo",
+				"</env>",
+			].join("\n"),
+		);
+	});
+
+	it("adds the snapshot to the yolo prompt for any provider", () => {
+		const prompt = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			mode: "yolo",
+			providerId: "pliny",
+			gitSnapshot: { branch: "main", status: [] },
+		});
+		const env = envBlock(prompt);
+		expect(env).toContain("   Current branch: main");
+		expect(env).toContain("   Status: clean");
+		expect(prompt).not.toContain("{{GIT_SNAPSHOT}}");
+	});
+
+	it("describes a detached HEAD and a status that timed out", () => {
+		const detached = envBlock(
+			buildClineSystemPrompt({
+				...BASE_OPTIONS,
+				gitSnapshot: { head: "abc1234", statusIncomplete: true },
+			}),
+		);
+		expect(detached).toContain(
+			"   Current branch: none (detached HEAD at abc1234)",
+		);
+		expect(detached).toContain(
+			"   Status: not available (git status did not finish in time)",
+		);
+
+		const partial = envBlock(
+			buildClineSystemPrompt({
+				...BASE_OPTIONS,
+				gitSnapshot: {
+					branch: "main",
+					status: [" M a.ts"],
+					statusIncomplete: true,
+				},
+			}),
+		);
+		expect(partial).toContain(
+			"     ... the list is incomplete (git status did not finish in time)",
+		);
+	});
+
+	it("falls back to the WorkspaceInfo git fields when no snapshot is given", () => {
+		const env = envBlock(
+			buildClineSystemPrompt({
+				...BASE_OPTIONS,
+				latestGitBranchName: "main",
+				latestGitCommitHash: "0123456789abcdef0123456789abcdef01234567",
+			}),
+		);
+		expect(env).toContain("   Current branch: main");
+		expect(env).not.toContain("Status");
+
+		const detached = envBlock(
+			buildClineSystemPrompt({
+				...BASE_OPTIONS,
+				latestGitCommitHash: "0123456789abcdef0123456789abcdef01234567",
+			}),
+		);
+		expect(detached).toContain("detached HEAD at 0123456");
+	});
+
+	it("inserts repository text literally", () => {
+		// "$&" and "$'" are replacement patterns for String.replace, and a
+		// commit subject may spell out one of the template's own placeholders.
+		const prompt = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			mode: "plan",
+			rules: "# Custom Rules\n\nBe brief.",
+			gitSnapshot: {
+				branch: "main",
+				recentCommits: ["abc1234 Cost is $& and $' {{CLINE_RULES}}"],
+			},
+		});
+		expect(envBlock(prompt)).toContain(
+			"     abc1234 Cost is $& and $' {{CLINE_RULES}}",
+		);
+		expect(prompt.indexOf("Be brief.")).toBeGreaterThan(
+			prompt.indexOf("</env>"),
+		);
+		expect(prompt).toContain(MODE_TAG_INSTRUCTIONS);
+	});
+
+	it("leaves an explicit override prompt alone", () => {
+		const prompt = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			overridePrompt: "You are a custom agent.",
+			gitSnapshot: { branch: "main" },
+		});
+		expect(prompt).toBe("You are a custom agent.");
+	});
+});

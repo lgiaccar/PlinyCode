@@ -675,4 +675,23 @@ describe("buildSessionConfig", () => {
 		expect(planConfig.systemPrompt).not.toContain("switch_to_act_mode")
 		expect(planConfig.systemPrompt).toContain("Plan/Act toggle")
 	})
+
+	it("puts the conversation's git snapshot in the env block, identically on every build", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({} as any)
+		const gitSnapshot = { branch: "feature/env", defaultBranch: "main", status: [" M src/app.ts"] }
+
+		const first = await buildSessionConfig({ cwd: "/tmp/workspace", mode: "act", gitSnapshot })
+		const rebuilt = await buildSessionConfig({ cwd: "/tmp/workspace", mode: "act", gitSnapshot })
+		const without = await buildSessionConfig({ cwd: "/tmp/workspace", mode: "act" })
+
+		expect(first.systemPrompt).toContain(
+			"4. Working Directory: /tmp/workspace\n5. Git (snapshot taken when this conversation started.",
+		)
+		expect(first.systemPrompt).toContain(
+			"   Current branch: feature/env\n   Default branch: main\n   Status:\n      M src/app.ts\n</env>",
+		)
+		// A rebuild must not change the cached prompt prefix.
+		expect(rebuilt.systemPrompt).toBe(first.systemPrompt)
+		expect(without.systemPrompt).toContain("4. Working Directory: /tmp/workspace\n</env>")
+	})
 })

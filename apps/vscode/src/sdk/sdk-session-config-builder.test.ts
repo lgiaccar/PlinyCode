@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
 import { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 
 const mocks = vi.hoisted(() => ({
@@ -81,6 +82,82 @@ describe("SdkSessionConfigBuilder", () => {
 		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, sessionId: "existing" })
 		const existing = await builder.build({ cwd: "/workspace", mode: "act" })
 		expect(existing.sessionId).toBe("existing")
+	})
+
+	describe("git snapshot", () => {
+		const SNAPSHOT = { branch: "feature/env", status: [" M src/app.ts"] }
+
+		function makeBuilder(getConversationId: () => string | undefined) {
+			const gather = vi.fn(async (_cwd: string) => SNAPSHOT)
+			const gitSnapshots = new ConversationGitSnapshots({
+				isEnabled: () => true,
+				gather,
+				readStored: async () => undefined,
+			})
+			const builder = new SdkSessionConfigBuilder({
+				stateManager: {} as never,
+				emitHookMessage: vi.fn(),
+				gitSnapshots,
+				getConversationId,
+			})
+			return { builder, gather, gitSnapshots }
+		}
+
+		it("is gathered once per conversation and passed to every later build", async () => {
+			let displayedTask: string | undefined
+			const { builder, gather, gitSnapshots } = makeBuilder(() => displayedTask)
+
+			// A new task: nothing is displayed yet, and the builder picks the session id.
+			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+			const started = await builder.build({ cwd: "/workspace", mode: "act" })
+			expect(mocks.buildSessionConfig).toHaveBeenLastCalledWith({ cwd: "/workspace", mode: "act", gitSnapshot: SNAPSHOT })
+			expect(gitSnapshots.sessionMetadata(started.sessionId)).toEqual({ gitSnapshot: SNAPSHOT })
+
+			// Mode switch, MCP tool change, resume: the task is displayed, and the
+			// caller pins the session id after the build.
+			displayedTask = started.sessionId
+			for (const mode of ["plan", "act", "ask"] as const) {
+				mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+				const rebuilt = await builder.build({ cwd: "/workspace", mode })
+				rebuilt.sessionId = displayedTask
+				expect(mocks.buildSessionConfig).toHaveBeenLastCalledWith({ cwd: "/workspace", mode, gitSnapshot: SNAPSHOT })
+			}
+
+			expect(gather).toHaveBeenCalledTimes(1)
+			expect(gather).toHaveBeenCalledWith("/workspace")
+		})
+
+		it("gathers again only for the next new conversation", async () => {
+			let displayedTask: string | undefined
+			const { builder, gather } = makeBuilder(() => displayedTask)
+
+			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+			displayedTask = (await builder.build({ cwd: "/workspace", mode: "act" })).sessionId
+			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+			await builder.build({ cwd: "/workspace", mode: "plan" })
+			expect(gather).toHaveBeenCalledTimes(1)
+
+			// "New Task" clears the displayed task before the next config is built.
+			displayedTask = undefined
+			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+			await builder.build({ cwd: "/other", mode: "act" })
+			expect(gather).toHaveBeenCalledTimes(2)
+			expect(gather).toHaveBeenLastCalledWith("/other")
+		})
+
+		it("leaves the input alone when the conversation has no snapshot", async () => {
+			const gitSnapshots = new ConversationGitSnapshots({
+				isEnabled: () => false,
+				gather: vi.fn(),
+				readStored: async () => undefined,
+			})
+			const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, emitHookMessage: vi.fn(), gitSnapshots })
+			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+
+			await builder.build({ cwd: "/workspace", mode: "act" })
+
+			expect(mocks.buildSessionConfig).toHaveBeenLastCalledWith({ cwd: "/workspace", mode: "act" })
+		})
 	})
 
 	it("drops hook rows and skips the mistake-limit row for a background session", async () => {

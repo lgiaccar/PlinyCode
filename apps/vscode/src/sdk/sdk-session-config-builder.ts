@@ -3,6 +3,7 @@ import { type AgentStopControl, createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
+import type { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
 import { installRouter } from "./router/router-integration"
@@ -31,6 +32,19 @@ interface SdkSessionConfigBuilderOptions {
 	 * stop control ends the run there (the conversation spending limit).
 	 */
 	checkSpendingLimit?: () => Promise<AgentStopControl | undefined>
+	/**
+	 * Supplies the git snapshot for the system prompt: gathered once per
+	 * conversation and reused on every later build, so rebuilds and resumes
+	 * keep the prompt's cached prefix.
+	 */
+	gitSnapshots?: Pick<ConversationGitSnapshots, "prepare">
+	/**
+	 * The conversation a config is being built for: the displayed task's id.
+	 * Undefined while a new task is starting, which is when a snapshot is
+	 * gathered. Every rebuild, resume, compaction and restore builds its config
+	 * with its task displayed.
+	 */
+	getConversationId?: () => string | undefined
 }
 
 /**
@@ -44,11 +58,13 @@ export class SdkSessionConfigBuilder {
 	constructor(private readonly options: SdkSessionConfigBuilderOptions) {}
 
 	async build(input: SessionConfigInput): Promise<Awaited<ReturnType<typeof buildSessionConfig>>> {
-		const config = await buildSessionConfig(input)
+		const git = await this.options.gitSnapshots?.prepare(this.options.getConversationId?.()?.trim() || undefined, input.cwd)
+		const config = await buildSessionConfig(git?.snapshot ? { ...input, gitSnapshot: git.snapshot } : input)
 		// A session id is fixed up front so per-session emitters below can tell
 		// whether their session runs in the background. Callers that reuse an
 		// existing id overwrite config.sessionId; the emitters read it lazily.
 		config.sessionId = config.sessionId?.trim() || createSessionId()
+		git?.bindToSession(config.sessionId)
 		const isBackground = () => this.options.isBackgroundSession?.(config.sessionId) === true
 
 		const onMistakeLimit = this.options.onConsecutiveMistakeLimitReached

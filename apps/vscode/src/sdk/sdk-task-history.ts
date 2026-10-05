@@ -647,6 +647,11 @@ export class SdkTaskHistory {
 		return this.withHistoryHost((host) => host.get(taskId) as Promise<SessionHistoryRecord | undefined>)
 	}
 
+	/** The metadata stored with a task's session record; undefined for an unknown or pre-SDK task. */
+	async getSessionMetadata(taskId: string): Promise<Record<string, unknown> | undefined> {
+		return (await this.getSdkRecord(taskId))?.metadata ?? undefined
+	}
+
 	async getClineMessages(taskId: string): Promise<ClineMessage[]> {
 		const sdkRecord = await this.getSdkRecord(taskId)
 		const legacyTask = this.findLegacyTask(taskId)
