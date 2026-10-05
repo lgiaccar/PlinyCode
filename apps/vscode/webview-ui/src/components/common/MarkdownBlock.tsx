@@ -66,10 +66,11 @@ const MemoizedMarkdownBlock = memo(
 							})
 							.join("")
 
-						// Case-insensitive check for "Act Mode (⌘⇧A)" pattern
-						// This ensures we only style the exact "Act Mode" mentions with keyboard shortcut
-						// Using case-insensitive flag to catch all capitalization variations
-						if (/^act mode\s*\(⌘⇧A\)$/i.test(childrenText)) {
+						// Case-insensitive check for "Agent Mode (⌘⇧A)" pattern
+						// This ensures we only style the exact "Agent Mode" mentions with keyboard shortcut
+						// Using case-insensitive flag to catch all capitalization variations. "Act Mode" is
+						// the mode's former name, which older conversations still contain.
+						if (/^(?:act|agent) mode\s*\(⌘⇧A\)$/i.test(childrenText)) {
 							return <ActModeHighlight />
 						}
 
@@ -138,11 +139,11 @@ const ActModeHighlight: React.FC = () => {
 					)
 				}
 			}}
-			title={mode !== "act" ? "Click to toggle to Act Mode" : "Already in Act Mode"}>
+			title={mode !== "act" ? "Click to toggle to Agent Mode" : "Already in Agent Mode"}>
 			<div className="p-1 rounded-md bg-code flex items-center justify-end w-7 border border-input-border">
 				<div className="rounded-full bg-link w-2 h-2" />
 			</div>
-			Act Mode (⌘⇧A)
+			Agent Mode (⌘⇧A)
 		</span>
 	)
 }
@@ -206,7 +207,8 @@ const remarkHighlightActMode = () => {
 			// Case-insensitive regex to match "to Act Mode" in various capitalizations
 			// Using word boundaries to avoid matching within words
 			// Added negative lookahead to avoid matching if already followed by the shortcut
-			const actModeRegex = /\bto\s+Act\s+Mode\b(?!\s*\(⌘⇧A\))/i
+			// "Act Mode" is the mode's former name, which older conversations still contain.
+			const actModeRegex = /\bto\s+(?:Act|Agent)\s+Mode\b(?!\s*\(⌘⇧A\))/i
 
 			if (!node.value.match(actModeRegex)) {
 				return
@@ -233,7 +235,8 @@ const remarkHighlightActMode = () => {
 					// Extract "to" and "Act Mode" parts
 					const matchText = matches[i]
 					const toIndex = matchText.toLowerCase().indexOf("to")
-					const actModeIndex = matchText.toLowerCase().indexOf("act mode", toIndex + 2)
+					const modeOffset = matchText.slice(toIndex + 2).search(/(?:act|agent)\s+mode/i)
+					const actModeIndex = modeOffset === -1 ? -1 : toIndex + 2 + modeOffset
 
 					if (toIndex !== -1 && actModeIndex !== -1) {
 						// Add "to" as regular text

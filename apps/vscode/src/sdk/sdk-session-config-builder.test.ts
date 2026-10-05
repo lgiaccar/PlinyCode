@@ -19,7 +19,7 @@ vi.mock("./hooks-adapter", () => ({
 describe("SdkSessionConfigBuilder", () => {
 	it("never exposes a switch_to_act_mode tool, even in plan mode", async () => {
 		// Matches the legacy extension: the model cannot switch plan -> act
-		// itself; the user must flip the Plan/Act toggle.
+		// itself; the user must flip the mode switch.
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
 			emitHookMessage: vi.fn(),

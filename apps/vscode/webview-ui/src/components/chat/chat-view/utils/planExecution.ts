@@ -40,7 +40,7 @@ function planExecutionModelLabel(modelId: string, models: Record<string, ModelIn
 }
 
 const DESCRIPTIONS: Record<PlanExecutionChoice, string> = {
-	actModel: "act mode model (default)",
+	actModel: "Agent mode model (default)",
 	freeAuto: "free models only",
 	balanceAuto: "paid models for hard steps",
 	planModel: "same model as the plan",

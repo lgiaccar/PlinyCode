@@ -151,7 +151,7 @@ await sidebar.getByTestId("send-button").click()
 
 #### Mode Switching
 ```typescript
-const actButton = sidebar.getByRole("switch", { name: "Act" })
+const actButton = sidebar.getByRole("switch", { name: "Agent" })
 const planButton = sidebar.getByRole("switch", { name: "Plan" })
 await actButton.click() // Switch to Plan mode
 ```

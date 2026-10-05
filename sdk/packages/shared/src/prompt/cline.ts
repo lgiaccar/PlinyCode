@@ -18,7 +18,7 @@ const WORKSPACE_CONFIGURATION_MARKER = "# Workspace Configuration";
  */
 export const MODE_TAG_INSTRUCTIONS = `# Plan / Act Modes
 
-User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and write the plan -- no edits except markdown plan files, no state-changing commands), "ask" means ask-mode constraints applied (answer the question -- no file edits at all, no state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened.`;
+User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and write the plan -- no edits except markdown plan files, no state-changing commands), "ask" means ask-mode constraints applied (answer the question -- no file edits at all, no state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened. The user's mode switch labels act mode "Agent", so call it Agent mode when you talk to the user.`;
 
 /**
  * Plan-mode behavioral contract, appended when the session mode is "plan".
@@ -62,7 +62,7 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
 /**
  * Plan-mode contract for hosts that do NOT expose the switch_to_act_mode tool
  * (the VS Code extension, matching the legacy extension's behavior). The model
- * must direct the user to flip the Plan/Act toggle instead of calling a tool
+ * must direct the user to flip the mode switch instead of calling a tool
  * that does not exist in its toolset.
  *
  * The extension's Execute plan button can run the plan on a different, cheaper
@@ -73,7 +73,7 @@ export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BA
 
 Write the plan for an executor that has not seen this conversation and may be a weaker model than you: give exact file paths, the steps in order, the command that verifies each step, the decisions already made with their reasons, and anything you discovered while exploring that the executor would otherwise have to rediscover.
 
-Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
+Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the mode switch once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Agent mode" (use those words).`;
 
 /**
  * Ask-mode behavioral contract, appended when the session mode is "ask".
@@ -97,7 +97,7 @@ File edits are blocked in ask mode: the file-writing tools are not available, an
 
 The run_commands tool remains available in ask mode strictly for read-only inspection -- listing files, searching (grep), reading configs, inspecting git history and diffs, checking tool versions, and the like. Never use it to change anything: no creating, modifying, or deleting files, no writing scripts that make changes, and no state-changing commands (installs, migrations, database or schema changes, container commands that mutate state, etc.). File-editing commands (rm/mv/cp, in-place edits like sed -i, output redirection to files outside /tmp, git commands that change the working tree, package installs) are hard-blocked in ask mode: they are not executed and return a tool error instead, so do not attempt them.
 
-You do NOT have the ability to switch modes yourself. If the user asks for a change to be made, explain what you would change and ask them to "toggle to Act mode" (use those words) to apply it.`;
+You do NOT have the ability to switch modes yourself. If the user asks for a change to be made, explain what you would change and ask them to "toggle to Agent mode" (use those words) to apply it.`;
 
 function redactRemoteUrlCredentials(remote: string): string {
 	const schemeEnd = remote.indexOf("://");

@@ -79,7 +79,7 @@ const ExecutePlanButton = memo(({ onExecute }: ExecutePlanButtonProps) => {
 				className="min-w-0 rounded-r-none"
 				onClick={() => onExecute(current.choice)}
 				size="sm"
-				title={`Switch to act mode and run the plan on ${current.modelLabel} (${current.modelId})`}
+				title={`Switch to Agent mode and run the plan on ${current.modelLabel} (${current.modelId})`}
 				type="button">
 				<span className="truncate">Execute plan · {current.modelLabel}</span>
 			</Button>

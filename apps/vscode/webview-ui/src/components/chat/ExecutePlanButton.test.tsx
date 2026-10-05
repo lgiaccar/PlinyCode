@@ -71,8 +71,8 @@ describe("ExecutePlanButton", () => {
 		const { unmount } = render(<ExecutePlanButton onExecute={vi.fn()} />)
 		openMenu()
 
-		expect(menuRows()).toEqual(["Claude Sonnet 4.6act mode model (default)", "FreeAutofree models only"])
-		expect(checkedRows()).toEqual(["Claude Sonnet 4.6act mode model (default)"])
+		expect(menuRows()).toEqual(["Claude Sonnet 4.6Agent mode model (default)", "FreeAutofree models only"])
+		expect(checkedRows()).toEqual(["Claude Sonnet 4.6Agent mode model (default)"])
 		unmount()
 
 		setState({ planModelId: SONNET, actModelId: SONNET, paidModelsUnlocked: true })
@@ -80,7 +80,7 @@ describe("ExecutePlanButton", () => {
 		openMenu()
 
 		expect(menuRows()).toEqual([
-			"Claude Sonnet 4.6act mode model (default)",
+			"Claude Sonnet 4.6Agent mode model (default)",
 			"FreeAutofree models only",
 			"BalanceAutopaid models for hard steps",
 		])
@@ -92,7 +92,7 @@ describe("ExecutePlanButton", () => {
 		openMenu()
 
 		expect(menuRows()).toEqual([
-			"Claude Sonnet 4.6act mode model (default)",
+			"Claude Sonnet 4.6Agent mode model (default)",
 			"FreeAutofree models only",
 			"Claude Opus 4.8same model as the plan",
 		])
@@ -133,8 +133,8 @@ describe("ExecutePlanButton", () => {
 		expect(onExecute).toHaveBeenLastCalledWith("freeAuto")
 
 		openMenu()
-		expect(menuRows()).toEqual(["FreeAutoact mode model (default)", "Claude Opus 4.8same model as the plan"])
-		expect(checkedRows()).toEqual(["FreeAutoact mode model (default)"])
+		expect(menuRows()).toEqual(["FreeAutoAgent mode model (default)", "Claude Opus 4.8same model as the plan"])
+		expect(checkedRows()).toEqual(["FreeAutoAgent mode model (default)"])
 	})
 
 	it("labels a remembered 'same model as the plan' with the plan's model", () => {

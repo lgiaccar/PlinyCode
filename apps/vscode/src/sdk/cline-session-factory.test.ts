@@ -670,10 +670,10 @@ describe("buildSessionConfig", () => {
 			"run_commands tool remains available in plan mode strictly for read-only inspection",
 		)
 		// Unlike the CLI, the extension never exposes switch_to_act_mode: the
-		// plan contract must direct the model to the manual Plan/Act toggle
+		// plan contract must direct the model to the manual mode switch
 		// instead of a tool it does not have.
 		expect(planConfig.systemPrompt).not.toContain("switch_to_act_mode")
-		expect(planConfig.systemPrompt).toContain("Plan/Act toggle")
+		expect(planConfig.systemPrompt).toContain("toggle to Agent mode")
 	})
 
 	it("puts the conversation's git snapshot in the env block, identically on every build", async () => {

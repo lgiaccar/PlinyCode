@@ -63,7 +63,7 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		expect(prompt).toContain(MODE_TAG_INSTRUCTIONS);
 		expect(prompt).toContain(ASK_MODE_INSTRUCTIONS);
 		expect(prompt).not.toContain(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH);
-		expect(ASK_MODE_INSTRUCTIONS).toContain("toggle to Act mode");
+		expect(ASK_MODE_INSTRUCTIONS).toContain("toggle to Agent mode");
 		// Ask mode cannot switch modes itself, on any host.
 		expect(ASK_MODE_INSTRUCTIONS).not.toContain("switch_to_act_mode");
 
@@ -94,7 +94,7 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		expect(prompt).not.toContain("switch_to_act_mode");
 		// The read-only run_commands contract is shared by both variants.
 		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("run_commands");
-		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("Plan/Act toggle");
+		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("toggle to Agent mode");
 	});
 
 	it("asks the manual-switch host for a plan another model can execute", () => {

@@ -4,16 +4,19 @@ import styled from "styled-components"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
+// Each mode has its own color: the selected segment of the switch and the outline of the focused prompt box use it.
+// Plan is yellow, Agent (the "act" mode) red and Ask green. Ask's green is fixed rather than taken from the theme:
+// the theme token it used to borrow (statusBarItem.remoteBackground) is blue in VS Code's current default themes.
 const PLAN_MODE_COLOR = "var(--vscode-activityWarningBadge-background)"
-const ACT_MODE_COLOR = "var(--vscode-focusBorder)"
-const ASK_MODE_COLOR = "var(--vscode-statusBarItem-remoteBackground, #16825d)"
+const ACT_MODE_COLOR = "var(--vscode-statusBarItem-errorBackground, #c72e0f)"
+const ASK_MODE_COLOR = "#16825d"
 
 /** The modes, in the order the switch shows them and the shortcut cycles through them. */
 const MODES: readonly Mode[] = ["plan", "act", "ask"]
 
 const MODE_DETAILS: Record<Mode, { label: string; color: string; description: string }> = {
 	plan: { label: "Plan", color: PLAN_MODE_COLOR, description: "gather information to architect a plan" },
-	act: { label: "Act", color: ACT_MODE_COLOR, description: "complete the task immediately" },
+	act: { label: "Agent", color: ACT_MODE_COLOR, description: "complete the task immediately" },
 	ask: { label: "Ask", color: ASK_MODE_COLOR, description: "answer your questions without editing any file" },
 }
 
@@ -59,7 +62,7 @@ interface ModeSwitchProps {
 }
 
 /**
- * The Plan/Act/Ask mode switch: one segment per mode, with a tooltip
+ * The Plan/Agent/Ask mode switch (the Agent segment is the "act" mode): one segment per mode, with a tooltip
  * explaining what the hovered mode does and the keyboard shortcut that cycles
  * through them. `shownTooltipMode` tracks which segment the pointer is
  * hovering, purely to decide the tooltip's copy — it's local to this component

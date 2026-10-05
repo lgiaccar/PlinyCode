@@ -17,7 +17,7 @@ e2e(
 			await helper.ensureReady(sidebar)
 
 			const planSwitch = sidebar.getByRole("switch", { name: "Plan" })
-			const actSwitch = sidebar.getByRole("switch", { name: "Act" })
+			const actSwitch = sidebar.getByRole("switch", { name: "Agent" })
 			await planSwitch.click()
 			await expect(planSwitch).toHaveAttribute("aria-checked", "true")
 
@@ -41,7 +41,7 @@ e2e(
 			await sidebar.getByRole("button", { name: "Execute with another model" }).click()
 			const rows = sidebar.getByRole("menuitemradio")
 			await expect(rows).toHaveCount(2)
-			await expect(rows.nth(0)).toContainText("act mode model (default)")
+			await expect(rows.nth(0)).toContainText("Agent mode model (default)")
 			await expect(rows.nth(0)).toHaveAttribute("aria-checked", "true")
 			await rows.filter({ hasText: "FreeAuto" }).click()
 

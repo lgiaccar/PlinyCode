@@ -904,7 +904,7 @@ export function createAskQuestionTool(
 			"For example, ask the user clarifying questions about a key implementation decision. " +
 			"You should only ask one question. " +
 			"Provide an array of 2-5 options for the user to choose from. " +
-			"Never include an option to toggle to Act mode.",
+			"Never include an option to toggle to Agent (act) mode.",
 		inputSchema: zodToJsonSchema(AskQuestionInputSchema),
 		retryable: false,
 		maxRetries: 0,

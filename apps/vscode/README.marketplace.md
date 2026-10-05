@@ -22,7 +22,7 @@ All requests go **only** to Synopsys internal models through the Pliny gateway. 
 
 ## Features
 
-- **Plan & Act modes** — let the agent propose a plan for your approval before it touches any code.
+- **Plan, Agent & Ask modes** — let the agent propose a plan for your approval before it touches any code.
 - **Rules from other agents** — reads the rules you already wrote for GitHub Copilot, Cursor and Windsurf,
   and the workspace `AGENTS.md`, in place. Enable or disable each one in the Rules panel.
 - **MCP servers** — extend the agent with Model Context Protocol tools.
