@@ -27,6 +27,7 @@ import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { StateManager } from "@/core/storage/StateManager"
 import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { getAdvisorSettings } from "@/hosts/vscode/advisor-settings"
 import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
@@ -37,6 +38,8 @@ import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
+import { checkAdvisorBudget } from "./advisor/advisor-budget"
+import type { AdvisorUsage } from "./advisor/advisor-tool"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { type ConversationContext, createConversationContext } from "./context"
 import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
@@ -381,6 +384,11 @@ export class Controller {
 			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
 			gitSnapshots: this.conversationContext.gitSnapshots,
 			getConversationId: () => this.task?.taskId,
+			advisor: {
+				getSettings: getAdvisorSettings,
+				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
+				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
+			},
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
@@ -770,6 +778,45 @@ export class Controller {
 			Logger.warn(`[SdkController] Could not raise the budget of ${task.taskId}; it is not in the task history`)
 		}
 		return this.interactions.handleSpendingLimitReached(hit)
+	}
+
+	/**
+	 * The conversation budget, checked before each advisor call (sdk/advisor/).
+	 * Unlike checkSpendingLimit it also applies on a free model and to a
+	 * background task, and it refuses the call instead of pausing the run; see
+	 * advisor-budget.ts. Returns why the call may not be made, or undefined.
+	 * A background task has no chat rows; its history record has its cost.
+	 */
+	private checkAdvisorBudget(sessionId: string): Promise<string | undefined> {
+		return checkAdvisorBudget(sessionId, {
+			findHistoryItem: (id) => this.taskHistory.findHistoryItem(id),
+			openTaskMessages: (id) =>
+				this.task?.taskId === id && !this.background.has(id)
+					? this.task.messageStateHandler.getClineMessages()
+					: undefined,
+			defaultBudget: getConversationSpendingLimit,
+		})
+	}
+
+	/**
+	 * The open task gets an advisor call's cost from the usage row the
+	 * translator derives from the tool result. A background task has no
+	 * transcript until it is reopened, so its history record is updated here,
+	 * like its model usage.
+	 */
+	private recordBackgroundAdvisorUsage(sessionId: string, usage: AdvisorUsage): void {
+		if (!this.background.has(sessionId)) {
+			return
+		}
+		this.taskHistory
+			.updateTaskUsage(sessionId, {
+				tokensIn: usage.inputTokens,
+				tokensOut: usage.outputTokens,
+				cacheReads: usage.cacheReadTokens,
+				cacheWrites: usage.cacheWriteTokens,
+				totalCost: usage.totalCost,
+			})
+			.catch((error) => Logger.error("[SdkController] Failed to persist background advisor usage:", error))
 	}
 
 	/** True when the active mode's model costs nothing: a free self-hosted model or a FreeAuto router. */

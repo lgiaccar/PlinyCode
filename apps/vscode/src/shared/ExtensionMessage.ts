@@ -399,12 +399,15 @@ export interface ClineCompactionInfo {
 }
 
 export interface ClineSubagentUsageInfo {
-	source: "subagents"
+	/** Whose usage the row adds to the conversation's: a sub-agent batch, or one advisor call (`ask_advisor`). */
+	source: "subagents" | "advisor"
 	tokensIn: number
 	tokensOut: number
 	cacheWrites: number
 	cacheReads: number
 	cost: number
+	/** True when the figures were estimated rather than reported by the provider. */
+	estimated?: boolean
 }
 
 type ClineApiReqCancelReason = "streaming_failed" | "user_cancelled" | "retries_exhausted"

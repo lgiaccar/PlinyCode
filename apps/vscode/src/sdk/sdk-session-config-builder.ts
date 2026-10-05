@@ -3,6 +3,7 @@ import { type AgentStopControl, createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { StateManager } from "@/core/storage/StateManager"
 import { isReviewBeforeFinishEnabled } from "@/hosts/vscode/review-settings"
+import { type AdvisorInstallDeps, installAdvisor } from "./advisor/advisor-install"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import type { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
@@ -52,6 +53,8 @@ interface SdkSessionConfigBuilderOptions {
 	 * with its task displayed.
 	 */
 	getConversationId?: () => string | undefined
+	/** The advisor tool's settings, budget check and usage sink; the tool is installed when given. */
+	advisor?: Pick<AdvisorInstallDeps, "getSettings" | "checkBudget" | "onUsage">
 }
 
 /**
@@ -136,6 +139,15 @@ export class SdkSessionConfigBuilder {
 				reviewEnabled: isReviewBeforeFinishEnabled,
 				// The id is read when the review runs: a new session's is only final once it has started.
 				...(getRunChanges ? { getRunChanges: () => getRunChanges(config.sessionId ?? "") } : {}),
+			})
+		}
+
+		// After the router, so the advisor's model factory wraps the router's.
+		if (this.options.advisor) {
+			installAdvisor(config, {
+				...this.options.advisor,
+				// The same key installRouter is given above.
+				routerSessionKey: this.options.getSessionId?.() || input.cwd,
 			})
 		}
 

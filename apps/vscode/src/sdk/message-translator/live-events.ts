@@ -20,6 +20,7 @@ import type { TodoListMessage } from "@shared/todo-list"
 import { isSyntheticUserPrompt } from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
 import { normalizeTodoList, TODO_TOOL_NAME } from "../vscode-todo-tool"
+import { advisorQuestionMessage, advisorResultMessages, isAdvisorTool } from "./advisor-rows"
 import { buildCompactionMessage, finalizeDanglingCompaction, parseCompactionNoticeMetadata } from "./ask-builders"
 import { reshapeErrorForWebview } from "./error-reshape"
 import {
@@ -196,6 +197,12 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 
 						// Clear the generic streaming tool so it doesn't also emit say:"tool"
 						state.clearStreamingTool()
+						break
+					}
+
+					// ask_advisor → "asked the advisor" row with the question; content_end adds the advice.
+					if (isAdvisorTool(toolName)) {
+						messages.push(advisorQuestionMessage(input, state.getStreamingToolTs(), true))
 						break
 					}
 
@@ -506,6 +513,22 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 							partial: false,
 							commandCompleted: true,
 						})
+						break
+					}
+
+					// ask_advisor → the advice (or why there is none) and its cost.
+					if (isAdvisorTool(toolName)) {
+						const storedInput = state.getStreamingToolInput()
+						const questionTs = state.clearStreamingTool()
+						messages.push(
+							...advisorResultMessages({
+								input: storedInput,
+								output: event.output,
+								error: event.error,
+								questionTs,
+								nextTs: () => state.nextTs(),
+							}),
+						)
 						break
 					}
 
