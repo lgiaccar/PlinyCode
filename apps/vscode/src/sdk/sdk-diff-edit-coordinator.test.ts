@@ -4,6 +4,7 @@ import * as os from "os"
 import * as path from "path"
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import { buildEditPreviewAnimation, EditPreview, type EditPreviewContent } from "@/integrations/editor/EditPreview"
+import type { EditDiagnosticsSource, EditProblem } from "./edit-problems"
 import { computeNewEditorContent, SdkDiffEditCoordinator } from "./sdk-diff-edit-coordinator"
 
 /** Records open/close calls; previews are purely visual so no other behavior is needed. */
@@ -33,6 +34,61 @@ class FakeEditPreview extends EditPreview {
 
 	override async close(): Promise<void> {
 		this.closed++
+	}
+}
+
+/** A language server reduced to what the coordinator's problem reporting sees of it. */
+class FakeDiagnostics implements EditDiagnosticsSource {
+	readonly errors = new Map<string, EditProblem[]>()
+	readonly shown = new Set<string>()
+	readonly openedInBackground: string[] = []
+	readonly closedAgain: string[] = []
+	private readonly listeners = new Set<(absolutePaths: string[]) => void>()
+	failReads = false
+	failBackgroundOpen = false
+
+	getErrors(absolutePath: string): EditProblem[] {
+		if (this.failReads) {
+			throw new Error("diagnostics unavailable")
+		}
+		return this.errors.get(absolutePath) ?? []
+	}
+
+	documentVersion(): number | undefined {
+		return undefined
+	}
+
+	onDidChangeDiagnostics(listener: (absolutePaths: string[]) => void): { dispose(): void } {
+		this.listeners.add(listener)
+		return { dispose: () => this.listeners.delete(listener) }
+	}
+
+	isShown(absolutePath: string): boolean {
+		return this.shown.has(absolutePath)
+	}
+
+	async showInBackground(absolutePath: string): Promise<() => Promise<void>> {
+		if (this.failBackgroundOpen) {
+			throw new Error("cannot open")
+		}
+		this.openedInBackground.push(absolutePath)
+		this.shown.add(absolutePath)
+		return async () => {
+			this.shown.delete(absolutePath)
+			this.closedAgain.push(absolutePath)
+		}
+	}
+
+	/** Publishes a file's errors, as a language server does after analysing it. */
+	publish(absolutePath: string, errors: EditProblem[]): void {
+		this.errors.set(absolutePath, errors)
+		for (const listener of this.listeners) {
+			listener([absolutePath])
+		}
+	}
+
+	get listenerCount(): number {
+		return this.listeners.size
 	}
 }
 
@@ -702,5 +758,300 @@ describe("SdkDiffEditCoordinator", () => {
 		expect(result).toBe("fallback editor result")
 		expect(previews).toHaveLength(0)
 		expect(showEditedFile).not.toHaveBeenCalled()
+	})
+
+	describe("new problems after an edit", () => {
+		const PROBLEMS_HEADER = "\n\nNew problems reported in this file after the edit (fix them if your change caused them):"
+		const FIRST_EVENT_TIMEOUT_MS = 150
+		let diagnostics: FakeDiagnostics
+		let reportNewProblems: boolean
+
+		function tsError(line: number, message: string): EditProblem {
+			return { line, message, source: "ts", code: "2304" }
+		}
+
+		/** Makes the write of `name` be followed, a moment later, by the language server's answer. */
+		function publishAfterWrite(
+			executor: Mock<EditorExecutor> | Mock<ApplyPatchExecutor>,
+			answers: Record<string, EditProblem[]>,
+		) {
+			executor.mockImplementation(async () => {
+				setTimeout(() => {
+					for (const [name, errors] of Object.entries(answers)) {
+						diagnostics.publish(path.join(tempDir, name), errors)
+					}
+				}, 10)
+				return "written"
+			})
+		}
+
+		beforeEach(() => {
+			diagnostics = new FakeDiagnostics()
+			reportNewProblems = true
+			// The coordinator shows an edited file in a tab before it reports on it.
+			showEditedFile.mockImplementation(async (absolutePath) => {
+				diagnostics.shown.add(absolutePath)
+			})
+			coordinator = makeCoordinator({
+				diagnostics,
+				isReportNewProblemsEnabled: () => reportNewProblems,
+				editProblemTimings: { firstEventTimeoutMs: FIRST_EVENT_TIMEOUT_MS, quietPeriodMs: 20, maxWaitMs: 400 },
+			})
+		})
+
+		afterEach(() => {
+			coordinator.dispose()
+		})
+
+		it("appends the errors the edit introduced to the editor result", async () => {
+			await writeFile("a.ts", "old content")
+			publishAfterWrite(fallbackEditor, { "a.ts": [tsError(12, "Cannot find name 'foo'.")] })
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+
+			expect(result).toBe(`written${PROBLEMS_HEADER}\n- line 12: Cannot find name 'foo'. (ts 2304)`)
+			// The file was shown by the coordinator, so no background tab was needed.
+			expect(diagnostics.openedInBackground).toEqual([])
+		})
+
+		it("does not report an error that was there before the edit", async () => {
+			const absolutePath = await writeFile("a.ts", "old content")
+			diagnostics.errors.set(absolutePath, [tsError(4, "Cannot find name 'before'.")])
+			publishAfterWrite(fallbackEditor, { "a.ts": [tsError(5, "Cannot find name 'before'.")] })
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+
+			expect(result).toBe("written")
+		})
+
+		it("says nothing when the edit removes errors", async () => {
+			const absolutePath = await writeFile("a.ts", "old content")
+			diagnostics.errors.set(absolutePath, [tsError(4, "Cannot find name 'before'.")])
+			publishAfterWrite(fallbackEditor, { "a.ts": [] })
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+
+			expect(result).toBe("written")
+		})
+
+		it("returns the result unchanged when no diagnostics arrive in time", async () => {
+			await writeFile("a.ts", "old content")
+			const startedAt = Date.now()
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+
+			expect(result).toBe("fallback editor result")
+			// It did wait for the language server, and no longer than the cap.
+			const elapsed = Date.now() - startedAt
+			expect(elapsed).toBeGreaterThanOrEqual(FIRST_EVENT_TIMEOUT_MS - 10)
+			expect(elapsed).toBeLessThan(2_000)
+		})
+
+		it("does not look at diagnostics when the setting is off", async () => {
+			reportNewProblems = false
+			await writeFile("a.ts", "old content")
+			publishAfterWrite(fallbackEditor, { "a.ts": [tsError(12, "Cannot find name 'foo'.")] })
+			const getErrors = vi.spyOn(diagnostics, "getErrors")
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+
+			expect(result).toBe("written")
+			expect(getErrors).not.toHaveBeenCalled()
+			expect(diagnostics.listenerCount).toBe(0)
+		})
+
+		it("returns the result unchanged when the diagnostics cannot be read", async () => {
+			await writeFile("a.ts", "old content")
+			const input = { path: "a.ts", old_text: "old", new_text: "new" }
+
+			diagnostics.failReads = true
+			expect(await coordinator.executeEditorTool(input, tempDir, makeContext("tc1"))).toBe("fallback editor result")
+
+			// Readable before the write, failing after it.
+			diagnostics.failReads = false
+			fallbackEditor.mockImplementation(async () => {
+				diagnostics.failReads = true
+				setTimeout(() => diagnostics.publish(path.join(tempDir, "a.ts"), [tsError(1, "Cannot find name 'foo'.")]), 10)
+				return "written"
+			})
+			expect(await coordinator.executeEditorTool(input, tempDir, makeContext("tc2"))).toBe("written")
+		})
+
+		it("lets a failed edit fail as before, and stops listening for its diagnostics", async () => {
+			await writeFile("a.ts", "old content")
+			fallbackEditor.mockRejectedValueOnce(new Error("No replacement performed: text not found in a.ts."))
+			const input = { path: "a.ts", old_text: "nope", new_text: "new" }
+
+			await expect(coordinator.executeEditorTool(input, tempDir, makeContext("tc1"))).rejects.toThrow(
+				"No replacement performed: text not found",
+			)
+
+			// A path the executor rejects has no file to check either.
+			fallbackEditor.mockRejectedValueOnce(new Error("Path must stay within cwd: ../outside.ts"))
+			await expect(
+				coordinator.executeEditorTool({ path: "../outside.ts", new_text: "x" }, tempDir, makeContext("tc2")),
+			).rejects.toThrow("Path must stay within cwd")
+		})
+
+		it("waits for the diagnostics after the preview has closed", async () => {
+			await writeFile("a.ts", "old content")
+			const input = { path: "a.ts", old_text: "old", new_text: "new" }
+			await coordinator.openForApproval("tc1", "editor", input)
+			let previewClosedWhenAnswered: boolean | undefined
+			fallbackEditor.mockImplementation(async () => {
+				setTimeout(() => {
+					previewClosedWhenAnswered = previews[0].closed === 1
+					diagnostics.publish(path.join(tempDir, "a.ts"), [tsError(2, "Cannot find name 'foo'.")])
+				}, 30)
+				return "written"
+			})
+
+			const result = await coordinator.executeEditorTool(input, tempDir, makeContext("tc1"))
+
+			expect(result).toContain("- line 2: Cannot find name 'foo'. (ts 2304)")
+			expect(previewClosedWhenAnswered).toBe(true)
+		})
+
+		it("shows a headlessly edited file in a background tab while it waits, then closes it", async () => {
+			backgroundEdit = true
+			await writeFile("a.ts", "old content")
+			publishAfterWrite(fallbackEditor, { "a.ts": [tsError(12, "Cannot find name 'foo'.")] })
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+			await sleep(0)
+
+			expect(result).toBe(`written${PROBLEMS_HEADER}\n- line 12: Cannot find name 'foo'. (ts 2304)`)
+			expect(showEditedFile).not.toHaveBeenCalled()
+			expect(diagnostics.openedInBackground).toEqual([path.join(tempDir, "a.ts")])
+			expect(diagnostics.closedAgain).toEqual([path.join(tempDir, "a.ts")])
+		})
+
+		it("returns the result unchanged when a headlessly edited file cannot be shown", async () => {
+			backgroundEdit = true
+			diagnostics.failBackgroundOpen = true
+			await writeFile("a.ts", "old content")
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1"),
+			)
+
+			expect(result).toBe("fallback editor result")
+		})
+
+		it("does not wait for diagnostics once the tool call is aborted", async () => {
+			backgroundEdit = true
+			await writeFile("a.ts", "old content")
+			const controller = new AbortController()
+			fallbackEditor.mockImplementation(async () => {
+				controller.abort()
+				return "written"
+			})
+			const startedAt = Date.now()
+
+			const result = await coordinator.executeEditorTool(
+				{ path: "a.ts", old_text: "old", new_text: "new" },
+				tempDir,
+				makeContext("tc1", controller.signal),
+			)
+
+			expect(result).toBe("written")
+			expect(Date.now() - startedAt).toBeLessThan(FIRST_EVENT_TIMEOUT_MS)
+			expect(diagnostics.openedInBackground).toEqual([])
+		})
+
+		it("groups the new problems of a multi-file patch by file", async () => {
+			await writeFile("one.ts", "line one\n")
+			await writeFile("two.ts", "line two\n")
+			const untouchedErrors = [tsError(1, "Cannot find name 'before'.")]
+			diagnostics.errors.set(path.join(tempDir, "two.ts"), untouchedErrors)
+			const patch = [
+				"*** Begin Patch",
+				"*** Update File: one.ts",
+				"@@",
+				"-line one",
+				"+line ONE",
+				"*** Update File: two.ts",
+				"@@",
+				"-line two",
+				"+line TWO",
+				"*** Add File: three.ts",
+				"+line three",
+				"*** End Patch",
+			].join("\n")
+			publishAfterWrite(fallbackApplyPatch, {
+				"one.ts": [tsError(1, "Cannot find name 'ONE'.")],
+				"two.ts": untouchedErrors,
+				"three.ts": [tsError(1, "Cannot find name 'line'."), tsError(1, "Cannot find name 'three'.")],
+			})
+
+			const result = await coordinator.executeApplyPatchTool({ input: patch }, tempDir, makeContext("tc1"))
+			await sleep(0)
+
+			expect(result).toBe(
+				[
+					"written",
+					"",
+					"New problems reported after the edit (fix them if your change caused them):",
+					"one.ts",
+					"- line 1: Cannot find name 'ONE'. (ts 2304)",
+					"three.ts",
+					"- line 1: Cannot find name 'line'. (ts 2304)",
+					"- line 1: Cannot find name 'three'. (ts 2304)",
+				].join("\n"),
+			)
+			// Only the previewed file was shown by the coordinator; the others were shown
+			// in the background for the check and closed again.
+			expect(showEditedFile).toHaveBeenCalledExactlyOnceWith(path.join(tempDir, "one.ts"))
+			expect(diagnostics.openedInBackground).toEqual([path.join(tempDir, "two.ts"), path.join(tempDir, "three.ts")])
+			expect(diagnostics.closedAgain).toEqual([path.join(tempDir, "two.ts"), path.join(tempDir, "three.ts")])
+		})
+
+		it("reports on a single-file patch as on an editor edit, and leaves a rejected patch alone", async () => {
+			await writeFile("patched.ts", "line one\n")
+			const patch = [
+				"*** Begin Patch",
+				"*** Update File: patched.ts",
+				"@@",
+				"-line one",
+				"+line ONE",
+				"*** End Patch",
+			].join("\n")
+			publishAfterWrite(fallbackApplyPatch, { "patched.ts": [tsError(1, "Cannot find name 'ONE'.")] })
+
+			expect(await coordinator.executeApplyPatchTool({ input: patch }, tempDir, makeContext("tc1"))).toBe(
+				`written${PROBLEMS_HEADER}\n- line 1: Cannot find name 'ONE'. (ts 2304)`,
+			)
+
+			fallbackApplyPatch.mockRejectedValueOnce(new Error("Invalid patch"))
+			await expect(
+				coordinator.executeApplyPatchTool({ input: "not a patch" }, tempDir, makeContext("tc2")),
+			).rejects.toThrow("Invalid patch")
+		})
 	})
 })

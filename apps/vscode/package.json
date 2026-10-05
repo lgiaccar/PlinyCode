@@ -392,6 +392,11 @@
 					"default": true,
 					"markdownDescription": "Let the agent watch CI with the `watch_ci` tool: after it pushes a change, PlinyCode checks the GitHub Actions or Azure Pipelines runs in the background, without using the model, and sends the result into the conversation when they finish. Turning this off also stops the watches that are running."
 				},
+				"plinycode.edits.reportNewProblems": {
+					"type": "boolean",
+					"default": true,
+					"description": "After PlinyCode edits a file, tell the model which new errors the editor reports for that file, so it can fix them right away. An edit waits up to 3 seconds for the language server; when PlinyCode edits a file that is not open in a tab, as with Background Edit, the file is opened in a background tab while it is checked."
+				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",
 					"default": 5,
