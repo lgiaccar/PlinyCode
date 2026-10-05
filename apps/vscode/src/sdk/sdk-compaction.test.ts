@@ -2,9 +2,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 const createContextCompactionPrepareTurn = vi.fn()
 const createSessionCompactionState = vi.fn((input: unknown) => ({ version: 1, input }))
-vi.mock("@plinycode/core", () => ({
+vi.mock("@plinycode/core", async (importOriginal) => ({
 	createContextCompactionPrepareTurn: (...args: unknown[]) => createContextCompactionPrepareTurn(...args),
 	createSessionCompactionState: (input: unknown) => createSessionCompactionState(input),
+	// The real filter (the stub re-exports it from the engine's source).
+	dropOffTheRecordTurns: (await importOriginal<typeof import("@plinycode/core")>()).dropOffTheRecordTurns,
 }))
 
 vi.mock("@/shared/services/Logger", () => ({
@@ -72,6 +74,25 @@ describe("compactSessionMessages", () => {
 			messages: [{ role: "user", content: "summary" }],
 			compactionState: { version: 1, input: expect.anything() },
 		})
+	})
+
+	it("leaves side questions out of what it compacts and of the saved state's source", async () => {
+		const compact = vi.fn().mockResolvedValue({ messages: [{ role: "user", content: "summary" }] })
+		createContextCompactionPrepareTurn.mockReturnValueOnce(compact)
+
+		const messages = [
+			{ role: "user" as const, content: "build the parser" },
+			{ role: "assistant" as const, content: "done" },
+			{ role: "user" as const, content: "side: what is a lexer?", metadata: { offTheRecord: true } },
+			{ role: "assistant" as const, content: "it tokenizes" },
+			{ role: "user" as const, content: "add tests" },
+			{ role: "assistant" as const, content: "added" },
+		]
+		await compactSessionMessages({ config: baseConfig, sessionId: "s1", messages })
+
+		const onRecord = [messages[0], messages[1], messages[4], messages[5]]
+		expect(compact).toHaveBeenCalledWith(expect.objectContaining({ messages: onRecord, apiMessages: onRecord }))
+		expect(createSessionCompactionState).toHaveBeenCalledWith(expect.objectContaining({ sourceMessages: onRecord }))
 	})
 
 	it("preserves context-only model limits for the shared resolver", async () => {

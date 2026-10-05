@@ -626,12 +626,58 @@ describe("SdkSessionLifecycle", () => {
 		expect(send).toHaveBeenCalledWith(expect.objectContaining({ prompt: "hello" }))
 	})
 
+	describe("side questions", () => {
+		it("sends the flag, leaves the mode-switch notice for the next message and reads the editor without remembering", async () => {
+			const send = vi.fn().mockResolvedValue(undefined)
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const consumeModeSwitchNotice = vi.fn(() => ({ from: "plan" as const, to: "act" as const }))
+			const block = "<editor_state>\nActive file: src/app.ts\n</editor_state>"
+			const editorState = { nextBlock: vi.fn(async () => block), syncWithTranscript: vi.fn() }
+			const lifecycle = makeLifecycle({ consumeModeSwitchNotice, editorState })
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "what is this file?", undefined, undefined, undefined, {
+				offTheRecord: true,
+			})
+			expect(lifecycle.isOffTheRecordTurn()).toBe(true)
+			await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+
+			expect(send).toHaveBeenCalledWith(
+				expect.objectContaining({ prompt: `what is this file?\n\n${block}`, offTheRecord: true }),
+			)
+			expect(consumeModeSwitchNotice).not.toHaveBeenCalled()
+			expect(editorState.nextBlock).toHaveBeenCalledWith("session-123", { remember: false })
+			await vi.waitFor(() => expect(lifecycle.isOffTheRecordTurn()).toBe(false))
+		})
+
+		it("does not apply to a queued message", async () => {
+			const send = vi.fn().mockResolvedValue(undefined)
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle({})
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({} as any)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "later", undefined, undefined, "queue", {
+				offTheRecord: true,
+			})
+			await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+
+			expect(send.mock.calls[0][0]).not.toHaveProperty("offTheRecord")
+			expect(lifecycle.isOffTheRecordTurn()).toBe(false)
+		})
+	})
+
 	describe("editor state", () => {
 		const BLOCK = "<editor_state>\nActive file: src/app.ts (cursor at line 3)\n</editor_state>"
 
 		function makeEditorState(blocks: Array<string | undefined>) {
 			return {
-				nextBlock: vi.fn(async (_sessionId: string) => blocks.shift()),
+				nextBlock: vi.fn(async (_sessionId: string, _options?: { remember?: boolean }) => blocks.shift()),
 				syncWithTranscript: vi.fn(),
 			}
 		}

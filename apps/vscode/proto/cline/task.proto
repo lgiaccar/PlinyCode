@@ -196,6 +196,9 @@ message AskResponseRequest {
   repeated string images = 4;
   repeated string files = 5;
   optional string delivery = 6; // "queue" or "steer"
+  // Ask the message as an off-the-record side question (docs/side-questions.md).
+  // Ignored when the message answers a pending approval or question, or joins a running turn.
+  optional bool off_the_record = 7;
 }
 
 // Request for editing a past user message and regenerating the conversation after it

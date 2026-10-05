@@ -20,7 +20,7 @@ It talks **only** to Synopsys internal models through the Pliny gateway. No code
 ## Features
 
 - **Agentic editing** — creates and edits files across your project, reacting to linter and compiler errors as it works.
-- **Plan & Act modes** — have the agent draft an approach for your approval before it changes anything.
+- **Plan, Agent & Ask modes** — have the agent draft an approach for your approval before it changes anything.
 - **Terminal execution** — runs commands and reads their output, with per-command approval.
 - **Context folders** — automatically scans `.github`, `.vscode`, `.devcontainer` and `.cursor` to generate
   project rules in `.cline/rules/` (opt-in per rule).

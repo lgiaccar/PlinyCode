@@ -174,7 +174,7 @@ describe("ChatTextArea sticky send mode", () => {
 		vi.unstubAllGlobals()
 	})
 
-	function renderWithSend() {
+	function renderWithSend(sideQuestionAvailable?: boolean) {
 		const onSend = vi.fn()
 		render(
 			<ChatTextArea
@@ -190,10 +190,35 @@ describe("ChatTextArea sticky send mode", () => {
 				setSelectedFiles={vi.fn()}
 				setSelectedImages={vi.fn()}
 				shouldDisableFilesAndImages={false}
+				sideQuestionAvailable={sideQuestionAvailable}
 			/>,
 		)
 		return { onSend, button: screen.getByTestId("send-button"), select: screen.getByTestId("send-mode-select") }
 	}
+
+	it("sends a ticked side question off the record, once", () => {
+		const { onSend, button } = renderWithSend(true)
+		const sideQuestion = screen.getByRole("checkbox", { name: "Side question" })
+
+		fireEvent.click(sideQuestion)
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenLastCalledWith(undefined, { offTheRecord: true })
+		// The box applies to one message.
+		expect(sideQuestion).not.toBeChecked()
+
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenLastCalledWith(undefined)
+	})
+
+	it("disables the side-question box when a side question cannot be sent", () => {
+		const { onSend, button } = renderWithSend(false)
+		const sideQuestion = screen.getByRole("checkbox", { name: "Side question" })
+
+		expect(sideQuestion).toBeDisabled()
+		fireEvent.click(sideQuestion)
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenCalledWith(undefined)
+	})
 
 	it("sends with the default delivery and the send icon by default", () => {
 		const { onSend, button } = renderWithSend()

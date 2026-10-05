@@ -1,6 +1,6 @@
 # Plan mode
 
-In plan mode the agent explores the code and writes its plan as markdown files, which the user can edit before running them. When the plan is ready, an **Execute plan** button switches to act mode and asks the agent to carry it out.
+In plan mode the agent explores the code and writes its plan as markdown files, which the user can edit before running them. When the plan is ready, an **Execute plan** button switches to act mode (labelled Agent in the mode switch) and asks the agent to carry it out.
 
 Ask mode, which answers questions and writes nothing at all, is described in [ask-mode.md](ask-mode.md).
 
@@ -68,7 +68,7 @@ The last choice is stored in the `plinycode.plan.executeWith` VS Code setting ([
 When the request carries a choice, `togglePlanActModeProto` calls `preparePlanExecution` ([plan-execution.ts](../apps/vscode/src/sdk/plan-execution.ts)) before it switches the mode:
 
 1. It works out the model the choice names. If act mode is not already set to it, it commits that model as act mode's selection, the same way the model picker does. The session that the mode switch builds next reads it.
-2. If that model differs from plan mode's and "Use different models for Plan and Act modes" is off, it turns the setting on first. With the setting off a commit writes both modes, which would replace the planner's model as well.
+2. If that model differs from plan mode's and "Use different models for Plan and Agent modes" is off, it turns the setting on first. With the setting off a commit writes both modes, which would replace the planner's model as well.
 3. It saves the choice in the setting.
 
 If the model cannot be committed, the request fails and the plan is not executed.
@@ -76,6 +76,6 @@ If the model cannot be committed, the request fails and the plan is not executed
 Things to know:
 
 - **The model switch is not per conversation.** Model selection is global, so act mode stays on the chosen model after the plan has run, in every conversation, until another model is picked.
-- **It builds on an existing setting.** With "Use different models for Plan and Act modes" on, each mode has always kept its own model, and the switch to act mode that Execute plan makes already moved to act mode's model. The button shows which model that is and lets the user change it where the plan is run.
+- **It builds on an existing setting.** With "Use different models for Plan and Agent modes" on, each mode has always kept its own model, and the switch to act mode that Execute plan makes already moved to act mode's model. The button shows which model that is and lets the user change it where the plan is run.
 - **Execution stays in the same conversation.** The executor starts with the planning conversation as its context. A free model can have a much smaller context window than a paid planner, so a long planning conversation may have to be compacted before the executor can work. This is the reason the plan has to stand on its own.
 - **The conversation budget still applies.** The budget is checked before every model call against the model the active mode is set to at that moment (`SdkController.checkSpendingLimit`). A paid executor is held to the conversation's budget from its first call, including what a paid planner already spent. A free executor is not limited, like any free model.

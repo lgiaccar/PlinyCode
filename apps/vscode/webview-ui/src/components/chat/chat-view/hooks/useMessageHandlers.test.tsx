@@ -205,6 +205,35 @@ describe("useMessageHandlers — send routing", () => {
 		)
 	})
 
+	it("sends a side question with the off-the-record flag and marks its pending bubble", async () => {
+		mockTurnState = { phase: "completed", seq: 7 }
+		const setPendingUserMessage = vi.fn()
+		const chatState = makeChatState(completedConversation, { setPendingUserMessage })
+		const { result } = renderHook(() => useMessageHandlers(completedConversation, chatState))
+
+		await act(async () => {
+			await result.current.handleSendMessage("what is a lexer?", [], [], undefined, { offTheRecord: true })
+		})
+
+		expect(askResponse).toHaveBeenCalledWith(
+			expect.objectContaining({ responseType: "messageResponse", text: "what is a lexer?", offTheRecord: true }),
+		)
+		expect(setPendingUserMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ message: expect.objectContaining({ text: "what is a lexer?", offTheRecord: true }) }),
+		)
+	})
+
+	it("drops the side-question flag on a message that joins a running turn", async () => {
+		mockTurnState = { phase: "streaming", seq: 7 }
+		const { result } = renderHook(() => useMessageHandlers(completedConversation, makeChatState(completedConversation)))
+
+		await act(async () => {
+			await result.current.handleSendMessage("later", [], [], "queue", { offTheRecord: true })
+		})
+
+		expect(askResponse).toHaveBeenCalledWith(expect.not.objectContaining({ offTheRecord: true }))
+	})
+
 	it("shows pending composer state before a follow-up askResponse resolves", async () => {
 		mockTurnState = { phase: "completed", seq: 7 }
 		let resolveAskResponse: () => void = () => {}

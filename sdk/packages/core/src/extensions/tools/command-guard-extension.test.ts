@@ -8,6 +8,7 @@ import {
 	ASK_MODE_COMMAND_GUARD_EXTENSION_NAME,
 	createAskModeCommandGuardExtension,
 	createPlanModeCommandGuardExtension,
+	guardOffTheRecordTool,
 	PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME,
 } from "./command-guard-extension";
 
@@ -291,5 +292,50 @@ describe("ask-mode command-guard extension", () => {
 				makeContext("read_files", { files: [{ path: "src/app.ts" }] }),
 			),
 		).toBeUndefined();
+	});
+});
+
+describe("off-the-record tool guard", () => {
+	it("rejects file writes, markdown included", () => {
+		for (const [tool, input] of [
+			["editor", { path: "README.md", new_text: "x" }],
+			[
+				"apply_patch",
+				{ input: "*** Begin Patch\n*** Add File: a.ts\n+x\n*** End Patch" },
+			],
+		] as const) {
+			const result = guardOffTheRecordTool(makeContext(tool, input));
+			expect(result?.skip).toBe(true);
+			expect(result?.stop).toBeUndefined();
+			expect(result?.reason).toContain("off-the-record side question");
+		}
+	});
+
+	it("rejects file-editing commands and lets read-only ones run", () => {
+		const blocked = guardOffTheRecordTool(
+			makeContext("run_commands", { commands: ["rm -rf build"] }),
+		);
+		expect(blocked?.skip).toBe(true);
+		expect(blocked?.reason).toContain("can modify files");
+
+		expect(
+			guardOffTheRecordTool(
+				makeContext("run_commands", { commands: ["git log -5"] }),
+			),
+		).toBeUndefined();
+	});
+
+	it("rejects the task list, sub-agents and teammates, and leaves read tools alone", () => {
+		for (const tool of [
+			"update_todo_list",
+			"spawn_agent",
+			"subagent_reviewer_ab12",
+			"team_spawn_teammate",
+		]) {
+			expect(guardOffTheRecordTool(makeContext(tool, {}))?.skip).toBe(true);
+		}
+		for (const tool of ["read_files", "search_codebase", "fetch_web_content"]) {
+			expect(guardOffTheRecordTool(makeContext(tool, {}))).toBeUndefined();
+		}
 	});
 });

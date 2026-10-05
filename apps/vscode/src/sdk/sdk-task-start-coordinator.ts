@@ -12,7 +12,7 @@ import type { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import { historyItemToSessionMetadata, type SdkTaskHistory } from "./sdk-task-history"
 import type { SdkSessionHost } from "./session-host"
-import { createTaskProxy, type TaskProxy } from "./task-proxy"
+import { type AskResponseCallback, createTaskProxy, type TaskProxy } from "./task-proxy"
 import type { VscodeSessionHost } from "./vscode-session-host"
 
 type StartInput = Parameters<VscodeSessionHost["start"]>[0]
@@ -48,7 +48,7 @@ export interface SdkTaskStartCoordinatorOptions {
 	/** detachRunning keeps a running task going in the background. */
 	clearTask: (options?: { detachRunning?: boolean }) => Promise<void>
 	setTask: (task: TaskProxy | undefined) => void
-	onAskResponse: (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
+	onAskResponse: AskResponseCallback
 	onCancelTask: () => Promise<void>
 	getWorkspaceRoot: () => Promise<string>
 	/**

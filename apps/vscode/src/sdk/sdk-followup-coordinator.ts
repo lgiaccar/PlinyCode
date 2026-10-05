@@ -58,6 +58,16 @@ export interface SdkFollowupCoordinatorOptions {
 	onFollowUpAbandoned: () => void
 }
 
+/** Per-message choices for a follow-up. */
+export interface FollowUpOptions {
+	/**
+	 * Ask the message as an off-the-record side question (docs/side-questions.md).
+	 * Applies only when the message starts a turn of its own: it is ignored when the
+	 * message answers a pending approval or question, or joins a running turn.
+	 */
+	offTheRecord?: boolean
+}
+
 export class SdkFollowupCoordinator {
 	constructor(private readonly options: SdkFollowupCoordinatorOptions) {}
 
@@ -68,7 +78,10 @@ export class SdkFollowupCoordinator {
 		askResponse?: ClineAskResponse,
 		turnPhaseAtSubmit?: TurnPhase,
 		delivery?: "queue" | "steer",
+		options?: FollowUpOptions,
 	): Promise<void> {
+		// A side question needs text to ask; a bare resume is never one.
+		const offTheRecord = options?.offTheRecord === true && !!prompt?.trim()
 		if (this.options.interactions.resolvePendingToolApproval(prompt, askResponse, images, files)) {
 			return
 		}
@@ -113,13 +126,13 @@ export class SdkFollowupCoordinator {
 			// reserved for tasks without a live session (opened from history,
 			// extension host reload).
 			if (currentSession && (!task || currentSession.sessionId === task.taskId)) {
-				await this.continueIdleSession(currentSession, prompt, images, files)
+				await this.continueIdleSession(currentSession, prompt, images, files, offTheRecord)
 				return
 			}
 
 			if (task) {
 				Logger.log(`[SdkController] askResponse: Resuming task ${task.taskId} before follow-up`)
-				await this.tryResumeSessionFromTask(task, prompt, images, files)
+				await this.tryResumeSessionFromTask(task, prompt, images, files, offTheRecord)
 				return
 			}
 
@@ -159,24 +172,31 @@ export class SdkFollowupCoordinator {
 		prompt?: string,
 		images?: string[],
 		files?: string[],
+		offTheRecord = false,
 	): Promise<void> {
 		const { sdkHost, sessionId } = activeSession
 		Logger.log(`[SdkController] Continuing idle session for follow-up: ${sessionId}`)
 
 		this.options.sessions.setRunning(true)
 		if (prompt?.trim() || images?.length || files?.length) {
-			this.emitUserFeedback(sessionId, prompt, images, files)
+			this.emitUserFeedback(sessionId, prompt, images, files, offTheRecord)
 		}
 		this.options.resetMessageTranslator()
 
 		const effectivePrompt = prompt?.trim() || TASK_RESUMPTION_PROMPT
 		const resolvedPrompt = await this.options.resolveContextMentions(effectivePrompt)
-		this.options.sessions.fireAndForgetSend(sdkHost, sessionId, resolvedPrompt, images, files)
+		this.sendTurn(sdkHost, sessionId, resolvedPrompt, images, files, offTheRecord)
 	}
 
-	private async tryResumeSessionFromTask(task: TaskProxy, prompt?: string, images?: string[], files?: string[]): Promise<void> {
+	private async tryResumeSessionFromTask(
+		task: TaskProxy,
+		prompt?: string,
+		images?: string[],
+		files?: string[],
+		offTheRecord = false,
+	): Promise<void> {
 		try {
-			await this.resumeSessionFromTask(task, prompt, images, files)
+			await this.resumeSessionFromTask(task, prompt, images, files, offTheRecord)
 		} catch (error) {
 			if (this.options.getTask()?.taskId !== task.taskId) {
 				// Settle the pre-set streaming phase, but do not emit the stale
@@ -204,7 +224,13 @@ export class SdkFollowupCoordinator {
 		}
 	}
 
-	private async resumeSessionFromTask(task: TaskProxy, prompt?: string, images?: string[], files?: string[]): Promise<void> {
+	private async resumeSessionFromTask(
+		task: TaskProxy,
+		prompt?: string,
+		images?: string[],
+		files?: string[],
+		offTheRecord = false,
+	): Promise<void> {
 		const taskId = task.taskId
 		Logger.log(`[SdkController] Resuming session from task: ${taskId}`)
 
@@ -262,7 +288,7 @@ export class SdkFollowupCoordinator {
 			// mapping: a resumption prompt carrying user attachments is counted as a
 			// visible user message, a bare resumption prompt is not.
 			if (prompt?.trim() || images?.length || files?.length) {
-				this.emitUserFeedback(startResult.sessionId, prompt, images, files)
+				this.emitUserFeedback(startResult.sessionId, prompt, images, files, offTheRecord)
 			}
 
 			await this.options.postStateToWebview()
@@ -274,10 +300,26 @@ export class SdkFollowupCoordinator {
 				return
 			}
 
-			this.options.sessions.fireAndForgetSend(sdkHost, startResult.sessionId, resolvedPrompt, images, files)
+			this.sendTurn(sdkHost, startResult.sessionId, resolvedPrompt, images, files, offTheRecord)
 		} catch (error) {
 			await this.endStartedResume(sdkHost, startResult.sessionId)
 			throw error
+		}
+	}
+
+	/** Starts a turn; a side question passes the flag, any other message the same arguments as always. */
+	private sendTurn(
+		sdkHost: SdkSessionHost,
+		sessionId: string,
+		prompt: string,
+		images: string[] | undefined,
+		files: string[] | undefined,
+		offTheRecord: boolean,
+	): void {
+		if (offTheRecord) {
+			this.options.sessions.fireAndForgetSend(sdkHost, sessionId, prompt, images, files, undefined, { offTheRecord: true })
+		} else {
+			this.options.sessions.fireAndForgetSend(sdkHost, sessionId, prompt, images, files)
 		}
 	}
 
@@ -297,7 +339,13 @@ export class SdkFollowupCoordinator {
 		await this.options.postStateToWebview()
 	}
 
-	private emitUserFeedback(sessionId: string, prompt?: string, images?: string[], files?: string[]): void {
+	private emitUserFeedback(
+		sessionId: string,
+		prompt?: string,
+		images?: string[],
+		files?: string[],
+		offTheRecord = false,
+	): void {
 		const hasPrompt = !!prompt?.trim()
 		const hasImages = !!images?.length
 		const hasFiles = !!files?.length
@@ -313,6 +361,7 @@ export class SdkFollowupCoordinator {
 			images,
 			files,
 			partial: false,
+			...(offTheRecord ? { offTheRecord: true } : {}),
 		}
 		this.options.messages.appendAndEmit([userMessage], {
 			type: "status",

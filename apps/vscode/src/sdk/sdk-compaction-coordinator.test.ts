@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { StateManager } from "@/core/storage/StateManager"
 import { SdkCompactionCoordinator, type SdkCompactionCoordinatorOptions } from "./sdk-compaction-coordinator"
 
-vi.mock("@plinycode/core", () => ({
+vi.mock("@plinycode/core", async (importOriginal) => ({
+	// The real filter (the stub re-exports it from the engine's source).
+	dropOffTheRecordTurns: (await importOriginal<typeof import("@plinycode/core")>()).dropOffTheRecordTurns,
 	createContextCompactionPrepareTurn: vi.fn(),
 	createSessionCompactionState: vi.fn((input: { compactedMessages: unknown[] }) => ({
 		version: 1,

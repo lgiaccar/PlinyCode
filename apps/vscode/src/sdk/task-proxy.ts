@@ -12,6 +12,7 @@ import { EventEmitter } from "node:events"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { Logger } from "@shared/services/Logger"
 import type { ClineAskResponse } from "@shared/WebviewMessage"
+import type { FollowUpOptions } from "./sdk-followup-coordinator"
 
 /**
  * Interface for the task proxy — mirrors the subset of classic Task
@@ -28,6 +29,7 @@ export interface TaskProxy {
 		images?: string[],
 		files?: string[],
 		delivery?: string,
+		options?: FollowUpOptions,
 	) => Promise<void>
 	/** Abort the running task */
 	abortTask: () => Promise<void>
@@ -156,7 +158,13 @@ interface TaskProxyState {
 /**
  * Callback type for delegating ask responses to the controller.
  */
-type AskResponseCallback = (text?: string, images?: string[], files?: string[], delivery?: string) => Promise<void>
+export type AskResponseCallback = (
+	text?: string,
+	images?: string[],
+	files?: string[],
+	delivery?: string,
+	options?: FollowUpOptions,
+) => Promise<void>
 
 /**
  * Callback type for delegating task cancellation to the controller.
@@ -212,6 +220,7 @@ export function createTaskProxy(
 			images?: string[],
 			files?: string[],
 			delivery?: string,
+			options?: FollowUpOptions,
 		): Promise<void> {
 			// Store the response type in task state (some handlers check this)
 			state.askResponse = askResponse
@@ -221,17 +230,17 @@ export function createTaskProxy(
 				case "noButtonClicked":
 					// For approval responses, we just send an empty continuation
 					// The SDK handles approval differently than the classic Task
-					await onAskResponse(text, images, files, delivery)
+					await onAskResponse(text, images, files, delivery, options)
 					break
 
 				case "messageResponse":
 					// User sent a follow-up message
-					await onAskResponse(text, images, files, delivery)
+					await onAskResponse(text, images, files, delivery, options)
 					break
 
 				default:
 					Logger.warn(`[TaskProxy] Unhandled askResponse type: ${askResponse}`)
-					await onAskResponse(text, images, files, delivery)
+					await onAskResponse(text, images, files, delivery, options)
 					break
 			}
 		},

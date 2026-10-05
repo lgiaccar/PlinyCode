@@ -15,6 +15,8 @@ interface UserMessageProps {
 	sendMessageFromChatRow?: (text: string, images: string[], files: string[]) => void
 	canRestoreWorkspace?: boolean
 	restoreWorkspaceDisabledReason?: string
+	/** Asked as an off-the-record side question: it and its answer are left out of later requests. */
+	offTheRecord?: boolean
 }
 
 const UserMessage: React.FC<UserMessageProps> = ({
@@ -24,6 +26,7 @@ const UserMessage: React.FC<UserMessageProps> = ({
 	messageTs,
 	canRestoreWorkspace = true,
 	restoreWorkspaceDisabledReason = "PlinyCode cannot revert files for this message.",
+	offTheRecord = false,
 }) => {
 	const [isEditing, setIsEditing] = useState(false)
 	const [editedText, setEditedText] = useState(text ?? "")
@@ -162,6 +165,7 @@ const UserMessage: React.FC<UserMessageProps> = ({
 				backgroundColor: "var(--vscode-badge-background)",
 				whiteSpace: "pre-line",
 				wordWrap: "break-word",
+				...(offTheRecord ? { outline: "1px dashed var(--vscode-badge-foreground)", outlineOffset: "-3px" } : {}),
 			}}
 			tabIndex={messageTs && !isEditing ? 0 : undefined}
 			title={messageTs && !isEditing ? "Edit and restart from here" : undefined}>
@@ -279,9 +283,20 @@ const UserMessage: React.FC<UserMessageProps> = ({
 					</div>
 				</div>
 			) : (
-				<span className="ph-no-capture text-sm" style={{ display: "block" }}>
-					{highlightedText}
-				</span>
+				<>
+					{offTheRecord && (
+						<span
+							className="flex items-center gap-1 mb-1 text-xs opacity-80"
+							data-testid="side-question-badge"
+							title="Asked as a side question: this message and its answer are not sent to the model with later messages.">
+							<i className="codicon codicon-eye-closed" />
+							Side question · not in the context
+						</span>
+					)}
+					<span className="ph-no-capture text-sm" style={{ display: "block" }}>
+						{highlightedText}
+					</span>
+				</>
 			)}
 			{!isEditing && ((images && images.length > 0) || (files && files.length > 0)) && (
 				<Thumbnails files={files ?? []} images={images ?? []} style={{ marginTop: "8px" }} />

@@ -23,6 +23,12 @@ type SdkMessageWithMetrics = SdkMessage & {
 	uiMode?: UserInputMode
 }
 
+/** A user message asked as an off-the-record side question (docs/side-questions.md). */
+function isOffTheRecordSdkMessage(message: SdkMessage): boolean {
+	const metadata = (message as { metadata?: { offTheRecord?: unknown } }).metadata
+	return metadata?.offTheRecord === true
+}
+
 function textContentBlocksToText(content: SdkMessage["content"]): string {
 	if (typeof content === "string") {
 		return content.trim()
@@ -338,6 +344,7 @@ export function sdkMessagesToClineMessages(
 						say: clineMessages.length === 0 ? "task" : "user_feedback",
 						text,
 						partial: false,
+						...(isOffTheRecordSdkMessage(sourceMessage) ? { offTheRecord: true } : {}),
 					})
 				}
 			}
@@ -355,6 +362,7 @@ export function sdkMessagesToClineMessages(
 					say: clineMessages.length === 0 ? "task" : "user_feedback",
 					text: userText,
 					partial: false,
+					...(isOffTheRecordSdkMessage(sourceMessage) ? { offTheRecord: true } : {}),
 				})
 			}
 		}

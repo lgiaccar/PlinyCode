@@ -208,6 +208,8 @@ message ClineMessage {
   // epoch = conversation/replica fence (older epoch is dropped by the webview)
   int64 seq = 24;
   int64 epoch = 25;
+  // A user message asked as an off-the-record side question (docs/side-questions.md).
+  bool off_the_record = 26;
 }
 
 message ShowWebviewEvent {

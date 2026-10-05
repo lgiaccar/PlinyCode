@@ -256,6 +256,12 @@ export interface SendSessionInput {
 	userFiles?: string[];
 	delivery?: "queue" | "steer";
 	timeoutMs?: number;
+	/**
+	 * Ask the prompt off the record: the turn is answered without changing any
+	 * file, and later requests leave it out of the context (see
+	 * session/off-the-record.ts).
+	 */
+	offTheRecord?: boolean;
 }
 
 export interface SessionAccumulatedUsage {

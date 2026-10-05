@@ -42,7 +42,13 @@ import {
 	modelSupportsToolCalling,
 	usesImageGenerationOperation,
 } from "@plinycode/shared";
+import { guardOffTheRecordTool } from "../../extensions/tools/command-guard-extension";
 import { createAgentModelFromConfig } from "../../services/llms/handler-factory";
+import {
+	dropOffTheRecordTurns,
+	isOffTheRecordTurnActive,
+	OFF_THE_RECORD_METADATA_KEY,
+} from "../../session/off-the-record";
 import {
 	getMessageBuilderOptionsFromEnv,
 	MessageBuilder,
@@ -123,6 +129,16 @@ export interface SessionRuntimeOrchestratorDeps {
 	) => AgentRuntime;
 }
 
+/** Per-run options for `SessionRuntime.run` / `continue`. */
+export interface SessionRunOptions {
+	/**
+	 * Ask this message off the record: the turn it starts is answered without
+	 * changing any file, and later requests leave it out (see
+	 * session/off-the-record.ts).
+	 */
+	readonly offTheRecord?: boolean;
+}
+
 /** Connection overrides applied via `updateConnection`. */
 export type ConnectionOverrides = ConnectionUpdate;
 
@@ -174,6 +190,11 @@ export class SessionRuntime {
 	private activeRunId: string | null = null;
 	/** True while a run is in flight. `canStartRun()` is the negation. */
 	private running = false;
+	/**
+	 * True while the active run answers an off-the-record message: its tool
+	 * calls must not change anything (see guardOffTheRecordTool).
+	 */
+	private activeRunOffTheRecord = false;
 	/** True once `abort()` has been requested for the active run. */
 	private abortRequested = false;
 	/** Last abort reason requested for the active run. */
@@ -483,6 +504,7 @@ export class SessionRuntime {
 		userMessage: string,
 		userImages?: string[],
 		userFiles?: string[],
+		options?: SessionRunOptions,
 	): Promise<AgentResult> {
 		this.conversation.resetForRun();
 		this.resetConversationBoundaryTrackers();
@@ -491,6 +513,7 @@ export class SessionRuntime {
 			userImages,
 			userFiles,
 			isContinue: false,
+			offTheRecord: options?.offTheRecord,
 		});
 	}
 
@@ -498,12 +521,14 @@ export class SessionRuntime {
 		userMessage?: string,
 		userImages?: string[],
 		userFiles?: string[],
+		options?: SessionRunOptions,
 	): Promise<AgentResult> {
 		return this.executeRun({
 			userMessage,
 			userImages,
 			userFiles,
 			isContinue: true,
+			offTheRecord: options?.offTheRecord,
 		});
 	}
 
@@ -535,6 +560,7 @@ export class SessionRuntime {
 		userImages?: string[];
 		userFiles?: string[];
 		isContinue: boolean;
+		offTheRecord?: boolean;
 	}): Promise<AgentResult> {
 		let activePromise!: Promise<AgentResult>;
 		activePromise = this.runRecovery
@@ -553,6 +579,7 @@ export class SessionRuntime {
 		userImages?: string[];
 		userFiles?: string[];
 		isContinue: boolean;
+		offTheRecord?: boolean;
 	}): Promise<AgentResult> {
 		if (this.shutdownCalled) {
 			throw new Error(
@@ -593,8 +620,19 @@ export class SessionRuntime {
 				input.userFiles,
 				this.config.userFileContentLoader,
 			);
-			this.conversation.appendMessage({ role: "user", content });
+			this.conversation.appendMessage({
+				role: "user",
+				content,
+				...(input.offTheRecord
+					? { metadata: { [OFF_THE_RECORD_METADATA_KEY]: true } }
+					: {}),
+			});
 		}
+		// Read from the transcript rather than the input, so a recovery
+		// attempt that continues the run without a message keeps the rule.
+		this.activeRunOffTheRecord = isOffTheRecordTurnActive(
+			this.conversation.getMessages(),
+		);
 
 		// Build the AgentRuntime for this turn. A host-supplied
 		// `agentModelFactory` can wrap or replace the model — e.g. to route each
@@ -750,6 +788,7 @@ export class SessionRuntime {
 			}
 			this.activeRuntime = null;
 			this.running = false;
+			this.activeRunOffTheRecord = false;
 			this.abortRequested = false;
 			this.abortReason = undefined;
 		}
@@ -824,6 +863,15 @@ export class SessionRuntime {
 		]);
 		return {
 			...hooks,
+			beforeTool: async (ctx) => {
+				if (this.activeRunOffTheRecord) {
+					const blocked = guardOffTheRecordTool(ctx);
+					if (blocked) {
+						return blocked;
+					}
+				}
+				return hooks.beforeTool?.(ctx);
+			},
 			beforeModel: async (ctx) => {
 				const control = await hooks.beforeModel?.(ctx);
 				if (control?.stop) {
@@ -858,13 +906,18 @@ export class SessionRuntime {
 		}
 
 		return async (context) => {
-			const messages = agentMessagesToMessagesWithMetadata(context.messages);
+			// Earlier off-the-record turns are not part of the context, so
+			// compaction neither counts nor summarizes them.
+			const contextMessages = dropOffTheRecordTurns(context.messages, {
+				keepCurrentTurn: true,
+			});
+			const messages = agentMessagesToMessagesWithMetadata(contextMessages);
 			// Size the request the way it will actually be sent (see
 			// prepareMessagesForModelRequest), so earlier turns' reasoning does
 			// not count towards compaction.
 			const apiMessages = await this.prepareProviderMessagesForApi(
 				agentMessagesToMessagesWithMetadata(
-					dropPriorTurnReasoning(context.messages),
+					dropPriorTurnReasoning(contextMessages),
 				),
 			);
 			const result = await prepareTurn({
@@ -904,8 +957,14 @@ export class SessionRuntime {
 	private async prepareMessagesForModelRequest(
 		messages: readonly AgentMessage[],
 	): Promise<AgentMessage[]> {
+		// Off-the-record turns are filtered here, before agentMessagesToMessages
+		// drops the metadata that marks them.
 		const providerMessages = await this.prepareProviderMessagesForApi(
-			agentMessagesToMessages(dropPriorTurnReasoning(messages)),
+			agentMessagesToMessages(
+				dropPriorTurnReasoning(
+					dropOffTheRecordTurns(messages, { keepCurrentTurn: true }),
+				),
+			),
 		);
 		return messagesToAgentMessages(providerMessages);
 	}

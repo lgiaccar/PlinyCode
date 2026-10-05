@@ -45,6 +45,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		task,
 		nextTaskWorkspace,
 		setNextTaskWorkspace,
+		clineAsk,
 	} = chatState
 
 	const { isAtBottom, scrollToBottomAuto } = scrollBehavior
@@ -54,6 +55,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		(lastMessage?.partial === true || (lastMessage?.type === "say" && lastMessage.say === "api_req_started"))
 	const allowQueuedSubmit = turnState?.phase === "streaming" || turnState?.phase === "awaiting_approval" || legacyTaskRunning
 	const submitDisabled = sendingDisabled && !allowQueuedSubmit
+	// A side question starts a turn of its own, so it needs a conversation to ask about and an idle agent:
+	// a message sent while the agent works joins its turn, and one sent to a pending question answers it.
+	const sideQuestionAvailable = !!task && !allowQueuedSubmit && clineAsk !== "followup"
 
 	return (
 		<>
@@ -79,7 +83,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
 				}}
 				onSchedulePrompt={onSchedulePrompt}
 				onSelectFilesAndImages={selectFilesAndImages}
-				onSend={(delivery) => messageHandlers.handleSendMessage(inputValue, selectedImages, selectedFiles, delivery)}
+				onSend={(delivery, options) =>
+					messageHandlers.handleSendMessage(inputValue, selectedImages, selectedFiles, delivery, options)
+				}
 				placeholderText={placeholderText}
 				ref={textAreaRef}
 				selectedFiles={selectedFiles}
@@ -89,6 +95,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 				setSelectedFiles={setSelectedFiles}
 				setSelectedImages={setSelectedImages}
 				shouldDisableFilesAndImages={shouldDisableFilesAndImages}
+				sideQuestionAvailable={sideQuestionAvailable}
 			/>
 		</>
 	)

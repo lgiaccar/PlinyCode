@@ -36,7 +36,14 @@ export async function askResponse(controller: Controller, request: AskResponseRe
 		}
 
 		// Deliver the response to the displayed task's handler
-		await controller.sendTaskAskResponse(responseType, request.text, request.images, request.files, request.delivery)
+		await controller.sendTaskAskResponse(
+			responseType,
+			request.text,
+			request.images,
+			request.files,
+			request.delivery,
+			request.offTheRecord ? { offTheRecord: true } : undefined,
+		)
 
 		return Empty.create()
 	} catch (error) {

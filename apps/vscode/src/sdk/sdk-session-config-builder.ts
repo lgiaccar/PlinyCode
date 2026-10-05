@@ -29,6 +29,8 @@ interface SdkSessionConfigBuilderOptions {
 	 * mistake-limit rows are dropped instead of landing in the displayed task.
 	 */
 	isBackgroundSession?: (sessionId: string | undefined) => boolean
+	/** True while the running turn answers an off-the-record side question, which edits nothing. */
+	isOffTheRecordTurn?: () => boolean
 	/**
 	 * Called before every model call of a foreground session. Returning a
 	 * stop control ends the run there (the conversation spending limit).
@@ -60,7 +62,7 @@ interface SdkSessionConfigBuilderOptions {
 /**
  * Unlike the CLI interactive runtime, plan-mode sessions do NOT expose a
  * switch_to_act_mode tool: matching the legacy extension, the model cannot
- * switch modes itself and must ask the user to flip the Plan/Act toggle. The
+ * switch modes itself and must ask the user to flip the mode switch. The
  * plan-mode system prompt (planModeSwitchTool: false in the session factory)
  * carries the matching instructions.
  */
@@ -132,8 +134,13 @@ export class SdkSessionConfigBuilder {
 			installRouter(config, {
 				sessionId: this.options.getSessionId?.() || input.cwd,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,
-				// Ask mode routes like plan mode: both read and reason, neither edits.
-				getMode: () => (this.options.stateManager.getGlobalSettingsKey("mode") === "act" ? "act" : "plan"),
+				// Ask mode routes like plan mode: both read and reason, neither edits. So does a
+				// side question, which runs under ask mode's rules whatever the mode is: it gets
+				// no completion judge and no review.
+				getMode: () =>
+					this.options.stateManager.getGlobalSettingsKey("mode") === "act" && !this.options.isOffTheRecordTurn?.()
+						? "act"
+						: "plan",
 				emitRow,
 				nextMessageTs,
 				reviewEnabled: isReviewBeforeFinishEnabled,
