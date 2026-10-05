@@ -69,19 +69,19 @@ describe("createVscodeExtraTools with a built-in server", () => {
 
 	it("offers the server's extension-side tools together with its own", async () => {
 		const extraTools = registerDevOps()
-		expect(await names("/github/repo")).toEqual(["plinycode-devops__pipeline_runs", "watch_ci", "wait"])
+		expect(await names("/github/repo")).toEqual(["plinycode-devops__pipeline_runs", "watch_ci", "wait", "update_todo_list"])
 		expect(extraTools).toHaveBeenCalledWith("/github/repo")
 	})
 
 	it("offers neither in a workspace the server does not apply to", async () => {
 		const extraTools = registerDevOps()
-		expect(await names("/plain/folder")).toEqual(["wait"])
+		expect(await names("/plain/folder")).toEqual(["wait", "update_todo_list"])
 		expect(extraTools).not.toHaveBeenCalled()
 	})
 
 	it("offers neither while the server is not running", async () => {
 		const extraTools = registerDevOps(false)
-		expect(await names("/github/repo")).toEqual(["wait"])
+		expect(await names("/github/repo")).toEqual(["wait", "update_todo_list"])
 		expect(extraTools).not.toHaveBeenCalled()
 	})
 })
