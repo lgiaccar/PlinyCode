@@ -408,12 +408,16 @@ const RUN_COMMANDS_SHARED_INSTRUCTIONS =
  * Build the run_commands tool description for the shell that will actually
  * execute the commands. Derive the edition and wrapper guidance from the
  * same executable, without probing a version or adding volatile prompt text.
- * isWindows describes the host, not the shell's edition.
+ * isWindows describes the host, not the shell's edition. longRunningNote,
+ * when the host has its own way of handling long-running commands, replaces
+ * the generic advice to background them by hand.
  */
 export function buildRunCommandsDescription(
 	shell: string,
 	isWindows: boolean,
+	longRunningNote?: string,
 ): string {
+	const longRunning = longRunningNote ? `${longRunningNote} ` : "";
 	const shellKind = getShellKind(shell);
 	if (shellKind === "powershell" || shellKind === "cmd") {
 		const edition = getPowerShellEdition(shell);
@@ -440,6 +444,7 @@ export function buildRunCommandsDescription(
 			`Commands run through ${shellName}; quote paths and arguments for ${executable} and use ${sequencingOperator} to sequence commands. ` +
 			`Write commands directly; do not wrap them in another ${wrapper} invocation. ` +
 			"Only start another shell when you intentionally need a different shell or a separate process. " +
+			longRunning +
 			"Include multiple commands in the same call when they are independent and safe to run concurrently. When independent reads, searches, or edits are also needed, call those tools in the same response."
 		);
 	}
@@ -456,7 +461,8 @@ export function buildRunCommandsDescription(
 		environmentNote +
 		"Commands should be properly shell-escaped and targeted to avoid error or timeout. Include multiple commands in the same call when they are independent complete shell commands and safe to run concurrently; multiline scripts and heredocs must be a single command string. When independent reads, searches, or edits are also needed, call those tools in the same response. " +
 		`Output beyond ~${Math.round(MAX_COMMAND_OUTPUT_CHARS / 1000)}k characters is middle-truncated (start and end preserved); pipe through grep/head/tail when you need specific sections of large output. ` +
-		"For long-running commands, run them in background and redirect output to a tmp file that you can read from later."
+		(longRunningNote ??
+			"For long-running commands, run them in background and redirect output to a tmp file that you can read from later.")
 	);
 }
 
@@ -548,6 +554,8 @@ export function createShellTool(
 	executor: ShellExecutor,
 	config: Pick<DefaultToolsConfig, "cwd" | "bashTimeoutMs"> & {
 		shell?: string | (() => string);
+		/** How the host handles long-running commands; see buildRunCommandsDescription. */
+		longRunningNote?: string;
 	} = {},
 ): AgentTool<unknown, ToolOperationResult[]> {
 	const timeoutMs = config.bashTimeoutMs ?? 30000;
@@ -558,7 +566,12 @@ export function createShellTool(
 		typeof configShell === "function"
 			? configShell
 			: () => configShell ?? getDefaultShell(process.platform);
-	const describe = () => buildRunCommandsDescription(resolveShell(), isWindows);
+	const describe = () =>
+		buildRunCommandsDescription(
+			resolveShell(),
+			isWindows,
+			config.longRunningNote,
+		);
 
 	const tool = createTool<unknown, ToolOperationResult[]>({
 		name: "run_commands",

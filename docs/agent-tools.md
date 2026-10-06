@@ -30,6 +30,35 @@ Small models often reproduce a block with the wrong indentation, or from a stale
 - Listed through ripgrep (which honors `.gitignore`) when one is available, otherwise by walking the directory and skipping dependency and build folders.
 - It is enabled together with `search_codebase` (same `enableSearch` flag), and auto-approved with the other read tools. An agent file (`.cline/agents/*.md`) that allows `search_codebase` gets it too.
 
+## Shell commands (`run_commands`)
+
+With Terminal Execution Mode set to VS Code Terminal (the default), commands
+run in a PlinyCode terminal, and the output is read through shell integration
+(`VscodeTerminalProcess`).
+
+- **Long-running commands.** A command still running after 5 minutes keeps
+  running in the terminal. The call returns with the output so far and the
+  path of a log file that receives the rest. The tool description tells the
+  model this, in place of the generic advice to background long jobs itself
+  (`longRunningNote` on the engine's `createShellTool`). That way it runs a
+  benchmark as an ordinary command and follows it with `wait`, instead of
+  launching it with `Start-Process` and losing its output and errors.
+- **Wrapped lines.** On Windows the output passes through ConPTY. When a
+  line wider than the terminal scrolls off the bottom row, ConPTY breaks it
+  with `\r\n`, moves the cursor back to the end of the row and writes that
+  row's last character again. `ConptyWrapJoiner` joins such rows back into
+  one line before the output is split into lines, so a path comes back whole
+  instead of as `…_2026100` / `06_124919`.
+- **Narrow terminals.** Programs format to the terminal's width before
+  PlinyCode sees their output: PowerShell tables lose columns and error
+  messages break mid-word, and nothing afterwards can undo that. The VS Code
+  API does not report a shell terminal's width, but a wrapped line shows it
+  (the column ConPTY moves back to). Below 80 columns the result ends with a
+  note telling the model the output was formatted to that width. The note
+  also suggests `Out-String -Width 300` or writing to a file. The first time
+  this happens in a window, the user is warned to widen the terminal panel or
+  switch to Background Exec.
+
 ## Read-only tools run concurrently
 
 `read_files`, `search_codebase`, `find_files` and `fetch_web_content` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.

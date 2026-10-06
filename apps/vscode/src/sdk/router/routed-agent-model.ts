@@ -116,26 +116,30 @@ export function isDegenerateOutputError(error: string): boolean {
 }
 
 /**
- * Wrap a stream so that text collapsing into one repeated token (" .   .   .",
- * "]]]]" for thousands of characters) ends the call as an error instead of
- * being accepted as the answer. Checked every ~1 000 characters once the reply
- * is long enough for repetition to be unambiguous.
+ * Wrap a stream so that text collapsing into repetition (" .   .   .", "]]]]",
+ * or the same sentence hundreds of times) ends the call as an error instead of
+ * being accepted as the answer or running on to the output-token cap. The
+ * reply text and the reasoning are checked separately, every ~1 000 characters
+ * once each is long enough for repetition to be unambiguous.
  */
 async function* withDegenerateOutputDetector(
 	source: AsyncIterable<AgentModelEvent>,
 	options: { modelId: string; onDetect: (chars: number) => void },
 ): AsyncGenerator<AgentModelEvent> {
-	let text = ""
-	let nextCheckAt = 2000
+	const streams = {
+		"text-delta": { text: "", nextCheckAt: 2000, label: "repeated text" },
+		"reasoning-delta": { text: "", nextCheckAt: 2000, label: "repeated reasoning" },
+	}
 	for await (const event of source) {
-		if (event.type === "text-delta") {
-			text += event.text
-			if (text.length >= nextCheckAt) {
-				nextCheckAt = text.length + 1000
-				if (looksDegenerate(text)) {
-					options.onDetect(text.length)
+		if (event.type === "text-delta" || event.type === "reasoning-delta") {
+			const stream = streams[event.type]
+			stream.text += event.text
+			if (stream.text.length >= stream.nextCheckAt) {
+				stream.nextCheckAt = stream.text.length + 1000
+				if (looksDegenerate(stream.text)) {
+					options.onDetect(stream.text.length)
 					throw new Error(
-						`${DEGENERATE_OUTPUT_PREFIX} (repeated text) from ${options.modelId} after ${text.length} characters`,
+						`${DEGENERATE_OUTPUT_PREFIX} (${stream.label}) from ${options.modelId} after ${stream.text.length} characters`,
 					)
 				}
 			}
@@ -325,7 +329,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 						{
 							modelId,
 							onDetect: (chars) =>
-								Logger.warn(`[FreeAuto] ${modelId} degenerated into repeated text after ${chars} characters`),
+								Logger.warn(`[FreeAuto] ${modelId} degenerated into repetition after ${chars} characters`),
 						},
 					)
 

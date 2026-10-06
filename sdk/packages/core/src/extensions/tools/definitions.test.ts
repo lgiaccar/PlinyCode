@@ -712,6 +712,25 @@ describe("run_commands tool description", () => {
 		expect(onUnix).toContain("grep/head/tail");
 	});
 
+	it("puts the host's long-running note in place of the generic advice", () => {
+		const note = "A command still running after 5 minutes keeps running.";
+		const posix = buildRunCommandsDescription("/bin/bash", false, note);
+		expect(posix).toContain(note);
+		expect(posix).not.toContain("run them in background");
+		expect(buildRunCommandsDescription("powershell.exe", true, note)).toContain(
+			note,
+		);
+		expect(buildRunCommandsDescription("powershell.exe", true)).not.toContain(
+			note,
+		);
+		expect(
+			createShellTool(async () => "ok", {
+				shell: () => "/bin/bash",
+				longRunningNote: note,
+			}).description,
+		).toContain(note);
+	});
+
 	it("derives the createShellTool description from config.shell", () => {
 		const posixTool = createShellTool(async () => "ok", {
 			shell: "/bin/bash",

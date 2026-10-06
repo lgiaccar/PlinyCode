@@ -208,7 +208,12 @@ BalanceAuto, only when the turn's last call ran on a free model — see
 
 A reply that collapses into repetition is cut off mid-stream by the routed model
 and treated like any other post-output failure: the run continues on another
-model with a prompt to redo the step.
+model with a prompt to redo the step. `looksDegenerate` catches a short unit
+repeated (`. . .`, `]]]]`) and a chunk of up to 1 500 characters repeated at
+least four times back to back. The second case is a model that writes the same
+sentence about the fix hundreds of times instead of making the tool call, until
+it reaches the output-token cap. The reply text and the reasoning are checked
+separately.
 
 The guard and the judge check that the work was done, not that it is right.
 Once they accept a reply, the reviewer pass has a second free model read the
