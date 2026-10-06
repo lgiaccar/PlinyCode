@@ -25,6 +25,7 @@ import type { AgentTool } from "@plinycode/shared"
 import { ClineTempManager } from "@services/temp"
 import * as fs from "fs"
 import { StateManager } from "@/core/storage/StateManager"
+import { HostProvider } from "@/hosts/host-provider"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { INPUT_PROMPT_IDLE_TIMEOUT, MAX_UNRETRIEVED_LINES } from "@/integrations/terminal/constants"
 import {
@@ -32,6 +33,7 @@ import {
 	type ITerminalProcess,
 	type TerminalCompletionDetails,
 } from "@/integrations/terminal/types"
+import { ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { getShellForProfile } from "@/utils/shell"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
@@ -48,6 +50,18 @@ export const VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS = 60 * 60 * 1000
 
 /** Release the agent turn if a foreground command is still running after 300 seconds. */
 export const FOREGROUND_COMMAND_AUTO_PROCEED_MS = 300 * 1000
+
+/**
+ * Told to the model in place of the generic "background it yourself" advice.
+ * A model that launches a benchmark with Start-Process loses its output and
+ * errors, and nested quoting can mangle its arguments: in one FreeAuto run
+ * `-Build "cpu_mt,cuda"` arrived as `cpu_mt cuda` and the script threw.
+ */
+const FOREGROUND_LONG_RUNNING_NOTE =
+	`A command still running after ${FOREGROUND_COMMAND_AUTO_PROCEED_MS / 60_000} minutes keeps running in the terminal ` +
+	"and the call returns with the output so far and the path of a log file that receives the rest. So run long jobs " +
+	"(builds, benchmarks, test suites) as ordinary commands; do not detach them yourself with Start-Process, Start-Job, " +
+	"nohup or '&', which hides their output and errors from you. To follow one, call `wait`, then read its log or status files."
 
 /**
  * Cap on the "Proceed While Running" log file. A detached devserver can log
@@ -200,6 +214,46 @@ function createDetachedCommandLog(terminalCommand: string, existingLines: string
 			end(`[Command failed before log capture completed: ${message}]`)
 		},
 	}
+}
+
+/** Below this width, programs' own formatting garbles what the model reads. */
+const NARROW_TERMINAL_COLUMNS = 80
+let warnedAboutNarrowTerminal = false
+
+/**
+ * A note for the model when the terminal is too narrow for output to arrive
+ * intact, and a warning for the user the first time it happens in a window.
+ *
+ * Programs format to the terminal's width before PlinyCode sees a byte:
+ * PowerShell lays tables out to fit and breaks error messages mid-word, so no
+ * post-processing can restore them. In a 33-column terminal a model spent
+ * several calls decoding run-directory paths split across lines.
+ */
+function narrowTerminalNote(columns: number | undefined): string | undefined {
+	if (columns === undefined || columns >= NARROW_TERMINAL_COLUMNS) {
+		return undefined
+	}
+	if (!warnedAboutNarrowTerminal) {
+		warnedAboutNarrowTerminal = true
+		try {
+			void HostProvider.window
+				.showMessage({
+					type: ShowMessageType.WARNING,
+					message:
+						`PlinyCode's terminal is only ${columns} columns wide, so commands lay out their output to that width ` +
+						"before the model reads it: tables lose columns, and long lines and error messages are broken up. Widen " +
+						"the terminal panel, or set Terminal Execution Mode to Background Exec in PlinyCode's settings.",
+				})
+				.catch(() => {})
+		} catch (error) {
+			Logger.warn(`[VscodeRunCommands] Could not show the narrow-terminal warning: ${error}`)
+		}
+	}
+	return (
+		`[The terminal is only ${columns} columns wide. Programs that format to its width (PowerShell tables and error ` +
+		"messages, for example) wrapped or cut the output above, so a path or word may be split across lines. When you " +
+		"need output intact, pipe it through `Out-String -Width 300` (PowerShell) or write it to a file and read that.]"
+	)
 }
 
 type DetachReason = "user" | "timeout" | "steer"
@@ -433,9 +487,11 @@ export async function executeForeground(
 				droppedLines > 0
 					? [...outputLines, `\n... (${droppedLines} earlier lines dropped) ...\n`].join("\n")
 					: outputLines.join("\n")
-			const output = truncateCommandOutput(bufferedOutput.trim(), {
+			const truncated = truncateCommandOutput(bufferedOutput.trim(), {
 				maxChars: maxOutputChars,
 			})
+			const note = truncated.length > 0 ? narrowTerminalNote(process.getCompletionDetails?.()?.terminalColumns) : undefined
+			const output = note ? `${truncated}\n${note}` : truncated
 
 			if (abortSignal?.aborted) {
 				throw abortedError(output)
@@ -557,6 +613,10 @@ export function createVscodeRunCommandsTool(options: VscodeRunCommandsToolOption
 	return createShellTool(createVscodeShellExecutor(options, state), {
 		cwd: options.cwd,
 		bashTimeoutMs: options.bashTimeoutMs,
+		longRunningNote:
+			(options.vscodeTerminalExecutionMode ?? "vscodeTerminal") === "vscodeTerminal"
+				? FOREGROUND_LONG_RUNNING_NOTE
+				: undefined,
 		shell: () => {
 			state.snapshot = takeShellSnapshot()
 			return state.snapshot.shell

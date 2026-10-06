@@ -181,6 +181,46 @@ describe("looksDegenerate", () => {
 	it("ignores short replies", () => {
 		expect(looksDegenerate(". . . . . .")).toBe(false)
 	})
+
+	// Kimi K2.6 in a real FreeAuto run: the right fix, said ~430 times instead of
+	// making the tool call, until the 32k output cap four minutes later.
+	const SENTENCE =
+		'I found the problem: `Start-Process` argument passing mangled `-Build "cpu_mt,cuda"` into `cpu_mt cuda` ' +
+		"(comma became a space), causing the script to throw. Let me create a temporary `.ps1` script file to avoid " +
+		"quoting issues entirely."
+	const LEAD = Array.from(
+		{ length: 24 },
+		(_, index) => `Check ${index}: the \`.err\` file shows line ${100 + index * 7} of the script threw before the build.`,
+	).join(" ")
+
+	it("flags a sentence repeated back to back, wherever the stream stopped", () => {
+		const loop = LEAD + `${SENTENCE}   `.repeat(12)
+		expect(looksDegenerate(loop)).toBe(true)
+		// Cut mid-sentence, as the streaming check sees it.
+		expect(looksDegenerate(loop.slice(0, -97))).toBe(true)
+		// Models vary the whitespace between repeats.
+		const ragged = LEAD + Array.from({ length: 12 }, (_, index) => SENTENCE + " ".repeat(1 + (index % 3))).join("\n")
+		expect(looksDegenerate(ragged)).toBe(true)
+	})
+
+	it("flags a long paragraph looping, but not a sentence said three times", () => {
+		const paragraph = Array.from({ length: 4 }, (_, index) => `${SENTENCE} Step ${index} of the plan.`).join(" ")
+		expect(looksDegenerate(LEAD + `${paragraph}\n\n`.repeat(5))).toBe(true)
+		expect(looksDegenerate(LEAD + `${SENTENCE} `.repeat(3))).toBe(false)
+	})
+
+	it("accepts long prose and logs whose lines are similar but not identical", () => {
+		const steps = Array.from(
+			{ length: 40 },
+			(_, index) => `Case ${index}: ran ${index % 2 ? "cpu_mt" : "cuda"} in ${(index * 7.3).toFixed(1)}s, status PASS.`,
+		).join("\n")
+		expect(looksDegenerate(steps)).toBe(false)
+		const prose = Array.from(
+			{ length: 30 },
+			(_, index) => `Section ${index} explains how the router picks model ${index % 5} for route ${index % 3} and why.`,
+		).join(" ")
+		expect(looksDegenerate(prose)).toBe(false)
+	})
 })
 
 describe("looksLikeReadinessInsteadOfAction", () => {

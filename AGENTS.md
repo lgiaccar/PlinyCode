@@ -33,7 +33,7 @@ Design and operations notes are in `docs/`:
 - [docs/side-questions.md](docs/side-questions.md): side questions, messages asked off the record: answered read-only and left out of later requests.
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
-- [docs/agent-tools.md](docs/agent-tools.md): how the editing, search and file-finding tools behave, which tools run concurrently, and the `update_todo_list` task list.
+- [docs/agent-tools.md](docs/agent-tools.md): how the editing, search and file-finding tools behave, how `run_commands` handles long-running commands and narrow terminals, which tools run concurrently, and the `update_todo_list` task list.
 - [docs/edit-problems.md](docs/edit-problems.md): how edit results list the new errors VS Code reports for the edited files, and the `plinycode.edits.reportNewProblems` setting.
 - [docs/environment-context.md](docs/environment-context.md): the git snapshot in the system prompt (taken once per conversation) and the editor state sent with each user message, and how both stay out of the chat.
 - [docs/advisor-tool.md](docs/advisor-tool.md): the `ask_advisor` tool, which lets a free or cheap model ask a stronger one for advice at a hard step, and how its cost is recorded and budget-checked.

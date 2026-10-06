@@ -1,6 +1,7 @@
 import { EventEmitter } from "events"
 import * as vscode from "vscode"
 import { stripAnsi } from "@/hosts/vscode/terminal/ansiUtils"
+import { ConptyWrapJoiner } from "@/hosts/vscode/terminal/conptyWrapJoiner"
 import { getLatestTerminalOutput } from "@/hosts/vscode/terminal/get-latest-output"
 import {
 	EXIT_CODE_EVENT_TIMEOUT_MS,
@@ -61,6 +62,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 	private signal: NodeJS.Signals | null = null
 	private terminalClosedMidCommand = false
 	private awaitingInput: string | undefined
+	private terminalColumns: number | undefined
 	private unobservedCommand: UnobservedTerminalCommand | undefined
 	private ownership: "managed" | "continued" | "detached" = "managed"
 	private activeCloseDisposable: vscode.Disposable | undefined
@@ -72,6 +74,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 		this.signal = null
 		this.unobservedCommand = undefined
 		this.awaitingInput = undefined
+		this.terminalColumns = undefined
 
 		// The pty may already be dead (exitStatus is set when the shell process
 		// terminates). executeCommand()/sendText() on a dead terminal never
@@ -112,6 +115,8 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			const execution = terminal.shellIntegration.executeCommand(command)
 			const stream = execution.read()
 			const parser = new Osc633Parser()
+			// Rejoins long lines that ConPTY splits at the terminal's width.
+			const wrapJoiner = new ConptyWrapJoiner()
 			let didSeeCommandExecuted = false
 			let inCommandOutput = false
 			let preCommandBuffer = "" // text before C; emitted as fallback if C never arrives
@@ -325,7 +330,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 				}
 
 				// Strip remaining ANSI escape sequences (colors, cursor moves, etc.)
-				data = stripAnsi(chunkOutput)
+				data = wrapJoiner.push(chunkOutput)
 
 				if (!data) {
 					continue
@@ -365,6 +370,17 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 
 				if (this.isListening) {
 					this.emitIfEol(data)
+					this.lastRetrievedIndex = this.fullOutput.length - this.buffer.length
+				}
+			}
+
+			// A line break the joiner held back for a continuation that never came.
+			const heldBack = wrapJoiner.flush()
+			this.terminalColumns = wrapJoiner.columns
+			if (heldBack) {
+				this.fullOutput += heldBack
+				if (this.isListening) {
+					this.emitIfEol(heldBack)
 					this.lastRetrievedIndex = this.fullOutput.length - this.buffer.length
 				}
 			}
@@ -589,6 +605,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			terminalClosed: this.terminalClosedMidCommand,
 			unobservedCommand: this.unobservedCommand,
 			...(this.awaitingInput !== undefined ? { awaitingInput: this.awaitingInput } : {}),
+			...(this.terminalColumns !== undefined ? { terminalColumns: this.terminalColumns } : {}),
 		}
 	}
 

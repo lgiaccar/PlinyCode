@@ -57,6 +57,11 @@ export interface TerminalCompletionDetails {
 	 * as a failure so the model reruns it non-interactively.
 	 */
 	awaitingInput?: string
+	/**
+	 * The terminal's width in characters, when the command's output wrapped
+	 * and so revealed it (the VS Code API does not expose it).
+	 */
+	terminalColumns?: number
 }
 
 export interface TerminalProcessEvents {

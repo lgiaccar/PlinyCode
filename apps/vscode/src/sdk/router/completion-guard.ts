@@ -69,7 +69,7 @@ const LEAKED_REASONING_REMINDER =
 	"in a few sentences instead."
 
 const DEGENERATE_REMINDER =
-	"[SYSTEM] Your last message was corrupted (the same characters repeated for thousands of characters) and " +
+	"[SYSTEM] Your last message was corrupted (the same text repeated over and over) and " +
 	"has been disregarded. Redo the step from the last tool result: continue with the next tool call, or give " +
 	"the final result if the task is complete."
 

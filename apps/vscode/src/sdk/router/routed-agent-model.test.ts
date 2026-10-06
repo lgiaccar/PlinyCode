@@ -167,6 +167,19 @@ describe("createRoutedAgentModel", () => {
 		expect(events.at(-1)).toMatchObject({ kind: "error", modelId: "snps-provider/first" })
 	})
 
+	it("ends a call whose reasoning loops on one sentence", async () => {
+		const sentence =
+			"Wait, the job object might kill the child when run_commands exits, so let me try Start-Job instead of Start-Process. "
+		const loop = Array.from({ length: 60 }, () => ({ type: "reasoning-delta", text: sentence }) as AgentModelEvent)
+		const { model } = build({
+			delegates: { "snps-provider/first": scripted([...loop, TEXT, STOP]) },
+		})
+		const out = await collect(model)
+		expect(out.at(-1)).toMatchObject({ type: "finish", reason: "error" })
+		expect((out.at(-1) as { error?: string }).error).toContain("Degenerate output (repeated reasoning)")
+		expect(out.filter((event) => event.type === "reasoning-delta").length).toBeLessThan(loop.length)
+	})
+
 	it("fails over silently when a candidate errors before producing output", async () => {
 		const { model, events } = build({
 			delegates: {

@@ -463,7 +463,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				? {
 						continuationPrompt: isDegenerateOutputError(error)
 							? // The partial reply is garbage; continuing it would only produce more.
-								"Your previous reply was corrupted (the same characters repeated over and over) and has been " +
+								"Your previous reply was corrupted (the same text repeated over and over) and has been " +
 								"disregarded. Do not continue it. Redo the step from the last tool result: continue with the next " +
 								"tool call, or give the final result if the task is complete."
 							: // Only the error's headline: the user-facing details and

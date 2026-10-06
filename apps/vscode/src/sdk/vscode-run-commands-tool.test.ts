@@ -17,6 +17,11 @@ import {
 const mocks = vi.hoisted(() => ({
 	existsSync: vi.fn<(path: fs.PathLike) => boolean>(),
 	getGlobalSettingsKey: vi.fn(() => "default"),
+	showMessage: vi.fn(async () => ({})),
+}))
+
+vi.mock("@/hosts/host-provider", () => ({
+	HostProvider: { window: { showMessage: mocks.showMessage } },
 }))
 
 vi.mock("fs", async (importOriginal) => ({
@@ -57,6 +62,37 @@ describe("createVscodeRunCommandsTool", () => {
 
 		expect(getTerminalManager).toHaveBeenCalledOnce()
 		expect(results).toEqual([expect.objectContaining({ result: "terminal-default-ok", success: true })])
+	})
+
+	it("tells the model to run long jobs in the foreground, in the terminal mode only", () => {
+		const options = { cwd: "/workspace", getTerminalManager: () => createFakeTerminalManager(createFakeTerminalProcess({})) }
+		expect(createVscodeRunCommandsTool(options).description).toContain("still running after 5 minutes")
+		expect(
+			createVscodeRunCommandsTool({ ...options, vscodeTerminalExecutionMode: "backgroundExec" }).description,
+		).not.toContain("still running after 5 minutes")
+	})
+
+	it("notes a narrow terminal to the model, and warns the user once", async () => {
+		const run = async (columns: number) => {
+			const process = createFakeTerminalProcess({
+				lines: ["RUN_DIR=D:/dev0/GPUSurfer/ai_output/surfer_target_cases/20261006_124919"],
+				completionDetails: { exitCode: 0, terminalColumns: columns },
+			})
+			const tool = createVscodeRunCommandsTool({
+				cwd: "/workspace",
+				getTerminalManager: () => createFakeTerminalManager(process),
+			})
+			const [result] = (await tool.execute(
+				{ commands: ["Get-ChildItem"] },
+				{ agentId: "agent-1", conversationId: "conversation-1", iteration: 1 },
+			)) as Array<{ result: string }>
+			return result.result
+		}
+		expect(await run(120)).not.toContain("columns wide")
+		expect(mocks.showMessage).not.toHaveBeenCalled()
+		expect(await run(33)).toContain("[The terminal is only 33 columns wide.")
+		expect(await run(33)).toContain("Out-String -Width 300")
+		expect(mocks.showMessage).toHaveBeenCalledOnce()
 	})
 
 	it("constructs a cmd tool from the stock array-valued Command Prompt profile", () => {
