@@ -36,7 +36,7 @@ describe("ensureWorktree", () => {
 	let root: string
 
 	beforeEach(() => {
-		dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ci-wt-")))
+		dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "ci-wt-")))
 		origin = path.join(dir, "origin")
 		repo = path.join(dir, "repo")
 		root = path.join(dir, "repo.worktrees")

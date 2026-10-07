@@ -30,7 +30,7 @@ describe("CiBoard", () => {
 		})
 
 	beforeEach(async () => {
-		dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ci-board-")))
+		dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "ci-board-")))
 		provider = new FakeBoardProvider()
 		provider.prs = [boardPr(12, { sourceBranch: "feature", url: "https://github.com/octo/hello/pull/12" })]
 		provider.runs.set(SHA_A, [boardRun(1, "ci", "completed", "failure")])
