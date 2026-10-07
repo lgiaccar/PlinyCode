@@ -379,3 +379,135 @@ describe("AzureDevOpsProvider", () => {
 		expect(api.requests.map((r) => r.headers.Authorization)).toEqual(["Bearer token-1", "Bearer token-2"])
 	})
 })
+
+describe("CI board queries", () => {
+	it("GitHub: maps mergeability, and reports it as pending while GitHub computes it", async () => {
+		const api = new FakeApi().on("GET", `${GH}/pulls/7`, ghPr({ mergeable: false, mergeable_state: "dirty" }))
+		expect((await github(api).getPr(7)).mergeState).toBe("conflicts")
+		api.on("GET", `${GH}/pulls/7`, ghPr({ mergeable: null, mergeable_state: "unknown" }))
+		expect((await github(api).getPr(7)).mergeState).toBe("pending")
+		api.on("GET", `${GH}/pulls/7`, ghPr({ mergeable: true, mergeable_state: "blocked" }))
+		expect((await github(api).getPr(7)).mergeState).toBe("clean")
+		// GitHub never computes mergeability for a merged PR; it is not "pending" for ever.
+		api.on("GET", `${GH}/pulls/7`, ghPr({ state: "closed", merged_at: "2026-10-01T00:00:00Z", mergeable: null }))
+		expect((await github(api).getPr(7)).mergeState).toBeUndefined()
+		// The list endpoint carries no mergeability at all.
+		expect((github(new FakeApi()) as any).pr(ghPr()).mergeState).toBeUndefined()
+	})
+
+	it("GitHub: flags PRs from forks", async () => {
+		const own = { repo: { full_name: "octo/hello" } }
+		const api = new FakeApi().on("GET", `${GH}/pulls`, [
+			ghPr({ number: 1, head: { ref: "a", sha: "1", repo: { full_name: "octo/hello" } }, base: { ref: "main", ...own } }),
+			ghPr({
+				number: 2,
+				head: { ref: "b", sha: "2", repo: { full_name: "someone/hello" } },
+				base: { ref: "main", ...own },
+			}),
+			ghPr({ number: 3, head: { ref: "c", sha: "3", repo: null }, base: { ref: "main", ...own } }),
+		])
+		const prs = await github(api).listOpenPrs({ mine: false, limit: 10 })
+		expect(prs.map((p) => [p.id, p.fork])).toEqual([
+			[1, false],
+			[2, true],
+			[3, true],
+		])
+	})
+
+	it("GitHub: lists open PRs, newest first, and keeps the signed-in user's for `mine`", async () => {
+		const api = new FakeApi()
+			.on("GET", `${GH}/pulls`, [
+				ghPr({ number: 1, user: { login: "me" } }),
+				ghPr({ number: 2, user: { login: "other" } }),
+				ghPr({ number: 3, user: { login: "me" } }),
+			])
+			.on("GET", "/user", { login: "me" })
+		const provider = github(api)
+		expect((await provider.listOpenPrs({ mine: true, limit: 10 })).map((p) => p.id)).toEqual([1, 3])
+		expect((await provider.listOpenPrs({ mine: false, limit: 2 })).map((p) => p.id)).toEqual([1, 2])
+		const params = api.requests.find((r) => r.url.pathname === `${GH}/pulls`)?.url.searchParams
+		expect([params?.get("state"), params?.get("sort"), params?.get("direction")]).toEqual(["open", "updated", "desc"])
+		// The login is asked once.
+		expect(api.requests.filter((r) => r.url.pathname === "/user")).toHaveLength(1)
+	})
+
+	it("GitHub: reads a branch head from the server, and undefined for a branch it does not have", async () => {
+		const api = new FakeApi()
+			.on("GET", `${GH}/git/ref/heads/user/feature`, { object: { sha: "f00" } })
+			.on("GET", `${GH}/git/ref/heads/gone`, { message: "Not Found" }, 404)
+		expect(await github(api).branchHead("user/feature")).toBe("f00")
+		expect(await github(api).branchHead("gone")).toBeUndefined()
+	})
+
+	it("GitHub: names a run's workflow so runs of one workflow group together", async () => {
+		const api = new FakeApi().on("GET", `${GH}/actions/runs`, {
+			workflow_runs: [{ id: 1, name: "ci", workflow_id: 55, status: "queued", head_sha: "a", html_url: "u" }],
+		})
+		const [run] = await github(api).listRuns("feature", undefined, 5)
+		expect([run.pipeline, run.pipelineId]).toEqual(["ci", 55])
+	})
+
+	it("GitHub: revalidates a repeated GET with its ETag and reuses the cached body on 304", async () => {
+		const api = new FakeApi().onTagged("GET", `${GH}/pulls/7`, ghPr({ title: "cached" }), '"v1"')
+		const provider = github(api)
+		expect((await provider.getPr(7)).title).toBe("cached")
+		expect((await provider.getPr(7)).title).toBe("cached")
+		expect(api.requests.map((r): string | undefined => r.headers["If-None-Match"])).toEqual([undefined, '"v1"'])
+		expect(provider.rateLimitRemaining).toBe(4999)
+	})
+
+	it("Azure DevOps: maps merge status and forks", async () => {
+		const api = new FakeApi().on("GET", PRS, {
+			value: [
+				{ ...adoPr, pullRequestId: 1, mergeStatus: "conflicts" },
+				{ ...adoPr, pullRequestId: 2, mergeStatus: "succeeded", forkSource: { name: "refs/heads/x" } },
+				{ ...adoPr, pullRequestId: 3, mergeStatus: "queued" },
+				{ ...adoPr, pullRequestId: 4 },
+			],
+		})
+		const prs = await azdo(api).listOpenPrs({ mine: false, limit: 10 })
+		expect(prs.map((p) => [p.id, p.mergeState, p.fork])).toEqual([
+			[1, "conflicts", false],
+			[2, "clean", true],
+			[3, "pending", false],
+			[4, undefined, false],
+		])
+		const params = api.last("GET").url.searchParams
+		expect([params.get("searchCriteria.status"), params.get("$top"), params.has("searchCriteria.creatorId")]).toEqual([
+			"active",
+			"10",
+			false,
+		])
+	})
+
+	it("Azure DevOps: filters `mine` by the signed-in user's id from connection data", async () => {
+		const api = new FakeApi()
+			.on("GET", PRS, { value: [adoPr] })
+			.on("GET", "/acme/_apis/connectionData", { authenticatedUser: { id: "user-1" } })
+		await azdo(api).listOpenPrs({ mine: true, limit: 5 })
+		expect(api.last("GET").url.searchParams.get("searchCriteria.creatorId")).toBe("user-1")
+	})
+
+	it("Azure DevOps: reads a branch head from the exact ref, not a prefix match", async () => {
+		const api = new FakeApi().on("GET", `${PROJ}/git/repositories/r-1/refs`, {
+			value: [
+				{ name: "refs/heads/feature-2", objectId: "222" },
+				{ name: "refs/heads/feature", objectId: "111" },
+			],
+		})
+		const provider = azdo(api)
+		expect(await provider.branchHead("feature")).toBe("111")
+		expect(api.last("GET").url.searchParams.get("filter")).toBe("heads/feature")
+		expect(await provider.branchHead("feat")).toBeUndefined()
+	})
+
+	it("Azure DevOps: names a run's definition so builds of one pipeline group together", async () => {
+		const api = new FakeApi().on("GET", `${PROJ}/build/builds`, {
+			value: [
+				{ id: 9, buildNumber: "20261007.3", definition: { name: "GPUSurfer-win_cpu", id: 16659 }, status: "inProgress" },
+			],
+		})
+		const [run] = await azdo(api).listRuns("feature", undefined, 5)
+		expect([run.name, run.pipeline, run.pipelineId]).toEqual(["GPUSurfer-win_cpu #20261007.3", "GPUSurfer-win_cpu", 16659])
+	})
+})

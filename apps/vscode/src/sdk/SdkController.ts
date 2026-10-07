@@ -74,7 +74,7 @@ import {
 	SdkTaskHistory,
 	sessionHistoryRecordToTaskItemFields,
 } from "./sdk-task-history"
-import { SdkTaskStartCoordinator } from "./sdk-task-start-coordinator"
+import { SdkTaskStartCoordinator, type TaskStartOptions } from "./sdk-task-start-coordinator"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
 import { isToolAutoApproved } from "./sdk-tool-policies"
 import {
@@ -1018,12 +1018,27 @@ export class Controller {
 		historyItem?: HistoryItem,
 		taskSettings?: Partial<Settings>,
 		workspace?: WorkspaceRef,
+		options?: TaskStartOptions,
 	): Promise<string | undefined> {
 		// A new task is starting — the agent is about to stream.
 		this.turnStateTracker.set("streaming")
 		// Clear the previous turn's completion signal so this turn's phase is computed fresh.
 		this.messageTranslatorState.clearTurnOutcome()
-		return this.taskStart.initTask(prompt, images, files, historyItem, taskSettings, workspace)
+		return this.taskStart.initTask(prompt, images, files, historyItem, taskSettings, workspace, options)
+	}
+
+	/** Starting a task now would stop the running one: it is running and the background is full. */
+	get startWouldStopRunningTask(): boolean {
+		return Boolean(this.sessions.getActiveSession()?.isRunning) && this.background.isFull
+	}
+
+	/** Where a conversation stands in this window: running on screen, running in the background, or neither. */
+	conversationActivity(conversationId: string): "running" | "background" | "idle" {
+		if (this.background.has(conversationId)) {
+			return "background"
+		}
+		const active = this.sessions.getActiveSession()
+		return active?.sessionId === conversationId && active.isRunning ? "running" : "idle"
 	}
 
 	async reinitExistingTaskFromId(taskId: string): Promise<void> {

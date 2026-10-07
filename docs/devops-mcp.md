@@ -96,6 +96,9 @@ Limits:
   conversation to be opened.
 - Turning `plinycode.ci.watch` off removes the tool and stops the running watches.
 
+To watch many pull requests and branches at once, with one status per pipeline and prompts that fix them, use
+the [CI Board](ci-board.md).
+
 ## In the PlinyCode GUI
 
 The server is listed first wherever PlinyCode lists MCP servers: the server icon in the chat input, and
@@ -171,6 +174,7 @@ The code is in `apps/vscode/src/services/devops-mcp/`:
 | `host/token-broker.ts`     | Local pipe that hands the editor's sign-in tokens to the server process.                   |
 | `builtin-mcp-registry.ts`  | How the agent session and the GUI handlers reach the service without importing `vscode`.   |
 | `ci-watch/`                | `watch_ci`: the watcher, its report, and the per-conversation watches. Runs in the extension host and reuses the server's providers. Delivery into conversations is `src/sdk/sdk-ci-watch-coordinator.ts`. |
+| `ci-board/`, `host/CiBoardHost.ts` | The CI Board: many PRs and branches at once, with actions that run prompts in git worktrees. See [ci-board.md](ci-board.md). |
 
 The built-in server is deliberately not in McpHub, which only manages servers from the user's MCP settings
 file. Tests: `bun test src/services/devops-mcp` (from `apps/vscode`), which needs `git` on `PATH` but no

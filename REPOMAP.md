@@ -54,7 +54,7 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 
 ### `src/services/`
 
-`banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
+`banner/`, `browser/` (Puppeteer page fetching for URL @-mentions), `devops-mcp/` (built-in DevOps MCP server, `watch_ci` and the CI Board), `error/`, `lg-cns-integration/`, `logging/`, `mcp/` (`McpHub.ts`), `search/`, `temp/`, `uri/`.
 
 ### `src/shared/`
 

@@ -71,6 +71,14 @@ export interface SdkTaskStartCoordinatorOptions {
 	postStateToWebview: () => Promise<void>
 }
 
+export interface TaskStartOptions {
+	/**
+	 * False keeps the task's workspace out of the recently used list, e.g. for
+	 * a CI board run in a throwaway git worktree. Default true.
+	 */
+	recordRecentWorkspace?: boolean
+}
+
 export class SdkTaskStartCoordinator {
 	constructor(private readonly options: SdkTaskStartCoordinatorOptions) {}
 
@@ -81,6 +89,7 @@ export class SdkTaskStartCoordinator {
 		historyItem?: HistoryItem,
 		taskSettings?: Partial<Settings>,
 		workspace?: WorkspaceRef,
+		startOptions?: TaskStartOptions,
 	): Promise<string | undefined> {
 		Logger.log(`[SdkController] initTask called: "${prompt?.substring(0, 50)}"`)
 		let taskSessionId: string | undefined
@@ -89,7 +98,9 @@ export class SdkTaskStartCoordinator {
 
 			const { cwd, workspace: boundWorkspace } = await this.resolveTaskWorkspace(workspace)
 			this.options.setActiveTaskWorkspace?.(boundWorkspace, cwd)
-			this.options.onWorkspaceUsed?.(boundWorkspace)
+			if (startOptions?.recordRecentWorkspace !== false) {
+				this.options.onWorkspaceUsed?.(boundWorkspace)
+			}
 			const mode = this.getCurrentMode()
 			Logger.log(`[SdkController] Building session config: mode=${mode}, cwd=${cwd}`)
 			const config = await this.options.sessionConfigBuilder.build({

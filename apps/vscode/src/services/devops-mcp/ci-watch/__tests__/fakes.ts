@@ -138,6 +138,14 @@ export class FakeProvider implements Provider {
 	async prChecks(): Promise<[]> {
 		return []
 	}
+
+	async listOpenPrs(): Promise<PullRequest[]> {
+		return this.pr ? [{ ...this.pr }] : []
+	}
+
+	async branchHead(branch: string): Promise<string | undefined> {
+		return this.runs.find((r) => r.branch === branch)?.commit
+	}
 }
 
 export function fakeContext(root = "/nowhere", detached = false): RepoContext {

@@ -6,6 +6,7 @@
  */
 import type { McpToolProvider } from "@plinycode/core"
 import type { AgentTool } from "@plinycode/shared"
+import type { CiBoard } from "./ci-board/ci-board"
 import type { CiWatchManager } from "./ci-watch/ci-watch-manager"
 
 interface BuiltinMcpSource {
@@ -27,6 +28,23 @@ interface BuiltinMcpSource {
 	 * which has to reach the conversation later).
 	 */
 	extraTools?(cwd: string): AgentTool[]
+	/**
+	 * The tool provider for a session rooted at `cwd`, when calls need to know
+	 * it (the DevOps tools default to the window's folder, which is the wrong
+	 * repository for a session running in a git worktree). Omitted: `provider`.
+	 */
+	providerFor?(cwd: string): McpToolProvider
+}
+
+/** `provider`, with `name: value` filled into every call that does not set `name` itself. */
+export function withDefaultArgument(provider: McpToolProvider, name: string, value: string): McpToolProvider {
+	return {
+		listTools: (serverName) => provider.listTools(serverName),
+		callTool: (request) =>
+			provider.callTool(
+				request.arguments?.[name] ? request : { ...request, arguments: { ...request.arguments, [name]: value } },
+			),
+	}
 }
 
 const sources = new Map<string, BuiltinMcpSource>()
@@ -100,4 +118,15 @@ export function setCiWatchManager(manager: CiWatchManager | undefined): void {
 
 export function getCiWatchManager(): CiWatchManager | undefined {
 	return ciWatchManager
+}
+
+let ciBoard: CiBoard | undefined
+
+/** The window's CI board; the DevOps service builds it, the webview handlers read it. */
+export function setCiBoard(board: CiBoard | undefined): void {
+	ciBoard = board
+}
+
+export function getCiBoard(): CiBoard | undefined {
+	return ciBoard
 }

@@ -8,6 +8,7 @@ import {
 	type Fetch,
 	Http,
 	type JobResult,
+	type MergeState,
 	type PipelineRun,
 	type Provider,
 	type PullRequest,
@@ -55,14 +56,25 @@ const status = (value?: string | null): Status =>
 
 const short = (ref?: string | null) => (ref ?? "").replace(/^refs\/heads\//, "")
 
+const MERGE_STATES: Record<string, MergeState> = {
+	conflicts: "conflicts",
+	succeeded: "clean",
+	queued: "pending",
+	notSet: "pending",
+	rejectedByPolicy: "unknown",
+	failure: "unknown",
+}
+
 export class AzureDevOpsProvider implements Provider {
 	readonly kind = "Azure DevOps"
 	// Azure DevOps rejects pull request descriptions longer than 4000 characters.
 	readonly maxBodyLength = 4000
 	readonly repoUrl: string
+	private readonly orgUrl: string
 	private readonly projectUrl: string
 	private readonly http: Http
 	private repoInfo?: Promise<any>
+	private userId?: Promise<string>
 
 	constructor(
 		private readonly remote: Remote,
@@ -72,10 +84,10 @@ export class AzureDevOpsProvider implements Provider {
 		// On-premises Azure DevOps Server: {origin}/{collection path}/{project}, where the collection path may
 		// itself have multiple segments (e.g. "tfs/Some_Collection") that must stay separate path segments,
 		// not one encoded blob. Cloud: https://dev.azure.com/{org}/{project}.
-		const orgUrl = remote.origin
+		this.orgUrl = remote.origin
 			? `${remote.origin}/${(remote.collection ?? "").split("/").map(encodeURIComponent).join("/")}`
 			: `https://dev.azure.com/${encodeURIComponent(remote.owner)}`
-		this.projectUrl = `${orgUrl}/${encodeURIComponent(remote.project ?? "")}`
+		this.projectUrl = `${this.orgUrl}/${encodeURIComponent(remote.project ?? "")}`
 		this.repoUrl = `${this.projectUrl}/_git/${encodeURIComponent(remote.repo)}`
 		this.http = new Http(auth, { Accept: "application/json" }, fetchImpl)
 	}
@@ -115,6 +127,8 @@ export class AzureDevOpsProvider implements Provider {
 			author: d.createdBy?.displayName ?? "",
 			url: `${this.repoUrl}/pullrequest/${d.pullRequestId}`,
 			headSha: d.lastMergeSourceCommit?.commitId,
+			mergeState: d.mergeStatus ? (MERGE_STATES[d.mergeStatus] ?? "unknown") : undefined,
+			fork: Boolean(d.forkSource),
 		}
 	}
 
@@ -131,6 +145,8 @@ export class AzureDevOpsProvider implements Provider {
 			started: d.startTime ?? d.queueTime,
 			finished: d.finishTime,
 			event: d.reason,
+			pipeline: d.definition?.name,
+			pipelineId: d.definition?.id,
 		}
 	}
 
@@ -153,6 +169,37 @@ export class AzureDevOpsProvider implements Provider {
 
 	async getPr(id: number): Promise<PullRequest> {
 		return this.pr(await this.api("GET", await this.prPath(`/${id}`)))
+	}
+
+	async listOpenPrs({ mine, limit }: { mine: boolean; limit: number }): Promise<PullRequest[]> {
+		const data = await this.api("GET", await this.prPath(), {
+			"searchCriteria.status": "active",
+			"searchCriteria.creatorId": mine ? await this.me() : undefined,
+			$top: limit,
+		})
+		return (data.value ?? []).slice(0, limit).map((d: any) => this.pr(d))
+	}
+
+	/** The signed-in user's id, from the organization's (or collection's) connection data. */
+	private me(): Promise<string> {
+		if (!this.userId) {
+			this.userId = this.http.json("GET", `${this.orgUrl}/_apis/connectionData`).then((data) => {
+				const id = data?.authenticatedUser?.id
+				if (!id) throw new DevOpsError("Azure DevOps did not say who is signed in.")
+				return String(id)
+			})
+			this.userId.catch(() => {
+				this.userId = undefined
+			})
+		}
+		return this.userId
+	}
+
+	async branchHead(branch: string): Promise<string | undefined> {
+		const data = await this.api("GET", `git/repositories/${(await this.repo()).id}/refs`, { filter: `heads/${branch}` })
+		// `filter` matches a prefix, so `feature` would also list `feature-2`.
+		const ref = (data.value ?? []).find((r: any) => r.name === `refs/heads/${branch}`)
+		return ref?.objectId
 	}
 
 	async createPr(title: string, body: string, source: string, target: string, draft: boolean): Promise<PullRequest> {

@@ -20,11 +20,13 @@ import { vscodeHostBridgeClient } from "@/hosts/vscode/hostbridge/client/host-gr
 import { createStorageContext } from "@/shared/storage/storage-context"
 import { readTextFromClipboard, writeTextToClipboard } from "@/utils/env"
 import { initialize, tearDown } from "./common"
+import { startCiRun } from "./core/controller/ciBoard/start-ci-run"
 import { addToCline } from "./core/controller/commands/addToCline"
 import { explainWithCline } from "./core/controller/commands/explainWithCline"
 import { fixWithCline } from "./core/controller/commands/fixWithCline"
 import { improveWithCline } from "./core/controller/commands/improveWithCline"
 import { sendAddToInputEvent } from "./core/controller/ui/subscribeToAddToInput"
+import { sendCiBoardButtonClickedEvent } from "./core/controller/ui/subscribeToCiBoardButtonClicked"
 import { sendShowWebviewEvent } from "./core/controller/ui/subscribeToShowWebview"
 import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
 import { ensureRulesDirectoryExists } from "./core/storage/disk"
@@ -152,6 +154,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand(commands.McpButton, () => sendMcpButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.SettingsButton, () => sendSettingsButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.HistoryButton, () => sendHistoryButtonClickedEvent()))
+	context.subscriptions.push(vscode.commands.registerCommand(commands.CiBoardButton, () => sendCiBoardButtonClickedEvent()))
 
 	// FreeAuto / BalanceAuto: make sure every profile's routing rules file
 	// exists so the command below always has something to open, then let the
@@ -212,7 +215,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	// Built-in PR / pipeline MCP server, for PlinyCode and the editor's own AI chat.
-	DevOpsMcpService.activate(context).catch((error) => Logger.error("[DevOpsMcp] Failed to start:", error))
+	// The CI board's notifications open the board, or start an action, through these.
+	const ciBoardUi = {
+		openBoard: async () => {
+			;(WebviewProvider.getInstance() as VscodeWebviewProvider).getWebview()?.show(true)
+			await sendCiBoardButtonClickedEvent()
+		},
+		runAction: async (targetId: string, itemKey: string, actionId: string) => {
+			try {
+				await startCiRun(WebviewProvider.getInstance().controller, targetId, itemKey, actionId)
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`Could not start the CI action: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+		},
+	}
+	DevOpsMcpService.activate(context, ciBoardUi).catch((error) => Logger.error("[DevOpsMcp] Failed to start:", error))
 
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
 

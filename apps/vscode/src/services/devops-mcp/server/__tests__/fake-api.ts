@@ -1,7 +1,7 @@
 import type { Auth } from "../auth"
 import type { Fetch } from "../providers/types"
 
-type Route = { status: number; body?: unknown; text?: string; contentType?: string }
+type Route = { status: number; body?: unknown; text?: string; contentType?: string; etag?: string }
 
 /** Routes `METHOD path` to canned responses and records every request. */
 export class FakeApi {
@@ -10,6 +10,12 @@ export class FakeApi {
 
 	on(method: string, path: string, body?: unknown, status = 200): this {
 		this.routes.set(`${method} ${path}`, { status, body })
+		return this
+	}
+
+	/** A JSON route with an ETag: a request that sends the same tag in If-None-Match gets a bodiless 304. */
+	onTagged(method: string, path: string, body: unknown, etag: string): this {
+		this.routes.set(`${method} ${path}`, { status: 200, body, etag })
 		return this
 	}
 
@@ -33,9 +39,12 @@ export class FakeApi {
 				headers: { "content-type": route.contentType ?? "text/plain" },
 			})
 		}
+		if (route.etag && headers["If-None-Match"] === route.etag) {
+			return new Response(null, { status: 304, headers: { etag: route.etag, "x-ratelimit-remaining": "4999" } })
+		}
 		return new Response(JSON.stringify(route.body ?? null), {
 			status: route.status,
-			headers: { "content-type": "application/json" },
+			headers: { "content-type": "application/json", ...(route.etag ? { etag: route.etag } : {}) },
 		})
 	}
 

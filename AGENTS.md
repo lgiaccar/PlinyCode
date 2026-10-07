@@ -39,6 +39,7 @@ Design and operations notes are in `docs/`:
 - [docs/advisor-tool.md](docs/advisor-tool.md): the `ask_advisor` tool, which lets a free or cheap model ask a stronger one for advice at a hard step, and how its cost is recorded and budget-checked.
 - [docs/review-pass.md](docs/review-pass.md): the reviewer pass, in which a second free model reads the diff before a FreeAuto or BalanceAuto act-mode run ends and hands likely defects back once.
 - The CI watcher (`watch_ci`), which wakes a conversation when CI finishes, is described in [docs/devops-mcp.md](docs/devops-mcp.md).
+- [docs/ci-board.md](docs/ci-board.md): the CI Board, which watches many pull requests and branches with one status per pipeline, and runs prompts (actions) against them in git worktrees.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.
 

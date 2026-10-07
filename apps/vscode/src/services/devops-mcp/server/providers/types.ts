@@ -13,7 +13,14 @@ export interface PullRequest {
 	author: string
 	url: string
 	headSha?: string
+	/** Whether the PR merges cleanly into its target; only some calls report it (GitHub: `getPr`). */
+	mergeState?: MergeState
+	/** The PR comes from a fork, so its branch cannot be pushed to through this repository's remote. */
+	fork?: boolean
 }
+
+/** `pending` while the server is still computing it. */
+export type MergeState = "clean" | "conflicts" | "pending" | "unknown"
 
 export type Status = "queued" | "in_progress" | "completed"
 /** success | failure | cancelled | partial | skipped | action_required, or undefined while running. */
@@ -32,6 +39,9 @@ export interface PipelineRun {
 	started?: string
 	finished?: string
 	event?: string
+	/** The workflow or pipeline definition the run belongs to; runs of one pipeline share it. */
+	pipeline?: string
+	pipelineId?: number
 }
 
 export interface JobResult {
@@ -75,6 +85,12 @@ export interface Provider {
 	listRuns(branch: string | undefined, pr: PullRequest | undefined, limit: number): Promise<PipelineRun[]>
 	runReport(runId: number, logLines: number): Promise<RunReport>
 	prChecks(pr: PullRequest): Promise<Check[]>
+	/** Open pull requests, most recently updated first; `mine` keeps the signed-in user's. */
+	listOpenPrs(options: { mine: boolean; limit: number }): Promise<PullRequest[]>
+	/** The commit `branch` points at on the server, or undefined when the server has no such branch. */
+	branchHead(branch: string): Promise<string | undefined>
+	/** Requests left in the API's current rate-limit window, once a response has said. */
+	readonly rateLimitRemaining?: number
 }
 
 export function checkBody(provider: Provider, body: string): void {
@@ -100,13 +116,37 @@ interface RequestOptions {
 	accept?: string
 }
 
+interface HttpOptions {
+	/**
+	 * Revalidate repeated JSON GETs with their ETag. GitHub answers an unchanged
+	 * resource with 304, which does not count against the rate limit.
+	 */
+	etags?: boolean
+}
+
+interface CachedResponse {
+	etag: string
+	text: string
+	contentType: string
+}
+
+/** JSON bodies kept for revalidation; the least recently stored goes first. */
+const ETAG_CACHE_SIZE = 500
+
 /** A thin fetch wrapper: adds auth, retries once on 401 and turns API errors into `DevOpsError`s. */
 export class Http {
+	private readonly cache?: Map<string, CachedResponse>
+	/** From the last response's `x-ratelimit-remaining` header (GitHub). */
+	rateLimitRemaining?: number
+
 	constructor(
 		private readonly auth: Auth,
 		private readonly baseHeaders: Record<string, string>,
 		private readonly fetchImpl: Fetch = globalThis.fetch,
-	) {}
+		options: HttpOptions = {},
+	) {
+		this.cache = options.etags ? new Map() : undefined
+	}
 
 	async request(method: string, url: string, options: RequestOptions = {}): Promise<Response> {
 		const target = new URL(url)
@@ -116,6 +156,8 @@ export class Http {
 			}
 		}
 		const accept = options.accept ?? this.baseHeaders.Accept ?? "application/json"
+		const cacheable = this.cache !== undefined && method === "GET" && accept.includes("json")
+		const cached = cacheable ? this.cache?.get(target.href) : undefined
 		let response: Response | undefined
 		for (const attempt of [1, 2]) {
 			const headers: Record<string, string> = {
@@ -126,6 +168,9 @@ export class Http {
 			}
 			if (options.json !== undefined) {
 				headers["Content-Type"] = "application/json"
+			}
+			if (cached) {
+				headers["If-None-Match"] = cached.etag
 			}
 			try {
 				response = await this.fetchImpl(target, {
@@ -146,12 +191,30 @@ export class Http {
 			break
 		}
 		const resp = response as Response
+		const remaining = Number.parseInt(resp.headers.get("x-ratelimit-remaining") ?? "", 10)
+		if (Number.isFinite(remaining)) {
+			this.rateLimitRemaining = remaining
+		}
+		if (resp.status === 304 && cached) {
+			return new Response(cached.text, { status: 200, headers: { "content-type": cached.contentType } })
+		}
 		if (resp.status >= 400) {
-			throw new DevOpsError(`${method} ${target.pathname} -> HTTP ${resp.status}: ${await errorText(resp)}`)
+			throw new DevOpsError(`${method} ${target.pathname} -> HTTP ${resp.status}: ${await errorText(resp)}`, resp.status)
 		}
 		// A rejected Azure DevOps credential is redirected to an HTML sign-in page with a 2xx status.
 		if (accept.includes("json") && (resp.headers.get("content-type") ?? "").includes("text/html")) {
 			throw new DevOpsError(`${method} ${target.pathname} returned a sign-in page; the credentials were not accepted.`)
+		}
+		const etag = resp.headers.get("etag")
+		if (cacheable && etag && this.cache) {
+			const text = await resp.text()
+			const contentType = resp.headers.get("content-type") ?? "application/json"
+			this.cache.delete(target.href)
+			this.cache.set(target.href, { etag, text, contentType })
+			if (this.cache.size > ETAG_CACHE_SIZE) {
+				this.cache.delete(this.cache.keys().next().value as string)
+			}
+			return new Response(text, { status: resp.status, headers: { "content-type": contentType } })
 		}
 		return resp
 	}

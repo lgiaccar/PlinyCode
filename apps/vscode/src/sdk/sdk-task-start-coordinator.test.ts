@@ -138,6 +138,22 @@ describe("SdkTaskStartCoordinator", () => {
 		)
 	})
 
+	it("keeps a throwaway workspace out of the recent list when asked", async () => {
+		vi.mocked(isDirectory).mockResolvedValue(true)
+		const { coordinator, options } = makeCoordinator()
+		options.setActiveTaskWorkspace = vi.fn()
+		options.onWorkspaceUsed = vi.fn()
+		const worktree = { path: "/repo.worktrees/feature", kind: "folder" as const, folders: ["/repo.worktrees/feature"] }
+
+		const sessionId = await coordinator.initTask("fix CI", undefined, undefined, undefined, undefined, worktree, {
+			recordRecentWorkspace: false,
+		})
+
+		expect(sessionId).toBeDefined()
+		expect(options.setActiveTaskWorkspace).toHaveBeenCalledWith(worktree, "/repo.worktrees/feature")
+		expect(options.onWorkspaceUsed).not.toHaveBeenCalled()
+	})
+
 	it("refuses to start in a chosen workspace whose folder is missing", async () => {
 		vi.mocked(isDirectory).mockResolvedValue(false)
 		const { coordinator, options } = makeCoordinator()
