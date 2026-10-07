@@ -2,7 +2,7 @@
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
-	"version": "0.1.9-test.4",
+	"version": "0.1.9-test.5",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -145,6 +145,11 @@
 				"icon": "$(history)"
 			},
 			{
+				"command": "cline.ciBoardButtonClicked",
+				"title": "CI Board",
+				"icon": "$(pulse)"
+			},
+			{
 				"command": "cline.settingsButtonClicked",
 				"title": "Settings",
 				"icon": "$(settings-gear)"
@@ -279,6 +284,11 @@
 				{
 					"command": "cline.historyButtonClicked",
 					"group": "navigation@3",
+					"when": "view == plinycode-dev.SidebarProvider"
+				},
+				{
+					"command": "cline.ciBoardButtonClicked",
+					"group": "navigation@4",
 					"when": "view == plinycode-dev.SidebarProvider"
 				},
 				{
@@ -418,6 +428,34 @@
 					"type": "boolean",
 					"default": true,
 					"markdownDescription": "Let the agent watch CI with the `watch_ci` tool: after it pushes a change, PlinyCode checks the GitHub Actions or Azure Pipelines runs in the background, without using the model, and sends the result into the conversation when they finish. Turning this off also stops the watches that are running."
+				},
+				"plinycode.ci.board.pollSeconds": {
+					"type": "number",
+					"default": 60,
+					"minimum": 30,
+					"markdownDescription": "How often the **CI Board** checks its pull requests and branches while it is on screen, in seconds. Unchanged pull requests cost one request per repository, so short intervals are cheap; GitHub's rate limit still applies."
+				},
+				"plinycode.ci.board.hiddenPollSeconds": {
+					"type": "number",
+					"default": 180,
+					"minimum": 30,
+					"markdownDescription": "How often the **CI Board** checks its pull requests and branches while it is not on screen, in seconds. It keeps checking so it can notify you when CI fails."
+				},
+				"plinycode.ci.board.notify": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show a notification when a pipeline on the **CI Board** fails or a pull request on it gets merge conflicts, with a button that runs the board's first action."
+				},
+				"plinycode.ci.board.maxPrsPerRepo": {
+					"type": "number",
+					"default": 30,
+					"minimum": 1,
+					"markdownDescription": "The most open pull requests the **CI Board** lists for a repository, most recently updated first."
+				},
+				"plinycode.ci.worktreeRoot": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Folder for the git worktrees the **CI Board** creates to work on pull requests that are not checked out. Empty puts them next to the repository, in `<repository>.worktrees`."
 				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",

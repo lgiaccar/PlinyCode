@@ -13,10 +13,12 @@ import {
 	notifyBuiltinMcpToolsChanged,
 	registerBuiltinMcpSource,
 	setDevOpsServerControl,
+	withDefaultArgument,
 } from "../builtin-mcp-registry"
-import { createCiWatchRepoOpener } from "../ci-watch/ci-watch-source"
+import { createProviderCache } from "../ci-watch/ci-watch-source"
 import { ciWatchTools } from "../ci-watch/watch-ci-tool"
 import { hasSupportedRemote } from "../server/repo"
+import { CiBoardHost, type CiBoardUi } from "./CiBoardHost"
 import {
 	detectEditorIntegration,
 	EDITOR_SERVER_NAME,
@@ -71,7 +73,7 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 		private readonly broker: TokenBroker,
 	) {}
 
-	static async activate(context: vscode.ExtensionContext): Promise<DevOpsMcpService> {
+	static async activate(context: vscode.ExtensionContext, ciBoardUi?: CiBoardUi): Promise<DevOpsMcpService> {
 		const service = new DevOpsMcpService(context, await TokenBroker.start())
 		DevOpsMcpService.current = service
 		setDevOpsServerControl(service)
@@ -87,7 +89,9 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			appliesTo: (cwd) => hasSupportedRemote(cwd),
 			extraTools: (cwd) =>
 				ciWatchTools({ enabled: service.ciWatchEnabled, manager: getCiWatchManager(), cwd, openRepo: service.openRepo }),
+			providerFor: (cwd) => service.toolProviderFor(cwd),
 		})
+		service.disposables.push(CiBoardHost.start(service.providers, ciBoardUi))
 		service.disposables.push(
 			new vscode.Disposable(unregister),
 			vscode.workspace.onDidChangeConfiguration((event) => {
@@ -127,8 +131,9 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 		return vscode.workspace.getConfiguration().get<boolean>(SETTING_CI_WATCH, true)
 	}
 
-	/** Repositories as the CI watcher reads them: in this process, with the editor's existing sign-in. */
-	private readonly openRepo = createCiWatchRepoOpener((provider, host) => this.broker.silentToken(provider, host))
+	/** Providers as the CI watcher and the CI board read them: in this process, with the editor's existing sign-in. */
+	readonly providers = createProviderCache((provider, host) => this.broker.silentToken(provider, host))
+	private readonly openRepo = this.providers.forCwd
 
 	private workspaceFolder(): string | undefined {
 		return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
@@ -301,6 +306,15 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			})
 			return { ...result, content: result.content ?? [] }
 		},
+	}
+
+	/**
+	 * `toolProvider` for a session rooted at `cwd`: a call that names no
+	 * `workspace` runs against `cwd` rather than the window's first folder, so a
+	 * conversation in a git worktree reads that worktree's branch.
+	 */
+	toolProviderFor(cwd: string): McpToolProvider {
+		return withDefaultArgument(this.toolProvider, "workspace", cwd)
 	}
 
 	/**

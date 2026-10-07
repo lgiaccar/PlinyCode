@@ -1,0 +1,159 @@
+syntax = "proto3";
+
+package cline;
+
+import "cline/common.proto";
+
+option go_package = "github.com/cline/grpc-go/cline";
+option java_multiple_files = true;
+option java_package = "bot.cline.proto";
+
+// The CI board: pull requests and branches watched together, one status per
+// pipeline, and prompts (actions) to run against them. See docs/ci-board.md.
+service CiBoardService {
+  // Streams the board whenever it changes. While anyone is subscribed, the
+  // board polls at its faster on-screen rate.
+  rpc subscribeToCiBoard(EmptyRequest) returns (stream CiBoardState);
+  // Adds a pull request link, a branch or a repository's open PRs. Returns
+  // the target's id; adding the same selection twice returns the first one.
+  rpc addCiTarget(AddCiTargetRequest) returns (String);
+  // Removes a target by id.
+  rpc removeCiTarget(StringRequest) returns (Empty);
+  // Changes a target's autonomy, actions or PR filter.
+  rpc updateCiTarget(UpdateCiTargetRequest) returns (Empty);
+  // Fetches a target (by id) or, for an empty id, every target now.
+  rpc refreshCiBoard(StringRequest) returns (Empty);
+  // Starts an action on an item: gets a working copy for its branch and starts
+  // a conversation there. Returns the conversation id.
+  rpc runCiAction(RunCiActionRequest) returns (String);
+  // Opens the conversation an action last started for an item (by item key).
+  rpc openCiConversation(StringRequest) returns (Empty);
+  // Opens a file picker for a prompt file. An empty path means cancelled.
+  rpc pickCiPromptFile(EmptyRequest) returns (String);
+  // The window's git repositories that the board can watch.
+  rpc listCiRepos(EmptyRequest) returns (CiRepoList);
+}
+
+message CiBoardState {
+  repeated CiTargetView targets = 1;
+  // GitHub's rate limit is low, so the board polls less.
+  bool rate_limited = 2;
+  // Why the board cannot be used right now; empty when it can.
+  string unavailable = 3;
+}
+
+message CiTargetView {
+  string id = 1;
+  // "pr", "branch" or "repo".
+  string kind = 2;
+  // e.g. "octo/hello #12", "octo/hello @ feature" or "octo/hello: my open PRs".
+  string label = 3;
+  string remote_url = 4;
+  // "github" or "ado".
+  string provider = 5;
+  // The local checkout runs use; empty when this window has none.
+  string checkout = 6;
+  string branch = 7;
+  int64 pr_id = 8;
+  // "mine" or "all", for "repo" targets.
+  string pr_filter = 9;
+  // "manual", "auto" or "full_auto".
+  string autonomy = 10;
+  repeated CiActionInfo actions = 11;
+  repeated CiItem items = 12;
+  string error = 13;
+  // True until the first fetch ends.
+  bool loading = 14;
+}
+
+message CiActionInfo {
+  string id = 1;
+  string label = 2;
+  // "builtin", "file" or "text".
+  string prompt_kind = 3;
+  // The file path or the text; empty for "builtin".
+  string prompt_value = 4;
+  // "manual", "on_failure", "on_conflict" or "on_failure_or_conflict".
+  string trigger = 5;
+}
+
+message CiItem {
+  // Stable across targets: the same PR listed twice shares its conversation.
+  string key = 1;
+  // 0 for a branch without a pull request.
+  int64 pr_id = 2;
+  string title = 3;
+  string url = 4;
+  string source_branch = 5;
+  string target_branch = 6;
+  string author = 7;
+  bool draft = 8;
+  // "open", "merged" or "closed"; empty for a branch.
+  string state = 9;
+  string head_sha = 10;
+  // "clean", "conflicts", "pending", "unknown" or empty.
+  string merge_state = 11;
+  repeated CiPipeline pipelines = 12;
+  // The conversation an action last started for this item.
+  string conversation_id = 13;
+  // "running", "background" or "idle"; empty without a conversation.
+  string conversation_status = 14;
+  // True while watch_ci watches that conversation.
+  bool watching = 15;
+  // Why an action cannot run on this item; empty when it can.
+  string run_blocked = 16;
+  string error = 17;
+}
+
+message CiPipeline {
+  string name = 1;
+  // "green", "red", "yellow" or "grey".
+  string color = 2;
+  // "queued", "in_progress", "completed", or empty without a run.
+  string status = 3;
+  string result = 4;
+  int64 run_id = 5;
+  string url = 6;
+}
+
+message AddCiTargetRequest {
+  Metadata metadata = 1;
+  // "pr", "branch" or "repo".
+  string kind = 2;
+  // The pull request link ("pr") or the branch name ("branch").
+  string input = 3;
+  // The repository folder, for "branch" and "repo".
+  string repo_root = 4;
+  // "mine" or "all", for "repo".
+  string pr_filter = 5;
+}
+
+message UpdateCiTargetRequest {
+  Metadata metadata = 1;
+  string id = 2;
+  optional string autonomy = 3;
+  // Replaces the actions when set_actions is true.
+  repeated CiActionInfo actions = 4;
+  bool set_actions = 5;
+  optional string pr_filter = 6;
+}
+
+message RunCiActionRequest {
+  Metadata metadata = 1;
+  string target_id = 2;
+  string item_key = 3;
+  string action_id = 4;
+}
+
+message CiRepoList {
+  repeated CiRepo repos = 1;
+}
+
+message CiRepo {
+  string root = 1;
+  string remote_url = 2;
+  // "github" or "ado".
+  string provider = 3;
+  // Empty when HEAD is detached.
+  string current_branch = 4;
+}

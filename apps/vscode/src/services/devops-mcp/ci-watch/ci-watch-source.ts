@@ -4,7 +4,7 @@ import { DevOpsError } from "../server/errors"
 import { AzureDevOpsProvider } from "../server/providers/azdo"
 import { GitHubProvider } from "../server/providers/github"
 import type { PipelineRun, Provider, PullRequest } from "../server/providers/types"
-import { loadContext, pushProblem, type RepoContext, remoteBranchHead, remoteKey } from "../server/repo"
+import { loadContext, pushProblem, type Remote, type RepoContext, remoteBranchHead, remoteKey } from "../server/repo"
 import type { CiWatchSource } from "./ci-watcher"
 
 /** Runs listed per poll; the ones for the watched commit are picked out of these. */
@@ -19,30 +19,74 @@ export interface CiWatchRepo {
 
 export type CiWatchRepoOpener = (cwd: string) => Promise<CiWatchRepo>
 
+/** Providers per remote, shared by everything that reads CI in the extension host. */
+export interface ProviderCache {
+	/** A remote that may have no checkout here, e.g. from a pasted pull request link. */
+	forRemote(remote: Remote): Provider
+	/** The repository at `cwd`, with the provider for its remote. */
+	forCwd: CiWatchRepoOpener
+}
+
 /**
- * Opens repositories for the watcher with providers that live in the extension
- * host. They sign in like the server does, except that they never show a
- * sign-in prompt: a background poll must not pop one up.
+ * Providers that live in the extension host. They sign in like the server
+ * does, except that they never show a sign-in prompt: a background poll must
+ * not pop one up.
  */
-export function createCiWatchRepoOpener(
+export function createProviderCache(
 	silentEditorToken: (provider: "github" | "ado", host: string) => Promise<string | undefined>,
-): CiWatchRepoOpener {
+): ProviderCache {
 	const providers = new Map<string, Provider>()
 	const editorToken: EditorTokenSource = (provider, host, interactive) =>
 		interactive ? Promise.resolve(undefined) : silentEditorToken(provider, host)
-	return async (cwd) => {
-		const ctx = await loadContext(cwd)
-		const key = remoteKey(ctx.remote)
+	const forRemote = (remote: Remote): Provider => {
+		const key = remoteKey(remote)
 		let provider = providers.get(key)
 		if (!provider) {
 			provider =
-				ctx.remote.kind === "github"
-					? new GitHubProvider(ctx.remote, undefined, githubAuth(ctx.remote.host, editorToken))
-					: new AzureDevOpsProvider(ctx.remote, undefined, adoAuth(editorToken))
+				remote.kind === "github"
+					? new GitHubProvider(remote, undefined, githubAuth(remote.host, editorToken))
+					: new AzureDevOpsProvider(remote, undefined, adoAuth(editorToken))
 			providers.set(key, provider)
 		}
-		return { ctx, provider }
+		return provider
 	}
+	return {
+		forRemote,
+		forCwd: async (cwd) => {
+			const ctx = await loadContext(cwd)
+			return { ctx, provider: forRemote(ctx.remote) }
+		},
+	}
+}
+
+/**
+ * The runs for commit `head` of a pull request or branch. Azure DevOps builds a
+ * pull request on its merge ref and the branch on its own ref, so a pull
+ * request's runs are in both lists. GitHub lists a pull request's runs by
+ * commit, whatever event started them, so one list is enough there.
+ */
+export async function runsForHead(
+	provider: Provider,
+	pr: PullRequest | undefined,
+	branch: string,
+	head: string,
+	limit = RUN_LIMIT,
+): Promise<PipelineRun[]> {
+	const queries: Promise<PipelineRun[]>[] = []
+	if (pr) {
+		queries.push(provider.listRuns(undefined, { ...pr, headSha: head }, limit))
+	}
+	if (!pr || provider.kind !== "GitHub") {
+		queries.push(provider.listRuns(branch, undefined, limit))
+	}
+	const lists = await Promise.all(queries)
+	const runs = new Map<number, PipelineRun>()
+	for (const run of lists.flat()) {
+		if ((run.headCommit ?? run.commit) === head) {
+			runs.set(run.id, run)
+		}
+	}
+	return [...runs.values()]
 }
 
 interface CiWatchTarget {
@@ -111,23 +155,7 @@ export function createCiWatchSource(repo: CiWatchRepo, target: CiWatchTarget): C
 			lastHead = head ?? lastHead
 			return lastHead
 		},
-		runs: async (head) => {
-			// Azure DevOps builds a pull request on its merge ref and the branch on
-			// its own ref, so a pull request's runs are in both lists.
-			const lists = pr
-				? await Promise.all([
-						provider.listRuns(undefined, { ...pr, headSha: head }, RUN_LIMIT),
-						provider.listRuns(branch, undefined, RUN_LIMIT),
-					])
-				: [await provider.listRuns(branch, undefined, RUN_LIMIT)]
-			const runs = new Map<number, PipelineRun>()
-			for (const run of lists.flat()) {
-				if ((run.headCommit ?? run.commit) === head) {
-					runs.set(run.id, run)
-				}
-			}
-			return [...runs.values()]
-		},
+		runs: (head) => runsForHead(provider, pr, branch, head),
 		report: (runId) => provider.runReport(runId, LOG_LINES),
 	}
 }

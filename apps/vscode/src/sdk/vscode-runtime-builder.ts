@@ -98,7 +98,7 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 				}
 				const serverTools = await createMcpTools({
 					serverName: source.serverName,
-					provider: source.provider,
+					provider: (options?.cwd && source.providerFor?.(options.cwd)) || source.provider,
 					timeoutMs: source.timeoutMs,
 				})
 				// Tools the server's host side adds (watch_ci) go wherever its own tools go.

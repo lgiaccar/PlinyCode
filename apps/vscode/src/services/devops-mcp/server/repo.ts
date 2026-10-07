@@ -34,6 +34,8 @@ export interface RepoContext {
 	root: string
 	remoteName: string
 	remote: Remote
+	/** The remote's URL as git has it. */
+	remoteUrl?: string
 	/** Undefined when HEAD is detached. */
 	branch?: string
 }
@@ -184,7 +186,7 @@ export async function loadContext(workspace?: string): Promise<RepoContext> {
 	}
 	const remote = parseRemote(url, process.env.DEVOPS_MCP_PROVIDER)
 	const branch = await git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"])
-	return { root, remoteName, remote, branch: branch || undefined }
+	return { root, remoteName, remote, remoteUrl: url, branch: branch || undefined }
 }
 
 /**

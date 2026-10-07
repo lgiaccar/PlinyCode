@@ -8,6 +8,7 @@ import {
 	type Fetch,
 	Http,
 	type JobResult,
+	type MergeState,
 	type PipelineRun,
 	type Provider,
 	type PullRequest,
@@ -37,6 +38,34 @@ const result = (value?: string | null): Result => (value ? (RESULTS[value] ?? va
 const status = (value?: string | null): Status =>
 	value === "completed" ? "completed" : value === "in_progress" ? "in_progress" : "queued"
 
+/** `mergeable_state` values; only `dirty` means the branch conflicts with its base. */
+const MERGE_STATES: Record<string, MergeState> = {
+	dirty: "conflicts",
+	clean: "clean",
+	unstable: "clean",
+	blocked: "clean",
+	behind: "clean",
+	has_hooks: "clean",
+	draft: "clean",
+	unknown: "pending",
+}
+
+/**
+ * Only the single-PR endpoint reports mergeability, and `mergeable` is null
+ * while GitHub is still computing it (it starts on the first request).
+ */
+function mergeState(d: any): MergeState | undefined {
+	if (!("mergeable" in d)) {
+		return undefined
+	}
+	if (d.mergeable === null) {
+		return "pending"
+	}
+	return MERGE_STATES[d.mergeable_state] ?? (d.mergeable === false ? "conflicts" : "unknown")
+}
+
+const PR_LIST_PAGE = 100
+
 /**
  * The `lines` lines ending at the last `##[error]` line of a job log.
  *
@@ -61,20 +90,28 @@ export class GitHubProvider implements Provider {
 	readonly kind = "GitHub"
 	readonly maxBodyLength = 65536
 	readonly repoUrl: string
+	private readonly apiRoot: string
 	private readonly api: string
 	private readonly graphqlUrl: string
 	private readonly http: Http
+	private loginInfo?: Promise<string>
 
 	constructor(
 		private readonly remote: Remote,
 		fetchImpl?: Fetch,
 		auth: Auth = githubAuth(remote.host),
 	) {
-		const base = remote.host === "github.com" ? "https://api.github.com" : `https://${remote.host}/api/v3`
-		this.api = `${base}/repos/${remote.owner}/${remote.repo}`
-		this.graphqlUrl = remote.host === "github.com" ? `${base}/graphql` : `https://${remote.host}/api/graphql`
+		this.apiRoot = remote.host === "github.com" ? "https://api.github.com" : `https://${remote.host}/api/v3`
+		this.api = `${this.apiRoot}/repos/${remote.owner}/${remote.repo}`
+		this.graphqlUrl = remote.host === "github.com" ? `${this.apiRoot}/graphql` : `https://${remote.host}/api/graphql`
 		this.repoUrl = `https://${remote.host}/${remote.owner}/${remote.repo}`
-		this.http = new Http(auth, { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, fetchImpl)
+		this.http = new Http(auth, { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, fetchImpl, {
+			etags: true,
+		})
+	}
+
+	get rateLimitRemaining(): number | undefined {
+		return this.http.rateLimitRemaining
 	}
 
 	private get<T = any>(path: string, query?: Record<string, string | number | undefined>): Promise<T> {
@@ -93,6 +130,12 @@ export class GitHubProvider implements Provider {
 			author: d.user?.login ?? "",
 			url: d.html_url,
 			headSha: d.head.sha,
+			// A merged or closed PR keeps `mergeable: null` for good; mergeability only matters while it is open.
+			mergeState: d.state === "open" && !d.merged_at ? mergeState(d) : undefined,
+			// A deleted fork leaves `head.repo` null.
+			fork:
+				d.head.repo === null ||
+				(d.head.repo?.full_name !== undefined && d.head.repo.full_name !== d.base.repo?.full_name),
 		}
 	}
 
@@ -108,6 +151,8 @@ export class GitHubProvider implements Provider {
 			started: d.run_started_at ?? d.created_at,
 			finished: d.status === "completed" ? d.updated_at : undefined,
 			event: d.event,
+			pipeline: d.name || undefined,
+			pipelineId: d.workflow_id,
 		}
 	}
 
@@ -122,6 +167,40 @@ export class GitHubProvider implements Provider {
 
 	async getPr(id: number): Promise<PullRequest> {
 		return this.pr(await this.get(`/pulls/${id}`))
+	}
+
+	async listOpenPrs({ mine, limit }: { mine: boolean; limit: number }): Promise<PullRequest[]> {
+		const prs = await this.get<any[]>("/pulls", {
+			state: "open",
+			sort: "updated",
+			direction: "desc",
+			per_page: mine ? PR_LIST_PAGE : Math.min(limit, PR_LIST_PAGE),
+		})
+		const login = mine ? await this.login() : undefined
+		return prs
+			.filter((d) => login === undefined || d.user?.login === login)
+			.slice(0, limit)
+			.map((d) => this.pr(d))
+	}
+
+	private login(): Promise<string> {
+		if (!this.loginInfo) {
+			this.loginInfo = this.http.json("GET", `${this.apiRoot}/user`).then((user) => String(user?.login ?? ""))
+			this.loginInfo.catch(() => {
+				this.loginInfo = undefined
+			})
+		}
+		return this.loginInfo
+	}
+
+	async branchHead(branch: string): Promise<string | undefined> {
+		const ref = branch.split("/").map(encodeURIComponent).join("/")
+		try {
+			return (await this.get(`/git/ref/heads/${ref}`))?.object?.sha
+		} catch (error) {
+			if (error instanceof DevOpsError && error.status === 404) return undefined
+			throw error
+		}
 	}
 
 	async createPr(title: string, body: string, source: string, target: string, draft: boolean): Promise<PullRequest> {

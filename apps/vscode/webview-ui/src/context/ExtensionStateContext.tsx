@@ -52,6 +52,7 @@ export interface ExtensionStateContextType extends ExtensionState {
 	settingsTargetSection?: string
 	settingsInitialModelTab?: "recommended" | "free"
 	showHistory: boolean
+	showCiBoard: boolean
 	expandTaskHeader: boolean
 
 	// Setters
@@ -81,11 +82,13 @@ export interface ExtensionStateContextType extends ExtensionState {
 	navigateToSettings: (targetSection?: string) => void
 	navigateToSettingsModelPicker: (opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => void
 	navigateToHistory: () => void
+	navigateToCiBoard: () => void
 	navigateToChat: () => void
 
 	// Hide functions
 	hideSettings: () => void
 	hideHistory: () => void
+	hideCiBoard: () => void
 	closeMcpView: () => void
 
 	// Event callbacks
@@ -104,6 +107,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	const [settingsTargetSection, setSettingsTargetSection] = useState<string | undefined>(undefined)
 	const [settingsInitialModelTab, setSettingsInitialModelTab] = useState<"recommended" | "free" | undefined>(undefined)
 	const [showHistory, setShowHistory] = useState(false)
+	const [showCiBoard, setShowCiBoard] = useState(false)
 
 	// Helper for MCP view
 	const closeMcpView = useCallback(() => {
@@ -118,12 +122,14 @@ export const ExtensionStateContextProvider: React.FC<{
 		setSettingsInitialModelTab(undefined)
 	}, [])
 	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
+	const hideCiBoard = useCallback(() => setShowCiBoard(false), [])
 
 	// Navigation functions
 	const navigateToMcp = useCallback(
 		(tab?: McpViewTab) => {
 			setShowSettings(false)
 			setShowHistory(false)
+			setShowCiBoard(false)
 			setMcpTab(tab)
 			setShowMcp(true)
 		},
@@ -133,6 +139,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	const navigateToSettings = useCallback(
 		(targetSection?: string) => {
 			setShowHistory(false)
+			setShowCiBoard(false)
 			closeMcpView()
 			setSettingsTargetSection(targetSection)
 			setSettingsInitialModelTab(undefined)
@@ -144,6 +151,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	const navigateToSettingsModelPicker = useCallback(
 		(opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => {
 			setShowHistory(false)
+			setShowCiBoard(false)
 			closeMcpView()
 			setSettingsTargetSection(opts.targetSection)
 			setSettingsInitialModelTab(opts.initialModelTab)
@@ -155,13 +163,22 @@ export const ExtensionStateContextProvider: React.FC<{
 	const navigateToHistory = useCallback(() => {
 		setShowSettings(false)
 		closeMcpView()
+		setShowCiBoard(false)
 		setShowHistory(true)
 	}, [setShowSettings, closeMcpView, setShowHistory])
+
+	const navigateToCiBoard = useCallback(() => {
+		setShowSettings(false)
+		closeMcpView()
+		setShowHistory(false)
+		setShowCiBoard(true)
+	}, [closeMcpView])
 
 	const navigateToChat = useCallback(() => {
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
+		setShowCiBoard(false)
 	}, [setShowSettings, closeMcpView, setShowHistory])
 
 	const [state, setState] = useState<ExtensionState>({
@@ -285,6 +302,7 @@ export const ExtensionStateContextProvider: React.FC<{
 
 	const mcpButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const historyButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
+	const ciBoardButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const chatButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const settingsButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const partialMessageUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -400,6 +418,17 @@ export const ExtensionStateContextProvider: React.FC<{
 				onComplete: () => {
 					console.log("History button clicked subscription completed")
 				},
+			},
+		)
+
+		ciBoardButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToCiBoardButtonClicked(
+			{},
+			{
+				onResponse: () => navigateToCiBoard(),
+				onError: (error: any) => {
+					console.error("Error in CI board button clicked subscription:", error)
+				},
+				onComplete: () => {},
 			},
 		)
 
@@ -531,6 +560,10 @@ export const ExtensionStateContextProvider: React.FC<{
 				historyButtonClickedSubscriptionRef.current()
 				historyButtonClickedSubscriptionRef.current = null
 			}
+			if (ciBoardButtonClickedSubscriptionRef.current) {
+				ciBoardButtonClickedSubscriptionRef.current()
+				ciBoardButtonClickedSubscriptionRef.current = null
+			}
 			if (chatButtonUnsubscribeRef.current) {
 				chatButtonUnsubscribeRef.current()
 				chatButtonUnsubscribeRef.current = null
@@ -573,6 +606,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		settingsTargetSection,
 		settingsInitialModelTab,
 		showHistory,
+		showCiBoard,
 		globalClineRulesToggles: state.globalClineRulesToggles || {},
 		localClineRulesToggles: state.localClineRulesToggles || {},
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
@@ -588,11 +622,13 @@ export const ExtensionStateContextProvider: React.FC<{
 		navigateToSettings,
 		navigateToSettingsModelPicker,
 		navigateToHistory,
+		navigateToCiBoard,
 		navigateToChat,
 
 		// Hide functions
 		hideSettings,
 		hideHistory,
+		hideCiBoard,
 		setShowWelcome,
 		startProviderModelsRequest,
 		applyProviderModelsResponse,

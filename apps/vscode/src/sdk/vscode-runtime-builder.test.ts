@@ -1,7 +1,7 @@
 import type { AgentTool } from "@plinycode/shared"
 import sinon from "sinon"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { registerBuiltinMcpSource } from "@/services/devops-mcp/builtin-mcp-registry"
+import { registerBuiltinMcpSource, withDefaultArgument } from "@/services/devops-mcp/builtin-mcp-registry"
 
 // The unit-test stand-in for the engine has no MCP tool factory; this one names
 // tools the way the real one does.
@@ -83,5 +83,37 @@ describe("createVscodeExtraTools with a built-in server", () => {
 		const extraTools = registerDevOps(false)
 		expect(await names("/github/repo")).toEqual(["wait", "update_todo_list"])
 		expect(extraTools).not.toHaveBeenCalled()
+	})
+
+	it("uses the provider the server gives for the session's folder", async () => {
+		const providerFor = vi.fn((_cwd: string) => ({
+			listTools: async () => [{ name: "for_cwd", inputSchema: {} }],
+			callTool: async () => ({}),
+		}))
+		unregister = registerBuiltinMcpSource({
+			serverName: "plinycode-devops",
+			timeoutMs: 1000,
+			provider: { listTools: async () => [{ name: "default", inputSchema: {} }], callTool: async () => ({}) },
+			isRunning: () => true,
+			toolNames: () => ["for_cwd"],
+			providerFor,
+		})
+		expect((await names("/github/wt"))[0]).toBe("plinycode-devops__for_cwd")
+		expect(providerFor).toHaveBeenCalledWith("/github/wt")
+	})
+})
+
+describe("withDefaultArgument", () => {
+	it("fills the argument only into calls that do not set it", async () => {
+		const callTool = vi.fn(async (_request: { arguments?: Record<string, unknown> }) => ({}))
+		const provider = withDefaultArgument({ listTools: async () => [], callTool } as never, "workspace", "/wt")
+		await provider.callTool({ serverName: "s", toolName: "repo_context", arguments: { pr_id: 3 } })
+		await provider.callTool({ serverName: "s", toolName: "repo_context" })
+		await provider.callTool({ serverName: "s", toolName: "repo_context", arguments: { workspace: "/other" } })
+		expect(callTool.mock.calls.map(([request]) => request.arguments)).toEqual([
+			{ pr_id: 3, workspace: "/wt" },
+			{ workspace: "/wt" },
+			{ workspace: "/other" },
+		])
 	})
 })
