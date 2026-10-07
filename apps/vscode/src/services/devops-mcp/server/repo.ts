@@ -48,6 +48,19 @@ export function remoteKey(remote: Remote): string {
 	return `${remote.kind}|${remote.host}|${remoteSlug(remote)}`
 }
 
+/**
+ * Whether two remotes name the same repository. Hosts and Azure DevOps paths
+ * are case-insensitive, and an Azure DevOps Server can answer to several host
+ * names (e.g. an old one in a clone's git remote and a new one in a pasted
+ * link), so on-premises remotes match on collection, project and repository.
+ */
+export function sameRepository(a: Remote, b: Remote): boolean {
+	if (a.kind === "ado" && b.kind === "ado" && a.collection && b.collection) {
+		return remoteSlug(a).toLowerCase() === remoteSlug(b).toLowerCase()
+	}
+	return remoteKey(a).toLowerCase() === remoteKey(b).toLowerCase()
+}
+
 const stripGit = (name: string) => (name.endsWith(".git") ? name.slice(0, -4) : name)
 
 /** Returns [scheme, host, port, path] for https://, ssh:// and scp-style (git@host:path) URLs. */

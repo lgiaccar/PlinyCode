@@ -141,7 +141,11 @@ GitHub Enterprise Server hosts use the editor's `github-enterprise` sign-in, and
 `DEVOPS_MCP_PROVIDER=github` because the host name alone doesn't identify the API. Azure DevOps Server
 (on-premises / TFS) is auto-detected from a `_git` path segment on any host that isn't `dev.azure.com` or
 `*.visualstudio.com`, so it needs no `DEVOPS_MCP_PROVIDER` setting; sign in with `AZURE_DEVOPS_PAT` (on-premises
-servers are usually PAT-only, not Azure AD).
+servers are usually PAT-only, not Azure AD). The editor only sees an environment variable that was set before it
+started, so restart it (every window) after setting the PAT. A server that was renamed and redirects its old host
+name to the new one (a clone's remote still says `tfs.ansys.com`, the server now answers as
+`ado.internal.synopsys.com`) keeps working: the credentials follow a redirect that changes only the host. On such
+servers the agent learns a PR build's commit from the merge commit it built, since they don't report it.
 
 ## Settings
 

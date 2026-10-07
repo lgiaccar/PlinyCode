@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test"
 import { DevOpsError } from "../errors"
 import { AzureDevOpsProvider } from "../providers/azdo"
 import { GitHubProvider } from "../providers/github"
-import { checkBody, type PullRequest } from "../providers/types"
-import { parseRemote } from "../repo"
+import { checkBody, type Fetch, Http, type PullRequest } from "../providers/types"
+import { parseRemote, sameRepository } from "../repo"
 import { FakeApi, staticAuth } from "./fake-api"
 
 const GH = "/repos/octo/hello"
@@ -509,5 +509,95 @@ describe("CI board queries", () => {
 		})
 		const [run] = await azdo(api).listRuns("feature", undefined, 5)
 		expect([run.name, run.pipeline, run.pipelineId]).toEqual(["GPUSurfer-win_cpu #20261007.3", "GPUSurfer-win_cpu", 16659])
+	})
+
+	it("Azure DevOps Server: finds a PR build's source commit from the merge commit it built", async () => {
+		// On-premises servers leave `pr.sourceSha` out of the trigger info (as ado.internal.synopsys.com does).
+		const prBuild = (id: number, name: string) => ({
+			id,
+			definition: { name },
+			status: "completed",
+			result: "failed",
+			sourceBranch: "refs/pull/42/merge",
+			sourceVersion: "merge1",
+			triggerInfo: { "pr.number": "42", "pr.isFork": "False" },
+		})
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/build/builds`, { value: [prBuild(1, "win_cpu"), prBuild(2, "win_cuda")] })
+			.on("GET", `${PROJ}/git/repositories/r-1/commits/merge1`, { parents: ["stage-head", "pr-head"] })
+		const provider = azdo(api)
+		const runs = await provider.listRuns(undefined, { id: 42, headSha: "pr-head" } as PullRequest, 10)
+		expect(runs.map((r) => [r.commit, r.headCommit])).toEqual([
+			["merge1", "pr-head"],
+			["merge1", "pr-head"],
+		])
+		await provider.listRuns(undefined, { id: 42, headSha: "pr-head" } as PullRequest, 10)
+		// One lookup per merge commit, ever.
+		expect(api.requests.filter((r) => r.url.pathname.endsWith("/commits/merge1"))).toHaveLength(1)
+	})
+})
+
+describe("Http redirects", () => {
+	/** A server whose old host redirects to its new one, and a log URL that redirects to signed storage. */
+	function hosts() {
+		const seen: { url: string; auth?: string }[] = []
+		const fetch: Fetch = async (input, init) => {
+			const url = new URL(String(input))
+			const auth = (init?.headers as Record<string, string>).Authorization
+			seen.push({ url: url.href, auth })
+			if (url.host === "tfs.old.example.com") {
+				return new Response(null, {
+					status: 302,
+					headers: { location: url.href.replace(url.host, "ado.new.example.com") },
+				})
+			}
+			if (url.pathname.endsWith("/logs/7")) {
+				return new Response(null, { status: 302, headers: { location: "https://blob.example.net/log?sig=abc" } })
+			}
+			if (url.host === "ado.new.example.com" && !auth) {
+				return new Response(JSON.stringify({ message: "TF400813: anonymous" }), { status: 401 })
+			}
+			return new Response(JSON.stringify({ ok: true, host: url.host }), { headers: { "content-type": "application/json" } })
+		}
+		return { seen, http: new Http(staticAuth("Basic pat"), { Accept: "application/json" }, fetch) }
+	}
+
+	it("keeps the credentials when a renamed server redirects to its new host, and goes there directly next time", async () => {
+		const { seen, http } = hosts()
+		expect(
+			await http.json<{ ok: boolean; host: string }>("GET", "https://tfs.old.example.com/tfs/C/P/_apis/git/repositories/R"),
+		).toEqual({
+			ok: true,
+			host: "ado.new.example.com",
+		})
+		await http.json("GET", "https://tfs.old.example.com/tfs/C/P/_apis/build/builds")
+		expect(seen.map((s): [string, string | undefined] => [new URL(s.url).host, s.auth])).toEqual([
+			["tfs.old.example.com", "Basic pat"],
+			["ado.new.example.com", "Basic pat"],
+			["ado.new.example.com", "Basic pat"],
+		])
+	})
+
+	it("does not send the credentials along a redirect to anywhere else", async () => {
+		const { seen, http } = hosts()
+		await http.request("GET", "https://ado.new.example.com/tfs/C/P/_apis/build/builds/1/logs/7", { accept: "text/plain" })
+		expect(seen.map((s): [string, string | undefined] => [new URL(s.url).host, s.auth])).toEqual([
+			["ado.new.example.com", "Basic pat"],
+			["blob.example.net", undefined],
+		])
+	})
+})
+
+describe("sameRepository", () => {
+	it("matches an Azure DevOps Server repository across its host names, and nothing else", () => {
+		const clone = parseRemote("ssh://tfs.ansys.com:22/tfs/ANSYS_Development/Meshing/_git/GPUSurfer")
+		const link = parseRemote("https://ado.internal.synopsys.com/tfs/ANSYS_Development/Meshing/_git/gpusurfer", "ado")
+		expect(sameRepository(clone, link)).toBe(true)
+		expect(
+			sameRepository(clone, parseRemote("https://ado.internal.synopsys.com/tfs/ANSYS_Development/Meshing/_git/Other")),
+		).toBe(false)
+		const gh = parseRemote("git@github.com:Octo/Hello.git")
+		expect(sameRepository(gh, parseRemote("https://github.com/octo/hello"))).toBe(true)
+		expect(sameRepository(gh, parseRemote("https://git.example.com/octo/hello", "github"))).toBe(false)
 	})
 })

@@ -10,7 +10,7 @@ import { CiBoard } from "../ci-board/ci-board"
 import { CiBoardStore } from "../ci-board/ci-board-store"
 import type { CiTransition } from "../ci-board/types"
 import type { ProviderCache } from "../ci-watch/ci-watch-source"
-import { loadContext, type Remote, remoteKey } from "../server/repo"
+import { loadContext, type Remote, sameRepository } from "../server/repo"
 
 const SETTING_POLL = "plinycode.ci.board.pollSeconds"
 const SETTING_HIDDEN_POLL = "plinycode.ci.board.hiddenPollSeconds"
@@ -86,12 +86,10 @@ export class CiBoardHost implements vscode.Disposable {
 
 	/** The open folder whose `origin` is `remote`. */
 	private async resolveCheckout(remote: Remote): Promise<string | undefined> {
-		// Hosts and Azure DevOps paths are case-insensitive, so a pasted link may differ in case from the git remote.
-		const wanted = remoteKey(remote).toLowerCase()
 		for (const folder of (await this.workspacePaths()).paths) {
 			try {
 				const ctx = await loadContext(folder)
-				if (remoteKey(ctx.remote).toLowerCase() === wanted) {
+				if (sameRepository(ctx.remote, remote)) {
 					return ctx.root
 				}
 			} catch {

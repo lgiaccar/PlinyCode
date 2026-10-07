@@ -5,8 +5,8 @@
 import { randomUUID } from "node:crypto"
 import { DevOpsError } from "../server/errors"
 import type { Provider } from "../server/providers/types"
-import { loadContext, parseRemote, type Remote, type RepoContext } from "../server/repo"
-import { CiBoardPoller, type CiBoardPollerOptions, type CiBoardTimings, targetRemoteKey } from "./ci-board-poller"
+import { loadContext, parseRemote, type Remote, type RepoContext, sameRepository } from "../server/repo"
+import { CiBoardPoller, type CiBoardPollerOptions, type CiBoardTimings } from "./ci-board-poller"
 import type { CiBoardStore } from "./ci-board-store"
 import { composeCiPrompt, loadPromptText } from "./ci-prompt"
 import { classifyTargetInput, parsePrLink } from "./pr-link"
@@ -315,7 +315,7 @@ function sameSelection(a: CiTarget, b: CiTarget): boolean {
 	}
 	let sameRemote: boolean
 	try {
-		sameRemote = targetRemoteKey(a).toLowerCase() === targetRemoteKey(b).toLowerCase()
+		sameRemote = sameRepository(remoteOf(a), remoteOf(b))
 	} catch {
 		sameRemote = a.remoteUrl === b.remoteUrl
 	}
