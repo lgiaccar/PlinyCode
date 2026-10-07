@@ -77,7 +77,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** Identifies a target's selection; changing it starts the target over. */
 const selection = (t: CiTarget) => [t.kind, t.remoteUrl, t.provider, t.branch, t.prId, t.prFilter].join("|")
 
-export function targetRemoteKey(target: CiTarget): string {
+function targetRemoteKey(target: CiTarget): string {
 	return remoteKey(parseRemote(target.remoteUrl, target.provider))
 }
 

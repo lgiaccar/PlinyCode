@@ -74,7 +74,8 @@ icon while `watch_ci` is watching it). Edits, commands and pushes follow your us
 
 An action cannot run on a pull request from a fork (its branch cannot be pushed to from here), on a merged or
 closed pull request, or when no folder in the window is a checkout of the repository. The Run button's tooltip
-says which.
+says which. A checkout matches whatever case its remote URL uses, and for Azure DevOps Server whatever host name
+(old or new) it uses, as long as the collection, project and repository are the same.
 
 ## Worktrees
 

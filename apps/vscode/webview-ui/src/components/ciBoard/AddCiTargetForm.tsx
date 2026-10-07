@@ -1,5 +1,5 @@
 import { AddCiTargetRequest, type CiRepo } from "@shared/proto/cline/ci_board"
-import { EmptyRequest } from "@shared/proto/cline/common"
+import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CiBoardServiceClient } from "@/services/grpc-client"
@@ -8,13 +8,17 @@ import { errorText } from "./useCiBoard"
 
 const field = "bg-input-background text-input-foreground border border-input-border rounded px-1.5 py-1 text-xs"
 
-/** Adds a pull request link, a branch of a workspace repository, or a repository's open pull requests. */
-export const AddCiTargetForm = () => {
+/**
+ * Adds a pull request link, a branch of a workspace repository, or a repository's open pull requests.
+ * `existing` is what the board already shows: adding one of those again checks it now and says so.
+ */
+export const AddCiTargetForm = ({ existing = [] }: { existing?: { id: string; label: string }[] }) => {
 	const [repos, setRepos] = useState<CiRepo[]>([])
 	const [repoRoot, setRepoRoot] = useState("")
 	const [input, setInput] = useState("")
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState<string>()
+	const [notice, setNotice] = useState<string>()
 
 	useEffect(() => {
 		CiBoardServiceClient.listCiRepos(EmptyRequest.create({}))
@@ -31,8 +35,14 @@ export const AddCiTargetForm = () => {
 	const add = async (request: Partial<AddCiTargetRequest>) => {
 		setBusy(true)
 		setError(undefined)
+		setNotice(undefined)
 		try {
-			await CiBoardServiceClient.addCiTarget(AddCiTargetRequest.create(request))
+			const { value: id } = await CiBoardServiceClient.addCiTarget(AddCiTargetRequest.create(request))
+			const already = existing.find((t) => t.id === id)
+			if (already) {
+				setNotice(`Already on the board: ${already.label}. Checking it again now.`)
+				await CiBoardServiceClient.refreshCiBoard(StringRequest.create({ value: id }))
+			}
 			setInput("")
 		} catch (e) {
 			setError(errorText(e))
@@ -97,6 +107,11 @@ export const AddCiTargetForm = () => {
 				<div className="text-xs text-description">
 					No folder in this window is a git repository on GitHub or Azure DevOps; you can still watch pull request
 					links.
+				</div>
+			)}
+			{notice && (
+				<div className="text-xs text-description break-words" data-testid="add-ci-target-notice">
+					{notice}
 				</div>
 			)}
 			{error && <div className="text-xs text-error break-words">{error}</div>}

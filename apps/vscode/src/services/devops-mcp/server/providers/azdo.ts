@@ -75,6 +75,7 @@ export class AzureDevOpsProvider implements Provider {
 	private readonly http: Http
 	private repoInfo?: Promise<any>
 	private userId?: Promise<string>
+	private readonly mergeSources = new Map<string, Promise<string | undefined>>()
 
 	constructor(
 		private readonly remote: Remote,
@@ -235,7 +236,33 @@ export class AzureDevOpsProvider implements Provider {
 			query.branchName = `refs/heads/${branch}`
 		}
 		const data = await this.api("GET", "build/builds", query)
-		return (data.value ?? []).map((b: any) => this.run(b))
+		const runs: PipelineRun[] = (data.value ?? []).map((b: any) => this.run(b))
+		// Azure DevOps Server (on-premises) leaves `pr.sourceSha` out of a PR build's trigger info, so only the
+		// merge commit it built is known. That commit's second parent is the PR's source commit.
+		await Promise.all(
+			runs
+				.filter((r) => !r.headCommit && r.commit && r.branch.startsWith("refs/pull/"))
+				.map(async (r) => {
+					r.headCommit = await this.mergeSource(repo.id, r.commit as string)
+				}),
+		)
+		return runs
+	}
+
+	/** The source (second parent) of a PR merge commit; commits never change, so answers are kept. */
+	private mergeSource(repoId: string, sha: string): Promise<string | undefined> {
+		let source = this.mergeSources.get(sha)
+		if (!source) {
+			source = this.api("GET", `git/repositories/${repoId}/commits/${sha}`).then(
+				(c) => (Array.isArray(c?.parents) && c.parents.length === 2 ? String(c.parents[1]) : undefined),
+				() => {
+					this.mergeSources.delete(sha)
+					return undefined
+				},
+			)
+			this.mergeSources.set(sha, source)
+		}
+		return source
 	}
 
 	async runReport(runId: number, logLines: number): Promise<RunReport> {

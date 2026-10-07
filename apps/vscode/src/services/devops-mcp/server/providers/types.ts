@@ -133,9 +133,13 @@ interface CachedResponse {
 /** JSON bodies kept for revalidation; the least recently stored goes first. */
 const ETAG_CACHE_SIZE = 500
 
+const MAX_REDIRECTS = 5
+
 /** A thin fetch wrapper: adds auth, retries once on 401 and turns API errors into `DevOpsError`s. */
 export class Http {
 	private readonly cache?: Map<string, CachedResponse>
+	/** Hosts that redirect every call to another host, learned from responses. */
+	private readonly movedOrigins = new Map<string, string>()
 	/** From the last response's `x-ratelimit-remaining` header (GitHub). */
 	rateLimitRemaining?: number
 
@@ -146,6 +150,49 @@ export class Http {
 		options: HttpOptions = {},
 	) {
 		this.cache = options.etags ? new Map() : undefined
+	}
+
+	/**
+	 * Follows redirects itself. `fetch` drops the Authorization header on a
+	 * redirect to another host, which turns a renamed server (an Azure DevOps
+	 * Server whose old host name redirects to its new one) into anonymous
+	 * requests. A redirect that only changes the host keeps the credentials and
+	 * is remembered, so later calls go straight to the new host; any other
+	 * redirect to another host (e.g. a signed log download) is followed without
+	 * them.
+	 */
+	private async send(target: URL, init: RequestInit & { headers: Record<string, string> }): Promise<Response> {
+		let url = this.moved(target)
+		let headers = init.headers
+		for (let hops = 0; ; hops++) {
+			const response = await this.fetchImpl(url, { ...init, headers, redirect: "manual" })
+			const location = response.headers.get("location")
+			if (
+				response.status < 300 ||
+				response.status >= 400 ||
+				response.status === 304 ||
+				!location ||
+				hops >= MAX_REDIRECTS
+			) {
+				return response
+			}
+			const next = new URL(location, url)
+			if (next.origin !== url.origin) {
+				const sameResource = next.protocol === "https:" && next.pathname === url.pathname && next.search === url.search
+				if (sameResource) {
+					this.movedOrigins.set(url.origin, next.origin)
+				} else {
+					const { Authorization: _dropped, ...rest } = headers
+					headers = rest
+				}
+			}
+			url = next
+		}
+	}
+
+	private moved(url: URL): URL {
+		const origin = this.movedOrigins.get(url.origin)
+		return origin ? new URL(url.href.replace(url.origin, origin)) : url
 	}
 
 	async request(method: string, url: string, options: RequestOptions = {}): Promise<Response> {
@@ -173,7 +220,7 @@ export class Http {
 				headers["If-None-Match"] = cached.etag
 			}
 			try {
-				response = await this.fetchImpl(target, {
+				response = await this.send(target, {
 					method,
 					headers,
 					body: options.json === undefined ? undefined : JSON.stringify(options.json),

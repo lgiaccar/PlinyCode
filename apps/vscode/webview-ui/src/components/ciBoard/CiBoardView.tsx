@@ -37,7 +37,7 @@ const CiBoardView = ({ onDone }: { onDone: () => void }) => {
 					<div className="text-description text-sm">{board.unavailable}</div>
 				) : (
 					<>
-						<AddCiTargetForm />
+						<AddCiTargetForm existing={board.targets.map((t) => ({ id: t.id, label: t.label }))} />
 						{board.rateLimited && (
 							<div className="text-xs text-warning mb-2">
 								GitHub's rate limit is running low, so the board checks less often until it resets.
