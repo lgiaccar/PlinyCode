@@ -12,19 +12,18 @@ Each has a setting, on by default: `plinycode.context.gitSnapshot` and `plinycod
 The `<env>` block of the system prompt gains a fifth entry after the working directory:
 
 ```
-5. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state.)
+5. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state, and `git --no-pager log --oneline -n 20` when the history matters.)
    Current branch: feature/env
    Default branch: stage
    Status:
       M src/app.ts
      ?? notes.md
      ... and 3 more
-   Recent commits:
-     abc1234 Add the env block
-     def5678 Fix a typo
 ```
 
-It holds the current branch (or the commit of a detached HEAD), the default branch, up to 20 `git status --porcelain` entries followed by a count of the rest, and the hash and subject of the last 5 commits. A workspace that is not a git repository gets no entry, and the block is the same as before.
+It holds the current branch (or the commit of a detached HEAD), the default branch, and up to 20 `git status --porcelain` entries followed by a count of the rest. A workspace that is not a git repository gets no entry, and the block is the same as before.
+
+The commit history is not in the prompt: the latest commits were rarely what a task needed, and the model runs `git log` when the history matters. Snapshots that older versions stored with a `recentCommits` list still load; the list is not shown.
 
 ### Gathering
 
@@ -34,10 +33,10 @@ It holds the current branch (or the commit of a detached HEAD), the default bran
 | --- | --- |
 | `git symbolic-ref --short -q HEAD` | the branch; exit code 1 means a detached HEAD |
 | `git for-each-ref` on `origin/HEAD`, `origin/main`, `origin/master`, `main`, `master` | the default branch: where `origin/HEAD` points, else the first of the others that exists |
-| `git log -5 --format=%h %s` | the latest commits |
+| `git rev-parse --short HEAD` | the commit of a detached HEAD |
 | `git status --porcelain` | the status |
 
-All four share one time limit of 2 seconds. A command still running then is stopped, and the snapshot holds what the others returned: in a repository where `git status` is slow, the entry shows the branch and the commits and says that the status did not finish in time. When no command shows that the folder is a repository (not a repository, git not installed, nothing answered in time), there is no snapshot and nothing is reported.
+All four share one time limit of 2 seconds. A command still running then is stopped, and the snapshot holds what the others returned: in a repository where `git status` is slow, the entry shows the branch and says that the status did not finish in time. When no command shows that the folder is a repository (not a repository, git not installed, nothing answered in time), there is no snapshot and nothing is reported.
 
 Git runs without a shell, with stdin closed, `--no-pager`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0` and `windowsHide`, so it cannot wait for a pager, a credential prompt or the index lock. Each line is stripped of control characters and cut to a maximum length before it goes in the prompt.
 

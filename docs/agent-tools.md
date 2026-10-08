@@ -65,6 +65,10 @@ run in a PlinyCode terminal, and the output is read through shell integration
 
 The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts`) keeps every open tool by call id for this, so each one finishes into its own row.
 
+## Memory and earlier conversations (`save_memory`, `search_conversations`, `read_conversation`)
+
+Extension tools described in [memory.md](memory.md). `save_memory` adds one entry to the repository's or the user's memory and is approved like a file edit. `search_conversations` and `read_conversation` search and read earlier conversations; they are approved like file reads and run concurrently.
+
 ## Task list (`update_todo_list`)
 
 An extension tool (`apps/vscode/src/sdk/vscode-todo-tool.ts`). The model sends the whole list each time, each task `pending`, `in_progress` or `completed`; the tool answers with the count and what is in progress or next. The chat shows the list after each update (`TodoListRow` in the webview, from a `task_progress` message).

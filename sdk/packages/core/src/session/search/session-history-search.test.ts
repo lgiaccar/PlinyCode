@@ -76,6 +76,37 @@ describe("SessionHistorySearchService", () => {
 		await service.dispose();
 	});
 
+	it("leaves side questions out of the index and keeps message positions", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "cline-session-search-"));
+		tempDirs.push(dir);
+		const messages = [
+			{ role: "user" as const, content: "Fix the parser" },
+			{
+				role: "user" as const,
+				content: "Off the record: what is a quokka?",
+				metadata: { offTheRecord: true },
+			},
+			{ role: "assistant" as const, content: "A quokka is a marsupial." },
+			{ role: "user" as const, content: "Back to the parser" },
+			{
+				role: "assistant" as const,
+				content: "The parser fix uses a wombat cache.",
+			},
+		];
+		const service = new SessionHistorySearchService(
+			{
+				listSessions: async () => [session()],
+				readSessionMessages: async () => messages,
+			},
+			{ dbPath: join(dir, "search.db") },
+		);
+
+		await service.refreshNow();
+		expect(service.search({ query: "quokka" })).toEqual([]);
+		expect(service.search({ query: "wombat" })[0]?.ordinal).toBe(4);
+		await service.dispose();
+	});
+
 	it("weights titles above paths and returns one hit per session", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "cline-session-search-"));
 		tempDirs.push(dir);

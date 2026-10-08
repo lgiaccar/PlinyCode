@@ -266,6 +266,7 @@ export type ClineSay =
 	| "subagent_usage"
 	| "conditional_rules_applied"
 	| "compaction" // context compaction progress/result divider
+	| "memory_proposal" // memories offered for saving (JSON MemoryProposal, @shared/memory-proposal)
 
 export interface ClineSayTool {
 	tool:
@@ -281,6 +282,9 @@ export interface ClineSayTool {
 		| "webSearch"
 		| "summarizeTask"
 		| "useSkill"
+		| "saveMemory"
+		| "searchConversations"
+		| "readConversation"
 	path?: string
 	diff?: string
 	content?: string

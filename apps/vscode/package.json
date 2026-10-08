@@ -2,7 +2,7 @@
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
-	"version": "0.2.0-test.1",
+	"version": "0.2.0-test.2",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.101.0"
@@ -213,6 +213,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.openMemory",
+				"title": "Open Memory",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.abortGitCommitMessage",
 				"title": "Generate Commit Message with PlinyCode - Stop",
 				"category": "PlinyCode",
@@ -368,7 +373,7 @@
 				"plinycode.context.gitSnapshot": {
 					"type": "boolean",
 					"default": true,
-					"description": "Tell the model the state of the git repository when a conversation starts: the current and default branch, a short status (up to 20 entries) and the last 5 commits. The snapshot is taken once per conversation and is not updated afterwards."
+					"description": "Tell the model the state of the git repository when a conversation starts: the current and default branch and a short status (up to 20 entries). The snapshot is taken once per conversation and is not updated afterwards; the model runs `git log` when it needs the history."
 				},
 				"plinycode.advisor.maxCallsPerConversation": {
 					"type": "integer",
@@ -466,6 +471,30 @@
 					"type": "boolean",
 					"default": true,
 					"description": "After PlinyCode edits a file, tell the model which new errors the editor reports for that file, so it can fix them right away. An edit waits up to 3 seconds for the language server; when PlinyCode edits a file that is not open in a tab, as with Background Edit, the file is opened in a background tab while it is checked."
+				},
+				"plinycode.memory.maxTokens": {
+					"type": "integer",
+					"default": 4000,
+					"minimum": 0,
+					"markdownDescription": "How many tokens of memory go into every conversation's system prompt: the repository's memory and your own (which gets at most a quarter of the budget). Entries are kept from the top of each file, where the most important ones are, so a smaller budget drops the least important first. `0` turns memory off. Run **PlinyCode: Open Memory** to edit the files."
+				},
+				"plinycode.memory.distill": {
+					"type": "string",
+					"enum": [
+						"offer",
+						"off"
+					],
+					"enumDescriptions": [
+						"After an act-mode run that edited files, a free model proposes memories worth keeping; nothing is saved until you choose.",
+						"Only propose memories when you type /distill."
+					],
+					"default": "offer",
+					"description": "Whether PlinyCode offers memories to save at the end of a run."
+				},
+				"plinycode.memory.conversationSearch": {
+					"type": "boolean",
+					"default": true,
+					"description": "Let the model search and read your earlier conversations (the search_conversations and read_conversation tools). The search index is built on first use and kept on this machine."
 				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",

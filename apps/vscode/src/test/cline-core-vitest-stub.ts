@@ -148,7 +148,9 @@ export { projectSessionMessagesForDisplay } from "../../../../sdk/packages/core/
 export {
 	dropOffTheRecordTurns,
 	isOffTheRecordMessage,
+	isOffTheRecordTurnActive,
 	OFF_THE_RECORD_METADATA_KEY,
+	offTheRecordMessageIndices,
 } from "../../../../sdk/packages/core/src/session/off-the-record"
 
 // Real file-read executor (dependency-light: node:fs/node:path + @plinycode/shared/storage)

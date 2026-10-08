@@ -24,6 +24,11 @@ interface BuildApiHandlerOptions {
 	 * doesn't receive a reasoning config at all.
 	 */
 	disableReasoning?: boolean
+	/**
+	 * A model to call instead of the mode's selected one, such as the free
+	 * utility model memory distillation uses (memory/memory-distiller.ts).
+	 */
+	modelId?: string
 }
 
 /**
@@ -52,7 +57,7 @@ export function buildSdkProviderConfig(
 	// Standalone callers (commit message generation) talk to the gateway
 	// directly, so the virtual FreeAuto id — which only the agent loop knows how
 	// to route — must be mapped to a concrete model here.
-	const modelId = resolvePlinyConcreteModelId(resolveModelId(mode, configuration))
+	const modelId = resolvePlinyConcreteModelId(options?.modelId?.trim() || resolveModelId(mode, configuration))
 	const baseUrl = resolveBaseUrl(providerId)
 
 	const reasoningEffort = mode === "plan" ? configuration.planModeReasoningEffort : configuration.actModeReasoningEffort

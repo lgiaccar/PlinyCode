@@ -22,6 +22,8 @@ The rule is enforced in three places in the engine:
 
 A rejected call comes back to the model as a tool error (`skip`, not `stop`), and the run continues.
 
+One write is allowed: `save_memory`, which adds an entry to the repository's or the user's memory outside the workspace ([memory.md](memory.md)). It is not a file edit of the project, so `/remember` works in ask mode too. It follows the "Edit files" auto-approve toggle.
+
 The command blacklist is a list of common file-editing commands, not a shell interpreter, so it does not catch every possible write (for example a script that writes files). MCP tools are not covered by the guard either; they go through the normal approval.
 
 ## Model and routing

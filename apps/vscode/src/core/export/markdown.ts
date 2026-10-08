@@ -32,6 +32,7 @@ const INTERNAL_SAYS: ReadonlySet<string> = new Set([
 	"deleted_api_reqs",
 	"checkpoint_created",
 	"compaction",
+	"memory_proposal",
 	"subagent",
 	"use_subagents",
 	"subagent_usage",
@@ -142,6 +143,12 @@ function toolSummary(tool: ClineSayTool): string {
 			return `Searched the web for ${target}`
 		case "useSkill":
 			return `Used skill ${target}`
+		case "saveMemory":
+			return `Saved to ${tool.path === "user" ? "personal" : "repository"} memory: ${code(tool.content ?? "")}`
+		case "searchConversations":
+			return `Searched earlier conversations for ${target}`
+		case "readConversation":
+			return `Read earlier conversation ${target}`
 		case "summarizeTask":
 			return "Summarized the task"
 		default:

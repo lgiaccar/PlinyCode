@@ -32,6 +32,7 @@ const ClineCommands = {
 	CheckForUpdates: prefix + ".checkForUpdates",
 	ExportTaskToMarkdown: prefix + ".exportTaskToMarkdown",
 	ShowLastModelRequest: prefix + ".showLastModelRequest",
+	OpenMemory: prefix + ".openMemory",
 	AbortCommit: prefix + ".abortGitCommitMessage",
 	// Jupyter Notebook commands
 	JupyterGenerateCell: prefix + ".jupyterGenerateCell",

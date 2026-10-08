@@ -205,6 +205,7 @@ describe("buildClineSystemPrompt env block", () => {
 					defaultBranch: "main",
 					status: [" M src/app.ts", "?? notes.md"],
 					statusOmitted: 3,
+					// Stored by older versions; no longer shown.
 					recentCommits: ["abc1234 Add the env block", "def5678 Fix a typo"],
 				},
 			}),
@@ -217,16 +218,13 @@ describe("buildClineSystemPrompt env block", () => {
 				`2. Date: ${new Date().toLocaleDateString()}`,
 				"3. IDE: VS Code",
 				"4. Working Directory: /workspace/project",
-				"5. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state.)",
+				"5. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state, and `git --no-pager log --oneline -n 20` when the history matters.)",
 				"   Current branch: feature/env",
 				"   Default branch: main",
 				"   Status:",
 				"      M src/app.ts",
 				"     ?? notes.md",
 				"     ... and 3 more",
-				"   Recent commits:",
-				"     abc1234 Add the env block",
-				"     def5678 Fix a typo",
 				"</env>",
 			].join("\n"),
 		);
@@ -296,18 +294,18 @@ describe("buildClineSystemPrompt env block", () => {
 
 	it("inserts repository text literally", () => {
 		// "$&" and "$'" are replacement patterns for String.replace, and a
-		// commit subject may spell out one of the template's own placeholders.
+		// file name may spell out one of the template's own placeholders.
 		const prompt = buildClineSystemPrompt({
 			...BASE_OPTIONS,
 			mode: "plan",
 			rules: "# Custom Rules\n\nBe brief.",
 			gitSnapshot: {
 				branch: "main",
-				recentCommits: ["abc1234 Cost is $& and $' {{CLINE_RULES}}"],
+				status: ["?? Cost is $& and $' {{CLINE_RULES}}.md"],
 			},
 		});
 		expect(envBlock(prompt)).toContain(
-			"     abc1234 Cost is $& and $' {{CLINE_RULES}}",
+			"     ?? Cost is $& and $' {{CLINE_RULES}}.md",
 		);
 		expect(prompt.indexOf("Be brief.")).toBeGreaterThan(
 			prompt.indexOf("</env>"),

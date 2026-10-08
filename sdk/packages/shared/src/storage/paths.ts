@@ -228,6 +228,19 @@ export function resolveSessionDataDir(): string {
 	return join(resolveClineDataDir(), "sessions");
 }
 
+/**
+ * Where repo and user memory live: `user/MEMORY.md` for the user's own notes
+ * and `repos/<repo key>/` for each repository's. Outside every repository, so
+ * clones and worktrees of one repository share it and git never sees it.
+ */
+export function resolveMemoryDataDir(): string {
+	const explicitDir = process.env.CLINE_MEMORY_DATA_DIR?.trim();
+	if (explicitDir) {
+		return explicitDir;
+	}
+	return join(resolveClineDataDir(), "memory");
+}
+
 export function resolveTeamDataDir(): string {
 	const explicitDir = process.env.CLINE_TEAM_DATA_DIR?.trim();
 	if (explicitDir) {

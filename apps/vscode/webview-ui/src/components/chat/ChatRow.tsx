@@ -18,6 +18,7 @@ import { Mode } from "@shared/storage/types"
 import deepEqual from "fast-deep-equal"
 import {
 	BellIcon,
+	BrainIcon,
 	ChevronDownIcon,
 	ChevronRightIcon,
 	CircleXIcon,
@@ -61,6 +62,7 @@ import ErrorRow from "./ErrorRow"
 import { FeatureTip } from "./FeatureTip"
 import HookMessage from "./HookMessage"
 import { MarkdownRow } from "./MarkdownRow"
+import MemoryProposalRow from "./MemoryProposalRow"
 import NewTaskPreview from "./NewTaskPreview"
 import PlanCompletionOutputRow from "./PlanCompletionOutputRow"
 import QuoteButton from "./QuoteButton"
@@ -743,6 +745,43 @@ const ChatRowContent = memo(
 							</div>
 						</div>
 					)
+				case "saveMemory":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								<BrainIcon className="size-2" />
+								<span className="font-bold">
+									{message.type === "ask"
+										? `PlinyCode wants to save to ${tool.path === "user" ? "your" : "the repository's"} memory:`
+										: `PlinyCode saved to ${tool.path === "user" ? "your" : "the repository's"} memory:`}
+								</span>
+							</div>
+							<div className="bg-code border border-editor-group-border overflow-hidden rounded-xs select-text py-[9px] px-2.5">
+								<span className="ph-no-capture break-words">{tool.content}</span>
+							</div>
+						</div>
+					)
+				case "searchConversations":
+				case "readConversation":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								<SearchIcon className="size-2 rotate-90" />
+								<span className="font-bold">
+									{tool.tool === "searchConversations"
+										? message.type === "ask"
+											? "PlinyCode wants to search earlier conversations for:"
+											: "PlinyCode searched earlier conversations for:"
+										: message.type === "ask"
+											? "PlinyCode wants to read an earlier conversation:"
+											: "PlinyCode read an earlier conversation:"}
+								</span>
+							</div>
+							<div className="bg-code border border-editor-group-border overflow-hidden rounded-xs select-text py-[9px] px-2.5">
+								<span className="ph-no-capture whitespace-nowrap overflow-hidden text-ellipsis">{tool.path}</span>
+							</div>
+						</div>
+					)
 				default:
 					return <InvisibleSpacer />
 			}
@@ -1099,6 +1138,8 @@ const ChatRowContent = memo(
 						return <TodoListRow message={message} />
 					case "compaction":
 						return <CompactionRow message={message} />
+					case "memory_proposal":
+						return <MemoryProposalRow message={message} />
 					default:
 						return (
 							<div>

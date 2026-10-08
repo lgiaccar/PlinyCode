@@ -91,6 +91,24 @@ Below is the user's input when they indicated that they wanted to create a compr
 `
 
 /**
+ * `/remember <text>`: the text after the command follows these instructions.
+ * Saving goes through the save_memory tool (memory/memory-tools.ts), which
+ * works in every mode and places the entry by importance (docs/memory.md).
+ */
+const REMEMBER_INSTRUCTIONS = `<explicit_instructions type="remember">
+The user wants you to remember something for later conversations. Save it with the save_memory tool, then confirm in one short sentence what you saved and where.
+
+- Rewrite it as one clear, self-contained line that will still make sense in a conversation that has none of this context. If it holds several separate facts, save each one with its own call.
+- scope: "user" when it is a personal preference that applies to every repository (how they like to work, answer style, tools they use everywhere); otherwise "repo".
+- importance: "high" only when forgetting it would cause real mistakes; otherwise "normal".
+- If it needs more than one line, keep the line short and put the rest in details, with a topic name.
+- If nothing follows the command, save the most important thing learned in this conversation so far, and say what you chose.
+- Do not save secrets such as passwords, keys or tokens; tell the user instead.
+</explicit_instructions>
+
+What to remember:`
+
+/**
  * Appended after the discovered workflow/skill commands in
  * SdkController.resolveSlashCommands. Declared as kind "skill" so the
  * workflow enable/disable toggles never apply to them.
@@ -100,6 +118,12 @@ export const BUILTIN_SLASH_COMMANDS: AvailableRuntimeCommand[] = [
 		id: "builtin:deep-planning",
 		name: "deep-planning",
 		instructions: DEEP_PLANNING_INSTRUCTIONS,
+		kind: "skill",
+	},
+	{
+		id: "builtin:remember",
+		name: "remember",
+		instructions: REMEMBER_INSTRUCTIONS,
 		kind: "skill",
 	},
 ]

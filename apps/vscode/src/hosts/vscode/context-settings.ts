@@ -14,8 +14,8 @@ function readContextToggle(setting: string): boolean {
 }
 
 /**
- * `plinycode.context.gitSnapshot`: put the repository's branch, status and
- * latest commits, as they were when the conversation started, in the system
+ * `plinycode.context.gitSnapshot`: put the repository's branch and status,
+ * as they were when the conversation started, in the system
  * prompt. See sdk/context/conversation-git-snapshots.ts.
  */
 export function isGitSnapshotEnabled(): boolean {

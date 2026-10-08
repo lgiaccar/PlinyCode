@@ -194,12 +194,14 @@ export function createAskModeCommandGuardExtension(): AgentExtension {
 
 /**
  * Tools an off-the-record turn may not call even though they write no file:
- * the task list is shown to the user and kept across turns, and sub-agents
- * and teammates run outside this guard.
+ * the task list is shown to the user and kept across turns, memory is loaded
+ * into every later conversation, and sub-agents and teammates run outside
+ * this guard.
  */
 function isOffTheRecordBlockedTool(name: string): boolean {
 	return (
 		name === "update_todo_list" ||
+		name === "save_memory" ||
 		name === "spawn_agent" ||
 		name.startsWith("subagent_") ||
 		name.startsWith("team_")

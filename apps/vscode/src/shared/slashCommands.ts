@@ -37,6 +37,20 @@ export const BASE_SLASH_COMMANDS: SlashCommand[] = [
 		section: "default",
 		cliCompatible: true,
 	},
+	// Repo memory (docs/memory.md). /remember expands into instructions to call
+	// save_memory; /distill is intercepted by the webview and runs the distill RPC.
+	{
+		name: "remember",
+		description: "Save something to this repository's memory (or yours) for later conversations",
+		section: "default",
+		cliCompatible: false,
+	},
+	{
+		name: "distill",
+		description: "Propose memories worth keeping from this conversation",
+		section: "default",
+		cliCompatible: false,
+	},
 ]
 
 // VS Code-only slash commands

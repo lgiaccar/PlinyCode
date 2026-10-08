@@ -51,6 +51,7 @@ export {
 	resolveGlobalTaskSpecsDir,
 	resolveHooksConfigSearchPaths,
 	resolveMcpSettingsPath,
+	resolveMemoryDataDir,
 	resolvePluginConfigSearchPaths,
 	resolvePluginModuleEntries,
 	resolveProviderSettingsPath,

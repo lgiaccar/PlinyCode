@@ -652,6 +652,21 @@ export class SdkTaskHistory {
 		return (await this.getSdkRecord(taskId))?.metadata ?? undefined
 	}
 
+	/**
+	 * Engine session records, newest first, without reading their transcripts:
+	 * what the conversation search index lists (memory/conversation-search.ts).
+	 * Sub-agent sessions are left out.
+	 */
+	async listSessionRecords(limit: number): Promise<SessionHistoryRecord[]> {
+		const records = await this.withHistoryHost((host) => host.listHistory({ limit, hydrate: false }))
+		return records.filter((record) => record.isSubagent !== true)
+	}
+
+	/** A conversation's engine transcript, for the conversation search index and memory distillation. */
+	async readSessionMessages(sessionId: string): Promise<SdkMessage[]> {
+		return this.withHistoryHost((host) => host.readMessages(sessionId) as Promise<SdkMessage[]>)
+	}
+
 	async getClineMessages(taskId: string): Promise<ClineMessage[]> {
 		const sdkRecord = await this.getSdkRecord(taskId)
 		const legacyTask = this.findLegacyTask(taskId)

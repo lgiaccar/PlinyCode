@@ -584,6 +584,38 @@ ${ctx.cellJson || "{}"}
 		}),
 	)
 
+	// Repo memory (docs/memory.md): open the repository's MEMORY.md or the user's own.
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.OpenMemory, async () => {
+			const controller = (WebviewProvider.getVisibleInstance() ?? WebviewProvider.getInstance())?.controller
+			if (!controller) {
+				return
+			}
+			const picked = await vscode.window.showQuickPick(
+				[
+					{
+						label: "Repository memory",
+						detail: "Shared by every clone and worktree of this repository",
+						scope: "repo" as const,
+					},
+					{ label: "Your memory", detail: "Your own notes, loaded in every repository", scope: "user" as const },
+				],
+				{ placeHolder: "Which memory?" },
+			)
+			if (!picked) {
+				return
+			}
+			try {
+				const { file } = await controller.ensureMemoryFile(picked.scope)
+				await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(file))
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`Could not open the memory file: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+		}),
+	)
+
 	// Debugging aid: what the active conversation's model was last sent, after
 	// compaction, with every reminder and notice the chat does not show.
 	context.subscriptions.push(

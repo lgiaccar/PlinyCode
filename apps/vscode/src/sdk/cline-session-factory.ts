@@ -72,6 +72,12 @@ export interface SessionConfigInput {
 	 * context/conversation-git-snapshots.ts.
 	 */
 	gitSnapshot?: GitSnapshot
+	/**
+	 * The conversation's `# Memory` section, appended to the system prompt.
+	 * The same text on every build for a conversation; see
+	 * memory/conversation-memory-snapshots.ts.
+	 */
+	memorySection?: string
 }
 
 /** Active session state tracked by the factory */
@@ -516,6 +522,10 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 		}
 	} catch (error) {
 		Logger.warn("[SessionFactory] Failed to inject preferredLanguage instructions:", error)
+	}
+
+	if (input.memorySection) {
+		systemPrompt = `${systemPrompt}${input.memorySection}`
 	}
 
 	const stateManager = StateManager.get()
