@@ -56,6 +56,7 @@ import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { ExtensionRegistryInfo } from "./registry"
 import { configureInstructionSources } from "./sdk/instruction-sources"
+import { formatLastModelRequest } from "./sdk/last-model-request"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
@@ -580,6 +581,24 @@ ${ctx.cellJson || "{}"}
 					`Could not export the conversation: ${error instanceof Error ? error.message : String(error)}`,
 				)
 			}
+		}),
+	)
+
+	// Debugging aid: what the active conversation's model was last sent, after
+	// compaction, with every reminder and notice the chat does not show.
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.ShowLastModelRequest, async () => {
+			const controller = (WebviewProvider.getVisibleInstance() ?? WebviewProvider.getInstance())?.controller
+			const sessionId = controller?.task?.taskId
+			const json = sessionId ? formatLastModelRequest(sessionId) : undefined
+			if (!json) {
+				void vscode.window.showInformationMessage(
+					"PlinyCode has no model request to show: the active conversation has not sent one since the window opened.",
+				)
+				return
+			}
+			const document = await vscode.workspace.openTextDocument({ language: "json", content: json })
+			await vscode.window.showTextDocument(document, { preview: false })
 		}),
 	)
 

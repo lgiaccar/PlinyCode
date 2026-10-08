@@ -9,6 +9,9 @@ export function isCheckpointAnswerMessage(messages: ClineMessage[], index: numbe
 	if (message?.type !== "say" || message.say !== "user_feedback") {
 		return false
 	}
+	if (message.answersTool) {
+		return true
+	}
 
 	for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
 		const previous = messages[cursor]
@@ -28,6 +31,28 @@ export function isCheckpointAnswerMessage(messages: ClineMessage[], index: numbe
 
 function isCheckpointRunUserMessage(messages: ClineMessage[], index: number): boolean {
 	return isVisibleCheckpointUserMessage(messages[index]) && !isCheckpointAnswerMessage(messages, index)
+}
+
+/** What the conversation needs to know about a chat row the user edits. */
+export interface EditedRow {
+	text?: string
+	/** The row answered the agent's question or rejected a tool; the conversation holds it as a tool result. */
+	isAnswer: boolean
+	/** 1-based count of prompt rows up to and including this one; answer rows are not prompts. */
+	promptOrdinal: number
+	/** 1-based count of answer rows with the same text up to and including this one. */
+	answerOccurrence: number
+}
+
+export function describeEditedRow(messages: ClineMessage[], index: number): EditedRow {
+	const rows = messages.slice(0, index + 1).filter(isVisibleCheckpointUserMessage)
+	const text = messages[index]?.text?.trim()
+	return {
+		text,
+		isAnswer: messages[index]?.answersTool === true,
+		promptOrdinal: rows.filter((row) => !row.answersTool).length,
+		answerOccurrence: rows.filter((row) => row.answersTool && row.text?.trim() === text).length,
+	}
 }
 
 export function getCheckpointRunCountForMessage(messages: ClineMessage[], targetIndex: number): number | undefined {

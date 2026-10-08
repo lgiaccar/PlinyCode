@@ -31,6 +31,7 @@ const ClineCommands = {
 	OpenFreeAutoCallLog: prefix + ".openFreeAutoCallLog",
 	CheckForUpdates: prefix + ".checkForUpdates",
 	ExportTaskToMarkdown: prefix + ".exportTaskToMarkdown",
+	ShowLastModelRequest: prefix + ".showLastModelRequest",
 	AbortCommit: prefix + ".abortGitCommitMessage",
 	// Jupyter Notebook commands
 	JupyterGenerateCell: prefix + ".jupyterGenerateCell",

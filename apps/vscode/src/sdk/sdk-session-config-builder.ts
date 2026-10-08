@@ -8,6 +8,7 @@ import { buildSessionConfig, type SessionConfigInput } from "./cline-session-fac
 import type { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
+import { installLastRequestCapture } from "./last-model-request"
 import { installRouter, type RouterInstallDeps } from "./router/router-integration"
 
 interface SdkSessionConfigBuilderOptions {
@@ -133,6 +134,9 @@ export class SdkSessionConfigBuilder {
 			const getRunChanges = this.options.getRunChanges
 			installRouter(config, {
 				sessionId: this.options.getSessionId?.() || input.cwd,
+				// The id this config's session runs under, once it runs: the router's
+				// state must be found under it when the turn summary is emitted.
+				getSessionId: () => config.sessionId,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,
 				// Ask mode routes like plan mode: both read and reason, neither edits. So does a
 				// side question, which runs under ask mode's rules whatever the mode is: it gets
@@ -153,10 +157,13 @@ export class SdkSessionConfigBuilder {
 		if (this.options.advisor) {
 			installAdvisor(config, {
 				...this.options.advisor,
-				// The same key installRouter is given above.
-				routerSessionKey: this.options.getSessionId?.() || input.cwd,
+				// The same key installRouter uses above.
+				routerSessionKey: () => config.sessionId?.trim() || this.options.getSessionId?.() || input.cwd,
 			})
 		}
+
+		// Outermost, so it records the request every other wrapper passes on.
+		installLastRequestCapture(config)
 
 		return config
 	}

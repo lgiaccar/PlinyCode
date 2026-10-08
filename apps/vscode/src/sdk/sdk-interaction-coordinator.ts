@@ -265,6 +265,7 @@ export class SdkInteractionCoordinator {
 				images,
 				files,
 				partial: false,
+				answersTool: true,
 			}
 			this.options.messages.appendAndEmit([userMessage], {
 				type: "status",
@@ -304,6 +305,7 @@ export class SdkInteractionCoordinator {
 				say: "user_feedback",
 				text: responseText,
 				partial: false,
+				answersTool: true,
 			}
 			this.options.messages.appendAndEmit([userMessage], {
 				type: "status",

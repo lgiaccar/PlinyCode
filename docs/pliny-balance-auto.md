@@ -88,8 +88,8 @@ The file has the same shape as the FreeAuto one. The differences:
 
 ## Watching it work
 
-Chat rows read `BalanceAuto → **global.anthropic.claude-sonnet-5** (call 1 ·
-route: coding · classifier: code · ~12k tok)`; sub-agent rows are prefixed with
+Chat rows read `BalanceAuto → **Claude Sonnet 5** (call 1 · route: coding ·
+classifier: code · ~12k tok)`, naming each model by its catalog name; sub-agent rows are prefixed with
 `↳ sub-agent`. The end-of-turn summary lists the models used. Every attempt is
 appended to `pliny-free-auto-calls.jsonl` with `profile: "balance"`, so
 `scripts/summarize-free-auto-log.ts` compares it against the free profiles on

@@ -190,6 +190,25 @@ export function looksLikeLeakedReasoning(text: string): boolean {
 }
 
 /**
+ * Tool-call syntaxes models fall back to in plain text: Anthropic's XML (with
+ * or without its namespace prefix), Qwen and Hermes `<tool_call>` blocks, and
+ * Kimi's control tokens.
+ */
+const TEXT_TOOL_CALL =
+	/<([a-z]+:)?invoke\s+name\s*=|<([a-z]+:)?function_calls>|<tool_call>|<\|tool_calls?_(section_)?begin\|>|<function=[\w.-]+>/i
+const FENCED_BLOCK = /```[\s\S]*?(```|$)/g
+
+/**
+ * True when a reply contains a tool call written as text outside a code
+ * fence. The stream already turns well-formed ones into real calls
+ * (`text-tool-calls.ts` in the llms package); what reaches the guard could
+ * not be read, and nothing ran.
+ */
+export function looksLikeTextToolCall(text: string): boolean {
+	return TEXT_TOOL_CALL.test(text.replace(FENCED_BLOCK, ""))
+}
+
+/**
  * True when a long reply is mostly one short unit repeated — " .   .   .",
  * "]]]]" — or ends in the same sentence or paragraph over and over, which is a
  * broken generation, not an answer.

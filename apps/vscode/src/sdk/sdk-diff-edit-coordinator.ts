@@ -260,6 +260,11 @@ export class SdkDiffEditCoordinator {
 		}
 	}
 
+	/** Drops errors still to be reported for earlier edits; see `EditProblemsReporter.forget`. */
+	forgetEditProblems(): void {
+		this.problemsReporter?.forget()
+	}
+
 	/** Stops watching the editor's diagnostics. Called on controller dispose. */
 	dispose(): void {
 		this.problemsReporter?.dispose()

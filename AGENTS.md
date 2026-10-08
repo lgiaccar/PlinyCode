@@ -31,6 +31,7 @@ Design and operations notes are in `docs/`:
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.
 - [docs/side-questions.md](docs/side-questions.md): side questions, messages asked off the record: answered read-only and left out of later requests.
+- [docs/restart-from-here.md](docs/restart-from-here.md): editing an earlier message and restarting from it, how the chat row is mapped to the history the model sees, which checkpoint "Restart and revert files" uses, and the Show Last Model Request debug command.
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
 - [docs/agent-tools.md](docs/agent-tools.md): how the editing, search and file-finding tools behave, how `run_commands` handles long-running commands and narrow terminals, which tools run concurrently, and the `update_todo_list` task list.

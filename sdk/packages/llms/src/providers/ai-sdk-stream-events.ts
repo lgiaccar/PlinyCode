@@ -29,8 +29,8 @@ import {
 	isRetryableBeyondSdkRetries,
 } from "./error-classification";
 import { extractErrorMessage } from "./format";
-import { createLeakedToolCallFilter, displayToolName } from "./kimi-tool-calls";
-import { isKimiModel } from "./model-facts";
+import { displayToolName } from "./kimi-tool-calls";
+import { createTextToolCallFilter } from "./text-tool-calls";
 import type {
 	AiSdkStreamPart,
 	AiSdkStreamResult,
@@ -292,6 +292,13 @@ export async function* emitAiSdkEvents(
 	// fields it does not map, such as Anthropic `cache_creation_input_tokens`.
 	let finishStepRawUsage: unknown;
 	let streamAborted = false;
+	/**
+	 * A tool call whose arguments are still streaming. The AI SDK only reports
+	 * a call once it is complete, so a reply cut off here loses the call
+	 * without a trace; the error says so, and the retry knows to make the call
+	 * again rather than continue the text.
+	 */
+	let toolInputInProgress: string | undefined;
 	let sawVisibleContent = false;
 	const mediaBudget = createMediaBudgetState();
 	const rejectedMediaErrors: string[] = [];
@@ -308,13 +315,13 @@ export async function* emitAiSdkEvents(
 	// error parts are matched by ID because some providers omit the
 	// providerExecuted flag on the result half of the pair.
 	const observationalProviderToolCallIds = new Set<string>();
-	// Kimi's server sometimes leaves a tool call it could not parse in the
-	// reply text. The section is held back and, once the reply is complete,
-	// read as the tool calls it was meant to be.
-	const leakedToolCalls =
-		request.tools?.length && isKimiModel(request, context)
-			? createLeakedToolCallFilter(request.tools.map((tool) => tool.name))
-			: undefined;
+	// A tool call left in the reply text: Kimi's server could not parse it,
+	// or the model wrote one in a syntax from its training data (Anthropic or
+	// Qwen XML). The section is held back and, once the reply is complete,
+	// read as the tool calls it was meant to be (text-tool-calls.ts).
+	const leakedToolCalls = request.tools?.length
+		? createTextToolCallFilter(request.tools)
+		: undefined;
 
 	try {
 		if (stream.fullStream) {
@@ -394,7 +401,12 @@ export async function* emitAiSdkEvents(
 					continue;
 				}
 
+				if (part.type === "tool-input-start") {
+					toolInputInProgress = (part.toolName as string | undefined) ?? "tool";
+				}
+
 				if (part.type === "tool-call") {
+					toolInputInProgress = undefined;
 					const toolName =
 						(part.toolName as string | undefined) ??
 						(part.name as string | undefined) ??
@@ -677,11 +689,19 @@ export async function* emitAiSdkEvents(
 		streamError = capturedError?.current ?? captureStreamError(error);
 	}
 
+	if (streamError && toolInputInProgress) {
+		streamError = {
+			...streamError,
+			message: `${streamError.message} — cut off while writing a ${toolInputInProgress} call`,
+		};
+	}
+
 	if (leakedToolCalls) {
 		// A reply that failed or was cut short may hold half a call: show it
 		// as the text it arrived as.
 		const leaked = leakedToolCalls.finish({
 			recover: !streamError && !streamAborted,
+			hadToolCalls: sawToolCalls,
 		});
 		if (leaked.text) {
 			sawVisibleContent = true;
