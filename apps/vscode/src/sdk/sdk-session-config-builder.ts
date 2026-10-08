@@ -9,6 +9,8 @@ import type { ConversationGitSnapshots } from "./context/conversation-git-snapsh
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
 import { installLastRequestCapture } from "./last-model-request"
+import type { ConversationMemorySnapshots } from "./memory/conversation-memory-snapshots"
+import { installMemory, type MemoryInstallDeps } from "./memory/install-memory"
 import { installRouter, type RouterInstallDeps } from "./router/router-integration"
 
 interface SdkSessionConfigBuilderOptions {
@@ -56,6 +58,11 @@ interface SdkSessionConfigBuilderOptions {
 	 * with its task displayed.
 	 */
 	getConversationId?: () => string | undefined
+	/**
+	 * The memory section of the system prompt, read once per conversation like
+	 * the git snapshot, and the memory and conversation search tools.
+	 */
+	memory?: MemoryInstallDeps & { snapshots: Pick<ConversationMemorySnapshots, "prepare"> }
 	/** The advisor tool's settings, budget check and usage sink; the tool is installed when given. */
 	advisor?: Pick<AdvisorInstallDeps, "getSettings" | "checkBudget" | "onUsage">
 }
@@ -71,13 +78,22 @@ export class SdkSessionConfigBuilder {
 	constructor(private readonly options: SdkSessionConfigBuilderOptions) {}
 
 	async build(input: SessionConfigInput): Promise<Awaited<ReturnType<typeof buildSessionConfig>>> {
-		const git = await this.options.gitSnapshots?.prepare(this.options.getConversationId?.()?.trim() || undefined, input.cwd)
-		const config = await buildSessionConfig(git?.snapshot ? { ...input, gitSnapshot: git.snapshot } : input)
+		const conversationId = this.options.getConversationId?.()?.trim() || undefined
+		const [git, memory] = await Promise.all([
+			this.options.gitSnapshots?.prepare(conversationId, input.cwd),
+			this.options.memory?.snapshots.prepare(conversationId, input.cwd),
+		])
+		const config = await buildSessionConfig({
+			...input,
+			...(git?.snapshot ? { gitSnapshot: git.snapshot } : {}),
+			...(memory?.section ? { memorySection: memory.section } : {}),
+		})
 		// A session id is fixed up front so per-session emitters below can tell
 		// whether their session runs in the background. Callers that reuse an
 		// existing id overwrite config.sessionId; the emitters read it lazily.
 		config.sessionId = config.sessionId?.trim() || createSessionId()
 		git?.bindToSession(config.sessionId)
+		memory?.bindToSession(config.sessionId)
 		const isBackground = () => this.options.isBackgroundSession?.(config.sessionId) === true
 
 		const onMistakeLimit = this.options.onConsecutiveMistakeLimitReached
@@ -151,6 +167,10 @@ export class SdkSessionConfigBuilder {
 				// The id is read when the review runs: a new session's is only final once it has started.
 				...(getRunChanges ? { getRunChanges: () => getRunChanges(config.sessionId ?? "") } : {}),
 			})
+		}
+
+		if (this.options.memory) {
+			installMemory(config, input.cwd, this.options.memory)
 		}
 
 		// After the router, so the advisor's model factory wraps the router's.

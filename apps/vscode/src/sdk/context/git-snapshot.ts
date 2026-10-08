@@ -1,5 +1,6 @@
 // Gathers the git snapshot shown in the system prompt's <env> block: current
-// and default branch, a short status and the latest commits. Runs when a
+// and default branch and a short status. The commit history is left to the
+// model, which runs `git log` when it needs it. Runs when a
 // conversation starts (see conversation-git-snapshots.ts), so it must be quick
 // and must never hang: every git process shares one time limit, and whatever
 // has arrived by then is what the snapshot holds.
@@ -10,9 +11,7 @@ import type { GitSnapshot } from "@plinycode/shared"
 /** Time limit for the whole snapshot, not per command. */
 export const GIT_SNAPSHOT_TIMEOUT_MS = 2000
 export const GIT_SNAPSHOT_MAX_STATUS_ENTRIES = 20
-const MAX_COMMITS = 5
 const MAX_STATUS_LINE_LENGTH = 200
-const MAX_COMMIT_LINE_LENGTH = 120
 const MAX_REF_NAME_LENGTH = 200
 // `git status` in a tree with a huge number of changes; what is read past this is dropped.
 const MAX_STDOUT_CHARS = 4 * 1024 * 1024
@@ -153,17 +152,18 @@ export async function gatherGitSnapshot(cwd: string, options: GatherGitSnapshotO
 
 	try {
 		// In parallel: a slow `git status` in a big repository must not cost
-		// the branch and the commits their share of the time limit.
-		const [branchResult, refsResult, logResult, statusResult] = await Promise.all([
+		// the branch its share of the time limit.
+		const [branchResult, refsResult, headResult, statusResult] = await Promise.all([
 			// Exits 0 with the branch, 1 on a detached HEAD, 128 outside a repository.
 			exec("symbolic-ref", "--short", "-q", "HEAD"),
 			exec("for-each-ref", "--format=%(refname) %(symref)", ORIGIN_HEAD_REF, ...CONVENTIONAL_DEFAULT_REFS),
-			exec("log", `-${MAX_COMMITS}`, "--format=%h %s"),
+			// Exits 0 with HEAD's short hash, also in a repository that is not on a branch.
+			exec("rev-parse", "--short", "HEAD"),
 			exec("status", "--porcelain"),
 		])
 
 		const inRepository =
-			branchResult.exitCode === 0 || branchResult.exitCode === 1 || logResult.exitCode === 0 || statusResult.exitCode === 0
+			branchResult.exitCode === 0 || branchResult.exitCode === 1 || headResult.exitCode === 0 || statusResult.exitCode === 0
 		if (!inRepository) {
 			return undefined
 		}
@@ -174,19 +174,11 @@ export async function gatherGitSnapshot(cwd: string, options: GatherGitSnapshotO
 			snapshot.branch = branch
 		}
 
-		const commits =
-			logResult.exitCode === 0
-				? splitLines(logResult.stdout)
-						.slice(0, MAX_COMMITS)
-						.map((line) => cleanLine(line, MAX_COMMIT_LINE_LENGTH))
-				: []
-		if (commits.length > 0) {
-			snapshot.recentCommits = commits
-			// Only a detached HEAD is described by its commit; a branch lookup
-			// that merely timed out must not read as one.
-			if (branchResult.exitCode === 1) {
-				snapshot.head = commits[0].split(" ")[0]
-			}
+		// Only a detached HEAD is described by its commit; a branch lookup that
+		// merely timed out must not read as one.
+		const head = headResult.exitCode === 0 ? cleanLine(headResult.stdout.trim(), MAX_REF_NAME_LENGTH) : ""
+		if (head && branchResult.exitCode === 1) {
+			snapshot.head = head
 		}
 
 		const defaultBranch = refsResult.exitCode === 0 ? parseDefaultBranch(refsResult.stdout) : undefined

@@ -8,8 +8,10 @@ import { loadSqliteDb, nowIso, type SqliteDb } from "@plinycode/shared/db";
 import { resolveDbDataDir } from "@plinycode/shared/storage";
 import type { RuntimeHost } from "../../runtime/host/runtime-host";
 import type { SessionRecord } from "../../types/sessions";
+import { offTheRecordMessageIndices } from "../off-the-record";
 
-const INDEX_VERSION = 2;
+// 3: side-question (off-the-record) turns are left out of the index.
+const INDEX_VERSION = 3;
 const DEFAULT_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const MAX_INDEXED_TEXT_LENGTH = 128 * 1024;
 const MAX_SESSIONS = 100_000;
@@ -286,7 +288,7 @@ export class SessionHistorySearchService {
 				`WITH matches AS MATERIALIZED (
 					SELECT session_search.session_id, document_id, ordinal, role, started_at,
 						workspace_root, indexed_sessions.title,
-						snippet(session_search, 7, '[', ']', '…', 24) AS snippet,
+						snippet(session_search, 7, '[', ']', 'â€¦', 24) AS snippet,
 						session_search.rank AS score
 					FROM session_search
 					JOIN indexed_sessions
@@ -431,7 +433,12 @@ export class SessionHistorySearchService {
 				session.prompt?.trim() ?? "",
 			);
 			let count = 1;
+			// Side questions are asked off the record: they stay out of search
+			// too. Skipped rather than removed, so ordinals still match the
+			// transcript.
+			const offTheRecord = offTheRecordMessageIndices(messages);
 			for (const [ordinal, message] of messages.entries()) {
+				if (offTheRecord.has(ordinal)) continue;
 				const content = messageText(message);
 				if (!content) continue;
 				insert.run(

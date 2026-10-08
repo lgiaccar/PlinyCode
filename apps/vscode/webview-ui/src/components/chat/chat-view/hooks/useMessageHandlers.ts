@@ -90,6 +90,17 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 				return
 			}
 
+			// `/distill` proposes memories from the conversation with a separate
+			// model call (docs/memory.md); it is not a message to the model.
+			if (messages.length > 0 && messageToSend === "/distill") {
+				setInputValue("")
+				setActiveQuote(null)
+				await SlashServiceClient.distill(StringRequest.create({ value: "distill" })).catch((err) =>
+					console.error("Failed to distill memories:", err),
+				)
+				return
+			}
+
 			if (hasContent) {
 				console.log("[ChatView] handleSendMessage - Sending message:", messageToSend)
 				let messageSent = false

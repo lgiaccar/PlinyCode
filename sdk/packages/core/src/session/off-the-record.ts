@@ -49,6 +49,27 @@ export function isOffTheRecordTurnActive(
 }
 
 /**
+ * Indices of the messages that belong to off-the-record turns, the newest
+ * turn included. For readers that must keep message positions, such as the
+ * conversation search index.
+ */
+export function offTheRecordMessageIndices(
+	messages: readonly MessageLike[],
+): Set<number> {
+	const indices = new Set<number>();
+	let inTurn = false;
+	for (const [index, message] of messages.entries()) {
+		if (isUserRunMessage(message)) {
+			inTurn = isOffTheRecordMessage(message);
+		}
+		if (inTurn) {
+			indices.add(index);
+		}
+	}
+	return indices;
+}
+
+/**
  * Removes off-the-record turns from `messages`.
  *
  * With `keepCurrentTurn`, the newest turn is kept even when it is off the

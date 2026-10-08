@@ -20,7 +20,11 @@ export interface GitSnapshot {
 	statusOmitted?: number;
 	/** `git status` did not finish in time, so `status` may be missing entries. */
 	statusIncomplete?: boolean;
-	/** `<short hash> <subject>` of the latest commits, newest first. */
+	/**
+	 * `<short hash> <subject>` of the latest commits, newest first. No longer
+	 * gathered or shown: the model runs `git log` when history matters. Kept so
+	 * snapshots stored by older versions still parse.
+	 */
 	recentCommits?: string[];
 }
 
@@ -30,8 +34,7 @@ function hasGitSnapshotContent(snapshot: GitSnapshot): boolean {
 			snapshot.head ||
 			snapshot.defaultBranch ||
 			snapshot.status ||
-			snapshot.statusIncomplete ||
-			snapshot.recentCommits?.length,
+			snapshot.statusIncomplete,
 	);
 }
 
@@ -49,7 +52,7 @@ export function formatGitSnapshotForEnv(
 	}
 
 	const lines = [
-		`${entryNumber}. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state.)`,
+		`${entryNumber}. Git (snapshot taken when this conversation started. It is not updated: run git commands when you need the current state, and \`git --no-pager log --oneline -n 20\` when the history matters.)`,
 	];
 	if (snapshot.branch) {
 		lines.push(`   Current branch: ${snapshot.branch}`);
@@ -77,13 +80,6 @@ export function formatGitSnapshotForEnv(
 		lines.push(`   Status: not available ${incompleteNote}`);
 	} else if (snapshot.status) {
 		lines.push("   Status: clean");
-	}
-
-	if (snapshot.recentCommits?.length) {
-		lines.push("   Recent commits:");
-		for (const commit of snapshot.recentCommits) {
-			lines.push(`     ${commit}`);
-		}
 	}
 	return lines.join("\n");
 }

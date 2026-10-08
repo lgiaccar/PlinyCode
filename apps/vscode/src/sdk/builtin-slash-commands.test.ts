@@ -10,6 +10,13 @@ describe("BUILTIN_SLASH_COMMANDS", () => {
 		expect(result).not.toContain("/deep-planning")
 	})
 
+	it("expands /remember into instructions to call save_memory, followed by what to remember", () => {
+		const result = expandSlashCommands("/remember we deploy from stage", BUILTIN_SLASH_COMMANDS)
+		expect(result).toContain('<explicit_instructions type="remember">')
+		expect(result).toContain("save_memory")
+		expect(result.trimEnd().endsWith("What to remember: we deploy from stage")).toBe(true)
+	})
+
 	it("leaves URLs and unrelated text unchanged", () => {
 		expect(expandSlashCommands("see http://x.com/deep-planning", BUILTIN_SLASH_COMMANDS)).toBe(
 			"see http://x.com/deep-planning",

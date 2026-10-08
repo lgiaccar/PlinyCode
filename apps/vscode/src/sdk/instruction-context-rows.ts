@@ -24,9 +24,12 @@ export interface InstructionContextSummary {
 	rulesChars?: number
 	/** Characters the skill list adds to the `skills` tool description. */
 	skillsChars?: number
+	/** Characters the `# Memory` section adds to every request (docs/memory.md). */
+	memoryChars?: number
 }
 
 const RULES_HEADING = "# Rules"
+const MEMORY_HEADING = "# Memory"
 const ON_DEMAND_HEADING = "## Rules to read when they apply"
 
 /**
@@ -43,15 +46,19 @@ function maskFencedCode(text: string): string {
  * `## name`, so a `# Title` inside a rule does not end the section early, and
  * the only `## ` lines before the on-demand list are rule names.
  */
-function rulesSection(systemPrompt: string): string | undefined {
+function topLevelSection(systemPrompt: string, heading: string): string | undefined {
 	const masked = maskFencedCode(systemPrompt)
-	const start = masked.indexOf(`\n${RULES_HEADING}\n`)
+	const start = masked.indexOf(`\n${heading}\n`)
 	if (start < 0) {
 		return undefined
 	}
-	const body = masked.slice(start + RULES_HEADING.length + 2)
+	const body = masked.slice(start + heading.length + 2)
 	const next = body.search(/\n# /)
 	return next < 0 ? body : body.slice(0, next)
+}
+
+function rulesSection(systemPrompt: string): string | undefined {
+	return topLevelSection(systemPrompt, RULES_HEADING)
 }
 
 /** What the request carries in terms of rules and skills. */
@@ -70,6 +77,12 @@ export function summarizeInstructionContext(request: AgentModelRequest): Instruc
 			summary.onDemandRules.push(match[1].trim())
 		}
 		summary.rulesChars = section.length
+	}
+
+	// The memory files' own headings are nested below the section's, like a rule's.
+	const memory = topLevelSection(request.systemPrompt ?? "", MEMORY_HEADING)
+	if (memory) {
+		summary.memoryChars = memory.length
 	}
 
 	const skillsTool = request.tools.find((tool) => tool.name === "skills")
@@ -121,6 +134,9 @@ export function formatInstructionContextRow(summary: InstructionContextSummary):
 		parts.push(
 			`${summary.skills.length} skill${summary.skills.length === 1 ? "" : "s"}${tokenHint(summary.skillsChars)}: ${nameList(summary.skills)}`,
 		)
+	}
+	if (summary.memoryChars) {
+		parts.push(`memory${tokenHint(summary.memoryChars)}`)
 	}
 	if (parts.length === 0) {
 		return "Context: no rules or skills were loaded for this workspace."

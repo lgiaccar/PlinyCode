@@ -13,4 +13,6 @@ service SlashService {
   // Sends button click message
   rpc reportBug(StringRequest) returns (Empty);
   rpc condense(StringRequest) returns (Empty);
+  // /distill: proposes memories from the displayed conversation (docs/memory.md)
+  rpc distill(StringRequest) returns (Empty);
 }

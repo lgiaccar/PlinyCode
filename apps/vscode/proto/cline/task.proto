@@ -50,6 +50,17 @@ service TaskService {
   rpc editMessageAndRegenerate(EditMessageAndRegenerateRequest) returns (Empty);
   // Deletes all task history
   rpc deleteAllTaskHistory(EmptyRequest) returns (DeleteAllTaskHistoryCount);
+  // Saves the checked memories of a memory_proposal row, or dismisses the row
+  rpc resolveMemoryProposal(ResolveMemoryProposalRequest) returns (Empty);
+}
+
+// The user's choice on a memory_proposal chat row (docs/memory.md)
+message ResolveMemoryProposalRequest {
+  Metadata metadata = 1;
+  string proposal_id = 2;
+  // False dismisses the proposal; item_ids is then ignored
+  bool save = 3;
+  repeated string item_ids = 4;
 }
 
 // Request message for creating a new task

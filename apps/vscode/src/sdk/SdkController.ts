@@ -29,6 +29,7 @@ import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager
 import { HostProvider } from "@/hosts/host-provider"
 import { getAdvisorSettings } from "@/hosts/vscode/advisor-settings"
 import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
+import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -42,6 +43,9 @@ import { checkAdvisorBudget } from "./advisor/advisor-budget"
 import type { AdvisorUsage } from "./advisor/advisor-tool"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { type ConversationContext, createConversationContext } from "./context"
+import { createMemoryServices, type MemoryServices } from "./memory"
+import { MemoryCoordinator } from "./memory/memory-coordinator"
+import { completeWithUtilityModel } from "./memory/memory-model"
 import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
@@ -209,6 +213,14 @@ export class Controller {
 		readSessionMetadata: (conversationId) => this.taskHistory.getSessionMetadata(conversationId),
 		getWorkspaceRoot: () => this.getWorkspaceRoot(),
 	})
+
+	// Repo memory and past-conversation search — see memory/index.ts and docs/memory.md.
+	private readonly memoryServices: MemoryServices = createMemoryServices({
+		listSessions: (limit) => this.taskHistory.listSessionRecords(limit),
+		readMessages: (sessionId) => this.taskHistory.readSessionMessages(sessionId),
+	})
+	/** Memory distillation and its proposal rows; the RPC handlers reach it here. */
+	readonly memory: MemoryCoordinator
 
 	// Synchronous snapshot of getWorkspaceRoot()'s latest result, for the message
 	// translator (which runs synchronously and relativizes the tool paths shown in
@@ -379,11 +391,25 @@ export class Controller {
 			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
 			gitSnapshots: this.conversationContext.gitSnapshots,
 			getConversationId: () => this.task?.taskId,
+			memory: this.memoryServices,
 			advisor: {
 				getSettings: getAdvisorSettings,
 				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
 				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
 			},
+		})
+		this.memory = new MemoryCoordinator({
+			store: this.memoryServices.store,
+			emitRow: (msg) => this.messages.emitHookMessage(msg),
+			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
+			getDisplayedConversationId: () => this.task?.taskId,
+			readMessages: (conversationId) => this.taskHistory.readSessionMessages(conversationId),
+			getCwd: () => this.getWorkspaceRoot(),
+			complete: async (system, user, signal) =>
+				completeWithUtilityModel(system, user, signal, await this.getWorkspaceRoot()),
+			isOfferEnabled: isMemoryDistillOfferEnabled,
+			isActMode: () => this.stateManager.getGlobalSettingsKey("mode") === "act",
+			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
@@ -463,6 +489,10 @@ export class Controller {
 				// Normal flows close their diff sessions inline; anything left here is orphaned.
 				void this.diffEdits.discardAllPreviews("turn complete")
 				this.emitRouterTurnSummary(sessionId)
+				// Offers memories worth keeping when the run edited files; runs after the turn, never blocks it.
+				void this.memory.maybeOfferDistill(sessionId).catch((error) => {
+					Logger.warn("[SdkController] Memory distillation failed:", error)
+				})
 
 				this.postStateToWebview().catch((err) => {
 					Logger.error("[SdkController] Failed to post state after turn:", err)
@@ -872,6 +902,7 @@ export class Controller {
 		// are disposed below — see StatePostDebouncer.dispose().
 		await this.statePostDebouncer.dispose()
 		await this.slashMentions.dispose()
+		await this.memoryServices.search.dispose()
 		this.messages.cancelPendingSave()
 		// Clear MCP tool list change callback before disposing McpHub
 		this.mcpHub?.clearToolListChangeCallback()
@@ -1493,7 +1524,20 @@ export class Controller {
 		}
 		// A CI report that arrived while this conversation was not loaded is sent now.
 		this.ciWatch.manager.conversationOpened(taskId)
+		// Memories proposed in this conversation and not yet saved or dismissed.
+		void this.memory.showPending(taskId)
 		return historyItemToTaskResponse(historyItem)
+	}
+
+	/**
+	 * The memory file of the displayed conversation's repository, or the
+	 * user's own, created from the template when missing (docs/memory.md).
+	 */
+	async ensureMemoryFile(scope: "repo" | "user"): Promise<{ file: string; repo: string }> {
+		const cwd = await this.getWorkspaceRoot()
+		const file = await this.memoryServices.store.ensureFile(cwd, scope)
+		const location = await this.memoryServices.store.locate(cwd)
+		return { file, repo: location.repo.identity }
 	}
 
 	// ---- Mode switching ----

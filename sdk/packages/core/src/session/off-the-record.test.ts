@@ -4,6 +4,7 @@ import {
 	dropOffTheRecordTurns,
 	isOffTheRecordMessage,
 	isOffTheRecordTurnActive,
+	offTheRecordMessageIndices,
 } from "./off-the-record";
 
 function message(
@@ -111,6 +112,26 @@ describe("off-the-record turns", () => {
 		expect(ids(dropOffTheRecordTurns(twoSides))).toEqual(["u1", "u2"]);
 		const plain = [message("u1", "user", "a"), message("a1", "assistant", "b")];
 		expect(dropOffTheRecordTurns(plain)).toEqual(plain);
+	});
+
+	it("lists the positions of every off-the-record message, the newest turn included", () => {
+		const positions = [...offTheRecordMessageIndices(transcript)];
+		expect(positions.map((index) => transcript[index]?.id)).toEqual(
+			ids(transcript).filter(
+				(id) => !ids(dropOffTheRecordTurns(transcript)).includes(id),
+			),
+		);
+		const during = transcript.slice(0, 4);
+		expect([...offTheRecordMessageIndices(during)]).toEqual(
+			during
+				.map((_, index) => index)
+				.filter(
+					(index) =>
+						!ids(dropOffTheRecordTurns(during)).includes(
+							during[index]?.id ?? "",
+						),
+				),
+		);
 	});
 
 	it("tells whether the newest turn is off the record", () => {

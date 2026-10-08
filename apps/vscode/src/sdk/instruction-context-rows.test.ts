@@ -98,6 +98,18 @@ describe("summarizeInstructionContext", () => {
 		expect(text).toBe("Context: 1 rule in the prompt: `AGENTS.md` · 7 skills: `a`, `b`, `c`, `d`, `e` +2 more")
 	})
 
+	it("reports the memory section, whose nested headings do not end it early", () => {
+		const memory =
+			"# Memory\n\nYou have a memory.\n\n## Repository memory\n\n### Repository memory: x\n\n#### Notes\n\n- a fact"
+		const rules = SYSTEM_PROMPT.slice(SYSTEM_PROMPT.indexOf("# Rules"))
+		const summary = summarizeInstructionContext(request({ systemPrompt: `You are PlinyCode.\n\n${memory}\n${rules}` }))
+		expect(summary.memoryChars).toBe(memory.length - "# Memory\n".length)
+		expect(summary.inlineRules).toEqual(["Workspace AGENTS.md", ".cursor/rules/git.md"])
+		expect(formatInstructionContextRow({ inlineRules: [], onDemandRules: [], skills: [], memoryChars: 4000 })).toBe(
+			"Context: memory (~1k tokens)",
+		)
+	})
+
 	it("adds the approximate size when known", () => {
 		const text = formatInstructionContextRow({
 			inlineRules: ["AGENTS.md"],

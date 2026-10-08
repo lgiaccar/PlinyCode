@@ -25,27 +25,26 @@ const ok = (stdout: string): GitRunResult => ({ stdout, exitCode: 0 })
 const REPOSITORY = {
 	"symbolic-ref": ok("feature/env\n"),
 	"for-each-ref": ok("refs/remotes/origin/HEAD refs/remotes/origin/stage\nrefs/heads/main \n"),
-	log: ok("abc1234 Add the env block\ndef5678 Fix a typo\n"),
+	"rev-parse": ok("abc1234\n"),
 	status: ok(" M src/app.ts\n?? notes.md\n"),
 }
 
 describe("gatherGitSnapshot", () => {
-	it("gathers the branch, default branch, status and latest commits", async () => {
+	it("gathers the branch, default branch and status, but not the commit history", async () => {
 		const runGit = fakeGit(REPOSITORY)
 
 		expect(await gatherGitSnapshot("/repo", { runGit })).toEqual({
 			branch: "feature/env",
 			defaultBranch: "stage",
 			status: [" M src/app.ts", "?? notes.md"],
-			recentCommits: ["abc1234 Add the env block", "def5678 Fix a typo"],
 		})
 		// One process per question, all in the workspace folder.
 		expect(runGit).toHaveBeenCalledTimes(4)
 		for (const [, options] of runGit.mock.calls) {
 			expect(options.cwd).toBe("/repo")
 		}
-		expect(runGit.mock.calls.map(([args]) => args[0]).sort()).toEqual(["for-each-ref", "log", "status", "symbolic-ref"])
-		expect(runGit.mock.calls.find(([args]) => args[0] === "log")?.[0]).toEqual(["log", "-5", "--format=%h %s"])
+		expect(runGit.mock.calls.map(([args]) => args[0]).sort()).toEqual(["for-each-ref", "rev-parse", "status", "symbolic-ref"])
+		expect(runGit.mock.calls.find(([args]) => args[0] === "rev-parse")?.[0]).toEqual(["rev-parse", "--short", "HEAD"])
 	})
 
 	it("reports a clean working tree as an empty status", async () => {
@@ -93,7 +92,6 @@ describe("gatherGitSnapshot", () => {
 			branch: "feature/env",
 			defaultBranch: "stage",
 			statusIncomplete: true,
-			recentCommits: ["abc1234 Add the env block", "def5678 Fix a typo"],
 		})
 	})
 
@@ -110,7 +108,7 @@ describe("gatherGitSnapshot", () => {
 	it("returns nothing, on time, when every command hangs", async () => {
 		const startedAt = Date.now()
 		const snapshot = await gatherGitSnapshot("/stuck", {
-			runGit: fakeGit({ "symbolic-ref": "hang", "for-each-ref": "hang", log: "hang", status: "hang" }),
+			runGit: fakeGit({ "symbolic-ref": "hang", "for-each-ref": "hang", "rev-parse": "hang", status: "hang" }),
 			timeoutMs: 30,
 		})
 
@@ -140,7 +138,7 @@ describe("gatherGitSnapshot", () => {
 			runGit: fakeGit({
 				"symbolic-ref": ok("main\n"),
 				"for-each-ref": ok(""),
-				log: { stdout: "", exitCode: 128 },
+				"rev-parse": { stdout: "HEAD\n", exitCode: 128 },
 				status: ok("?? README.md\n"),
 			}),
 		})
@@ -161,12 +159,12 @@ describe("gatherGitSnapshot", () => {
 		const snapshot = await gatherGitSnapshot("/repo", {
 			runGit: fakeGit({
 				...REPOSITORY,
-				log: ok(`abc1234 ${"long subject ".repeat(40)}\ndef5678 bell\u0007 and escape\u001b[31m\n`),
+				status: ok(` M ${"long/".repeat(60)}x.ts\n?? bell\u0007 and escape\u001b[31m.md\n`),
 			}),
 		})
 
-		expect(snapshot?.recentCommits?.[0]).toHaveLength(120)
-		expect(snapshot?.recentCommits?.[0].endsWith("…")).toBe(true)
-		expect(snapshot?.recentCommits?.[1]).toBe("def5678 bell and escape[31m")
+		expect(snapshot?.status?.[0]).toHaveLength(200)
+		expect(snapshot?.status?.[0].endsWith("…")).toBe(true)
+		expect(snapshot?.status?.[1]).toBe("?? bell and escape[31m.md")
 	})
 })

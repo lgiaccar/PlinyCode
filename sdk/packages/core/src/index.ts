@@ -737,7 +737,9 @@ export type { SessionRow } from "./session/models/session-row";
 export {
 	dropOffTheRecordTurns,
 	isOffTheRecordMessage,
+	isOffTheRecordTurnActive,
 	OFF_THE_RECORD_METADATA_KEY,
+	offTheRecordMessageIndices,
 } from "./session/off-the-record";
 export * from "./session/search";
 export type {

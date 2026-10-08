@@ -143,6 +143,9 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *   fetch_web_content/web_fetch        → webFetch
  *   web_search                         → webSearch
  *   skills/use_skill                   → useSkill
+ *   save_memory                        → saveMemory (path: "repo" | "user", content: the memory)
+ *   search_conversations               → searchConversations (path: the query)
+ *   read_conversation                  → readConversation (path: the conversation id)
  *   ask_question/ask_followup_question → (not a visual tool — handled by askQuestion executor in SdkController)
  *   MCP tools (serverName__toolName)   → (handled before reaching sdkToolToClineSayTool — emitted as say="use_mcp_server")
  */
@@ -332,6 +335,21 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 				path: skillName,
 			}
 		}
+
+		case "save_memory": {
+			const scope = getStringField(parsedInput, "scope")?.toLowerCase()
+			return {
+				tool: "saveMemory",
+				path: scope === "user" || scope === "global" || scope === "personal" ? "user" : "repo",
+				content: getStringField(parsedInput, "text") ?? getStringField(parsedInput, "memory") ?? "",
+			}
+		}
+
+		case "search_conversations":
+			return { tool: "searchConversations", path: getStringField(parsedInput, "query") ?? "" }
+
+		case "read_conversation":
+			return { tool: "readConversation", path: getStringField(parsedInput, "session_id") ?? "" }
 
 		default: {
 			// MCP tools and unknown tools — pass through with the raw tool name.
