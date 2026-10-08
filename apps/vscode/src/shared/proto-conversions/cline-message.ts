@@ -195,6 +195,7 @@ export function convertClineMessageToProto(message: AppClineMessage): ProtoCline
 		seq: message.seq ?? 0,
 		epoch: message.epoch ?? 0,
 		offTheRecord: message.offTheRecord ?? false,
+		answersTool: message.answersTool ?? false,
 		lastCheckpointHash: message.lastCheckpointHash ?? "",
 		isCheckpointCheckedOut: message.isCheckpointCheckedOut ?? false,
 		isOperationOutsideWorkspace: message.isOperationOutsideWorkspace ?? false,
@@ -290,6 +291,9 @@ export function convertProtoToClineMessage(protoMessage: ProtoClineMessage): App
 	}
 	if (protoMessage.offTheRecord) {
 		message.offTheRecord = true
+	}
+	if (protoMessage.answersTool) {
+		message.answersTool = true
 	}
 
 	return message

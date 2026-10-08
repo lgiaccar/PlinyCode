@@ -11,9 +11,7 @@ import { createOpenAICompatibleProvider } from "./ai-sdk";
 import { repairMalformedToolCall } from "./ai-sdk-message-convert";
 import { describeUnavailableToolCall } from "./ai-sdk-stream-events";
 import {
-	createLeakedToolCallFilter,
 	parseGluedToolCall,
-	parseLeakedToolCalls,
 	resolveMisnamedTool,
 	withKimiToolCallIds,
 } from "./kimi-tool-calls";
@@ -277,69 +275,6 @@ describe("withKimiToolCallIds", () => {
 	});
 });
 
-const LEAKED_SECTION =
-	'<|tool_calls_section_begin|> <|tool_call_begin|> functions.run_commands:17 <|tool_call_argument_begin|> {"commands": ["git status"]} <|tool_call_end|> <|tool_calls_section_end|>';
-
-describe("createLeakedToolCallFilter", () => {
-	function run(deltas: string[], recover = true) {
-		const filter = createLeakedToolCallFilter(TOOLS);
-		const shown = deltas.map((delta) => filter.push(delta)).join("");
-		const end = filter.finish({ recover });
-		return { shown, ...end };
-	}
-
-	it("passes ordinary text through untouched, angle brackets included", () => {
-		const text = "Use `a < b` or <|x|> and List<|T|>; nothing to hold. <";
-		const { shown, text: rest, calls } = run(text.split(/(?<=\s)/));
-		expect(shown + rest).toBe(text);
-		expect(calls).toEqual([]);
-	});
-
-	it("turns a leaked section into its tool call, however the stream cut it", () => {
-		const reply = `Let me verify by running it:  ${LEAKED_SECTION}`;
-		for (const size of [1, 7, 1000]) {
-			const deltas = reply.match(new RegExp(`[\\s\\S]{1,${size}}`, "g")) ?? [];
-			const { shown, text, calls } = run(deltas);
-			expect(shown).toBe("Let me verify by running it:  ");
-			expect(text).toBe("");
-			expect(calls).toEqual([
-				{ toolName: "run_commands", input: { commands: ["git status"] } },
-			]);
-		}
-	});
-
-	it("reads several calls, and the mangled ids Kimi writes", () => {
-		const section =
-			'<|tool_calls_section_begin|> <|tool_call_begin|> functions-run-commands-0-ca476m3kqt6mhr {"commands": ["ls"]} <|tool_call_end|>' +
-			' <|tool_call_begin|> functions.read_files:1 <|tool_call_argument_begin|> {"files": [{"path": "a.ts"}]} <|tool_call_end|> <|tool_calls_section_end|>';
-		expect(parseLeakedToolCalls(section, TOOLS)).toEqual([
-			{ toolName: "run_commands", input: { commands: ["ls"] } },
-			{ toolName: "read_files", input: { files: [{ path: "a.ts" }] } },
-		]);
-	});
-
-	it("shows the section as text when no call can be read from it", () => {
-		const garbage =
-			"Let me clean up: <|tool_calls_section_begin|> <|tool_call_begin|> chatcmpl-tool-92d46e95896a0361Remove-Item fix_conflicts.py\ngit status";
-		const { shown, text, calls } = run([garbage]);
-		expect(shown + text).toBe(garbage);
-		expect(calls).toEqual([]);
-		// A call without arguments is not run on a guess.
-		expect(
-			parseLeakedToolCalls(
-				"<|tool_call_begin|> functions.wait:2 <|tool_call_end|>",
-				TOOLS,
-			),
-		).toEqual([]);
-	});
-
-	it("does not run calls from a reply that failed or was cut short", () => {
-		const { shown, text, calls } = run(["Running: ", LEAKED_SECTION], false);
-		expect(shown + text).toBe(`Running: ${LEAKED_SECTION}`);
-		expect(calls).toEqual([]);
-	});
-});
-
 const READ_FILES_TOOL: AgentToolDefinition = {
 	name: "read_files",
 	description: "Read files",
@@ -496,17 +431,32 @@ describe("the adapter with Kimi's tool calls", () => {
 		expect(finish(events)).toMatchObject({ reason: "tool-calls" });
 	});
 
-	it("leaves the same text alone for a model that is not Kimi", async () => {
+	it("runs a call another model wrote as text in Anthropic's XML", async () => {
 		const { events } = await streamFrom(
 			sse(
-				[{ role: "assistant", content: `Kimi writes ${LEAKED_SECTION}` }],
+				[
+					{
+						role: "assistant",
+						content: 'Checking: <invoke name="run_commands">',
+					},
+					{
+						content:
+							'<parameter name="commands">["git status"]</parameter></invoke>',
+					},
+				],
 				"stop",
 			),
 			{ modelId: "snps-provider/glm-5.2" },
 		);
-		expect(text(events)).toBe(`Kimi writes ${LEAKED_SECTION}`);
-		expect(toolCalls(events)).toEqual([]);
-		expect(finish(events)).toMatchObject({ reason: "stop" });
+		expect(text(events)).toBe("Checking: ");
+		expect(toolCalls(events)).toEqual([
+			{
+				toolName: "run_commands",
+				input: { commands: ["git status"] },
+				error: undefined,
+			},
+		]);
+		expect(finish(events)).toMatchObject({ reason: "tool-calls" });
 	});
 
 	const sentToolIds = (sent: Record<string, unknown> | undefined) =>

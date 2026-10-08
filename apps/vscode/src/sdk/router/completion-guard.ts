@@ -32,6 +32,7 @@ import {
 	looksDegenerate,
 	looksLikeLeakedReasoning,
 	looksLikeReadinessInsteadOfAction,
+	looksLikeTextToolCall,
 	looksLikeWaitBailOut,
 	looksUnfinished,
 	previousShellFailure,
@@ -46,6 +47,7 @@ export type GuardRule =
 	| "announcement"
 	| "wait-bail-out"
 	| "leaked-reasoning"
+	| "text-tool-call"
 	| "readiness"
 	| "judge"
 
@@ -67,6 +69,11 @@ const LEAKED_REASONING_REMINDER =
 	"[SYSTEM] Your last message reads as unfinished thinking rather than an answer, and it made no tool call. " +
 	"Decide what to do, then do it with a tool call in this reply. If the task is complete, give the final result " +
 	"in a few sentences instead."
+
+const TEXT_TOOL_CALL_REMINDER =
+	"[SYSTEM] Your last message wrote a tool call as text (XML or tool-call markup), so nothing ran. Make the " +
+	"call through the tool-calling interface in this reply, not as text in your message. If the task is " +
+	"complete, give the final result in a few sentences instead."
 
 const DEGENERATE_REMINDER =
 	"[SYSTEM] Your last message was corrupted (the same text repeated over and over) and " +
@@ -181,6 +188,9 @@ export function evaluateReply(
 	if (looksDegenerate(text)) {
 		return { rule: "degenerate", reminder: DEGENERATE_REMINDER }
 	}
+	if (looksLikeTextToolCall(text)) {
+		return { rule: "text-tool-call", reminder: TEXT_TOOL_CALL_REMINDER }
+	}
 	const failure = previousShellFailure(context.runMessages, context.message)
 	if (failure?.kind === "failed" && once("after-failed-command") && !endsWithHandBack(text)) {
 		return { rule: "after-failed-command", reminder: failedCommandReminder(failure) }
@@ -262,7 +272,11 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 		}
 		lastIteration = iteration
 
-		if (!options.isActive()) {
+		const text = replyText(message)
+		// A tool call written as text is a stall on any model: nothing ran. The
+		// other rules and the judge exist for the free models, which stop early.
+		const active = options.isActive()
+		if (!active && !looksLikeTextToolCall(text)) {
 			return undefined
 		}
 		// A reminder the model obeyed has done its job: it no longer counts
@@ -271,7 +285,6 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 			pendingNudge = false
 			unansweredNudges -= 1
 		}
-		const text = replyText(message)
 		// watch_ci told the model to stop here; the CI watcher wakes the
 		// conversation with the result, so neither the rules nor the judge apply.
 		if (followsCiWatchStart(runMessages, message) && !looksDegenerate(text)) {
@@ -282,7 +295,9 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 		const rightAfterNudge = lastNudgeIteration !== undefined && iteration === lastNudgeIteration + 1
 		const budgetLeft = nudgesThisRun < maxNudges && unansweredNudges < maxUnanswered
 
-		const hit = evaluateReply(text, { message, runMessages, userRequest, firedRules })
+		const hit = active
+			? evaluateReply(text, { message, runMessages, userRequest, firedRules })
+			: { rule: "text-tool-call" as const, reminder: TEXT_TOOL_CALL_REMINDER }
 		if (hit) {
 			const excerpt = lastSentence(text).slice(0, 120)
 			consecutiveStalls = rightAfterNudge ? consecutiveStalls + 1 : 1
@@ -322,6 +337,7 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 		// never on the reply that answers a reminder: that reply is the model's
 		// considered answer.
 		const canJudge =
+			active &&
 			options.judge !== undefined &&
 			judgeRuns < 1 &&
 			!rightAfterNudge &&

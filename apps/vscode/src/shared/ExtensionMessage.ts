@@ -200,6 +200,12 @@ export interface ClineMessage {
 	 * out of later model requests (docs/side-questions.md).
 	 */
 	offTheRecord?: boolean
+	/**
+	 * A user message that answered the agent's question, or the feedback given with a rejected
+	 * tool. The conversation stores it as a tool result, not as a user message, so it neither
+	 * starts a checkpoint run nor counts when chat rows are mapped onto the conversation.
+	 */
+	answersTool?: boolean
 }
 
 export type ClineAsk =

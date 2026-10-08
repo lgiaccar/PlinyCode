@@ -208,6 +208,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.showLastModelRequest",
+				"title": "Show Last Model Request (debug)",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.abortGitCommitMessage",
 				"title": "Generate Commit Message with PlinyCode - Stop",
 				"category": "PlinyCode",

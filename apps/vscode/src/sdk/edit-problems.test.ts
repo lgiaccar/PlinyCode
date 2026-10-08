@@ -522,6 +522,17 @@ describe("EditProblemsReporter", () => {
 			expect(await editThenPublish(b, [])).toBe("")
 		})
 
+		it("forgets them for a conversation that replaced the one that made the edit", async () => {
+			await editInSilence(a)
+			diagnostics.publish(a.absolutePath, [tsError(12, "Cannot find name 'foo'.")])
+
+			reporter.forget()
+
+			expect(await editThenPublish(b, [])).toBe("")
+			// The error is now part of the file's baseline, not new to an edit of it.
+			expect(await editThenPublish(a, [tsError(12, "Cannot find name 'foo'.")])).toBe("")
+		})
+
 		it("does not put an error down to an edit made long before it appeared", async () => {
 			await editInSilence(a)
 			await vi.advanceTimersByTimeAsync(TIMINGS.lateAnswerWindowMs)

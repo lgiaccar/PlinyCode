@@ -23,7 +23,8 @@
  * - **A call the server could not parse still reaches us**, either glued into
  *   the tool name (` functions-read_files-2-4wzk2r {"files": […]}
  *   <|tool_call_end|>`, with empty arguments) or left in the reply text.
- *   `parseGluedToolCall` and `createLeakedToolCallFilter` read the tool and
+ *   `parseGluedToolCall` and `parseLeakedToolCalls` (through
+ *   `createTextToolCallFilter` in `text-tool-calls.ts`) read the tool and
  *   its arguments back out, so the call runs instead of failing as "no tool
  *   is named …" or ending the turn.
  */
@@ -223,8 +224,6 @@ export function withKimiToolCallIds(
 	});
 }
 
-/** Both `<|tool_calls_section_begin|>` and `<|tool_call_begin|>` start like this. */
-const LEAK_MARKER = "<|tool_call";
 const CALL_BEGIN = "<|tool_call_begin|>";
 const CALL_END = "<|tool_call_end|>";
 
@@ -250,59 +249,4 @@ export function parseLeakedToolCalls(
 		}
 	}
 	return calls;
-}
-
-/**
- * Watches a reply's text for a tool-call section the server left in it.
- * `push` returns the text that is safe to show; from the first marker on,
- * text is held back. `finish` returns the calls read out of the held text,
- * or the held text itself when no call could be recovered from it.
- */
-export function createLeakedToolCallFilter(availableTools: readonly string[]) {
-	let held = "";
-	let holding = false;
-	/** The end of the last delta, when it could be the start of a marker. */
-	let tail = "";
-
-	return {
-		push(text: string): string {
-			if (holding) {
-				held += text;
-				return "";
-			}
-			const combined = tail + text;
-			const marker = combined.indexOf(LEAK_MARKER);
-			if (marker >= 0) {
-				holding = true;
-				held = combined.slice(marker);
-				tail = "";
-				return combined.slice(0, marker);
-			}
-			tail = "";
-			for (
-				let length = Math.min(LEAK_MARKER.length - 1, combined.length);
-				length > 0;
-				length--
-			) {
-				if (LEAK_MARKER.startsWith(combined.slice(-length))) {
-					tail = combined.slice(-length);
-					break;
-				}
-			}
-			return combined.slice(0, combined.length - tail.length);
-		},
-		finish(options?: { recover?: boolean }): {
-			text: string;
-			calls: RecoveredToolCall[];
-		} {
-			if (!holding) {
-				return { text: tail, calls: [] };
-			}
-			const calls =
-				options?.recover === false
-					? []
-					: parseLeakedToolCalls(held, availableTools);
-			return calls.length > 0 ? { text: "", calls } : { text: held, calls };
-		},
-	};
 }

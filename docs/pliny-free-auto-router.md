@@ -122,6 +122,35 @@ So three things now happen for Kimi models (`isKimiModel`; code in
   `<|tool_calls_section_begin|>` on is held back; when the reply ends, the
   calls that name a real tool and carry JSON arguments are executed and the
   section is not shown. Text no call can be read from is shown as it arrived.
+  This now happens for every model, together with the formats below.
+
+### Tool calls written as text, on any model
+
+Models also fall back to a tool-call syntax from their training data and write
+it into the reply as text, so nothing runs and the turn ends on what looks
+like an answer. Seen in real sessions: Kimi K2.6 writing Anthropic's
+`<invoke name="read_files"><parameter name="files">…</parameter></invoke>` on
+the first reply of a FreeAuto turn, and a BalanceAuto model writing Qwen3-Coder's
+`<tool_call><function=read_files><parameter=files>…` block.
+`createTextToolCallFilter` (`sdk/packages/llms/src/providers/text-tool-calls.ts`)
+holds such a section back while the reply streams, for every model that has
+tools, and once the reply is complete turns it into the tool calls it meant.
+It reads Anthropic's XML (with or without its namespace prefix and
+`<function_calls>` wrapper), Qwen3-Coder's XML, Hermes `<tool_call>{json}`
+blocks and Kimi's tokens. A parameter is kept as text when the tool's schema
+says it is a string and read as JSON otherwise; Windows paths written with
+single backslashes are repaired. It leaves the text alone, and runs nothing,
+when the section is inside a code fence, when prose follows it, when one call
+names a tool that does not exist or has arguments it cannot read, when the
+reply also made real tool calls, or when the reply failed or was cut short.
+
+What the filter cannot read reaches the completion guard, whose
+`text-tool-call` rule sends `[SYSTEM] Your last message wrote a tool call as
+text …` and shows `↻ The model wrote a tool call as text, so nothing ran`.
+Unlike the other rules it applies to every model, paid ones on BalanceAuto
+included, and on the first reply of a run. The router's system-prompt addendum
+also tells the free models to make calls only through the tool-calling
+interface and to reply in the user's language.
 
 When a name still resolves to nothing, the error quoted back to the model is
 cut to 80 characters and stripped of control tokens, so it does not hand the
@@ -214,6 +243,32 @@ least four times back to back. The second case is a model that writes the same
 sentence about the fix hundreds of times instead of making the tool call, until
 it reaches the output-token cap. The reply text and the reasoning are checked
 separately.
+
+### When a run fails
+
+A run that fails after the model produced output is recovered by
+`onRunError` in `router-integration.ts`, at most three times a turn:
+
+- **A dropped connection** (`terminated: SocketError: other side closed`,
+  `ECONNRESET` and the like, `isTransportError`) says nothing about the model.
+  The first one in a turn waits two seconds and retries without counting a
+  failure against the model's health, so a gateway blip cannot bench it; the
+  chat shows `⚠ The connection to **Claude Sonnet 5** dropped … · retrying`.
+  A second one in the same turn is treated like any other failure.
+- **Any other failure** counts against the model and moves the turn on:
+  `⚠ Turn failed on **…** · retrying with another model`.
+- **The retry continues the turn.** The run that recovers a failed one keeps
+  the turn's call log, failover count, classifier verdict and the edits the
+  reviewer needs, so the limit of three failovers applies across the retries
+  and the end-of-turn summary lists every call.
+- **A hidden prompt resumes the reply.** When the stream died while the model
+  was still writing a tool call's arguments, that call never reached the
+  history; the llms stream adds `— cut off while writing a <tool> call` to the
+  error, and the prompt tells the model the call was lost and must be made
+  again through the tool-calling interface rather than "continued" as text.
+
+Chat rows name models by their catalog name (`Claude Sonnet 5`, `Kimi K2.6`),
+falling back to the id without its pool prefix.
 
 The guard and the judge check that the work was done, not that it is right.
 Once they accept a reply, the reviewer pass has a second free model read the

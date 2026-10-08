@@ -33,6 +33,14 @@ function shell(entries: Array<{ query: string; result: string; error?: string; s
 }
 
 const unfinished = reply("Let me check the log:")
+/** Kimi K2.6 on FreeAuto, 2026-10-06: reasoning in plain text, then a call the stream could not read. */
+const KIMI_TEXT_CALL = [
+	"The user wants me to read the prompt first. Let me read it.",
+	"",
+	'<invoke name="read_files">',
+	'<parameter name="files">[{"path": </parameter>',
+	"</invoke>",
+].join("\n")
 const done = reply("All tests pass.")
 
 describe("evaluateReply", () => {
@@ -99,6 +107,27 @@ describe("evaluateReply", () => {
 				context(later, [detached, later], "start it"),
 			)?.rule,
 		).toBe("after-detached-command")
+	})
+
+	it("fires the text-tool-call rule on markup outside code fences, before the reasoning rules", () => {
+		expect(evaluateReply(KIMI_TEXT_CALL, context(reply(KIMI_TEXT_CALL)))?.rule).toBe("text-tool-call")
+		const qwen = [
+			"Let me read it:",
+			"<tool_call>",
+			"<function=read_files>",
+			"<parameter=files>",
+			'[{"path": "a"',
+			"</tool_call>",
+		].join("\n")
+		expect(evaluateReply(qwen, context(reply(qwen)))?.rule).toBe("text-tool-call")
+		const fenced = [
+			"Models sometimes write:",
+			"```xml",
+			'<invoke name="read_files"></invoke>',
+			"```",
+			"That is not a call.",
+		].join("\n")
+		expect(evaluateReply(fenced, context(reply(fenced)))).toBeUndefined()
 	})
 
 	it("fires the readiness rule when the user asked to run it", () => {
@@ -218,6 +247,22 @@ describe("createRouterCompletionGuard", () => {
 	it("does nothing while inactive", async () => {
 		const guard = createRouterCompletionGuard({ isActive: () => false })
 		expect(await guard({ message: unfinished, iteration: 1 })).toBeUndefined()
+	})
+
+	it("catches a tool call written as text even while inactive, and never asks the judge then", async () => {
+		const judge = vi.fn()
+		const nudges: Array<{ rule: GuardRule }> = []
+		const guard = createRouterCompletionGuard({
+			isActive: () => false,
+			judge,
+			toolCallsThisRun: () => 3,
+			onNudge: (info) => nudges.push(info),
+		})
+		const reminder = await guard({ message: reply(KIMI_TEXT_CALL), iteration: 1 })
+		expect(reminder).toContain("wrote a tool call as text")
+		expect(nudges.map((nudge) => nudge.rule)).toEqual(["text-tool-call"])
+		expect(await guard({ message: done, iteration: 2 })).toBeUndefined()
+		expect(judge).not.toHaveBeenCalled()
 	})
 
 	describe("after watch_ci", () => {

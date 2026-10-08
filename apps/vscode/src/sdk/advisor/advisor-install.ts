@@ -25,8 +25,8 @@ export interface AdvisorInstallDeps {
 	checkBudget: (sessionId: string) => Promise<string | undefined>
 	/** See `AdvisorToolDeps.onUsage`. */
 	onUsage?: (sessionId: string, usage: AdvisorUsage) => void
-	/** The key the router keeps this session's state under (`installRouter`'s `sessionId`). */
-	routerSessionKey?: string
+	/** The key the router keeps this session's state under (see `installRouter`), or how to read it. */
+	routerSessionKey?: string | (() => string)
 	ledger?: AdvisorCallLedger
 	timeoutMs?: number
 }
@@ -57,10 +57,11 @@ export function installAdvisor(config: CoreSessionConfig, deps: AdvisorInstallDe
 			conversationModelId,
 			// On a router the caller is whichever model the turn's last call landed on.
 			callingModelId: () => {
-				if (!deps.routerSessionKey || !isPlinyRouterModelId(conversationModelId())) {
+				const routerKey = typeof deps.routerSessionKey === "function" ? deps.routerSessionKey() : deps.routerSessionKey
+				if (!routerKey || !isPlinyRouterModelId(conversationModelId())) {
 					return undefined
 				}
-				const calls = getSessionState(deps.routerSessionKey).calls
+				const calls = getSessionState(routerKey).calls
 				return calls[calls.length - 1]?.modelId
 			},
 			createModel: (modelId) => createModel?.(modelId),

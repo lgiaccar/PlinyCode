@@ -3,8 +3,9 @@ import { PLINY_BALANCE_AUTO_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@plinycod
 import type { AgentMessage, AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { RouterCallLogRecord } from "./router-call-log"
-import { getSessionState, resetHealth, resetSessions } from "./router-health"
+import { getSessionState, isModelHealthy, resetHealth, resetSessions } from "./router-health"
 import { installRouter, type RouterInstallDeps } from "./router-integration"
+import { defaultRules } from "./router-rules"
 import type { RouterRunLogRecord } from "./router-run-log"
 
 vi.mock("./router-rules-store", async () => {
@@ -31,9 +32,10 @@ function request(text = "fix the failing test"): AgentModelRequest {
 	return { messages: [{ id: "m1", role: "user", content: [{ type: "text", text }], createdAt: 0 }], tools: [] }
 }
 
-function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID) {
+function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID, knownModels?: Record<string, { name: string }>) {
 	const rows: string[] = []
 	const logged: RouterCallLogRecord[] = []
+	const sleeps: number[] = []
 	let ts = 0
 	const deps: RouterInstallDeps = {
 		sessionId: "root",
@@ -42,8 +44,11 @@ function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID) {
 		nextMessageTs: () => ++ts,
 		logCall: (record) => logged.push(record),
 		now: () => NOW,
+		sleep: async (ms) => {
+			sleeps.push(ms)
+		},
 	}
-	const config = installRouter({ providerId: "pliny", modelId, cwd: "/tmp" } as unknown as CoreSessionConfig, deps)
+	const config = installRouter({ providerId: "pliny", modelId, cwd: "/tmp", knownModels } as unknown as CoreSessionConfig, deps)
 	const factory = config.agentModelFactory
 	if (!factory) {
 		throw new Error("router did not install a model factory")
@@ -65,7 +70,7 @@ function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID) {
 			}
 		}
 	}
-	return { rows, logged, run, createdFor, classifierModel, config }
+	return { rows, logged, run, createdFor, classifierModel, config, sleeps }
 }
 
 const UNFINISHED_REPLY = {
@@ -489,5 +494,81 @@ describe("installRouter profiles, effort and call log", () => {
 		const plain = setup()
 		await plain.run()
 		expect(plain.createdFor).not.toContain(CLASSIFIER)
+	})
+})
+
+describe("installRouter run recovery", () => {
+	beforeEach(() => {
+		resetHealth()
+		resetSessions()
+	})
+
+	const SOCKET_ERROR = "terminated: SocketError: other side closed (UND_ERR_SOCKET)"
+	const recover = (config: CoreSessionConfig, error: string, attempt = 1, hadAssistantContent = true) => {
+		if (!config.onRunError) {
+			throw new Error("router did not install onRunError")
+		}
+		return config.onRunError({ error, errorClass: undefined, attempt, modelId: config.modelId, hadAssistantContent })
+	}
+
+	it("retries a dropped connection after a short wait, without counting it against the model", async () => {
+		const { rows, run, config, sleeps } = setup()
+		await run()
+		const modelId = getSessionState("root").calls[0].modelId
+
+		const decision = await recover(config, SOCKET_ERROR)
+		expect(decision).toMatchObject({ retry: true })
+		expect(sleeps).toEqual([2000])
+		expect(rows.at(-1)).toContain("dropped")
+		expect(rows.at(-1)).not.toContain("another model")
+
+		// A second drop in the same turn is a failure like any other.
+		await run()
+		await recover(config, SOCKET_ERROR, 2)
+		expect(rows.at(-1)).toContain("retrying with another model")
+		expect(sleeps).toEqual([2000])
+		// One failure recorded, below the bench threshold of two.
+		expect(isModelHealthy(modelId, NOW)).toBe(true)
+	})
+
+	it("continues the turn on the recovery run: calls, failovers and the budget carry over", async () => {
+		const { rows, run, config } = setup()
+		await run()
+		await recover(config, "Stream stalled: no output for 90s")
+		await run()
+		expect(getSessionState("root").calls).toHaveLength(2)
+		expect(getSessionState("root").failovers).toBe(1)
+
+		await recover(config, "Stream stalled: no output for 90s", 2)
+		await run()
+		await recover(config, "Stream stalled: no output for 90s", 3)
+		await run()
+		expect(getSessionState("root").failovers).toBe(3)
+		expect(await recover(config, "Stream stalled: no output for 90s", 4)).toBe(false)
+		expect(rows.at(-1)).toContain("stopped retrying after 3 failovers")
+
+		// The next user turn starts afresh.
+		await run()
+		expect(getSessionState("root").calls).toHaveLength(1)
+		expect(getSessionState("root").failovers).toBe(0)
+	})
+
+	it("asks for a lost tool call to be made again, not continued as text", async () => {
+		const { run, config } = setup()
+		await run()
+		const decision = await recover(config, `${SOCKET_ERROR} — cut off while writing a read_files call`)
+		const prompt = decision && decision.retry ? (decision.continuationPrompt ?? "") : ""
+		expect(prompt).toContain("Your previous reply was cut off (terminated: SocketError: other side closed)")
+		expect(prompt).toContain("`read_files` tool call")
+		expect(prompt).toContain("not as text")
+		expect(prompt).not.toContain("Continue exactly where it stopped")
+	})
+
+	it("names models by their catalog name in chat rows", async () => {
+		const names = Object.fromEntries(defaultRules().pool.map((id) => [id, { name: `Model ${id.length}` }]))
+		const { rows, run } = setup(PLINY_FREE_AUTO_MODEL_ID, names)
+		await run()
+		const modelId = getSessionState("root").calls[0].modelId
+		expect(rows[0]).toContain(`→ **${names[modelId].name}**`)
 	})
 })

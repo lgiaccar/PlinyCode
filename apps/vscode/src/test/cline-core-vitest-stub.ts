@@ -59,6 +59,9 @@ export {
 	StoredModelEntrySchema,
 	syncStoredProviderRegistration,
 } from "../../../../sdk/packages/core/src/services/providers/local-provider-registry"
+// Real checkpoint run numbering, so edit-and-regenerate mapping is tested
+// against the counter core's checkpoint hook actually uses.
+export { countUserRunMessages, isUserRunMessage } from "../../../../sdk/packages/core/src/session/user-run-messages"
 
 export type GlobalCompactionStrategy = "basic" | "agentic"
 

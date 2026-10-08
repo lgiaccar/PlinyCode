@@ -410,9 +410,10 @@ export {
 	type SubprocessHooksOptions,
 	toHookConfigFileName,
 } from "./hooks";
-export type {
-	CheckpointEntry,
-	CheckpointMetadata,
+export {
+	type CheckpointEntry,
+	type CheckpointMetadata,
+	retainCheckpointRefs,
 } from "./hooks/checkpoint-hooks";
 export {
 	hashSecret,

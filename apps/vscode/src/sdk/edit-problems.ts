@@ -199,6 +199,15 @@ export class EditProblemsReporter {
 		}
 	}
 
+	/**
+	 * Forgets what earlier edits left: errors still to report late, and the
+	 * baselines they were measured against. For a conversation that replaces
+	 * another, whose edits are not its own to hear about.
+	 */
+	forget(): void {
+		this.remembered.clear()
+	}
+
 	dispose(): void {
 		this.subscription?.dispose()
 		this.subscription = undefined

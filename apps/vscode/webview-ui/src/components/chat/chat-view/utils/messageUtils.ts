@@ -76,6 +76,9 @@ function isCheckpointAnswerMessage(messages: ClineMessage[], index: number): boo
 	if (message?.type !== "say" || message.say !== "user_feedback") {
 		return false
 	}
+	if (message.answersTool) {
+		return true
+	}
 
 	for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
 		const previous = messages[cursor]

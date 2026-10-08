@@ -6,7 +6,7 @@
 // the webview's gRPC streams.
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
-import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath } from "@plinycode/core"
+import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath, retainCheckpointRefs } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
@@ -49,7 +49,7 @@ import { createProviderConfigStore } from "./model-catalog/store"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
-import { getCheckpointRunCountForMessage } from "./sdk-checkpoints"
+import { describeEditedRow, getCheckpointRunCountForMessage } from "./sdk-checkpoints"
 import { SdkCiWatchCoordinator } from "./sdk-ci-watch-coordinator"
 import { SdkCompactionCoordinator } from "./sdk-compaction-coordinator"
 import { SdkDiffEditCoordinator } from "./sdk-diff-edit-coordinator"
@@ -77,13 +77,7 @@ import {
 import { SdkTaskStartCoordinator, type TaskStartOptions } from "./sdk-task-start-coordinator"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
 import { isToolAutoApproved } from "./sdk-tool-policies"
-import {
-	extractSdkUserText,
-	findSdkUserMessageIndexByOrdinal,
-	getSdkCheckpointRunCountForMessageIndex,
-	isSyntheticSdkUserMessage,
-	type SdkUserMessage,
-} from "./sdk-user-message-mapping"
+import { extractSdkUserText, isSyntheticSdkUserMessage, planEditRestart, type SdkUserMessage } from "./sdk-user-message-mapping"
 import { SdkWorkspaceRootResolver } from "./sdk-workspace-root-resolver"
 import { checkConversationBudget } from "./spending-limit"
 import { StatePostDebouncer } from "./state-post-debouncer"
@@ -1257,10 +1251,15 @@ export class Controller {
 			throw new Error("Only user messages can be edited")
 		}
 
-		const userOrdinal = clineMessages
-			.slice(0, targetIndex + 1)
-			.filter((message) => message.type === "say" && (message.say === "task" || message.say === "user_feedback")).length
-		const canRestoreWorkspace = getCheckpointRunCountForMessage(clineMessages, targetIndex) !== undefined
+		const editedRow = describeEditedRow(clineMessages, targetIndex)
+		const editsFirstPrompt = !editedRow.isAnswer && editedRow.promptOrdinal === 1
+		const canRestoreWorkspace =
+			!editedRow.isAnswer && getCheckpointRunCountForMessage(clineMessages, targetIndex) !== undefined
+		if (input.restoreWorkspace && !canRestoreWorkspace) {
+			throw new Error(
+				"PlinyCode could not restore files for this message. Use a git workspace and edit a message that started an agent run with a checkpoint.",
+			)
+		}
 		const sourceSessionId = activeSession?.sessionId ?? currentTask.taskId
 		if (activeSession?.isRunning) {
 			await this.cancelTask()
@@ -1270,22 +1269,19 @@ export class Controller {
 		const sessionHost = activeSession?.sdkHost ?? (tempHost = await this.createTempSessionHost())
 		try {
 			sdkMessages = (await sessionHost.readMessages(sourceSessionId)) as SdkUserMessage[]
-			const sdkTargetIndex = findSdkUserMessageIndexByOrdinal(sdkMessages, userOrdinal)
-			if (sdkTargetIndex === -1) {
+			const restartPlan = planEditRestart(sdkMessages, editedRow)
+			if (!restartPlan) {
 				throw new Error("Could not map edited message to persisted conversation history")
 			}
-			const checkpointRunCount = getSdkCheckpointRunCountForMessageIndex(sdkMessages, sdkTargetIndex)
+			const { checkpointRunCount, carriedRuns } = restartPlan
 
-			const initialMessages = sdkMessages.slice(0, sdkTargetIndex) as Parameters<
-				VscodeSessionHost["start"]
-			>[0]["initialMessages"]
+			const initialMessages = restartPlan.initialMessages as Parameters<VscodeSessionHost["start"]>[0]["initialMessages"]
 			const firstUserMessage = sdkMessages.find(
 				(message) => message.role === "user" && !!extractSdkUserText(message) && !isSyntheticSdkUserMessage(message),
 			)
-			const historyTitle =
-				userOrdinal === 1
-					? editedText
-					: extractSdkUserText(firstUserMessage ?? {}) || clineMessages[0]?.text || editedText
+			const historyTitle = editsFirstPrompt
+				? editedText
+				: extractSdkUserText(firstUserMessage ?? {}) || clineMessages[0]?.text || editedText
 			const fallbackCwd = await this.getWorkspaceRoot()
 			const [sessionRecord, historyItem] = await Promise.all([
 				sessionHost.get(sourceSessionId).catch(() => undefined),
@@ -1302,6 +1298,7 @@ export class Controller {
 			// Regenerating replaces the session: keep a user-given title and the
 			// conversation's start and running time rather than resetting them.
 			const displayTitle = historyItem?.isRenamed ? historyItem.task : historyTitle
+			const carriedCheckpoint = carriedRuns > 0 ? createRestoredCheckpointMetadata(sessionRecord, carriedRuns) : undefined
 			const carriedHistoryFields = {
 				isFavorited: historyItem?.isFavorited,
 				isPinned: historyItem?.isPinned,
@@ -1328,14 +1325,15 @@ export class Controller {
 					...(carriedHistoryFields.spendingStep !== undefined
 						? { spendingStep: carriedHistoryFields.spendingStep }
 						: {}),
-					...(checkpointRunCount
-						? { checkpoint: createRestoredCheckpointMetadata(sessionRecord, checkpointRunCount) }
-						: {}),
+					// Only the checkpoints of runs before the edited message: the
+					// regenerated run takes its own, so "View changes" and the reviewer
+					// never diff against a snapshot from the abandoned turns.
+					...(carriedCheckpoint ? { checkpoint: carriedCheckpoint } : {}),
 				},
 			}
 
 			if (input.restoreWorkspace) {
-				if (!canRestoreWorkspace || checkpointRunCount === undefined) {
+				if (checkpointRunCount === undefined) {
 					throw new Error(
 						"PlinyCode could not restore files for this message. Use a git workspace and edit a message that started an agent run with a checkpoint.",
 					)
@@ -1362,6 +1360,9 @@ export class Controller {
 			// the old run stays suspended forever on a promise nothing can
 			// resolve, and the stale parked resolver intercepts later responses.
 			this.interactions.clearPending("Superseded by an edited message")
+			// Errors that show up late for files the abandoned turns edited belong
+			// to those turns, not to the regenerated one's next edit result.
+			this.diffEdits.forgetEditProblems()
 
 			const { startResult, sdkHost } = await this.sessions.startNewSession(startInput)
 
@@ -1386,6 +1387,11 @@ export class Controller {
 				...carriedHistoryFields,
 			}
 			if (sourceSessionId !== startResult.sessionId) {
+				// Deleting the old session deletes its checkpoint refs; point refs of
+				// the new session at the carried snapshots first so git keeps them.
+				await retainCheckpointRefs(cwd, startResult.sessionId, carriedCheckpoint?.history ?? []).catch((error) =>
+					Logger.warn(`[SdkController] Failed to keep checkpoints for ${startResult.sessionId}`, error),
+				)
 				this.ciWatch.manager.removeConversation(sourceSessionId)
 				try {
 					await this.taskHistory.deleteTaskFromState(sourceSessionId)
@@ -1404,7 +1410,7 @@ export class Controller {
 				{
 					ts: editedMessageTs,
 					type: "say",
-					say: userOrdinal === 1 ? "task" : "user_feedback",
+					say: editsFirstPrompt ? "task" : "user_feedback",
 					text: editedText,
 					images: input.images,
 					files: input.files,

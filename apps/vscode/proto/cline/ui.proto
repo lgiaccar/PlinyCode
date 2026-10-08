@@ -210,6 +210,9 @@ message ClineMessage {
   int64 epoch = 25;
   // A user message asked as an off-the-record side question (docs/side-questions.md).
   bool off_the_record = 26;
+  // A user message that answered the agent's question, or the feedback given with a rejected
+  // tool. The conversation stores it as a tool result, not as a user message.
+  bool answers_tool = 27;
 }
 
 message ShowWebviewEvent {
