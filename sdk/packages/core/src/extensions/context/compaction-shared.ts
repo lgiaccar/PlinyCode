@@ -3,6 +3,7 @@ import {
 	CHARS_PER_TOKEN,
 	estimateTokens,
 	type MessageWithMetadata,
+	serializeForTokenEstimate,
 } from "@plinycode/shared";
 
 export { CHARS_PER_TOKEN, estimateTokens };
@@ -39,6 +40,17 @@ export interface FileOperationSummary {
 	modifiedFiles: string[];
 }
 
+/** What the summarizer's call cost, as the provider or catalog reported it. */
+export interface CompactionSummarizerUsage {
+	providerId: string;
+	modelId: string;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens?: number;
+	cacheWriteTokens?: number;
+	totalCost?: number;
+}
+
 export interface CompactionSummaryMetadata {
 	kind: "compaction_summary";
 	displayRole: "system";
@@ -47,6 +59,8 @@ export interface CompactionSummaryMetadata {
 	details: FileOperationSummary;
 	tokensBefore: number;
 	generatedAt: number;
+	/** Kept with the summary so a reopened conversation can show the cost again. */
+	summarizerUsage?: CompactionSummarizerUsage;
 }
 
 export type EstimateMessageTokens = (message: MessageWithMetadata) => number;
@@ -201,13 +215,14 @@ export function createTokenEstimator(): EstimateMessageTokens {
 		if (typeof cached === "number") {
 			return cached;
 		}
-		let serialized: string;
-		try {
-			serialized = JSON.stringify(message);
-		} catch {
-			serialized = serializeMessage(message);
-		}
-		const value = estimateTokens(serialized.length);
+		// Images count at a fixed estimate, not as their base64 text, like the
+		// request-level estimate the trigger compares against.
+		const serialized = serializeForTokenEstimate(message);
+		const value = estimateTokens(
+			serialized.length > 0
+				? serialized.length
+				: serializeMessage(message).length,
+		);
 		cache.set(ref, value);
 		return value;
 	};
@@ -770,6 +785,7 @@ export function buildSummaryMessage(options: {
 	fileOps: FileOperationSummary;
 	tokensBefore: number;
 	userRunSpan: number;
+	summarizerUsage?: CompactionSummarizerUsage;
 }): MessageWithMetadata {
 	return {
 		role: "user",
@@ -787,6 +803,9 @@ export function buildSummaryMessage(options: {
 			details: options.fileOps,
 			tokensBefore: options.tokensBefore,
 			generatedAt: Date.now(),
+			...(options.summarizerUsage
+				? { summarizerUsage: options.summarizerUsage }
+				: {}),
 		} satisfies CompactionSummaryMetadata,
 	};
 }

@@ -700,6 +700,49 @@ describe("Pliny prompt caching", () => {
 describe("withContentBlockCacheBreakpoints", () => {
 	const marker = { type: "ephemeral" };
 
+	it("marks a text-less tool-call message only when the probe flag is set", () => {
+		const body = {
+			model: "m",
+			cache_control: marker,
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "task" },
+				{ role: "assistant", content: null, tool_calls: [{ id: "c1" }] },
+				{ role: "tool", tool_call_id: "c1", content: "file a" },
+			],
+		};
+		const previous = process.env.PLINYCODE_CACHE_MARK_TOOL_CALLS;
+		try {
+			delete process.env.PLINYCODE_CACHE_MARK_TOOL_CALLS;
+			const off = withContentBlockCacheBreakpoints(body);
+			// Without the flag the breakpoint stays on the last user text.
+			expect(off.messages[1]).toEqual({
+				role: "user",
+				content: [{ type: "text", text: "task", cache_control: marker }],
+			});
+			expect(off.messages[2]).toEqual({
+				role: "assistant",
+				content: null,
+				tool_calls: [{ id: "c1" }],
+			});
+
+			process.env.PLINYCODE_CACHE_MARK_TOOL_CALLS = "1";
+			const on = withContentBlockCacheBreakpoints(body);
+			expect(on.messages[2]).toEqual({
+				role: "assistant",
+				content: [{ type: "text", text: ".", cache_control: marker }],
+				tool_calls: [{ id: "c1" }],
+			});
+			expect(on.messages[1]).toEqual({ role: "user", content: "task" });
+		} finally {
+			if (previous === undefined) {
+				delete process.env.PLINYCODE_CACHE_MARK_TOOL_CALLS;
+			} else {
+				process.env.PLINYCODE_CACHE_MARK_TOOL_CALLS = previous;
+			}
+		}
+	});
+
 	it("leaves a body without cache intent unchanged", () => {
 		const body = {
 			model: "m",

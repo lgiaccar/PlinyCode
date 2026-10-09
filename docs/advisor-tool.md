@@ -109,7 +109,9 @@ consulted**" with the reason. No proto or webview change was needed.
   (and sub-agent) cost until the next usage event rewrites the total. The task
   header and the budget check read the chat rows and are not affected.
   Sub-agent cost reaches the same `subagent_usage` row type from the
-  `spawn_agent` tool result ([agent-tools.md](agent-tools.md), "Sub-agents").
+  `spawn_agent` tool result ([agent-tools.md](agent-tools.md), "Sub-agents"),
+  and the compaction summarizer's from the compaction notice
+  ([context-compaction.md](context-compaction.md)).
 - The call count is per conversation; two VS Code windows on the same
   conversation keep separate in-memory counts (the count read back from the
   conversation still applies on the next session start).

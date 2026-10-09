@@ -150,6 +150,16 @@ export interface CoreCompactionBudgetMetadata {
 export interface CoreCompactionResult {
 	messages: MessageWithMetadata[];
 	budget?: CoreCompactionBudgetMetadata;
+	/** The summarizer call's tokens and cost, when a model wrote the summary. */
+	summarizerUsage?: {
+		providerId: string;
+		modelId: string;
+		inputTokens: number;
+		outputTokens: number;
+		cacheReadTokens?: number;
+		cacheWriteTokens?: number;
+		totalCost?: number;
+	};
 }
 
 export interface CoreCompactionSummarizerConfig {

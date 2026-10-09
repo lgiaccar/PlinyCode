@@ -49,6 +49,27 @@ vi.mock("@/components/ui/button", () => ({
 	),
 }))
 
+describe("ContextWindow auto condense marker", () => {
+	it("draws the marker where auto condense runs and names the token count", () => {
+		render(
+			<ContextWindow
+				autoCompactThreshold={0.32}
+				contextWindow={256_000}
+				lastApiReqTotalTokens={40_000}
+				useAutoCondense={false}
+			/>,
+		)
+		const marker = screen.getByTestId("auto-compact-threshold")
+		expect(Number.parseFloat(marker.style.left)).toBeCloseTo(32, 5)
+		expect(marker.title).toContain("81.9k tokens")
+	})
+
+	it("draws no marker without a threshold", () => {
+		render(<ContextWindow contextWindow={200_000} lastApiReqTotalTokens={40_000} useAutoCondense={false} />)
+		expect(screen.queryByTestId("auto-compact-threshold")).not.toBeInTheDocument()
+	})
+})
+
 describe("ContextWindow compact button", () => {
 	beforeEach(() => {
 		condense.mockClear()

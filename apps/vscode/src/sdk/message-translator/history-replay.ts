@@ -8,6 +8,7 @@ import type { AgentEvent, UserInputMode } from "@plinycode/shared"
 import type { ClineApiReqInfo, ClineMessage } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
 import { extractPersistedHookContextChips, isSyntheticSdkUserMessage } from "../sdk-user-message-mapping"
+import { buildCompactionUsageMessage } from "./ask-builders"
 import { translateSessionEvent } from "./live-events"
 import { extractToolOutputText } from "./tool-mapping"
 import { MessageTranslatorState, normalizeUsageEvent } from "./translator-state"
@@ -307,6 +308,18 @@ export function sdkMessagesToClineMessages(
 				}
 			}
 			appendPersistedMetricsMessage(clineMessages, message, state)
+			continue
+		}
+
+		// A compaction summary is the engine's, not the user's. Its summarizer
+		// call was paid for, and the live usage row is not in the transcript, so
+		// the row is rebuilt from the metadata kept with the summary.
+		const summaryMetadata = (message as { metadata?: Record<string, unknown> }).metadata
+		if (summaryMetadata?.kind === "compaction_summary") {
+			const usageRow = buildCompactionUsageMessage(summaryMetadata.summarizerUsage, state.nextTs())
+			if (usageRow) {
+				clineMessages.push(usageRow)
+			}
 			continue
 		}
 

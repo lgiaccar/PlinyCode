@@ -606,6 +606,17 @@ export interface AgentRuntimeConfig {
 	toolExecution?: "sequential" | "parallel";
 	toolPolicies?: Record<string, ToolPolicy>;
 	toolContextMetadata?: Record<string, unknown>;
+	/**
+	 * What parts of the request came from where, read before each model call
+	 * and sent as request metadata so the provider's usage report can break
+	 * the context down by source (rules, skills, workflows). Without it those
+	 * buckets read as zero and the rules count as system prompt.
+	 */
+	contextSources?: () => {
+		rulesText?: string;
+		skillsText?: string;
+		workflowsText?: string;
+	};
 	requestToolApproval?: (
 		request: ToolApprovalRequest,
 	) => Promise<ToolApprovalResult> | ToolApprovalResult;

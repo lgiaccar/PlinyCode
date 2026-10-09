@@ -23,6 +23,12 @@ interface ContextWindowProgressProps extends ContextWindowInfoProps {
 	useAutoCondense: boolean
 	lastApiReqTotalTokens?: number
 	contextWindow?: number
+	/**
+	 * Where auto-condense runs, as a share of the context window (0 to 1): 90%
+	 * of the model's input limit, which is below the window for the routers.
+	 * Drawn as a marker on the bar; undefined draws none.
+	 */
+	autoCompactThreshold?: number
 	hasEstimatedUsage?: boolean
 	contextBreakdown?: ClineContextBreakdown
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
@@ -63,6 +69,7 @@ ConfirmationDialog.displayName = "ConfirmationDialog"
 const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 	contextWindow = 0,
 	lastApiReqTotalTokens = 0,
+	autoCompactThreshold,
 	onSendMessage,
 	useAutoCondense,
 	tokensIn,
@@ -163,6 +170,7 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 						<HoverCard>
 							<HoverCardContent className="bg-menu rounded-xs shadow-sm">
 								<ContextWindowSummary
+									autoCompactThreshold={autoCompactThreshold}
 									cacheReads={cacheReads}
 									cacheWrites={cacheWrites}
 									contextBreakdown={contextBreakdown}
@@ -186,6 +194,17 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 										color="success"
 										value={tokenData.percentage}
 									/>
+									{autoCompactThreshold !== undefined &&
+										autoCompactThreshold > 0 &&
+										autoCompactThreshold < 1 && (
+											<div
+												aria-label="Auto condense threshold"
+												className="absolute top-0 bottom-0 w-px bg-foreground opacity-60 pointer-events-none"
+												data-testid="auto-compact-threshold"
+												style={{ left: `${(autoCompactThreshold * 100).toFixed(1)}%` }}
+												title={`Auto condense runs at about ${formatTokenNumber(Math.round(autoCompactThreshold * tokenData.max))} tokens`}
+											/>
+										)}
 									{isOpened}
 								</div>
 							</HoverCardTrigger>
