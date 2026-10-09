@@ -200,7 +200,7 @@ export class PipelineManager {
 		const ref = record.ref.replace(/^refs\/(heads|tags)\//, "")
 		if (
 			run.pipelineId !== record.pipeline.id ||
-			run.branch !== ref ||
+			run.branch.replace(/^refs\/(heads|tags)\//, "") !== ref ||
 			!run.started ||
 			!Number.isFinite(Date.parse(run.started)) ||
 			Date.parse(run.started) < record.created - 60_000 ||

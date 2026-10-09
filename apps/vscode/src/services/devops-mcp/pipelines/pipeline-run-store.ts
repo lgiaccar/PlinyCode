@@ -123,7 +123,7 @@ export class PipelineRunStore {
 		try {
 			const previous = await this.get(record.id)
 			if (previous?.run?.status === "completed" && record.run?.status !== "completed") return
-			if (previous?.updated && record.updated && previous.updated > record.updated) return
+			if ((previous?.updated ?? 0) > (record.updated ?? 0)) return
 			await fs.writeFile(temp, JSON.stringify(record), "utf8")
 			await fs.rename(temp, file)
 		} finally {
