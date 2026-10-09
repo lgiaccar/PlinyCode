@@ -32,26 +32,19 @@ export class PipelineManager {
 	private viewers = 0
 	private disposed = false
 	private readonly now: () => number
-	private readonly rateLimitStates = new Map<string, {
-		lastLowRateLimit: number
-		lastProbeTime: number
-		probing: boolean
-	}>()
-	
+	private readonly rateLimitStates = new Map<string, { lowSince?: number; lastProbeTime?: number }>()
+
 	private getRateLimitState(provider: PipelineProvider): {
-		lastLowRateLimit: number
-		lastProbeTime: number
-		probing: boolean
+		lowSince?: number
+		lastProbeTime?: number
 	} {
 		const key = `${provider.kind}:${provider.repoUrl}`
-		if (!this.rateLimitStates.has(key)) {
-			this.rateLimitStates.set(key, {
-				lastLowRateLimit: 0,
-				lastProbeTime: 0,
-				probing: false
-			})
+		let state = this.rateLimitStates.get(key)
+		if (!state) {
+			state = {}
+			this.rateLimitStates.set(key, state)
 		}
-		return this.rateLimitStates.get(key)!
+		return state
 	}
 	private readonly loadRepo: (root: string) => Promise<RepoContext>
 
@@ -258,35 +251,26 @@ export class PipelineManager {
 						try {
 							const provider = this.options.providerFor(parseRemote(record.remoteUrl, record.provider))
 							const rateLimitState = this.getRateLimitState(provider)
-							
-							// Check if we should probe to recover from rate limit issues
-							const timeSinceLowRate = this.now() - rateLimitState.lastLowRateLimit
-							const timeSinceLastProbe = this.now() - rateLimitState.lastProbeTime
-							
-							// If we've been in low rate limit state for more than 5 minutes, probe periodically
-							const shouldProbe = (provider.rateLimitRemaining ?? 1000) < 100 && 
-								timeSinceLowRate > 5 * 60_000 && 
-								timeSinceLastProbe > 2 * 60_000 // Probe every 2 minutes
-							
-							if ((provider.rateLimitRemaining ?? 1000) < 100 && !shouldProbe) {
-								backoff = true
-								await this.options.store.update({
-									...record,
-									error: "Rate limit is low. Showing the last known status.",
-								})
-								return
-							}
-							
-							// Update rate limit tracking - only update probe time when we actually make the call
 							if ((provider.rateLimitRemaining ?? 1000) < 100) {
-								rateLimitState.lastLowRateLimit = this.now()
-								// Only update probe time when we're about to make the actual API call
-								if (shouldProbe) {
-									rateLimitState.lastProbeTime = this.now()
+								backoff = true
+								const now = this.now()
+								rateLimitState.lowSince ??= now
+								if (
+									now - rateLimitState.lowSince < 5 * 60_000 ||
+									(rateLimitState.lastProbeTime !== undefined &&
+										now - rateLimitState.lastProbeTime < 2 * 60_000)
+								) {
+									await this.options.store.update({
+										...record,
+										error: "Rate limit is low. Showing the last known status.",
+									})
+									return
 								}
-							} else if ((provider.rateLimitRemaining ?? 1000) >= 100) {
-								// Rate limit has recovered
-								rateLimitState.lastLowRateLimit = 0
+								// Reserve the probe before yielding so concurrent launches share one request.
+								rateLimitState.lastProbeTime = now
+							} else {
+								rateLimitState.lowSince = undefined
+								rateLimitState.lastProbeTime = undefined
 							}
 							const run = await provider.getRun(record.runId as number)
 							await this.options.store.update({

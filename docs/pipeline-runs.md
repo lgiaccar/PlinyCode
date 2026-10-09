@@ -41,12 +41,18 @@ Identified active runs refresh roughly every 30 seconds while the view is open
 and every 120 seconds in the background. Network failures and low GitHub rate
 limits slow refreshing down. Errors preserve the last known status rather than
 inventing a failure result. Completed runs stop making status requests.
+When a repository's remaining rate limit drops below 100, status requests pause
+for five minutes, then allow one recovery probe per repository no more than
+every two minutes. Normal polling resumes when the provider reports recovery.
 
 History is workspace-scoped and survives extension restarts. It uses a dedicated
 `pipeline-runs` directory in PlinyCode's data directory, with one record per
 launch. Launch intent is saved atomically before dispatch, and updates use a
 cross-process lock with stale-lock recovery. No input values, credentials or
 provider error bodies are persisted in these records.
+History retains the newest 200 completed or rejected launches, plus all
+unfinished launches so older active runs remain eligible for tracking. Record
+reads are batched to avoid unbounded concurrent file I/O.
 
 Polling requires the extension host to be running. Reopening PlinyCode resumes
 tracking; it does not replay dispatch requests. A dispatch left pending for

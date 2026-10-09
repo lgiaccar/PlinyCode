@@ -18,6 +18,7 @@ afterEach(async () => {
 
 async function setup(
 	queue: () => Promise<PipelineDispatch> = async () => ({ runId: 42, url: "https://github.com/o/r/actions/runs/42" }),
+	polling?: { now: () => number; remaining: number; status: string },
 ) {
 	const directory = await fs.mkdtemp(path.join(os.tmpdir(), "pipeline-test-"))
 	directories.push(directory)
@@ -25,6 +26,10 @@ async function setup(
 	let dispatches = 0
 	let polls = 0
 	const provider = {
+		kind: "github",
+		get rateLimitRemaining() {
+			return polling?.remaining ?? 1000
+		},
 		repoUrl: "https://github.com/o/r",
 		listPipelines: async () => [{ id: 1, name: "Build", url: "https://github.com/o/r/actions" }],
 		pipelineInputs: async () => ({ revision: "sha", inputs: [], limitations: [] }),
@@ -40,7 +45,7 @@ async function setup(
 				name: "Build",
 				branch: "main",
 				event: "workflow_dispatch",
-				status: "completed",
+				status: polling?.status ?? "completed",
 				result: "success",
 				url: "https://github.com/o/r/actions/runs/42",
 				started: new Date().toISOString(),
@@ -49,6 +54,7 @@ async function setup(
 	} as unknown as PipelineProvider
 	const options = {
 		store,
+		now: polling?.now,
 		repositories: async () => ["/workspace"],
 		providerFor: () => provider,
 		loadRepo: async () =>
@@ -71,6 +77,96 @@ async function setup(
 }
 
 describe("pipeline launches", () => {
+	it("waits five minutes before probing a newly low rate limit", async () => {
+		let now = 10 * 60_000
+		const polling = { now: () => now, remaining: 99, status: "in_progress" }
+		const { manager, request, counts } = await setup(undefined, polling)
+		await manager.queue(request)
+		await manager.refresh()
+		expect(counts().polls).toBe(0)
+		now += 5 * 60_000 - 1
+		await manager.refresh()
+		expect(counts().polls).toBe(0)
+		now++
+		await manager.refresh()
+		expect(counts().polls).toBe(1)
+	})
+
+	it("repeats low-rate probes every two minutes, not every five minutes", async () => {
+		let now = 0
+		const polling = { now: () => now, remaining: 99, status: "in_progress" }
+		const { manager, request, counts } = await setup(undefined, polling)
+		await manager.queue(request)
+		await manager.refresh()
+		now = 5 * 60_000 + 1
+		await manager.refresh()
+		expect(counts().polls).toBe(1)
+		now += 2 * 60_000 - 1
+		await manager.refresh()
+		expect(counts().polls).toBe(1)
+		now++
+		await manager.refresh()
+		expect(counts().polls).toBe(2)
+	})
+
+	it("allows only one low-rate probe per repository across concurrent launches", async () => {
+		let now = 10 * 60_000
+		const polling = { now: () => now, remaining: 99, status: "in_progress" }
+		const { manager, request, counts } = await setup(undefined, polling)
+		await Promise.all([manager.queue(request), manager.queue({ ...request, id: randomUUID() })])
+		await manager.refresh()
+		expect(counts().polls).toBe(0)
+		now += 5 * 60_000
+		await manager.refresh()
+		expect(counts().polls).toBe(1)
+	})
+
+	it("resumes normal polling after the rate limit recovers", async () => {
+		let now = 0
+		const polling = { now: () => now, remaining: 99, status: "in_progress" }
+		const { manager, request, counts, store } = await setup(undefined, polling)
+		await manager.queue(request)
+		await manager.refresh()
+		expect((await store.get(request.id))?.error).toContain("Rate limit")
+		polling.remaining = 100
+		await manager.refresh()
+		expect(counts().polls).toBe(1)
+		expect((await store.get(request.id))?.error).toBeUndefined()
+		now += 30_000
+		await manager.refresh()
+		expect(counts().polls).toBe(2)
+	})
+
+	it("limits history by launch time rather than UUID filename order", async () => {
+		const { manager, request, store } = await setup()
+		await manager.queue(request)
+		await manager.refresh()
+		const record = await store.get(request.id)
+		if (!record) throw new Error("Missing test record")
+		await store.create({ ...record, id: "00000000-0000-4000-8000-000000000001", created: 1 })
+		await store.create({ ...record, id: "ffffffff-ffff-4fff-8fff-ffffffffffff", created: record.created + 1 })
+		expect((await store.load(1)).map((launch) => launch.id)).toEqual(["ffffffff-ffff-4fff-8fff-ffffffffffff"])
+	})
+
+	it("retains all unfinished launches beyond the finished history limit", async () => {
+		const { manager, request, store } = await setup()
+		await manager.queue(request)
+		await manager.refresh()
+		const record = await store.get(request.id)
+		if (!record) throw new Error("Missing test record")
+		const unfinished = [
+			{ ...record, id: randomUUID(), created: 1, run: undefined },
+			{ ...record, id: randomUUID(), created: 2, run: undefined, runId: undefined },
+			{ ...record, id: randomUUID(), created: 3, run: undefined, runId: undefined, state: "unknown" as const },
+			{ ...record, id: randomUUID(), created: 4, run: undefined, runId: undefined, state: "dispatching" as const },
+		]
+		for (const launch of unfinished) await store.create(launch)
+		await store.create({ ...record, id: randomUUID(), created: record.created + 1 })
+		const history = await store.load(1)
+		expect(history).toHaveLength(5)
+		for (const launch of unfinished) expect(history.some((entry) => entry.id === launch.id)).toBe(true)
+	})
+
 	it("persists intent, dispatches once per request, polls by ID and stops at completion", async () => {
 		const setupResult = await setup()
 		const { manager, request, store, counts } = setupResult

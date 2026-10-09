@@ -44,16 +44,12 @@ export class PipelineRunStore {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
 			throw error
 		}
-		
-		// Filter and limit files to prevent unbounded reads
-		const validFiles = files
-			.filter((file) => file.endsWith(".json") && validId(file.slice(0, -5)))
-			.slice(0, limit) // Limit the number of files to process
-		
+		const validFiles = files.filter((file) => file.endsWith(".json") && validId(file.slice(0, -5)))
+
 		// Process files in smaller batches to avoid unbounded I/O bursts
 		const batchSize = 10
 		const records: (PipelineLaunch | undefined)[] = []
-		
+
 		for (let i = 0; i < validFiles.length; i += batchSize) {
 			const batch = validFiles.slice(i, i + batchSize)
 			const batchRecords = await Promise.all(
@@ -68,10 +64,15 @@ export class PipelineRunStore {
 			)
 			records.push(...batchRecords)
 		}
-		
+
+		let finished = 0
 		return records
 			.filter((record): record is PipelineLaunch => record !== undefined)
 			.sort((left, right) => right.created - left.created)
+			.filter((record) => {
+				if (record.state !== "rejected" && record.run?.status !== "completed") return true
+				return finished++ < limit
+			})
 	}
 
 	async get(id: string): Promise<PipelineLaunch | undefined> {
