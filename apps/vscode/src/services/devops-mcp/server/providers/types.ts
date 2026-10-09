@@ -1,3 +1,4 @@
+import type { PipelineSchema } from "../../pipelines/pipeline-inputs"
 import type { Auth } from "../auth"
 import { DevOpsError } from "../errors"
 
@@ -93,6 +94,24 @@ export interface Provider {
 	readonly rateLimitRemaining?: number
 }
 
+export interface PipelineDefinition {
+	id: number
+	name: string
+	url: string
+}
+
+export interface PipelineDispatch {
+	runId?: number
+	url: string
+}
+
+export interface PipelineProvider extends Provider {
+	listPipelines(): Promise<PipelineDefinition[]>
+	pipelineInputs(pipelineId: number, ref: string): Promise<PipelineSchema>
+	queuePipeline(pipelineId: number, ref: string, inputs: Record<string, unknown>): Promise<PipelineDispatch>
+	getRun(runId: number): Promise<PipelineRun>
+}
+
 export function checkBody(provider: Provider, body: string): void {
 	if (body.length > provider.maxBodyLength) {
 		throw new DevOpsError(
@@ -114,6 +133,7 @@ interface RequestOptions {
 	query?: Query
 	json?: unknown
 	accept?: string
+	apiVersion?: string
 }
 
 interface HttpOptions {
@@ -216,6 +236,7 @@ export class Http {
 			if (options.json !== undefined) {
 				headers["Content-Type"] = "application/json"
 			}
+			if (options.apiVersion) headers["X-GitHub-Api-Version"] = options.apiVersion
 			if (cached) {
 				headers["If-None-Match"] = cached.etag
 			}

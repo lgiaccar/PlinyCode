@@ -26,6 +26,7 @@ import {
 	type LaunchSpec,
 	registerWithEditor,
 } from "./editor-registration"
+import { PipelineHost } from "./PipelineHost"
 import { TokenBroker } from "./token-broker"
 
 /** Name the agent sees: tools are exposed as `plinycode-devops__<tool>`. */
@@ -92,6 +93,7 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			providerFor: (cwd) => service.toolProviderFor(cwd),
 		})
 		service.disposables.push(CiBoardHost.start(service.providers, ciBoardUi))
+		service.disposables.push(PipelineHost.start(service.providers))
 		service.disposables.push(
 			new vscode.Disposable(unregister),
 			vscode.workspace.onDidChangeConfiguration((event) => {

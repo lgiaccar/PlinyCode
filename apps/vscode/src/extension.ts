@@ -27,6 +27,7 @@ import { fixWithCline } from "./core/controller/commands/fixWithCline"
 import { improveWithCline } from "./core/controller/commands/improveWithCline"
 import { sendAddToInputEvent } from "./core/controller/ui/subscribeToAddToInput"
 import { sendCiBoardButtonClickedEvent } from "./core/controller/ui/subscribeToCiBoardButtonClicked"
+import { sendPipelinesButtonClickedEvent } from "./core/controller/ui/subscribeToPipelinesButtonClicked"
 import { sendShowWebviewEvent } from "./core/controller/ui/subscribeToShowWebview"
 import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
 import { ensureRulesDirectoryExists } from "./core/storage/disk"
@@ -156,6 +157,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand(commands.SettingsButton, () => sendSettingsButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.HistoryButton, () => sendHistoryButtonClickedEvent()))
 	context.subscriptions.push(vscode.commands.registerCommand(commands.CiBoardButton, () => sendCiBoardButtonClickedEvent()))
+	context.subscriptions.push(vscode.commands.registerCommand(commands.PipelinesButton, () => sendPipelinesButtonClickedEvent()))
 
 	// FreeAuto / BalanceAuto: make sure every profile's routing rules file
 	// exists so the command below always has something to open, then let the

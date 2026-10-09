@@ -1,4 +1,6 @@
 /** Azure DevOps Services (dev.azure.com) Repos + Pipelines through the REST API (7.1). */
+
+import { type PipelineSchema, parsePipelineInputs } from "../../pipelines/pipeline-inputs"
 import { type Auth, adoAuth } from "../auth"
 import { DevOpsError } from "../errors"
 import type { Remote } from "../repo"
@@ -9,8 +11,10 @@ import {
 	Http,
 	type JobResult,
 	type MergeState,
+	type PipelineDefinition,
+	type PipelineDispatch,
+	type PipelineProvider,
 	type PipelineRun,
-	type Provider,
 	type PullRequest,
 	type Result,
 	type RunReport,
@@ -65,7 +69,7 @@ const MERGE_STATES: Record<string, MergeState> = {
 	failure: "unknown",
 }
 
-export class AzureDevOpsProvider implements Provider {
+export class AzureDevOpsProvider implements PipelineProvider {
 	readonly kind = "Azure DevOps"
 	// Azure DevOps rejects pull request descriptions longer than 4000 characters.
 	readonly maxBodyLength = 4000
@@ -157,6 +161,72 @@ export class AzureDevOpsProvider implements Provider {
 			throw new DevOpsError("The Azure DevOps repository has no default branch yet.")
 		}
 		return branch
+	}
+
+	async listPipelines(): Promise<PipelineDefinition[]> {
+		const repo = await this.repo()
+		const pipelines: PipelineDefinition[] = []
+		let continuation: string | undefined
+		do {
+			const response = await this.http.request("GET", `${this.projectUrl}/_apis/build/definitions`, {
+				query: {
+					"api-version": API_VERSION,
+					repositoryId: repo.id,
+					repositoryType: "TfsGit",
+					includeAllProperties: "true",
+					$top: 100,
+					continuationToken: continuation,
+				},
+			})
+			const data = (await response.json()) as { value?: any[] }
+			pipelines.push(
+				...(data.value ?? [])
+					.filter((definition) => definition.process?.type === 2 && definition.queueStatus === "enabled")
+					.map((definition) => ({
+						id: definition.id,
+						name: definition.name,
+						url: definition._links?.web?.href ?? `${this.projectUrl}/_build?definitionId=${definition.id}`,
+					})),
+			)
+			continuation = response.headers.get("x-ms-continuationtoken") ?? undefined
+		} while (continuation)
+		return pipelines
+	}
+
+	async pipelineInputs(pipelineId: number, ref: string): Promise<PipelineSchema> {
+		const repo = await this.repo()
+		const definition = await this.api("GET", `build/definitions/${pipelineId}`)
+		if (definition.process?.type !== 2 || String(definition.repository?.id).toLowerCase() !== String(repo.id).toLowerCase()) {
+			throw new DevOpsError("Select a YAML pipeline connected to this workspace repository.")
+		}
+		if (definition.queueStatus !== "enabled") throw new DevOpsError("This pipeline does not allow new runs.")
+		const content = await this.api("GET", `git/repositories/${repo.id}/items`, {
+			path: definition.process.yamlFilename,
+			includeContent: "true",
+			"versionDescriptor.version": ref.replace(/^refs\/(heads|tags)\//, ""),
+			"versionDescriptor.versionType": ref.startsWith("refs/tags/") ? "tag" : "branch",
+		})
+		if (typeof content.content !== "string") throw new DevOpsError("Azure DevOps did not return the pipeline YAML.")
+		return parsePipelineInputs(content.content, "ado", content.commitId)
+	}
+
+	async queuePipeline(pipelineId: number, ref: string, inputs: Record<string, unknown>): Promise<PipelineDispatch> {
+		const data = await this.api(
+			"POST",
+			`pipelines/${pipelineId}/runs`,
+			{},
+			{
+				templateParameters: inputs,
+				resources: { repositories: { self: { refName: ref.startsWith("refs/") ? ref : `refs/heads/${ref}` } } },
+			},
+		)
+		if (!Number.isSafeInteger(data?.id) || data.id <= 0)
+			throw new DevOpsError("Azure DevOps accepted the request but did not return a run ID.")
+		return { runId: data.id, url: data._links?.web?.href ?? `${this.projectUrl}/_build/results?buildId=${data.id}` }
+	}
+
+	async getRun(runId: number): Promise<PipelineRun> {
+		return this.run(await this.api("GET", `build/builds/${runId}`))
 	}
 
 	async findOpenPr(branch: string): Promise<PullRequest | undefined> {
