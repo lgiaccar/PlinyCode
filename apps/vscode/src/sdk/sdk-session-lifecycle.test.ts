@@ -670,6 +670,27 @@ describe("SdkSessionLifecycle", () => {
 			expect(send.mock.calls[0][0]).not.toHaveProperty("offTheRecord")
 			expect(lifecycle.isOffTheRecordTurn()).toBe(false)
 		})
+
+		it("is tracked per session, so a background task is not affected by the displayed one's side question", async () => {
+			let settle: () => void = () => {}
+			const send = vi.fn(() => new Promise<void>((resolve) => (settle = resolve)))
+			const sdkHost = makeSdkHost({ send })
+			mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+			const lifecycle = makeLifecycle({})
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			await lifecycle.startNewSession({ config: { sessionId: "session-123" } } as any)
+
+			// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+			lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "what is this?", undefined, undefined, undefined, {
+				offTheRecord: true,
+			})
+			expect(lifecycle.isOffTheRecordTurn("session-123")).toBe(true)
+			expect(lifecycle.isOffTheRecordTurn()).toBe(true)
+			expect(lifecycle.isOffTheRecordTurn("background-task")).toBe(false)
+
+			settle()
+			await vi.waitFor(() => expect(lifecycle.isOffTheRecordTurn("session-123")).toBe(false))
+		})
 	})
 
 	describe("editor state", () => {

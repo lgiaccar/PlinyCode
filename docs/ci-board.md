@@ -65,7 +65,7 @@ state, every pipeline with its run id, and the working copy. It also tells the a
 
 1. If the conversation it last started for this pull request is still running, the board opens it instead.
 2. The board gets a working copy of the branch (see [Worktrees](#worktrees)).
-3. It switches to Agent mode if Plan or Ask mode is on, since an action edits and pushes.
+3. The run's conversation is built in Agent mode, since an action edits and pushes. The mode switch is left where it is: moving it would rebuild, and cancel the turn of, the task that is still displayed when the run starts. A notice says so when Plan or Ask mode is on.
 4. It starts a conversation in that working copy and shows it. If a task is already running and the background
    holds as many tasks as it can, the board asks first, because starting one stops the running task.
 

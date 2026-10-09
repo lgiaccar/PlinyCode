@@ -46,18 +46,21 @@ export async function startCiRun(
 		}
 	}
 
-	// An action edits and pushes, which plan and ask modes forbid.
+	// An action edits and pushes, which plan and ask modes forbid. The run's
+	// session is built in act mode whatever the mode switch shows: flipping the
+	// switch here would rebuild, and cancel the turn of, the task that is still
+	// displayed at this point.
 	if (controller.stateManager.getGlobalSettingsKey("mode") !== "act") {
-		await controller.togglePlanActMode("act")
 		void HostProvider.window.showMessage({
 			type: ShowMessageType.INFORMATION,
-			message: "Switched to Agent mode to run the CI action.",
+			message: "The CI action runs in Agent mode; the mode switch is left as it is.",
 		})
 	}
 
 	const workspace = await runWorkspace(run.worktree.path, run.worktree.inPlace)
 	const conversationId = await controller.initTask(run.prompt, [], [], undefined, undefined, workspace, {
 		recordRecentWorkspace: false,
+		mode: "act",
 	})
 	if (!conversationId) {
 		return undefined

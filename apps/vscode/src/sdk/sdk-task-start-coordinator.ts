@@ -69,6 +69,8 @@ export interface SdkTaskStartCoordinatorOptions {
 	loadInitialMessages: (reader: SdkSessionHost, taskId: string) => Promise<unknown[] | undefined>
 	resolveContextMentions: (text: string) => Promise<string>
 	postStateToWebview: () => Promise<void>
+	/** How many background tasks run in `cwd`; a new task there is warned that they share the working tree. */
+	backgroundSessionsInFolder?: (cwd: string) => number
 }
 
 export interface TaskStartOptions {
@@ -77,6 +79,12 @@ export interface TaskStartOptions {
 	 * a CI board run in a throwaway git worktree. Default true.
 	 */
 	recordRecentWorkspace?: boolean
+	/**
+	 * The mode the task's session is built in. Default: the mode switch's
+	 * current position. A CI Board action passes act, since it edits and
+	 * pushes, without moving the switch for the task that is displayed.
+	 */
+	mode?: Mode
 }
 
 export class SdkTaskStartCoordinator {
@@ -101,7 +109,7 @@ export class SdkTaskStartCoordinator {
 			if (startOptions?.recordRecentWorkspace !== false) {
 				this.options.onWorkspaceUsed?.(boundWorkspace)
 			}
-			const mode = this.getCurrentMode()
+			const mode = startOptions?.mode ?? this.getCurrentMode()
 			Logger.log(`[SdkController] Building session config: mode=${mode}, cwd=${cwd}`)
 			const config = await this.options.sessionConfigBuilder.build({
 				prompt,
@@ -143,6 +151,7 @@ export class SdkTaskStartCoordinator {
 
 			const task = this.createAndSetTask(taskSessionId)
 			this.emitInitialTaskMessage(taskSessionId, prompt ?? "", images, files)
+			this.warnIfFolderShared(cwd)
 
 			// The turn phase was already set to "streaming" (in SdkController.initTask), but the
 			// webview only learns the phase through a full state post. Ship one now, in parallel
@@ -213,7 +222,7 @@ export class SdkTaskStartCoordinator {
 			)
 			const config = await this.options.sessionConfigBuilder.build({
 				cwd,
-				mode: "act",
+				mode: this.getCurrentMode(),
 			})
 
 			const tempManager = await this.options.createTempSessionHost()
@@ -260,6 +269,29 @@ export class SdkTaskStartCoordinator {
 
 	private getCurrentMode(): Mode {
 		return toMode(this.options.stateManager.getGlobalSettingsKey("mode"))
+	}
+
+	/**
+	 * Checkpoints snapshot the whole working tree of a folder, and the reviewer
+	 * reads the run's changes from them, so two tasks in one folder see each
+	 * other's edits. The CI Board runs in worktrees for this reason; a task the
+	 * user starts next to a background one is told once.
+	 */
+	private warnIfFolderShared(cwd: string): void {
+		const others = this.options.backgroundSessionsInFolder?.(cwd) ?? 0
+		if (others <= 0) {
+			return
+		}
+		this.options.messages.emitHookMessage({
+			ts: Date.now(),
+			type: "say",
+			say: "info",
+			partial: false,
+			text:
+				others === 1
+					? 'Another task is still running in this folder. Checkpoints, "View changes" and the reviewer\'s diff include its edits too.'
+					: `${others} other tasks are still running in this folder. Checkpoints, "View changes" and the reviewer's diff include their edits too.`,
+		})
 	}
 
 	private createAndSetTask(sessionId: string): TaskProxy {

@@ -39,7 +39,8 @@ export interface MemoryCoordinatorDeps {
 	/** One call to the distillation model; resolves with its reply text. */
 	complete: (system: string, user: string, signal: AbortSignal) => Promise<string>
 	isOfferEnabled: () => boolean
-	isActMode: () => boolean
+	/** Whether the session ran in act mode: its own mode, not the mode switch's current position. */
+	isActMode: (sessionId: string) => boolean
 	isBackgroundSession: (sessionId: string) => boolean
 }
 
@@ -78,7 +79,7 @@ export class MemoryCoordinator {
 	async maybeOfferDistill(sessionId: string): Promise<void> {
 		if (
 			!this.deps.isOfferEnabled() ||
-			!this.deps.isActMode() ||
+			!this.deps.isActMode(sessionId) ||
 			this.deps.isBackgroundSession(sessionId) ||
 			this.deps.getDisplayedConversationId() !== sessionId
 		) {

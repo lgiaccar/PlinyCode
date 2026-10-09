@@ -282,6 +282,37 @@ describe("SdkTaskStartCoordinator", () => {
 		expect(options.postStateToWebview).toHaveBeenCalledOnce()
 	})
 
+	it("builds the session in the mode the caller asks for, without reading the mode switch", async () => {
+		const { coordinator, options } = makeCoordinator({ mode: "plan" })
+
+		await coordinator.initTask("run the CI action", [], [], undefined, undefined, undefined, { mode: "act" })
+
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(expect.objectContaining({ mode: "act" }))
+		expect(options.buildStartSessionInput).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ mode: "act" }))
+	})
+
+	it("tells a new task when background tasks share its folder", async () => {
+		const { coordinator, options } = makeCoordinator()
+		const emitHookMessage = vi.fn()
+		Object.assign(options.messages, { emitHookMessage })
+		options.backgroundSessionsInFolder = vi.fn((cwd: string) => (cwd === "/workspace" ? 1 : 0))
+
+		await coordinator.initTask("hello")
+
+		expect(emitHookMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				say: "info",
+				text: expect.stringContaining("Another task is still running in this folder"),
+			}),
+		)
+
+		// Alone in the folder: no row.
+		emitHookMessage.mockClear()
+		options.backgroundSessionsInFolder = vi.fn(() => 0)
+		await coordinator.initTask("hello again")
+		expect(emitHookMessage).not.toHaveBeenCalled()
+	})
+
 	it("falls back to the workspace root when a stored task cwd is unavailable", async () => {
 		const historyItem: HistoryItem = {
 			id: "task-1",

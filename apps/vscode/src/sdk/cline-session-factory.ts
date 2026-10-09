@@ -89,8 +89,12 @@ export interface SessionConfigInput {
 export interface ActiveSession {
 	/** The session ID */
 	sessionId: string
-	/** The config used to start the active session. */
-	startConfig?: Pick<CoreSessionConfig, "providerId" | "modelId">
+	/**
+	 * The config used to start the active session. `mode` and `cwd` are the
+	 * session's own: a background or CI Board task keeps them while the
+	 * displayed task and the mode switch move on.
+	 */
+	startConfig?: Pick<CoreSessionConfig, "providerId" | "modelId"> & Partial<Pick<CoreSessionConfig, "mode" | "cwd">>
 	/** The runtime host instance managing this session (VscodeSessionHost) */
 	sdkHost: SdkSessionHost
 	/** Unsubscribe function for session events */

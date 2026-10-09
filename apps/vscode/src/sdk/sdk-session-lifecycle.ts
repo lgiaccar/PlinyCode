@@ -82,8 +82,12 @@ export class SdkSessionLifecycle {
 	private readonly pendingStops = new Map<string, Promise<void>>()
 	/** Orders the sends that wait on the editor state; see fireAndForgetSend. */
 	private outboundSends: Promise<void> = Promise.resolve()
-	/** Set while an off-the-record send's turn runs; the token is that send's own. */
-	private offTheRecordTurn: object | undefined
+	/**
+	 * Sessions whose running turn answers an off-the-record side question,
+	 * each with its send's own token. Keyed by session id: a background task's
+	 * routing must not see the foreground's side question.
+	 */
+	private readonly offTheRecordTurns = new Map<string, object>()
 
 	constructor(private readonly options: SdkSessionLifecycleOptions) {}
 
@@ -91,9 +95,13 @@ export class SdkSessionLifecycle {
 		return this.activeSession
 	}
 
-	/** True while the running turn answers an off-the-record side question. */
-	isOffTheRecordTurn(): boolean {
-		return this.offTheRecordTurn !== undefined
+	/**
+	 * True while the session's running turn answers an off-the-record side
+	 * question. Without a session id, the active session's.
+	 */
+	isOffTheRecordTurn(sessionId?: string): boolean {
+		const id = sessionId ?? this.activeSession?.sessionId
+		return id !== undefined && this.offTheRecordTurns.has(id)
 	}
 
 	setRunning(isRunning: boolean): void {
@@ -233,6 +241,8 @@ export class SdkSessionLifecycle {
 				? {
 						providerId: startInput.config.providerId,
 						modelId: startInput.config.modelId,
+						mode: startInput.config.mode,
+						cwd: startInput.config.cwd,
 					}
 				: undefined,
 			sdkHost,
@@ -302,6 +312,8 @@ export class SdkSessionLifecycle {
 				? {
 						providerId: input.start.config.providerId,
 						modelId: input.start.config.modelId,
+						mode: input.start.config.mode,
+						cwd: input.start.config.cwd,
 					}
 				: activeSession.startConfig,
 			startResult: restored.startResult,
@@ -467,7 +479,11 @@ export class SdkSessionLifecycle {
 		this.options.onSendStart?.(sessionId)
 		const offTheRecordTurn = offTheRecord ? {} : undefined
 		if (delivery === undefined) {
-			this.offTheRecordTurn = offTheRecordTurn
+			if (offTheRecordTurn) {
+				this.offTheRecordTurns.set(sessionId, offTheRecordTurn)
+			} else {
+				this.offTheRecordTurns.delete(sessionId)
+			}
 		}
 		const send = (outboundPrompt: string): void => {
 			sdkHost
@@ -480,8 +496,8 @@ export class SdkSessionLifecycle {
 					...(offTheRecord ? { offTheRecord: true } : {}),
 				})
 				.finally(() => {
-					if (offTheRecordTurn && this.offTheRecordTurn === offTheRecordTurn) {
-						this.offTheRecordTurn = undefined
+					if (offTheRecordTurn && this.offTheRecordTurns.get(sessionId) === offTheRecordTurn) {
+						this.offTheRecordTurns.delete(sessionId)
 					}
 				})
 				.then(async () => {

@@ -1511,6 +1511,41 @@ describe("default run_commands tool", () => {
 });
 
 describe("default read_files tool", () => {
+	it("resolves a relative path against the session's folder before the executor sees it", async () => {
+		const execute = vi.fn(async () => "content");
+		const cwd = process.platform === "win32" ? "C:\\work\\repo" : "/work/repo";
+		const tool = createReadFilesTool(execute, { cwd });
+		const context = { agentId: "agent-1", iteration: 1 };
+
+		await tool.execute({ files: [{ path: "src/app.ts" }] }, context);
+		expect(execute).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				path: `${cwd}${process.platform === "win32" ? "\\" : "/"}src${process.platform === "win32" ? "\\" : "/"}app.ts`,
+			}),
+			expect.anything(),
+		);
+
+		// Absolute paths and line ranges pass through unchanged.
+		const absolute =
+			process.platform === "win32" ? "D:\\other\\file.ts" : "/other/file.ts";
+		await tool.execute(
+			{ files: [{ path: absolute, start_line: 1, end_line: 2 }] },
+			context,
+		);
+		expect(execute).toHaveBeenLastCalledWith(
+			{ path: absolute, start_line: 1, end_line: 2 },
+			expect.anything(),
+		);
+
+		// Without a folder, the executor decides.
+		const bare = createReadFilesTool(execute);
+		await bare.execute({ files: [{ path: "src/app.ts" }] }, context);
+		expect(execute).toHaveBeenLastCalledWith(
+			{ path: "src/app.ts" },
+			expect.anything(),
+		);
+	});
+
 	it("validates ranged file requests and passes them to the executor", async () => {
 		const execute = vi.fn(async () => "selected lines");
 		const tool = createReadFilesTool(execute);
