@@ -9,6 +9,7 @@
 // FTS5 the search scans the most recent transcripts instead.
 
 import { offTheRecordMessageIndices } from "@plinycode/core"
+import { stripModeNotices } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
 import { normalizeFolderPath } from "./repo-key"
 
@@ -43,7 +44,7 @@ export interface ConversationIndex {
 	start(): void
 	refreshNow(): Promise<void>
 	isAvailable(): boolean
-	search(input: { query: string; limit?: number }): IndexHit[]
+	search(input: { query: string; limit?: number; workspaceRoot?: string }): IndexHit[]
 	dispose(): Promise<void>
 }
 
@@ -80,6 +81,12 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 /** The text of a message's blocks: text, tool calls on one line, tool results. Images and reasoning are left out. */
 export function messageToText(message: unknown, maxToolResultChars = 300): string {
+	// The editor state appended to typed messages and mode notices are the
+	// extension's, not the user's words: left out of what is read back.
+	return stripModeNotices(rawMessageText(message, maxToolResultChars))
+}
+
+function rawMessageText(message: unknown, maxToolResultChars: number): string {
 	const record = asRecord(message)
 	const content = record?.content
 	if (typeof content === "string") {
@@ -151,9 +158,12 @@ export class ConversationSearch {
 			hit.sessionId !== input.excludeSessionId &&
 			(!input.workspaceRoot || sameFolder(hit.workspaceRoot, input.workspaceRoot))
 		if (index) {
-			// The index filters by folder with exact string equality; filter here instead.
+			// The index normalizes workspace roots (slashes, case on Windows) and
+			// filters by folder in the query, so another workspace's hits cannot
+			// crowd this one's out of the candidates. The check here stays for
+			// roots the index normalizes differently from normalizeFolderPath.
 			return index
-				.search({ query: input.query, limit: Math.min(200, limit * 10) })
+				.search({ query: input.query, limit: Math.min(200, limit * 10), workspaceRoot: input.workspaceRoot })
 				.filter(keep)
 				.slice(0, limit)
 		}

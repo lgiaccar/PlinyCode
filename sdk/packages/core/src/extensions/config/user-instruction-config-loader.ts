@@ -28,6 +28,11 @@ import {
 } from "../agent-plugin";
 import { resolveAgentPluginSkillDirectories } from "../plugin/plugin-config-loader";
 import {
+	discoverNestedGuideFiles,
+	isNestedGuideFile,
+	nestedGuideRule,
+} from "./nested-guides";
+import {
 	type UnifiedConfigDefinition,
 	type UnifiedConfigFileCandidate,
 	type UnifiedConfigFileContext,
@@ -852,24 +857,41 @@ export function createSkillsConfigDefinition(
 export function createRulesConfigDefinition(
 	options?: CreateRulesConfigDefinitionOptions,
 ): UnifiedConfigDefinition<"rule", RuleConfig> {
+	const workspacePath = options?.workspacePath;
 	const directories =
-		options?.directories ??
-		resolveRulesConfigSearchPaths(options?.workspacePath);
-	const managedRoot = options?.workspacePath
-		? join(options.workspacePath, ".cline")
-		: undefined;
+		options?.directories ?? resolveRulesConfigSearchPaths(workspacePath);
+	const managedRoot = workspacePath ? join(workspacePath, ".cline") : undefined;
+	// Per-directory agent guides (apps/x/AGENTS.md, CLAUDE.md), listed by path
+	// and scope rather than inlined (nested-guides.ts). Found once, when the
+	// definition is built; a new guide shows up when the workspace is reopened.
+	const nestedGuides =
+		workspacePath && !options?.directories
+			? discoverNestedGuideFiles(workspacePath)
+			: [];
 
 	return {
 		type: "rule",
-		directories: managedRoot ? [...directories, managedRoot] : directories,
+		directories: [
+			...directories,
+			...nestedGuides,
+			...(managedRoot ? [managedRoot] : []),
+		],
 		discoverFiles: discoverRulesLikeFiles,
 		includeFile: (fileName, filePath) =>
 			isRuleFile(fileName) || isRuleFile(basename(filePath)),
-		parseFile: (context) =>
-			parseRuleConfigFromMarkdown(
+		parseFile: (context) => {
+			const rule = parseRuleConfigFromMarkdown(
 				context.content,
-				resolveRuleFallbackName(context, options?.workspacePath),
-			),
+				resolveRuleFallbackName(context, workspacePath),
+			);
+			if (workspacePath && isNestedGuideFile(context.filePath, workspacePath)) {
+				return {
+					...rule,
+					...nestedGuideRule(context.filePath, workspacePath, rule.frontmatter),
+				};
+			}
+			return rule;
+		},
 		resolveId: (rule) => normalizeName(rule.name),
 	};
 }

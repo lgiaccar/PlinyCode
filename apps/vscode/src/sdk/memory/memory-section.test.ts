@@ -21,6 +21,27 @@ function contents(repoText: string, userText = ""): MemoryContents {
 	}
 }
 
+describe("renderMemorySection budget", () => {
+	it("counts the instructions, topic list and the cut-entries note against the budget", () => {
+		const entries = Array.from({ length: 300 }, (_, i) => `- fact number ${i} with a little padding`).join("\n")
+		const topics = Array.from({ length: 30 }, (_, i) => ({
+			path: `/m/repos/k/topic-${i}.md`,
+			summary: `Topic ${i} summary that is reasonably long`,
+		}))
+		const section = renderMemorySection(
+			{ ...contents(`# Repository memory\n\n## Notes\n\n${entries}\n`), repoTopics: topics },
+			1000,
+		)
+		const text = section?.text ?? ""
+		// The whole section, instructions included, stays near the 3,000-character budget.
+		expect(text.length).toBeLessThanOrEqual(1000 * 3 + 400)
+		// At most 12 topic files are listed; the rest are counted.
+		expect(text.match(/topic-\d+\.md/g)).toHaveLength(12)
+		expect(text).toContain("… 18 more in the folder of")
+		expect(section?.summary.droppedEntries).toBeGreaterThan(0)
+	})
+})
+
 describe("renderSubAgentMemoryExcerpt", () => {
 	it("gives a sub-agent the repository's important entries, read-only, and nothing else", () => {
 		const section = renderMemorySection(

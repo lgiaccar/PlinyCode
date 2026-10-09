@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { GitRunner } from "../context/git-snapshot"
 import { ConversationMemorySnapshots } from "./conversation-memory-snapshots"
 import { renderMemorySection } from "./memory-section"
-import { MemoryStore, topicFileName } from "./memory-store"
+import { MemoryStore, topicFileName, withFileLock } from "./memory-store"
 import { createSaveMemoryTool, parseSaveMemoryInput } from "./memory-tools"
 
 const REMOTE: GitRunner = async (args) =>
@@ -49,6 +49,38 @@ describe("MemoryStore", () => {
 		for (let index = 0; index < 10; index++) {
 			expect(content.repoText).toContain(`- fact ${index}\n`)
 		}
+	})
+
+	it("does not lose an entry when two windows save to one file at once", async () => {
+		// Two stores stand for two VS Code windows: separate queues, one file.
+		const first = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		const second = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		await Promise.all(
+			Array.from({ length: 8 }, (_, index) =>
+				(index % 2 === 0 ? first : second).save("/work/a", {
+					scope: "repo",
+					text: `window fact ${index}`,
+					importance: "normal",
+				}),
+			),
+		)
+		const content = await first.read("/work/a")
+		for (let index = 0; index < 8; index++) {
+			expect(content.repoText).toContain(`- window fact ${index}\n`)
+		}
+		const files = await fs.readdir(path.dirname(content.location.repoFile))
+		expect(files.some((name) => name.endsWith(".lock"))).toBe(false)
+	})
+
+	it("breaks a lock left by a window that died mid-write", async () => {
+		const file = path.join(root, "stale", "MEMORY.md")
+		await fs.mkdir(path.dirname(file), { recursive: true })
+		await fs.writeFile(`${file}.lock`, "")
+		const old = new Date(Date.now() - 60_000)
+		await fs.utimes(`${file}.lock`, old, old)
+		const started = Date.now()
+		expect(await withFileLock(file, async () => "ran")).toBe("ran")
+		expect(Date.now() - started).toBeLessThan(1_500)
 	})
 
 	it("writes details to a topic file and lists it", async () => {
@@ -96,13 +128,14 @@ describe("renderMemorySection", () => {
 			await store.save("/work/a", { scope: "user", text: `personal preference number ${index}`, importance: "normal" })
 			await store.save("/work/a", { scope: "repo", text: `repository fact number ${index}`, importance: "normal" })
 		}
-		const maxTokens = 400
+		const maxTokens = 700
 		const section = renderMemorySection(await store.read("/work/a"), maxTokens)
 		expect(section).toBeDefined()
 		const text = section?.text ?? ""
 		expect(text.startsWith("\n\n# Memory\n")).toBe(true)
-		// Memory content stays within the budget; the instructions are on top of it.
-		expect(section?.summary.chars).toBeLessThanOrEqual(maxTokens * CHARS_PER_TOKEN)
+		// The whole section, instructions included, stays within the budget; only the
+		// two headings with their file paths come on top.
+		expect(text.length).toBeLessThanOrEqual(maxTokens * CHARS_PER_TOKEN + 400)
 		const userPart = text.slice(text.indexOf("## Your memory"))
 		const repoPart = text.slice(text.indexOf("## Repository memory"), text.indexOf("## Your memory"))
 		expect(userPart.length).toBeLessThan(repoPart.length)

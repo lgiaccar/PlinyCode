@@ -40,7 +40,7 @@ Knowledge the whole team should share belongs in `AGENTS.md` or a rules file, wh
 - **Insertion.** `save_memory` inserts deterministically: an important entry goes first under `## Important`, any other goes first under `## Notes`, so each section reads newest first. An entry that is already there (compared without case and spacing) is not added again.
 - **Truncation.** It keeps whole entries from the top of the file. When the budget drops from 20k to 10k tokens, the bottom 10k (the least important entries, and within `## Notes` the oldest) are the ones left out. The prompt says how many entries were left out and gives the file path, so the model can read the rest when it is relevant. New notes go in at the top of their section for this reason: appended at the end of a file already over the budget, a fresh note would have been the first thing cut.
 - **Over the budget.** `save_memory` renders the section the next conversation would see and says in its result when the entry it just saved falls outside it, so the model can tell the user to trim the file or raise the budget instead of promising that later conversations will see it.
-- **Topic files.** Longer detail goes in a topic file. `save_memory` writes `details` there and adds `(details: <topic>.md)` to the entry. The prompt lists each topic file by path and first line, at most 30, for `read_files`.
+- **Topic files.** Longer detail goes in a topic file. `save_memory` writes `details` there and adds `(details: <topic>.md)` to the entry. The prompt lists each topic file by path and first line, at most 12 per memory with a count of the rest, for `read_files`.
 
 ## The system prompt section
 
@@ -53,9 +53,11 @@ The headings inside the files are pushed two levels down, so they stay inside th
 
 **Budget.** `plinycode.memory.maxTokens` sets the budget. It defaults to 4000 tokens, and 0 turns memory off: no section and no `save_memory` tool. Tokens are counted as characters / 3 (`CHARS_PER_TOKEN`).
 
-- The user's memory gets at most a quarter of the budget.
+- The instructions (about 1,400 characters) come out of the budget first.
+- The user's memory gets at most a quarter of what is left.
 - The repository gets the rest, including whatever the user's memory does not use.
-- The instructions and headings are not counted.
+- Each memory's topic list and its "N more entries" note are counted with it. Only the two headings with their file paths are not.
+- The chat's context row estimates the section at the same three characters per token.
 
 For comparison, 4000 tokens is about 12,000 characters: some 60–100 one-line entries, a third of the rules budget (`MAX_RULES_TOTAL_CHARS`), and small enough for the 32k-context free models.
 
@@ -81,9 +83,9 @@ It is an extension tool, installed by `installMemory` ([install-memory.ts](../ap
 - **Approval.** It is approved like a file edit: it follows the "Edit files" auto-approve toggle ([sdk-tool-policies.ts](../apps/vscode/src/sdk/sdk-tool-policies.ts)). A memory is sent with every later request, so a write prompted by injected text would outlive the conversation.
 - **Side questions are blocked.** Core's off-the-record guard rejects it in a side question (`isOffTheRecordBlockedTool` in [command-guard-extension.ts](../sdk/packages/core/src/extensions/tools/command-guard-extension.ts)).
 
-Writes to one file go through one at a time and land with a rename ([memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)). Reorganising or pruning a memory file is a normal edit with `editor` in act or plan mode; the prompt gives the absolute paths.
+Writes to one file go through one at a time and land with a rename ([memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)). Each write also holds `<file>.lock`, created exclusively, so two VS Code windows saving at once cannot overwrite each other's entry; a lock older than ten seconds is broken, and a write that waited two seconds goes ahead without it. Reorganising or pruning a memory file is a normal edit with `editor` in act or plan mode; the prompt gives the absolute paths.
 
-`/remember <text>` is a built-in slash command ([builtin-slash-commands.ts](../apps/vscode/src/sdk/builtin-slash-commands.ts)). It expands into instructions to call `save_memory`, choose the scope and importance, and keep the entry to one line. Sub-agents get neither tool: the extension leaves them out of the tools it hands sub-agents (`SUB_AGENT_DENIED_TOOLS`), since a memory outlives the conversation and a sub-agent reports to the parent instead. A sub-agent's prompt does carry a read-only excerpt of the repository's `## Important` entries, at most 2,000 characters (`renderSubAgentMemoryExcerpt` in [memory-section.ts](../apps/vscode/src/sdk/memory/memory-section.ts)).
+`/remember <text>` is a built-in slash command ([builtin-slash-commands.ts](../apps/vscode/src/sdk/builtin-slash-commands.ts)). It expands into instructions to call `save_memory`, choose the scope and importance, and keep the entry to one line. While memory is off it expands into a note telling the model to say so instead. Sub-agents get neither tool: the extension leaves them out of the tools it hands sub-agents (`SUB_AGENT_DENIED_TOOLS`), since a memory outlives the conversation and a sub-agent reports to the parent instead. A sub-agent's prompt does carry a read-only excerpt of the repository's `## Important` entries, at most 2,000 characters (`renderSubAgentMemoryExcerpt` in [memory-section.ts](../apps/vscode/src/sdk/memory/memory-section.ts)).
 
 ## Distillation
 
@@ -104,8 +106,9 @@ After a run, a free model reads the conversation and proposes memories, and the 
 
 - The model is the router rules' free utility summarizer (`utility.summarizer`), called through `buildApiHandler` with a model override ([memory-model.ts](../apps/vscode/src/sdk/memory/memory-model.ts)). It costs nothing and needs no budget check.
 - The input is a compact transcript of the messages since the last offer: text, tool calls on one line, and the start of each tool result. Side questions are left out. The transcript is capped at 24k characters, keeping the end.
-- The current memory goes with it, so known facts are skipped.
+- The current memory goes with it, so known facts are skipped. A proposal is a duplicate only when it equals a whole entry (compared without case and spacing), as in `save_memory`.
 - The reply is JSON, at most 8 memories. A timeout (90 s) or an unusable reply ends silently, unless the user typed `/distill`.
+- **Kept between windows.** How far each conversation was distilled, and the memories the user dismissed or left unchecked, are stored in `memory/distill/<conversation>.json`. A reload does not re-read the whole conversation, and a memory the user turned down is not proposed for that conversation again, `/distill` included.
 
 **The approval row.** The proposals appear as a `memory_proposal` chat row (`MemoryProposalRow` in the webview), one checkbox per memory, all checked, with **Save** and **Dismiss**.
 
@@ -121,7 +124,9 @@ After a run, a free model reads the conversation and proposes memories, and the 
 
 - **Built on first use.** `ConversationSearch` ([conversation-search.ts](../apps/vscode/src/sdk/memory/conversation-search.ts)) builds the index on the first search, not at activation, because the first build reads every transcript.
 - **Refreshed.** After that, the service re-indexes changed conversations every 5 minutes. A search refreshes it first, waiting up to 8 s.
-- **Side questions.** The index leaves them out (index version 3; `offTheRecordMessageIndices`), keeping message numbers aligned with the transcript.
+- **Side questions.** The index leaves them out (`offTheRecordMessageIndices`), keeping message numbers aligned with the transcript.
+- **Editor state.** The `<editor_state>` and `<mode_notice>` blocks the extension adds to typed messages are left out of the index and of what `read_conversation` returns, so an open file's name does not match a search (index version 4).
+- **Workspace roots** are stored normalized (forward slashes, no trailing slash, lower case on Windows), and the folder filter runs in the index query, so another workspace's conversations cannot crowd this one's out of the candidates.
 
 **Results.**
 

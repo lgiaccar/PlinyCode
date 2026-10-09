@@ -247,7 +247,26 @@ export function listEnabledRulesFromWatcher(
 			filePath: record.filePath,
 		}))
 		.filter(isRuleEnabled)
-		.sort((a, b) => a.name.localeCompare(b.name));
+		.sort(
+			(a, b) =>
+				rulePriority(a) - rulePriority(b) || a.name.localeCompare(b.name),
+		);
+}
+
+/**
+ * Inlining order under the rules budget: the workspace's AGENTS.md first,
+ * since it is written for agents and the repository reviews it, then the
+ * global one, then the rest by name. Alphabetical order alone let a rule
+ * named `a-style.md` push AGENTS.md out of the budget.
+ */
+function rulePriority(rule: RuleForPrompt): number {
+	if (rule.name === "Workspace AGENTS.md") {
+		return 0;
+	}
+	if (rule.name === "Global AGENTS.md") {
+		return 1;
+	}
+	return 2;
 }
 
 export function loadRulesForSystemPromptFromWatcher(
