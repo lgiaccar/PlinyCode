@@ -245,6 +245,7 @@ service UiService {
 
   // Subscribe to CI Board button click events
   rpc subscribeToCiBoardButtonClicked(EmptyRequest) returns (stream Empty);
+  rpc subscribeToPipelinesButtonClicked(EmptyRequest) returns (stream Empty);
 
   // Subscribe to chat button clicked events (when the chat button is clicked in VSCode)
   rpc subscribeToChatButtonClicked(EmptyRequest) returns (stream Empty);

@@ -53,6 +53,7 @@ export interface ExtensionStateContextType extends ExtensionState {
 	settingsInitialModelTab?: "recommended" | "free"
 	showHistory: boolean
 	showCiBoard: boolean
+	showPipelines: boolean
 	expandTaskHeader: boolean
 
 	// Setters
@@ -83,12 +84,14 @@ export interface ExtensionStateContextType extends ExtensionState {
 	navigateToSettingsModelPicker: (opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => void
 	navigateToHistory: () => void
 	navigateToCiBoard: () => void
+	navigateToPipelines: () => void
 	navigateToChat: () => void
 
 	// Hide functions
 	hideSettings: () => void
 	hideHistory: () => void
 	hideCiBoard: () => void
+	hidePipelines: () => void
 	closeMcpView: () => void
 
 	// Event callbacks
@@ -108,6 +111,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	const [settingsInitialModelTab, setSettingsInitialModelTab] = useState<"recommended" | "free" | undefined>(undefined)
 	const [showHistory, setShowHistory] = useState(false)
 	const [showCiBoard, setShowCiBoard] = useState(false)
+	const [showPipelines, setShowPipelines] = useState(false)
 
 	// Helper for MCP view
 	const closeMcpView = useCallback(() => {
@@ -123,10 +127,12 @@ export const ExtensionStateContextProvider: React.FC<{
 	}, [])
 	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
 	const hideCiBoard = useCallback(() => setShowCiBoard(false), [])
+	const hidePipelines = useCallback(() => setShowPipelines(false), [])
 
 	// Navigation functions
 	const navigateToMcp = useCallback(
 		(tab?: McpViewTab) => {
+			setShowPipelines(false)
 			setShowSettings(false)
 			setShowHistory(false)
 			setShowCiBoard(false)
@@ -138,6 +144,7 @@ export const ExtensionStateContextProvider: React.FC<{
 
 	const navigateToSettings = useCallback(
 		(targetSection?: string) => {
+			setShowPipelines(false)
 			setShowHistory(false)
 			setShowCiBoard(false)
 			closeMcpView()
@@ -150,6 +157,7 @@ export const ExtensionStateContextProvider: React.FC<{
 
 	const navigateToSettingsModelPicker = useCallback(
 		(opts: { targetSection?: string; initialModelTab?: "recommended" | "free" }) => {
+			setShowPipelines(false)
 			setShowHistory(false)
 			setShowCiBoard(false)
 			closeMcpView()
@@ -161,6 +169,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	)
 
 	const navigateToHistory = useCallback(() => {
+		setShowPipelines(false)
 		setShowSettings(false)
 		closeMcpView()
 		setShowCiBoard(false)
@@ -168,13 +177,23 @@ export const ExtensionStateContextProvider: React.FC<{
 	}, [setShowSettings, closeMcpView, setShowHistory])
 
 	const navigateToCiBoard = useCallback(() => {
+		setShowPipelines(false)
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
 		setShowCiBoard(true)
 	}, [closeMcpView])
 
+	const navigateToPipelines = useCallback(() => {
+		setShowSettings(false)
+		closeMcpView()
+		setShowHistory(false)
+		setShowCiBoard(false)
+		setShowPipelines(true)
+	}, [closeMcpView])
+
 	const navigateToChat = useCallback(() => {
+		setShowPipelines(false)
 		setShowSettings(false)
 		closeMcpView()
 		setShowHistory(false)
@@ -303,6 +322,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	const mcpButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const historyButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const ciBoardButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
+	const pipelinesButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const chatButtonUnsubscribeRef = useRef<(() => void) | null>(null)
 	const settingsButtonClickedSubscriptionRef = useRef<(() => void) | null>(null)
 	const partialMessageUnsubscribeRef = useRef<(() => void) | null>(null)
@@ -428,6 +448,14 @@ export const ExtensionStateContextProvider: React.FC<{
 				onError: (error: any) => {
 					console.error("Error in CI board button clicked subscription:", error)
 				},
+				onComplete: () => {},
+			},
+		)
+		pipelinesButtonClickedSubscriptionRef.current = UiServiceClient.subscribeToPipelinesButtonClicked(
+			{},
+			{
+				onResponse: () => navigateToPipelines(),
+				onError: (error: unknown) => console.error("Error in Pipelines navigation subscription:", error),
 				onComplete: () => {},
 			},
 		)
@@ -564,6 +592,8 @@ export const ExtensionStateContextProvider: React.FC<{
 				ciBoardButtonClickedSubscriptionRef.current()
 				ciBoardButtonClickedSubscriptionRef.current = null
 			}
+			pipelinesButtonClickedSubscriptionRef.current?.()
+			pipelinesButtonClickedSubscriptionRef.current = null
 			if (chatButtonUnsubscribeRef.current) {
 				chatButtonUnsubscribeRef.current()
 				chatButtonUnsubscribeRef.current = null
@@ -607,6 +637,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		settingsInitialModelTab,
 		showHistory,
 		showCiBoard,
+		showPipelines,
 		globalClineRulesToggles: state.globalClineRulesToggles || {},
 		localClineRulesToggles: state.localClineRulesToggles || {},
 		localCursorRulesToggles: state.localCursorRulesToggles || {},
@@ -623,12 +654,14 @@ export const ExtensionStateContextProvider: React.FC<{
 		navigateToSettingsModelPicker,
 		navigateToHistory,
 		navigateToCiBoard,
+		navigateToPipelines,
 		navigateToChat,
 
 		// Hide functions
 		hideSettings,
 		hideHistory,
 		hideCiBoard,
+		hidePipelines,
 		setShowWelcome,
 		startProviderModelsRequest,
 		applyProviderModelsResponse,
