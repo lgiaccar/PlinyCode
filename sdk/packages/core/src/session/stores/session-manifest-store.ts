@@ -73,8 +73,15 @@ function sessionRowFromManifest(manifest: SessionManifest): SessionRow {
 	};
 }
 
+/** A transcript write waiting for the one in flight to finish; only the newest is kept. */
+interface PendingMessagesWrite {
+	done: Promise<void>;
+	latest?: { path: string; contents: string };
+}
+
 export class SessionManifestStore {
 	readonly artifacts: SessionArtifacts;
+	private readonly messagesWrites = new Map<string, PendingMessagesWrite>();
 
 	constructor(
 		private readonly adapter: SessionPersistenceAdapter,
@@ -209,9 +216,48 @@ export class SessionManifestStore {
 			messages: messages as StoredMessageWithMetadata[],
 			systemPrompt,
 		});
-		const contents = `${JSON.stringify(payload, null, 2)}\n`;
-		mkdirSync(dirname(path), { recursive: true });
-		writeFileSync(path, contents, "utf8");
+		// Compact: the file is rewritten whole after every model call and grows
+		// with the conversation, and nothing reads it but JSON.parse.
+		const contents = `${JSON.stringify(payload)}\n`;
+		await this.writeMessagesCoalesced(sessionId, path, contents);
+	}
+
+	/**
+	 * Writes the transcript atomically (temp file + rename, so a crash leaves
+	 * the previous file rather than half of one), one write in flight per
+	 * session. A write requested while one is running waits for it and only
+	 * the newest requested contents are then written: every payload is the
+	 * whole transcript, so the ones in between carry nothing the newest does
+	 * not. The returned promise settles once the caller's contents, or newer
+	 * ones, are on disk.
+	 */
+	private writeMessagesCoalesced(
+		sessionId: string,
+		path: string,
+		contents: string,
+	): Promise<void> {
+		const pending = this.messagesWrites.get(sessionId);
+		if (pending) {
+			pending.latest = { path, contents };
+			return pending.done;
+		}
+		const state: PendingMessagesWrite = {
+			done: Promise.resolve(),
+			latest: { path, contents },
+		};
+		state.done = (async () => {
+			try {
+				while (state.latest) {
+					const next = state.latest;
+					state.latest = undefined;
+					await writeFileAtomic(next.path, next.contents);
+				}
+			} finally {
+				this.messagesWrites.delete(sessionId);
+			}
+		})();
+		this.messagesWrites.set(sessionId, state);
+		return state.done;
 	}
 
 	private resolveCompactionPath(sessionId: string): string {

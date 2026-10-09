@@ -106,8 +106,9 @@ describe("renderMemorySection", () => {
 		const userPart = text.slice(text.indexOf("## Your memory"))
 		const repoPart = text.slice(text.indexOf("## Repository memory"), text.indexOf("## Your memory"))
 		expect(userPart.length).toBeLessThan(repoPart.length)
-		expect(text).toContain("repository fact number 0")
-		expect(text).not.toContain("repository fact number 39")
+		// Notes are newest first, so the budget keeps the latest and drops the oldest.
+		expect(text).toContain("repository fact number 39")
+		expect(text).not.toContain("repository fact number 0\n")
 		expect(text).toMatch(/\[\d+ more entries are in `[^`]+MEMORY\.md`/)
 		// The files' titles are dropped and their sections sit below the part's heading.
 		expect(text).not.toContain("Repository memory: github.com/org/repo")
@@ -166,11 +167,30 @@ describe("save_memory", () => {
 
 	it("saves and says where", async () => {
 		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
-		const tool = createSaveMemoryTool({ store, getCwd: () => "/work/a" })
+		const tool = createSaveMemoryTool({ store, getCwd: () => "/work/a", getMaxTokens: () => 4000 })
 		const context = { agentId: "a", iteration: 1 }
 		expect(await tool.execute({ text: "Use bun", importance: "high" }, context)).toMatch(
-			/^Saved to .*at the top of Important/,
+			/^Saved to .*at the top of Important\. Later conversations will see it\./,
+		)
+		expect(await tool.execute({ text: "Prefer vitest" }, context)).toMatch(
+			/at the top of Notes\. Later conversations will see it\./,
 		)
 		expect(await tool.execute({ text: "Use bun" }, context)).toMatch(/already in/)
+	})
+
+	it("says when the saved entry falls outside the memory budget", async () => {
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		// Fill Important past a tiny budget; the new note under Notes cannot be shown.
+		for (let index = 0; index < 20; index++) {
+			await store.save("/work/a", { scope: "repo", text: `important fact number ${index}`, importance: "high" })
+		}
+		const tool = createSaveMemoryTool({ store, getCwd: () => "/work/a", getMaxTokens: () => 60 })
+		const context = { agentId: "a", iteration: 1 }
+		expect(await tool.execute({ text: "A note nobody will see" }, context)).toMatch(
+			/at the top of Notes\. It is outside the memory budget/,
+		)
+		// Without the budget the tool cannot tell and does not claim either way.
+		const blind = createSaveMemoryTool({ store, getCwd: () => "/work/a" })
+		expect(await blind.execute({ text: "Another note" }, context)).toMatch(/Later conversations will see it/)
 	})
 })

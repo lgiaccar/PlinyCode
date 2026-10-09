@@ -390,6 +390,7 @@ export class Controller {
 			checkSpendingLimit: () => this.checkSpendingLimit(),
 			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
 			gitSnapshots: this.conversationContext.gitSnapshots,
+			promptDates: this.conversationContext.promptDates,
 			getConversationId: () => this.task?.taskId,
 			memory: this.memoryServices,
 			advisor: {
@@ -483,7 +484,7 @@ export class Controller {
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
 			consumeModeSwitchNotice: (sessionId) => this.mode.consumeModeSwitchNotice(sessionId),
-			getSessionStartMetadata: (sessionId) => this.conversationContext.gitSnapshots.sessionMetadata(sessionId),
+			getSessionStartMetadata: (sessionId) => this.conversationContext.sessionStartMetadata(sessionId),
 			editorState: this.conversationContext.editorState,
 			onSendComplete: async (sessionId) => {
 				// Normal flows close their diff sessions inline; anything left here is orphaned.

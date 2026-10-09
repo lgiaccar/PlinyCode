@@ -48,7 +48,10 @@ input budget, at about 83k estimated tokens. That is where the 128k models
 (the coding route among them) stop fitting a request, so compacting there keeps
 the whole pool routable instead of letting a run grow until only GLM-5.2 fits.
 The timestamped rows (below) are shown in the chat only; they never reach the
-model.
+model. Whether the conversation compacts at all follows the auto-condense
+setting like any other model: the router only attaches the free summarizer the
+compaction uses, so turning auto-condense off leaves a routed conversation
+with the engine's overflow recovery alone.
 
 ## The profiles and their routes
 

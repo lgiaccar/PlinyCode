@@ -73,6 +73,11 @@ export interface SessionConfigInput {
 	 */
 	gitSnapshot?: GitSnapshot
 	/**
+	 * The date the system prompt's <env> block shows: the one the conversation
+	 * started with, on every build; see context/conversation-prompt-date.ts.
+	 */
+	currentDate?: string
+	/**
 	 * The conversation's `# Memory` section, appended to the system prompt.
 	 * The same text on every build for a conversation; see
 	 * memory/conversation-memory-snapshots.ts.
@@ -500,6 +505,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			providerId,
 			platform: process.platform,
 			gitSnapshot: input.gitSnapshot,
+			currentDate: input.currentDate,
 			// The extension never exposes switch_to_act_mode (unlike the CLI):
 			// matching the legacy extension, the user must flip the Plan/Act
 			// toggle themselves, so the plan contract must not tell the model to

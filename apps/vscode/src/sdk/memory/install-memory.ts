@@ -18,12 +18,14 @@ export interface MemoryInstallDeps {
 	search: Pick<ConversationSearch, "search" | "read">
 	isMemoryEnabled: () => boolean
 	isSearchEnabled: () => boolean
+	/** `plinycode.memory.maxTokens`; lets `save_memory` say when an entry falls outside the budget. */
+	getMaxTokens?: () => number
 }
 
 export function installMemory(config: CoreSessionConfig, cwd: string, deps: MemoryInstallDeps): CoreSessionConfig {
 	const tools = [...(config.extraTools ?? [])]
 	if (deps.isMemoryEnabled()) {
-		tools.push(createSaveMemoryTool({ store: deps.store, getCwd: () => cwd }))
+		tools.push(createSaveMemoryTool({ store: deps.store, getCwd: () => cwd, getMaxTokens: deps.getMaxTokens }))
 	}
 	if (deps.isSearchEnabled()) {
 		tools.push(

@@ -14,6 +14,8 @@
  */
 
 import type { AgentTool } from "@plinycode/shared"
+import { normalizeEntryText } from "./memory-file"
+import { renderMemorySection } from "./memory-section"
 import type { MemorySaveInput, MemoryScope, MemoryStore } from "./memory-store"
 
 const SAVE_MEMORY_TOOL_NAME = "save_memory"
@@ -45,6 +47,31 @@ interface SaveMemoryToolDeps {
 	store: MemoryStore
 	/** The folder whose repository the memory belongs to: the session's cwd. */
 	getCwd: () => string
+	/**
+	 * `plinycode.memory.maxTokens`, to tell the model when the entry it just
+	 * saved falls outside what the prompt will show. Without it the result
+	 * does not say.
+	 */
+	getMaxTokens?: () => number
+}
+
+/**
+ * Whether a just-saved entry is inside the part of the files the system
+ * prompt shows under the budget. Rendering the section the way the next
+ * conversation will is the only reliable check: the two memories share one
+ * budget, and the user's own takes its quarter first.
+ */
+async function isShownUnderBudget(deps: SaveMemoryToolDeps, cwd: string, text: string): Promise<boolean | undefined> {
+	const maxTokens = deps.getMaxTokens?.()
+	if (maxTokens === undefined) {
+		return undefined
+	}
+	try {
+		const rendered = renderMemorySection(await deps.store.read(cwd), maxTokens)
+		return rendered?.text.includes(normalizeEntryText(text)) ?? false
+	} catch {
+		return undefined
+	}
 }
 
 export function createSaveMemoryTool(deps: SaveMemoryToolDeps): AgentTool {
@@ -72,13 +99,19 @@ export function createSaveMemoryTool(deps: SaveMemoryToolDeps): AgentTool {
 		retryable: false,
 		async execute(rawInput: unknown): Promise<string> {
 			const input = parseSaveMemoryInput(rawInput)
-			const result = await deps.store.save(deps.getCwd(), input)
+			const cwd = deps.getCwd()
+			const result = await deps.store.save(cwd, input)
 			if (!result.inserted) {
 				return `That memory is already in ${result.file}; nothing was added.`
 			}
-			const where = input.importance === "high" ? "at the top of Important" : "at the end of Notes"
+			const where = input.importance === "high" ? "at the top of Important" : "at the top of Notes"
 			const topic = result.topicFile ? ` Details were appended to ${result.topicFile}.` : ""
-			return `Saved to ${result.file}, ${where}. Later conversations will see it.${topic}`
+			const shown = await isShownUnderBudget(deps, cwd, input.text)
+			const visibility =
+				shown === false
+					? " It is outside the memory budget, so later conversations will not see it in their prompt until the file is trimmed or the budget (plinycode.memory.maxTokens) is raised; tell the user."
+					: " Later conversations will see it."
+			return `Saved to ${result.file}, ${where}.${visibility}${topic}`
 		},
 	}
 }

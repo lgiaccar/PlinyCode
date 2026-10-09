@@ -6,6 +6,7 @@ import { isReviewBeforeFinishEnabled } from "@/hosts/vscode/review-settings"
 import { type AdvisorInstallDeps, installAdvisor } from "./advisor/advisor-install"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import type { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
+import type { ConversationPromptDates } from "./context/conversation-prompt-date"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
 import { installLastRequestCapture } from "./last-model-request"
@@ -52,6 +53,12 @@ interface SdkSessionConfigBuilderOptions {
 	 */
 	gitSnapshots?: Pick<ConversationGitSnapshots, "prepare">
 	/**
+	 * Supplies the date for the system prompt's <env> block: fixed when the
+	 * conversation starts and reused on every later build, for the same
+	 * reason as the git snapshot.
+	 */
+	promptDates?: Pick<ConversationPromptDates, "prepare">
+	/**
 	 * The conversation a config is being built for: the displayed task's id.
 	 * Undefined while a new task is starting, which is when a snapshot is
 	 * gathered. Every rebuild, resume, compaction and restore builds its config
@@ -79,13 +86,15 @@ export class SdkSessionConfigBuilder {
 
 	async build(input: SessionConfigInput): Promise<Awaited<ReturnType<typeof buildSessionConfig>>> {
 		const conversationId = this.options.getConversationId?.()?.trim() || undefined
-		const [git, memory] = await Promise.all([
+		const [git, date, memory] = await Promise.all([
 			this.options.gitSnapshots?.prepare(conversationId, input.cwd),
+			this.options.promptDates?.prepare(conversationId),
 			this.options.memory?.snapshots.prepare(conversationId, input.cwd),
 		])
 		const config = await buildSessionConfig({
 			...input,
 			...(git?.snapshot ? { gitSnapshot: git.snapshot } : {}),
+			...(date ? { currentDate: date.date } : {}),
 			...(memory?.section ? { memorySection: memory.section } : {}),
 		})
 		// A session id is fixed up front so per-session emitters below can tell
@@ -93,6 +102,7 @@ export class SdkSessionConfigBuilder {
 		// existing id overwrite config.sessionId; the emitters read it lazily.
 		config.sessionId = config.sessionId?.trim() || createSessionId()
 		git?.bindToSession(config.sessionId)
+		date?.bindToSession(config.sessionId)
 		memory?.bindToSession(config.sessionId)
 		const isBackground = () => this.options.isBackgroundSession?.(config.sessionId) === true
 

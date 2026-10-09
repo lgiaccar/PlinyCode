@@ -288,7 +288,7 @@ export class SessionHistorySearchService {
 				`WITH matches AS MATERIALIZED (
 					SELECT session_search.session_id, document_id, ordinal, role, started_at,
 						workspace_root, indexed_sessions.title,
-						snippet(session_search, 7, '[', ']', 'â€¦', 24) AS snippet,
+						snippet(session_search, 7, '[', ']', '…', 24) AS snippet,
 						session_search.rank AS score
 					FROM session_search
 					JOIN indexed_sessions

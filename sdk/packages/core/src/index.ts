@@ -486,8 +486,10 @@ export {
 	probeProcessStartTokenAsync,
 } from "./runtime/process-start-token";
 export {
+	capInstructionText,
 	formatRulesForSystemPrompt,
 	isRuleEnabled,
+	MAX_COMMAND_INSTRUCTION_CHARS,
 	mergeRulesForSystemPrompt,
 } from "./runtime/safety/rules";
 export {

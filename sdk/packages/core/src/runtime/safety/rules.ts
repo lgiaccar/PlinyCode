@@ -125,6 +125,32 @@ export function nestRuleHeadings(body: string): string {
 export const MAX_RULE_CHARS = 12_000;
 /** Budget for all always-on rule bodies together. */
 export const MAX_RULES_TOTAL_CHARS = 40_000;
+/**
+ * Longest skill or workflow body a slash command pastes into a user message.
+ * Twice a rule: a command is pasted once, where a rule is resent with every
+ * request, but it still has to fit beside the rest of the context.
+ */
+export const MAX_COMMAND_INSTRUCTION_CHARS = 24_000;
+
+/**
+ * Cuts an instruction body that a command expands into the conversation,
+ * ending it with a note that says how much was left out and where the rest
+ * is, so the model can read the file instead of acting on half of it.
+ */
+export function capInstructionText(
+	text: string,
+	options: { maxChars?: number; sourcePath?: string } = {},
+): string {
+	const limit = Math.max(0, options.maxChars ?? MAX_COMMAND_INSTRUCTION_CHARS);
+	if (text.length <= limit) {
+		return text;
+	}
+	const omitted = text.length - limit;
+	const where = options.sourcePath
+		? ` Read the rest in \`${options.sourcePath}\`.`
+		: "";
+	return `${text.slice(0, limit)}\n\n[Instructions truncated: ${omitted} more characters.${where}]`;
+}
 
 /**
  * Renders rules for the system prompt, which is resent with every request.

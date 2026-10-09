@@ -827,6 +827,11 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// point, so the summarizer starts on the built-in default and is updated in
 	// place once the file is read: core keeps a reference to this object rather
 	// than a copy.
+	//
+	// Whether compaction runs at all is the session factory's decision: it
+	// leaves `compaction` out when the user turned auto-condense off, and that
+	// must stay off on a router too. The summarizer is still attached, so a
+	// later rebuild that turns compaction on finds it.
 	if (isRouted()) {
 		const summarizerModelId = defaultRules(installProfile).utility.summarizer
 		const summarizer = {
@@ -839,7 +844,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		}
 		config.compaction = {
 			...(config.compaction ?? {}),
-			enabled: config.compaction?.enabled ?? true,
+			enabled: config.compaction?.enabled ?? false,
 			summarizer,
 		}
 		onRulesLoaded = (rules) => {

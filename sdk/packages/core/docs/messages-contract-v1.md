@@ -15,6 +15,14 @@ and is not required for replay or export.
 The schema is versioned by the top-level `version` field. This document
 describes **version `1`**.
 
+The file is rewritten whole after every model call. It is written as a single
+line of compact JSON followed by a newline (older files are pretty-printed;
+both parse the same), through a temporary file and a rename, so a crash leaves
+the previous version rather than half of one. Writes to one session are
+coalesced: a write requested while one is in flight waits for it, and only the
+newest requested contents are then written, since every payload is the whole
+transcript.
+
 ## File-level shape
 
 ```jsonc
