@@ -140,6 +140,8 @@ After a run, a free model reads the conversation and proposes memories, and the 
 | `plinycode.memory.distill` | `offer` | `off`: only `/distill` proposes memories |
 | `plinycode.memory.conversationSearch` | true | The `search_conversations` and `read_conversation` tools |
 
+All three are also in PlinyCode's own **Settings → Features → Memory**, with links that open the repository's and your own `MEMORY.md` ([MemorySettings.tsx](../apps/vscode/webview-ui/src/components/settings/MemorySettings.tsx)). Both places edit the same VS Code settings, and the view follows changes made in VS Code's settings. The view accepts budgets from 0 to 64,000 tokens.
+
 ## Related
 
 - [environment-context.md](environment-context.md): the git snapshot. Its commit list was replaced by a hint to run `git log` when the history matters.

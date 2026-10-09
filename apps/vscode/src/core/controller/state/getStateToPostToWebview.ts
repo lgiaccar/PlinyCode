@@ -9,6 +9,7 @@ import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@pli
 import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
+import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { ExtensionRegistryInfo } from "@/registry"
@@ -60,6 +61,9 @@ export async function getStateToPostToWebview(controller: {
 	const webSearchEnabled = isModelToolEnabledGlobally("web_search")
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
+	const memoryMaxTokens = getMemoryMaxTokens()
+	const memoryDistillEnabled = isMemoryDistillOfferEnabled()
+	const memoryConversationSearchEnabled = isConversationSearchEnabled()
 	const planExecutionChoice = getPlanExecutionChoice()
 	const subagentsEnabled = stateManager.getGlobalSettingsKey("subagentsEnabled")
 	const mcpDisplayMode = stateManager.getGlobalStateKey("mcpDisplayMode")
@@ -123,6 +127,9 @@ export async function getStateToPostToWebview(controller: {
 		webSearchEnabled,
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,
+		memoryMaxTokens,
+		memoryDistillEnabled,
+		memoryConversationSearchEnabled,
 		planExecutionChoice,
 		subagentsEnabled,
 		mcpDisplayMode,

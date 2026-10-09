@@ -115,6 +115,12 @@ export interface ExtensionState {
 	prereleaseUpdatesEnabled?: boolean
 	/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 	conversationSpendingLimit?: number
+	/** `plinycode.memory.maxTokens`: the memory budget in the system prompt; 0 = memory off (docs/memory.md). */
+	memoryMaxTokens?: number
+	/** `plinycode.memory.distill` is "offer": memories are proposed after a run that edited files. */
+	memoryDistillEnabled?: boolean
+	/** `plinycode.memory.conversationSearch`: the model can search and read earlier conversations. */
+	memoryConversationSearchEnabled?: boolean
 	/** `plinycode.plan.executeWith`: the model the Execute plan button runs a plan on; the last choice made in its menu. */
 	planExecutionChoice?: PlanExecutionChoice
 	subagentsEnabled?: boolean
