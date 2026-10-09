@@ -277,10 +277,13 @@ export class PipelineManager {
 								return
 							}
 							
-							// Update rate limit tracking
+							// Update rate limit tracking - only update probe time when we actually make the call
 							if ((provider.rateLimitRemaining ?? 1000) < 100) {
 								rateLimitState.lastLowRateLimit = this.now()
-								rateLimitState.lastProbeTime = this.now()
+								// Only update probe time when we're about to make the actual API call
+								if (shouldProbe) {
+									rateLimitState.lastProbeTime = this.now()
+								}
 							} else if ((provider.rateLimitRemaining ?? 1000) >= 100) {
 								// Rate limit has recovered
 								rateLimitState.lastLowRateLimit = 0
