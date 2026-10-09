@@ -23,14 +23,14 @@ export const PROMPT_DATE_METADATA_KEY = "promptDate"
 // their session record when they are next rebuilt.
 const MAX_REMEMBERED_CONVERSATIONS = 100
 
-export interface ConversationPromptDatesOptions {
+interface ConversationPromptDatesOptions {
 	/** Today, formatted the way the prompt shows it. */
 	today: () => string
 	/** The value stored under PROMPT_DATE_METADATA_KEY in the conversation's session record. */
 	readStored: (conversationId: string) => Promise<unknown>
 }
 
-export interface PreparedPromptDate {
+interface PreparedPromptDate {
 	/** The date the system prompt shows for this conversation. */
 	date: string
 	/** Ties the date to the session the config is built for, like the git snapshot. */
