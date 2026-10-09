@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { renderMemorySection, renderSubAgentMemoryExcerpt } from "./memory-section"
+import type { MemoryContents } from "./memory-store"
 
 /** The excerpt budget in memory-section.ts. */
 const SUB_AGENT_MEMORY_EXCERPT_CHARS = 2000
-
-import type { MemoryContents } from "./memory-store"
 
 function contents(repoText: string, userText = ""): MemoryContents {
 	return {
