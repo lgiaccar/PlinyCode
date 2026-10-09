@@ -26,6 +26,41 @@ const github = (api: FakeApi) =>
 	new GitHubProvider({ kind: "github", host: "github.com", owner: "octo", repo: "hello" }, api.fetch, staticAuth())
 
 describe("GitHubProvider", () => {
+	it("discovers dispatch inputs at the selected ref and queues typed values", async () => {
+		const api = new FakeApi()
+			.on("GET", `${GH}/actions/workflows`, {
+				workflows: [{ id: 3, name: "Build", state: "active", html_url: "https://github.com/octo/hello/actions" }],
+			})
+			.on("GET", `${GH}/actions/workflows/3`, { path: ".github/workflows/build.yml", state: "active" })
+			.on("GET", GH, { default_branch: "main" })
+			.on("GET", `${GH}/contents/.github/workflows/build.yml`, {
+				sha: "file-sha",
+				encoding: "base64",
+				content: Buffer.from(
+					"on:\n  workflow_dispatch:\n    inputs:\n      enabled: {type: boolean, default: false}",
+				).toString("base64"),
+			})
+			.on("POST", `${GH}/actions/workflows/3/dispatches`, {
+				workflow_run_id: 42,
+				html_url: "https://github.com/octo/hello/actions/runs/42",
+			})
+		const provider = github(api)
+		expect(await provider.listPipelines()).toHaveLength(1)
+		expect((await provider.pipelineInputs(3, "main")).inputs[0].default).toBe(false)
+		expect(api.requests.find((request) => request.url.pathname.includes("/contents/"))?.url.searchParams.get("ref")).toBe(
+			"main",
+		)
+		expect((await provider.queuePipeline(3, "main", { enabled: false })).runId).toBe(42)
+		expect(api.lastJson("POST")).toEqual({ ref: "main", inputs: { enabled: false } })
+		expect(api.last("POST").headers["X-GitHub-Api-Version"]).toBe("2026-03-10")
+	})
+
+	it("keeps accepted legacy dispatches unidentified instead of guessing a run", async () => {
+		const api = new FakeApi().on("POST", `${GH}/actions/workflows/3/dispatches`, null)
+		expect((await github(api).queuePipeline(3, "main", {})).runId).toBeUndefined()
+		expect(api.requests).toHaveLength(1)
+	})
+
 	it("creates a PR with the given payload and auth", async () => {
 		const api = new FakeApi().on("POST", `${GH}/pulls`, ghPr())
 		const pr = await github(api).createPr("Add feature", "## Summary", "feature", "main", true)
@@ -198,6 +233,43 @@ const azdo = (api: FakeApi, auth = staticAuth()) => {
 }
 
 describe("AzureDevOpsProvider", () => {
+	it("discovers repository YAML parameters and sends templateParameters with the selected ref", async () => {
+		const definition = {
+			id: 4,
+			name: "Deploy",
+			process: { type: 2, yamlFilename: "/pipelines/deploy.yml" },
+			repository: { id: "r-1" },
+			queueStatus: "enabled",
+		}
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/build/definitions`, {
+				value: [definition, { id: 5, process: { type: 1 }, queueStatus: "enabled" }],
+			})
+			.on("GET", `${PROJ}/build/definitions/4`, definition)
+			.on("GET", `${PROJ}/git/repositories/r-1/items`, {
+				commitId: "sha",
+				content:
+					"parameters:\n  - name: enabled\n    type: boolean\n    default: false\n  - name: count\n    type: number\n    default: 0",
+			})
+			.on("POST", `${PROJ}/pipelines/4/runs`, { id: 55 })
+		const provider = azdo(api)
+		expect((await provider.listPipelines()).map((definition) => definition.id)).toEqual([4])
+		expect((await provider.pipelineInputs(4, "refs/tags/v1")).inputs.map((input) => input.default)).toEqual([false, 0])
+		expect(api.last("GET").url.searchParams.get("versionDescriptor.versionType")).toBe("tag")
+		expect(api.last("GET").url.searchParams.get("versionDescriptor.version")).toBe("v1")
+		expect((await provider.queuePipeline(4, "refs/tags/v1", { enabled: false, count: 0 })).runId).toBe(55)
+		expect(api.lastJson("POST")).toEqual({
+			templateParameters: { enabled: false, count: 0 },
+			resources: { repositories: { self: { refName: "refs/tags/v1" } } },
+		})
+	})
+
+	it("rejects parameter discovery for a pipeline from another repository", async () => {
+		const api = new FakeApi().on("GET", `${PROJ}/build/definitions/4`, { process: { type: 2 }, repository: { id: "other" } })
+		await expect(azdo(api).pipelineInputs(4, "main")).rejects.toThrow("connected to this workspace")
+		expect(api.requests.some((request) => request.url.pathname.endsWith("/items"))).toBe(false)
+	})
+
 	it("creates a PR with full refs", async () => {
 		const api = new FakeApi().on("POST", PRS, adoPr)
 		const pr = await azdo(api).createPr("Add feature", "## Summary", "feature", "main", true)

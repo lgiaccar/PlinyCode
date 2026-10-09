@@ -8,6 +8,7 @@ import type { McpToolProvider } from "@plinycode/core"
 import type { AgentTool } from "@plinycode/shared"
 import type { CiBoard } from "./ci-board/ci-board"
 import type { CiWatchManager } from "./ci-watch/ci-watch-manager"
+import type { PipelineManager } from "./pipelines/pipeline-manager"
 
 interface BuiltinMcpSource {
 	serverName: string
@@ -129,4 +130,14 @@ export function setCiBoard(board: CiBoard | undefined): void {
 
 export function getCiBoard(): CiBoard | undefined {
 	return ciBoard
+}
+
+let pipelineManager: PipelineManager | undefined
+
+export function setPipelineManager(manager: PipelineManager | undefined): void {
+	pipelineManager = manager
+}
+
+export function getPipelineManager(): PipelineManager | undefined {
+	return pipelineManager
 }

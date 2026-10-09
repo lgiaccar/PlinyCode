@@ -1,4 +1,6 @@
 /** GitHub (github.com and GitHub Enterprise Server) through the REST API. */
+
+import { type PipelineSchema, parsePipelineInputs } from "../../pipelines/pipeline-inputs"
 import { type Auth, githubAuth } from "../auth"
 import { DevOpsError } from "../errors"
 import type { Remote } from "../repo"
@@ -9,8 +11,10 @@ import {
 	Http,
 	type JobResult,
 	type MergeState,
+	type PipelineDefinition,
+	type PipelineDispatch,
+	type PipelineProvider,
 	type PipelineRun,
-	type Provider,
 	type PullRequest,
 	type Result,
 	type RunReport,
@@ -86,7 +90,7 @@ export function failureExcerpt(log: string, lines: number): string {
 	return all.slice(Math.max(0, last + 1 - lines), last + 1).join("\n")
 }
 
-export class GitHubProvider implements Provider {
+export class GitHubProvider implements PipelineProvider {
 	readonly kind = "GitHub"
 	readonly maxBodyLength = 65536
 	readonly repoUrl: string
@@ -158,6 +162,80 @@ export class GitHubProvider implements Provider {
 
 	async defaultBranch(): Promise<string> {
 		return (await this.get("")).default_branch
+	}
+
+	async listPipelines(): Promise<PipelineDefinition[]> {
+		const pipelines: PipelineDefinition[] = []
+		for (let page = 1; ; page++) {
+			const workflows: any[] = (await this.get("/actions/workflows", { per_page: 100, page })).workflows ?? []
+			pipelines.push(
+				...workflows
+					.filter((workflow) => workflow.state === "active")
+					.map((workflow) => ({
+						id: workflow.id,
+						name: workflow.name,
+						url: workflow.path
+							? `${this.repoUrl}/actions/workflows/${encodeURIComponent(String(workflow.path).split("/").at(-1) ?? "")}`
+							: `${this.repoUrl}/actions`,
+					})),
+			)
+			if (workflows.length < 100) return pipelines
+		}
+	}
+
+	async pipelineInputs(pipelineId: number, ref: string): Promise<PipelineSchema> {
+		const workflow = await this.get(`/actions/workflows/${pipelineId}`)
+		if (workflow.state !== "active") throw new DevOpsError("This workflow is not active.")
+		const path = String(workflow.path).split("/").map(encodeURIComponent).join("/")
+		const content = await this.get(`/contents/${path}`, { ref })
+		if (typeof content.content !== "string" || content.encoding !== "base64") {
+			throw new DevOpsError("GitHub did not return the workflow YAML.")
+		}
+		const schema = parsePipelineInputs(Buffer.from(content.content, "base64").toString("utf8"), "github", content.sha)
+		const defaultRef = await this.defaultBranch()
+		if (ref !== defaultRef && ref !== `refs/heads/${defaultRef}`) {
+			const defaultContent = await this.get(`/contents/${path}`, { ref: defaultRef })
+			const defaultSchema = parsePipelineInputs(
+				Buffer.from(defaultContent.content ?? "", "base64").toString("utf8"),
+				"github",
+				defaultContent.sha,
+			)
+			if (defaultSchema.limitations.length)
+				schema.limitations.push("Manual dispatch must also be enabled on the default branch.")
+		}
+		if (schema.inputs.some((input) => input.type === "environment")) {
+			const environments: string[] = []
+			for (let page = 1; ; page++) {
+				const entries: any[] = (await this.get("/environments", { per_page: 100, page })).environments ?? []
+				environments.push(...entries.map((entry) => String(entry.name)))
+				if (entries.length < 100) break
+			}
+			for (const input of schema.inputs) {
+				if (input.type === "environment") {
+					input.type = "choice"
+					input.options = environments
+				}
+			}
+		}
+		return schema
+	}
+
+	async queuePipeline(pipelineId: number, ref: string, inputs: Record<string, unknown>): Promise<PipelineDispatch> {
+		const response = await this.http.json("POST", `${this.api}/actions/workflows/${pipelineId}/dispatches`, {
+			json: { ref, inputs },
+			apiVersion: this.remote.host === "github.com" ? "2026-03-10" : undefined,
+		})
+		return {
+			runId:
+				Number.isSafeInteger(response?.workflow_run_id) && response.workflow_run_id > 0
+					? response.workflow_run_id
+					: undefined,
+			url: response?.html_url ?? `${this.repoUrl}/actions`,
+		}
+	}
+
+	async getRun(runId: number): Promise<PipelineRun> {
+		return this.run(await this.get(`/actions/runs/${runId}`))
 	}
 
 	async findOpenPr(branch: string): Promise<PullRequest | undefined> {

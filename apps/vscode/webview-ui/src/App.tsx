@@ -2,6 +2,7 @@ import ChatView from "./components/chat/ChatView"
 import CiBoardView from "./components/ciBoard/CiBoardView"
 import HistoryView from "./components/history/HistoryView"
 import McpView from "./components/mcp/configuration/McpConfigurationView"
+import PipelinesView from "./components/pipelines/PipelinesView"
 import SettingsView from "./components/settings/SettingsView"
 import { useExtensionState } from "./context/ExtensionStateContext"
 import { Providers } from "./Providers"
@@ -15,11 +16,13 @@ const AppContent = () => {
 		settingsTargetSection,
 		showHistory,
 		showCiBoard,
+		showPipelines,
 		closeMcpView,
 		navigateToHistory,
 		hideSettings,
 		hideHistory,
 		hideCiBoard,
+		hidePipelines,
 	} = useExtensionState()
 
 	if (!didHydrateState) {
@@ -32,8 +35,12 @@ const AppContent = () => {
 			{showHistory && <HistoryView onDone={hideHistory} />}
 			{showMcp && <McpView initialTab={mcpTab} onDone={closeMcpView} />}
 			{showCiBoard && <CiBoardView onDone={hideCiBoard} />}
+			{showPipelines && <PipelinesView onDone={hidePipelines} />}
 			{/* Do not conditionally load ChatView, it's expensive and there's state we don't want to lose (user input, disableInput, askResponse promise, etc.) */}
-			<ChatView isHidden={showSettings || showHistory || showMcp || showCiBoard} showHistoryView={navigateToHistory} />
+			<ChatView
+				isHidden={showSettings || showHistory || showMcp || showCiBoard || showPipelines}
+				showHistoryView={navigateToHistory}
+			/>
 		</div>
 	)
 }

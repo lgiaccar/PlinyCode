@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package cline;
+
+import "cline/common.proto";
+
+option go_package = "github.com/cline/grpc-go/cline";
+option java_multiple_files = true;
+option java_package = "bot.cline.proto";
+
+service PipelineService {
+  rpc listPipelines(StringRequest) returns (PipelineList);
+  rpc getPipelineInputs(PipelineSelection) returns (PipelineInputSchema);
+  rpc queuePipelineRun(QueuePipelineRequest) returns (String);
+  rpc subscribeToPipelineRuns(EmptyRequest) returns (stream PipelineHistory);
+  rpc refreshPipelineRuns(EmptyRequest) returns (Empty);
+  rpc associatePipelineRun(AssociatePipelineRequest) returns (Empty);
+}
+
+message PipelineDefinitionInfo {
+  int64 id = 1;
+  string name = 2;
+  string url = 3;
+}
+
+message PipelineList {
+  repeated PipelineDefinitionInfo pipelines = 1;
+  string default_ref = 2;
+}
+
+message PipelineSelection {
+  Metadata metadata = 1;
+  string repo_root = 2;
+  int64 pipeline_id = 3;
+  string ref = 4;
+}
+
+message PipelineParameter {
+  string name = 1;
+  string label = 2;
+  string type = 3;
+  bool required = 4;
+  string default_json = 5;
+  repeated string options_json = 6;
+}
+
+message PipelineInputSchema {
+  string revision = 1;
+  repeated PipelineParameter parameters = 2;
+  repeated string limitations = 3;
+}
+
+message QueuePipelineRequest {
+  Metadata metadata = 1;
+  string id = 2;
+  string repo_root = 3;
+  int64 pipeline_id = 4;
+  string ref = 5;
+  string revision = 6;
+  string inputs_json = 7;
+}
+
+message PipelineHistory {
+  repeated PipelineLaunchInfo launches = 1;
+  string unavailable = 2;
+}
+
+message PipelineLaunchInfo {
+  string id = 1;
+  string pipeline_name = 2;
+  string repo_root = 3;
+  string ref = 4;
+  int64 created = 5;
+  string status = 6;
+  string result = 7;
+  string url = 8;
+  int64 run_id = 9;
+  int64 updated = 10;
+  string error = 11;
+  bool needs_association = 12;
+  string provider = 13;
+}
+
+message AssociatePipelineRequest {
+  Metadata metadata = 1;
+  string id = 2;
+  int64 run_id = 3;
+}
