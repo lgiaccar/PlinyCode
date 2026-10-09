@@ -80,7 +80,7 @@ describe("pipeline launches", () => {
 		await manager.refresh()
 		expect(counts()).toEqual({ dispatches: 1, polls: 1 })
 		expect((await store.get(request.id))?.run?.result).toBe("success")
-		expect(JSON.stringify(await store.load())).not.toContain('"inputs"')
+		expect(JSON.stringify(await store.load(100))).not.toContain('"inputs"')
 	})
 
 	it("does not retry unknown dispatch outcomes", async () => {
@@ -116,7 +116,7 @@ describe("pipeline launches", () => {
 		managers.push(other)
 		await other.init()
 		await Promise.all([manager.queue(request), other.queue({ ...request, id: randomUUID() })])
-		expect(await store.load()).toHaveLength(2)
+		expect(await store.load(100)).toHaveLength(2)
 	})
 
 	it("uses a durable reservation to prevent duplicate dispatch across windows", async () => {
@@ -181,7 +181,7 @@ describe("pipeline launches", () => {
 		await manager.init()
 		await manager.queue(request)
 		await manager.queue(request)
-		expect(JSON.stringify(await store.load())).not.toContain("sensitive-token")
+		expect(JSON.stringify(await store.load(100))).not.toContain("sensitive-token")
 		expect((await store.get(request.id))?.remoteUrl).toBe("https://github.com/o/r")
 	})
 })

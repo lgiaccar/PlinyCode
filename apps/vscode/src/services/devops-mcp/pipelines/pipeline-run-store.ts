@@ -36,7 +36,7 @@ export class PipelineRunStore {
 		return path.join(this.directory, `${id}.json`)
 	}
 
-	async load(): Promise<PipelineLaunch[]> {
+	async load(limit = 100): Promise<PipelineLaunch[]> {
 		let files: string[]
 		try {
 			files = await fs.readdir(this.directory)
@@ -44,10 +44,20 @@ export class PipelineRunStore {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
 			throw error
 		}
-		const records = await Promise.all(
-			files
-				.filter((file) => file.endsWith(".json") && validId(file.slice(0, -5)))
-				.map(async (file) => {
+		
+		// Filter and limit files to prevent unbounded reads
+		const validFiles = files
+			.filter((file) => file.endsWith(".json") && validId(file.slice(0, -5)))
+			.slice(0, limit) // Limit the number of files to process
+		
+		// Process files in smaller batches to avoid unbounded I/O bursts
+		const batchSize = 10
+		const records: (PipelineLaunch | undefined)[] = []
+		
+		for (let i = 0; i < validFiles.length; i += batchSize) {
+			const batch = validFiles.slice(i, i + batchSize)
+			const batchRecords = await Promise.all(
+				batch.map(async (file) => {
 					try {
 						return await this.get(file.slice(0, -5))
 					} catch (error) {
@@ -55,7 +65,10 @@ export class PipelineRunStore {
 						return undefined
 					}
 				}),
-		)
+			)
+			records.push(...batchRecords)
+		}
+		
 		return records
 			.filter((record): record is PipelineLaunch => record !== undefined)
 			.sort((left, right) => right.created - left.created)

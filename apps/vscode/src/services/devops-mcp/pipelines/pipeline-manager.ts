@@ -32,15 +32,36 @@ export class PipelineManager {
 	private viewers = 0
 	private disposed = false
 	private readonly now: () => number
+	private readonly rateLimitStates = new Map<string, {
+		lastLowRateLimit: number
+		lastProbeTime: number
+		probing: boolean
+	}>()
+	
+	private getRateLimitState(provider: PipelineProvider): {
+		lastLowRateLimit: number
+		lastProbeTime: number
+		probing: boolean
+	} {
+		const key = `${provider.kind}:${provider.repoUrl}`
+		if (!this.rateLimitStates.has(key)) {
+			this.rateLimitStates.set(key, {
+				lastLowRateLimit: 0,
+				lastProbeTime: 0,
+				probing: false
+			})
+		}
+		return this.rateLimitStates.get(key)!
+	}
 	private readonly loadRepo: (root: string) => Promise<RepoContext>
 
 	constructor(private readonly options: PipelineManagerOptions) {
-		this.now = options.now ?? Date.now
+		this.now = options.now ?? (() => Date.now())
 		this.loadRepo = options.loadRepo ?? loadContext
 	}
 
 	async init(): Promise<void> {
-		this.launches = await this.options.store.load()
+		this.launches = await this.options.store.load(200)
 		this.emit()
 		await this.refresh()
 	}
@@ -201,7 +222,7 @@ export class PipelineManager {
 	}
 
 	private async reload(): Promise<void> {
-		this.launches = await this.options.store.load()
+		this.launches = await this.options.store.load(200)
 		this.emit()
 	}
 
@@ -236,13 +257,33 @@ export class PipelineManager {
 					active.slice(offset, offset + 4).map(async (record) => {
 						try {
 							const provider = this.options.providerFor(parseRemote(record.remoteUrl, record.provider))
-							if ((provider.rateLimitRemaining ?? 1000) < 100) {
+							const rateLimitState = this.getRateLimitState(provider)
+							
+							// Check if we should probe to recover from rate limit issues
+							const timeSinceLowRate = this.now() - rateLimitState.lastLowRateLimit
+							const timeSinceLastProbe = this.now() - rateLimitState.lastProbeTime
+							
+							// If we've been in low rate limit state for more than 5 minutes, probe periodically
+							const shouldProbe = (provider.rateLimitRemaining ?? 1000) < 100 && 
+								timeSinceLowRate > 5 * 60_000 && 
+								timeSinceLastProbe > 2 * 60_000 // Probe every 2 minutes
+							
+							if ((provider.rateLimitRemaining ?? 1000) < 100 && !shouldProbe) {
 								backoff = true
 								await this.options.store.update({
 									...record,
 									error: "Rate limit is low. Showing the last known status.",
 								})
 								return
+							}
+							
+							// Update rate limit tracking
+							if ((provider.rateLimitRemaining ?? 1000) < 100) {
+								rateLimitState.lastLowRateLimit = this.now()
+								rateLimitState.lastProbeTime = this.now()
+							} else if ((provider.rateLimitRemaining ?? 1000) >= 100) {
+								// Rate limit has recovered
+								rateLimitState.lastLowRateLimit = 0
 							}
 							const run = await provider.getRun(record.runId as number)
 							await this.options.store.update({
