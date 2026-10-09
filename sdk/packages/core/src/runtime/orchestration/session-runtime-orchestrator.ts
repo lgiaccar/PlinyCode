@@ -659,6 +659,7 @@ export class SessionRuntime {
 			? this.config.agentModelFactory({
 					config: this.config,
 					createDefault: createDefaultAgentModel,
+					agentId: this.agentId,
 				})
 			: createDefaultAgentModel();
 		// Merge extension-contributed tools with the config-declared

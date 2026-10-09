@@ -17,6 +17,7 @@ import type {
 } from "@shared/ExtensionMessage"
 import { Logger } from "@shared/services/Logger"
 import type { TodoListMessage } from "@shared/todo-list"
+import { isSubAgentTool } from "../sdk-tool-policies"
 import { isSyntheticUserPrompt } from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
 import { normalizeTodoList, TODO_TOOL_NAME } from "../vscode-todo-tool"
@@ -172,9 +173,10 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					// Emit say:"use_subagents" with prompts list, then say:"subagent"
 					// with running status. Multiple parallel spawn_agent calls in the
 					// same iteration are aggregated into a single status message.
-					if (toolName === "spawn_agent") {
+					if (isSubAgentTool(toolName)) {
 						const parsedInput = parseToolInput(input)
-						const taskPrompt = getStringField(parsedInput, "task") ?? ""
+						// `spawn_agent` takes `task`; a configured `subagent_<name>` takes `prompt`.
+						const taskPrompt = getStringField(parsedInput, "task") ?? getStringField(parsedInput, "prompt") ?? ""
 						const callId = event.toolCallId ?? `spawn-${state.nextTs()}`
 						state.addSpawnAgent(callId, taskPrompt)
 						Logger.log(`[Subagent] spawned: ${taskPrompt.replace(/\s+/g, " ").slice(0, 120)}`)
@@ -275,13 +277,15 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 			// The SDK's spawn_agent tool may emit content_update events with
 			// sub-agent progress (iterations, tool calls, usage). We translate
 			// these into the ClineSaySubagentStatus format for the rich UI.
-			if (updateToolName === "spawn_agent" && state.hasSpawnAgents()) {
+			if (updateToolName && isSubAgentTool(updateToolName) && state.hasSpawnAgents()) {
 				const callId = event.toolCallId ?? ""
 				const entry = callId ? state.getSpawnAgent(callId) : undefined
 				if (entry) {
 					// Apply progress from the update payload if available
 					const updateData = event.update as Record<string, unknown> | undefined
 					if (updateData) {
+						if (typeof updateData.subAgentId === "string" && updateData.subAgentId)
+							entry.agentId = updateData.subAgentId
 						if (typeof updateData.toolCalls === "number") entry.toolCalls = updateData.toolCalls
 						if (typeof updateData.inputTokens === "number") entry.inputTokens = updateData.inputTokens
 						if (typeof updateData.outputTokens === "number") entry.outputTokens = updateData.outputTokens
@@ -403,7 +407,7 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 					// say:"subagent" (completed/failed) + say:"subagent_usage".
 					// When all spawn_agent calls in this iteration finish, the
 					// final say:"subagent" has partial=false.
-					if (toolName === "spawn_agent") {
+					if (isSubAgentTool(toolName)) {
 						const callId = event.toolCallId ?? ""
 						const entry = callId ? state.getSpawnAgent(callId) : undefined
 						if (entry) {
@@ -415,6 +419,12 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 								if (usage) {
 									if (typeof usage.inputTokens === "number") entry.inputTokens = usage.inputTokens
 									if (typeof usage.outputTokens === "number") entry.outputTokens = usage.outputTokens
+									if (typeof usage.cacheReadTokens === "number") entry.cacheReadTokens = usage.cacheReadTokens
+									if (typeof usage.cacheWriteTokens === "number")
+										entry.cacheWriteTokens = usage.cacheWriteTokens
+									// The engine prices the sub-agent's calls; without a price the live
+									// progress updates' sum stands.
+									if (typeof usage.totalCost === "number") entry.totalCost = usage.totalCost
 								}
 							}
 							if (event.error) {
@@ -448,14 +458,19 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 							partial: !allDone,
 						})
 
-						// When all done, emit subagent_usage for cost accounting
+						// When all done, emit subagent_usage for cost accounting. The
+						// engine reports input tokens with the cached ones included;
+						// the buckets the header shows are disjoint, like the root's.
 						if (allDone) {
+							const cacheReads = items.reduce((acc, e) => acc + (e.cacheReadTokens || 0), 0)
+							const cacheWrites = items.reduce((acc, e) => acc + (e.cacheWriteTokens || 0), 0)
+							const tokensIn = items.reduce((acc, e) => acc + (e.inputTokens || 0), 0)
 							const usagePayload: ClineSubagentUsageInfo = {
 								source: "subagents",
-								tokensIn: items.reduce((acc, e) => acc + (e.inputTokens || 0), 0),
+								tokensIn: Math.max(0, tokensIn - cacheReads - cacheWrites),
 								tokensOut: items.reduce((acc, e) => acc + (e.outputTokens || 0), 0),
-								cacheWrites: 0,
-								cacheReads: 0,
+								cacheWrites,
+								cacheReads,
 								cost: items.reduce((acc, e) => acc + (e.totalCost || 0), 0),
 							}
 							messages.push({
@@ -898,7 +913,10 @@ export function translateSessionEvent(event: CoreSessionEvent, state: MessageTra
 			const isToolLifecycleEvent =
 				agentEvent.type === "content_start" || agentEvent.type === "content_update" || agentEvent.type === "content_end"
 			const isSpawnAgentToolEvent =
-				isToolLifecycleEvent && agentEvent.contentType === "tool" && agentEvent.toolName === "spawn_agent"
+				isToolLifecycleEvent &&
+				agentEvent.contentType === "tool" &&
+				agentEvent.toolName !== undefined &&
+				isSubAgentTool(agentEvent.toolName)
 
 			// Newer SDK events carry parentAgentId on sub-agent events. Older/local
 			// RuntimeEventAdapter output does not, so while spawn_agent calls are in

@@ -8,9 +8,35 @@ import type {
 	ToolApprovalRequest,
 	ToolApprovalResult,
 } from "./sdk-interaction-coordinator"
+import { isSubAgentTool } from "./sdk-tool-policies"
 
 /** Maximum number of tasks kept running in the background at once. */
 export const MAX_BACKGROUND_SESSIONS = 3
+
+type UsageAgentEvent = Extract<CoreSessionEvent, { type: "agent_event" }>["payload"]["event"] & { type: "usage" }
+
+/** A sub-agent tool result's usage as a usage event the task's history record can take. */
+function subAgentUsageFromOutput(output: unknown): UsageAgentEvent | undefined {
+	const usage = (output as { usage?: Record<string, unknown> } | undefined)?.usage
+	if (!usage || typeof usage !== "object") {
+		return undefined
+	}
+	const number = (key: string) => (typeof usage[key] === "number" ? (usage[key] as number) : undefined)
+	const inputTokens = number("inputTokens") ?? 0
+	const outputTokens = number("outputTokens") ?? 0
+	const cost = number("totalCost")
+	if (inputTokens === 0 && outputTokens === 0 && !cost) {
+		return undefined
+	}
+	return {
+		type: "usage",
+		inputTokens,
+		outputTokens,
+		cacheReadTokens: number("cacheReadTokens"),
+		cacheWriteTokens: number("cacheWriteTokens"),
+		cost,
+	} as UsageAgentEvent
+}
 
 /**
  * How long to wait after a turn's `done` before treating the task as idle. A
@@ -187,9 +213,19 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 				if (
 					(agentEvent.type === "content_start" || agentEvent.type === "content_end") &&
 					agentEvent.contentType === "tool" &&
-					agentEvent.toolName === "spawn_agent"
+					agentEvent.toolName !== undefined &&
+					isSubAgentTool(agentEvent.toolName)
 				) {
 					entry.runningSubagents = Math.max(0, entry.runningSubagents + (agentEvent.type === "content_start" ? 1 : -1))
+					// A sub-agent's own usage events carry its id and are skipped
+					// above; its run's totals arrive in the tool result, and a
+					// background task has no chat rows to add them from.
+					if (agentEvent.type === "content_end") {
+						const usage = subAgentUsageFromOutput(agentEvent.output)
+						if (usage) {
+							this.options.recordUsage(sessionId, usage)
+						}
+					}
 					break
 				}
 				if (agentEvent.type === "usage") {

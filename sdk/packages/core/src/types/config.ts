@@ -9,6 +9,7 @@ import type {
 	ConsecutiveMistakeLimitContext,
 	ConsecutiveMistakeLimitDecision,
 	ExtensionContext,
+	GitSnapshot,
 	HookErrorMode,
 	MessageWithMetadata,
 	SessionExecutionConfig,
@@ -285,6 +286,27 @@ export interface CoreSessionConfig
 	logger?: BasicLogger;
 	extensionContext?: ExtensionContext;
 	extraTools?: AgentTool[];
+	/**
+	 * Host tools a spawned sub-agent gets besides the engine's built-ins, e.g.
+	 * the host's own shell when it replaces the built-in one. `extraTools` are
+	 * not copied: a host decides which of its tools a sub-agent may use.
+	 */
+	subAgentExtraTools?: AgentTool[];
+	/** Iteration cap for a spawned sub-agent run; the engine has a default. */
+	subAgentMaxIterations?: number;
+	/**
+	 * What a spawned sub-agent's own system prompt shows about where it runs,
+	 * supplied by the host like the root prompt's: the editor, platform, the
+	 * conversation's git snapshot and pinned date, and a suffix such as a
+	 * memory excerpt.
+	 */
+	subAgentPrompt?: {
+		ide?: string;
+		platform?: string;
+		gitSnapshot?: GitSnapshot;
+		currentDate?: string;
+		suffix?: string;
+	};
 	pluginPaths?: string[];
 	/**
 	 * Additional Agent Plugins v1 package roots. Paths are resolved by the

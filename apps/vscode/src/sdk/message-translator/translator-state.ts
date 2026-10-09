@@ -467,6 +467,19 @@ export class MessageTranslatorState {
 		return this.spawnAgentEntries.get(toolCallId)
 	}
 
+	/**
+	 * How the chat names the sub-agent with this engine agent id ("sub-agent 2"),
+	 * once its first progress update has told us the id. Undefined for the root
+	 * agent and for sub-agents that have not reported yet.
+	 */
+	subAgentLabel(agentId: string | undefined): string | undefined {
+		if (!agentId) {
+			return undefined
+		}
+		const entry = this.getSpawnAgentItems().find((item) => item.agentId === agentId)
+		return entry ? `sub-agent ${entry.index}` : undefined
+	}
+
 	/** Whether there are any active spawn_agent calls */
 	hasSpawnAgents(): boolean {
 		return this.spawnAgentEntries.size > 0

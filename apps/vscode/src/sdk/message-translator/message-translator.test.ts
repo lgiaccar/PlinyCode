@@ -171,6 +171,71 @@ describe("translateSessionEvent — chunk events", () => {
 })
 
 // ---------------------------------------------------------------------------
+// translateSessionEvent — sub-agents
+// ---------------------------------------------------------------------------
+
+describe("translateSessionEvent — sub-agent rows", () => {
+	function agentEvent(event: Record<string, unknown>): CoreSessionEvent {
+		return { type: "agent_event", payload: { sessionId: "session-1", event } } as unknown as CoreSessionEvent
+	}
+
+	it("carries a sub-agent's cost and cache tokens into the usage row, for configured agents too", () => {
+		const state = new MessageTranslatorState()
+		translateSessionEvent(
+			agentEvent({
+				type: "content_start",
+				contentType: "tool",
+				toolName: "subagent_reviewer",
+				toolCallId: "c1",
+				input: { prompt: "Review the diff" },
+			}),
+			state,
+		)
+		expect(state.getSpawnAgentItems().map((item) => item.prompt)).toEqual(["Review the diff"])
+
+		// Live progress names the engine's agent id, so approvals can be attributed.
+		translateSessionEvent(
+			agentEvent({
+				type: "content_update",
+				contentType: "tool",
+				toolName: "subagent_reviewer",
+				toolCallId: "c1",
+				update: { subAgentId: "agent_7", toolCalls: 3, inputTokens: 100, outputTokens: 10, totalCost: 0.01 },
+			}),
+			state,
+		)
+		expect(state.subAgentLabel("agent_7")).toBe("sub-agent 1")
+		expect(state.subAgentLabel("someone-else")).toBeUndefined()
+
+		const result = translateSessionEvent(
+			agentEvent({
+				type: "content_end",
+				contentType: "tool",
+				toolName: "subagent_reviewer",
+				toolCallId: "c1",
+				output: {
+					text: "No problems.",
+					iterations: 2,
+					finishReason: "completed",
+					usage: { inputTokens: 1000, outputTokens: 80, cacheReadTokens: 400, cacheWriteTokens: 100, totalCost: 0.05 },
+				},
+			}),
+			state,
+		)
+		const usageRow = result.messages.find((message) => message.say === "subagent_usage")
+		expect(usageRow).toBeDefined()
+		expect(JSON.parse(usageRow?.text ?? "{}")).toEqual({
+			source: "subagents",
+			tokensIn: 500,
+			tokensOut: 80,
+			cacheWrites: 100,
+			cacheReads: 400,
+			cost: 0.05,
+		})
+	})
+})
+
+// ---------------------------------------------------------------------------
 // translateSessionEvent — pending prompts
 // ---------------------------------------------------------------------------
 

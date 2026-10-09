@@ -300,17 +300,27 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// Core copies this factory into every spawned sub-agent, whose runs happen
 	// inside the parent's turn. Each such run gets its own turn key so it cannot
 	// reset the parent's call log, sticky model or failover budget; model health
-	// stays process-wide. `activeTurnKey` is what `onRunError` (also copied to
-	// sub-agents, without access to the run) consults; sub-agent runs are
-	// sequential within the parent's tool call, so the latest key is the right
-	// one. Parallel spawn_agent calls would share it — a known limitation.
+	// stays process-wide. Runs are told apart by the engine's agent id, which
+	// the factory, `onRunError` and the hooks' snapshots all carry: parallel
+	// spawn_agent calls each find their own state, and a root failure after a
+	// sub-agent run benches the root's model, not the sub-agent's.
 	let subRunCounter = 0
 	// The key this session's router state lives under. Read per use: a config
 	// is built before its session starts, and some callers give it another id
 	// afterwards, so the id at install time may not be the session's.
 	const sessionKey = () => deps.getSessionId?.()?.trim() || deps.sessionId
-	let activeTurnKey = sessionKey()
+	const runsByAgent = new Map<string, { turnKey: string; profile: string }>()
+	// For a hook or error that names no agent: the newest sub-agent key, the
+	// way things worked when sub-agent runs could only be sequential.
+	let latestSubRunKey: string | undefined
 	let activeProfile = installProfile
+	const turnKeyFor = (agentId: string | undefined, parentAgentId: string | null | undefined): string => {
+		const run = agentId ? runsByAgent.get(agentId) : undefined
+		if (run) {
+			return run.turnKey
+		}
+		return parentAgentId ? (latestSubRunKey ?? sessionKey()) : sessionKey()
+	}
 	// The judge needs a gateway model for the utility id; the factory is the
 	// only place one can be built, so remember how from the latest run.
 	let createUtilityModel: ((modelId: string) => AgentModel) | undefined
@@ -319,32 +329,50 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// when only a sub-agent did, and must not pick one of the authors.
 	let turnEdits = { bySubAgents: 0, authors: new Set<string>() }
 	// Set by onRunError when it asks for a retry, read by the factory for the
-	// retry's run.
+	// retry's run: the agent ids whose next run continues their turn. The
+	// root's flag is kept apart for an engine that names no agent.
+	const recoveringRuns = new Set<string>()
 	let recoveringRootRun = false
 	let transportRetriesThisTurn = 0
 	const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 	rememberModelNames(config.knownModels as Record<string, ModelInfo> | undefined)
 
-	config.agentModelFactory = ({ config: agentConfig, createDefault }) => {
+	config.agentModelFactory = ({ config: agentConfig, createDefault, agentId }) => {
 		createUtilityModel = (modelId) => createDefault({ modelId })
 		if (!isPlinyRouterModelId(agentConfig.modelId)) {
 			return createDefault()
 		}
 		const profile = plinyRouterProfile(agentConfig.modelId)
 		const isSubAgent = Boolean(agentConfig.parentAgentId)
-		const turnKey = isSubAgent ? `${sessionKey()}:sub:${++subRunCounter}` : sessionKey()
 		// A run that recovers a failed one continues its turn: same call log,
 		// failover budget, classifier verdict and edits for the reviewer.
-		const continuesTurn = !isSubAgent && recoveringRootRun
+		const recovering = agentId ? recoveringRuns.delete(agentId) : false
+		const continuesTurn = recovering || (!isSubAgent && recoveringRootRun)
 		if (!isSubAgent) {
 			recoveringRootRun = false
 		}
+		const turnKey = continuesTurn
+			? turnKeyFor(agentId, agentConfig.parentAgentId)
+			: isSubAgent
+				? `${sessionKey()}:sub:${++subRunCounter}`
+				: sessionKey()
 		if (!isSubAgent && !continuesTurn) {
 			forgetSessionsWithPrefix(`${sessionKey()}:sub:`)
+			for (const [id, run] of runsByAgent) {
+				if (run.turnKey !== sessionKey()) {
+					runsByAgent.delete(id)
+				}
+			}
+			latestSubRunKey = undefined
 			turnEdits = { bySubAgents: 0, authors: new Set() }
 			transportRetriesThisTurn = 0
 		}
-		activeTurnKey = turnKey
+		if (agentId) {
+			runsByAgent.set(agentId, { turnKey, profile })
+		}
+		if (isSubAgent) {
+			latestSubRunKey = turnKey
+		}
 		activeProfile = profile
 		rememberModelNames(agentConfig.knownModels as Record<string, ModelInfo> | undefined)
 		const rowPrefix = isSubAgent ? "↳ sub-agent " : ""
@@ -507,19 +535,21 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		})
 	}
 
-	config.onRunError = async ({ error, errorClass, attempt, hadAssistantContent }) => {
+	config.onRunError = async ({ error, errorClass, attempt, hadAssistantContent, agentId, parentAgentId }) => {
 		if (!isRouted()) {
 			return false
 		}
-		const rules = rulesFor(activeProfile)
-		const state = getSessionState(activeTurnKey)
+		const run = agentId ? runsByAgent.get(agentId) : undefined
+		const profile = run?.profile ?? activeProfile
+		const rules = rulesFor(profile)
+		const state = getSessionState(turnKeyFor(agentId, parentAgentId))
 
 		if (errorClass === "auth") {
 			return false
 		}
 		if (state.failovers >= rules.health.maxFailoversPerTurn) {
 			emitInfo(
-				`\`${formatClock(now())}\` ⚠ ${routerLabel(activeProfile)} stopped retrying after ${state.failovers} failovers this turn.`,
+				`\`${formatClock(now())}\` ⚠ ${routerLabel(profile)} stopped retrying after ${state.failovers} failovers this turn.`,
 			)
 			return false
 		}
@@ -559,7 +589,13 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			await sleep(TRANSPORT_RETRY_DELAY_MS)
 		}
 		// The retry continues this turn: the factory must not start a new one.
-		recoveringRootRun = true
+		// A sub-agent's recovery is its own; it must not make the next root run
+		// look like a continuation.
+		if (agentId) {
+			recoveringRuns.add(agentId)
+		} else if (!parentAgentId) {
+			recoveringRootRun = true
+		}
 
 		return {
 			retry: true,
@@ -746,7 +782,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	config.hooks = composeHooks(config.hooks, {
 		afterTool: ({ snapshot, tool, toolCall, result }) => {
 			if (isRouted() && isSuccessfulEdit(tool.name, result)) {
-				const calls = getSessionState(snapshot.parentAgentId ? activeTurnKey : sessionKey()).calls
+				const calls = getSessionState(turnKeyFor(snapshot.agentId, snapshot.parentAgentId)).calls
 				const author = calls[calls.length - 1]?.modelId
 				if (author) {
 					turnEdits.authors.add(author)
@@ -756,7 +792,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				}
 			}
 			// Hooks run in sub-agents too; judge by the agent that ran the tool.
-			if (!freeModelIsAnswering(snapshot.parentAgentId ? activeTurnKey : sessionKey())) {
+			if (!freeModelIsAnswering(turnKeyFor(snapshot.agentId, snapshot.parentAgentId))) {
 				return undefined
 			}
 			const failure = shellFailureFromResult({
@@ -784,7 +820,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				return
 			}
 			const subAgent = Boolean(snapshot.parentAgentId)
-			const state = getSessionState(subAgent ? activeTurnKey : sessionKey())
+			const state = getSessionState(turnKeyFor(snapshot.agentId, snapshot.parentAgentId))
 			const lastCall = state.calls[state.calls.length - 1]
 			const lastAssistant = [...result.messages].reverse().find((message) => message.role === "assistant")
 			const reply = lastAssistant

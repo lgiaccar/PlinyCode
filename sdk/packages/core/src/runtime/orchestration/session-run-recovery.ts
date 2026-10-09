@@ -188,6 +188,8 @@ export class SessionRunRecovery {
 				attempt,
 				modelId: this.config.modelId,
 				hadAssistantContent: this.hasTrailingAssistantContent(),
+				agentId: this.agentId,
+				parentAgentId: this.config.parentAgentId ?? null,
 			})
 			.catch((error) => {
 				this.logger?.error?.("onRunError hook failed", {

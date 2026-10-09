@@ -18,6 +18,23 @@ const READ_TOOLS = [
 const EDIT_TOOLS = ["editor", "replace_in_file", "write_to_file", "apply_patch", "delete_file", "save_memory"]
 
 /**
+ * Extension tools a spawned sub-agent does not get (docs/agent-tools.md): the
+ * advisor is the root's one paid question per hard step, and a memory outlives
+ * the conversation, so saving or searching one stays with the agent the user
+ * talks to. Everything else the root has, the sub-agent has too.
+ */
+const SUB_AGENT_DENIED_TOOLS = new Set(["ask_advisor", "save_memory", "search_conversations", "read_conversation"])
+
+export function isSubAgentDeniedTool(toolName: string): boolean {
+	return SUB_AGENT_DENIED_TOOLS.has(toolName)
+}
+
+/** `spawn_agent`, and the `subagent_<name>` tools made from `.cline/agents/*.md`. */
+export function isSubAgentTool(toolName: string): boolean {
+	return toolName === "spawn_agent" || toolName.startsWith("subagent_")
+}
+
+/**
  * Build SDK `toolPolicies` for tools governed by Cline's auto-approval UI.
  *
  * The SDK defaults unlisted tools to auto-approved. For tools controlled by
@@ -42,6 +59,9 @@ export function buildToolPolicies(
 	set(EDIT_TOOLS)
 	set(["run_commands", "execute_command"])
 	set(["fetch_web_content", "web_fetch", "web_search"])
+	// Delegation follows its own toggle; the sub-agent's own calls then follow
+	// the same policies as the root's, since they edit the same files.
+	set(["spawn_agent"])
 
 	if (mcpHub) {
 		for (const server of mcpHub.getServers()) {
@@ -80,6 +100,10 @@ export function isToolAutoApproved(toolName: string, settings: AutoApprovalSetti
 	}
 	if (isBrowserTool(toolName)) {
 		return !!settings.actions.useBrowser
+	}
+	if (isSubAgentTool(toolName)) {
+		// On unless the user turned it off: settings saved before the toggle existed have no value.
+		return settings.actions.useSubagents !== false
 	}
 
 	if (isMcpToolName(toolName)) {

@@ -713,6 +713,12 @@ export type AgentModelFactory = (context: {
 		modelId?: string;
 		providerId?: string;
 	}) => AgentModel;
+	/**
+	 * The runtime's own agent id. A host that keys per-run state (a router's
+	 * call log, failover budget) uses it to tell parallel sub-agent runs
+	 * apart; `onRunError` reports the same id.
+	 */
+	agentId?: string;
 }) => AgentModel;
 
 /** What a host decided to do about a failed run. */
@@ -743,6 +749,10 @@ export type AgentRunErrorHandler = (context: {
 	modelId: string;
 	/** Whether the failed attempt left assistant content in the transcript. */
 	hadAssistantContent: boolean;
+	/** The failed run's agent id, the one `agentModelFactory` was given. */
+	agentId?: string;
+	/** Set for a sub-agent's run; null or absent for the root agent's. */
+	parentAgentId?: string | null;
 }) => Promise<AgentRunErrorDecision>;
 
 export interface AgentConfig {

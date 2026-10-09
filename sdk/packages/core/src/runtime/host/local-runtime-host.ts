@@ -8,6 +8,8 @@ import {
 	type BasicLogger,
 	type CompletionGuard,
 	createSessionId,
+	type ToolApprovalRequest,
+	type ToolApprovalResult,
 } from "@plinycode/shared";
 import { setHomeDirIfUnset } from "@plinycode/shared/storage";
 import { isOAuthProvider } from "../../auth/provider-auth-registry";
@@ -477,6 +479,36 @@ export class LocalRuntimeHost implements RuntimeHost {
 		const pluginEventFallbackAutomation =
 			inputLocalConfig?.extensionContext?.automation;
 		let bootstrap!: Awaited<ReturnType<typeof prepareLocalRuntimeBootstrap>>;
+		// Compaction for sub-agent runs: built after the runtime (below), read
+		// when a sub-agent starts. Sub-agents keep no compaction sidecar, so
+		// they get the plain projection, not the state-aware one.
+		let subAgentPrepareTurn: AgentConfig["prepareTurn"];
+		// Tool approval for every agent of the session, lead and sub-agents
+		// alike: the host's callback, with the session shown as pending while
+		// the user decides.
+		const requestToolApproval = async (
+			request: ToolApprovalRequest,
+		): Promise<ToolApprovalResult> => {
+			const hostRequestToolApproval = bootstrap.requestToolApproval;
+			if (!hostRequestToolApproval) {
+				return {
+					approved: false,
+					reason: "Tool approval callback is not configured.",
+				};
+			}
+			const liveSession = this.sessions.get(sessionId);
+			if (liveSession) {
+				await this.markTurnPending(liveSession);
+			}
+			try {
+				return await hostRequestToolApproval(request);
+			} finally {
+				const currentSession = this.sessions.get(sessionId);
+				if (currentSession?.status === "pending") {
+					await this.markTurnRunning(currentSession);
+				}
+			}
+		};
 		const subAgentDeps = {
 			getSession: (sid: string) => this.sessions.get(sid),
 			onAgentEvent: (
@@ -535,6 +567,14 @@ export class LocalRuntimeHost implements RuntimeHost {
 					bootstrap.config,
 					sessionId,
 					sessionToolExecutors,
+					{
+						extraTools: bootstrap.config.subAgentExtraTools,
+						toolPolicies: bootstrap.toolPolicies,
+						requestToolApproval: bootstrap.requestToolApproval
+							? requestToolApproval
+							: undefined,
+						getPrepareTurn: () => subAgentPrepareTurn,
+					},
 				),
 			createSubAgentLifecycleCallbacks: (config) =>
 				createSessionSubAgentLifecycleCallbacks(
@@ -569,6 +609,8 @@ export class LocalRuntimeHost implements RuntimeHost {
 			...bootstrap.runtimeBuilderInput,
 			distinctId: this.distinctId,
 			runCommandExecutionController: this.runCommandExecutionController,
+			subAgentPrepareTurn: () => subAgentPrepareTurn,
+			...(bootstrap.requestToolApproval ? { requestToolApproval } : {}),
 		});
 		const configWithProvider = bootstrap.config;
 		const providerConfig = bootstrap.providerConfig;
@@ -607,6 +649,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 		const rawInitialCompactionState =
 			explicitInitialCompactionState ?? resumedCompactionState;
 		const autoCompact = createContextCompactionPrepareTurn(configWithProvider);
+		subAgentPrepareTurn = autoCompact;
 		// Resuming an imported session summarizes the foreign transcript before
 		// the model sees it. The summary persists to the compaction sidecar and
 		// the policy stands down once that sidecar projects, so it applies once
@@ -707,27 +750,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 			userFileContentLoader: loadUserFileContent,
 			toolPolicies: bootstrap.toolPolicies,
 			requestToolApproval: bootstrap.requestToolApproval
-				? async (request) => {
-						const requestToolApproval = bootstrap.requestToolApproval;
-						const liveSession = this.sessions.get(sessionId);
-						if (liveSession) {
-							await this.markTurnPending(liveSession);
-						}
-						try {
-							if (!requestToolApproval) {
-								return {
-									approved: false,
-									reason: "Tool approval callback is not configured.",
-								};
-							}
-							return await requestToolApproval(request);
-						} finally {
-							const currentSession = this.sessions.get(sessionId);
-							if (currentSession?.status === "pending") {
-								await this.markTurnRunning(currentSession);
-							}
-						}
-					}
+				? requestToolApproval
 				: undefined,
 			onConsecutiveMistakeLimitReached:
 				configWithProvider.onConsecutiveMistakeLimitReached,

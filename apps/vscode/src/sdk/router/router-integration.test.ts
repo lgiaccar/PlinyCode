@@ -56,9 +56,11 @@ function setup(modelId: string = PLINY_FREE_AUTO_MODEL_ID, knownModels?: Record<
 
 	const createdFor: string[] = []
 	const classifierModel = vi.fn(() => scripted([{ type: "text-delta", text: '{"tier":"code","think":false}' }, STOP]))
-	const run = async (agentConfig: { parentAgentId?: string } = {}, calls = 1) => {
+	const run = async (agentConfig: { parentAgentId?: string; agentId?: string } = {}, calls = 1) => {
+		const { agentId, ...rest } = agentConfig
 		const model = factory({
-			config: { modelId, ...agentConfig } as never,
+			config: { modelId, ...rest } as never,
+			...(agentId ? { agentId } : {}),
 			createDefault: (overrides) => {
 				createdFor.push(overrides?.modelId ?? "(default)")
 				return overrides?.modelId === CLASSIFIER ? classifierModel() : scripted([TEXT, STOP])
@@ -100,6 +102,36 @@ describe("installRouter turn isolation", () => {
 
 		expect(rows[0]).not.toContain("sub-agent")
 		expect(rows[1]).toContain("↳ sub-agent")
+	})
+
+	it("keys parallel sub-agent runs by agent id, so a failure benches the run that failed", async () => {
+		const { run, config } = setup()
+		await run()
+		await run({ parentAgentId: "parent", agentId: "sub-a" })
+		await run({ parentAgentId: "parent", agentId: "sub-b" })
+		expect(getSessionState("root:sub:1").calls).toHaveLength(1)
+		expect(getSessionState("root:sub:2").calls).toHaveLength(1)
+
+		// The first sub-agent fails after the second one ran: its own turn takes the failover.
+		const decision = await config.onRunError?.({
+			error: "boom",
+			attempt: 1,
+			modelId: PLINY_FREE_AUTO_MODEL_ID,
+			hadAssistantContent: false,
+			agentId: "sub-a",
+			parentAgentId: "parent",
+		})
+		expect(decision).toMatchObject({ retry: true })
+		expect(getSessionState("root:sub:1").failovers).toBe(1)
+		expect(getSessionState("root:sub:2").failovers).toBe(0)
+		expect(getSessionState("root").failovers).toBe(0)
+
+		// Its retry continues its own turn; the next root run still starts a new one.
+		await run({ parentAgentId: "parent", agentId: "sub-a" })
+		expect(getSessionState("root:sub:1").calls).toHaveLength(2)
+		await run({ agentId: "root-agent" })
+		expect(getSessionState("root").calls).toHaveLength(1)
+		expect(getSessionState("root:sub:1").calls).toHaveLength(0)
 	})
 
 	it("drops earlier sub-agent state when the next root turn starts", async () => {
