@@ -1,5 +1,5 @@
 import { openFile as openFileIntegration } from "@integrations/misc/open-file"
-import { PLINY_FREE_AUTO_RULES_URI } from "@shared/pliny"
+import { PLINY_FREE_AUTO_RULES_URI, PLINY_REPO_MEMORY_URI, PLINY_USER_MEMORY_URI } from "@shared/pliny"
 import { Empty, StringRequest } from "@shared/proto/cline/common"
 import { globalRulesPath, initialiseDefaultRulesFile } from "@/sdk/router/router-rules-store"
 import { Controller } from ".."
@@ -11,12 +11,16 @@ import { Controller } from ".."
  *                Supports a special URI for the FreeAuto routing rules, whose path depends on the
  *                data directory the host resolved:
  *                - pliny://free-auto-rules
+ *                - pliny://memory/repo and pliny://memory/user: the memory files, created when missing
  * @returns Empty response
  */
-export async function openFile(_controller: Controller, request: StringRequest): Promise<Empty> {
+export async function openFile(controller: Controller, request: StringRequest): Promise<Empty> {
 	if (request.value) {
 		if (request.value === PLINY_FREE_AUTO_RULES_URI) {
 			await openFreeAutoRulesFile()
+		} else if (request.value === PLINY_REPO_MEMORY_URI || request.value === PLINY_USER_MEMORY_URI) {
+			const { file } = await controller.ensureMemoryFile(request.value === PLINY_USER_MEMORY_URI ? "user" : "repo")
+			await openFileIntegration(file)
 		} else {
 			await openFileIntegration(request.value)
 		}

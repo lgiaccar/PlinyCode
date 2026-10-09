@@ -50,6 +50,13 @@ export const PLINY_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
  */
 export const PLINY_FREE_AUTO_RULES_URI = "pliny://free-auto-rules"
 
+/**
+ * The repository's and the user's MEMORY.md (docs/memory.md). Where they live
+ * depends on the repository's remote, which only the host can resolve.
+ */
+export const PLINY_REPO_MEMORY_URI = "pliny://memory/repo"
+export const PLINY_USER_MEMORY_URI = "pliny://memory/user"
+
 /** True for the virtual router id and its profile ids (`pliny/auto-free-fast`, ...). */
 export function isPlinyFreeAutoModelId(modelId: string | undefined | null): boolean {
 	if (typeof modelId !== "string") {

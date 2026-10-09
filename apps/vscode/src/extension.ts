@@ -204,10 +204,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerAutoUpdater(context)
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			// Keep the Settings view's pre-release checkbox, and the model named on the Execute plan
-			// button, in step with edits made in VS Code's settings.
+			// Keep the Settings view's pre-release checkbox and memory settings, and the model named on
+			// the Execute plan button, in step with edits made in VS Code's settings.
 			if (
 				event.affectsConfiguration("plinycode.updates.prerelease") ||
+				event.affectsConfiguration("plinycode.memory") ||
 				event.affectsConfiguration(PLAN_EXECUTE_WITH_SETTING_ID)
 			) {
 				void WebviewProvider.getInstance()?.controller.postStateToWebview()
