@@ -444,6 +444,7 @@ export class Controller {
 			},
 			getCwd: () => this.lastKnownWorkspaceRoot,
 			background: this.background,
+			describeAgent: (agentId) => this.messageTranslatorState.subAgentLabel(agentId),
 		})
 		this.sessions = new SdkSessionLifecycle({
 			mcpHub: this.mcpHub,

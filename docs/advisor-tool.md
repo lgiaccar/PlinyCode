@@ -108,6 +108,8 @@ consulted**" with the reason. No proto or webview change was needed.
   extension's `setTaskUsage`, and then the history list leaves out advisor
   (and sub-agent) cost until the next usage event rewrites the total. The task
   header and the budget check read the chat rows and are not affected.
+  Sub-agent cost reaches the same `subagent_usage` row type from the
+  `spawn_agent` tool result ([agent-tools.md](agent-tools.md), "Sub-agents").
 - The call count is per conversation; two VS Code windows on the same
   conversation keep separate in-memory counts (the count read back from the
   conversation still applies on the next session start).

@@ -83,7 +83,7 @@ It is an extension tool, installed by `installMemory` ([install-memory.ts](../ap
 
 Writes to one file go through one at a time and land with a rename ([memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)). Reorganising or pruning a memory file is a normal edit with `editor` in act or plan mode; the prompt gives the absolute paths.
 
-`/remember <text>` is a built-in slash command ([builtin-slash-commands.ts](../apps/vscode/src/sdk/builtin-slash-commands.ts)). It expands into instructions to call `save_memory`, choose the scope and importance, and keep the entry to one line. Sub-agents get neither tool, since core builds their tool list without `extraTools`.
+`/remember <text>` is a built-in slash command ([builtin-slash-commands.ts](../apps/vscode/src/sdk/builtin-slash-commands.ts)). It expands into instructions to call `save_memory`, choose the scope and importance, and keep the entry to one line. Sub-agents get neither tool: the extension leaves them out of the tools it hands sub-agents (`SUB_AGENT_DENIED_TOOLS`), since a memory outlives the conversation and a sub-agent reports to the parent instead. A sub-agent's prompt does carry a read-only excerpt of the repository's `## Important` entries, at most 2,000 characters (`renderSubAgentMemoryExcerpt` in [memory-section.ts](../apps/vscode/src/sdk/memory/memory-section.ts)).
 
 ## Distillation
 

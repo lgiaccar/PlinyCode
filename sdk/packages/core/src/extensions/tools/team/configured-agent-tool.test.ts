@@ -3,6 +3,7 @@ import {
 	buildConfiguredAgentToolName,
 	createConfiguredAgentTools,
 } from "./configured-agent-tool";
+import { DEFAULT_SUB_AGENT_TIMEOUT_MS } from "./spawn-agent-tool";
 
 describe("configured agent tools", () => {
 	it("builds stable subagent tool names", () => {
@@ -38,7 +39,7 @@ describe("configured agent tools", () => {
 
 		expect(tool?.name).toBe("subagent_code_reviewer");
 		expect(tool?.executionMode).toBe("parallel");
-		expect(tool?.timeoutMs).toBe(300000);
+		expect(tool?.timeoutMs).toBe(DEFAULT_SUB_AGENT_TIMEOUT_MS);
 		expect(tool?.retryable).toBe(false);
 	});
 });

@@ -65,6 +65,17 @@ run in a PlinyCode terminal, and the output is read through shell integration
 
 The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts`) keeps every open tool by call id for this, so each one finishes into its own row.
 
+## Sub-agents (`spawn_agent`, `subagent_<name>`)
+
+`spawn_agent` runs a sub-agent in its own context and returns only its final report to the model that called it. The engine's tool (`sdk/packages/core/src/extensions/tools/team/`) takes `task` and optional `instructions` (`systemPrompt` is the older name); configured agents from `.cline/agents/*.md` appear as `subagent_<name>` tools with a fixed prompt, model and tool allowlist. The system prompt carries a short section on when to delegate (`subagent-guidance.ts`, only while the tool is in the request): exploration across many files, reviews, long test runs, and independent subtasks that can run in parallel. The setting `subagentsEnabled` (Settings → Advanced) turns the tool off.
+
+- **Prompt.** A sub-agent gets the same base prompt as a root session, with the conversation's git snapshot and pinned date, the session's mode (plan mode edits nothing), a short account of its role, the parent's instructions as rules, and a read-only excerpt of the repository's important memory entries (`subagent-prompts.ts`, `renderSubAgentMemoryExcerpt`). It knows nothing of the conversation itself: the parent's `task` is all it sees.
+- **Tools.** The engine's built-ins plus the extension's own: `run_commands` (always in the background executor, so it cannot race the user's terminal), `wait`, the task list and MCP tools. Not the advisor, `save_memory` or the conversation search (`SUB_AGENT_DENIED_TOOLS` in `sdk-tool-policies.ts`), and not `spawn_agent` itself: delegation goes one level deep (`MAX_SUB_AGENT_DEPTH`).
+- **Approval.** Delegating follows the **Delegate to sub-agents** auto-approve toggle (on by default). The sub-agent's own calls follow the same toggles and policies as the root's, since they edit the same files; an approval it asks for is preceded by a row saying which sub-agent asks.
+- **Limits.** At most 3 sub-agent runs in flight per parent (the rest wait), 40 iterations per run unless the host sets `subAgentMaxIterations`, 20 minutes per run, and the same context compaction as the root session.
+- **Cost.** The tool reports progress (`emitUpdate`) after each model call and tool: the sub-agents row shows tool calls, tokens and cost live. Its result carries the run's tokens, cache tokens and cost, which the `subagent_usage` row adds to the task header, the budget check and the history record; a task running in the background records them from the tool result. The chat shows nothing else of a sub-agent's work.
+- **Routing.** On FreeAuto and BalanceAuto, a sub-agent run takes the `subagent` route and keeps its own call log and failover budget, keyed by the engine's agent id, so parallel sub-agents and the root never share one ([pliny-free-auto-router.md](pliny-free-auto-router.md)).
+
 ## Memory and earlier conversations (`save_memory`, `search_conversations`, `read_conversation`)
 
 Extension tools described in [memory.md](memory.md). `save_memory` adds one entry to the repository's or the user's memory and is approved like a file edit. `search_conversations` and `read_conversation` search and read earlier conversations; they are approved like file reads and run concurrently.

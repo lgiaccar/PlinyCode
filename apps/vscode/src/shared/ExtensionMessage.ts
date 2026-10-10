@@ -317,6 +317,10 @@ export interface SubagentStatusItem {
 	index: number
 	prompt: string
 	status: SubagentExecutionStatus
+	/** The engine's id of the sub-agent, once it has started; approvals it asks for name it. */
+	agentId?: string
+	cacheReadTokens?: number
+	cacheWriteTokens?: number
 	toolCalls: number
 	inputTokens: number
 	outputTokens: number

@@ -4,6 +4,7 @@ import type {
 	AgentHooks,
 	AgentTool,
 	BasicLogger,
+	GitSnapshot,
 	HookErrorMode,
 	ToolApprovalRequest,
 	ToolApprovalResult,
@@ -41,6 +42,14 @@ export interface DelegatedAgentRuntimeConfig
 	providerId: string;
 	clinePlatform?: string;
 	clineIdeName?: string;
+	/** The parent session's mode: a sub-agent inherits its rules (plan mode edits nothing). */
+	mode?: string;
+	/** The conversation's git snapshot, shown in the sub-agent's <env> block. */
+	gitSnapshot?: GitSnapshot;
+	/** The conversation's pinned date, shown in the sub-agent's <env> block. */
+	currentDate?: string;
+	/** Text appended to the sub-agent's rules, e.g. a memory excerpt. */
+	promptSuffix?: string;
 	maxIterations?: number;
 	hooks?: AgentHooks;
 	extensions?: AgentExtension[];
@@ -82,6 +91,8 @@ export interface BuildDelegatedAgentConfigOptions {
 	requestToolApproval?: (
 		request: ToolApprovalRequest,
 	) => Promise<ToolApprovalResult> | ToolApprovalResult;
+	/** Request projection (context compaction) for the delegated run; none by default. */
+	prepareTurn?: AgentConfig["prepareTurn"];
 	role?: string;
 	cwd?: string;
 }
@@ -143,6 +154,7 @@ export function buildDelegatedAgentConfig(
 		hookErrorMode: options.hookErrorMode,
 		toolPolicies: options.toolPolicies,
 		requestToolApproval: options.requestToolApproval,
+		...(options.prepareTurn ? { prepareTurn: options.prepareTurn } : {}),
 		logger: runtimeConfig.logger,
 		role: options.role,
 	};

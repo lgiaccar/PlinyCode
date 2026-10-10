@@ -36,6 +36,7 @@ import { coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { buildAgentHooks } from "./hooks-adapter"
 import { getHostIdeName } from "./instruction-sources"
 import { resolveDataDir } from "./legacy-state-reader"
+import { renderSubAgentMemoryExcerpt } from "./memory/memory-section"
 import type { ResolvedModelSelection } from "./model-catalog/contracts"
 import { nonNegativeFiniteNumber, positiveFiniteNumber, toSdkApiFormat } from "./model-catalog/model-values"
 import { parseProviderId } from "./model-catalog/provider-id"
@@ -537,6 +538,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	if (input.memorySection) {
 		systemPrompt = `${systemPrompt}${input.memorySection}`
 	}
+	const memoryExcerpt = renderSubAgentMemoryExcerpt(input.memorySection)
 
 	const stateManager = StateManager.get()
 	// Auto compact is on by default; keep this fallback aligned with the
@@ -609,6 +611,15 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 		},
 		enableSpawnAgent: stateManager.getGlobalSettingsKey("subagentsEnabled") !== false,
 		enableAgentTeams: false,
+		// A sub-agent's own prompt shows where it runs, like the root's
+		// (sdk/packages/core: subagent-prompts.ts), with a read-only memory excerpt.
+		subAgentPrompt: {
+			ide: getHostIdeName(),
+			platform: process.platform,
+			...(input.gitSnapshot ? { gitSnapshot: input.gitSnapshot } : {}),
+			...(input.currentDate ? { currentDate: input.currentDate } : {}),
+			...(memoryExcerpt ? { suffix: memoryExcerpt } : {}),
+		},
 		...(useAutoCondense
 			? {
 					compaction: {

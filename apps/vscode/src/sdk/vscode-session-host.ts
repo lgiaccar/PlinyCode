@@ -47,6 +47,7 @@ import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import { getBinaryLocation } from "@/utils/fs"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
+import { isSubAgentDeniedTool } from "./sdk-tool-policies"
 import type { SdkSessionHost } from "./session-host"
 import { createVscodeExtraTools } from "./vscode-runtime-builder"
 
@@ -143,12 +144,24 @@ export class VscodeSessionHost implements SdkSessionHost {
 		// checkpoint-restore replacement sessions, which ClineCore starts without
 		// running the prepare hook.
 		const prepareStartSessionInput = async (input: ClineCoreStartInput): Promise<ClineCoreStartInput> => {
+			const vscodeTerminalExecutionMode = StateManager.get().getGlobalStateKey("vscodeTerminalExecutionMode")
 			const extraTools = await createVscodeExtraTools(options.mcpHub, {
 				cwd: input.config.cwd,
 				getTerminalManager: options.getTerminalManager,
-				vscodeTerminalExecutionMode: StateManager.get().getGlobalStateKey("vscodeTerminalExecutionMode"),
+				vscodeTerminalExecutionMode,
 				foregroundCommands: options.foregroundCommands,
 			})
+			// A sub-agent gets the extension's tools too (its shell, `wait`, the
+			// task list, MCP), or it could read and edit but run nothing. The
+			// advisor and the memory tools stay with the root: docs/agent-tools.md.
+			const subAgentExtraTools = (
+				await createVscodeExtraTools(options.mcpHub, {
+					cwd: input.config.cwd,
+					getTerminalManager: options.getTerminalManager,
+					vscodeTerminalExecutionMode,
+					forSubAgents: true,
+				})
+			).filter((tool) => !isSubAgentDeniedTool(tool.name))
 			return {
 				...input,
 				source: input.source ?? "vscode",
@@ -168,6 +181,7 @@ export class VscodeSessionHost implements SdkSessionHost {
 				config: {
 					...input.config,
 					extraTools: [...(input.config.extraTools ?? []), ...extraTools],
+					subAgentExtraTools: [...(input.config.subAgentExtraTools ?? []), ...subAgentExtraTools],
 				},
 			}
 		}

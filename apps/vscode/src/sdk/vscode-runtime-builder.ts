@@ -60,6 +60,13 @@ interface VscodeExtraToolsOptions {
 	vscodeTerminalExecutionMode?: "vscodeTerminal" | "backgroundExec"
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
+	/**
+	 * Tools for a spawned sub-agent rather than the root session. Its
+	 * `run_commands` runs in the background executor whatever the terminal
+	 * mode: a sub-agent has no chat of its own, and a command of its own in
+	 * the user's terminal would race the root's.
+	 */
+	forSubAgents?: boolean
 }
 
 export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExtraToolsOptions): Promise<AgentTool[]> {
@@ -123,14 +130,14 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	// This replaces the SDK's built-in run_commands, which is suppressed via
 	// tool executor capabilities in VscodeSessionHost.
 	if (options?.getTerminalManager) {
-		const executionMode = options.vscodeTerminalExecutionMode ?? "vscodeTerminal"
+		const executionMode = options.forSubAgents ? "backgroundExec" : (options.vscodeTerminalExecutionMode ?? "vscodeTerminal")
 		tools.push(
 			createVscodeRunCommandsTool({
 				cwd: options.cwd ?? process.cwd(),
 				getTerminalManager: options.getTerminalManager,
 				bashTimeoutMs: executionMode === "vscodeTerminal" ? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS : undefined,
 				vscodeTerminalExecutionMode: executionMode,
-				foregroundCommands: options.foregroundCommands,
+				foregroundCommands: options.forSubAgents ? undefined : options.foregroundCommands,
 			}),
 		)
 		Logger.log(
