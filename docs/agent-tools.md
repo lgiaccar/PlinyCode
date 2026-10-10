@@ -69,6 +69,10 @@ The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts
 
 Extension tools described in [memory.md](memory.md). `save_memory` adds one entry to the repository's or the user's memory and is approved like a file edit. `search_conversations` and `read_conversation` search and read earlier conversations; they are approved like file reads and run concurrently.
 
+## Slash commands that paste instructions
+
+A workflow typed as `/name`, and a built-in command, is replaced in the user message by the file's body (`listAvailableRuntimeCommandsFromWatcher` in core's `runtime-commands.ts`, and `expandSlashCommands` in the extension). The body is cut at `MAX_COMMAND_INSTRUCTION_CHARS` (24,000 characters, twice a rule's budget) and ends with a note saying how many characters were left out and which file holds the rest, so a long file is read with `read_files` rather than pasted whole into every later request. Skills go through the `skills` tool instead and are not expanded.
+
 ## Task list (`update_todo_list`)
 
 An extension tool (`apps/vscode/src/sdk/vscode-todo-tool.ts`). The model sends the whole list each time, each task `pending`, `in_progress` or `completed`; the tool answers with the count and what is in progress or next. The chat shows the list after each update (`TodoListRow` in the webview, from a `task_progress` message).

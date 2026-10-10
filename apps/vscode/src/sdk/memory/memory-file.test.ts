@@ -91,15 +91,24 @@ describe("insertMemoryEntry", () => {
 		expect(lines[heading + 3]).toBe("- Never run `bun run fix:all` in apps/vscode: it rewrites ~200 files.")
 	})
 
-	it("appends a normal entry at the end of Notes, after continuation lines", () => {
+	it("puts a normal entry first under Notes, so truncation drops older notes before it", () => {
 		const result = insertMemoryEntry(FILE, { text: "Logs go to ai_output/", importance: "normal" })
-		expect(result.content.endsWith("- Biome formats only the files you pass.\n- Logs go to ai_output/\n")).toBe(true)
+		const lines = result.content.split("\n")
+		const heading = lines.indexOf("## Notes")
+		expect(lines[heading + 1]).toBe("")
+		expect(lines[heading + 2]).toBe("- Logs go to ai_output/")
+		expect(lines[heading + 3]).toBe("- The engine resolves through dist/: run build:sdk after engine changes.")
+		expect(result.content.endsWith("- Biome formats only the files you pass.\n")).toBe(true)
+		// The new note survives a budget that cuts the end of the file.
+		const kept = truncateMemory(result.content, result.content.indexOf("- Biome"))
+		expect(kept.text).toContain("- Logs go to ai_output/")
+		expect(kept.droppedEntries).toBe(1)
 	})
 
-	it("appends to Notes even when another section follows it", () => {
+	it("inserts into Notes without touching the section after it", () => {
 		const content = "# M\n\n## Notes\n\n- a\n\n## Archive\n\n- old\n"
 		const result = insertMemoryEntry(content, { text: "b", importance: "normal" })
-		expect(result.content).toBe("# M\n\n## Notes\n\n- a\n- b\n\n## Archive\n\n- old\n")
+		expect(result.content).toBe("# M\n\n## Notes\n\n- b\n- a\n\n## Archive\n\n- old\n")
 	})
 
 	it("adds missing sections", () => {

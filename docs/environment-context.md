@@ -54,6 +54,10 @@ A conversation that started without a snapshot never gets one later: it started 
 
 Sub-agents are started by the engine with their own prompt and do not go through this path, so nothing is gathered for them.
 
+### The date is pinned too
+
+The `<env>` block's `Date:` line sits above the snapshot, and the same reasoning applies to it: filled in from the clock, it changed the prompt's prefix the first time a conversation was rebuilt on a later day. `ConversationPromptDates` in [conversation-prompt-date.ts](../apps/vscode/src/sdk/context/conversation-prompt-date.ts) fixes the date when the conversation's first config is built and hands it to every later build through the `currentDate` option of `buildClineSystemPrompt`. It is stored with the snapshot in the session metadata, under `promptDate`, so a resume after a restart shows the same date. A conversation that started before the date was stored gets today's date on its next build, once. When the current day matters to a task, the model runs a command for it, as it does for the git state.
+
 ## Editor state
 
 A message the user types is sent with a block appended to it:

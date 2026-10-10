@@ -37,8 +37,9 @@ Knowledge the whole team should share belongs in `AGENTS.md` or a rules file, wh
 
 `MEMORY.md` has two sections, `## Important` and `## Notes`. An entry is a top-level bullet together with the lines under it ([memory-file.ts](../apps/vscode/src/sdk/memory/memory-file.ts)).
 
-- **Insertion.** `save_memory` inserts deterministically: an important entry goes first under `## Important`, any other goes last under `## Notes`. An entry that is already there (compared without case and spacing) is not added again.
-- **Truncation.** It keeps whole entries from the top of the file. When the budget drops from 20k to 10k tokens, the bottom 10k (the least important entries) are the ones left out. The prompt says how many entries were left out and gives the file path, so the model can read the rest when it is relevant.
+- **Insertion.** `save_memory` inserts deterministically: an important entry goes first under `## Important`, any other goes first under `## Notes`, so each section reads newest first. An entry that is already there (compared without case and spacing) is not added again.
+- **Truncation.** It keeps whole entries from the top of the file. When the budget drops from 20k to 10k tokens, the bottom 10k (the least important entries, and within `## Notes` the oldest) are the ones left out. The prompt says how many entries were left out and gives the file path, so the model can read the rest when it is relevant. New notes go in at the top of their section for this reason: appended at the end of a file already over the budget, a fresh note would have been the first thing cut.
+- **Over the budget.** `save_memory` renders the section the next conversation would see and says in its result when the entry it just saved falls outside it, so the model can tell the user to trim the file or raise the budget instead of promising that later conversations will see it.
 - **Topic files.** Longer detail goes in a topic file. `save_memory` writes `details` there and adds `(details: <topic>.md)` to the entry. The prompt lists each topic file by path and first line, at most 30, for `read_files`.
 
 ## The system prompt section

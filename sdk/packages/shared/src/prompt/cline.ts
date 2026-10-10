@@ -216,6 +216,13 @@ export interface ClineSystemPromptOptions
 	 * calling a tool that is not in its toolset.
 	 */
 	planModeSwitchTool?: boolean;
+	/**
+	 * The date shown in the `<env>` block. The prompt is rebuilt many times in
+	 * a conversation's life, and the date sits near its start, so a host that
+	 * wants the provider's prompt cache to survive a rebuild on a later day
+	 * passes the date the conversation started with. Defaults to today.
+	 */
+	currentDate?: string;
 }
 
 export function buildClineSystemPrompt(
@@ -231,6 +238,7 @@ export function buildClineSystemPrompt(
 		overridePrompt,
 		providerId,
 		planModeSwitchTool = true,
+		currentDate,
 	} = options;
 	const workspaceRoot = options.workspaceRoot ?? options.rootPath ?? "";
 	const isCline = isClineProvider(providerId || "");
@@ -281,7 +289,10 @@ export function buildClineSystemPrompt(
 	return basePrompt
 		.replace("{{PLATFORM_NAME}}", platform)
 		.replace("{{CWD}}", workspaceRoot)
-		.replace("{{CURRENT_DATE}}", new Date().toLocaleDateString())
+		.replace(
+			"{{CURRENT_DATE}}",
+			currentDate?.trim() || new Date().toLocaleDateString(),
+		)
 		.replace("{{IDE_NAME}}", ide)
 		.replace(
 			"{{CLINE_METADATA}}",

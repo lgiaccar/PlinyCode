@@ -4,9 +4,11 @@ import type {
 	UserInstructionConfigWatcher,
 } from "../../extensions/config/user-instruction-config-loader";
 import {
+	capInstructionText,
 	describeRuleScope,
 	formatRulesForSystemPrompt,
 	listEnabledRulesFromWatcher,
+	MAX_COMMAND_INSTRUCTION_CHARS,
 	MAX_RULE_CHARS,
 	MAX_RULES_TOTAL_CHARS,
 	mergeRulesForSystemPrompt,
@@ -123,6 +125,30 @@ describe("formatRulesForSystemPrompt budgets", () => {
 
 		expect(output).toContain(
 			`- **r${count - 1}** (not inlined: the rules budget is used up): \`/w/r${count - 1}.md\``,
+		);
+	});
+});
+
+describe("capInstructionText", () => {
+	it("leaves a body within the limit alone", () => {
+		expect(capInstructionText("short")).toBe("short");
+		const exact = "x".repeat(MAX_COMMAND_INSTRUCTION_CHARS);
+		expect(capInstructionText(exact)).toBe(exact);
+	});
+
+	it("cuts a long body and says how much is left out and where", () => {
+		const body = "y".repeat(MAX_COMMAND_INSTRUCTION_CHARS + 500);
+		const capped = capInstructionText(body, {
+			sourcePath: "/repo/.clinerules/workflows/release.md",
+		});
+		expect(capped.startsWith("y".repeat(MAX_COMMAND_INSTRUCTION_CHARS))).toBe(
+			true,
+		);
+		expect(capped).toContain(
+			"[Instructions truncated: 500 more characters. Read the rest in `/repo/.clinerules/workflows/release.md`.]",
+		);
+		expect(capInstructionText("abcdef", { maxChars: 3 })).toBe(
+			"abc\n\n[Instructions truncated: 3 more characters.]",
 		);
 	});
 });

@@ -5,7 +5,9 @@
 // An entry is a top-level bullet with every line under it (continuation
 // lines, nested bullets), or a heading. Truncation keeps whole entries, and
 // `save_memory` inserts deterministically: an important entry at the top of
-// `## Important`, any other at the end of `## Notes`.
+// `## Important`, any other at the top of `## Notes`. Both go first in their
+// section because truncation cuts from the bottom: a new note appended last
+// to a file already over the budget would be the first thing left out.
 
 export const MEMORY_FILE_NAME = "MEMORY.md"
 const IMPORTANT_HEADING = "## Important"
@@ -161,20 +163,11 @@ function lineIndexOfHeading(lines: string[], heading: string): number {
 	return lines.findIndex((line) => line.trim().toLowerCase() === heading.toLowerCase())
 }
 
-/** Where the section that starts at `headingIndex` ends: the next `#`/`##` heading, or the end of the file. */
-function sectionEnd(lines: string[], headingIndex: number): number {
-	for (let index = headingIndex + 1; index < lines.length; index++) {
-		if (/^ {0,3}#{1,2}\s/.test(lines[index])) {
-			return index
-		}
-	}
-	return lines.length
-}
-
 /**
  * Adds one entry. An important one goes first under `## Important`, which
- * puts it at the top of what a small budget keeps; any other goes last under
- * `## Notes`. Missing sections are created.
+ * puts it at the top of what a small budget keeps; any other goes first under
+ * `## Notes`, newest first, so that a file over the budget drops its oldest
+ * notes rather than the one just saved. Missing sections are created.
  */
 export function insertMemoryEntry(content: string, insertion: MemoryInsertion, title = "Memory"): InsertResult {
 	const entryText = normalizeEntryText(insertion.text)
@@ -189,8 +182,9 @@ export function insertMemoryEntry(content: string, insertion: MemoryInsertion, t
 	}
 
 	const lines = base.replace(/\n+$/, "").split("\n")
+	let headingIndex: number
 	if (insertion.importance === "high") {
-		let headingIndex = lineIndexOfHeading(lines, IMPORTANT_HEADING)
+		headingIndex = lineIndexOfHeading(lines, IMPORTANT_HEADING)
 		if (headingIndex < 0) {
 			// After the file's title and any intro, before the first section.
 			const firstSection = lines.findIndex((text, index) => index > 0 && /^ {0,3}##\s/.test(text))
@@ -198,24 +192,19 @@ export function insertMemoryEntry(content: string, insertion: MemoryInsertion, t
 			lines.splice(at, 0, ...(at > 0 && lines[at - 1].trim() ? [""] : []), IMPORTANT_HEADING, "")
 			headingIndex = lineIndexOfHeading(lines, IMPORTANT_HEADING)
 		}
-		let at = headingIndex + 1
-		while (at < lines.length && !lines[at].trim()) {
-			at++
-		}
-		lines.splice(at, 0, ...(at === headingIndex + 1 ? ["", line] : [line]))
 	} else {
-		let headingIndex = lineIndexOfHeading(lines, NOTES_HEADING)
+		headingIndex = lineIndexOfHeading(lines, NOTES_HEADING)
 		if (headingIndex < 0) {
 			lines.push("", NOTES_HEADING)
 			headingIndex = lines.length - 1
 		}
-		const end = sectionEnd(lines, headingIndex)
-		let at = end
-		while (at > headingIndex + 1 && !lines[at - 1].trim()) {
-			at--
-		}
-		lines.splice(at, 0, ...(at === headingIndex + 1 ? [""] : []), line)
 	}
+	// First entry of the section: right after its heading and the blank line under it.
+	let at = headingIndex + 1
+	while (at < lines.length && !lines[at].trim()) {
+		at++
+	}
+	lines.splice(at, 0, ...(at === headingIndex + 1 ? ["", line] : [line]))
 	return { content: tidy(lines.join("\n")), inserted: true }
 }
 

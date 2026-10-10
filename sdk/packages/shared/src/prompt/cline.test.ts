@@ -313,6 +313,23 @@ describe("buildClineSystemPrompt env block", () => {
 		expect(prompt).toContain(MODE_TAG_INSTRUCTIONS);
 	});
 
+	it("shows the date the host pins for the conversation, and today without one", () => {
+		const pinned = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			mode: "act",
+			currentDate: "10/1/2026",
+		});
+		expect(envBlock(pinned)).toContain("2. Date: 10/1/2026");
+		const blank = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			mode: "act",
+			currentDate: "  ",
+		});
+		expect(envBlock(blank)).toContain(
+			`2. Date: ${new Date().toLocaleDateString()}`,
+		);
+	});
+
 	it("leaves an explicit override prompt alone", () => {
 		const prompt = buildClineSystemPrompt({
 			...BASE_OPTIONS,

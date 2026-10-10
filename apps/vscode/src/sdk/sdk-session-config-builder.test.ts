@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { DEFAULT_ADVISOR_SETTINGS } from "./advisor/advisor-settings"
 import { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
+import { ConversationPromptDates } from "./context/conversation-prompt-date"
 import { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 
 const mocks = vi.hoisted(() => ({
@@ -192,6 +193,30 @@ describe("SdkSessionConfigBuilder", () => {
 		})
 		expect(decision).toMatchObject({ action: "stop" })
 		expect(onConsecutiveMistakeLimitReached).not.toHaveBeenCalled()
+	})
+
+	it("pins the prompt date per conversation and passes it to every build", async () => {
+		let displayedTask: string | undefined
+		const today = vi.fn(() => "10/9/2026")
+		const promptDates = new ConversationPromptDates({ today, readStored: async () => undefined })
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			promptDates,
+			getConversationId: () => displayedTask,
+		})
+
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+		const started = await builder.build({ cwd: "/workspace", mode: "act" })
+		expect(mocks.buildSessionConfig).toHaveBeenLastCalledWith({ cwd: "/workspace", mode: "act", currentDate: "10/9/2026" })
+		expect(promptDates.sessionMetadata(started.sessionId)).toEqual({ promptDate: "10/9/2026" })
+
+		displayedTask = started.sessionId
+		today.mockReturnValue("10/10/2026")
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+		const rebuilt = await builder.build({ cwd: "/workspace", mode: "plan" })
+		rebuilt.sessionId = displayedTask
+		expect(mocks.buildSessionConfig).toHaveBeenLastCalledWith({ cwd: "/workspace", mode: "plan", currentDate: "10/9/2026" })
 	})
 
 	it("installs the advisor tool, hidden from the model unless the conversation is offered it", async () => {

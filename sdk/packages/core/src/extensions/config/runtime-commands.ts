@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { truncateSplit } from "@plinycode/shared";
+import { capInstructionText } from "../../runtime/safety/rules";
 import type {
 	SkillConfig,
 	UserInstructionConfigWatcher,
@@ -18,6 +19,7 @@ export type AvailableRuntimeCommand = {
 
 type CommandRecord = {
 	item: SkillConfig | WorkflowConfig;
+	filePath?: string;
 };
 
 export function normalizeRuntimeCommandName(name: string): string {
@@ -60,22 +62,31 @@ function isCommandEnabled(command: SkillConfig | WorkflowConfig): boolean {
 	return command.disabled !== true;
 }
 
+/**
+ * The body a slash command pastes into the user message. It is capped
+ * (MAX_COMMAND_INSTRUCTION_CHARS): rules have a budget, and a workflow file
+ * nobody trimmed must not take the whole context window with it.
+ */
 function resolveCommandInstructions(
-	item: SkillConfig | WorkflowConfig,
+	record: CommandRecord,
 	kind: RuntimeCommandKind,
 ): string {
+	const { item } = record;
+	const instructions = capInstructionText(item.instructions, {
+		sourcePath: record.filePath,
+	});
 	if (
 		kind !== "skill" ||
 		!("source" in item) ||
 		item.source?.type !== "agent-plugin"
 	) {
-		return item.instructions;
+		return instructions;
 	}
 	const skillRoot = item.source.skillRoot
 		.replaceAll("&", "&amp;")
 		.replaceAll("<", "&lt;")
 		.replaceAll(">", "&gt;");
-	return `<skill-root>${skillRoot}</skill-root>\n${item.instructions}`;
+	return `<skill-root>${skillRoot}</skill-root>\n${instructions}`;
 }
 
 function listCommandsForKind(
@@ -90,7 +101,7 @@ function listCommandsForKind(
 			name:
 				normalizeRuntimeCommandName(record.item.name) ||
 				`${kind}-${stableRuntimeCommandSuffix(id)}`,
-			instructions: resolveCommandInstructions(record.item, kind),
+			instructions: resolveCommandInstructions(record, kind),
 			description: resolveCommandDescription(record.item, kind),
 			kind,
 		}))

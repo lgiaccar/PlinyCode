@@ -31,5 +31,6 @@ export function createMemoryServices(source: ConversationSource): MemoryServices
 		}),
 		isMemoryEnabled: () => getMemoryMaxTokens() > 0,
 		isSearchEnabled: isConversationSearchEnabled,
+		getMaxTokens: getMemoryMaxTokens,
 	}
 }

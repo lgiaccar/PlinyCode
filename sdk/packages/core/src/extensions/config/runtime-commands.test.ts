@@ -171,6 +171,30 @@ Run the release workflow.`,
 		}
 	});
 
+	it("caps a workflow body a slash command would paste and points at its file", async () => {
+		const tempRoot = await mkdtemp(join(tmpdir(), "core-runtime-commands-"));
+		tempRoots.push(tempRoot);
+		const workflowsDir = join(tempRoot, "workflows");
+		await mkdir(workflowsDir, { recursive: true });
+		const workflowPath = join(workflowsDir, "huge.md");
+		await writeFile(workflowPath, `step\n`.repeat(10_000));
+
+		const watcher = createUserInstructionConfigWatcher({
+			skills: { directories: [] },
+			rules: { directories: [] },
+			workflows: { directories: [workflowsDir] },
+		});
+		try {
+			await watcher.refreshAll();
+			const expanded = resolveRuntimeSlashCommandFromWatcher("/huge", watcher);
+			expect(expanded.length).toBeLessThan(30_000);
+			expect(expanded).toContain("[Instructions truncated: ");
+			expect(expanded).toContain(`Read the rest in \`${workflowPath}\`.]`);
+		} finally {
+			watcher.stop();
+		}
+	});
+
 	it("normalizes configured names into resolvable slash command tokens", async () => {
 		const tempRoot = await mkdtemp(join(tmpdir(), "core-runtime-commands-"));
 		tempRoots.push(tempRoot);
