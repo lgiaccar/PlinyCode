@@ -154,6 +154,8 @@ export type ConnectionOverrides = ConnectionUpdate;
 export class SessionRuntime {
 	private config: AgentConfig;
 	private readonly agentId: string;
+	/** The rules the newest system prompt carries, for the request's context breakdown. */
+	private lastRulesText = "";
 	private readonly parentAgentId?: string;
 	private readonly logger?: BasicLogger;
 	private readonly conversation: ConversationStore;
@@ -552,6 +554,9 @@ export class SessionRuntime {
 				rules.push(content);
 			}
 		}
+		// Kept for the request metadata: the usage report's context breakdown
+		// counts the rules apart from the rest of the system prompt.
+		this.lastRulesText = rules.join("\n\n");
 		return mergeSystemPromptRules(this.config.systemPrompt, rules);
 	}
 
@@ -729,6 +734,8 @@ export class SessionRuntime {
 			consumeSystemNotice: () => this.runTracker.consumeSystemNotice(),
 			completionPolicy: toolCallingDisabled ? null : undefined,
 			systemPrompt,
+			contextSources: () =>
+				this.lastRulesText ? { rulesText: this.lastRulesText } : {},
 		});
 		const runtime = this.createAgentRuntimeImpl(runtimeConfig);
 		this.activeRuntime = runtime;

@@ -259,6 +259,10 @@ export {
 	CHARS_PER_TOKEN,
 	estimateRequestInputTokens,
 	estimateTokens,
+	estimateValueTokens,
+	IMAGE_TOKEN_ESTIMATE,
+	isBinaryPayload,
+	serializeForTokenEstimate,
 	type TokenEstimatedRequest,
 } from "./llms/tokens";
 export type {

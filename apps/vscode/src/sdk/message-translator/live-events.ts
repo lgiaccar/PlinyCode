@@ -22,7 +22,13 @@ import { isSyntheticUserPrompt } from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
 import { normalizeTodoList, TODO_TOOL_NAME } from "../vscode-todo-tool"
 import { advisorQuestionMessage, advisorResultMessages, isAdvisorTool } from "./advisor-rows"
-import { buildCompactionMessage, finalizeDanglingCompaction, parseCompactionNoticeMetadata } from "./ask-builders"
+import {
+	buildCompactionInsufficientMessage,
+	buildCompactionMessage,
+	buildCompactionUsageMessage,
+	finalizeDanglingCompaction,
+	parseCompactionNoticeMetadata,
+} from "./ask-builders"
 import { reshapeErrorForWebview } from "./error-reshape"
 import {
 	extractFileReads,
@@ -708,6 +714,17 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 							? state.beginCompaction()
 							: (state.takeOpenCompactionTs() ?? state.nextTs())
 					messages.push(buildCompactionMessage(compaction, ts))
+					// The summarizer's call is paid like any other: its usage row
+					// adds it to the task header, the budget check and history.
+					const usageRow = buildCompactionUsageMessage(event.metadata?.summarizerUsage, state.nextTs())
+					if (usageRow) {
+						messages.push(usageRow)
+					}
+					break
+				}
+				const insufficient = buildCompactionInsufficientMessage(event.metadata, state.nextTs())
+				if (insufficient) {
+					messages.push(insufficient)
 					break
 				}
 				if (INTERNAL_STATUS_NOTICES.has(event.message ?? "")) {

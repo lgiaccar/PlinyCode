@@ -11,6 +11,7 @@ import {
 	type BudgetProjectionResult,
 	buildBudgetProjection,
 } from "./budget-projection";
+import type { CompactionSummarizerUsage } from "./compaction-shared";
 import {
 	buildSummaryMessage,
 	buildSummaryRequest,
@@ -65,6 +66,8 @@ interface SummaryGenerationResult {
 	reasoningChars: number;
 	/** Provider-reported reason the response is incomplete (e.g. "max_output_tokens"). */
 	incompleteReason?: string;
+	/** The call's tokens and cost, when the stream reported them. */
+	usage?: CompactionSummarizerUsage;
 }
 
 async function generateSummary(options: {
@@ -76,6 +79,7 @@ async function generateSummary(options: {
 	let text = "";
 	let reasoningChars = 0;
 	let incompleteReason: string | undefined;
+	let usage: CompactionSummarizerUsage | undefined;
 	for await (const chunk of handler.createMessage(
 		"Summarize the provided coding session into a concise continuation note with detailed next steps.",
 		[{ role: "user", content: options.request }],
@@ -86,6 +90,26 @@ async function generateSummary(options: {
 		}
 		if (chunk.type === "reasoning") {
 			reasoningChars += chunk.reasoning?.length ?? 0;
+			continue;
+		}
+		if (chunk.type === "usage") {
+			// The summarizer's call is paid like any other; the host adds it to
+			// the conversation's cost. Later chunks carry the running totals.
+			usage = {
+				providerId: options.providerConfig.providerId,
+				modelId: options.providerConfig.modelId,
+				inputTokens: chunk.inputTokens ?? 0,
+				outputTokens: chunk.outputTokens ?? 0,
+				...(chunk.cacheReadTokens !== undefined
+					? { cacheReadTokens: chunk.cacheReadTokens }
+					: {}),
+				...(chunk.cacheWriteTokens !== undefined
+					? { cacheWriteTokens: chunk.cacheWriteTokens }
+					: {}),
+				...(chunk.totalCost !== undefined
+					? { totalCost: chunk.totalCost }
+					: {}),
+			};
 			continue;
 		}
 		if (chunk.type === "done") {
@@ -101,8 +125,9 @@ async function generateSummary(options: {
 		incompleteReason,
 		modelId: options.providerConfig.modelId,
 		providerId: options.providerConfig.providerId,
+		...(usage ? { usage } : {}),
 	});
-	return { text: text.trim(), reasoningChars, incompleteReason };
+	return { text: text.trim(), reasoningChars, incompleteReason, usage };
 }
 
 function safeJsonSize(value: unknown): number {
@@ -286,6 +311,7 @@ export async function runAgenticCompaction(options: {
 			fileOps,
 			tokensBefore,
 			userRunSpan: countUserRunMessages(messagesToSummarize),
+			summarizerUsage: summaryResult.usage,
 		}),
 		...messages.slice(cutIndex),
 	];
@@ -314,5 +340,6 @@ export async function runAgenticCompaction(options: {
 			warningCount: summaryInputBudget.warnings.length,
 			liveTailHandling: summaryInputBudget.liveTailHandling,
 		},
+		...(summaryResult.usage ? { summarizerUsage: summaryResult.usage } : {}),
 	};
 }

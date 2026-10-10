@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { getEnvironmentColor } from "@/utils/environmentColors"
 import { formatStartTime } from "@/utils/format"
+import { autoCompactThresholdFor } from "./autoCompactThreshold"
 import CopyTaskButton from "./buttons/CopyTaskButton"
 import DeleteTaskButton from "./buttons/DeleteTaskButton"
 import ExportMarkdownButton from "./buttons/ExportMarkdownButton"
@@ -246,6 +247,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						</div>
 
 						<ContextWindow
+							autoCompactThreshold={autoCompactThresholdFor(selectedModelInfo)}
 							cacheReads={cacheReads}
 							cacheWrites={cacheWrites}
 							contextBreakdown={contextBreakdown}

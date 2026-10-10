@@ -188,13 +188,52 @@ export function withContentBlockCacheBreakpoints(
 		if (messages[i].role !== "user" && messages[i].role !== "assistant") {
 			continue;
 		}
-		const marked = withBreakpointOnLastText(messages[i], marker);
+		const marked =
+			withBreakpointOnLastText(messages[i], marker) ??
+			withBreakpointOnToolCallMessage(messages[i], marker);
 		if (marked) {
 			messages[i] = marked;
 			break;
 		}
 	}
 	return { ...rest, messages };
+}
+
+/**
+ * Whether to put the moving breakpoint on an assistant message that made
+ * tool calls and wrote no text. Off by default: in a tool loop the breakpoint
+ * then stays on the last text, and every tool result since is sent uncached
+ * on each step. Marking such a message needs a text block (the gateway drops
+ * markers on anything else), so a one-character text is added to the request
+ * on the wire only. Set PLINYCODE_CACHE_MARK_TOOL_CALLS=1 to measure the
+ * difference with the router's call log before making it the default.
+ */
+export function cacheMarkToolCallMessages(): boolean {
+	return process.env.PLINYCODE_CACHE_MARK_TOOL_CALLS === "1";
+}
+
+function withBreakpointOnToolCallMessage(
+	message: WireMessage,
+	marker: unknown,
+): WireMessage | undefined {
+	if (
+		!cacheMarkToolCallMessages() ||
+		message.role !== "assistant" ||
+		!Array.isArray(message.tool_calls) ||
+		message.tool_calls.length === 0
+	) {
+		return undefined;
+	}
+	const { content } = message;
+	const parts = Array.isArray(content)
+		? content
+		: typeof content === "string" && content.trim()
+			? [{ type: "text", text: content }]
+			: [];
+	return {
+		...message,
+		content: [{ type: "text", text: ".", cache_control: marker }, ...parts],
+	};
 }
 
 export function createPromptCacheProviderOptions(

@@ -424,8 +424,12 @@ export interface ClineCompactionInfo {
 }
 
 export interface ClineSubagentUsageInfo {
-	/** Whose usage the row adds to the conversation's: a sub-agent batch, or one advisor call (`ask_advisor`). */
-	source: "subagents" | "advisor"
+	/**
+	 * Whose usage the row adds to the conversation's: a sub-agent batch, one
+	 * advisor call (`ask_advisor`), or the model call that summarized the
+	 * context during compaction.
+	 */
+	source: "subagents" | "advisor" | "compaction"
 	tokensIn: number
 	tokensOut: number
 	cacheWrites: number
