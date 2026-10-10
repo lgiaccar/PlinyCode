@@ -9,6 +9,9 @@
 // - Rows the extension emits are not part of the transcript, so a pending
 //   proposal is also written to `<memory dir>/pending/<conversation>.json` and
 //   shown again when the conversation is reopened, until it is resolved.
+// - How far each conversation was distilled, and the memories the user
+//   dismissed or left unchecked, are kept in `<memory dir>/distill/<conversation>.json`,
+//   so a reload neither re-reads the whole conversation nor proposes them again.
 
 import { promises as fs } from "node:fs"
 import * as path from "node:path"
@@ -23,7 +26,21 @@ import {
 	hasSuccessfulEdit,
 	parseDistillReply,
 } from "./memory-distiller"
+import { memoryEntryKey } from "./memory-file"
 import type { MemoryStore } from "./memory-store"
+
+/** What is kept per conversation between windows: see the header. */
+interface DistillState {
+	upTo: number
+	dismissed: string[]
+}
+
+/** Dismissed keys kept per conversation; the oldest go first. */
+const MAX_DISMISSED_KEYS = 200
+
+function safeFileName(conversationId: string): string {
+	return conversationId.replace(/[^a-zA-Z0-9._-]/g, "_")
+}
 
 const DISTILL_TIMEOUT_MS = 90_000
 
@@ -61,8 +78,12 @@ function lastUserRunStart(messages: readonly unknown[]): number {
 
 export class MemoryCoordinator {
 	private readonly pending = new Map<string, PendingRecord>()
-	/** Per conversation: messages already distilled, so an offer only covers what is new. */
-	private readonly distilledUpTo = new Map<string, number>()
+	/**
+	 * Per conversation: messages already distilled, so an offer only covers
+	 * what is new, and the memories not to propose again. Loaded from disk the
+	 * first time a conversation is distilled in this window.
+	 */
+	private readonly states = new Map<string, DistillState>()
 	private readonly running = new Set<string>()
 
 	constructor(private readonly deps: MemoryCoordinatorDeps) {}
@@ -72,7 +93,51 @@ export class MemoryCoordinator {
 	}
 
 	private pendingFile(conversationId: string): string {
-		return path.join(this.pendingDir, `${conversationId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`)
+		return path.join(this.pendingDir, `${safeFileName(conversationId)}.json`)
+	}
+
+	private stateFile(conversationId: string): string {
+		return path.join(this.deps.store.rootDir, "distill", `${safeFileName(conversationId)}.json`)
+	}
+
+	private async loadState(conversationId: string): Promise<DistillState> {
+		const known = this.states.get(conversationId)
+		if (known) {
+			return known
+		}
+		let state: DistillState = { upTo: 0, dismissed: [] }
+		try {
+			const stored = JSON.parse(await fs.readFile(this.stateFile(conversationId), "utf8")) as Partial<DistillState>
+			state = {
+				upTo: typeof stored.upTo === "number" && stored.upTo > 0 ? stored.upTo : 0,
+				dismissed: Array.isArray(stored.dismissed) ? stored.dismissed.filter((key) => typeof key === "string") : [],
+			}
+		} catch {
+			// Never distilled, or the file is unreadable: start from the beginning.
+		}
+		this.states.set(conversationId, state)
+		return state
+	}
+
+	private async saveState(conversationId: string, state: DistillState): Promise<void> {
+		this.states.set(conversationId, state)
+		try {
+			const file = this.stateFile(conversationId)
+			await fs.mkdir(path.dirname(file), { recursive: true })
+			await fs.writeFile(file, JSON.stringify(state), "utf8")
+		} catch (error) {
+			Logger.debug("[Memory] Failed to store the distillation state:", error)
+		}
+	}
+
+	/** Remembers memories the user chose not to keep, so they are not proposed again. */
+	private async rememberDismissed(conversationId: string, texts: readonly string[]): Promise<void> {
+		if (texts.length === 0) {
+			return
+		}
+		const state = await this.loadState(conversationId)
+		const dismissed = [...new Set([...state.dismissed, ...texts.map(memoryEntryKey)])].slice(-MAX_DISMISSED_KEYS)
+		await this.saveState(conversationId, { ...state, dismissed })
 	}
 
 	/** Called when a send completes. Offers memories when the run edited files and the conversation is shown. */
@@ -104,7 +169,6 @@ export class MemoryCoordinator {
 			return
 		}
 		const messages = await this.deps.readMessages(conversationId).catch(() => [] as unknown[])
-		this.distilledUpTo.delete(conversationId)
 		await this.distill(conversationId, messages, { manual: true })
 	}
 
@@ -112,7 +176,8 @@ export class MemoryCoordinator {
 		if (this.running.has(conversationId)) {
 			return
 		}
-		const from = options.manual ? 0 : (this.distilledUpTo.get(conversationId) ?? 0)
+		const state = await this.loadState(conversationId)
+		const from = options.manual ? 0 : Math.min(state.upTo, messages.length)
 		const transcript = buildDistillTranscript(messages, from)
 		if (!transcript.trim()) {
 			if (options.manual) this.info("There is nothing in this conversation to distill yet.")
@@ -137,8 +202,9 @@ export class MemoryCoordinator {
 			} finally {
 				clearTimeout(timer)
 			}
-			this.distilledUpTo.set(conversationId, messages.length)
-			const memories = parseDistillReply(reply, `${memory.repoText}\n${memory.userText}`)
+			const latest = await this.loadState(conversationId)
+			await this.saveState(conversationId, { ...latest, upTo: messages.length })
+			const memories = parseDistillReply(reply, `${memory.repoText}\n${memory.userText}`, new Set(latest.dismissed))
 			if (memories.length === 0) {
 				if (options.manual) this.info("No new memories found in this conversation.")
 				return
@@ -180,13 +246,22 @@ export class MemoryCoordinator {
 		if (!record || record.proposal.status !== "pending") {
 			return
 		}
+		const conversationId = record.proposal.conversationId
 		if (!save) {
 			record.proposal = { ...record.proposal, status: "dismissed" }
 			this.show(record)
+			await this.rememberDismissed(
+				conversationId,
+				record.proposal.items.map((item) => item.text),
+			)
 			await this.forget(record)
 			return
 		}
 		const chosen = record.proposal.items.filter((item) => itemIds.includes(item.id))
+		await this.rememberDismissed(
+			conversationId,
+			record.proposal.items.filter((item) => !itemIds.includes(item.id)).map((item) => item.text),
+		)
 		record.proposal = { ...record.proposal, status: "saving" }
 		this.show(record)
 		let saved = 0

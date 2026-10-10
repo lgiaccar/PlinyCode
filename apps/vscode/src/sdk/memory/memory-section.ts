@@ -26,11 +26,21 @@ export interface RenderedMemorySection {
 	summary: MemorySectionSummary
 }
 
-function topicList(topics: TopicFile[]): string {
+/** Topic files listed per memory; the rest are counted, and the folder named. */
+const MAX_LISTED_TOPICS = 12
+/** Room kept for the "N more entries" note under a cut memory. */
+const DROPPED_NOTE_CHARS = 200
+
+function topicList(topics: TopicFile[], file: string): string {
 	if (topics.length === 0) {
 		return ""
 	}
-	const lines = topics.map((topic) => `- \`${topic.path}\`${topic.summary ? `: ${topic.summary}` : ""}`)
+	const shown = topics.slice(0, MAX_LISTED_TOPICS)
+	const lines = shown.map((topic) => `- \`${topic.path}\`${topic.summary ? `: ${topic.summary}` : ""}`)
+	const more = topics.length - shown.length
+	if (more > 0) {
+		lines.push(`- … ${more} more in the folder of \`${file}\``)
+	}
 	return `\n\nTopic files (read one with read_files when it applies):\n${lines.join("\n")}`
 }
 
@@ -44,14 +54,20 @@ function renderPart(
 	// Two levels down: the file's `# title` and `## Important` sit under this part's `## heading`.
 	// The file's `# title` repeats this part's heading; its `## sections` go one level down to sit under it.
 	const nested = nestHeadings(text.trim().replace(/^# [^\n]*(\n+|$)/, ""), 1)
-	const truncated = truncateMemory(nested, Math.max(0, maxChars))
+	// The topic list and the note about cut entries are memory text too: they
+	// come out of the part's budget, so the section stays within it.
+	const topicsText = topicList(topics, file)
+	const entriesBudget = Math.max(0, maxChars - topicsText.length - DROPPED_NOTE_CHARS)
+	const truncated = truncateMemory(nested, entriesBudget)
 	let body = truncated.text || "(empty)"
+	let note = ""
 	if (truncated.droppedEntries > 0) {
-		body += `\n\n[${truncated.droppedEntries} more ${truncated.droppedEntries === 1 ? "entry is" : "entries are"} in \`${file}\`, left out by the memory budget. Read the file when they may be relevant.]`
+		note = `\n\n[${truncated.droppedEntries} more ${truncated.droppedEntries === 1 ? "entry is" : "entries are"} in \`${file}\`, left out by the memory budget. Read the file when they may be relevant.]`
+		body += note
 	}
 	return {
-		text: `## ${heading}\nFile: \`${file}\`\n\n${body}${topicList(topics)}`,
-		chars: truncated.text.length,
+		text: `## ${heading}\nFile: \`${file}\`\n\n${body}${topicsText}`,
+		chars: truncated.text.length + note.length + topicsText.length,
 		entries: truncated.keptEntries,
 		dropped: truncated.droppedEntries,
 	}
@@ -108,7 +124,8 @@ export function renderMemorySection(contents: MemoryContents, maxTokens: number)
 	if (!(maxTokens > 0)) {
 		return undefined
 	}
-	const budget = Math.floor(maxTokens * CHARS_PER_TOKEN)
+	// The instructions go with every section; what is left is for the memories.
+	const budget = Math.max(0, Math.floor(maxTokens * CHARS_PER_TOKEN) - INSTRUCTIONS.length)
 	const { location } = contents
 	const user = renderPart(
 		"Your memory (every repository)",

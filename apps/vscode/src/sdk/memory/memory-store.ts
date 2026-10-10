@@ -5,8 +5,10 @@
 //   <memory dir>/repos/<repo key>/<topic>.md    detail, read on demand
 //   <memory dir>/repos/<repo key>/repo.json     which repository the key is
 //
-// Every write goes through `insert`, one at a time per file, and lands with a
-// rename, so two windows saving at once neither interleave nor leave half a file.
+// Every write goes through `serialized`, one at a time per file in this
+// window, holding `<file>.lock` against other windows (withFileLock), and
+// lands with a rename, so two windows saving at once neither lose an entry
+// nor leave half a file.
 
 import { promises as fs } from "node:fs"
 import * as path from "node:path"
@@ -93,6 +95,55 @@ async function writeAtomically(file: string, content: string): Promise<void> {
 	} catch (error) {
 		await fs.rm(temp, { force: true })
 		throw error
+	}
+}
+
+/** How long a write waits for another window's lock before going ahead anyway. */
+const LOCK_WAIT_MS = 2_000
+/** A lock older than this was left by a window that died mid-write. */
+const LOCK_STALE_MS = 10_000
+const LOCK_RETRY_MS = 50
+
+/**
+ * Runs `task` holding `<file>.lock`, created exclusively, so two VS Code
+ * windows do not interleave a read-modify-write of one memory file.
+ * Best-effort: a stale lock is broken, and after LOCK_WAIT_MS the write goes
+ * ahead without it rather than failing the save.
+ */
+export async function withFileLock<T>(file: string, task: () => Promise<T>): Promise<T> {
+	const lock = `${file}.lock`
+	await fs.mkdir(path.dirname(file), { recursive: true }).catch(() => {})
+	const deadline = Date.now() + LOCK_WAIT_MS
+	let held = false
+	while (!held) {
+		try {
+			const handle = await fs.open(lock, "wx")
+			await handle.close()
+			held = true
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+				break
+			}
+			const age = await fs
+				.stat(lock)
+				.then((stat) => Date.now() - stat.mtimeMs)
+				.catch(() => 0)
+			if (age > LOCK_STALE_MS) {
+				await fs.rm(lock, { force: true }).catch(() => {})
+				continue
+			}
+			if (Date.now() >= deadline) {
+				break
+			}
+			await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS))
+		}
+	}
+	try {
+		return await task()
+	} finally {
+		if (held) {
+			await fs.rm(lock, { force: true }).catch(() => {})
+		}
 	}
 }
 
@@ -243,7 +294,10 @@ export class MemoryStore {
 
 	private serialized<T>(file: string, task: () => Promise<T>): Promise<T> {
 		const previous = this.writeQueues.get(file) ?? Promise.resolve()
-		const next = previous.catch(() => {}).then(task)
+		// The queue orders this window's writes; the lock file orders them with
+		// another window's, whose read-modify-write would otherwise overwrite
+		// an entry saved in between. Each task reads the file inside the lock.
+		const next = previous.catch(() => {}).then(() => withFileLock(file, task))
 		this.writeQueues.set(file, next)
 		const forget = () => {
 			if (this.writeQueues.get(file) === next) {

@@ -10,7 +10,7 @@
  */
 
 import type { CoreSessionConfig } from "@plinycode/core"
-import type { AgentBeforeModelContext, AgentModelRequest } from "@plinycode/shared"
+import { type AgentBeforeModelContext, type AgentModelRequest, CHARS_PER_TOKEN } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 
 export interface InstructionContextSummary {
@@ -98,8 +98,6 @@ export function summarizeInstructionContext(request: AgentModelRequest): Instruc
 }
 
 const MAX_NAMES = 5
-/** Rough characters per token, enough for a "how big is this" hint. */
-const CHARS_PER_TOKEN = 4
 
 function nameList(names: string[]): string {
 	const shown = names.slice(0, MAX_NAMES).map((name) => `\`${name}\``)

@@ -6,7 +6,7 @@
 import { offTheRecordMessageIndices } from "@plinycode/core"
 import { extractJsonObjects } from "../router/router-classifier"
 import { messageToText } from "./conversation-search"
-import { normalizeEntryText } from "./memory-file"
+import { memoryEntryKey, memoryEntryKeys, normalizeEntryText } from "./memory-file"
 
 const MAX_DISTILL_TRANSCRIPT_CHARS = 24_000
 const MAX_MEMORY_CONTEXT_CHARS = 8_000
@@ -94,9 +94,17 @@ export function buildDistillUserPrompt(transcript: string, repoMemory: string, u
 	].join("\n")
 }
 
-/** The memories in the model's reply, normalized, minus any already in `existing`. */
-export function parseDistillReply(reply: string, existing: string): DistilledMemory[] {
-	const known = existing.toLowerCase().replace(/\s+/g, " ")
+/**
+ * The memories in the model's reply, normalized, minus any already an entry
+ * of `existing` (compared as whole entries: a memory that only occurs inside
+ * a longer one is new) and any the user dismissed before.
+ */
+export function parseDistillReply(
+	reply: string,
+	existing: string,
+	dismissed: ReadonlySet<string> = new Set(),
+): DistilledMemory[] {
+	const known = memoryEntryKeys(existing)
 	const seen = new Set<string>()
 	const memories: DistilledMemory[] = []
 	for (const object of extractJsonObjects(reply)) {
@@ -104,8 +112,8 @@ export function parseDistillReply(reply: string, existing: string): DistilledMem
 		for (const raw of object.memories) {
 			const item = asRecord(raw)
 			const text = typeof item?.text === "string" ? normalizeEntryText(item.text) : ""
-			const key = text.toLowerCase().replace(/\s+/g, " ")
-			if (!text || seen.has(key) || known.includes(key)) continue
+			const key = memoryEntryKey(text)
+			if (!text || seen.has(key) || known.has(key) || dismissed.has(key)) continue
 			seen.add(key)
 			memories.push({
 				text,
