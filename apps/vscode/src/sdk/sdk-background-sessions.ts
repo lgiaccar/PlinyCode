@@ -80,6 +80,16 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 		return sessionId !== undefined && this.entries.has(sessionId)
 	}
 
+	/** The session a background task runs, for its own mode and folder. */
+	session(sessionId: string | undefined): ActiveSession | undefined {
+		return sessionId === undefined ? undefined : this.entries.get(sessionId)?.session
+	}
+
+	/** The sessions running in the background, newest last. */
+	sessions(): ActiveSession[] {
+		return [...this.entries.values()].map((entry) => entry.session)
+	}
+
 	get isFull(): boolean {
 		return this.entries.size >= this.maxSessions
 	}

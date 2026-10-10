@@ -18,6 +18,7 @@ import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray
 import type { Settings } from "@shared/storage/state-keys"
 import { type Mode, toMode } from "@shared/storage/types"
 import type { ClineAskResponse, ClineCheckpointRestore } from "@shared/WebviewMessage"
+import { workspacePathsEqual } from "@shared/workspacePath"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { createTaskApiModelShim } from "@/core/controller/models/taskApiModel"
 import { sendChatButtonClickedEvent } from "@/core/controller/ui/subscribeToChatButtonClicked"
@@ -386,7 +387,7 @@ export class Controller {
 			emitRow: (msg) => this.messages.emitHookMessage(msg),
 			nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
-			isOffTheRecordTurn: () => this.sessions.isOffTheRecordTurn(),
+			isOffTheRecordTurn: (sessionId) => this.sessions.isOffTheRecordTurn(sessionId),
 			checkSpendingLimit: () => this.checkSpendingLimit(),
 			getRunChanges: (sessionId) => this.checkpoints.getRunChanges(sessionId),
 			gitSnapshots: this.conversationContext.gitSnapshots,
@@ -409,7 +410,7 @@ export class Controller {
 			complete: async (system, user, signal) =>
 				completeWithUtilityModel(system, user, signal, await this.getWorkspaceRoot()),
 			isOfferEnabled: isMemoryDistillOfferEnabled,
-			isActMode: () => this.stateManager.getGlobalSettingsKey("mode") === "act",
+			isActMode: (sessionId) => this.sessionMode(sessionId) === "act",
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
@@ -679,6 +680,8 @@ export class Controller {
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
 			postStateToWebview: () => this.postStateToWebview(),
+			backgroundSessionsInFolder: (cwd) =>
+				this.background.sessions().filter((session) => workspacePathsEqual(session.startConfig?.cwd, cwd)).length,
 		})
 		this.compaction = new SdkCompactionCoordinator({
 			stateManager: this.stateManager,
@@ -843,6 +846,18 @@ export class Controller {
 				totalCost: usage.totalCost,
 			})
 			.catch((error) => Logger.error("[SdkController] Failed to persist background advisor usage:", error))
+	}
+
+	/**
+	 * The mode a session was started in: the displayed task's, or a background
+	 * task's. A session's mode is fixed when its config is built (the mode
+	 * switch rebuilds the displayed session), so it is the session's own and
+	 * not the switch's current position.
+	 */
+	private sessionMode(sessionId: string): string | undefined {
+		const active = this.sessions.getActiveSession()
+		const session = active?.sessionId === sessionId ? active : this.background.session(sessionId)
+		return session?.startConfig?.mode
 	}
 
 	/** True when the active mode's model costs nothing: a free self-hosted model or a FreeAuto router. */

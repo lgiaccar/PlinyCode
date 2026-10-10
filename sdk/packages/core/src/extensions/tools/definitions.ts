@@ -4,6 +4,7 @@
  * Factory functions for creating the default tools.
  */
 
+import { isAbsolute, resolve } from "node:path";
 import {
 	type AgentTool,
 	type AgentToolContext,
@@ -241,9 +242,18 @@ const READ_ONLY_EXECUTION_MODE = "parallel" as const;
  */
 export function createReadFilesTool(
 	executor: FileReadExecutor,
-	config: Pick<DefaultToolsConfig, "fileReadTimeoutMs"> = {},
+	config: Pick<DefaultToolsConfig, "fileReadTimeoutMs" | "cwd"> = {},
 ): AgentTool<ReadFilesInput, ToolOperationResult[]> {
 	const timeoutMs = config.fileReadTimeoutMs ?? 10000;
+	// A relative path is relative to the session's own folder, like the search
+	// and shell tools' paths. Resolving it here, rather than in the executor,
+	// keeps a host's executor (shared by every session of a window) from
+	// having to guess which session's folder a read belongs to.
+	const cwd = config.cwd?.trim();
+	const resolveRequestPath = (request: ReadFileRequest): ReadFileRequest =>
+		cwd && typeof request.path === "string" && !isAbsolute(request.path)
+			? { ...request, path: resolve(cwd, request.path) }
+			: request;
 
 	return createTool<ReadFilesInput, ToolOperationResult[]>({
 		name: "read_files",
@@ -307,7 +317,7 @@ export function createReadFilesTool(
 
 					try {
 						const content = await withTimeout(
-							executor(request, context),
+							executor(resolveRequestPath(request), context),
 							timeoutMs,
 							`File read timed out after ${timeoutMs}ms`,
 						);
