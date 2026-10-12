@@ -1,7 +1,13 @@
+import type { Mode } from "@shared/storage/types"
 import { workspacePathsEqual } from "@shared/workspacePath"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { HostProvider } from "@/hosts/host-provider"
+import type { CiRunPolicy } from "@/sdk/ci-run-policy"
 import { getCiBoard } from "@/services/devops-mcp/builtin-mcp-registry"
+import type { CiAutoStartResult } from "@/services/devops-mcp/ci-board/ci-auto-runner"
+import type { CiRunRequest, PreparedCiRun } from "@/services/devops-mcp/ci-board/ci-board"
+import type { CiModelChoice } from "@/services/devops-mcp/ci-board/types"
+import { PLINY_FREE_AUTO_MODEL_ID } from "@/shared/pliny"
 import { ShowMessageType } from "@/shared/proto/index.host"
 import { Logger } from "@/shared/services/Logger"
 import type { Controller } from "../index"
@@ -9,17 +15,38 @@ import { sendChatButtonClickedEvent } from "../ui/subscribeToChatButtonClicked"
 
 const START_ANYWAY = "Start anyway"
 
+const MODE_NAMES: Record<Mode, string> = { act: "Agent", plan: "Plan", ask: "Ask" }
+
+const modelFor = (choice: CiModelChoice) => (choice === "free" ? PLINY_FREE_AUTO_MODEL_ID : undefined)
+
+/** A short history title: what ran, on what. */
+function runTitle(run: PreparedCiRun, auto: boolean): string {
+	const where = run.item.pr ? `PR #${run.item.pr.id}` : run.sourceBranch
+	return `${auto ? "CI auto-watch" : "CI board"}: ${run.action.label} on ${where}`
+}
+
+function policyFor(run: PreparedCiRun, scope: CiRunPolicy["scope"]): CiRunPolicy {
+	return {
+		scope,
+		worktree: run.worktree.path,
+		remoteName: run.remoteName,
+		sourceBranch: run.sourceBranch,
+		// The report folder lives in the main checkout, outside a worktree.
+		readRoots: run.reportDir ? [run.reportDir] : [],
+	}
+}
+
 /**
- * Starts a CI board action: opens the item's conversation if it is still
- * running, otherwise gets a working copy for the branch and starts a new
- * conversation there with the action's prompt. Returns the conversation id,
- * or undefined when nothing was started.
+ * Starts a CI board run the user asked for: opens the item's conversation if
+ * it is still running, otherwise gets a working copy for the branch and
+ * starts a conversation there with the run's prompt, in the foreground.
+ * Returns the conversation id, or undefined when nothing was started.
  */
 export async function startCiRun(
 	controller: Controller,
 	targetId: string,
 	itemKey: string,
-	actionId: string,
+	request: CiRunRequest,
 ): Promise<string | undefined> {
 	const board = getCiBoard()
 	if (!board) {
@@ -32,7 +59,7 @@ export async function startCiRun(
 		return link.conversationId
 	}
 
-	const run = await board.prepareRun(targetId, itemKey, actionId)
+	const run = await board.prepareRun(targetId, itemKey, request)
 
 	if (controller.startWouldStopRunningTask) {
 		const { selectedOption } = await HostProvider.window.showMessage({
@@ -46,32 +73,94 @@ export async function startCiRun(
 		}
 	}
 
-	// An action edits and pushes, which plan and ask modes forbid.
-	if (controller.stateManager.getGlobalSettingsKey("mode") !== "act") {
-		await controller.togglePlanActMode("act")
+	// An action that edits and pushes needs Agent mode; Investigate reads only, in Ask mode.
+	if (controller.stateManager.getGlobalSettingsKey("mode") !== run.mode) {
+		await controller.togglePlanActMode(run.mode)
 		void HostProvider.window.showMessage({
 			type: ShowMessageType.INFORMATION,
-			message: "Switched to Agent mode to run the CI action.",
+			message: `Switched to ${MODE_NAMES[run.mode]} mode to run "${run.action.label}".`,
 		})
 	}
 
 	const workspace = await runWorkspace(run.worktree.path, run.worktree.inPlace)
+	const modelId = modelFor(run.action.model)
 	const conversationId = await controller.initTask(run.prompt, [], [], undefined, undefined, workspace, {
 		recordRecentWorkspace: false,
+		modelId,
+		title: runTitle(run, false),
 	})
 	if (!conversationId) {
 		return undefined
 	}
+	controller.setCiRunPolicy(conversationId, policyFor(run, "guard"))
 	await board.setLink(itemKey, {
 		conversationId,
 		actionId: run.action.id,
 		worktree: run.worktree.path,
 		headSha: run.item.headSha,
 		startedTs: Date.now(),
+		modelId,
+		sourceBranch: run.sourceBranch,
+		remoteName: run.remoteName,
 	})
 	await sendChatButtonClickedEvent()
 	Logger.log(`[CiBoard] Started ${run.action.id} for ${itemKey} in ${run.worktree.path}: ${conversationId}`)
 	return conversationId
+}
+
+/**
+ * Starts an auto-watch run: in the background, on the free model, with the
+ * unattended approval policy. The displayed task and the mode switch are left
+ * alone.
+ */
+export async function startCiAutoRun(
+	controller: Controller,
+	targetId: string,
+	itemKey: string,
+	actionId: string,
+): Promise<CiAutoStartResult> {
+	const board = getCiBoard()
+	if (!board) {
+		return { error: "The CI board is not available." }
+	}
+	if (controller.backgroundFreeSlots <= 1) {
+		return "full"
+	}
+	const run = await board.prepareRun(targetId, itemKey, { actionId }, { auto: true })
+	if (run.worktree.inPlace) {
+		// Never edit the user's own checkout unattended: it may hold their uncommitted work.
+		return {
+			error: `${run.sourceBranch} is checked out in your own folder, so auto-watch will not change it. Switch that folder to another branch, or run the action yourself.`,
+		}
+	}
+	const workspace: WorkspaceRef = { path: run.worktree.path, kind: "folder", folders: [run.worktree.path] }
+	const started = await controller.startBackgroundTask(run.prompt, workspace, {
+		recordRecentWorkspace: false,
+		// Background runs skip the spending check, so they always run on the free model.
+		modelId: PLINY_FREE_AUTO_MODEL_ID,
+		mode: run.mode,
+		title: runTitle(run, true),
+	})
+	if (started.status === "full") {
+		return "full"
+	}
+	if (started.status === "error") {
+		return { error: started.message }
+	}
+	controller.setCiRunPolicy(started.conversationId, policyFor(run, "auto"))
+	await board.setLink(itemKey, {
+		conversationId: started.conversationId,
+		actionId: run.action.id,
+		worktree: run.worktree.path,
+		headSha: run.item.headSha,
+		startedTs: Date.now(),
+		auto: true,
+		modelId: PLINY_FREE_AUTO_MODEL_ID,
+		sourceBranch: run.sourceBranch,
+		remoteName: run.remoteName,
+	})
+	Logger.log(`[CiBoard] Auto-watch started ${run.action.id} for ${itemKey}: ${started.conversationId}`)
+	return "started"
 }
 
 /**

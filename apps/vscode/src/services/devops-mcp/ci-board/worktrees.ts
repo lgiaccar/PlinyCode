@@ -15,7 +15,7 @@ interface GitResult {
 	stderr: string
 }
 
-function git(cwd: string, args: string[], timeoutMs = 120_000): Promise<GitResult> {
+export function git(cwd: string, args: string[], timeoutMs = 120_000): Promise<GitResult> {
 	return new Promise((resolve) => {
 		execFile(
 			"git",

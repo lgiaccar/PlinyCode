@@ -82,17 +82,36 @@ interface SdkSessionConfigBuilderOptions {
  * carries the matching instructions.
  */
 export class SdkSessionConfigBuilder {
+	/** Conversations that run on a model of their own (CI board runs), by conversation id. */
+	private readonly pinnedModels = new Map<string, string>()
+
 	constructor(private readonly options: SdkSessionConfigBuilderOptions) {}
 
+	/**
+	 * Keeps a conversation on `modelId` through every rebuild (mode, MCP,
+	 * compaction, resume), whatever model the chat selects.
+	 */
+	pinModel(conversationId: string, modelId: string): void {
+		this.pinnedModels.set(conversationId, modelId)
+	}
+
+	pinnedModel(conversationId: string | undefined): string | undefined {
+		return conversationId ? this.pinnedModels.get(conversationId) : undefined
+	}
+
 	async build(input: SessionConfigInput): Promise<Awaited<ReturnType<typeof buildSessionConfig>>> {
-		const conversationId = this.options.getConversationId?.()?.trim() || undefined
+		// A conversation started in the background is not the displayed one, so
+		// it must not pick up the displayed task's snapshots or pinned model.
+		const conversationId = input.newConversation ? undefined : this.options.getConversationId?.()?.trim() || undefined
 		const [git, date, memory] = await Promise.all([
 			this.options.gitSnapshots?.prepare(conversationId, input.cwd),
 			this.options.promptDates?.prepare(conversationId),
 			this.options.memory?.snapshots.prepare(conversationId, input.cwd),
 		])
+		const modelId = input.modelId?.trim() || this.pinnedModel(conversationId)
 		const config = await buildSessionConfig({
 			...input,
+			...(modelId ? { modelId } : {}),
 			...(git?.snapshot ? { gitSnapshot: git.snapshot } : {}),
 			...(date ? { currentDate: date.date } : {}),
 			...(memory?.section ? { memorySection: memory.section } : {}),
@@ -159,7 +178,7 @@ export class SdkSessionConfigBuilder {
 			installInstructionContextRows(config, { emitRow, nextMessageTs })
 			const getRunChanges = this.options.getRunChanges
 			installRouter(config, {
-				sessionId: this.options.getSessionId?.() || input.cwd,
+				sessionId: (input.newConversation ? config.sessionId : this.options.getSessionId?.()) || input.cwd,
 				// The id this config's session runs under, once it runs: the router's
 				// state must be found under it when the turn summary is emitted.
 				getSessionId: () => config.sessionId,
@@ -167,8 +186,10 @@ export class SdkSessionConfigBuilder {
 				// Ask mode routes like plan mode: both read and reason, neither edits. So does a
 				// side question, which runs under ask mode's rules whatever the mode is: it gets
 				// no completion judge and no review.
+				// A background session keeps the mode it was built with; the switch is the displayed task's.
 				getMode: () =>
-					this.options.stateManager.getGlobalSettingsKey("mode") === "act" && !this.options.isOffTheRecordTurn?.()
+					(isBackground() ? input.mode : this.options.stateManager.getGlobalSettingsKey("mode")) === "act" &&
+					!this.options.isOffTheRecordTurn?.()
 						? "act"
 						: "plan",
 				emitRow,
@@ -188,7 +209,8 @@ export class SdkSessionConfigBuilder {
 			installAdvisor(config, {
 				...this.options.advisor,
 				// The same key installRouter uses above.
-				routerSessionKey: () => config.sessionId?.trim() || this.options.getSessionId?.() || input.cwd,
+				routerSessionKey: () =>
+					config.sessionId?.trim() || (input.newConversation ? undefined : this.options.getSessionId?.()) || input.cwd,
 			})
 		}
 

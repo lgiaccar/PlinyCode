@@ -9,23 +9,33 @@ import type { ProviderKind } from "../server/repo"
 /** One pull request (`pr`), a branch's open PR or head (`branch`), or every open PR of a repository (`repo`). */
 export type CiTargetKind = "pr" | "branch" | "repo"
 
-/**
- * What happens when CI turns red or the PR conflicts: `manual` notifies and
- * waits for a click, `auto` starts the action with the usual approvals, and
- * `full_auto` also approves its tool calls. Only `manual` runs today.
- */
-export type CiAutonomy = "manual" | "auto" | "full_auto"
+/** The board's own actions. Every target has one of each; their prompt can be overridden. */
+export type CiBuiltinId = "fix-conflicts" | "recalibrate" | "fix-ci" | "investigate"
 
-export type CiTrigger = "manual" | "on_failure" | "on_conflict" | "on_failure_or_conflict"
+export const BUILTIN_IDS: readonly CiBuiltinId[] = ["fix-conflicts", "recalibrate", "fix-ci", "investigate"]
 
-export type CiPromptSource = { kind: "builtin" } | { kind: "file"; path: string } | { kind: "text"; text: string }
+export const isBuiltinId = (id: string): id is CiBuiltinId => (BUILTIN_IDS as readonly string[]).includes(id)
+
+export type CiPromptSource =
+	| { kind: "builtin"; id: CiBuiltinId }
+	| { kind: "file"; path: string }
+	| { kind: "text"; text: string }
+
+/** `free` runs on the free auto-router (`pliny/auto-free`); `current` on the model selected in the chat. */
+export type CiModelChoice = "free" | "current"
+
+/** When an action is the row's main button: on conflicts, on small test deltas, on other failures, or never by itself. */
+export type CiSituation = "conflict" | "small-delta" | "failure" | "any"
 
 /** A prompt the user can run against an item of the board. */
 export interface CiAction {
 	id: string
 	label: string
 	prompt: CiPromptSource
-	trigger: CiTrigger
+	model: CiModelChoice
+	situation: CiSituation
+	/** Auto-watch may start it on its own. Only honoured for `fix-conflicts` and `recalibrate`. */
+	auto: boolean
 }
 
 export interface CiTarget {
@@ -42,7 +52,8 @@ export interface CiTarget {
 	prId?: number
 	/** `repo` targets: the signed-in user's PRs, or everyone's. */
 	prFilter?: "mine" | "all"
-	autonomy: CiAutonomy
+	/** Fix conflicts and recalibrate small test deltas automatically, in the background. */
+	autoWatch: boolean
 	actions: CiAction[]
 	createdTs: number
 }
@@ -80,6 +91,69 @@ export interface CiLink {
 	worktree: string
 	headSha?: string
 	startedTs: number
+	/** Started by auto-watch rather than by a click. */
+	auto?: boolean
+	/** The model the run is pinned to, when it is not the chat's. */
+	modelId?: string
+	/** The branch the run may push to. */
+	sourceBranch?: string
+	/** The git remote the run pushes to. */
+	remoteName?: string
+}
+
+/** How often auto-watch started an action for an item. Keyed `item|action|headSha`, or `item|action` for the streak. */
+export interface CiAutoAttempt {
+	key: string
+	count: number
+	lastTs: number
+}
+
+/** How bad an item's failures are, worst first. */
+export type CiSeverity = "blocker" | "high" | "medium" | "low" | "info"
+
+/** What kind of failure a pipeline has. */
+export type CiCategory = "conflict" | "build" | "test-regression" | "small-test-delta" | "infrastructure" | "stale" | "unknown"
+
+export interface CiStepDetail {
+	job: string
+	step: string
+	errors: string[]
+	/** The log lines around the error, trimmed. */
+	excerpt?: string
+}
+
+export interface CiPipelineTriage {
+	name: string
+	runId?: number
+	url?: string
+	category: CiCategory
+	summary: string
+	/** Empty once reloaded from disk: details are refetched on demand. */
+	steps: CiStepDetail[]
+}
+
+/** What the board worked out about an item's failures. */
+export interface CiTriageResult {
+	/** The item's state this result is about; see `fingerprintOf`. */
+	fingerprint: string
+	itemKey: string
+	headSha?: string
+	/** `pending` while it runs; `deferred` when the rate limit is low and only names were used. */
+	status: "pending" | "done" | "deferred"
+	severity: CiSeverity
+	summary: string
+	pipelines: CiPipelineTriage[]
+	conflict: boolean
+	/** The built-in actions that fit, best first. */
+	recommended: CiBuiltinId[]
+	/** `model`: a free model classified the failures; `heuristic`: rules did, from names and error text. */
+	source: "model" | "heuristic"
+	/** How sure the model is that every failure is a small test delta, 0–1. */
+	smallDeltaConfidence?: number
+	/** The full markdown report, when the details did not fit the board. */
+	reportPath?: string
+	analyzedTs: number
+	error?: string
 }
 
 export interface CiTransition {
@@ -91,6 +165,51 @@ export interface CiTransition {
 	headSha?: string
 }
 
-export const DEFAULT_ACTIONS: CiAction[] = [
-	{ id: "fix", label: "Fix CI & conflicts", prompt: { kind: "builtin" }, trigger: "on_failure_or_conflict" },
+export const BUILTIN_ACTIONS: readonly CiAction[] = [
+	{
+		id: "fix-conflicts",
+		label: "Fix conflicts",
+		prompt: { kind: "builtin", id: "fix-conflicts" },
+		model: "free",
+		situation: "conflict",
+		auto: true,
+	},
+	{
+		id: "recalibrate",
+		label: "Recalibrate",
+		prompt: { kind: "builtin", id: "recalibrate" },
+		model: "free",
+		situation: "small-delta",
+		auto: true,
+	},
+	{
+		id: "fix-ci",
+		label: "Fix CI",
+		prompt: { kind: "builtin", id: "fix-ci" },
+		model: "free",
+		situation: "failure",
+		auto: false,
+	},
+	{
+		id: "investigate",
+		label: "Investigate",
+		prompt: { kind: "builtin", id: "investigate" },
+		model: "free",
+		situation: "failure",
+		auto: false,
+	},
 ]
+
+export const defaultActions = (): CiAction[] => BUILTIN_ACTIONS.map((a) => ({ ...a, prompt: { ...a.prompt } }))
+
+/**
+ * Puts the built-in actions first, in their fixed order, keeping any edits the
+ * user made to them, and adds the ones that are missing. Custom actions follow.
+ */
+export function withBuiltins(actions: CiAction[]): CiAction[] {
+	const builtins = BUILTIN_ACTIONS.map((b) => {
+		const own = actions.find((a) => a.id === b.id)
+		return own ? { ...own, situation: b.situation, auto: b.auto && own.auto } : { ...b, prompt: { ...b.prompt } }
+	})
+	return [...builtins, ...actions.filter((a) => !isBuiltinId(a.id))]
+}

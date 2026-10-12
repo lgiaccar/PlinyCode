@@ -47,7 +47,10 @@ export async function prepareTaskResumeStartInput(
 	const cwd = historyItem?.cwdOnTaskInitialization ?? (await deps.getWorkspaceRoot())
 
 	const mode = toMode(deps.stateManager.getGlobalSettingsKey("mode"))
-	const config = await deps.sessionConfigBuilder.build({ cwd, mode })
+	if (historyItem?.pinnedModelId) {
+		deps.sessionConfigBuilder.pinModel(taskId, historyItem.pinnedModelId)
+	}
+	const config = await deps.sessionConfigBuilder.build({ cwd, mode, modelId: historyItem?.pinnedModelId })
 	config.sessionId = taskId
 
 	const isLegacyTask = await deps.taskHistory.isLegacyTask(taskId)

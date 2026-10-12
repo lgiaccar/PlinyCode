@@ -178,7 +178,7 @@ The code is in `apps/vscode/src/services/devops-mcp/`:
 | `host/token-broker.ts`     | Local pipe that hands the editor's sign-in tokens to the server process.                   |
 | `builtin-mcp-registry.ts`  | How the agent session and the GUI handlers reach the service without importing `vscode`.   |
 | `ci-watch/`                | `watch_ci`: the watcher, its report, and the per-conversation watches. Runs in the extension host and reuses the server's providers. Delivery into conversations is `src/sdk/sdk-ci-watch-coordinator.ts`. |
-| `ci-board/`, `host/CiBoardHost.ts` | The CI Board: many PRs and branches at once, with actions that run prompts in git worktrees. See [ci-board.md](ci-board.md). |
+| `ci-board/`, `host/CiBoardHost.ts` | The CI Board: many PRs and branches at once, free-model failure triage, actions that run prompts in git worktrees, and auto-watch. See [ci-board.md](ci-board.md). |
 
 The built-in server is deliberately not in McpHub, which only manages servers from the user's MCP settings
 file. Tests: `bun test src/services/devops-mcp` (from `apps/vscode`), which needs `git` on `PATH` but no

@@ -1,56 +1,124 @@
-import { type CiActionInfo, UpdateCiTargetRequest } from "@shared/proto/cline/ci_board"
+import { type CiActionInfo, type CiSkillInfo, UpdateCiTargetRequest } from "@shared/proto/cline/ci_board"
 import { EmptyRequest } from "@shared/proto/cline/common"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { CiBoardServiceClient } from "@/services/grpc-client"
+import { CiTip } from "./CiTip"
 import { errorText } from "./useCiBoard"
-
-const PROMPT_KINDS = [
-	{ value: "builtin", label: "Built-in: fix CI & conflicts" },
-	{ value: "file", label: "Prompt file" },
-	{ value: "text", label: "Prompt text" },
-]
-
-const TRIGGERS = [
-	{ value: "manual", label: "On click only" },
-	{ value: "on_failure", label: "When CI fails" },
-	{ value: "on_conflict", label: "When the PR conflicts" },
-	{ value: "on_failure_or_conflict", label: "When CI fails or the PR conflicts" },
-]
 
 const field = "bg-input-background text-input-foreground border border-input-border rounded px-1.5 py-0.5 text-xs"
 
+const BUILTIN_TEXT: Record<string, string> = {
+	"fix-conflicts": "Merges the target branch in and resolves the conflicts, keeping both sides' intent.",
+	recalibrate:
+		"Updates expected values of tests that moved slightly, with the repository's own tooling. Never for a regression.",
+	"fix-ci": "Triages the failed pipelines, fixes build and test failures, pushes and watches CI.",
+	investigate: "Explains each failure with its evidence, in Ask mode: no edits, no pushes.",
+}
+
+/** Auto-watch may start these on its own. */
+const AUTO_CAPABLE = new Set(["fix-conflicts", "recalibrate"])
+
+const SITUATIONS = [
+	{ value: "any", label: "Menu only" },
+	{ value: "conflict", label: "Main button on conflicts" },
+	{ value: "failure", label: "Main button on failures" },
+	{ value: "small-delta", label: "Main button on small deltas" },
+]
+
 const newAction = (): CiActionInfo => ({
-	id: `a${Date.now().toString(36)}`,
-	label: "Investigate",
+	id: `custom-${Date.now().toString(36)}`,
+	label: "My prompt",
 	promptKind: "file",
 	promptValue: "",
-	trigger: "manual",
+	model: "free",
+	situation: "any",
+	auto: false,
+	builtin: false,
 })
 
+const PromptFields = ({ action, onChange }: { action: CiActionInfo; onChange: (patch: Partial<CiActionInfo>) => void }) => {
+	const browse = async () => {
+		const picked = await CiBoardServiceClient.pickCiPromptFile(EmptyRequest.create({}))
+		if (picked.value) onChange({ promptValue: picked.value })
+	}
+	return (
+		<>
+			<div className="flex items-center gap-1">
+				<CiTip tip="Built-in: the board's own prompt, which follows the repository's matching skill when it has one. File or text: your own prompt instead.">
+					<select
+						aria-label="Prompt"
+						className={field}
+						onChange={(e) =>
+							onChange({ promptKind: e.target.value, promptValue: e.target.value === "builtin" ? action.id : "" })
+						}
+						value={action.promptKind}>
+						{action.builtin && <option value="builtin">Built-in prompt</option>}
+						<option value="file">Prompt file</option>
+						<option value="text">Prompt text</option>
+					</select>
+				</CiTip>
+				<CiTip tip="FreeAuto routes each step to a free Pliny model. The current model is the one selected in the chat, which may cost money. Auto-watch always uses FreeAuto.">
+					<select
+						aria-label="Model"
+						className={field}
+						onChange={(e) => onChange({ model: e.target.value })}
+						value={action.model}>
+						<option value="free">FreeAuto (free)</option>
+						<option value="current">My current model</option>
+					</select>
+				</CiTip>
+			</div>
+			{action.promptKind === "file" && (
+				<div className="flex items-center gap-1">
+					<input
+						aria-label="Prompt file"
+						className={cn(field, "flex-1")}
+						onChange={(e) => onChange({ promptValue: e.target.value })}
+						placeholder="AI_prompts/pipelines_failures_investigation.md"
+						value={action.promptValue}
+					/>
+					<Button onClick={browse} size="xs" variant="secondary">
+						Browse…
+					</Button>
+				</div>
+			)}
+			{action.promptKind === "text" && (
+				<textarea
+					aria-label="Prompt text"
+					className={field}
+					onChange={(e) => onChange({ promptValue: e.target.value })}
+					placeholder="What should the agent do with this pull request? {{prId}}, {{sourceBranch}}, {{targetBranch}}, {{worktree}} and {{reportPath}} are filled in."
+					rows={4}
+					value={action.promptValue}
+				/>
+			)}
+		</>
+	)
+}
+
 /**
- * The prompts a target can run. A file path may be relative to the
- * repository, so a prompt checked into the repository follows the branch.
+ * A target's actions: the four built-in ones (whose prompt, model and
+ * auto-watch permission can be changed) and the user's own. A file path may
+ * be relative to the repository, so a prompt checked in follows the branch.
  */
 export const CiActionsEditor = ({
 	targetId,
 	actions,
+	skills,
 	onDone,
 }: {
 	targetId: string
 	actions: CiActionInfo[]
+	skills: CiSkillInfo[]
 	onDone: () => void
 }) => {
 	const [draft, setDraft] = useState<CiActionInfo[]>(actions.map((a) => ({ ...a })))
 	const [error, setError] = useState<string>()
 
-	const change = (index: number, patch: Partial<CiActionInfo>) =>
-		setDraft((list) => list.map((a, i) => (i === index ? { ...a, ...patch } : a)))
-
-	const browse = async (index: number) => {
-		const picked = await CiBoardServiceClient.pickCiPromptFile(EmptyRequest.create({}))
-		if (picked.value) change(index, { promptValue: picked.value })
-	}
+	const change = (id: string, patch: Partial<CiActionInfo>) =>
+		setDraft((list) => list.map((a) => (a.id === id ? { ...a, ...patch } : a)))
 
 	const save = async () => {
 		setError(undefined)
@@ -64,79 +132,89 @@ export const CiActionsEditor = ({
 		}
 	}
 
+	const builtins = draft.filter((a) => a.builtin)
+	const custom = draft.filter((a) => !a.builtin)
+
 	return (
-		<div className="flex flex-col gap-2 p-2 my-1 bg-code-block-background rounded" data-testid="ci-actions-editor">
-			{draft.map((action, index) => (
+		<div className="flex flex-col gap-2 p-2 my-1 bg-code-block-background rounded text-xs" data-testid="ci-actions-editor">
+			<div className="font-medium">Built-in actions</div>
+			{builtins.map((action) => {
+				const matching = skills.filter((s) => s.actionId === action.id)
+				return (
+					<div className="flex flex-col gap-1 pb-2 border-b border-editor-group-border" key={action.id}>
+						<div className="flex items-center gap-1">
+							<input
+								aria-label="Action name"
+								className={cn(field, "flex-1")}
+								onChange={(e) => change(action.id, { label: e.target.value })}
+								value={action.label}
+							/>
+							{AUTO_CAPABLE.has(action.id) && (
+								<CiTip tip="When auto-watch is on, it may start this action by itself, in the background, on FreeAuto.">
+									<label className="inline-flex items-center gap-1 text-description">
+										<input
+											aria-label={`Auto-watch may run ${action.label}`}
+											checked={action.auto}
+											onChange={(e) => change(action.id, { auto: e.target.checked })}
+											type="checkbox"
+										/>
+										Auto-watch
+									</label>
+								</CiTip>
+							)}
+						</div>
+						<div className="text-description">{BUILTIN_TEXT[action.id]}</div>
+						<PromptFields action={action} onChange={(patch) => change(action.id, patch)} />
+						{action.promptKind === "builtin" && (
+							<div className="text-description">
+								{matching.length
+									? `Follows this repository's ${matching.map((s) => `/${s.name}`).join(", ")} skill.`
+									: action.id === "recalibrate"
+										? "No recalibration skill found in this repository: auto-watch will not recalibrate until you give it a prompt."
+										: "No matching skill found in this repository; the built-in steps are used."}
+							</div>
+						)}
+					</div>
+				)
+			})}
+			<div className="font-medium">Your actions</div>
+			{custom.length === 0 && <div className="text-description">None yet. Add a prompt you run often.</div>}
+			{custom.map((action) => (
 				<div className="flex flex-col gap-1 pb-2 border-b border-editor-group-border" key={action.id}>
 					<div className="flex items-center gap-1">
 						<input
 							aria-label="Action name"
-							className={`${field} flex-1`}
-							onChange={(e) => change(index, { label: e.target.value })}
+							className={cn(field, "flex-1")}
+							onChange={(e) => change(action.id, { label: e.target.value })}
 							value={action.label}
 						/>
-						<Button
-							disabled={draft.length <= 1}
-							onClick={() => setDraft((list) => list.filter((_, i) => i !== index))}
-							size="xs"
-							title="Remove this action"
-							variant="ghost">
-							<span className="codicon codicon-trash" />
-						</Button>
-					</div>
-					<select
-						aria-label="Prompt"
-						className={field}
-						onChange={(e) => change(index, { promptKind: e.target.value, promptValue: "" })}
-						value={action.promptKind}>
-						{PROMPT_KINDS.map((k) => (
-							<option key={k.value} value={k.value}>
-								{k.label}
-							</option>
-						))}
-					</select>
-					{action.promptKind === "file" && (
-						<div className="flex items-center gap-1">
-							<input
-								aria-label="Prompt file"
-								className={`${field} flex-1`}
-								onChange={(e) => change(index, { promptValue: e.target.value })}
-								placeholder="AI_prompts/pipelines_failures_investigation.md"
-								value={action.promptValue}
-							/>
-							<Button onClick={() => browse(index)} size="xs" variant="secondary">
-								Browse…
+						<CiTip tip="When this action is the row's main button; otherwise it is in the menu.">
+							<select
+								aria-label="Situation"
+								className={field}
+								onChange={(e) => change(action.id, { situation: e.target.value })}
+								value={action.situation}>
+								{SITUATIONS.map((s) => (
+									<option key={s.value} value={s.value}>
+										{s.label}
+									</option>
+								))}
+							</select>
+						</CiTip>
+						<CiTip tip="Remove this action">
+							<Button
+								aria-label="Remove this action"
+								onClick={() => setDraft((list) => list.filter((a) => a.id !== action.id))}
+								size="xs"
+								variant="ghost">
+								<span className="codicon codicon-trash" />
 							</Button>
-						</div>
-					)}
-					{action.promptKind === "text" && (
-						<textarea
-							aria-label="Prompt text"
-							className={field}
-							onChange={(e) => change(index, { promptValue: e.target.value })}
-							placeholder="What should the agent do with this pull request? {{prId}}, {{sourceBranch}}, {{targetBranch}} and {{worktree}} are filled in."
-							rows={4}
-							value={action.promptValue}
-						/>
-					)}
-					<label className="flex items-center gap-1 text-xs text-description">
-						Runs automatically
-						<select
-							aria-label="Trigger"
-							className={field}
-							onChange={(e) => change(index, { trigger: e.target.value })}
-							title="Used by the Auto and Full auto modes"
-							value={action.trigger}>
-							{TRIGGERS.map((t) => (
-								<option key={t.value} value={t.value}>
-									{t.label}
-								</option>
-							))}
-						</select>
-					</label>
+						</CiTip>
+					</div>
+					<PromptFields action={action} onChange={(patch) => change(action.id, patch)} />
 				</div>
 			))}
-			{error && <div className="text-xs text-error">{error}</div>}
+			{error && <div className="text-error">{error}</div>}
 			<div className="flex gap-1">
 				<Button onClick={() => setDraft((list) => [...list, newAction()])} size="xs" variant="ghost">
 					<span className="codicon codicon-add" /> Add action

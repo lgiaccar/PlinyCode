@@ -5,21 +5,15 @@ import type { CiTargetPatch } from "@/services/devops-mcp/ci-board/ci-board"
 import type { Controller } from "../index"
 import { fromProtoAction } from "./ci-board-view"
 
-const AUTONOMY = ["manual", "auto", "full_auto"] as const
-
-/** Changes a CI board target's autonomy, actions or PR filter. */
+/** Changes a CI board target's auto-watch switch, actions or PR filter. */
 export async function updateCiTarget(_controller: Controller, request: UpdateCiTargetRequest): Promise<Empty> {
 	const board = getCiBoard()
 	if (!board) {
 		throw new Error("The CI board is not available.")
 	}
 	const patch: CiTargetPatch = {}
-	if (request.autonomy !== undefined) {
-		const autonomy = AUTONOMY.find((a) => a === request.autonomy)
-		if (!autonomy) {
-			throw new Error(`Unknown autonomy "${request.autonomy}".`)
-		}
-		patch.autonomy = autonomy
+	if (request.autoWatch !== undefined) {
+		patch.autoWatch = request.autoWatch
 	}
 	if (request.setActions) {
 		const actions = request.actions.map(fromProtoAction)

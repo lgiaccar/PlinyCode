@@ -1,4 +1,4 @@
-import type { PipelineRun, Provider, PullRequest } from "../../server/providers/types"
+import type { PipelineRun, Provider, PullRequest, RunReport } from "../../server/providers/types"
 import type { CiTarget } from "../types"
 
 export const SHA_A = "a".repeat(40)
@@ -86,8 +86,14 @@ export class FakeBoardProvider implements Provider {
 		return sha ? [...(this.runs.get(sha) ?? [])] : []
 	}
 
-	async runReport(): Promise<never> {
-		throw new Error("not used")
+	/** Reports by run id; a run without one fails like an API error. */
+	reports = new Map<number, RunReport>()
+
+	async runReport(runId: number): Promise<RunReport> {
+		this.count("runReport")
+		const report = this.reports.get(runId)
+		if (!report) throw new Error(`GET /runs/${runId} -> HTTP 404: Not Found`)
+		return report
 	}
 
 	async prChecks(): Promise<[]> {
@@ -116,7 +122,7 @@ export function boardTarget(overrides: Partial<CiTarget> = {}): CiTarget {
 		remoteUrl: "https://github.com/octo/hello",
 		provider: "github",
 		prFilter: "mine",
-		autonomy: "manual",
+		autoWatch: false,
 		actions: [],
 		createdTs: 0,
 		...overrides,

@@ -197,6 +197,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.activeMs ? { activeMs: item.activeMs } : {}),
 		...(item.isRenamed ? { isRenamed: true } : {}),
 		...(item.isPinned ? { isPinned: true } : {}),
+		...(item.pinnedModelId ? { pinnedModelId: item.pinnedModelId } : {}),
 		...(item.spendingLimit !== undefined ? { spendingLimit: item.spendingLimit } : {}),
 		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
 		// The workspace binding, kept across resumes like the fields above.
@@ -301,6 +302,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		isFavorited: metadataBoolean(metadata, "isFavorited") ?? metadataBoolean(metadata, "is_favorited") ?? false,
 		isPinned: metadataBoolean(metadata, "isPinned") === true || undefined,
 		modelId: item.model || metadataString(metadata, "modelId") || "",
+		pinnedModelId: metadataString(metadata, "pinnedModelId") || undefined,
 		apiProvider: item.provider || undefined,
 		cwdOnTaskInitialization: item.cwd || item.workspaceRoot || undefined,
 		workspaceRootOnTaskInitialization: (item.workspaceRoot || item.cwd || "").trim() || undefined,

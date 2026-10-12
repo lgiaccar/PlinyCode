@@ -41,6 +41,36 @@ describe("SdkSessionConfigBuilder", () => {
 		expect(actConfig.extraTools?.some((tool) => tool.name === "switch_to_act_mode")).toBe(false)
 	})
 
+	it("keeps a pinned conversation on its model through rebuilds, and ignores the displayed one for a new conversation", async () => {
+		let displayed: string | undefined = "ci-run"
+		const gitPrepare = vi.fn(async (_conversationId: string | undefined, _cwd: string) => ({
+			snapshot: undefined,
+			bindToSession: vi.fn(),
+		}))
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			getConversationId: () => displayed,
+			gitSnapshots: { prepare: gitPrepare },
+		})
+		builder.pinModel("ci-run", "pliny/auto-free")
+
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+		await builder.build({ cwd: "/workspace", mode: "act" })
+		expect(mocks.buildSessionConfig).toHaveBeenLastCalledWith(expect.objectContaining({ modelId: "pliny/auto-free" }))
+
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+		await builder.build({ cwd: "/wt", mode: "act", newConversation: true })
+		expect(mocks.buildSessionConfig.mock.lastCall?.[0]).not.toHaveProperty("modelId")
+		expect(gitPrepare).toHaveBeenLastCalledWith(undefined, "/wt")
+
+		displayed = "other"
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+		await builder.build({ cwd: "/workspace", mode: "act" })
+		expect(mocks.buildSessionConfig.mock.lastCall?.[0]).not.toHaveProperty("modelId")
+		expect(builder.pinnedModel("ci-run")).toBe("pliny/auto-free")
+	})
+
 	it("wires the agent hooks into the SDK config", async () => {
 		const hooks = { beforeModel: vi.fn() }
 		mocks.buildAgentHooks.mockReturnValueOnce(hooks)

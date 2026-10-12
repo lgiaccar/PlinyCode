@@ -245,6 +245,36 @@ export class SdkSessionLifecycle {
 		return { startResult, sdkHost }
 	}
 
+	/**
+	 * Starts a session that is never the active one, for a task that runs in
+	 * the background from its first turn (a CI board auto-watch run). The
+	 * displayed task and its session are left alone. The caller registers the
+	 * session with the background registry before it sends anything.
+	 */
+	async startDetachedSession(
+		startInput: Parameters<VscodeSessionHost["start"]>[0],
+	): Promise<{ startResult: StartSessionResult; session: ActiveSession }> {
+		const autoApprovalSettings = StateManager.get().getGlobalSettingsKey("autoApprovalSettings")
+		const toolPolicies = autoApprovalSettings ? buildToolPolicies(autoApprovalSettings, this.options.mcpHub) : undefined
+		const sdkHost = await this.getOrCreateSharedHost()
+		const startResult = await sdkHost.start({
+			...this.withSessionStartMetadata(startInput),
+			...(toolPolicies ? { toolPolicies } : {}),
+		})
+		const session: ActiveSession = {
+			sessionId: startResult.sessionId,
+			startConfig: startInput.config
+				? { providerId: startInput.config.providerId, modelId: startInput.config.modelId }
+				: undefined,
+			sdkHost,
+			unsubscribe: () => {},
+			startResult,
+			isRunning: true,
+			runningSince: Date.now(),
+		}
+		return { startResult, session }
+	}
+
 	async replaceActiveSession(options: {
 		expectedSession: ActiveSession
 		startInput: Parameters<VscodeSessionHost["start"]>[0]

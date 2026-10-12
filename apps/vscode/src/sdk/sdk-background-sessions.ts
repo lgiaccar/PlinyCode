@@ -55,6 +55,8 @@ export interface SdkBackgroundSessionsOptions {
 	openTask: (sessionId: string) => void
 	/** Background task list changed (badges in History). */
 	onChanged: () => void
+	/** A background task left the background: it finished, was stopped, or was reopened. */
+	onReleased?: (sessionId: string) => void
 	maxSessions?: number
 	idleSettleMs?: number
 }
@@ -82,6 +84,11 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 
 	get isFull(): boolean {
 		return this.entries.size >= this.maxSessions
+	}
+
+	/** Background slots still free. */
+	get freeSlots(): number {
+		return Math.max(0, this.maxSessions - this.entries.size)
 	}
 
 	list(): BackgroundTaskInfo[] {
@@ -121,6 +128,7 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 		}
 		this.entries.delete(sessionId)
 		this.options.onChanged()
+		this.options.onReleased?.(sessionId)
 		return {
 			session: entry.session,
 			held: { approvals: entry.approvals, questions: entry.questions },
@@ -235,6 +243,7 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 		this.rejectHeld(entry, reason)
 		this.options.onChanged()
 		await this.options.stopSession(entry.session, reason)
+		this.options.onReleased?.(sessionId)
 	}
 
 	/** Stop every background session (extension shutdown, delete all history). */
@@ -291,6 +300,7 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 					: "finished"
 		Logger.log(`[BackgroundSessions] Background task ${sessionId} ${outcome} (${reason})`)
 		this.options.notify(`PlinyCode task "${entry.title}" ${outcome}.`, () => this.options.openTask(sessionId))
+		this.options.onReleased?.(sessionId)
 	}
 
 	private rejectHeld(entry: BackgroundEntry, reason: string): void {

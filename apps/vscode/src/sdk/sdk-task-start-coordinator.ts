@@ -7,6 +7,7 @@ import type { WorkspaceRef } from "@shared/workspaceRef"
 import type { StateManager } from "@/core/storage/StateManager"
 import { Logger } from "@/shared/services/Logger"
 import { isDirectory } from "@/utils/fs"
+import type { SdkBackgroundSessions } from "./sdk-background-sessions"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import type { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
@@ -69,6 +70,8 @@ export interface SdkTaskStartCoordinatorOptions {
 	loadInitialMessages: (reader: SdkSessionHost, taskId: string) => Promise<unknown[] | undefined>
 	resolveContextMentions: (text: string) => Promise<string>
 	postStateToWebview: () => Promise<void>
+	/** Where tasks started straight into the background live. */
+	background?: Pick<SdkBackgroundSessions, "isFull" | "add" | "handleSendSettled">
 }
 
 export interface TaskStartOptions {
@@ -77,7 +80,18 @@ export interface TaskStartOptions {
 	 * a CI board run in a throwaway git worktree. Default true.
 	 */
 	recordRecentWorkspace?: boolean
+	/** Runs the conversation on this model through every rebuild and resume, e.g. a CI board run on FreeAuto. */
+	modelId?: string
+	/** The mode to start in instead of the mode switch's (background starts only; a foreground task follows the switch). */
+	mode?: Mode
+	/** A title for the conversation's history entry, when the prompt makes a poor one. */
+	title?: string
 }
+
+export type BackgroundStartResult =
+	| { status: "started"; conversationId: string }
+	| { status: "full" }
+	| { status: "error"; message: string }
 
 export class SdkTaskStartCoordinator {
 	constructor(private readonly options: SdkTaskStartCoordinatorOptions) {}
@@ -111,6 +125,7 @@ export class SdkTaskStartCoordinator {
 				taskSettings,
 				cwd,
 				mode,
+				modelId: startOptions?.modelId,
 			})
 
 			Logger.log(
@@ -118,6 +133,9 @@ export class SdkTaskStartCoordinator {
 			)
 
 			taskSessionId = config.sessionId?.trim() || createSessionId()
+			if (startOptions?.modelId) {
+				this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
+			}
 			const configWithSessionId = {
 				...config,
 				sessionId: taskSessionId,
@@ -169,6 +187,11 @@ export class SdkTaskStartCoordinator {
 				configWithSessionId.workspaceRoot ?? cwd,
 				boundWorkspace,
 			)
+			if (startOptions?.modelId) {
+				this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
+				newHistoryItem.pinnedModelId = startOptions.modelId
+			}
+			if (startOptions?.title) newHistoryItem.task = startOptions.title
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 			await this.options.postStateToWebview()
 
@@ -186,6 +209,84 @@ export class SdkTaskStartCoordinator {
 				Logger.error("[SdkController] Failed to post state after init error:", postError)
 			})
 			return undefined
+		}
+	}
+
+	/**
+	 * Starts a conversation that runs in the background from its first turn,
+	 * leaving the displayed task, its session and the mode switch alone. Like
+	 * any background task, it is stopped and the user notified when its turn
+	 * ends. The prompt is sent as is: no mention or slash-command expansion.
+	 */
+	async startBackgroundTask(
+		prompt: string,
+		workspace: WorkspaceRef | undefined,
+		startOptions: TaskStartOptions = {},
+	): Promise<BackgroundStartResult> {
+		const background = this.options.background
+		if (!background) {
+			return { status: "error", message: "Background tasks are not available." }
+		}
+		if (background.isFull) {
+			return { status: "full" }
+		}
+		let session: Awaited<ReturnType<SdkSessionLifecycle["startDetachedSession"]>>["session"] | undefined
+		try {
+			const { cwd, workspace: boundWorkspace } = await this.resolveTaskWorkspace(workspace)
+			const mode = startOptions.mode ?? "act"
+			const config = await this.options.sessionConfigBuilder.build({
+				prompt,
+				cwd,
+				mode,
+				modelId: startOptions.modelId,
+				newConversation: true,
+			})
+			const sessionId = config.sessionId?.trim() || createSessionId()
+			if (startOptions.modelId) {
+				this.options.sessionConfigBuilder.pinModel(sessionId, startOptions.modelId)
+			}
+			const configWithSessionId = { ...config, sessionId }
+			const startInput = {
+				...this.options.buildStartSessionInput(configWithSessionId, { prompt, cwd, mode }),
+				...(boundWorkspace
+					? { sessionMetadata: { workspacePath: boundWorkspace.path, workspaceKind: boundWorkspace.kind } }
+					: {}),
+			}
+			const started = await this.options.sessions.startDetachedSession(startInput)
+			session = started.session
+			const conversationId = started.startResult.sessionId
+			if (conversationId !== sessionId && startOptions.modelId) {
+				this.options.sessionConfigBuilder.pinModel(conversationId, startOptions.modelId)
+			}
+			const title = startOptions.title ?? prompt
+			if (!background.add(session, title)) {
+				await this.options.sessions.stopSession(session, "backgroundFull")
+				return { status: "full" }
+			}
+			const historyItem = this.options.createHistoryItemFromSession(
+				conversationId,
+				prompt,
+				configWithSessionId.modelId,
+				cwd,
+				configWithSessionId.workspaceRoot ?? cwd,
+				boundWorkspace,
+			)
+			if (startOptions.modelId) historyItem.pinnedModelId = startOptions.modelId
+			if (startOptions.title) historyItem.task = startOptions.title
+			await this.options.taskHistory.updateTaskHistoryItem(historyItem)
+			session.sdkHost.send({ sessionId: conversationId, prompt }).then(
+				() => background.handleSendSettled(conversationId),
+				(error) => background.handleSendSettled(conversationId, error ?? new Error("send failed")),
+			)
+			await this.options.postStateToWebview()
+			Logger.log(`[SdkController] Background task started: ${conversationId}`)
+			return { status: "started", conversationId }
+		} catch (error) {
+			Logger.error("[SdkController] Failed to start a background task:", error)
+			if (session) {
+				await this.options.sessions.stopSession(session, "backgroundStartFailed").catch(() => undefined)
+			}
+			return { status: "error", message: error instanceof Error ? error.message : String(error) }
 		}
 	}
 
@@ -211,9 +312,13 @@ export class SdkTaskStartCoordinator {
 					: undefined,
 				cwd,
 			)
+			if (historyItem.pinnedModelId) {
+				this.options.sessionConfigBuilder.pinModel(taskId, historyItem.pinnedModelId)
+			}
 			const config = await this.options.sessionConfigBuilder.build({
 				cwd,
 				mode: "act",
+				modelId: historyItem.pinnedModelId,
 			})
 
 			const tempManager = await this.options.createTempSessionHost()

@@ -2,8 +2,13 @@
 
 The CI Board watches many pull requests and branches at once, on **GitHub** (Actions) and **Azure DevOps**
 (Pipelines, cloud or on-premises). Each pull request shows one colored dot per pipeline and a badge when it
-conflicts with its target branch. An **action** runs a prompt against a pull request: it opens a conversation in
-a git worktree of the branch, where the agent fixes conflicts, investigates failures, fixes the build and pushes.
+conflicts with its target branch.
+
+When something fails, a free Pliny model reads the failed runs and says what broke and how serious it is. The
+row's main button offers the fix that fits: **Fix conflicts**, **Recalibrate** or **Fix CI**. Each fix is an
+**action**: it opens a conversation in a git worktree of the branch, on the free auto-router, where the agent fixes
+the problem and pushes. **Auto-watch** does the safe ones by itself: it fixes conflicts and recalibrates small test
+deltas in the background.
 
 `watch_ci` ([devops-mcp.md](devops-mcp.md#watching-ci-watch_ci)) watches one pull request for one conversation.
 The board is for the overview, and for starting that work.
@@ -29,8 +34,18 @@ The board belongs to the window's workspace: each window shows, polls and notifi
 
 ## Reading it
 
-Each dot is a workflow (GitHub) or pipeline definition (Azure DevOps) on the pull request's head commit. If a
-pipeline ran more than once on that commit, the newest run sets the color:
+The top line counts the pull requests that fail, conflict, are running and are green. **Failing only** hides the
+rest. Within an entry, the worst pull requests come first.
+
+Each row has:
+
+- a **severity** chip (see [Failure triage](#failure-triage)), and a colored left edge to match;
+- one **dot** per pipeline: a workflow (GitHub) or pipeline definition (Azure DevOps) on the pull request's head
+  commit. If a pipeline ran more than once on that commit, the newest run sets the color;
+- the pull request's number (a link) and title, and a **Conflicts** badge;
+- an **auto-watch** badge when auto-watch is doing something about it;
+- a second line with the triage's one-line summary, or the branches and author when nothing fails;
+- the conversation the last action started, and the action buttons.
 
 | Color  | Meaning                                                                                                   |
 | ------ | --------------------------------------------------------------------------------------------------------- |
@@ -40,48 +55,193 @@ pipeline ran more than once on that commit, the newest run sets the color:
 | Grey   | Cancelled or skipped, or no run on this commit for a pipeline that ran on an earlier one: a new push whose runs have not started, a pipeline whose path filter skipped it, or an Azure DevOps PR build that never queued because the PR conflicts. |
 
 Click a dot to open its run. **Conflicts** means the pull request does not merge cleanly into its target branch;
-**Checking merge…** means GitHub or Azure DevOps is still working that out.
+**Checking merge…** means GitHub or Azure DevOps is still working that out. Every control has a tooltip that says
+what it does.
+
+The chevron at the start of a failing row expands its **details**: each failed pipeline with its category, a
+one-line summary, a link to the run, and each failed job › step with its first errors and the last log lines. **Open
+full report** opens the [markdown report](#reports) when the details did not fit; **Analyze again** reads the runs
+again.
+
+## Failure triage
+
+When an item fails or conflicts, the board reads the failed runs (`runReport`: the failed jobs and steps, their
+error messages and the end of their logs) and sends them to the router's free utility summarizer model
+(`rules.utility.summarizer` in the [router rules](pliny-free-auto-router.md)) in one request. The model classifies each
+failed pipeline:
+
+| Category           | Meaning                                                                                       | Severity |
+| ------------------ | --------------------------------------------------------------------------------------------- | -------- |
+| Build              | Compiling, linking, packaging, lint or type checking fails.                                   | Blocker  |
+| Test failure       | Tests fail because of a real defect: a crash, an assertion, clearly worse results.            | High     |
+| Conflicts          | The pull request does not merge cleanly.                                                      | High     |
+| Unclear            | Not enough evidence.                                                                          | Medium   |
+| Small delta        | Tests fail only because measured values moved slightly (over a tolerance, an improvement, noise). | Low      |
+| Infrastructure     | An agent, network, disk, service or artifact problem unrelated to the code.                   | Low      |
+| Stale run          | The run tested an older commit.                                                               | Info     |
+
+The item's severity is its worst category's. The severity and the recommended actions are worked out from the
+categories, not by the model, so they stay stable:
+
+- conflicts → **Fix conflicts**;
+- every failure a small delta → **Recalibrate**;
+- any build, test or unclear failure → **Fix CI**;
+- only infrastructure → **Investigate** (and a re-run).
+
+The model also says how sure it is that *every* failure is a small delta; auto-watch uses that.
+
+When the model does not answer or its answer cannot be read, rules on job, step and error text classify the
+failures instead, and the details say so. Rules never call a failure a small delta, so auto-watch never
+recalibrates on their word.
+
+Triage runs once per **state** of an item: its head commit, its red runs and whether it conflicts. It runs for what
+was already red when the board started, too. At most four red runs are read per item, two items at a time. When
+fewer than 500 GitHub requests are left, triage uses pipeline names only and tries again once the limit recovers.
+The result (without its step details) is saved with the board, so it survives a reload; **Analyze again** reads the
+details back. The model call costs nothing and needs no budget check.
+
+`plinycode.ci.board.triage` is `auto` (the default), `onDemand` (only from **Analyze**) or `off`.
+
+### Reports
+
+When an item's details are longer than the board shows (8000 characters, more than five errors in a step, or a log
+cut short), the full report goes to a markdown file: `.plinycode/ci-reports/<pr-N|branch>-<sha>.md` in the
+repository's checkout. It has the triage, the job table of each failed run, every error and the log tails. The
+board adds `/.plinycode/` to the repository's `.git/info/exclude` (its common git directory, which its worktrees
+share), so the reports never show in `git status` and no tracked `.gitignore` changes. The 50 newest reports are
+kept.
+
+Runs started from the board are told the report's path, and read it before calling `pipeline_report`.
 
 ## Actions
 
-Every entry starts with one action, **Fix CI & conflicts**, which runs the built-in prompt. The gear button edits
-an entry's actions. Each action has a name and a prompt:
+Every entry has four built-in actions. The row's **main button** is the one that fits the item; the others, your
+own actions and the tools below are in the **menu** beside it (the chevron).
 
-- **Built-in.** Sync the branch, merge the target branch and resolve conflicts (keeping both sides' intent, never
-  hand-merging generated or data files), triage the failed runs with `pr_checks`, `pipeline_runs` and
-  `pipeline_report`, fix the build, fix or update tests the way the repository documents (never recalibrating a
-  regression), push, call `watch_ci`, and report.
-- **Prompt file.** A Markdown or text file. A relative path is looked up in the branch's worktree first, then in
-  the repository, so a prompt checked into the repository (for example
-  `AI_prompts/pipelines_failures_investigation.md`) follows the branch. YAML front matter is dropped.
-- **Prompt text.** Typed into the editor.
+| Action            | Main button when                                | What it does                                                                                     | Mode  |
+| ----------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----- |
+| **Fix conflicts** | the pull request conflicts                      | Merges the target branch in and resolves the conflicts, keeping both sides' intent. Generated and measured files are regenerated, not hand-merged. Pushes. | Agent |
+| **Recalibrate**   | the triage says every failure is a small delta  | Updates the expected values of tests that moved slightly, with the repository's own tooling. Never for a regression; stops when the repository documents no tooling. | Agent |
+| **Fix CI**        | anything else fails                             | Resolves conflicts first, triages each failed pipeline, fixes build and test failures, pushes and calls `watch_ci`. | Agent |
+| **Investigate**   | never (menu only)                               | Explains each failure with its evidence and the next step to take. Edits nothing.                | Ask   |
 
-Prompts can use `{{prId}}`, `{{prUrl}}`, `{{sourceBranch}}`, `{{targetBranch}}`, `{{headSha}}`, `{{remote}}` and
-`{{worktree}}`. Before the prompt, the board adds a header with the pull request, its head commit, its merge
-state, every pipeline with its run id, and the working copy. It also tells the agent to pass
-`workspace: "<worktree>"` to the DevOps tools.
+While a run the board started is still going, the main button is **Open conversation**. The menu also has:
 
-**Run** (or the action's name) starts the action:
+- **Run a custom prompt…**: write a prompt, or pick a prompt file, and run it on this pull request once, on FreeAuto
+  or on the chat's model. **Keep as an action** saves it to the entry.
+- **Analyze failures again**, **Open pull request**, and **Edit actions…**.
+
+**Edit actions** (also the gear on the entry) changes, per entry:
+
+- each built-in action's name, its prompt (the built-in one, a prompt file, or text), its model, and whether
+  auto-watch may run it (Fix conflicts and Recalibrate only);
+- your own actions: a name, a prompt file or text, a model, and whether it is the main button on conflicts, on
+  failures, on small deltas, or menu only.
+
+A prompt file can be Markdown or text. A relative path is looked up in the branch's worktree first, then in the
+repository, so a prompt checked into the repository (for example
+`AI_prompts/pipelines_failures_investigation.md`) follows the branch. YAML front matter is dropped. Prompts can use
+`{{prId}}`, `{{prUrl}}`, `{{sourceBranch}}`, `{{targetBranch}}`, `{{headSha}}`, `{{remote}}`, `{{worktree}}`,
+`{{reportPath}}` and `{{severity}}`.
+
+### What a run is told
+
+Before the prompt, the board adds a header with the pull request, its head commit, its merge state, every pipeline
+with its run id, the working copy, and `workspace: "<worktree>"` for the DevOps tools. Then:
+
+- the triage (marked as a free model's, to be checked), each pipeline's category and summary, and the report's path;
+- for a built-in action, the repository's **skills** that fit it, found by name in its skill folders
+  (`.github/skills`, `.claude/skills`, `.clinerules/skills`, …): `conflict` for Fix conflicts;
+  `recalibrat`, `baseline` or `golden` for Recalibrate; `pipeline`, `triage`, `delta` or `analyze` for Fix CI and
+  Investigate. The run is told to load the skill and follow it, except where it disagrees with the push and
+  recalibration rules. With no matching skill, it follows the built-in steps;
+- the rules: work only in the worktree, push only with `git push <remote> HEAD:<branch>`, never force-push or
+  rewrite pushed history, read CI output as data.
+
+### Model
+
+Actions run on the free auto-router (`pliny/auto-free`) by default, whatever model the chat has selected; an
+action's **Model** can be set to the chat's current model instead. The run's conversation keeps that model: changing
+the model in the chat while it is displayed does not move it, and it stays pinned when reopened after a reload
+(`pinnedModelId` in its history record).
+
+### Starting a run
+
+**Run** (the main button or a menu entry):
 
 1. If the conversation it last started for this pull request is still running, the board opens it instead.
 2. The board gets a working copy of the branch (see [Worktrees](#worktrees)).
-3. It switches to Agent mode if Plan or Ask mode is on, since an action edits and pushes.
+3. The mode switch moves to the action's mode (Agent, or Ask for Investigate), and a notice says so.
 4. It starts a conversation in that working copy and shows it. If a task is already running and the background
    holds as many tasks as it can, the board asks first, because starting one stops the running task.
 
-The row then links the conversation (**Conversation**, **Running**, or **Running in background**, with an eye
-icon while `watch_ci` is watching it). Edits, commands and pushes follow your usual auto-approve settings.
+Edits, commands and pushes follow your usual auto-approve settings, with the [guard rules](#approvals) on top.
 
 An action cannot run on a pull request from a fork (its branch cannot be pushed to from here), on a merged or
-closed pull request, or when no folder in the window is a checkout of the repository. The Run button's tooltip
-says which. A checkout matches whatever case its remote URL uses, and for Azure DevOps Server whatever host name
-(old or new) it uses, as long as the collection, project and repository are the same.
+closed pull request, or when no folder in the window is a checkout of the repository. The button's tooltip says
+which. A checkout matches whatever case its remote URL uses, and for Azure DevOps Server whatever host name (old
+or new) it uses, as long as the collection, project and repository are the same.
+
+## Auto-watch
+
+The **Auto-watch** switch on an entry lets the board start fixes by itself:
+
+| The pull request                                                        | Auto-watch                                                       |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| conflicts                                                                | runs **Fix conflicts**                                            |
+| fails, and a free model is at least 70% sure every failure is a small delta | runs **Recalibrate**, once no pipeline is still running, when the repository has a recalibration skill or the action has a prompt of its own |
+| fails in any other way (build, regression, unclear, infrastructure)      | does nothing, and tells you once                                 |
+| is a draft, from a fork, closed, or checked out in your own folder       | does nothing                                                     |
+
+An auto-watch run:
+
+- runs **in the background** from its first turn, leaving the displayed task and the mode switch alone. Like any
+  background task it ends after its turn, and you are notified;
+- always runs on **FreeAuto** (background tasks skip the spending check);
+- works only in a **separate worktree**: if the branch is checked out in your own folder, auto-watch will not touch
+  it;
+- uses the [unattended approval rules](#approvals): it never waits for an approval;
+- is told nobody is watching, and does not call `watch_ci`: the board's own polling sees the result.
+
+Limits:
+
+- at most `plinycode.ci.board.autoWatch.maxAttempts` (2) runs of one action on one commit, and 3 on one pull
+  request until it turns green;
+- at most `plinycode.ci.board.autoWatch.maxConcurrentRuns` (1) runs at once, and one background slot is always left
+  for your own tasks; a run that has to wait shows **Auto: waiting for a slot** and starts when one frees up;
+- after a run ends, auto-watch waits two minutes for CI to pick up its push before it looks at the item again.
+
+The counters are saved with the board. The row's badge says what auto-watch is doing (**fixing 1/2**, **queued**,
+**waiting**, **needs you**, **gave up**), with the reason in its tooltip. With auto-watch on, the board's failure
+notifications come from auto-watch: one when it starts a run (with **Open conversation**), and one when it leaves a
+pull request to you.
+
+## Approvals
+
+Runs the board starts have their own approval rules, checked before your auto-approve settings
+([ci-run-policy.ts](../apps/vscode/src/sdk/ci-run-policy.ts)).
+
+| Tool call                                                              | Run you started          | Auto-watch run |
+| ---------------------------------------------------------------------- | ------------------------ | -------------- |
+| `git push <remote> HEAD:<branch>` (or `<branch>`, `refs/heads/<branch>`) | your settings            | approved       |
+| a force push (`-f`, `--force*`, a `+` refspec), `--delete`, `--mirror`, `--all`, `--tags`, `:<branch>`, another branch or remote | refused | refused |
+| a bare `git push`                                                       | asks                     | refused, with the command to use instead |
+| editing a file outside the worktree, or inside `.git`                   | refused                  | refused        |
+| `rm`, `mv`, `cd`, `Remove-Item`, … or a `>` redirection to a path outside the worktree; `git -C <elsewhere>` | refused | refused |
+| `git rebase`, `commit --amend`, `branch -D`, `worktree`, `remote`, `config --global`; `sudo`; piping a download to a shell; `gh`/`az` commands that change things | your settings | refused |
+| reading outside the worktree and the report folder; MCP tools other than the DevOps server's read-only ones; web tools; `save_memory` | your settings | refused |
+| anything else (editing in the worktree, builds, tests, reads)           | your settings            | approved       |
+
+A refusal comes back to the model with the reason, so it can correct itself (for example push with the explicit
+form) or report. Command parsing is best effort (a command hidden in `bash -c` is not seen); the worktree and the
+narrow push rule are the real boundary. An auto-watch run you reopen from the background gets the rules of a run you
+started.
 
 ## Worktrees
 
 A pull request whose branch is checked out in the window's repository runs right there, beside any changes you
-have open. Any other branch gets a git worktree, so several pull requests can be worked on at once without
-touching your checkout:
+have open (auto-watch refuses this case). Any other branch gets a git worktree, so several pull requests can be
+worked on at once without touching your checkout:
 
 - It goes in `<repository>.worktrees/<branch>` next to the repository, or under `plinycode.ci.worktreeRoot`.
   Branch names are shortened and given a hash where needed, for Windows path limits.
@@ -95,25 +255,11 @@ Conversations started in a worktree are bound to it ([workspace-conversations.md
 they appear in History under **All workspaces**, or from the board's conversation link. Worktrees are not added
 to the recently used workspaces.
 
-## Autonomy
-
-Each entry has an autonomy setting:
-
-| Setting    | When CI fails or the PR conflicts                                                                   |
-| ---------- | ---------------------------------------------------------------------------------------------------- |
-| Manual     | A notification, with **Open CI Board** and a button that runs the entry's first action.             |
-| Auto       | Coming: starts the action whose trigger matches, in the background, with the usual approvals.      |
-| Full auto  | Coming: also approves the action's tool calls, with a cap on attempts and cost per pull request.   |
-
-An action's **Runs automatically** trigger (on failure, on conflict, or both) is what Auto and Full auto will use.
-Notifications come once per failure: a pipeline that stays red on the same commit is not reported again, and
-nothing is reported for what was already red when the board started.
-
 ## Polling and rate limits
 
 The board checks every `plinycode.ci.board.pollSeconds` (60) while it is on screen and every
-`plinycode.ci.board.hiddenPollSeconds` (180) otherwise, so notifications keep working. Each check lists each
-entry's pull requests, but asks for a pull request's runs only when something can have changed:
+`plinycode.ci.board.hiddenPollSeconds` (180) otherwise, so notifications and auto-watch keep working. Each check
+lists each entry's pull requests, but asks for a pull request's runs only when something can have changed:
 
 - its head commit moved;
 - a run is still going;
@@ -122,32 +268,41 @@ entry's pull requests, but asks for a pull request's runs only when something ca
 
 On GitHub, unchanged answers come back as `304 Not Modified`, which does not count against the rate limit. An
 idle repository with 20 open pull requests costs about 60 listing requests an hour, plus each pull request's runs
-every 10 minutes. When fewer than 500 GitHub requests are left, the board checks four times less often and only
-looks at new commits until the limit resets; a note at the top says so.
+every 10 minutes. Triage adds a few requests per failed run, once per state. When fewer than 500 GitHub requests
+are left, the board checks four times less often and only looks at new commits until the limit resets; a note at
+the top says so.
+
+Without auto-watch, notifications come once per failure: a pipeline that stays red on the same commit is not
+reported again, and nothing is reported for what was already red when the board started.
 
 ## Settings
 
-| Setting                               | Default | What it does                                                    |
-| ------------------------------------- | ------- | --------------------------------------------------------------- |
-| `plinycode.ci.board.pollSeconds`      | `60`    | Seconds between checks while the board is on screen (min. 30).  |
-| `plinycode.ci.board.hiddenPollSeconds` | `180`  | Seconds between checks while it is not (min. 30).               |
-| `plinycode.ci.board.notify`           | `true`  | Notify when a pipeline fails or a pull request conflicts.       |
-| `plinycode.ci.board.maxPrsPerRepo`    | `30`    | Most open pull requests listed per repository.                  |
-| `plinycode.ci.worktreeRoot`           | `""`    | Folder for the board's worktrees; empty means next to the repository. |
+| Setting                                         | Default | What it does                                                    |
+| ----------------------------------------------- | ------- | --------------------------------------------------------------- |
+| `plinycode.ci.board.pollSeconds`                | `60`    | Seconds between checks while the board is on screen (min. 30).  |
+| `plinycode.ci.board.hiddenPollSeconds`          | `180`   | Seconds between checks while it is not (min. 30).               |
+| `plinycode.ci.board.notify`                     | `true`  | Notify when a pipeline fails or a pull request conflicts, and about auto-watch. |
+| `plinycode.ci.board.maxPrsPerRepo`              | `30`    | Most open pull requests listed per repository.                  |
+| `plinycode.ci.board.triage`                     | `auto`  | `auto`, `onDemand` or `off`: when a free model analyses failures. |
+| `plinycode.ci.board.autoWatch.maxAttempts`      | `2`     | Auto-watch runs of one action on one commit (1–5).              |
+| `plinycode.ci.board.autoWatch.maxConcurrentRuns` | `1`    | Auto-watch runs at once (1–2).                                  |
+| `plinycode.ci.worktreeRoot`                     | `""`    | Folder for the board's worktrees; empty means next to the repository. |
 
 ## For developers
 
 | Path                                                          | Contents                                                                                     |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `apps/vscode/src/services/devops-mcp/ci-board/`               | The board, no `vscode` import: targets and store (`ci-board.ts`, `ci-board-store.ts`), polling (`ci-board-poller.ts`), dots and transitions (`ci-board-snapshot.ts`), PR links, worktrees, prompts and the built-in prompt. |
-| `apps/vscode/src/services/devops-mcp/host/CiBoardHost.ts`     | Builds the window's board with the editor's sign-in, finds checkouts among the window's folders, turns transitions into notifications. |
+| `apps/vscode/src/services/devops-mcp/ci-board/`               | The board, no `vscode` import: targets and store (`ci-board.ts`, `ci-board-store.ts`, version 2 with the version 1 migration), polling (`ci-board-poller.ts`), dots and transitions (`ci-board-snapshot.ts`), triage and reports (`ci-triage.ts`, `report-dir.ts`), the row's actions and tooltips (`ci-board-actions.ts`), skill detection (`ci-skills.ts`), the built-in prompts (`builtin-prompts.ts`) and the header (`ci-prompt.ts`), auto-watch (`ci-auto-runner.ts`), PR links and worktrees. |
+| `apps/vscode/src/services/devops-mcp/host/CiBoardHost.ts`     | Builds the window's board with the editor's sign-in and the free utility model, finds checkouts among the window's folders, runs auto-watch, turns transitions into notifications. |
+| `apps/vscode/src/sdk/ci-run-policy.ts`                        | The approval rules of board runs; `SdkInteractionCoordinator`'s `sessionPolicy` applies them first. |
+| `apps/vscode/src/sdk/sdk-task-start-coordinator.ts`           | `startBackgroundTask` (a task that starts in the background) and `TaskStartOptions.modelId` (a pinned model, kept by `SdkSessionConfigBuilder.pinModel`). |
 | `apps/vscode/src/services/devops-mcp/server/providers/`       | `listOpenPrs`, `branchHead`, merge state, forks and pipeline names, added for the board; GitHub ETag revalidation. |
-| `apps/vscode/proto/cline/ci_board.proto`, `src/core/controller/ciBoard/` | The webview's `CiBoardService` and its handlers; `start-ci-run.ts` starts an action.   |
-| `apps/vscode/webview-ui/src/components/ciBoard/`              | The view.                                                                                    |
+| `apps/vscode/proto/cline/ci_board.proto`, `src/core/controller/ciBoard/` | The webview's `CiBoardService` and its handlers; `start-ci-run.ts` starts an action (`startCiRun`) or an auto-watch run (`startCiAutoRun`). |
+| `apps/vscode/webview-ui/src/components/ciBoard/`              | The view: rows (`CiItemRow`), the split button (`CiActionBar`), details (`CiItemDetails`), the editor, the custom prompt panel. |
 
 A conversation in a worktree runs the DevOps tools against the worktree: `BuiltinMcpSource.providerFor(cwd)`
 fills in `workspace` for calls that leave it out, where the server would otherwise use the window's first folder.
 
-Tests: `bun test src/services/devops-mcp` (needs `git` on `PATH`; the worktree tests use temporary repositories),
-`bunx vitest run --config vitest.config.ts src/sdk/vscode-runtime-builder.test.ts src/sdk/sdk-task-start-coordinator.test.ts`,
+Tests: `bun test src/services/devops-mcp` (needs `git` on `PATH`; the worktree and report tests use temporary
+repositories); `bunx vitest run --config vitest.config.ts src/sdk/ci-run-policy.test.ts src/sdk/sdk-task-start-coordinator.test.ts src/sdk/sdk-session-config-builder.test.ts src/sdk/sdk-interaction-coordinator.test.ts`;
 and in `webview-ui`, `bunx vitest run src/components/ciBoard`.

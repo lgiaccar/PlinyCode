@@ -22,6 +22,8 @@ export interface ToolApprovalRequest {
 
 export type ToolApprovalResult = { approved: boolean; reason?: string }
 
+type SessionPolicyDecision = { kind: "approve" } | { kind: "deny"; reason: string } | { kind: "ask" }
+
 /** A tool approval awaiting the user, detached from the chat view. */
 export interface HeldToolApproval {
 	request: ToolApprovalRequest
@@ -51,6 +53,12 @@ interface SdkInteractionCoordinatorOptions {
 	getSessionId: () => string
 	postStateToWebview: () => Promise<void>
 	shouldAutoApproveTool?: (request: ToolApprovalRequest) => boolean
+	/**
+	 * A session's own approval rule, checked before the user's settings: a CI
+	 * board run approves what fits its working copy and branch, and refuses
+	 * force-pushes and edits elsewhere. `ask` or undefined falls through.
+	 */
+	sessionPolicy?: (request: ToolApprovalRequest) => SessionPolicyDecision | undefined
 	recordApprovedToolMessage?: (toolCallId: string, messageTs: number) => void
 	recordDeniedToolApproval?: (toolCallId: string, toolName: string, reason: string) => void
 	/**
@@ -146,6 +154,17 @@ export class SdkInteractionCoordinator {
 	}
 
 	async handleRequestToolApproval(request: ToolApprovalRequest): Promise<{ approved: boolean; reason?: string }> {
+		const decision = this.options.sessionPolicy?.(request)
+		if (decision?.kind === "deny") {
+			Logger.log(`[SdkController] Session policy refused tool=${request.toolName}: ${decision.reason}`)
+			if (!(request.sessionId && this.options.background?.has(request.sessionId))) {
+				this.options.recordDeniedToolApproval?.(request.toolCallId, request.toolName, decision.reason)
+			}
+			return { approved: false, reason: decision.reason }
+		}
+		if (decision?.kind === "approve") {
+			return { approved: true }
+		}
 		if (request.policy.autoApprove === true || this.options.shouldAutoApproveTool?.(request) === true) {
 			Logger.log(`[SdkController] Auto-approving tool execution: tool=${request.toolName}`)
 			return { approved: true }
