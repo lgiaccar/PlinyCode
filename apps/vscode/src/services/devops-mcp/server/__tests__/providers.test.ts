@@ -264,6 +264,15 @@ describe("AzureDevOpsProvider", () => {
 		})
 	})
 
+	it("sends object and array template parameters as JSON text", async () => {
+		const api = new FakeApi().on("POST", `${PROJ}/pipelines/4/runs`, { id: 56 })
+		await azdo(api).queuePipeline(4, "main", { branches: ["a:origin/a", "b"], options: { x: 1 }, skip: false, count: 2 })
+		expect(api.lastJson("POST")).toEqual({
+			templateParameters: { branches: '["a:origin/a","b"]', options: '{"x":1}', skip: false, count: 2 },
+			resources: { repositories: { self: { refName: "refs/heads/main" } } },
+		})
+	})
+
 	it("rejects parameter discovery for a pipeline from another repository", async () => {
 		const api = new FakeApi().on("GET", `${PROJ}/build/definitions/4`, { process: { type: 2 }, repository: { id: "other" } })
 		await expect(azdo(api).pipelineInputs(4, "main")).rejects.toThrow("connected to this workspace")
