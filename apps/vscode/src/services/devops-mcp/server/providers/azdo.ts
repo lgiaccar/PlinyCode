@@ -216,7 +216,13 @@ export class AzureDevOpsProvider implements PipelineProvider {
 			`pipelines/${pipelineId}/runs`,
 			{},
 			{
-				templateParameters: inputs,
+				templateParameters: Object.fromEntries(
+					// Some Azure DevOps servers reject JSON arrays/objects here (HTTP 400, "runParameters"); they accept JSON text.
+					Object.entries(inputs).map(([name, value]) => [
+						name,
+						value !== null && typeof value === "object" ? JSON.stringify(value) : value,
+					]),
+				),
 				resources: { repositories: { self: { refName: ref.startsWith("refs/") ? ref : `refs/heads/${ref}` } } },
 			},
 		)
