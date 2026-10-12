@@ -33,7 +33,7 @@ import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { ExtensionRegistryInfo } from "@/registry"
-import { onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
+import { getCiBoard, onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
@@ -41,6 +41,7 @@ import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { checkAdvisorBudget } from "./advisor/advisor-budget"
 import type { AdvisorUsage } from "./advisor/advisor-tool"
+import { CiRunPolicies, type CiRunPolicy, decideCiTool } from "./ci-run-policy"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { type ConversationContext, createConversationContext } from "./context"
 import { createMemoryServices, type MemoryServices } from "./memory"
@@ -78,7 +79,7 @@ import {
 	SdkTaskHistory,
 	sessionHistoryRecordToTaskItemFields,
 } from "./sdk-task-history"
-import { SdkTaskStartCoordinator, type TaskStartOptions } from "./sdk-task-start-coordinator"
+import { type BackgroundStartResult, SdkTaskStartCoordinator, type TaskStartOptions } from "./sdk-task-start-coordinator"
 import { SdkTerminalExecutionModeCoordinator } from "./sdk-terminal-execution-mode-coordinator"
 import { isToolAutoApproved } from "./sdk-tool-policies"
 import { extractSdkUserText, isSyntheticSdkUserMessage, planEditRestart, type SdkUserMessage } from "./sdk-user-message-mapping"
@@ -186,6 +187,9 @@ export class Controller {
 	// Tasks that keep running after the user starts a new task or opens another
 	// one. Created in the constructor; its callbacks reach session state lazily.
 	private readonly background: SdkBackgroundSessions
+	/** The approval policies of CI board runs started in this window. */
+	private readonly ciRunPolicies = new CiRunPolicies()
+	private readonly backgroundReleasedListeners = new Set<(sessionId: string) => void>()
 
 	// CI watches started with the watch_ci tool, and the delivery of their
 	// reports into conversations — see sdk-ci-watch-coordinator.ts.
@@ -340,6 +344,16 @@ export class Controller {
 			},
 			onChanged: () => {
 				void this.postStateToWebview()
+				getCiBoard()?.touch()
+			},
+			onReleased: (sessionId) => {
+				// Out of the background, someone is watching again: the user's settings apply.
+				const policy = this.ciRunPolicies.get(sessionId)
+				if (policy?.scope === "auto") {
+					this.ciRunPolicies.set(sessionId, { ...policy, scope: "guard" })
+				}
+				for (const listener of this.backgroundReleasedListeners) listener(sessionId)
+				getCiBoard()?.touch()
 			},
 		})
 		this.ciWatch = new SdkCiWatchCoordinator({
@@ -440,6 +454,10 @@ export class Controller {
 			shouldAutoApproveTool: (request) => {
 				const autoApprovalSettings = this.stateManager.getGlobalSettingsKey("autoApprovalSettings")
 				return autoApprovalSettings ? isToolAutoApproved(request.toolName, autoApprovalSettings) : false
+			},
+			sessionPolicy: (request) => {
+				const policy = this.ciRunPolicyFor(request.sessionId)
+				return policy ? decideCiTool(policy, request.toolName, request.input) : undefined
 			},
 			getCwd: () => this.lastKnownWorkspaceRoot,
 			background: this.background,
@@ -679,6 +697,7 @@ export class Controller {
 			loadInitialMessages: (reader, taskId) => this.sessionHistory.loadInitialMessages(reader, taskId),
 			resolveContextMentions: (text) => this.resolveContextMentions(text),
 			postStateToWebview: () => this.postStateToWebview(),
+			background: this.background,
 		})
 		this.compaction = new SdkCompactionCoordinator({
 			stateManager: this.stateManager,
@@ -763,6 +782,14 @@ export class Controller {
 		this.scheduleProviderConfigStatePost()
 
 		if (event.kind === "selection" && this.isSelectionForActiveModeProvider(event)) {
+			// A CI board run stays on the model it was started with.
+			const pinned = this.sessionConfigBuilder.pinnedModel(this.sessions?.getActiveSession()?.sessionId)
+			if (pinned) {
+				Logger.log(
+					`[SdkController] The displayed conversation is pinned to ${pinned}; the new model applies to new tasks.`,
+				)
+				return
+			}
 			this.sessions
 				?.updateActiveSessionModel(event.selection.modelId)
 				.catch((error) => Logger.error("[SdkController] Failed to update active session model:", error))
@@ -1056,6 +1083,54 @@ export class Controller {
 	/** Starting a task now would stop the running one: it is running and the background is full. */
 	get startWouldStopRunningTask(): boolean {
 		return Boolean(this.sessions.getActiveSession()?.isRunning) && this.background.isFull
+	}
+
+	/** Free background slots: a task started now in the background, or pushed there by a new task, takes one. */
+	get backgroundFreeSlots(): number {
+		return this.background.freeSlots
+	}
+
+	/**
+	 * Starts a conversation straight into the background (a CI board auto-watch
+	 * run), leaving the displayed task alone. Returns `full` when the
+	 * background has no free slot.
+	 */
+	startBackgroundTask(
+		prompt: string,
+		workspace: WorkspaceRef | undefined,
+		options: TaskStartOptions = {},
+	): Promise<BackgroundStartResult> {
+		return this.taskStart.startBackgroundTask(prompt, workspace, options)
+	}
+
+	/** Calls `listener` whenever a task leaves the background (finished, stopped or reopened). */
+	onBackgroundTaskReleased(listener: (sessionId: string) => void): () => void {
+		this.backgroundReleasedListeners.add(listener)
+		return () => this.backgroundReleasedListeners.delete(listener)
+	}
+
+	/** Applies a CI board run's approval policy to its conversation. */
+	setCiRunPolicy(conversationId: string, policy: CiRunPolicy): void {
+		this.ciRunPolicies.set(conversationId, policy)
+	}
+
+	/**
+	 * A CI board run's policy: the one set when it started, or, for a run from
+	 * an earlier window, the guard rules rebuilt from the board's link.
+	 */
+	private ciRunPolicyFor(sessionId: string | undefined): CiRunPolicy | undefined {
+		if (!sessionId) return undefined
+		const own = this.ciRunPolicies.get(sessionId)
+		if (own) return own
+		const link = getCiBoard()?.linkOfConversation(sessionId)?.link
+		if (!link?.sourceBranch || !link.remoteName) return undefined
+		return {
+			scope: "guard",
+			worktree: link.worktree,
+			remoteName: link.remoteName,
+			sourceBranch: link.sourceBranch,
+			readRoots: [],
+		}
 	}
 
 	/** Where a conversation stands in this window: running on screen, running in the background, or neither. */

@@ -55,12 +55,12 @@ describe("CiBoard", () => {
 		const a = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
 		const b = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12/files" })
 		expect(b.id).toBe(a.id)
-		expect([a.kind, a.prId, a.provider, a.autonomy, a.actions.map((x) => x.id)]).toEqual([
+		expect([a.kind, a.prId, a.provider, a.autoWatch, a.actions.map((x) => x.id)]).toEqual([
 			"pr",
 			12,
 			"github",
-			"manual",
-			["fix"],
+			false,
+			["fix-conflicts", "recalibrate", "fix-ci", "investigate"],
 		])
 
 		const reopened = makeBoard()
@@ -97,8 +97,8 @@ describe("CiBoard", () => {
 
 	it("updates and removes targets, and keeps links", async () => {
 		const t = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
-		await board.updateTarget(t.id, { autonomy: "auto" })
-		expect(board.target(t.id)?.autonomy).toBe("auto")
+		await board.updateTarget(t.id, { autoWatch: true })
+		expect(board.target(t.id)?.autoWatch).toBe(true)
 		await board.setLink("k", { conversationId: "c1", actionId: "fix", worktree: "/w", startedTs: 1 })
 		expect(board.linkFor("k")?.conversationId).toBe("c1")
 		await board.removeTarget(t.id)
@@ -111,7 +111,7 @@ describe("CiBoard", () => {
 		await board.refresh()
 		const [item] = board.view()[0].items
 		expect(board.runBlockedReason(t, item)).toContain("No folder open in this window")
-		await expect(board.prepareRun(t.id, item.key, "fix")).rejects.toThrow(/No folder open/)
+		await expect(board.prepareRun(t.id, item.key, { actionId: "fix-ci" })).rejects.toThrow(/No folder open/)
 		checkout = repoCtx.root
 		await board.rescanCheckouts()
 		expect(board.runBlockedReason(t, item)).toBeUndefined()
@@ -133,11 +133,45 @@ describe("CiBoard", () => {
 		const t = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
 		await board.refresh()
 		const [item] = board.view()[0].items
-		const run = await board.prepareRun(t.id, item.key, "fix")
+		const run = await board.prepareRun(t.id, item.key, { actionId: "fix-ci" })
 		expect(run.worktree.created).toBe(true)
 		expect(run.worktree.path).toBe(path.join(dir, "worktrees", "repo", "feature"))
 		expect(run.prompt.startsWith(`${CI_BOARD_MARKER} PR #12`)).toBe(true)
 		expect(run.prompt).toContain("- ✗ ci: failure (run 1)")
 		expect(run.prompt).toContain("Get this pull request green")
+		expect([run.mode, run.sourceBranch, run.remoteName]).toEqual(["act", "feature", "origin"])
+		expect(run.reportDir).toBe(path.join(repoCtx.root, ".plinycode", "ci-reports"))
+
+		const investigate = await board.prepareRun(t.id, item.key, { actionId: "investigate" })
+		expect(investigate.mode).toBe("ask")
+		expect(investigate.prompt).toContain("read-only investigation")
+
+		const custom = await board.prepareRun(t.id, item.key, {
+			custom: { kind: "text", text: "Rebase {{sourceBranch}} please" },
+			label: "Mine",
+			model: "current",
+		})
+		expect([custom.action.label, custom.action.model, custom.mode]).toEqual(["Mine", "current", "act"])
+		expect(custom.prompt).toEndWith("Rebase feature please")
 	}, 30_000)
+
+	it("keeps auto-watch counters, and forgets an item's when asked", async () => {
+		await board.recordAutoAttempt(["k|fix-conflicts|a", "k|fix-conflicts"])
+		await board.recordAutoAttempt(["k|fix-conflicts|a"])
+		expect([board.autoAttempts("k|fix-conflicts|a"), board.autoAttempts("k|fix-conflicts")]).toEqual([2, 1])
+		await board.resetAutoAttempts("k|")
+		expect(board.autoAttempts("k|fix-conflicts|a")).toBe(0)
+	})
+
+	it("keeps the built-in actions when the actions are replaced", async () => {
+		const t = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
+		const next = await board.updateTarget(t.id, {
+			actions: [
+				{ id: "mine", label: "Mine", prompt: { kind: "text", text: "x" }, model: "free", situation: "any", auto: true },
+				{ ...t.actions[1], auto: false, label: "Recal" },
+			],
+		})
+		expect(next.actions.map((a) => a.id)).toEqual(["fix-conflicts", "recalibrate", "fix-ci", "investigate", "mine"])
+		expect(next.actions[1]).toMatchObject({ label: "Recal", auto: false })
+	})
 })

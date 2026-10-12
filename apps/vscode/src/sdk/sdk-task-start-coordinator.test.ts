@@ -85,6 +85,61 @@ describe("SdkTaskStartCoordinator", () => {
 		)
 	})
 
+	it("pins a task's model and titles its history entry", async () => {
+		const { coordinator, options } = makeCoordinator()
+		const pinModel = vi.fn()
+		Object.assign(options.sessionConfigBuilder, { pinModel })
+
+		const sessionId = await coordinator.initTask("[CI BOARD] long prompt", [], [], undefined, undefined, undefined, {
+			modelId: "pliny/auto-free",
+			title: "CI board: Fix CI on PR #12",
+		})
+
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(expect.objectContaining({ modelId: "pliny/auto-free" }))
+		expect(pinModel).toHaveBeenCalledWith(sessionId, "pliny/auto-free")
+		expect(options.taskHistory.updateTaskHistoryItem).toHaveBeenCalledWith(
+			expect.objectContaining({ pinnedModelId: "pliny/auto-free", task: "CI board: Fix CI on PR #12" }),
+		)
+	})
+
+	it("starts a task straight into the background without touching the displayed one", async () => {
+		vi.mocked(isDirectory).mockResolvedValue(true)
+		const { coordinator, options } = makeCoordinator()
+		const send = vi.fn().mockResolvedValue(undefined)
+		const session = { sessionId: "bg-1", sdkHost: { send } }
+		const background = { isFull: false, add: vi.fn(() => true), handleSendSettled: vi.fn() }
+		Object.assign(options, { background })
+		Object.assign(options.sessions, {
+			startDetachedSession: vi.fn(async () => ({ startResult: { sessionId: "bg-1" }, session })),
+			stopSession: vi.fn(),
+		})
+		Object.assign(options.sessionConfigBuilder, { pinModel: vi.fn() })
+		const workspace = { path: "/wt", kind: "folder" as const, folders: ["/wt"] }
+
+		const result = await coordinator.startBackgroundTask("fix it", workspace, {
+			modelId: "pliny/auto-free",
+			mode: "act",
+			title: "CI auto-watch: Fix conflicts on PR #12",
+		})
+
+		expect(result).toEqual({ status: "started", conversationId: "bg-1" })
+		expect(options.clearTask).not.toHaveBeenCalled()
+		expect(options.setTask).not.toHaveBeenCalled()
+		expect(options.sessions.startNewSession).not.toHaveBeenCalled()
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(
+			expect.objectContaining({ cwd: "/wt", mode: "act", modelId: "pliny/auto-free", newConversation: true }),
+		)
+		expect(background.add).toHaveBeenCalledWith(session, "CI auto-watch: Fix conflicts on PR #12")
+		expect(send).toHaveBeenCalledWith({ sessionId: "bg-1", prompt: "fix it" })
+		expect(options.taskHistory.updateTaskHistoryItem).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "bg-1", pinnedModelId: "pliny/auto-free" }),
+		)
+		await vi.waitFor(() => expect(background.handleSendSettled).toHaveBeenCalledWith("bg-1"))
+
+		background.isFull = true
+		await expect(coordinator.startBackgroundTask("again", workspace)).resolves.toEqual({ status: "full" })
+	})
+
 	it("binds a new task to the window's workspace and records it as used", async () => {
 		const { coordinator, options } = makeCoordinator()
 		const windowWorkspace = { path: "/workspace", kind: "folder" as const, folders: ["/workspace"] }

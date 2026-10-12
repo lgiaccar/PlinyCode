@@ -41,7 +41,7 @@ Design and operations notes are in `docs/`:
 - [docs/advisor-tool.md](docs/advisor-tool.md): the `ask_advisor` tool, which lets a free or cheap model ask a stronger one for advice at a hard step, and how its cost is recorded and budget-checked.
 - [docs/review-pass.md](docs/review-pass.md): the reviewer pass, in which a second free model reads the diff before a FreeAuto or BalanceAuto act-mode run ends and hands likely defects back once.
 - The CI watcher (`watch_ci`), which wakes a conversation when CI finishes, is described in [docs/devops-mcp.md](docs/devops-mcp.md).
-- [docs/ci-board.md](docs/ci-board.md): the CI Board, which watches many pull requests and branches with one status per pipeline, and runs prompts (actions) against them in git worktrees.
+- [docs/ci-board.md](docs/ci-board.md): the CI Board, which watches many pull requests and branches with one status per pipeline, has a free model triage their failures (severity, summary, markdown reports), runs fixes (actions) against them in git worktrees on the free auto-router, and with auto-watch fixes conflicts and small test deltas by itself under its own approval rules.
 - [docs/context-management-audit.md](docs/context-management-audit.md): the audit of sub-agents, task isolation, context compression, memory and knowledge, with each finding's site and the wave that fixes it.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
 

@@ -20,7 +20,7 @@ import { vscodeHostBridgeClient } from "@/hosts/vscode/hostbridge/client/host-gr
 import { createStorageContext } from "@/shared/storage/storage-context"
 import { readTextFromClipboard, writeTextToClipboard } from "@/utils/env"
 import { initialize, tearDown } from "./common"
-import { startCiRun } from "./core/controller/ciBoard/start-ci-run"
+import { startCiAutoRun, startCiRun } from "./core/controller/ciBoard/start-ci-run"
 import { addToCline } from "./core/controller/commands/addToCline"
 import { explainWithCline } from "./core/controller/commands/explainWithCline"
 import { fixWithCline } from "./core/controller/commands/fixWithCline"
@@ -58,6 +58,7 @@ import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-
 import { ExtensionRegistryInfo } from "./registry"
 import { configureInstructionSources } from "./sdk/instruction-sources"
 import { formatLastModelRequest } from "./sdk/last-model-request"
+import { completeWithUtilityModel } from "./sdk/memory/memory-model"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
@@ -227,13 +228,41 @@ export async function activate(context: vscode.ExtensionContext) {
 		},
 		runAction: async (targetId: string, itemKey: string, actionId: string) => {
 			try {
-				await startCiRun(WebviewProvider.getInstance().controller, targetId, itemKey, actionId)
+				await startCiRun(WebviewProvider.getInstance().controller, targetId, itemKey, { actionId })
 			} catch (error) {
 				void vscode.window.showErrorMessage(
 					`Could not start the CI action: ${error instanceof Error ? error.message : String(error)}`,
 				)
 			}
 		},
+		startAutoRun: (targetId: string, itemKey: string, actionId: string) =>
+			startCiAutoRun(WebviewProvider.getInstance().controller, targetId, itemKey, actionId),
+		isConversationActive: (conversationId: string) =>
+			(WebviewProvider.getInstance()?.controller.conversationActivity(conversationId) ?? "idle") !== "idle",
+		backgroundFreeSlots: () => WebviewProvider.getInstance()?.controller.backgroundFreeSlots ?? 0,
+		onBackgroundReleased: (listener: (conversationId: string) => void) => {
+			// The controller may not exist yet when the board starts; subscribe once it does.
+			let unsubscribe: (() => void) | undefined
+			let disposed = false
+			const attach = () => {
+				const controller = WebviewProvider.getInstance()?.controller
+				if (disposed || unsubscribe) return
+				if (controller) unsubscribe = controller.onBackgroundTaskReleased(listener)
+				else setTimeout(attach, 2000)
+			}
+			attach()
+			return () => {
+				disposed = true
+				unsubscribe?.()
+			}
+		},
+		openConversation: async (conversationId: string) => {
+			const controller = WebviewProvider.getInstance().controller
+			;(WebviewProvider.getInstance() as VscodeWebviewProvider).getWebview()?.show(true)
+			await controller.showTaskWithId(conversationId)
+		},
+		complete: (system: string, user: string, signal: AbortSignal, cwd?: string) =>
+			completeWithUtilityModel(system, user, signal, cwd ?? process.cwd()),
 	}
 	DevOpsMcpService.activate(context, ciBoardUi).catch((error) => Logger.error("[DevOpsMcp] Failed to start:", error))
 

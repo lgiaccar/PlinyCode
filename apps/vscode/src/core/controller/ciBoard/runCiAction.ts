@@ -5,6 +5,6 @@ import { startCiRun } from "./start-ci-run"
 
 /** Runs a CI board action on an item in a new conversation; returns its id, or "" when nothing started. */
 export async function runCiAction(controller: Controller, request: RunCiActionRequest): Promise<String> {
-	const conversationId = await startCiRun(controller, request.targetId, request.itemKey, request.actionId)
+	const conversationId = await startCiRun(controller, request.targetId, request.itemKey, { actionId: request.actionId })
 	return String.create({ value: conversationId ?? "" })
 }

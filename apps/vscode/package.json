@@ -472,6 +472,35 @@
 					"minimum": 1,
 					"markdownDescription": "The most open pull requests the **CI Board** lists for a repository, most recently updated first."
 				},
+				"plinycode.ci.board.triage": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"onDemand",
+						"off"
+					],
+					"enumDescriptions": [
+						"Analyse every failing or conflicting pull request once per commit.",
+						"Analyse only when asked (Analyze in a row's menu or details).",
+						"Never analyse; the board shows the pipelines only."
+					],
+					"default": "auto",
+					"markdownDescription": "How the **CI Board** triages failures: it reads the failed runs and asks a free Pliny model what failed and how serious it is. Rules on job and error text stand in when the model does not answer."
+				},
+				"plinycode.ci.board.autoWatch.maxAttempts": {
+					"type": "number",
+					"default": 2,
+					"minimum": 1,
+					"maximum": 5,
+					"markdownDescription": "How many times **auto-watch** runs one action on one commit of a pull request before it stops and leaves it to you."
+				},
+				"plinycode.ci.board.autoWatch.maxConcurrentRuns": {
+					"type": "number",
+					"default": 1,
+					"minimum": 1,
+					"maximum": 2,
+					"markdownDescription": "How many **auto-watch** runs go on at once, in the background. One background slot is always kept for your own tasks."
+				},
 				"plinycode.ci.worktreeRoot": {
 					"type": "string",
 					"default": "",

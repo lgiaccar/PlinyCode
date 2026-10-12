@@ -83,6 +83,17 @@ export interface SessionConfigInput {
 	 * memory/conversation-memory-snapshots.ts.
 	 */
 	memorySection?: string
+	/**
+	 * Runs the session on this model instead of the mode's selected one, e.g.
+	 * a CI board run pinned to the free auto-router.
+	 */
+	modelId?: string
+	/**
+	 * The config is for a conversation that is not the displayed one (a task
+	 * started straight into the background), so per-conversation state must
+	 * not be read from the displayed task.
+	 */
+	newConversation?: boolean
 }
 
 /** Active session state tracked by the factory */
@@ -482,10 +493,11 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	// Keep the default aligned with the provider catalog so the UI and session
 	// factory share one source of truth for default models.
 	const modelId =
-		(apiConfig ? resolveModelId(mode, apiConfig) : undefined) ??
-		getDefaultModelIdForProvider(providerId) ??
-		getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ??
-		""
+		input.modelId?.trim() ||
+		((apiConfig ? resolveModelId(mode, apiConfig) : undefined) ??
+			getDefaultModelIdForProvider(providerId) ??
+			getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ??
+			"")
 	Logger.log(`[SessionFactory] Resolved provider=${providerId}, model=${modelId}, hasApiKey=${!!apiKey}`)
 
 	const committedRuntimeModel = resolveCommittedRuntimeModel(providerId, mode, modelId)

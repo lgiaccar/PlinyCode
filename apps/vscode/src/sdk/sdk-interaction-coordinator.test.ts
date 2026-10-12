@@ -15,6 +15,46 @@ vi.mock("@core/storage/disk", () => ({
 }))
 
 describe("SdkInteractionCoordinator", () => {
+	it("lets a session's policy approve or refuse before the user's settings, and fall through on ask", async () => {
+		const task = createTaskProxy("session-123", vi.fn(), vi.fn())
+		const messages = new SdkMessageCoordinator({ getTask: () => task })
+		const recordDeniedToolApproval = vi.fn()
+		const shouldAutoApproveTool = vi.fn().mockReturnValue(true)
+		const decisions = {
+			push: { kind: "deny" as const, reason: "never force-push" },
+			edit: { kind: "approve" as const },
+			read: { kind: "ask" as const },
+		}
+		const coordinator = new SdkInteractionCoordinator({
+			messages,
+			getSessionId: () => "session-123",
+			postStateToWebview: vi.fn().mockResolvedValue(undefined),
+			shouldAutoApproveTool,
+			recordDeniedToolApproval,
+			sessionPolicy: (request) => decisions[request.toolName as keyof typeof decisions],
+		})
+		const request = (toolName: string) => ({
+			sessionId: "session-123",
+			agentId: "agent",
+			conversationId: "c",
+			iteration: 1,
+			toolCallId: `call-${toolName}`,
+			toolName,
+			input: {},
+			policy: { autoApprove: false },
+		})
+
+		await expect(coordinator.handleRequestToolApproval(request("push"))).resolves.toEqual({
+			approved: false,
+			reason: "never force-push",
+		})
+		expect(recordDeniedToolApproval).toHaveBeenCalledWith("call-push", "push", "never force-push")
+		await expect(coordinator.handleRequestToolApproval(request("edit"))).resolves.toEqual({ approved: true })
+		expect(shouldAutoApproveTool).not.toHaveBeenCalled()
+		await expect(coordinator.handleRequestToolApproval(request("read"))).resolves.toEqual({ approved: true })
+		expect(shouldAutoApproveTool).toHaveBeenCalledOnce()
+	})
+
 	it("emits a tool approval ask and resolves approval from askResponse state", async () => {
 		const task = createTaskProxy("session-123", vi.fn(), vi.fn())
 		const messages = new SdkMessageCoordinator({ getTask: () => task })

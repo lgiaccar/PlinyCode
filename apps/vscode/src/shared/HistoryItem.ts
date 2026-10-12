@@ -29,6 +29,11 @@ export type HistoryItem = {
 
 	modelId?: string
 	/**
+	 * The model the conversation always runs on, whatever the chat selects (a
+	 * CI board run pinned to the free auto-router). Absent for ordinary ones.
+	 */
+	pinnedModelId?: string
+	/**
 	 * Provider id the task ran on (from the SDK session record). Absent for
 	 * tasks recorded before this field existed and for legacy imports —
 	 * cost-display consumers treat an absent provider as "show", since

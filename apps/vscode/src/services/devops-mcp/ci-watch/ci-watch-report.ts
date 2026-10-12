@@ -1,6 +1,7 @@
 /** Turns a watch's outcome into the message the conversation receives. */
 import { CI_WATCH_MARKER } from "@shared/ciWatch"
 import type { FailedStep, PipelineRun, RunReport } from "../server/providers/types"
+import { defang, stripAnsi, tailWithin, unfence } from "./ci-report-text"
 import type { CiWatchOutcome, CiWatchTimings } from "./ci-watcher"
 
 /** Characters of error messages and log lines a report carries, over all failed steps. */
@@ -8,8 +9,6 @@ const EXCERPT_BUDGET = 4000
 /** Below this a step's excerpt says too little to be worth its heading. */
 const MIN_EXCERPT = 300
 const MAX_LISTED = 20
-// biome-ignore lint/suspicious/noControlCharactersInRegex: the escape character is what starts the sequence
-const ANSI_STYLE = /\u001b\[[0-9;]*m/g
 
 export interface CiWatchMessage {
 	/** One sentence with the verdict, for notifications and the first line of the prompt. */
@@ -51,16 +50,6 @@ function tally(runs: PipelineRun[]): { text: string; failed: number; unsuccessfu
 	return { text: parts.join(", "), failed, unsuccessful }
 }
 
-/**
- * A report is sent like a message the user typed, so the engine unwraps these
- * elements from it and the extension expands `@` mentions in it; a log that
- * prints `<user_input>` would swallow the rest of the report, and one that
- * prints `actions/checkout@<sha>` would pull in that commit's diff. A
- * zero-width space keeps both literal.
- */
-const defang = (text: string) =>
-	text.replace(/<(\/?)(user_input|user_command|mode_notice|hook_context)/g, "<​$1$2").replace(/@(?=[\w"/-])/g, "@​")
-
 function runLines(runs: PipelineRun[]): string[] {
 	// Failures first: a long matrix must not push them past the cut.
 	const ordered = [...runs].sort((a, b) => Number(outcomeOf(b) === "failure") - Number(outcomeOf(a) === "failure"))
@@ -69,16 +58,6 @@ function runLines(runs: PipelineRun[]): string[] {
 		lines.push(`- … and ${ordered.length - MAX_LISTED} more`)
 	}
 	return lines
-}
-
-/** The end of `text` that fits in `budget` characters, cut at a line start. */
-function tailWithin(text: string, budget: number): string {
-	if (text.length <= budget) {
-		return text
-	}
-	const cut = text.slice(text.length - budget)
-	const newline = cut.indexOf("\n")
-	return `…\n${newline >= 0 && newline < cut.length - 1 ? cut.slice(newline + 1) : cut}`
 }
 
 function excerpt(report: RunReport, failure: FailedStep, budget: number): string {
@@ -92,11 +71,10 @@ function excerpt(report: RunReport, failure: FailedStep, budget: number): string
 		out.push(line)
 		left -= line.length
 	}
-	// Colour codes mean nothing to the model and would eat into the budget.
-	const log = failure.logTail?.replace(ANSI_STYLE, "").trimEnd()
+	const log = failure.logTail && stripAnsi(failure.logTail).trimEnd()
 	if (log && left >= 100) {
 		// The failing lines are at the end of what the provider returns.
-		out.push("```text", tailWithin(log, left).replace(/```/g, "``​`"), "```")
+		out.push("```text", unfence(tailWithin(log, left)), "```")
 	}
 	return out.join("\n")
 }

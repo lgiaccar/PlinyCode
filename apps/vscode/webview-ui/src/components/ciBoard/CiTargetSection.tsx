@@ -5,21 +5,25 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CiBoardServiceClient } from "@/services/grpc-client"
 import { CiActionsEditor } from "./CiActionsEditor"
+import { CiAutoWatchToggle } from "./CiAutoWatchToggle"
 import { CiItemRow } from "./CiItemRow"
-import { AUTONOMY_OPTIONS } from "./ciBoardUtils"
+import { CiTip } from "./CiTip"
+import { isFailing, itemRank } from "./ciBoardUtils"
 import { errorText } from "./useCiBoard"
 
-const KIND_ICONS: Record<string, string> = {
-	pr: "codicon-git-pull-request",
-	branch: "codicon-git-branch",
-	repo: "codicon-repo",
+const KIND_ICONS: Record<string, { icon: string; tip: string }> = {
+	pr: { icon: "codicon-git-pull-request", tip: "A pull request" },
+	branch: { icon: "codicon-git-branch", tip: "A branch: its open pull request, or its pushed head" },
+	repo: { icon: "codicon-repo", tip: "A repository's open pull requests" },
 }
 
-/** A target of the board: its header (autonomy, actions, refresh, remove) and its pull requests. */
-export const CiTargetSection = ({ target }: { target: CiTargetView }) => {
+/** A target of the board: its header (auto-watch, actions, refresh, remove) and its pull requests, worst first. */
+export const CiTargetSection = ({ target, failingOnly = false }: { target: CiTargetView; failingOnly?: boolean }) => {
 	const [editing, setEditing] = useState(false)
 	const [refreshing, setRefreshing] = useState(false)
+	const [confirmRemove, setConfirmRemove] = useState(false)
 	const [error, setError] = useState<string>()
+	const kind = KIND_ICONS[target.kind] ?? KIND_ICONS.repo
 
 	const update = (patch: Partial<UpdateCiTargetRequest>) =>
 		CiBoardServiceClient.updateCiTarget(UpdateCiTargetRequest.create({ id: target.id, ...patch })).catch((e) =>
@@ -40,55 +44,84 @@ export const CiTargetSection = ({ target }: { target: CiTargetView }) => {
 	const remove = () =>
 		CiBoardServiceClient.removeCiTarget(StringRequest.create({ value: target.id })).catch((e) => setError(errorText(e)))
 
+	const failing = target.items.filter(isFailing).length
+	const items = [...target.items].filter((item) => !failingOnly || isFailing(item)).sort((a, b) => itemRank(b) - itemRank(a))
+
 	return (
 		<section className="mb-4" data-testid="ci-target">
-			<div className="flex items-center gap-1.5 min-w-0">
-				<span className={cn("codicon", KIND_ICONS[target.kind] ?? "codicon-repo")} />
-				<span className="font-medium truncate flex-1 min-w-0" title={target.remoteUrl}>
-					{target.label}
-				</span>
-				<select
-					aria-label="Autonomy"
-					className="bg-dropdown-background text-dropdown-foreground border border-dropdown-border rounded text-xs"
-					onChange={(e) => update({ autonomy: e.target.value })}
-					title={AUTONOMY_OPTIONS.find((o) => o.value === target.autonomy)?.title}
-					value={target.autonomy}>
-					{AUTONOMY_OPTIONS.map((o) => (
-						<option disabled={o.value !== "manual"} key={o.value} title={o.title} value={o.value}>
-							{o.label}
-						</option>
-					))}
-				</select>
-				{target.kind === "repo" && (
-					<select
-						aria-label="Whose pull requests"
-						className="bg-dropdown-background text-dropdown-foreground border border-dropdown-border rounded text-xs"
-						onChange={(e) => update({ prFilter: e.target.value })}
-						value={target.prFilter}>
-						<option value="mine">Mine</option>
-						<option value="all">Everyone's</option>
-					</select>
+			<div className="sticky top-0 z-10 flex items-center gap-1.5 min-w-0 py-1 bg-sidebar-background">
+				<CiTip tip={kind.tip}>
+					<span className={cn("codicon", kind.icon)} />
+				</CiTip>
+				<CiTip tip={target.remoteUrl}>
+					<span className="font-medium truncate flex-1 min-w-0">{target.label}</span>
+				</CiTip>
+				{failing > 0 && (
+					<CiTip tip={`${failing} of ${target.items.length} failing or conflicting`}>
+						<span className="rounded-full px-1.5 text-[10px] bg-error/20 text-error flex-shrink-0">{failing}</span>
+					</CiTip>
 				)}
-				<Button
-					onClick={() => setEditing(!editing)}
-					size="xs"
-					title="Actions: the prompts this entry can run"
-					variant="ghost">
-					<span className="codicon codicon-settings-gear" />
-				</Button>
-				<Button disabled={refreshing} onClick={refresh} size="xs" title="Check now" variant="ghost">
-					<span className={cn("codicon codicon-refresh", refreshing && "codicon-modifier-spin")} />
-				</Button>
-				<Button onClick={remove} size="xs" title="Remove from the board" variant="ghost">
-					<span className="codicon codicon-close" />
-				</Button>
+				<CiAutoWatchToggle
+					checked={target.autoWatch}
+					disabledReason={target.checkout ? undefined : "Open a checkout of this repository in the window to use it."}
+					onChange={(autoWatch) => update({ autoWatch })}
+				/>
+				{target.kind === "repo" && (
+					<CiTip tip="Whose open pull requests to list: yours, or everyone's.">
+						<select
+							aria-label="Whose pull requests"
+							className="bg-dropdown-background text-dropdown-foreground border border-dropdown-border rounded text-xs"
+							onChange={(e) => update({ prFilter: e.target.value })}
+							value={target.prFilter}>
+							<option value="mine">Mine</option>
+							<option value="all">Everyone's</option>
+						</select>
+					</CiTip>
+				)}
+				<CiTip tip="Edit actions: the prompts this entry can run, their models, and what auto-watch may start.">
+					<Button aria-label="Edit actions" onClick={() => setEditing(!editing)} size="xs" variant="ghost">
+						<span className="codicon codicon-settings-gear" />
+					</Button>
+				</CiTip>
+				<CiTip tip="Check CI for this entry now">
+					<Button aria-label="Refresh" disabled={refreshing} onClick={refresh} size="xs" variant="ghost">
+						<span className={cn("codicon codicon-refresh", refreshing && "codicon-modifier-spin")} />
+					</Button>
+				</CiTip>
+				{confirmRemove ? (
+					<>
+						<Button onClick={remove} size="xs" variant="danger">
+							Remove
+						</Button>
+						<Button onClick={() => setConfirmRemove(false)} size="xs" variant="ghost">
+							Keep
+						</Button>
+					</>
+				) : (
+					<CiTip tip="Stop watching this entry. Its worktrees and conversations are kept.">
+						<Button
+							aria-label="Remove from the board"
+							onClick={() => setConfirmRemove(true)}
+							size="xs"
+							variant="ghost">
+							<span className="codicon codicon-close" />
+						</Button>
+					</CiTip>
+				)}
 			</div>
 			{!target.checkout && (
 				<div className="text-xs text-description mt-1">
 					No folder in this window is a checkout of this repository, so actions cannot run. Open one to run them.
 				</div>
 			)}
-			{editing && <CiActionsEditor actions={target.actions} onDone={() => setEditing(false)} targetId={target.id} />}
+			{editing && (
+				<CiActionsEditor
+					actions={target.actions}
+					onDone={() => setEditing(false)}
+					skills={target.skills}
+					targetId={target.id}
+				/>
+			)}
 			{(error || target.error) && <div className="text-xs text-error break-words mt-1">{error || target.error}</div>}
 			{target.loading && target.items.length === 0 && <div className="text-xs text-description mt-1">Checking…</div>}
 			{!target.loading && !target.error && target.items.length === 0 && (
@@ -96,9 +129,12 @@ export const CiTargetSection = ({ target }: { target: CiTargetView }) => {
 					{target.kind === "repo" ? "No open pull requests." : "Nothing to show yet."}
 				</div>
 			)}
+			{failingOnly && items.length === 0 && target.items.length > 0 && (
+				<div className="text-xs text-description mt-1">Nothing failing here.</div>
+			)}
 			<div>
-				{target.items.map((item) => (
-					<CiItemRow actions={target.actions} item={item} key={item.key} targetId={target.id} />
+				{items.map((item) => (
+					<CiItemRow item={item} key={item.key} onEditActions={() => setEditing(true)} targetId={target.id} />
 				))}
 			</div>
 		</section>

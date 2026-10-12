@@ -2,11 +2,23 @@ import {
 	type CiActionInfo,
 	CiBoardState,
 	type CiItem,
+	type CiSkillInfo,
 	type CiTargetView as CiTargetViewProto,
+	type CiTriage,
 } from "@shared/proto/cline/ci_board"
 import { getCiWatchManager } from "@/services/devops-mcp/builtin-mcp-registry"
 import type { CiBoard, CiTargetView } from "@/services/devops-mcp/ci-board/ci-board"
-import type { CiAction, CiBoardItem, CiPromptSource, CiTrigger } from "@/services/devops-mcp/ci-board/types"
+import { itemActions } from "@/services/devops-mcp/ci-board/ci-board-actions"
+import type { CiSkills } from "@/services/devops-mcp/ci-board/ci-skills"
+import {
+	BUILTIN_ACTIONS,
+	type CiAction,
+	type CiBoardItem,
+	type CiPromptSource,
+	type CiSituation,
+	type CiTriageResult,
+	isBuiltinId,
+} from "@/services/devops-mcp/ci-board/types"
 import { parseRemote, remoteSlug } from "@/services/devops-mcp/server/repo"
 import type { Controller } from "../index"
 
@@ -33,31 +45,77 @@ function toProtoAction(action: CiAction): CiActionInfo {
 		id: action.id,
 		label: action.label,
 		promptKind: action.prompt.kind,
-		promptValue: action.prompt.kind === "file" ? action.prompt.path : action.prompt.kind === "text" ? action.prompt.text : "",
-		trigger: action.trigger,
+		promptValue:
+			action.prompt.kind === "file"
+				? action.prompt.path
+				: action.prompt.kind === "text"
+					? action.prompt.text
+					: action.prompt.id,
+		model: action.model,
+		situation: action.situation,
+		auto: action.auto,
+		builtin: isBuiltinId(action.id),
 	}
 }
 
-const TRIGGERS: CiTrigger[] = ["manual", "on_failure", "on_conflict", "on_failure_or_conflict"]
+const SITUATIONS: CiSituation[] = ["conflict", "small-delta", "failure", "any"]
 
 export function fromProtoAction(action: CiActionInfo): CiAction {
+	const id = action.id.trim()
+	const builtin = BUILTIN_ACTIONS.find((b) => b.id === id)
 	const prompt: CiPromptSource =
 		action.promptKind === "file"
 			? { kind: "file", path: action.promptValue.trim() }
 			: action.promptKind === "text"
 				? { kind: "text", text: action.promptValue }
-				: { kind: "builtin" }
+				: builtin
+					? { kind: "builtin", id: builtin.id as Extract<CiPromptSource, { kind: "builtin" }>["id"] }
+					: { kind: "text", text: "" }
 	return {
-		id: action.id.trim(),
-		label: action.label.trim() || "Run prompt",
+		id,
+		label: action.label.trim() || builtin?.label || "Run prompt",
 		prompt,
-		trigger: TRIGGERS.includes(action.trigger as CiTrigger) ? (action.trigger as CiTrigger) : "manual",
+		model: action.model === "current" ? "current" : "free",
+		situation:
+			builtin?.situation ??
+			(SITUATIONS.includes(action.situation as CiSituation) ? (action.situation as CiSituation) : "any"),
+		auto: !!builtin?.auto && action.auto,
 	}
+}
+
+function toProtoTriage(result: CiTriageResult, stale: boolean): CiTriage {
+	return {
+		status: result.status,
+		severity: result.severity,
+		summary: result.summary,
+		source: result.source,
+		analyzedTs: result.analyzedTs,
+		reportPath: result.reportPath ?? "",
+		stale,
+		pipelines: result.pipelines.map((p) => ({
+			name: p.name,
+			category: p.category,
+			summary: p.summary,
+			runId: p.runId ?? 0,
+			url: p.url ?? "",
+			steps: p.steps.map((s) => ({ job: s.job, step: s.step, errors: s.errors, excerpt: s.excerpt ?? "" })),
+		})),
+		recommended: result.recommended,
+		error: result.error ?? "",
+		conflict: result.conflict,
+	}
+}
+
+function toProtoSkills(skills: CiSkills): CiSkillInfo[] {
+	return Object.entries(skills).flatMap(([actionId, list]) => list.map((s) => ({ actionId, name: s.name, path: s.path })))
 }
 
 function toProtoItem(controller: Controller, board: CiBoard, view: CiTargetView, item: CiBoardItem): CiItem {
 	const link = board.linkFor(item.key)
 	const pr = item.pr
+	const triage = board.triageFor(item)
+	const blocked = board.runBlockedReason(view.target, item)
+	const auto = view.target.autoWatch ? board.autoState(item.key) : undefined
 	return {
 		key: item.key,
 		prId: pr?.id ?? 0,
@@ -81,8 +139,25 @@ function toProtoItem(controller: Controller, board: CiBoard, view: CiTargetView,
 		conversationId: link?.conversationId ?? "",
 		conversationStatus: link ? controller.conversationActivity(link.conversationId) : "",
 		watching: link ? getCiWatchManager()?.watching(link.conversationId) !== undefined : false,
-		runBlocked: board.runBlockedReason(view.target, item) ?? "",
+		runBlocked: blocked ?? "",
 		error: item.error ?? "",
+		triage: triage ? toProtoTriage(triage.result, triage.stale) : undefined,
+		auto: auto
+			? {
+					status: auto.status,
+					actionId: auto.actionId ?? "",
+					attempt: auto.attempt ?? 0,
+					maxAttempts: auto.maxAttempts ?? 0,
+					message: auto.message,
+				}
+			: undefined,
+		actions: itemActions({
+			actions: view.target.actions,
+			item,
+			triage: triage && !triage.stale ? triage.result : undefined,
+			blocked,
+			skills: board.skillsFor(view.target.id),
+		}).map((a) => ({ ...a, disabledReason: a.disabledReason ?? "" })),
 	}
 }
 
@@ -100,11 +175,12 @@ export function toProtoCiBoard(controller: Controller, board: CiBoard | undefine
 		branch: view.target.branch ?? "",
 		prId: view.target.prId ?? 0,
 		prFilter: view.target.prFilter ?? "",
-		autonomy: view.target.autonomy,
 		actions: view.target.actions.map(toProtoAction),
 		items: view.items.map((item) => toProtoItem(controller, board, view, item)),
 		error: view.error ?? "",
 		loading: view.loading,
+		autoWatch: view.target.autoWatch,
+		skills: toProtoSkills(board.skillsFor(view.target.id)),
 	}))
 	return CiBoardState.create({ targets, rateLimited: board.rateLimited })
 }

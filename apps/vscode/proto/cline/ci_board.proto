@@ -19,7 +19,7 @@ service CiBoardService {
   rpc addCiTarget(AddCiTargetRequest) returns (String);
   // Removes a target by id.
   rpc removeCiTarget(StringRequest) returns (Empty);
-  // Changes a target's autonomy, actions or PR filter.
+  // Changes a target's auto-watch switch, actions or PR filter.
   rpc updateCiTarget(UpdateCiTargetRequest) returns (Empty);
   // Fetches a target (by id) or, for an empty id, every target now.
   rpc refreshCiBoard(StringRequest) returns (Empty);
@@ -32,6 +32,11 @@ service CiBoardService {
   rpc pickCiPromptFile(EmptyRequest) returns (String);
   // The window's git repositories that the board can watch.
   rpc listCiRepos(EmptyRequest) returns (CiRepoList);
+  // Analyses an item's failures again now; the result arrives with the board.
+  rpc analyzeCiItem(CiItemRequest) returns (Empty);
+  // Runs a prompt typed or picked for this run only, like an action. Returns
+  // the conversation id; save_as also keeps it as an action of the target.
+  rpc runCiCustomPrompt(RunCiCustomPromptRequest) returns (String);
 }
 
 message CiBoardState {
@@ -57,13 +62,24 @@ message CiTargetView {
   int64 pr_id = 8;
   // "mine" or "all", for "repo" targets.
   string pr_filter = 9;
-  // "manual", "auto" or "full_auto".
-  string autonomy = 10;
+  reserved 10;
+  reserved "autonomy";
   repeated CiActionInfo actions = 11;
   repeated CiItem items = 12;
   string error = 13;
   // True until the first fetch ends.
   bool loading = 14;
+  // Fixes conflicts and recalibrates small test deltas on its own.
+  bool auto_watch = 15;
+  // The repository's skills that fit the built-in actions.
+  repeated CiSkillInfo skills = 16;
+}
+
+message CiSkillInfo {
+  // The built-in action the skill fits.
+  string action_id = 1;
+  string name = 2;
+  string path = 3;
 }
 
 message CiActionInfo {
@@ -71,10 +87,18 @@ message CiActionInfo {
   string label = 2;
   // "builtin", "file" or "text".
   string prompt_kind = 3;
-  // The file path or the text; empty for "builtin".
+  // The file path or the text; the built-in prompt's id for "builtin".
   string prompt_value = 4;
-  // "manual", "on_failure", "on_conflict" or "on_failure_or_conflict".
-  string trigger = 5;
+  reserved 5;
+  reserved "trigger";
+  // "free" (the free auto-router) or "current" (the chat's model).
+  string model = 6;
+  // When it is the row's main button: "conflict", "small-delta", "failure" or "any".
+  string situation = 7;
+  // Auto-watch may start it (fix-conflicts and recalibrate only).
+  bool auto = 8;
+  // One of the board's own actions, which cannot be removed.
+  bool builtin = 9;
 }
 
 message CiItem {
@@ -103,6 +127,72 @@ message CiItem {
   // Why an action cannot run on this item; empty when it can.
   string run_blocked = 16;
   string error = 17;
+  // What the board worked out about the failures; unset when there are none.
+  optional CiTriage triage = 18;
+  // What auto-watch is doing about this item; unset when it is off.
+  optional CiAutoStatus auto = 19;
+  // The actions in the order the row offers them; the first may be its main button.
+  repeated CiItemAction actions = 20;
+}
+
+message CiTriage {
+  // "pending", "done" or "deferred" (rate limit low: names only).
+  string status = 1;
+  // "blocker", "high", "medium", "low" or "info".
+  string severity = 2;
+  string summary = 3;
+  // "model" (a free model) or "heuristic" (rules on job and error text).
+  string source = 4;
+  int64 analyzed_ts = 5;
+  // The full markdown report, when the details did not fit the board.
+  string report_path = 6;
+  // It describes an older state of the item (another commit or set of runs).
+  bool stale = 7;
+  repeated CiPipelineTriage pipelines = 8;
+  // Built-in action ids that fit, best first.
+  repeated string recommended = 9;
+  string error = 10;
+  bool conflict = 11;
+}
+
+message CiPipelineTriage {
+  string name = 1;
+  // "build", "test-regression", "small-test-delta", "infrastructure", "stale" or "unknown".
+  string category = 2;
+  string summary = 3;
+  int64 run_id = 4;
+  string url = 5;
+  repeated CiFailedStep steps = 6;
+}
+
+message CiFailedStep {
+  string job = 1;
+  string step = 2;
+  repeated string errors = 3;
+  // The log lines around the error.
+  string excerpt = 4;
+}
+
+message CiAutoStatus {
+  // "running", "queued", "waiting_slot", "waiting_ci", "capped", "needs_you" or "idle".
+  string status = 1;
+  string action_id = 2;
+  int32 attempt = 3;
+  int32 max_attempts = 4;
+  string message = 5;
+}
+
+message CiItemAction {
+  string action_id = 1;
+  string label = 2;
+  // "primary" (the row's main button) or "menu".
+  string role = 3;
+  // The triage says it fits the failures.
+  bool recommended = 4;
+  string description = 5;
+  string tooltip = 6;
+  // Why it cannot run now; empty when it can.
+  string disabled_reason = 7;
 }
 
 message CiPipeline {
@@ -131,11 +221,32 @@ message AddCiTargetRequest {
 message UpdateCiTargetRequest {
   Metadata metadata = 1;
   string id = 2;
-  optional string autonomy = 3;
+  reserved 3;
+  reserved "autonomy";
   // Replaces the actions when set_actions is true.
   repeated CiActionInfo actions = 4;
   bool set_actions = 5;
   optional string pr_filter = 6;
+  optional bool auto_watch = 7;
+}
+
+message CiItemRequest {
+  Metadata metadata = 1;
+  string target_id = 2;
+  string item_key = 3;
+}
+
+message RunCiCustomPromptRequest {
+  Metadata metadata = 1;
+  string target_id = 2;
+  string item_key = 3;
+  // "text" or "file".
+  string prompt_kind = 4;
+  string prompt_value = 5;
+  // "free" or "current".
+  string model = 6;
+  // When not empty, the prompt is also saved as an action with this name.
+  string save_as = 7;
 }
 
 message RunCiActionRequest {
