@@ -1,6 +1,6 @@
 import { type CiItem, CiItemRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { cn } from "@/lib/utils"
 import { CiBoardServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { CiActionBar } from "./CiActionBar"
@@ -11,7 +11,7 @@ import { CiSeverityChip } from "./CiSeverityChip"
 import { CiTip } from "./CiTip"
 import { CONVERSATION_LABELS, isFailing, MERGE_BADGES, SEVERITY_META } from "./ciBoardUtils"
 import { PipelineDots } from "./PipelineDots"
-import { errorText } from "./useCiBoard"
+import { errorText, useCiRun } from "./useCiBoard"
 
 interface CiItemRowProps {
 	targetId: string
@@ -24,10 +24,13 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 	const [expanded, setExpanded] = useState(false)
 	const [customPrompt, setCustomPrompt] = useState(false)
 	const [error, setError] = useState<string>()
+	const onError = useCallback((message: string | undefined) => setError(message), [])
+	const { busy, run } = useCiRun(targetId, item.key, onError)
 	const badge = MERGE_BADGES[item.mergeState]
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const failing = isFailing(item)
 	const triage = item.triage
+	const expandable = failing || !!triage || item.pipelines.length > 0
 	const severity = triage ? SEVERITY_META[triage.severity] : undefined
 	const branches = `${item.sourceBranch}${item.targetBranch ? ` → ${item.targetBranch}` : ""}${item.author ? ` · ${item.author}` : ""}`
 
@@ -55,8 +58,9 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 			data-testid="ci-item"
 			style={severity && !triage?.stale ? { borderLeftColor: severity.color } : undefined}>
 			<div className="flex items-center gap-1.5 min-w-0">
-				{failing || triage ? (
-					<CiTip tip={expanded ? "Hide the failure details" : "Show what failed, pipeline by pipeline"}>
+				{expandable ? (
+					<CiTip
+						tip={expanded ? "Back to the compact view" : "Show each pipeline, what is wrong with it and its own fix"}>
 						<button
 							aria-expanded={expanded}
 							aria-label={expanded ? "Hide details" : "Show details"}
@@ -128,14 +132,28 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					</CiTip>
 				)}
 				<CiActionBar
+					busy={busy}
 					item={item}
 					onCustomPrompt={() => setCustomPrompt(true)}
 					onEditActions={onEditActions}
-					onError={setError}
+					onError={onError}
+					onRun={run}
 					targetId={targetId}
 				/>
 			</div>
-			{expanded && <CiItemDetails item={item} onAnalyze={analyze} />}
+			{expanded && (
+				<CiItemDetails
+					busy={busy}
+					item={item}
+					onAnalyze={analyze}
+					onRun={run}
+					runningReason={
+						running
+							? "A run started from the board is still going for this pull request. Open its conversation to follow it."
+							: undefined
+					}
+				/>
+			)}
 			{customPrompt && <CiCustomPromptPanel itemKey={item.key} onDone={() => setCustomPrompt(false)} targetId={targetId} />}
 			{(error || item.error) && <div className="text-xs text-error break-words pl-5">{error || item.error}</div>}
 		</div>

@@ -8,7 +8,7 @@ import {
 } from "@shared/proto/cline/ci_board"
 import { getCiWatchManager } from "@/services/devops-mcp/builtin-mcp-registry"
 import type { CiBoard, CiTargetView } from "@/services/devops-mcp/ci-board/ci-board"
-import { itemActions } from "@/services/devops-mcp/ci-board/ci-board-actions"
+import { itemActions, pipelineFixes } from "@/services/devops-mcp/ci-board/ci-board-actions"
 import type { CiSkills } from "@/services/devops-mcp/ci-board/ci-skills"
 import {
 	BUILTIN_ACTIONS,
@@ -116,6 +116,14 @@ function toProtoItem(controller: Controller, board: CiBoard, view: CiTargetView,
 	const triage = board.triageFor(item)
 	const blocked = board.runBlockedReason(view.target, item)
 	const auto = view.target.autoWatch ? board.autoState(item.key) : undefined
+	const actionContext = {
+		actions: view.target.actions,
+		item,
+		triage: triage && !triage.stale ? triage.result : undefined,
+		blocked,
+		skills: board.skillsFor(view.target.id),
+	}
+	const fixes = pipelineFixes(actionContext)
 	return {
 		key: item.key,
 		prId: pr?.id ?? 0,
@@ -151,13 +159,19 @@ function toProtoItem(controller: Controller, board: CiBoard, view: CiTargetView,
 					message: auto.message,
 				}
 			: undefined,
-		actions: itemActions({
-			actions: view.target.actions,
-			item,
-			triage: triage && !triage.stale ? triage.result : undefined,
-			blocked,
-			skills: board.skillsFor(view.target.id),
-		}).map((a) => ({ ...a, disabledReason: a.disabledReason ?? "" })),
+		actions: itemActions(actionContext, fixes).map((a) => ({
+			...a,
+			disabledReason: a.disabledReason ?? "",
+			pipeline: a.pipeline ?? "",
+		})),
+		fixes: fixes.map((f) => ({
+			...f,
+			actionId: f.actionId ?? "",
+			label: f.label ?? "",
+			disabledReason: f.disabledReason ?? "",
+		})),
+		runActionId: link?.actionId ?? "",
+		runPipeline: link?.pipeline ?? "",
 	}
 }
 

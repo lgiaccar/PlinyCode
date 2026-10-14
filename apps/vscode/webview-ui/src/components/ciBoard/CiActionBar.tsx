@@ -1,27 +1,30 @@
-import { type CiItem, type CiItemAction, CiItemRequest, RunCiActionRequest } from "@shared/proto/cline/ci_board"
+import { type CiItem, type CiItemAction, CiItemRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { type KeyboardEvent, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CiBoardServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { CiTip } from "./CiTip"
-import { errorText } from "./useCiBoard"
+import { errorText, runKey } from "./useCiBoard"
 
 interface CiActionBarProps {
 	targetId: string
 	item: CiItem
+	/** The `runKey` of the run being started, if any. */
+	busy?: string
+	onRun: (actionId: string, pipeline?: string) => Promise<void>
 	onCustomPrompt: () => void
 	onEditActions: () => void
 	onError: (message: string | undefined) => void
 }
 
 /**
- * A row's actions: the one that fits the item's state as the main button
- * (Fix conflicts, Recalibrate, Fix CI, or Open conversation while a run is
- * going), and the rest in the menu beside it.
+ * A row's actions: the one that fits the item's state as the main button (the
+ * single fix when one thing is wrong, Fix them all when several are, or Open
+ * conversation while a run is going), and the rest in the menu beside it.
  */
-export const CiActionBar = ({ targetId, item, onCustomPrompt, onEditActions, onError }: CiActionBarProps) => {
-	const [busy, setBusy] = useState<string>()
+export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEditActions, onError }: CiActionBarProps) => {
+	const [analyzing, setAnalyzing] = useState(false)
 	const [open, setOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
@@ -38,19 +41,9 @@ export const CiActionBar = ({ targetId, item, onCustomPrompt, onEditActions, onE
 		return () => document.removeEventListener("mousedown", onDown)
 	}, [open])
 
-	const run = async (action: CiItemAction) => {
+	const run = (action: CiItemAction) => {
 		setOpen(false)
-		setBusy(action.actionId)
-		onError(undefined)
-		try {
-			await CiBoardServiceClient.runCiAction(
-				RunCiActionRequest.create({ targetId, itemKey: item.key, actionId: action.actionId }),
-			)
-		} catch (e) {
-			onError(errorText(e))
-		} finally {
-			setBusy(undefined)
-		}
+		void onRun(action.actionId, action.pipeline)
 	}
 
 	const openConversation = () =>
@@ -58,14 +51,14 @@ export const CiActionBar = ({ targetId, item, onCustomPrompt, onEditActions, onE
 
 	const analyze = async () => {
 		setOpen(false)
-		setBusy("analyze")
+		setAnalyzing(true)
 		onError(undefined)
 		try {
 			await CiBoardServiceClient.analyzeCiItem(CiItemRequest.create({ targetId, itemKey: item.key }))
 		} catch (e) {
 			onError(errorText(e))
 		} finally {
-			setBusy(undefined)
+			setAnalyzing(false)
 		}
 	}
 
@@ -106,7 +99,7 @@ export const CiActionBar = ({ targetId, item, onCustomPrompt, onEditActions, onE
 						<span
 							className={cn(
 								"codicon",
-								busy === primary.actionId
+								busy === runKey(primary.actionId, primary.pipeline)
 									? "codicon-loading codicon-modifier-spin"
 									: primary.recommended
 										? "codicon-sparkle"
@@ -174,12 +167,7 @@ export const CiActionBar = ({ targetId, item, onCustomPrompt, onEditActions, onE
 					</CiTip>
 					{failing && (
 						<CiTip side="left" tip="Read the failed runs again and ask a free model for a new summary and severity.">
-							<button
-								className={menuItem}
-								disabled={busy === "analyze"}
-								onClick={analyze}
-								role="menuitem"
-								type="button">
+							<button className={menuItem} disabled={analyzing} onClick={analyze} role="menuitem" type="button">
 								<span className="codicon codicon-sync text-[11px]" /> Analyze failures again
 							</button>
 						</CiTip>

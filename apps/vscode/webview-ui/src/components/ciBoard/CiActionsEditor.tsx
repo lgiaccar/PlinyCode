@@ -13,7 +13,10 @@ const BUILTIN_TEXT: Record<string, string> = {
 	"fix-conflicts": "Merges the target branch in and resolves the conflicts, keeping both sides' intent.",
 	recalibrate:
 		"Updates expected values of tests that moved slightly, with the repository's own tooling. Never for a regression.",
-	"fix-ci": "Triages the failed pipelines, fixes build and test failures, pushes and watches CI.",
+	"fix-build":
+		"Fixes a failed pipeline's build or failing tests in the code. The main button of a single failed pipeline, and of each pipeline in the details.",
+	"fix-ci":
+		"Fix them all: works out each failed pipeline's problem and applies the fix that fits it (conflicts, build, regression, small delta), pushes and watches CI.",
 	investigate: "Explains each failure with its evidence, in Ask mode: no edits, no pushes.",
 }
 

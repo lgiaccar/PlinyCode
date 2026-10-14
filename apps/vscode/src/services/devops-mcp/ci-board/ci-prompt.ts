@@ -98,6 +98,8 @@ interface CiPromptContext {
 	skills?: CiSkill[]
 	/** Started by auto-watch: nobody is watching the conversation. */
 	auto?: boolean
+	/** The one pipeline the run should fix; the others are left alone. */
+	pipeline?: string
 }
 
 function templateVars(ctx: CiPromptContext): Record<string, string | number | undefined> {
@@ -112,6 +114,8 @@ function templateVars(ctx: CiPromptContext): Record<string, string | number | un
 		worktree: ctx.worktree,
 		reportPath: ctx.triage?.reportPath,
 		severity: ctx.triage?.severity,
+		pipeline: ctx.pipeline,
+		runId: ctx.item.pipelines.find((p) => p.name === ctx.pipeline)?.runId,
 	}
 }
 
@@ -125,6 +129,24 @@ function triageLines(triage: CiTriageResult): string[] {
 	]
 	if (triage.reportPath) {
 		lines.push(`- Full failure report: ${triage.reportPath} (read it before calling pipeline_report)`)
+	}
+	return lines
+}
+
+function scopeLines(ctx: CiPromptContext, pipeline: string): string[] {
+	const status = ctx.item.pipelines.find((p) => p.name === pipeline)
+	const triaged = ctx.triage?.pipelines.find((p) => p.name === pipeline)
+	const lines = [
+		"",
+		"Scope:",
+		`- Fix only the pipeline ${pipeline}${status?.runId !== undefined ? ` (run ${status.runId})` : ""}.`,
+	]
+	if (triaged) {
+		lines.push(`- The triage calls it a ${CATEGORY_TEXT[triaged.category]}: ${defang(triaged.summary)}`)
+	}
+	const others = ctx.item.pipelines.filter((p) => p.name !== pipeline && p.color === "red").map((p) => p.name)
+	if (others.length) {
+		lines.push(`- Leave the other failed pipelines (${others.join(", ")}) alone: they get their own fixes.`)
 	}
 	return lines
 }
@@ -160,6 +182,9 @@ export function composeCiPrompt(ctx: CiPromptContext, body: string): string {
 	}
 	if (ctx.triage?.status === "done" || ctx.triage?.status === "deferred") {
 		lines.push(...triageLines(ctx.triage))
+	}
+	if (ctx.pipeline) {
+		lines.push(...scopeLines(ctx, ctx.pipeline))
 	}
 	if (ctx.builtin && ctx.skills) {
 		lines.push(...skillLines(ctx.skills))

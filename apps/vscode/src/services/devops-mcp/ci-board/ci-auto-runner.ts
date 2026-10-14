@@ -270,7 +270,9 @@ export class CiAutoRunner {
 					result.pipelines.map((p) => ({ name: p.name, category: p.category })),
 					result.source,
 				)
-				return needsYou(`${what} Auto-watch fixes only conflicts and small test deltas; use Fix CI or Investigate.`)
+				return needsYou(
+					`${what} Auto-watch fixes only conflicts and small test deltas; use Fix build, Fix them all or Investigate.`,
+				)
 			}
 			action = target.actions.find((a) => a.id === "recalibrate")
 			if (!action?.auto)

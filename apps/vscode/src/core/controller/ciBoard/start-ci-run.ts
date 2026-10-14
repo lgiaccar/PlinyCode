@@ -22,7 +22,8 @@ const modelFor = (choice: CiModelChoice) => (choice === "free" ? PLINY_FREE_AUTO
 /** A short history title: what ran, on what. */
 function runTitle(run: PreparedCiRun, auto: boolean): string {
 	const where = run.item.pr ? `PR #${run.item.pr.id}` : run.sourceBranch
-	return `${auto ? "CI auto-watch" : "CI board"}: ${run.action.label} on ${where}`
+	const scope = run.pipeline ? ` (${run.pipeline})` : ""
+	return `${auto ? "CI auto-watch" : "CI board"}: ${run.action.label}${scope} on ${where}`
 }
 
 function policyFor(run: PreparedCiRun, scope: CiRunPolicy["scope"]): CiRunPolicy {
@@ -102,6 +103,7 @@ export async function startCiRun(
 		modelId,
 		sourceBranch: run.sourceBranch,
 		remoteName: run.remoteName,
+		pipeline: run.pipeline,
 	})
 	await sendChatButtonClickedEvent()
 	Logger.log(`[CiBoard] Started ${run.action.id} for ${itemKey} in ${run.worktree.path}: ${conversationId}`)

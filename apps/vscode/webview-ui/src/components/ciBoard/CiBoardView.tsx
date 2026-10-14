@@ -72,8 +72,9 @@ const CiBoardView = ({ onDone }: { onDone: () => void }) => {
 										serious it is.
 									</li>
 									<li>
-										The main button offers the fix that fits: Fix conflicts, Recalibrate small test deltas, or
-										Fix CI. More actions, and your own prompts, are in the menu beside it.
+										The main button offers the fix that fits: Fix conflicts, Fix build, Recalibrate small test
+										deltas, or Fix them all when several things are wrong. Expand a row for a fix per
+										pipeline; more actions, and your own prompts, are in the menu beside it.
 									</li>
 									<li>Auto-watch fixes conflicts and small deltas by itself, in the background, for free.</li>
 								</ul>

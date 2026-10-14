@@ -10,9 +10,9 @@ import type { ProviderKind } from "../server/repo"
 export type CiTargetKind = "pr" | "branch" | "repo"
 
 /** The board's own actions. Every target has one of each; their prompt can be overridden. */
-export type CiBuiltinId = "fix-conflicts" | "recalibrate" | "fix-ci" | "investigate"
+export type CiBuiltinId = "fix-conflicts" | "fix-build" | "recalibrate" | "fix-ci" | "investigate"
 
-export const BUILTIN_IDS: readonly CiBuiltinId[] = ["fix-conflicts", "recalibrate", "fix-ci", "investigate"]
+export const BUILTIN_IDS: readonly CiBuiltinId[] = ["fix-conflicts", "fix-build", "recalibrate", "fix-ci", "investigate"]
 
 export const isBuiltinId = (id: string): id is CiBuiltinId => (BUILTIN_IDS as readonly string[]).includes(id)
 
@@ -99,6 +99,8 @@ export interface CiLink {
 	sourceBranch?: string
 	/** The git remote the run pushes to. */
 	remoteName?: string
+	/** The one pipeline the run was asked to fix, when it was scoped to one. */
+	pipeline?: string
 }
 
 /** How often auto-watch started an action for an item. Keyed `item|action|headSha`, or `item|action` for the streak. */
@@ -165,6 +167,9 @@ export interface CiTransition {
 	headSha?: string
 }
 
+/** The fix-ci action's name. It was "Fix CI" before the board offered a fix per pipeline. */
+export const FIX_ALL_LABEL = "Fix them all"
+
 export const BUILTIN_ACTIONS: readonly CiAction[] = [
 	{
 		id: "fix-conflicts",
@@ -173,6 +178,15 @@ export const BUILTIN_ACTIONS: readonly CiAction[] = [
 		model: "free",
 		situation: "conflict",
 		auto: true,
+	},
+	{
+		// The main button of a single failed pipeline; see `ci-board-actions.ts`.
+		id: "fix-build",
+		label: "Fix build",
+		prompt: { kind: "builtin", id: "fix-build" },
+		model: "free",
+		situation: "any",
+		auto: false,
 	},
 	{
 		id: "recalibrate",
@@ -184,7 +198,7 @@ export const BUILTIN_ACTIONS: readonly CiAction[] = [
 	},
 	{
 		id: "fix-ci",
-		label: "Fix CI",
+		label: FIX_ALL_LABEL,
 		prompt: { kind: "builtin", id: "fix-ci" },
 		model: "free",
 		situation: "failure",

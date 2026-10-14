@@ -158,6 +158,7 @@
 				// per-export ignore) because every remaining finding in each one is
 				// this same test-only pattern.
 				"src/components/chat/ChatTextArea.tsx",
+				"src/components/chat/chat-textarea/hooks/useResizableRows.ts",
 				"src/components/chat/chat-view/components/messages/ToolGroupRenderer.tsx",
 				"src/components/chat/chat-view/hooks/useThinkingLoaderRow.ts",
 				"src/components/chat/chat-view/messageReducer.ts",

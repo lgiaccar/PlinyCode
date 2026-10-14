@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { itemActions } from "../ci-board-actions"
+import { itemActions, pipelineFixes } from "../ci-board-actions"
 import { noSkills } from "../ci-skills"
 import { type CiBoardItem, type CiTriageResult, defaultActions } from "../types"
 import { boardPr, SHA_A } from "./fake-board-provider"
@@ -14,29 +14,100 @@ const base: CiBoardItem = {
 	pipelines: [{ name: "ci", color: "red", status: "completed", result: "failure", runId: 1 }],
 }
 
-const triage = (recommended: CiTriageResult["recommended"]): CiTriageResult => ({
+const triage = (recommended: CiTriageResult["recommended"], pipelines: CiTriageResult["pipelines"] = []): CiTriageResult => ({
 	fingerprint: "f",
 	itemKey: "k",
 	status: "done",
 	severity: "low",
 	summary: "",
-	pipelines: [],
+	pipelines,
 	conflict: false,
 	recommended,
 	source: "model",
 	analyzedTs: 0,
 })
 
-const primary = (item: CiBoardItem, t?: CiTriageResult) =>
-	itemActions({ actions: defaultActions(), item, triage: t, skills: noSkills() }).find((a) => a.role === "primary")?.actionId
+const mainButton = (item: CiBoardItem, t?: CiTriageResult) =>
+	itemActions({ actions: defaultActions(), item, triage: t, skills: noSkills() }).find((a) => a.role === "primary")
+const primary = (item: CiBoardItem, t?: CiTriageResult) => mainButton(item, t)?.actionId
+
+const red = (name: string, runId: number) => ({
+	name,
+	color: "red" as const,
+	status: "completed" as const,
+	result: "failure",
+	runId,
+})
+const step = (category: CiTriageResult["pipelines"][number]["category"], name: string) => ({
+	name,
+	category,
+	summary: `${name} ${category}`,
+	steps: [],
+})
 
 describe("itemActions", () => {
-	it("picks the main button from the item's state", () => {
-		expect(primary({ ...base, mergeState: "conflicts" })).toBe("fix-conflicts")
-		expect(primary(base, triage(["recalibrate"]))).toBe("recalibrate")
-		expect(primary(base, triage(["fix-ci"]))).toBe("fix-ci")
-		expect(primary(base)).toBe("fix-ci")
-		expect(primary({ ...base, pipelines: [{ name: "ci", color: "green" }] })).toBeUndefined()
+	it("offers the single fix when one thing is wrong, and Fix them all when several are", () => {
+		const clean = { ...base, pipelines: [{ name: "ci", color: "green" as const }] }
+		expect(primary({ ...clean, mergeState: "conflicts" })).toBe("fix-conflicts")
+		expect(primary(clean)).toBeUndefined()
+
+		// One failed pipeline: its own fix, scoped to it.
+		expect(mainButton(base)).toMatchObject({ actionId: "fix-build", pipeline: "ci", label: "Fix build" })
+		expect(mainButton(base, triage(["recalibrate"], [step("small-test-delta", "ci")]))).toMatchObject({
+			actionId: "recalibrate",
+			pipeline: "ci",
+		})
+		// Infrastructure has no single fix.
+		expect(primary(base, triage([], [step("infrastructure", "ci")]))).toBe("fix-ci")
+
+		// Several problems.
+		expect(primary({ ...base, mergeState: "conflicts" })).toBe("fix-ci")
+		const two = { ...base, pipelines: [red("win", 1), red("linux", 2)] }
+		expect(mainButton(two)).toMatchObject({ actionId: "fix-ci", label: "Fix them all", pipeline: undefined })
+		const deltas = triage(["recalibrate"], [step("small-test-delta", "win"), step("small-test-delta", "linux")])
+		expect(mainButton(two, deltas)).toMatchObject({ actionId: "recalibrate", pipeline: undefined })
+	})
+
+	it("lists each problem with the single fix that fits it", () => {
+		const item: CiBoardItem = {
+			...base,
+			mergeState: "conflicts",
+			pipelines: [
+				{ name: "ok", color: "green" },
+				red("win_build", 1),
+				red("unit", 2),
+				red("regression", 3),
+				red("agent", 4),
+				red("untriaged", 5),
+			],
+		}
+		const fixes = pipelineFixes({
+			actions: defaultActions(),
+			item,
+			triage: triage(
+				[],
+				[
+					step("build", "win_build"),
+					step("test-regression", "unit"),
+					step("small-test-delta", "regression"),
+					step("infrastructure", "agent"),
+				],
+			),
+			skills: noSkills(),
+		})
+		expect(fixes.map((f) => [f.pipeline, f.problem, f.actionId])).toEqual([
+			["", "Has conflicts", "fix-conflicts"],
+			["win_build", "Build failed", "fix-build"],
+			["unit", "Test regression", "fix-build"],
+			["regression", "Small test delta", "recalibrate"],
+			["agent", "Infrastructure", undefined],
+			["untriaged", "Failed", "fix-build"],
+		])
+		expect(fixes[1].tooltip).toContain("Fixes what breaks win_build")
+		expect(fixes[1].alternatives).toEqual(["recalibrate", "investigate"])
+		expect(fixes[3].tooltip).toContain("tests regression runs")
+		expect(fixes[4].tooltip).toContain("re-run the pipeline")
+		expect(fixes[4].alternatives).toEqual(["fix-build", "recalibrate", "investigate"])
 	})
 
 	it("lists every action, main button first, with tooltips that say where and on which model", () => {
@@ -54,12 +125,13 @@ describe("itemActions", () => {
 					auto: false,
 				},
 			],
-			item: { ...base, mergeState: "conflicts" },
+			item: { ...base, mergeState: "conflicts", pipelines: [] },
 			skills,
 			blocked: "This pull request comes from a fork; its branch cannot be pushed to from here.",
 		})
 		expect(actions.map((a) => [a.actionId, a.role])).toEqual([
 			["fix-conflicts", "primary"],
+			["fix-build", "menu"],
 			["recalibrate", "menu"],
 			["fix-ci", "menu"],
 			["investigate", "menu"],
@@ -68,14 +140,15 @@ describe("itemActions", () => {
 		expect(actions[0].tooltip).toContain("Merges stage into feature")
 		expect(actions[0].tooltip).toContain("/fix-conflicts skill")
 		expect(actions[0].tooltip).toContain("FreeAuto")
-		expect(actions[3].tooltip).toContain("Ask mode")
-		expect(actions[4].tooltip).toContain("Runs the prompt in AI/x.md")
-		expect(actions[4].tooltip).toContain("the model selected in the chat")
+		expect(actions[4].tooltip).toContain("Ask mode")
+		expect(actions[5].tooltip).toContain("Runs the prompt in AI/x.md")
+		expect(actions[5].tooltip).toContain("the model selected in the chat")
 		expect(actions.every((a) => a.disabledReason?.includes("fork"))).toBe(true)
 	})
 
 	it("marks the actions the triage recommends", () => {
-		const actions = itemActions({ actions: defaultActions(), item: base, triage: triage(["fix-ci"]), skills: noSkills() })
+		const two = { ...base, pipelines: [red("win", 1), red("linux", 2)] }
+		const actions = itemActions({ actions: defaultActions(), item: two, triage: triage(["fix-ci"]), skills: noSkills() })
 		expect(actions.filter((a) => a.recommended).map((a) => a.actionId)).toEqual(["fix-ci"])
 	})
 })

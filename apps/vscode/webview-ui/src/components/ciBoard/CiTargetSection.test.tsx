@@ -39,6 +39,9 @@ const item = (key: string, overrides: Partial<CiItem> = {}): CiItem => ({
 	runBlocked: "",
 	error: "",
 	actions: [],
+	fixes: [],
+	runActionId: "",
+	runPipeline: "",
 	...overrides,
 })
 
@@ -67,7 +70,7 @@ function makeTarget(overrides: Partial<CiTargetView> = {}): CiTargetView {
 		actions: [
 			builtin("fix-conflicts", "Fix conflicts", true),
 			builtin("recalibrate", "Recalibrate", true),
-			builtin("fix-ci", "Fix CI", false),
+			builtin("fix-ci", "Fix them all", false),
 			builtin("investigate", "Investigate", false),
 		],
 		items: [

@@ -25,9 +25,9 @@ import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hoo
 import { useDropHandling } from "./chat-textarea/hooks/useDropHandling"
 import {
 	getRowHeightPx,
-	MAX_CHAT_INPUT_MAX_ROWS,
 	MIN_CHAT_INPUT_MAX_ROWS,
 	rowsFromDrag,
+	useFittingRows,
 	useResizableRows,
 } from "./chat-textarea/hooks/useResizableRows"
 import { useSchedulePicker } from "./chat-textarea/hooks/useSchedulePicker"
@@ -127,9 +127,12 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const modelSupportsImages = selectedModelInfo.supportsImages !== false
 		const unsupportedImagesAttached = selectedImages.length > 0 && !modelSupportsImages
 
-		const { maxRows, setMaxRows, isDraggingMaxHeight, handleMaxHeightDragMouseDown } = useResizableRows(
+		// The prompt box never grows past what fits the panel, so the conversation keeps its minimum height.
+		const fitRows = useFittingRows(textAreaRef)
+		const { setMaxRows, shownMaxRows, upperRows, isDraggingMaxHeight, handleMaxHeightDragMouseDown } = useResizableRows(
 			persistedChatInputMaxRows,
 			textAreaRef,
+			fitRows,
 		)
 
 		const {
@@ -611,9 +614,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<div
 						aria-label="Drag to resize the prompt box"
 						aria-orientation="horizontal"
-						aria-valuemax={MAX_CHAT_INPUT_MAX_ROWS}
+						aria-valuemax={upperRows}
 						aria-valuemin={MIN_CHAT_INPUT_MAX_ROWS}
-						aria-valuenow={maxRows}
+						aria-valuenow={shownMaxRows}
 						className="absolute left-3.5 right-3.5 top-1 z-2 rounded-xs"
 						data-testid="chat-textarea-resize-handle"
 						onKeyDown={(e) => {
@@ -623,8 +626,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								const delta = e.key === "ArrowUp" ? 1 : -1
 								setMaxRows((current) => {
 									const next = Math.min(
-										MAX_CHAT_INPUT_MAX_ROWS,
-										Math.max(MIN_CHAT_INPUT_MAX_ROWS, current + delta),
+										upperRows,
+										Math.max(MIN_CHAT_INPUT_MAX_ROWS, Math.min(current, upperRows) + delta),
 									)
 									updateSetting("chatInputMaxRows", next)
 									return next
@@ -676,8 +679,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<DynamicTextArea
 						autoFocus={true}
 						data-testid="chat-input"
-						maxRows={maxRows}
-						minRows={3}
+						maxRows={shownMaxRows}
+						minRows={Math.min(3, shownMaxRows)}
 						onBlur={handleBlur}
 						onChange={(e) => {
 							handleInputChange(e)
