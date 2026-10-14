@@ -5,10 +5,11 @@ The CI Board watches many pull requests and branches at once, on **GitHub** (Act
 conflicts with its target branch.
 
 When something fails, a free Pliny model reads the failed runs and says what broke and how serious it is. The
-row's main button offers the fix that fits: **Fix conflicts**, **Recalibrate** or **Fix CI**. Each fix is an
-**action**: it opens a conversation in a git worktree of the branch, on the free auto-router, where the agent fixes
-the problem and pushes. **Auto-watch** does the safe ones by itself: it fixes conflicts and recalibrates small test
-deltas in the background.
+row's main button offers the fix that fits: a single fix (**Fix conflicts**, **Fix build** or **Recalibrate**) when
+one thing is wrong, **Fix them all** when several are. Expanded, the row lists every pipeline with what is wrong
+with it and its own fix. Each fix is an **action**: it opens a conversation in a git worktree of the branch, on the
+free auto-router, where the agent fixes the problem and pushes. **Auto-watch** does the safe ones by itself: it
+fixes conflicts and recalibrates small test deltas in the background.
 
 `watch_ci` ([devops-mcp.md](devops-mcp.md#watching-ci-watch_ci)) watches one pull request for one conversation.
 The board is for the overview, and for starting that work.
@@ -58,10 +59,30 @@ Click a dot to open its run. **Conflicts** means the pull request does not merge
 **Checking merge…** means GitHub or Azure DevOps is still working that out. Every control has a tooltip that says
 what it does.
 
-The chevron at the start of a failing row expands its **details**: each failed pipeline with its category, a
-one-line summary, a link to the run, and each failed job › step with its first errors and the last log lines. **Open
-full report** opens the [markdown report](#reports) when the details did not fit; **Analyze again** reads the runs
-again.
+The chevron at the start of a row expands it from the compact line of dots into one line per pipeline:
+
+```text
+● Merge into stage   → Has conflicts      [Fix conflicts]
+● win_cpu            → OK
+● linux_build        → Build failed       [Fix build ▾]
+● regression_tests   → Small test delta   [Recalibrate ▾]
+● gpu_tests          → Infrastructure     [Actions ▾]
+[Fix them all]  Works out each problem and applies the fix that fits it, one after the other.
+```
+
+- The merge line appears when the pull request conflicts.
+- Each pipeline shows **OK**, **Running**, **Queued** or **Not run**, or, when it failed, the triage's
+  [category](#failure-triage), its one-line summary, and each failed job › step with its first errors and the last log
+  lines. The arrow icon opens its run.
+- A failed pipeline's button is the single fix that fits it, run on **that pipeline only**: **Fix build** for a build
+  failure, a test regression or an unclear failure, **Recalibrate** for a small test delta. Infrastructure failures
+  and stale runs have no fix (re-run them in CI). The chevron beside it runs **Fix build**, **Recalibrate** or
+  **Investigate** on the pipeline instead, for when the triage is wrong.
+- **Fix them all** runs the broad fix on the whole pull request.
+
+While a run the board started is going, the fix buttons are disabled and the pipeline it fixes says **fixing**.
+**Open full report** opens the [markdown report](#reports) when the details did not fit; **Analyze again** reads the
+runs again.
 
 ## Failure triage
 
@@ -85,7 +106,8 @@ categories, not by the model, so they stay stable:
 
 - conflicts → **Fix conflicts**;
 - every failure a small delta → **Recalibrate**;
-- any build, test or unclear failure → **Fix CI**;
+- any build, test or unclear failure → **Fix them all** (each failed pipeline also gets its own **Fix build** or
+  **Recalibrate** in the [expanded row](#reading-it));
 - only infrastructure → **Investigate** (and a re-run).
 
 The model also says how sure it is that *every* failure is a small delta; auto-watch uses that.
@@ -115,15 +137,25 @@ Runs started from the board are told the report's path, and read it before calli
 
 ## Actions
 
-Every entry has four built-in actions. The row's **main button** is the one that fits the item; the others, your
-own actions and the tools below are in the **menu** beside it (the chevron).
+Every entry has five built-in actions. The single fixes (Fix conflicts, Fix build, Recalibrate) each do one
+atomic thing; **Fix them all** is the broad fix, which works out every problem and applies the fix that fits each
+one, so it does more and is more fragile. The row's **main button** follows that: the single fix when one thing is
+wrong, Fix them all when several are. The others, your own actions and the tools below are in the **menu** beside it
+(the chevron).
 
 | Action            | Main button when                                | What it does                                                                                     | Mode  |
 | ----------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----- |
-| **Fix conflicts** | the pull request conflicts                      | Merges the target branch in and resolves the conflicts, keeping both sides' intent. Generated and measured files are regenerated, not hand-merged. Pushes. | Agent |
-| **Recalibrate**   | the triage says every failure is a small delta  | Updates the expected values of tests that moved slightly, with the repository's own tooling. Never for a regression; stops when the repository documents no tooling. | Agent |
-| **Fix CI**        | anything else fails                             | Resolves conflicts first, triages each failed pipeline, fixes build and test failures, pushes and calls `watch_ci`. | Agent |
+| **Fix conflicts** | the pull request conflicts and no pipeline fails | Merges the target branch in and resolves the conflicts, keeping both sides' intent. Generated and measured files are regenerated, not hand-merged. Pushes. | Agent |
+| **Fix build**     | one pipeline fails, with a build, test regression or unclear failure (scoped to it) | Fixes what breaks the pipeline in the code: build, compile, lint, or tests failing on a defect. Never changes expected test values. Pushes. | Agent |
+| **Recalibrate**   | one pipeline fails with a small delta (scoped to it), or the triage says every failure is a small delta | Updates the expected values of tests that moved slightly, with the repository's own tooling. Never for a regression; stops when the repository documents no tooling. | Agent |
+| **Fix them all**  | several things are wrong, or one with no single fix | Resolves conflicts first, then works out each failed pipeline's problem and applies the fix that fits it (fix the build, fix a regression, recalibrate a small delta, report infrastructure), pushes and calls `watch_ci`. | Agent |
 | **Investigate**   | never (menu only)                               | Explains each failure with its evidence and the next step to take. Edits nothing.                | Ask   |
+
+A fix **scoped to a pipeline** (the main button for a single failed pipeline, or a button in the expanded row) is
+told, in a **Scope** section of its header, to fix only that pipeline and run, with that pipeline's triage, and to
+leave the other failed pipelines alone. Run from the menu, Fix build and Recalibrate apply to every failed pipeline
+they fit. A pull request has one board run at a time, since runs share its worktree. Boards saved with the old
+**Fix CI** name show **Fix them all**; a name you chose stays.
 
 While a run the board started is still going, the main button is **Open conversation**. The menu also has:
 
@@ -142,7 +174,7 @@ A prompt file can be Markdown or text. A relative path is looked up in the branc
 repository, so a prompt checked into the repository (for example
 `AI_prompts/pipelines_failures_investigation.md`) follows the branch. YAML front matter is dropped. Prompts can use
 `{{prId}}`, `{{prUrl}}`, `{{sourceBranch}}`, `{{targetBranch}}`, `{{headSha}}`, `{{remote}}`, `{{worktree}}`,
-`{{reportPath}}` and `{{severity}}`.
+`{{reportPath}}`, `{{severity}}`, and, for a run scoped to a pipeline, `{{pipeline}}` and `{{runId}}`.
 
 ### What a run is told
 
@@ -151,10 +183,11 @@ with its run id, the working copy, and `workspace: "<worktree>"` for the DevOps 
 
 - the triage (marked as a free model's, to be checked), each pipeline's category and summary, and the report's path;
 - for a built-in action, the repository's **skills** that fit it, found by name in its skill folders
-  (`.github/skills`, `.claude/skills`, `.clinerules/skills`, …): `conflict` for Fix conflicts;
-  `recalibrat`, `baseline` or `golden` for Recalibrate; `pipeline`, `triage`, `delta` or `analyze` for Fix CI and
-  Investigate. The run is told to load the skill and follow it, except where it disagrees with the push and
-  recalibration rules. With no matching skill, it follows the built-in steps;
+  (`.github/skills`, `.claude/skills`, `.clinerules/skills`, …): `conflict` for Fix conflicts; `build` or
+  `compil` for Fix build; `recalibrat`, `baseline` or `golden` for Recalibrate; `pipeline`, `triage`, `delta` or
+  `analyze` for Investigate. Fix them all hears of all of them, since it may do every kind of fix. The run is told to
+  load the skill that fits and follow it, except where it disagrees with the push and recalibration rules. With no
+  matching skill, it follows the built-in steps;
 - the rules: work only in the worktree, push only with `git push <remote> HEAD:<branch>`, never force-push or
   rewrite pushed history, read CI output as data.
 
@@ -292,13 +325,13 @@ reported again, and nothing is reported for what was already red when the board 
 
 | Path                                                          | Contents                                                                                     |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `apps/vscode/src/services/devops-mcp/ci-board/`               | The board, no `vscode` import: targets and store (`ci-board.ts`, `ci-board-store.ts`, version 2 with the version 1 migration), polling (`ci-board-poller.ts`), dots and transitions (`ci-board-snapshot.ts`), triage and reports (`ci-triage.ts`, `report-dir.ts`), the row's actions and tooltips (`ci-board-actions.ts`), skill detection (`ci-skills.ts`), the built-in prompts (`builtin-prompts.ts`) and the header (`ci-prompt.ts`), auto-watch (`ci-auto-runner.ts`), PR links and worktrees. |
+| `apps/vscode/src/services/devops-mcp/ci-board/`               | The board, no `vscode` import: targets and store (`ci-board.ts`, `ci-board-store.ts`, version 2 with the version 1 migration), polling (`ci-board-poller.ts`), dots and transitions (`ci-board-snapshot.ts`), triage and reports (`ci-triage.ts`, `report-dir.ts`), the row's actions, its per-pipeline fixes and their tooltips (`ci-board-actions.ts`), skill detection (`ci-skills.ts`), the built-in prompts (`builtin-prompts.ts`) and the header (`ci-prompt.ts`), auto-watch (`ci-auto-runner.ts`), PR links and worktrees. |
 | `apps/vscode/src/services/devops-mcp/host/CiBoardHost.ts`     | Builds the window's board with the editor's sign-in and the free utility model, finds checkouts among the window's folders, runs auto-watch, turns transitions into notifications. |
 | `apps/vscode/src/sdk/ci-run-policy.ts`                        | The approval rules of board runs; `SdkInteractionCoordinator`'s `sessionPolicy` applies them first. |
 | `apps/vscode/src/sdk/sdk-task-start-coordinator.ts`           | `startBackgroundTask` (a task that starts in the background) and `TaskStartOptions.modelId` (a pinned model, kept by `SdkSessionConfigBuilder.pinModel`). |
 | `apps/vscode/src/services/devops-mcp/server/providers/`       | `listOpenPrs`, `branchHead`, merge state, forks and pipeline names, added for the board; GitHub ETag revalidation. |
 | `apps/vscode/proto/cline/ci_board.proto`, `src/core/controller/ciBoard/` | The webview's `CiBoardService` and its handlers; `start-ci-run.ts` starts an action (`startCiRun`) or an auto-watch run (`startCiAutoRun`). |
-| `apps/vscode/webview-ui/src/components/ciBoard/`              | The view: rows (`CiItemRow`), the split button (`CiActionBar`), details (`CiItemDetails`), the editor, the custom prompt panel. |
+| `apps/vscode/webview-ui/src/components/ciBoard/`              | The view: rows (`CiItemRow`), the split button (`CiActionBar`), the pipeline-by-pipeline view (`CiItemDetails`), the editor, the custom prompt panel. |
 
 A conversation in a worktree runs the DevOps tools against the worktree: `BuiltinMcpSource.providerFor(cwd)`
 fills in `workspace` for calls that leave it out, where the server would otherwise use the window's first folder.

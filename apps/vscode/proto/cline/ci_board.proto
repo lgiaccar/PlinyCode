@@ -133,6 +133,30 @@ message CiItem {
   optional CiAutoStatus auto = 19;
   // The actions in the order the row offers them; the first may be its main button.
   repeated CiItemAction actions = 20;
+  // One per problem: the merge conflicts, then each failed pipeline, with the fix that fits it.
+  repeated CiPipelineFix fixes = 21;
+  // The action and pipeline the item's conversation was started for; empty when unknown.
+  string run_action_id = 22;
+  string run_pipeline = 23;
+}
+
+// One problem of an item and the single fix that fits it, for the row's
+// expanded, pipeline-by-pipeline view.
+message CiPipelineFix {
+  // The failed pipeline; empty for the pull request's merge conflicts.
+  string pipeline = 1;
+  // What is wrong, e.g. "Has conflicts", "Build failed", "Small test delta".
+  string problem = 2;
+  // The triage's category, "conflict", or "failed" before the triage has one.
+  string category = 3;
+  // The action that fixes it, scoped to the pipeline; empty when none fits (infrastructure, a stale run).
+  string action_id = 4;
+  string label = 5;
+  string tooltip = 6;
+  // Why it cannot run now; empty when it can.
+  string disabled_reason = 7;
+  // Other actions that can run on this pipeline alone, for when the triage is wrong.
+  repeated string alternatives = 8;
 }
 
 message CiTriage {
@@ -193,6 +217,8 @@ message CiItemAction {
   string tooltip = 6;
   // Why it cannot run now; empty when it can.
   string disabled_reason = 7;
+  // The one pipeline it runs on, when it is scoped to one; empty for the whole pull request.
+  string pipeline = 8;
 }
 
 message CiPipeline {
@@ -254,6 +280,8 @@ message RunCiActionRequest {
   string target_id = 2;
   string item_key = 3;
   string action_id = 4;
+  // Scopes the run to one of the item's pipelines; empty for the whole pull request.
+  string pipeline = 5;
 }
 
 message CiRepoList {

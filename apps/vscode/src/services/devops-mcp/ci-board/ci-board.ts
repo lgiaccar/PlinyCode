@@ -13,7 +13,7 @@ import type { CiAutoState } from "./ci-auto-runner"
 import { CiBoardPoller, type CiBoardPollerOptions, type CiBoardTimings } from "./ci-board-poller"
 import type { CiBoardStore } from "./ci-board-store"
 import { composeCiPrompt, loadPromptText } from "./ci-prompt"
-import { type CiSkills, detectCiSkills, noSkills } from "./ci-skills"
+import { type CiSkill, type CiSkills, detectCiSkills, noSkills } from "./ci-skills"
 import { CiTriage, type CiTriageMode, type CompleteFn, fingerprintOf } from "./ci-triage"
 import { classifyTargetInput, parsePrLink } from "./pr-link"
 import { ensureReportDir } from "./report-dir"
@@ -76,7 +76,10 @@ interface CiBoardOptions {
 }
 
 /** What to run: one of the target's actions, or a prompt typed or picked for this run only. */
-export type CiRunRequest = { actionId: string } | { custom: CiPromptSource; label: string; model: CiModelChoice }
+/** An action, optionally scoped to one of the item's pipelines, or a prompt for this run only. */
+export type CiRunRequest =
+	| { actionId: string; pipeline?: string }
+	| { custom: CiPromptSource; label: string; model: CiModelChoice }
 
 export interface PreparedCiRun {
 	prompt: string
@@ -89,6 +92,8 @@ export interface PreparedCiRun {
 	sourceBranch: string
 	/** The checkout's report folder, which runs may read. */
 	reportDir?: string
+	/** The one pipeline the run fixes, when it was scoped to one. */
+	pipeline?: string
 }
 
 type Listener<T> = (value: T) => void
@@ -378,6 +383,10 @@ export class CiBoard {
 		if (blocked) {
 			throw new DevOpsError(blocked)
 		}
+		const pipeline = "pipeline" in request && request.pipeline ? request.pipeline : undefined
+		if (pipeline && !item.pipelines.some((p) => p.name === pipeline)) {
+			throw new DevOpsError(`The pipeline ${pipeline} is no longer on this pull request; refresh the board and try again.`)
+		}
 		const repoRoot = this.checkouts.get(targetId) as string
 		const ctx = await this.loadRepo(repoRoot)
 		const sourceBranch = item.pr?.sourceBranch ?? item.branch
@@ -389,9 +398,16 @@ export class CiBoard {
 		})
 		const body = await loadPromptText(action.prompt, [worktree.path, ctx.root])
 		const builtin = action.prompt.kind === "builtin" ? action.prompt.id : isBuiltinId(action.id) ? action.id : undefined
-		const skills = builtin
-			? (await (this.options.detectSkills ?? detectCiSkills)(worktree.path).catch(() => noSkills()))[builtin]
+		const found = builtin
+			? await (this.options.detectSkills ?? detectCiSkills)(worktree.path).catch(() => noSkills())
 			: undefined
+		// Fix them all may do every kind of fix, so it hears of every kind of skill.
+		const skills =
+			found && builtin === "fix-ci"
+				? dedupeSkills([...found["fix-ci"], ...found["fix-conflicts"], ...found["fix-build"], ...found.recalibrate])
+				: found && builtin
+					? found[builtin]
+					: undefined
 		const triage = this.triageFor(item)
 		const prompt = composeCiPrompt(
 			{
@@ -404,12 +420,13 @@ export class CiBoard {
 				builtin,
 				skills,
 				auto: options.auto,
+				pipeline,
 			},
 			body,
 		)
 		const mode: Mode = action.prompt.kind === "builtin" ? BUILTIN_PROMPTS[action.prompt.id].mode : "act"
 		const reportDir = await (this.options.reportDir ?? ensureReportDir)(ctx.root).catch(() => undefined)
-		return { prompt, worktree, item, action, mode, remoteName: ctx.remoteName, sourceBranch, reportDir }
+		return { prompt, worktree, item, action, mode, remoteName: ctx.remoteName, sourceBranch, reportDir, pipeline }
 	}
 
 	/** Why an action cannot run on `item`, or undefined when it can. */
@@ -491,4 +508,9 @@ function sameSelection(a: CiTarget, b: CiTarget): boolean {
 		sameRemote = a.remoteUrl === b.remoteUrl
 	}
 	return sameRemote && a.branch === b.branch && a.prId === b.prId && a.prFilter === b.prFilter
+}
+
+function dedupeSkills(skills: CiSkill[]): CiSkill[] {
+	const seen = new Set<string>()
+	return skills.filter((s) => !seen.has(s.path) && !!seen.add(s.path))
 }

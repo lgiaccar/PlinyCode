@@ -1,5 +1,6 @@
 import type React from "react"
 import styled from "styled-components"
+import { MIN_CONVERSATION_CSS } from "@/components/chat/chat-textarea/hooks/useResizableRows"
 
 interface ChatLayoutProps {
 	isHidden: boolean
@@ -7,8 +8,10 @@ interface ChatLayoutProps {
 }
 
 /**
- * Main layout container for the chat view
- * Provides the fixed positioning and flex layout structure
+ * Main layout container for the chat view: the conversation on top, the
+ * footer with the prompt box below. The conversation keeps a minimum height
+ * however tall the footer gets; the prompt box caps itself to match (see
+ * `useFittingRows`), so neither can cover the other.
  */
 export const ChatLayout: React.FC<ChatLayoutProps> = ({ isHidden, children }) => {
 	return (
@@ -22,7 +25,7 @@ const ChatLayoutContainer = styled.div.withConfig({
 	shouldForwardProp: (prop) => !["isHidden"].includes(prop),
 })<{ isHidden: boolean }>`
 	display: ${(props) => (props.isHidden ? "none" : "grid")};
-	grid-template-rows: 1fr auto;
+	grid-template-rows: minmax(${MIN_CONVERSATION_CSS}, 1fr) auto;
 	overflow: hidden;
 	padding: 0;
 	margin: 0;

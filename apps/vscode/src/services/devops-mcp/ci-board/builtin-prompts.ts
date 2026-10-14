@@ -42,7 +42,7 @@ ${RULES}
 
 const RECALIBRATE = `# Recalibrate small test deltas
 
-Some tests fail only because measured values moved slightly. Update their expected values with the repository's own recalibration tooling, but only where the change is not a regression.
+Some tests fail only because measured values moved slightly. Update their expected values with the repository's own recalibration tooling, but only where the change is not a regression. When the **Scope** above names a pipeline, recalibrate only the tests that pipeline runs.
 
 ${RULES}
 - Never recalibrate a regression: a metric that got clearly worse, a crash, an exception, a rising count of defects, or a test that fails for a reason other than a value moving. Report those and leave them alone.
@@ -62,9 +62,32 @@ ${RULES}
 
 A table: test, configuration, expected → actual, delta, verdict (recalibrated / left: regression / left: unclear). Then a verdict: "recalibrated and pushed", or "blocked: <what needs a human>".`
 
-const FIX_CI = `# Get this pull request green
+const FIX_BUILD = `# Fix a failing pipeline
 
-Find out why CI fails or the merge conflicts, and fix what you can: merge conflict → merge and resolve; build failure → fix the source; test failure → fix the code, or update tests the way this repository says to.
+Fix what breaks the pipeline the **Scope** above names: a build, compile, link, lint or type-check error, or a test that fails because of a defect in the code. With no Scope, fix every failed pipeline whose build or tests fail. Leave merge conflicts, small test deltas and the other pipelines alone: they have their own fixes.
+
+${RULES}
+- Never change expected or measured test values to make a test pass. If the failure is only a value that moved slightly, stop and say Recalibrate fits.
+
+## Steps
+
+1. \`git status\`, then \`git pull --ff-only {{remote}} {{sourceBranch}}\`.
+2. Read the failure report above, or call \`pipeline_report\` for the pipeline's run id. Find the first real error (not the cascade after it): job › step, file, line, message.
+3. If it is infrastructure (agent lost, timeout, network, disk, artifact download), do not edit anything: report that the pipeline needs a re-run.
+4. Read the code the error points to and this branch's changes (\`git diff {{remote}}/{{targetBranch}}...HEAD\`) to find the cause.
+5. Fix the source for the failing configuration (compiler, platform and flags are in the report). Keep the fix as small as the error allows.
+6. Build or test locally only where the repository documents how and your platform matches; otherwise let CI check it.
+7. Commit ("Fix <pipeline>: <cause>") and \`git push {{remote}} HEAD:{{sourceBranch}}\`.
+
+## Report
+
+- The pipeline, the first error and its cause (one or two sentences).
+- What you changed and what you pushed.
+- A verdict: "fixed, CI running", "needs a re-run (infrastructure)", "not a build failure: <which fix fits>", or "blocked: <what needs a human>".`
+
+const FIX_CI = `# Fix them all: get this pull request green
+
+Work out what is wrong with each pipeline, and apply the fix that fits each problem, one after the other. This is the broad fix: when only one thing is wrong, the board's single fixes (Fix conflicts, Fix build, Recalibrate) do the same with less risk.
 
 ${RULES}
 
@@ -72,38 +95,32 @@ ${RULES}
 
 \`git status\`, then \`git pull --ff-only {{remote}} {{sourceBranch}}\`. If the branch has local commits that are not pushed, push them first so CI tests what you are looking at.
 
-## Step 2: merge conflicts
+## Step 2: list the problems
 
-If the merge state says the pull request conflicts:
+Start from the failure triage and report above, if there is one. Otherwise call \`pr_checks\` and \`pipeline_runs\`, then \`pipeline_report\` for each failed run id. Write a short list, one line per problem:
 
-1. \`git fetch {{remote}} {{targetBranch}}\` and \`git merge {{remote}}/{{targetBranch}}\`.
-2. Resolve each conflict keeping both intents. Never hand-merge generated files or data with measured numbers: take one side and regenerate them the way the repository does.
-3. Commit ("Merge {{targetBranch}} into {{sourceBranch}}: resolve conflicts") and push. The push starts fresh pipelines.
+- the pull request conflicts → **conflicts**;
+- a pipeline fails to build, compile, link, lint or type-check → **build**;
+- a pipeline's tests fail because of a defect (a crash, an assertion, a clearly worse result) → **regression**;
+- a pipeline's tests fail only because measured values moved slightly → **small delta**;
+- agent lost, timeout, network or artifact errors → **infrastructure**;
+- the run tested an older commit → **stale**.
 
-## Step 3: triage the failures
+The triage is a free model's guess: check each line against the logs before you act on it.
 
-Start from the failure triage and report above, if there is one. Otherwise call \`pr_checks\` and \`pipeline_runs\`, then \`pipeline_report\` for each failed run id. Decide for each failed pipeline:
+## Step 3: fix them in this order
 
-- **Infrastructure** (agent lost, timeout, network or artifact errors): say so and recommend a re-run. Do not edit code for it.
-- **Stale run** (it tested an older commit): wait for the run on the current head.
-- **Build** → Step 4. **Tests** → Step 5.
+1. **Conflicts** first, since the other pipelines test the merged code: \`git fetch {{remote}} {{targetBranch}}\`, \`git merge {{remote}}/{{targetBranch}}\`, resolve each conflict keeping both intents (never hand-merge generated files or data with measured numbers: take one side and regenerate them), commit ("Merge {{targetBranch}} into {{sourceBranch}}: resolve conflicts").
+2. **Build**: fix the source for the failing configuration (compiler, platform and flags are in the report). Build locally only where the repository documents how and the platform matches yours.
+3. **Regression**: fix the code. Never update expected values to hide a regression.
+4. **Small delta**: update the expected values only with the repository's documented recalibration tooling, only for the tests that moved, never by hand. With no documented tooling, report them instead.
+5. **Infrastructure**: change nothing; recommend a re-run. **Stale**: wait for the run on the current head.
 
-## Step 4: build failures
+Commit each kind of fix on its own, with a message that names the pipeline and the cause. Push with \`git push {{remote}} HEAD:{{sourceBranch}}\` when you are done (or after the merge, if the build cannot be checked without CI).
 
-Fix the source for the failing configuration (compiler, platform, flags in the report). Build locally only where the repository documents how and the platform matches yours; otherwise push and let CI validate. Commit and push.
+## Step 4: report
 
-## Step 5: test failures
-
-- A real bug in the change: fix it.
-- Expected-value or snapshot updates: only through the repository's documented tooling. Never hand-edit measured values.
-- Never update expected values for a regression (a metric that got worse, a rising count of defects, a crash): report it and stop.
-- If the repository says nothing about how to update expected values, report the failures and the evidence instead of guessing.
-
-## Step 6: report
-
-- Which pipelines failed and at which stage, with the cause.
-- What you changed and what you pushed.
-- A verdict: "fixed, CI running", "needs a re-run (infrastructure)", or "blocked: <what needs a human>".`
+A table: pipeline (or "merge"), problem, what you did, verdict (fixed / re-run / left: why). Then one line: "fixed, CI running", "needs a re-run (infrastructure)", or "blocked: <what needs a human>".`
 
 const INVESTIGATE = `# Investigate this pull request's CI failures
 
@@ -128,10 +145,11 @@ For each failed pipeline:
 - **Cause**: one or two sentences.
 - **Evidence**: run id, job › step, and the key log line.
 - **Category**: build, test regression, small test delta, infrastructure, stale run, or unknown.
-- **Next step**: the action to take (Fix CI, Recalibrate, Fix conflicts, re-run, or what a human must decide).`
+- **Next step**: the action to take (Fix conflicts, Fix build, Recalibrate, Fix them all, a re-run, or what a human must decide).`
 
 export const BUILTIN_PROMPTS: Record<CiBuiltinId, { mode: Mode; body: string }> = {
 	"fix-conflicts": { mode: "act", body: FIX_CONFLICTS },
+	"fix-build": { mode: "act", body: FIX_BUILD },
 	recalibrate: { mode: "act", body: RECALIBRATE },
 	"fix-ci": { mode: "act", body: FIX_CI },
 	investigate: { mode: "ask", body: INVESTIGATE },

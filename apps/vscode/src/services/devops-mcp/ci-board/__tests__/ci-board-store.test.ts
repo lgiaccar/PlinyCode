@@ -119,12 +119,48 @@ describe("CiBoardStore", () => {
 		// A renamed default becomes Fix CI with its name; a prompt file is kept, with its trigger as its situation.
 		expect(custom.actions.map((a) => [a.id, a.label])).toEqual([
 			["fix-conflicts", "Fix conflicts"],
+			["fix-build", "Fix build"],
 			["recalibrate", "Recalibrate"],
 			["fix-ci", "Make it green"],
 			["investigate", "Investigate"],
 			["deltas", "Pipeline deltas"],
 		])
-		expect(custom.actions[4]).toMatchObject({ situation: "failure", model: "free", auto: false })
+		expect(custom.actions[5]).toMatchObject({ situation: "failure", model: "free", auto: false })
+	})
+
+	it("renames the untouched Fix CI action to Fix them all, and adds Fix build", async () => {
+		const fixCi = (label: string) => ({
+			id: "fix-ci",
+			label,
+			prompt: { kind: "builtin", id: "fix-ci" },
+			model: "free",
+			situation: "failure",
+			auto: false,
+		})
+		const target = (id: string, label: string) => ({
+			id,
+			kind: "pr",
+			remoteUrl: "https://github.com/octo/hello.git",
+			provider: "github",
+			prId: 12,
+			autoWatch: false,
+			actions: [fixCi(label)],
+			createdTs: 1,
+		})
+		fs.mkdirSync(path.dirname(file), { recursive: true })
+		fs.writeFileSync(
+			file,
+			JSON.stringify({ version: 2, boards: { "/repo": { targets: [target("a", "Fix CI"), target("b", "Green it")] } } }),
+		)
+		const [a, b] = (await new CiBoardStore(file).load("/repo")).targets
+		expect(a.actions.map((x) => [x.id, x.label])).toEqual([
+			["fix-conflicts", "Fix conflicts"],
+			["fix-build", "Fix build"],
+			["recalibrate", "Recalibrate"],
+			["fix-ci", "Fix them all"],
+			["investigate", "Investigate"],
+		])
+		expect(b.actions.find((x) => x.id === "fix-ci")?.label).toBe("Green it")
 	})
 
 	it("keeps auto-watch counters for a week and the triage without step details", async () => {

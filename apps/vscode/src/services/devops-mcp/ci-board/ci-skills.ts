@@ -20,6 +20,7 @@ export type CiSkills = Record<CiBuiltinId, CiSkill[]>
 
 const PATTERNS: Record<CiBuiltinId, RegExp> = {
 	"fix-conflicts": /conflict/i,
+	"fix-build": /build|compil/i,
 	recalibrate: /recalibrat|re-?baseline|golden/i,
 	"fix-ci": /pipeline|ci[-_]?fail|triage|delta|analy[sz]e/i,
 	investigate: /pipeline|ci[-_]?fail|triage|delta|analy[sz]e/i,
@@ -29,7 +30,7 @@ const CACHE_MS = 60_000
 
 const cache = new Map<string, { at: number; skills: Promise<CiSkill[]> }>()
 
-export const noSkills = (): CiSkills => ({ "fix-conflicts": [], recalibrate: [], "fix-ci": [], investigate: [] })
+export const noSkills = (): CiSkills => ({ "fix-conflicts": [], "fix-build": [], recalibrate: [], "fix-ci": [], investigate: [] })
 
 /** The skills under `root` that fit each built-in action, project skills first. */
 export async function detectCiSkills(root: string, now = Date.now()): Promise<CiSkills> {

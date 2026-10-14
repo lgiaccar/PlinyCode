@@ -10,6 +10,7 @@ import {
 	type CiSituation,
 	type CiTarget,
 	type CiTriageResult,
+	FIX_ALL_LABEL,
 	isBuiltinId,
 	withBuiltins,
 } from "./types"
@@ -204,7 +205,8 @@ function migrateAction(value: unknown): CiAction | undefined {
 		: (SITUATION_OF_TRIGGER[a.trigger ?? ""] ?? "any")
 	return {
 		id: a.id,
-		label: a.label,
+		// The old default name of the fix-ci action follows its rename; a name the user chose stays.
+		label: a.id === "fix-ci" && a.label === "Fix CI" ? FIX_ALL_LABEL : a.label,
 		prompt,
 		model: a.model === "current" ? "current" : "free",
 		situation,

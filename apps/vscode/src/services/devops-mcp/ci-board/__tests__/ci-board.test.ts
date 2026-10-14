@@ -60,7 +60,7 @@ describe("CiBoard", () => {
 			12,
 			"github",
 			false,
-			["fix-conflicts", "recalibrate", "fix-ci", "investigate"],
+			["fix-conflicts", "fix-build", "recalibrate", "fix-ci", "investigate"],
 		])
 
 		const reopened = makeBoard()
@@ -138,7 +138,17 @@ describe("CiBoard", () => {
 		expect(run.worktree.path).toBe(path.join(dir, "worktrees", "repo", "feature"))
 		expect(run.prompt.startsWith(`${CI_BOARD_MARKER} PR #12`)).toBe(true)
 		expect(run.prompt).toContain("- ✗ ci: failure (run 1)")
-		expect(run.prompt).toContain("Get this pull request green")
+		expect(run.prompt).toContain("Fix them all: get this pull request green")
+		expect(run.prompt).not.toContain("Scope:")
+		expect(run.pipeline).toBeUndefined()
+
+		const scoped = await board.prepareRun(t.id, item.key, { actionId: "fix-build", pipeline: "ci" })
+		expect(scoped.pipeline).toBe("ci")
+		expect(scoped.prompt).toContain("Scope:\n- Fix only the pipeline ci (run 1).")
+		expect(scoped.prompt).toContain("# Fix a failing pipeline")
+		await expect(board.prepareRun(t.id, item.key, { actionId: "fix-build", pipeline: "gone" })).rejects.toThrow(
+			/no longer on this pull request/,
+		)
 		expect([run.mode, run.sourceBranch, run.remoteName]).toEqual(["act", "feature", "origin"])
 		expect(run.reportDir).toBe(path.join(repoCtx.root, ".plinycode", "ci-reports"))
 
@@ -168,10 +178,17 @@ describe("CiBoard", () => {
 		const next = await board.updateTarget(t.id, {
 			actions: [
 				{ id: "mine", label: "Mine", prompt: { kind: "text", text: "x" }, model: "free", situation: "any", auto: true },
-				{ ...t.actions[1], auto: false, label: "Recal" },
+				{ ...t.actions[2], auto: false, label: "Recal" },
 			],
 		})
-		expect(next.actions.map((a) => a.id)).toEqual(["fix-conflicts", "recalibrate", "fix-ci", "investigate", "mine"])
-		expect(next.actions[1]).toMatchObject({ label: "Recal", auto: false })
+		expect(next.actions.map((a) => a.id)).toEqual([
+			"fix-conflicts",
+			"fix-build",
+			"recalibrate",
+			"fix-ci",
+			"investigate",
+			"mine",
+		])
+		expect(next.actions[2]).toMatchObject({ id: "recalibrate", label: "Recal", auto: false })
 	})
 })

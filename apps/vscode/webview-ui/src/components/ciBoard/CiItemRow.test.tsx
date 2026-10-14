@@ -1,4 +1,4 @@
-import type { CiItem, CiItemAction, CiTriage } from "@shared/proto/cline/ci_board"
+import type { CiItem, CiItemAction, CiPipelineFix, CiTriage } from "@shared/proto/cline/ci_board"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { CiItemRow } from "./CiItemRow"
@@ -39,15 +39,29 @@ const action = (actionId: string, label: string, overrides: Partial<CiItemAction
 	description: `${label} it.`,
 	tooltip: `${label}: what it does.`,
 	disabledReason: "",
+	pipeline: "",
 	...overrides,
 })
 
 const ACTIONS = [
-	action("fix-ci", "Fix CI", { role: "primary" }),
+	action("fix-ci", "Fix them all", { role: "primary" }),
 	action("fix-conflicts", "Fix conflicts"),
+	action("fix-build", "Fix build"),
 	action("recalibrate", "Recalibrate"),
 	action("investigate", "Investigate"),
 ]
+
+const fix = (pipeline: string, overrides: Partial<CiPipelineFix> = {}): CiPipelineFix => ({
+	pipeline,
+	problem: "Build failed",
+	category: "build",
+	actionId: "fix-build",
+	label: "Fix build",
+	tooltip: `Fixes what breaks ${pipeline}.`,
+	disabledReason: "",
+	alternatives: ["recalibrate", "investigate"],
+	...overrides,
+})
 
 function makeTriage(overrides: Partial<CiTriage> = {}): CiTriage {
 	return {
@@ -99,6 +113,9 @@ function makeItem(overrides: Partial<CiItem> = {}): CiItem {
 		runBlocked: "",
 		error: "",
 		actions: ACTIONS,
+		fixes: [fix("win_cpu")],
+		runActionId: "",
+		runPipeline: "",
 		...overrides,
 	}
 }
@@ -182,7 +199,7 @@ describe("CiItemRow", () => {
 		expect(screen.queryByTestId("ci-item-details")).toBeNull()
 
 		fireEvent.click(screen.getByTestId("ci-expand"))
-		expect(screen.getByTestId("ci-pipeline-detail")).toHaveTextContent("C2065 in mesher.cpp")
+		expect(screen.getAllByTestId("ci-pipeline-detail")[0]).toHaveTextContent("C2065 in mesher.cpp")
 		expect(screen.getByText("e3")).toBeInTheDocument()
 		expect(screen.queryByText("e4")).toBeNull()
 		fireEvent.click(screen.getByText("Show 1 more"))
@@ -200,6 +217,103 @@ describe("CiItemRow", () => {
 		expect(screen.getByTestId("ci-summary")).toHaveTextContent("Analyzing the failures with a free model…")
 		fireEvent.click(screen.getByTestId("ci-expand"))
 		expect(screen.queryByTestId("ci-open-report")).toBeNull()
+	})
+
+	it("expands into one line per pipeline: its problem and its own fix, then Fix them all", async () => {
+		const item = makeItem({
+			mergeState: "conflicts",
+			pipelines: [
+				{ name: "ok_cpu", color: "green", status: "completed", result: "success", runId: 1, url: "" },
+				{ name: "build_cpu", color: "red", status: "completed", result: "failure", runId: 2, url: "" },
+				{ name: "regress", color: "red", status: "completed", result: "failure", runId: 3, url: "" },
+			],
+			fixes: [
+				fix("", {
+					problem: "Has conflicts",
+					category: "conflict",
+					actionId: "fix-conflicts",
+					label: "Fix conflicts",
+					alternatives: [],
+				}),
+				fix("build_cpu"),
+				fix("regress", {
+					problem: "Small test delta",
+					category: "small-test-delta",
+					actionId: "recalibrate",
+					label: "Recalibrate",
+					alternatives: ["fix-build", "investigate"],
+				}),
+			],
+		})
+		render(row(item))
+		fireEvent.click(screen.getByTestId("ci-expand"))
+		const lines = screen.getAllByTestId("ci-pipeline-detail")
+		expect(lines.map((l) => l.querySelector("[data-testid=ci-pipeline-problem]")?.textContent)).toEqual([
+			"Has conflicts",
+			"OK",
+			"Build failed",
+			"Small test delta",
+		])
+		expect(lines.map((l) => l.querySelector("[data-testid=ci-fix-button]")?.textContent ?? "")).toEqual([
+			"Fix conflicts",
+			"",
+			"Fix build",
+			"Recalibrate",
+		])
+
+		fireEvent.click(lines[3].querySelector("[data-testid=ci-fix-button]") as HTMLElement)
+		await waitFor(() =>
+			expect(mocks.runCiAction).toHaveBeenCalledWith(
+				expect.objectContaining({ actionId: "recalibrate", pipeline: "regress" }),
+			),
+		)
+		fireEvent.click(screen.getByRole("button", { name: "Other actions on build_cpu" }))
+		fireEvent.click(screen.getByRole("menuitem", { name: /Investigate on build_cpu only/ }))
+		await waitFor(() =>
+			expect(mocks.runCiAction).toHaveBeenCalledWith(
+				expect.objectContaining({ actionId: "investigate", pipeline: "build_cpu" }),
+			),
+		)
+		fireEvent.click(lines[0].querySelector("[data-testid=ci-fix-button]") as HTMLElement)
+		await waitFor(() =>
+			expect(mocks.runCiAction).toHaveBeenCalledWith(expect.objectContaining({ actionId: "fix-conflicts", pipeline: "" })),
+		)
+
+		fireEvent.click(screen.getByTestId("ci-fix-all"))
+		await waitFor(() =>
+			expect(mocks.runCiAction).toHaveBeenLastCalledWith(expect.objectContaining({ actionId: "fix-ci", pipeline: "" })),
+		)
+	})
+
+	it("disables the pipelines' fixes while a run is going, and marks the pipeline it fixes", () => {
+		render(
+			row(
+				makeItem({
+					conversationId: "conv-1",
+					conversationStatus: "running",
+					runActionId: "fix-build",
+					runPipeline: "win_cpu",
+				}),
+			),
+		)
+		fireEvent.click(screen.getByTestId("ci-expand"))
+		expect(screen.getByTestId("ci-fix-button")).toBeDisabled()
+		expect(screen.getByTestId("ci-fix-all")).toBeDisabled()
+		expect(screen.getAllByTestId("ci-pipeline-detail")[0]).toHaveTextContent("fixing")
+	})
+
+	it("runs a main button scoped to one pipeline on that pipeline", async () => {
+		const single = ACTIONS.map((a) =>
+			a.actionId === "fix-build" ? { ...a, role: "primary", pipeline: "win_cpu" } : { ...a, role: "menu" },
+		)
+		render(row(makeItem({ actions: single })))
+		expect(screen.getByTestId("ci-primary-action")).toHaveTextContent("Fix build")
+		fireEvent.click(screen.getByTestId("ci-primary-action"))
+		await waitFor(() =>
+			expect(mocks.runCiAction).toHaveBeenCalledWith(
+				expect.objectContaining({ actionId: "fix-build", pipeline: "win_cpu" }),
+			),
+		)
 	})
 
 	it("shows what auto-watch is doing", () => {

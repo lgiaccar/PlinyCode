@@ -48,6 +48,7 @@ describe("prompt text", () => {
 	it("runs Investigate in Ask mode and every other built-in in Agent mode", () => {
 		expect(BUILTIN_IDS.map((id) => [id, BUILTIN_PROMPTS[id].mode])).toEqual([
 			["fix-conflicts", "act"],
+			["fix-build", "act"],
 			["recalibrate", "act"],
 			["fix-ci", "act"],
 			["investigate", "ask"],
@@ -150,6 +151,21 @@ describe("composeCiPrompt", () => {
 		expect(prompt).toContain("unattended auto-watch run")
 		expect(prompt).toContain("No repository skill matches this task")
 		expect(prompt).not.toContain("call `watch_ci`")
+	})
+
+	it("scopes a run to one pipeline, with its triage, and leaves the others alone", () => {
+		const two: CiBoardItem = {
+			...item,
+			pipelines: [...item.pipelines, { name: "mac", color: "red", status: "completed", result: "failure", runId: 103 }],
+		}
+		const prompt = composeCiPrompt(
+			{ item: two, worktree: "/wt", inPlace: false, remoteName: "origin", notes: [], triage, pipeline: "win_cpu" },
+			BUILTIN_PROMPTS["fix-build"].body,
+		)
+		expect(prompt).toContain("Scope:\n- Fix only the pipeline win_cpu (run 101).")
+		expect(prompt).toContain("- The triage calls it a small test delta: Volume 1.2% off")
+		expect(prompt).toContain("- Leave the other failed pipelines (mac) alone")
+		expect(prompt).toContain("Fix what breaks the pipeline the **Scope** above names")
 	})
 
 	it("leaves out a pending triage", () => {
