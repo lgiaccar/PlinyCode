@@ -67,11 +67,18 @@ The expanded task header shows a panel under the context bar:
 
 - **Bars:** one stacked bar per LLM call (cache read, cache write, uncached input, output), for
   the last 80 calls.
-- **Summary:** the models used and how many calls each served, call count and cost, input, output
-  and reasoning tokens, and cache reads, writes and hit rate.
+- **Summary:** the model, call count and cost, input, output and reasoning tokens, and cache
+  reads, writes and hit rate.
+- **Model chips:** shown when the conversation used more than one model, as FreeAuto and
+  BalanceAuto do (they pick a model per call). There is one chip per model, with its call count.
+  Picking a chip narrows the summary to that model's calls and dims the other bars. **All models**
+  shows them all again.
 
 Hovering a bar switches the summary to that call. The hit rate is cache reads over all prompt
 tokens: uncached input plus cache reads plus cache writes.
+
+The panel's header row (**Token usage** · calls · cost · hit rate) folds it away and keeps those
+totals in view. It starts open; the choice is remembered per webview in `localStorage`.
 
 The panel reads the `api_req_started` rows, so it covers the main agent's calls. Sub-agent and
 advisor usage appear as one extra line. Each row carries `modelId` and `reasoningTokens` when
