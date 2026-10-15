@@ -154,3 +154,29 @@ export function getSideUsage(messages: ClineMessage[]): { rows: number; tokens: 
 	}
 	return side
 }
+
+/**
+ * The calls grouped by the model that served them, in order of first use. Router conversations
+ * (FreeAuto, BalanceAuto) mix several models; a call whose row names no model counts under
+ * `fallbackModelId` (the conversation's selected model).
+ */
+export function groupCallsByModel(
+	calls: ApiCallUsage[],
+	fallbackModelId: string | undefined,
+): { modelId: string; calls: ApiCallUsage[] }[] {
+	const groups = new Map<string, ApiCallUsage[]>()
+	for (const call of calls) {
+		const modelId = callModelId(call, fallbackModelId)
+		const group = groups.get(modelId)
+		if (group) {
+			group.push(call)
+		} else {
+			groups.set(modelId, [call])
+		}
+	}
+	return [...groups].map(([modelId, groupCalls]) => ({ modelId, calls: groupCalls }))
+}
+
+export function callModelId(call: ApiCallUsage, fallbackModelId: string | undefined): string {
+	return call.modelId ?? fallbackModelId ?? ""
+}
