@@ -36,6 +36,8 @@ export interface TranslationResult {
 		totalCost?: number
 		estimated?: boolean
 		contextBreakdown?: ClineContextBreakdown
+		reasoningTokens?: number
+		modelId?: string
 	}
 }
 
@@ -50,6 +52,8 @@ export function normalizeUsageEvent(usageEvent: {
 	totalCost?: number
 	estimated?: boolean
 	contextBreakdown?: ClineContextBreakdown
+	reasoningTokens?: number
+	modelId?: string
 }): NormalizedUsage {
 	const inputTokens = usageEvent.inputTokens ?? 0
 	const cacheReads = usageEvent.cacheReadTokens ?? 0
@@ -68,6 +72,8 @@ export function normalizeUsageEvent(usageEvent: {
 		totalCost: usageEvent.cost ?? usageEvent.totalCost ?? 0,
 		...(usageEvent.estimated ? { estimated: true } : {}),
 		...(usageEvent.contextBreakdown ? { contextBreakdown: usageEvent.contextBreakdown } : {}),
+		...(usageEvent.reasoningTokens ? { reasoningTokens: usageEvent.reasoningTokens } : {}),
+		...(usageEvent.modelId ? { modelId: usageEvent.modelId } : {}),
 	}
 }
 

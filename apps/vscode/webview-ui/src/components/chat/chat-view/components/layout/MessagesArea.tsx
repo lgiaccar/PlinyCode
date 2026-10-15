@@ -1,8 +1,8 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from "lucide-react"
 import type React from "react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ListRange, Virtuoso } from "react-virtuoso"
+import { useCallback, useEffect, useMemo, useRef } from "react"
+import { Virtuoso } from "react-virtuoso"
 import ChatRow from "@/components/chat/ChatRow"
 import { StickyUserMessage } from "@/components/chat/task-header/StickyUserMessage"
 import { useExtensionState } from "@/context/ExtensionStateContext"
@@ -67,6 +67,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		goToNextUserMessage,
 		isAtBottom,
 		userMessageIndices,
+		topVisibleIndex = 0,
 	} = scrollBehavior
 
 	// Find the index of the scrolled past user message for scrolling
@@ -242,24 +243,17 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		})
 	}, [showInputMarkers, lastRowIndex, userMessageIndices, displayedGroupedMessages])
 
-	const [visibleRange, setVisibleRange] = useState<ListRange>({ startIndex: 0, endIndex: 0 })
-	const handleMarkerRangeChanged = useCallback(
-		(range: ListRange) => {
-			setVisibleRange(range)
-			handleRangeChanged(range)
-		},
-		[handleRangeChanged],
-	)
-
+	// Keyed on the row at the top of the viewport. Virtuoso's rangeChanged startIndex includes the
+	// 3000px overscan above the viewport, so it highlighted a prompt well above the one in view.
 	const activeMarkerIndex = useMemo(() => {
 		let active = -1
 		for (const marker of inputMarkers) {
-			if (marker.index <= visibleRange.startIndex) {
+			if (marker.index <= topVisibleIndex) {
 				active = marker.index
 			}
 		}
 		return active
-	}, [inputMarkers, visibleRange])
+	}, [inputMarkers, topVisibleIndex])
 
 	const prefersReducedMotion = useMemo(
 		() =>
@@ -338,7 +332,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 					initialTopMostItemIndex={displayedGroupedMessages.length - 1} // messages is the raw format returned by extension, modifiedMessages is the manipulated structure that combines certain messages of related type, and visibleMessages is the filtered structure that removes messages that should not be rendered
 					itemContent={itemContent}
 					key={task.ts}
-					rangeChanged={handleMarkerRangeChanged}
+					rangeChanged={handleRangeChanged}
 					ref={virtuosoRef} // anything lower causes issues with followOutput
 					style={{
 						overflowAnchor: "none", // prevent scroll jump when content expands
@@ -369,82 +363,55 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 						))}
 					</div>
 				)}
-				{/* Floating scroll navigation buttons */}
+				{/* Floating scroll navigation buttons. Top to bottom they mirror where they go: very top,
+				    previous prompt, next prompt, very bottom. The bottom button is hidden rather than
+				    unmounted while at the bottom, so the stack never shifts under the cursor and a
+				    repeated click can't land on a different button. */}
 				{hasMultipleUserMessages && (
 					<div className="absolute right-3 bottom-4 flex flex-col gap-1.5 z-20">
-						<button
-							className={cn(
-								"flex items-center justify-center w-7 h-7 rounded-full",
-								"cursor-pointer select-none backdrop-blur-sm",
-								"hover:brightness-110 transition-transform hover:scale-110",
-								"shadow-md",
-								"opacity-70 hover:opacity-100",
-							)}
-							onClick={scrollToTopSmooth}
-							style={{
-								backgroundColor: "var(--vscode-badge-background)",
-								color: "var(--vscode-badge-foreground)",
-							}}
-							title="Scroll to top"
-							type="button">
+						<NavButton onClick={scrollToTopSmooth} title="Scroll to top">
 							<ArrowUp size={16} />
-						</button>
-						<button
-							className={cn(
-								"flex items-center justify-center w-7 h-7 rounded-full",
-								"cursor-pointer select-none backdrop-blur-sm",
-								"hover:brightness-110 transition-transform hover:scale-110",
-								"shadow-md",
-								"opacity-70 hover:opacity-100",
-							)}
-							onClick={goToPreviousUserMessage}
-							style={{
-								backgroundColor: "var(--vscode-badge-background)",
-								color: "var(--vscode-badge-foreground)",
-							}}
-							title="Previous user message"
-							type="button">
+						</NavButton>
+						<NavButton onClick={goToPreviousUserMessage} title="Previous user message">
 							<ChevronUp size={16} />
-						</button>
-						{!isAtBottom && (
-							<button
-								className={cn(
-									"flex items-center justify-center w-7 h-7 rounded-full",
-									"cursor-pointer select-none backdrop-blur-sm",
-									"hover:brightness-110 transition-transform hover:scale-110",
-									"shadow-md",
-									"opacity-70 hover:opacity-100",
-								)}
-								onClick={scrollToBottomSmooth}
-								style={{
-									backgroundColor: "var(--vscode-badge-background)",
-									color: "var(--vscode-badge-foreground)",
-								}}
-								title="Scroll to bottom"
-								type="button">
-								<ArrowDown size={16} />
-							</button>
-						)}
-						<button
-							className={cn(
-								"flex items-center justify-center w-7 h-7 rounded-full",
-								"cursor-pointer select-none backdrop-blur-sm",
-								"hover:brightness-110 transition-transform hover:scale-110",
-								"shadow-md",
-								"opacity-70 hover:opacity-100",
-							)}
-							onClick={goToNextUserMessage}
-							style={{
-								backgroundColor: "var(--vscode-badge-background)",
-								color: "var(--vscode-badge-foreground)",
-							}}
-							title="Next user message"
-							type="button">
+						</NavButton>
+						<NavButton onClick={goToNextUserMessage} title="Next user message">
 							<ChevronDown size={16} />
-						</button>
+						</NavButton>
+						<NavButton hidden={isAtBottom} onClick={scrollToBottomSmooth} title="Scroll to bottom">
+							<ArrowDown size={16} />
+						</NavButton>
 					</div>
 				)}
 			</div>
 		</div>
 	)
 }
+
+const NavButton: React.FC<{ onClick: () => void; title: string; hidden?: boolean; children: React.ReactNode }> = ({
+	onClick,
+	title,
+	hidden,
+	children,
+}) => (
+	<button
+		aria-hidden={hidden || undefined}
+		className={cn(
+			"flex items-center justify-center w-7 h-7 rounded-full",
+			"cursor-pointer select-none backdrop-blur-sm",
+			"hover:brightness-110 transition-transform hover:scale-110",
+			"shadow-md",
+			"opacity-70 hover:opacity-100",
+			hidden && "invisible",
+		)}
+		onClick={onClick}
+		style={{
+			backgroundColor: "var(--vscode-badge-background)",
+			color: "var(--vscode-badge-foreground)",
+		}}
+		tabIndex={hidden ? -1 : undefined}
+		title={title}
+		type="button">
+		{children}
+	</button>
+)

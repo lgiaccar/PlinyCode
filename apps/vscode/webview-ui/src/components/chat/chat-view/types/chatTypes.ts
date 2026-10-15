@@ -111,6 +111,8 @@ export interface ScrollBehavior {
 	pendingScrollToMessage: number | null
 	setPendingScrollToMessage: React.Dispatch<React.SetStateAction<number | null>>
 	scrolledPastUserMessage: ClineMessage | null
+	/** Index into groupedMessages of the row at the top of the viewport (read from the DOM). */
+	topVisibleIndex?: number
 	handleRangeChanged: (range: ListRange) => void
 	goToPreviousUserMessage: () => void
 	goToNextUserMessage: () => void

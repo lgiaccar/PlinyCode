@@ -93,9 +93,9 @@ export const ANTHROPIC_AND_QWEN_CACHE_ROUTING_METADATA =
 
 /**
  * Pliny caches only the Claude models its catalog flags `cache_control`, and
- * honors a breakpoint only on a system/user/assistant content block (measured
- * against the live gateway: message-level, top-level and tool-message markers
- * are silently dropped).
+ * honors a breakpoint only on a content block of a system, user, assistant or
+ * tool message (measured against the live gateway: message-level and
+ * top-level markers are silently dropped).
  */
 export const PLINY_ROUTING_METADATA = createAnthropicRoutingMetadata({
 	promptCacheRoutes: [
@@ -154,14 +154,48 @@ function withBreakpointOnLastText(
 	return undefined;
 }
 
+const MARKABLE_ROLES = new Set(["user", "assistant", "tool"]);
+
+/** Marks the newest markable message at or before `from`; returns its index or -1. */
+function markNewestBefore(
+	messages: WireMessage[],
+	from: number,
+	stopAt: number,
+	marker: unknown,
+): number {
+	for (let i = from; i > stopAt; i--) {
+		if (!MARKABLE_ROLES.has(messages[i].role as string)) {
+			continue;
+		}
+		const marked = withBreakpointOnLastText(messages[i], marker);
+		if (marked) {
+			messages[i] = marked;
+			return i;
+		}
+	}
+	return -1;
+}
+
 /**
  * Moves the request's prompt-cache intent (the top-level `cache_control` that
- * `buildCompatibleProviderOptions` sets when a cache route matched) onto two
+ * `buildCompatibleProviderOptions` sets when a cache route matched) onto
  * content-block breakpoints of a serialized OpenAI-compatible chat body:
  *
  * - the system prompt, caching tools + system for every turn and session;
- * - the newest user/assistant text, a breakpoint that advances each turn so
- *   the whole conversation before the latest tool results is read from cache.
+ * - the newest message, usually the latest tool result, so the whole request
+ *   is written and the next call reads all of it back;
+ * - the end of the previous step (the message before the newest assistant
+ *   turn), which is where the previous call wrote. Marking it again lets the
+ *   cache find that entry even when a step with many parallel tool calls puts
+ *   it beyond Anthropic's 20-block lookback.
+ *
+ * Tool results are marked on a text part of their content: the gateway drops
+ * a message-level marker on a tool message but honors a content-block one
+ * (measured with apps/vscode/scripts/probe-pliny-prompt-cache.ts). Before this,
+ * only user/assistant text was marked, and an assistant turn holding only tool
+ * calls has no text, so for a model that calls tools without narrating
+ * (Claude Sonnet 5 nearly always) the breakpoint fell back to the prompt that
+ * opened the turn and every later call re-paid the whole turn at full price.
  *
  * Every other marker is dropped so the request stays within Anthropic's limit
  * of four breakpoints. A body without cache intent is returned unchanged.
@@ -184,15 +218,25 @@ export function withContentBlockCacheBreakpoints(
 			withBreakpointOnLastText(messages[systemIndex], marker) ??
 			messages[systemIndex];
 	}
-	for (let i = messages.length - 1; i > systemIndex; i--) {
-		if (messages[i].role !== "user" && messages[i].role !== "assistant") {
-			continue;
-		}
-		const marked = withBreakpointOnLastText(messages[i], marker);
-		if (marked) {
-			messages[i] = marked;
-			break;
-		}
+	const newest = markNewestBefore(
+		messages,
+		messages.length - 1,
+		systemIndex,
+		marker,
+	);
+	let lastAssistant = newest - 1;
+	while (
+		lastAssistant > systemIndex &&
+		messages[lastAssistant].role !== "assistant"
+	) {
+		lastAssistant--;
+	}
+	// The newest message may itself be that assistant turn (a request that ends on it).
+	if (messages[newest]?.role === "assistant") {
+		lastAssistant = newest;
+	}
+	if (lastAssistant > systemIndex) {
+		markNewestBefore(messages, lastAssistant - 1, systemIndex, marker);
 	}
 	return { ...rest, messages };
 }

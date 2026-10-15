@@ -115,6 +115,18 @@ describe("createRoutedAgentModel", () => {
 		])
 	})
 
+	it("tags usage with the model that served the call", async () => {
+		const usage: AgentModelEvent = { type: "usage", usage: { inputTokens: 10, outputTokens: 2 } }
+		const { model } = build({
+			delegates: { "snps-provider/first": scripted([TEXT, usage, STOP]) },
+		})
+		expect(await collect(model)).toEqual([
+			TEXT,
+			{ type: "usage", usage: { inputTokens: 10, outputTokens: 2, modelId: "snps-provider/first" } },
+			STOP,
+		])
+	})
+
 	it("appends the router addendum to the system prompt for a free candidate only", async () => {
 		const seen: Array<string | undefined> = []
 		const capturing: AgentModel = {

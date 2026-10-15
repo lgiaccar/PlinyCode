@@ -116,6 +116,13 @@ export interface AgentTokenUsage {
 	 * reflects only the most recent one, same as `estimated`.
 	 */
 	contextBreakdown?: ContextBreakdownTokens;
+	/**
+	 * The concrete model that served the most recent request, when it differs
+	 * from the configured one: router models (FreeAuto, BalanceAuto) pick a
+	 * model per call and report it here. Not summed — reflects only the most
+	 * recent request, same as `estimated`.
+	 */
+	modelId?: string;
 }
 
 /**

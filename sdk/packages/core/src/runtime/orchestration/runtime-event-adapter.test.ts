@@ -727,6 +727,27 @@ describe("RuntimeEventAdapter — usage rolling totals", () => {
 		expect((out[0] as { cost?: number }).cost).toBeCloseTo(0.02, 10);
 	});
 
+	it("forwards the per-request reasoning delta and the routed model", () => {
+		adapter.translate({
+			type: "usage-updated",
+			snapshot: makeSnapshot(),
+			usage: makeUsage({ inputTokens: 100, reasoningTokenCount: 10 }),
+		});
+		const out = adapter.translate({
+			type: "usage-updated",
+			snapshot: makeSnapshot(),
+			usage: makeUsage({
+				inputTokens: 150,
+				reasoningTokenCount: 35,
+				modelId: "snps-provider/kimi-k2.6",
+			}),
+		});
+		expect(out[0]).toMatchObject({
+			reasoningTokens: 25,
+			modelId: "snps-provider/kimi-k2.6",
+		});
+	});
+
 	it("omits cost when the totalCost delta is zero", () => {
 		adapter.translate({
 			type: "usage-updated",

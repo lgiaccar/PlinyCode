@@ -363,7 +363,11 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 							producedContent = true
 							firstContentAt = now()
 						}
-						yield event
+						// Tag usage with the model that served it, so the per-call token panel
+						// and the saved message metrics name the routed model, not the router.
+						yield event.type === "usage" && !event.usage.modelId
+							? { ...event, usage: { ...event.usage, modelId } }
+							: event
 					}
 
 					// A stream that ended without any finish event looks like a clean

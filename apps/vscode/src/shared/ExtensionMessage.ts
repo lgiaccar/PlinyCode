@@ -403,6 +403,10 @@ export interface ClineApiReqInfo {
 	estimated?: boolean
 	/** Breakdown of this request's context tokens by source; see ContextWindowSummary. */
 	contextBreakdown?: ClineContextBreakdown
+	/** Hidden reasoning tokens, when the provider reports them. Already counted in tokensOut. */
+	reasoningTokens?: number
+	/** The model that served this request: the routed model for FreeAuto/BalanceAuto, else the selected one. */
+	modelId?: string
 }
 
 /**

@@ -158,7 +158,11 @@ export interface MessageWithMetadata extends Message {
 		outputTokens?: number;
 		cacheReadTokens?: number;
 		cacheWriteTokens?: number;
+		/** Hidden reasoning tokens, when the provider reported them (part of outputTokens) */
+		reasoningTokenCount?: number;
 		cost?: number;
+		/** The model that served the request when a router model picked it (see AgentTokenUsage.modelId) */
+		modelId?: string;
 	};
 	/** Timestamp of when the message was created */
 	ts?: number;

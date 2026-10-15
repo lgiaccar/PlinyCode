@@ -177,6 +177,7 @@ export class RuntimeEventAdapter {
 		outputTokens: 0,
 		cacheReadTokens: 0,
 		cacheWriteTokens: 0,
+		reasoningTokenCount: 0,
 		totalCost: 0,
 	};
 
@@ -279,6 +280,7 @@ export class RuntimeEventAdapter {
 			outputTokens: 0,
 			cacheReadTokens: 0,
 			cacheWriteTokens: 0,
+			reasoningTokenCount: 0,
 			totalCost: 0,
 		};
 		this.toolStartedAt.clear();
@@ -360,6 +362,9 @@ export class RuntimeEventAdapter {
 			next.cacheReadTokens - this.lastUsage.cacheReadTokens;
 		const deltaCacheWrite =
 			next.cacheWriteTokens - this.lastUsage.cacheWriteTokens;
+		const deltaReasoning =
+			(next.reasoningTokenCount ?? 0) -
+			(this.lastUsage.reasoningTokenCount ?? 0);
 		const prevCost = this.lastUsage.totalCost ?? 0;
 		const nextCost = next.totalCost ?? 0;
 		const deltaCost = nextCost - prevCost;
@@ -368,6 +373,7 @@ export class RuntimeEventAdapter {
 			outputTokens: next.outputTokens,
 			cacheReadTokens: next.cacheReadTokens,
 			cacheWriteTokens: next.cacheWriteTokens,
+			reasoningTokenCount: next.reasoningTokenCount ?? 0,
 			totalCost: next.totalCost,
 		};
 		return [
@@ -382,6 +388,8 @@ export class RuntimeEventAdapter {
 				cost: deltaCost === 0 ? undefined : deltaCost,
 				estimated: next.estimated,
 				contextBreakdown: next.contextBreakdown,
+				...(deltaReasoning > 0 ? { reasoningTokens: deltaReasoning } : {}),
+				...(next.modelId ? { modelId: next.modelId } : {}),
 				totalInputTokens: next.inputTokens,
 				totalOutputTokens: next.outputTokens,
 				totalCacheReadTokens:

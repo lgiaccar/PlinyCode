@@ -166,6 +166,7 @@ export function usageDelta(
 		cacheWriteTokens: cacheWriteTokens > 0 ? cacheWriteTokens : 0,
 		...(reasoningTokenCount > 0 ? { reasoningTokenCount } : {}),
 		...(cost > 0 ? { cost } : {}),
+		...(end.modelId ? { modelId: end.modelId } : {}),
 	};
 }
 
