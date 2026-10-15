@@ -27,8 +27,10 @@ Open it with the pulse icon in the PlinyCode panel's title bar.
 A link can be GitHub's `…/owner/repo/pull/12` (including GitHub Enterprise hosts) or Azure DevOps'
 `…/_git/repo/pullrequest/12`, cloud or on-premises (`https://host/tfs/Collection/Project/_git/repo/pullrequest/12`).
 The board signs in like the DevOps server does ([devops-mcp.md](devops-mcp.md#sign-in)), but never shows a
-sign-in prompt, since it polls in the background. Azure DevOps Server needs `AZURE_DEVOPS_PAT`; a target that
-cannot sign in shows the error under its name.
+sign-in prompt, since it polls in the background. A target that cannot sign in shows the error under its name.
+Azure DevOps Server takes only a personal access token: when one is missing or rejected, the error has a **Sign in
+to Azure DevOps Server** button that stores a token for that host and checks the target again (see
+[devops-mcp.md](devops-mcp.md#azure-devops-server-personal-access-tokens)).
 
 The board belongs to the window's workspace: each window shows, polls and notifies about its own. It is saved in
 `ci-board.json` in PlinyCode's data directory and survives reloads.

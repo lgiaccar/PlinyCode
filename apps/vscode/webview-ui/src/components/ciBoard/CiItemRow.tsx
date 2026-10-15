@@ -1,6 +1,7 @@
 import { type CiItem, CiItemRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { useCallback, useState } from "react"
+import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { cn } from "@/lib/utils"
 import { CiBoardServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { CiActionBar } from "./CiActionBar"
@@ -155,7 +156,18 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 				/>
 			)}
 			{customPrompt && <CiCustomPromptPanel itemKey={item.key} onDone={() => setCustomPrompt(false)} targetId={targetId} />}
-			{(error || item.error) && <div className="text-xs text-error break-words pl-5">{error || item.error}</div>}
+			{(error || item.error) && (
+				<DevOpsErrorText
+					className="text-xs text-error break-words pl-5"
+					error={error || item.error || ""}
+					onSignedIn={() => {
+						setError(undefined)
+						CiBoardServiceClient.refreshCiBoard(StringRequest.create({ value: targetId })).catch((e) =>
+							setError(errorText(e)),
+						)
+					}}
+				/>
+			)}
 		</div>
 	)
 }

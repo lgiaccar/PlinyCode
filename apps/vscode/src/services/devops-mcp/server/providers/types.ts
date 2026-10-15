@@ -266,12 +266,20 @@ export class Http {
 		if (resp.status === 304 && cached) {
 			return new Response(cached.text, { status: 200, headers: { "content-type": cached.contentType } })
 		}
+		const rejected = this.auth.rejectedHint ? ` ${this.auth.rejectedHint}` : ""
 		if (resp.status >= 400) {
-			throw new DevOpsError(`${method} ${target.pathname} -> HTTP ${resp.status}: ${await errorText(resp)}`, resp.status)
+			const hint = resp.status === 401 ? rejected : ""
+			throw new DevOpsError(
+				`${method} ${target.pathname} -> HTTP ${resp.status}: ${await errorText(resp)}${hint}`,
+				resp.status,
+			)
 		}
 		// A rejected Azure DevOps credential is redirected to an HTML sign-in page with a 2xx status.
 		if (accept.includes("json") && (resp.headers.get("content-type") ?? "").includes("text/html")) {
-			throw new DevOpsError(`${method} ${target.pathname} returned a sign-in page; the credentials were not accepted.`)
+			throw new DevOpsError(
+				`${method} ${target.pathname} returned a sign-in page; the credentials were not accepted.${rejected}`,
+				401,
+			)
 		}
 		const etag = resp.headers.get("etag")
 		if (cacheable && etag && this.cache) {

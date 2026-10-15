@@ -34,6 +34,8 @@ const ClineCommands = {
 	ExportTaskToMarkdown: prefix + ".exportTaskToMarkdown",
 	ShowLastModelRequest: prefix + ".showLastModelRequest",
 	OpenMemory: prefix + ".openMemory",
+	SignInAzureDevOpsServer: prefix + ".signInAzureDevOpsServer",
+	ForgetAzureDevOpsServerToken: prefix + ".forgetAzureDevOpsServerToken",
 	AbortCommit: prefix + ".abortGitCommitMessage",
 	// Jupyter Notebook commands
 	JupyterGenerateCell: prefix + ".jupyterGenerateCell",

@@ -223,6 +223,16 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.signInAzureDevOpsServer",
+				"title": "Sign in to Azure DevOps Server (personal access token)",
+				"category": "PlinyCode"
+			},
+			{
+				"command": "cline.forgetAzureDevOpsServerToken",
+				"title": "Forget Azure DevOps Server Token",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.abortGitCommitMessage",
 				"title": "Generate Commit Message with PlinyCode - Stop",
 				"category": "PlinyCode",

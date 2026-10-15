@@ -4,11 +4,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { McpToolProvider } from "@plinycode/core"
 import * as vscode from "vscode"
+import { ExtensionRegistryInfo } from "@/registry"
 import { Logger } from "@/shared/services/Logger"
 import {
 	type DevOpsServerControl,
 	type DevOpsServerState,
 	type DevOpsServerStatus,
+	getCiBoard,
 	getCiWatchManager,
 	notifyBuiltinMcpToolsChanged,
 	registerBuiltinMcpSource,
@@ -17,7 +19,8 @@ import {
 } from "../builtin-mcp-registry"
 import { createProviderCache } from "../ci-watch/ci-watch-source"
 import { ciWatchTools } from "../ci-watch/watch-ci-tool"
-import { hasSupportedRemote } from "../server/repo"
+import { adoCollectionUrl, hasSupportedRemote, loadContext } from "../server/repo"
+import { AdoServerTokens } from "./ado-server-tokens"
 import { CiBoardHost, type CiBoardUi } from "./CiBoardHost"
 import {
 	detectEditorIntegration,
@@ -69,13 +72,28 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 	private readonly statusListeners = new Set<(status: DevOpsServerStatus) => void>()
 	private readonly disposables: vscode.Disposable[] = []
 
+	private adoServerHosts: string[] = []
+
 	private constructor(
 		private readonly context: vscode.ExtensionContext,
 		private readonly broker: TokenBroker,
+		private readonly adoServerTokens: AdoServerTokens,
 	) {}
 
 	static async activate(context: vscode.ExtensionContext, ciBoardUi?: CiBoardUi): Promise<DevOpsMcpService> {
-		const service = new DevOpsMcpService(context, await TokenBroker.start())
+		const adoServerTokens = new AdoServerTokens(context.secrets)
+		const service = new DevOpsMcpService(context, await TokenBroker.start(adoServerTokens), adoServerTokens)
+		service.disposables.push(
+			adoServerTokens,
+			adoServerTokens.onDidChange(() => void service.loadAdoServerHosts()),
+			vscode.commands.registerCommand(ExtensionRegistryInfo.commands.SignInAzureDevOpsServer, () =>
+				service.signInAdoServer(),
+			),
+			vscode.commands.registerCommand(ExtensionRegistryInfo.commands.ForgetAzureDevOpsServerToken, () =>
+				service.pickAndForgetAdoServerToken(),
+			),
+		)
+		void service.loadAdoServerHosts()
 		DevOpsMcpService.current = service
 		setDevOpsServerControl(service)
 		context.subscriptions.push(service)
@@ -134,7 +152,7 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 	}
 
 	/** Providers as the CI watcher and the CI board read them: in this process, with the editor's existing sign-in. */
-	readonly providers = createProviderCache((provider, host) => this.broker.silentToken(provider, host))
+	readonly providers = createProviderCache((provider, host, server) => this.broker.silentToken(provider, host, server))
 	private readonly openRepo = this.providers.forCwd
 
 	private workspaceFolder(): string | undefined {
@@ -160,7 +178,47 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			editorError: this.editorError,
 			enabled: this.enabled,
 			registerWithEditor: this.shareWithEditor,
+			adoServerHosts: this.adoServerHosts,
 		}
+	}
+
+	private async loadAdoServerHosts(): Promise<void> {
+		this.adoServerHosts = await this.adoServerTokens.hosts()
+		this.emit()
+	}
+
+	async signInAdoServer(host?: string): Promise<boolean> {
+		if (!host) {
+			// Offer the on-premises servers of the open folders, with their token pages.
+			for (const folder of vscode.workspace.workspaceFolders ?? []) {
+				const remote = await loadContext(folder.uri.fsPath).then(
+					(ctx) => ctx.remote,
+					() => undefined,
+				)
+				if (remote) this.adoServerTokens.noteServer(remote.host, adoCollectionUrl(remote))
+			}
+		}
+		const token = await this.adoServerTokens.prompt(host || undefined)
+		if (!token) return false
+		// Entries that failed for want of a token try again now.
+		void getCiBoard()
+			?.refresh()
+			.catch(() => undefined)
+		return true
+	}
+
+	async forgetAdoServerToken(host: string): Promise<void> {
+		await this.adoServerTokens.forget(host)
+	}
+
+	private async pickAndForgetAdoServerToken(): Promise<void> {
+		const hosts = await this.adoServerTokens.hosts()
+		if (hosts.length === 0) {
+			void vscode.window.showInformationMessage("No Azure DevOps Server token is stored.")
+			return
+		}
+		const host = await vscode.window.showQuickPick(hosts, { title: "Forget Azure DevOps Server token" })
+		if (host) await this.forgetAdoServerToken(host)
 	}
 
 	onDidChangeStatus(listener: (status: DevOpsServerStatus) => void): vscode.Disposable {

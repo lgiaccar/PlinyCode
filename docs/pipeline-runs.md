@@ -78,7 +78,10 @@ another launch; use **Link run** if it did start.
 ## Permissions and Limits
 
 Authentication reuses the [built-in DevOps credentials](devops-mcp.md).
-Background status checks never prompt for sign-in. Existing tokens must also
+Background status checks never prompt for sign-in. When an Azure DevOps Server
+needs a personal access token, the error has a **Sign in to Azure DevOps Server**
+button, and the pipeline list loads again once a token is stored (see
+[devops-mcp.md](devops-mcp.md#azure-devops-server-personal-access-tokens)). Existing tokens must also
 have permission to queue runs: GitHub Actions write/repository permissions,
 or Azure DevOps build execution permissions. Read access alone is insufficient.
 Environment inputs also require permission to list repository environments.

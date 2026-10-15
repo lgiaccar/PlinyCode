@@ -9,13 +9,16 @@ import {
 	ADO_RESOURCE_ID,
 	BROKER_PATH_ENV,
 	BROKER_SECRET_ENV,
+	type BrokerProvider,
 	type BrokerRequest,
 	type BrokerResponse,
 } from "../shared/broker-protocol"
+import type { AdoServerTokens } from "./ado-server-tokens"
 
 /**
- * Hands out the editor's GitHub / Microsoft sign-in tokens to the devops-mcp
- * server process, which cannot call `vscode.authentication` itself.
+ * Hands out the editor's GitHub / Microsoft sign-in tokens, and the stored
+ * Azure DevOps Server tokens, to the devops-mcp server process, which cannot
+ * call `vscode.authentication` itself.
  *
  * It listens on a per-window named pipe (Windows) or Unix socket, and answers
  * only requests carrying the random secret passed to the server in its
@@ -29,9 +32,10 @@ export class TokenBroker implements vscode.Disposable {
 		private readonly server: net.Server,
 		private readonly socketPath: string,
 		private readonly secret: string,
+		private readonly adoServerTokens: AdoServerTokens,
 	) {}
 
-	static async start(): Promise<TokenBroker> {
+	static async start(adoServerTokens: AdoServerTokens): Promise<TokenBroker> {
 		const id = randomBytes(6).toString("hex")
 		const socketPath =
 			process.platform === "win32"
@@ -39,7 +43,7 @@ export class TokenBroker implements vscode.Disposable {
 				: path.join(os.tmpdir(), `plinycode-devops-${id}.sock`)
 		const secret = randomBytes(32).toString("hex")
 		const server = net.createServer()
-		const broker = new TokenBroker(server, socketPath, secret)
+		const broker = new TokenBroker(server, socketPath, secret, adoServerTokens)
 		server.on("connection", (socket) => broker.handle(socket))
 		await new Promise<void>((resolve, reject) => {
 			server.once("error", reject)
@@ -92,9 +96,9 @@ export class TokenBroker implements vscode.Disposable {
 	}
 
 	/** A token from an existing editor sign-in, for code in the extension host. Never prompts. */
-	async silentToken(provider: BrokerRequest["provider"], host: string): Promise<string | undefined> {
+	async silentToken(provider: BrokerProvider, host: string, server?: string): Promise<string | undefined> {
 		try {
-			return await this.token({ secret: this.secret, provider, host, interactive: false })
+			return await this.token({ secret: this.secret, provider, host, interactive: false, server })
 		} catch {
 			return undefined
 		}
@@ -108,6 +112,14 @@ export class TokenBroker implements vscode.Disposable {
 	}
 
 	private async token(request: BrokerRequest): Promise<string | undefined> {
+		if (request.provider === "ado-server") {
+			// An on-premises server takes no Microsoft sign-in: only a token the user stored for its host.
+			this.adoServerTokens.noteServer(request.host, request.server)
+			return (
+				(await this.adoServerTokens.get(request.host)) ??
+				(request.interactive ? this.adoServerTokens.prompt(request.host) : undefined)
+			)
+		}
 		const [providerId, scopes] =
 			request.provider === "ado"
 				? ["microsoft", [`${ADO_RESOURCE_ID}/.default`]]

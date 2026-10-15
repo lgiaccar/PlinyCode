@@ -20,5 +20,6 @@ export function toProtoDevOpsStatus(status: Status): DevOpsServerStatus {
 		editorError: status.editorError,
 		enabled: status.enabled,
 		registerWithEditor: status.registerWithEditor,
+		adoServerHosts: status.adoServerHosts,
 	})
 }

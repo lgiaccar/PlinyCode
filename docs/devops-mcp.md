@@ -140,12 +140,39 @@ configs copied to other clients, which use steps 1 and 3.
 GitHub Enterprise Server hosts use the editor's `github-enterprise` sign-in, and need
 `DEVOPS_MCP_PROVIDER=github` because the host name alone doesn't identify the API. Azure DevOps Server
 (on-premises / TFS) is auto-detected from a `_git` path segment on any host that isn't `dev.azure.com` or
-`*.visualstudio.com`, so it needs no `DEVOPS_MCP_PROVIDER` setting; sign in with `AZURE_DEVOPS_PAT` (on-premises
-servers are usually PAT-only, not Azure AD). The editor only sees an environment variable that was set before it
-started, so restart it (every window) after setting the PAT. A server that was renamed and redirects its old host
+`*.visualstudio.com`, so it needs no `DEVOPS_MCP_PROVIDER` setting. A server that was renamed and redirects its old host
 name to the new one (a clone's remote still says `tfs.ansys.com`, the server now answers as
 `ado.internal.synopsys.com`) keeps working: the credentials follow a redirect that changes only the host. On such
 servers the agent learns a PR build's commit from the merge commit it built, since they don't report it.
+
+### Azure DevOps Server (personal access tokens)
+
+An on-premises server takes only a personal access token (PAT). It ignores a Microsoft sign-in and treats such a
+request as anonymous (`TF400813: Resource not available for anonymous access`), so for these hosts the server never
+asks for one. It tries, in order:
+
+1. The token stored for that host in the editor.
+2. `AZURE_DEVOPS_PAT` / `AZURE_DEVOPS_EXT_PAT`. The editor only sees an environment variable that was set before it
+   started, so restart every window after setting one.
+3. The editor's prompt for a token, when a tool call (not a background poll) needs one.
+
+To store a token from the GUI:
+
+- When the CI Board or the Pipelines view fails because a server needs a token, the error says
+  `Azure DevOps Server <host> needs a personal access token` and has a **Sign in to Azure DevOps Server** button
+  beside it. The button asks for the token, checks it against the server's `_apis/connectionData` and stores it,
+  then checks the board again. A token the server rejects is asked for again; one that can't be checked (no
+  network, a proxy) is kept.
+- The **PlinyCode DevOps** card in the MCP Servers view lists the hosts with a stored token, with **Replace** and
+  **Forget** buttons, and a sign-in button that offers the servers of the open folders.
+- The Command Palette has **PlinyCode: Sign in to Azure DevOps Server (personal access token)** and
+  **PlinyCode: Forget Azure DevOps Server Token**.
+
+The prompt links to the server's token page (`<collection URL>/_usersSettings/tokens`). The token needs
+**Code (Read)** and **Build (Read & execute)**; add **Code (Read & write)** to let the agent create or update pull
+requests. Tokens are kept in the editor's secret storage (the OS keychain), one per host, so every window uses a
+token as soon as one window stores it. A token is stored under the host in the git remote or pasted link, so a
+renamed server reached under both names needs a token for each.
 
 ## Settings
 
@@ -163,6 +190,8 @@ Environment variables read by the server: `DEVOPS_MCP_WORKSPACE` (repository whe
 - **The card says Error.** Use the restart button. The server's own messages are in **Output → PlinyCode**,
   prefixed `[DevOpsMcp]`.
 - **"No credentials available".** Sign in when the editor asks, or run `gh auth login` / `az login` once.
+- **`TF400813` or "needs a personal access token" on an Azure DevOps Server.** Use the **Sign in to Azure DevOps
+  Server** button next to the error, or **Replace** on the DevOps card if the stored token expired.
 - **"is not inside a git repository".** The agent passed no `workspace` and the window's first folder isn't a
   git checkout; ask it to pass the repository path.
 
@@ -176,6 +205,7 @@ The code is in `apps/vscode/src/services/devops-mcp/`:
 | `server/providers/`        | GitHub and Azure DevOps REST clients behind one `Provider` interface.                       |
 | `host/DevOpsMcpService.ts` | Starts the server, tracks its status, feeds its tools to the agent, registers it with the editor. |
 | `host/token-broker.ts`     | Local pipe that hands the editor's sign-in tokens to the server process.                   |
+| `host/ado-server-tokens.ts` | Azure DevOps Server tokens per host in the editor's secret storage, and the prompt that asks for one. |
 | `builtin-mcp-registry.ts`  | How the agent session and the GUI handlers reach the service without importing `vscode`.   |
 | `ci-watch/`                | `watch_ci`: the watcher, its report, and the per-conversation watches. Runs in the extension host and reuses the server's providers. Delivery into conversations is `src/sdk/sdk-ci-watch-coordinator.ts`. |
 | `ci-board/`, `host/CiBoardHost.ts` | The CI Board: many PRs and branches at once, free-model failure triage, actions that run prompts in git worktrees, and auto-watch. See [ci-board.md](ci-board.md). |
