@@ -130,6 +130,35 @@ describe("MessagesArea", () => {
 		expect(scrollToTopSmooth).toHaveBeenCalledTimes(1)
 	})
 
+	it("keeps the navigation buttons in fixed slots whether or not the view is at the bottom", () => {
+		const task = makeMessage(1, "task", "hello")
+		const groupedMessages = [task, makeMessage(2, "text", "response"), makeMessage(3, "user_feedback", "follow up")]
+		const titles = () =>
+			screen
+				.getAllByRole("button", { hidden: true })
+				.map((button) => button.title)
+				.filter((title) => title.startsWith("Scroll") || title.endsWith("user message"))
+		const renderAt = (isAtBottom: boolean) => (
+			<MessagesArea
+				chatState={makeChatState()}
+				groupedMessages={groupedMessages}
+				messageHandlers={makeMessageHandlers()}
+				modifiedMessages={groupedMessages as ClineMessage[]}
+				scrollBehavior={makeScrollBehavior({ isAtBottom, userMessageIndices: [0, 2] })}
+				task={task}
+			/>
+		)
+		const order = ["Scroll to top", "Previous user message", "Next user message", "Scroll to bottom"]
+
+		const { rerender } = render(renderAt(true))
+		expect(titles()).toEqual(order)
+		expect(screen.getByTitle("Scroll to bottom")).toHaveClass("invisible")
+
+		rerender(renderAt(false))
+		expect(titles()).toEqual(order)
+		expect(screen.getByTitle("Scroll to bottom")).not.toHaveClass("invisible")
+	})
+
 	it("renders one marker per user message and hides them below the 3-message threshold", () => {
 		const task = makeMessage(1, "task", "hello")
 		const groupedMessages = [task, makeMessage(2, "text", "response"), makeMessage(3, "user_feedback", "follow up")]

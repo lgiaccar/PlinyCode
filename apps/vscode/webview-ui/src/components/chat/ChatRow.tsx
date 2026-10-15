@@ -987,6 +987,9 @@ const ChatRowContent = memo(
 							</div>
 						)
 					}
+					// The task row normally lives in the header, but one that reaches the list (an edit
+					// restart, an optimistic first prompt) is still a prompt and keeps the prompt frame.
+					case "task":
 					case "user_feedback":
 						if (isCiWatchReport(message.text)) {
 							return <CiWatchRow text={message.text ?? ""} />

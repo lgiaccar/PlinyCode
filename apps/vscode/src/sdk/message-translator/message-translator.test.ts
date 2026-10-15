@@ -4303,6 +4303,76 @@ describe("tool display paths are relativized to the cwd", () => {
 		])
 	})
 
+	it("rebuilds an answered ask_question as the question and a highlighted answer", () => {
+		const messages = [
+			{ role: "user", content: "clean up the logs" },
+			{
+				role: "assistant",
+				content: [
+					{
+						type: "tool_use",
+						id: "q1",
+						name: "ask_question",
+						input: { question: "Delete old logs?", options: ["Yes", "No"] },
+					},
+				],
+			},
+			{ role: "user", content: [{ type: "tool_result", tool_use_id: "q1", name: "ask_question", content: "No" }] },
+			{
+				role: "assistant",
+				content: [{ type: "tool_use", id: "q2", name: "ask_question", input: { question: "Which folder then?" } }],
+			},
+			{ role: "user", content: [{ type: "tool_result", tool_use_id: "q2", content: "only build/logs" }] },
+			{ role: "assistant", content: "Done." },
+		] as SdkMessage[]
+
+		const rows = sdkMessagesToClineMessages(messages)
+		const asks = rows.filter((m) => m.ask === "followup").map((m) => JSON.parse(m.text ?? "{}"))
+		const answers = rows.filter((m) => m.say === "user_feedback")
+
+		expect(asks).toEqual([
+			{ question: "Delete old logs?", options: ["Yes", "No"], selected: "No" },
+			{ question: "Which folder then?", selected: "only build/logs" },
+		])
+		expect(answers.map((m) => [m.text, m.answersTool])).toEqual([
+			["No", true],
+			["only build/logs", true],
+		])
+		expect(rows.some((m) => m.say === "tool")).toBe(false)
+		// The answers sit inside the turn, so its final text still gets the completion retag.
+		expect(rows.some((m) => m.say === "completion_result" || m.ask === "completion_result")).toBe(true)
+	})
+
+	it("keeps the feedback typed when rejecting a tool call", () => {
+		const denial = (feedback?: string) =>
+			JSON.stringify({
+				error: `This tool call was rejected by the user and not executed.${
+					feedback ? ` The user provided the following feedback:\n<feedback>\n${feedback}\n</feedback>` : ""
+				} -- NOT a tool or system failure.`,
+			})
+		const messages = [
+			{ role: "user", content: "deploy it" },
+			{
+				role: "assistant",
+				content: [{ type: "tool_use", id: "c1", name: "run_commands", input: { commands: ["./deploy.sh"] } }],
+			},
+			{
+				role: "user",
+				content: [{ type: "tool_result", tool_use_id: "c1", content: denial("use staging first"), is_error: true }],
+			},
+			{
+				role: "assistant",
+				content: [{ type: "tool_use", id: "c2", name: "run_commands", input: { commands: ["./deploy.sh staging"] } }],
+			},
+			{ role: "user", content: [{ type: "tool_result", tool_use_id: "c2", content: denial(), is_error: true }] },
+			{ role: "assistant", content: "OK, stopping." },
+		] as SdkMessage[]
+
+		const feedback = sdkMessagesToClineMessages(messages).filter((m) => m.say === "user_feedback")
+
+		expect(feedback.map((m) => [m.text, m.answersTool])).toEqual([["use staging first", true]])
+	})
+
 	it("relativizes persisted-history tool paths via options.cwd", () => {
 		const messages: SdkMessage[] = [
 			{

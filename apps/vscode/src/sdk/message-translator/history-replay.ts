@@ -5,9 +5,10 @@
 import { projectSessionMessagesForDisplay } from "@plinycode/core"
 import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
 import type { AgentEvent, UserInputMode } from "@plinycode/shared"
-import type { ClineApiReqInfo, ClineMessage } from "@shared/ExtensionMessage"
+import type { ClineApiReqInfo, ClineAskQuestion, ClineMessage } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
 import { extractPersistedHookContextChips, isSyntheticSdkUserMessage } from "../sdk-user-message-mapping"
+import { isKnownToolApprovalDenial } from "../tool-approval-denial"
 import { translateSessionEvent } from "./live-events"
 import { extractToolOutputText } from "./tool-mapping"
 import { MessageTranslatorState, normalizeUsageEvent } from "./translator-state"
@@ -73,6 +74,9 @@ function appendPersistedMetricsMessage(
 		cacheReadTokens: message.metrics.cacheReadTokens,
 		cacheWriteTokens: message.metrics.cacheWriteTokens,
 		cost: message.metrics.cost,
+		reasoningTokens: message.metrics.reasoningTokenCount,
+		// The routed model (FreeAuto/BalanceAuto) when one was recorded, else the configured one.
+		modelId: message.metrics.modelId ?? message.modelInfo?.id,
 	})
 
 	if (
@@ -95,6 +99,8 @@ function appendPersistedMetricsMessage(
 			cacheWrites: usage.cacheWrites,
 			cacheReads: usage.cacheReads,
 			cost: usage.totalCost,
+			...(usage.reasoningTokens ? { reasoningTokens: usage.reasoningTokens } : {}),
+			...(usage.modelId ? { modelId: usage.modelId } : {}),
 		} satisfies ClineApiReqInfo),
 		partial: false,
 	})
@@ -131,6 +137,101 @@ function finalizePersistedToolUse(
 		} as AgentEvent,
 		state,
 	)
+}
+
+const ASK_QUESTION_TOOLS = new Set(["ask_question", "ask_followup_question"])
+const REJECTION_FEEDBACK = /<feedback>\n([\s\S]*?)\n<\/feedback>/
+
+/**
+ * A tool result's text. A failed result is persisted as the JSON string `{"error": "..."}`,
+ * which is unwrapped here so the denial wording and the user's feedback can be read.
+ */
+function persistedToolResultText(output: unknown): string {
+	const text = extractToolOutputText(output)
+	if (text.startsWith("{")) {
+		try {
+			const parsed = JSON.parse(text) as { error?: unknown }
+			if (typeof parsed.error === "string") {
+				return parsed.error
+			}
+		} catch {
+			// Not JSON; use the text as is
+		}
+	}
+	return text
+}
+
+function readAskQuestionInput(input: unknown): { question: string; options?: string[] } | undefined {
+	let record = input
+	if (typeof record === "string") {
+		try {
+			record = JSON.parse(record)
+		} catch {
+			return undefined
+		}
+	}
+	if (!record || typeof record !== "object") {
+		return undefined
+	}
+	const { question, options } = record as { question?: unknown; options?: unknown }
+	if (typeof question !== "string" || !question.trim()) {
+		return undefined
+	}
+	const choices = Array.isArray(options)
+		? options.filter((option): option is string => typeof option === "string" && option.trim().length > 0)
+		: []
+	return { question: question.trim(), ...(choices.length > 0 ? { options: choices } : {}) }
+}
+
+/**
+ * The rows the live path shows for an ask_question call (see sdk-interaction-coordinator): the
+ * question as ask:"followup" and the user's answer as a highlighted user_feedback row. The answer
+ * is persisted only as the tool's result, so without this a reopened conversation lost both.
+ * `selected` marks the question answered, so its option buttons stay inactive; an answer that
+ * just repeats a clicked option is hidden as an echo, as it is live.
+ */
+function askQuestionRows(
+	toolUse: SdkToolUseBlock,
+	state: MessageTranslatorState,
+	output?: unknown,
+	isError?: boolean,
+): ClineMessage[] {
+	const ask = readAskQuestionInput(toolUse.input)
+	if (!ask) {
+		return []
+	}
+	const answer = output === undefined || isError ? "" : persistedToolResultText(output).trim()
+	const question: ClineAskQuestion = {
+		question: ask.question,
+		...(ask.options ? { options: ask.options } : {}),
+		...(answer ? { selected: answer } : {}),
+	}
+	const rows: ClineMessage[] = [
+		{ ts: state.nextTs(), type: "ask", ask: "followup", text: JSON.stringify(question), partial: false },
+	]
+	if (answer) {
+		rows.push({ ts: state.nextTs(), type: "say", say: "user_feedback", text: answer, partial: false, answersTool: true })
+	}
+	return rows
+}
+
+/**
+ * The feedback the user typed when rejecting a tool call. Live it shows as a highlighted
+ * user_feedback row; persisted it is only inside the rejected tool's error, whose row the
+ * replay drops, so a reopened conversation lost it.
+ */
+function rejectionFeedbackRow(state: MessageTranslatorState, output: unknown, isError?: boolean): ClineMessage | undefined {
+	if (!isError) {
+		return undefined
+	}
+	const text = persistedToolResultText(output)
+	if (!isKnownToolApprovalDenial(text)) {
+		return undefined
+	}
+	const feedback = REJECTION_FEEDBACK.exec(text)?.[1]?.trim()
+	return feedback
+		? { ts: state.nextTs(), type: "say", say: "user_feedback", text: feedback, partial: false, answersTool: true }
+		: undefined
 }
 
 export interface SdkMessagesToClineMessagesOptions {
@@ -177,7 +278,11 @@ export function sdkMessagesToClineMessages(
 
 	const flushUnmatchedToolUses = () => {
 		for (const toolUse of pendingToolUses.values()) {
-			clineMessages.push(...finalizePersistedToolUse(toolUse, state))
+			clineMessages.push(
+				...(ASK_QUESTION_TOOLS.has(toolUse.name)
+					? askQuestionRows(toolUse, state)
+					: finalizePersistedToolUse(toolUse, state)),
+			)
 		}
 		pendingToolUses.clear()
 	}
@@ -378,7 +483,16 @@ export function sdkMessagesToClineMessages(
 			}
 
 			pendingToolUses.delete(block.tool_use_id)
+			// The answer arrives inside a tool result, so the turn goes on (no endPrecedingTurn), as live.
+			if (ASK_QUESTION_TOOLS.has(toolUse.name)) {
+				clineMessages.push(...askQuestionRows(toolUse, state, block.content, block.is_error))
+				continue
+			}
 			clineMessages.push(...finalizePersistedToolUse(toolUse, state, block.content, block.is_error))
+			const feedback = rejectionFeedbackRow(state, block.content, block.is_error)
+			if (feedback) {
+				clineMessages.push(feedback)
+			}
 		}
 	}
 

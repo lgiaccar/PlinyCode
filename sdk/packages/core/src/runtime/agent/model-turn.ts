@@ -623,6 +623,7 @@ async function updateUsage(
 		// per-turn delta event below (see translateUsage in core).
 		estimated: usage.estimated,
 		contextBreakdown: usage.contextBreakdown,
+		modelId: usage.modelId,
 	};
 	await ctx.emit({
 		type: "usage-updated",

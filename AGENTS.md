@@ -38,6 +38,7 @@ Design and operations notes are in `docs/`:
 - [docs/edit-problems.md](docs/edit-problems.md): how edit results list the new errors VS Code reports for the edited files, and the `plinycode.edits.reportNewProblems` setting.
 - [docs/environment-context.md](docs/environment-context.md): the git snapshot in the system prompt (taken once per conversation) and the editor state sent with each user message, and how both stay out of the chat.
 - [docs/memory.md](docs/memory.md): repo memory: the per-repository and per-user `MEMORY.md` files loaded into the system prompt within `plinycode.memory.maxTokens`, `save_memory` and `/remember`, distillation proposals, and the past-conversation search tools.
+- [docs/prompt-cache.md](docs/prompt-cache.md): which Pliny models are prompt-cached, where the cache breakpoints go and why, the live-gateway probe that measures it, and the task header's per-call token usage panel.
 - [docs/advisor-tool.md](docs/advisor-tool.md): the `ask_advisor` tool, which lets a free or cheap model ask a stronger one for advice at a hard step, and how its cost is recorded and budget-checked.
 - [docs/review-pass.md](docs/review-pass.md): the reviewer pass, in which a second free model reads the diff before a FreeAuto or BalanceAuto act-mode run ends and hands likely defects back once.
 - The CI watcher (`watch_ci`), which wakes a conversation when CI finishes, is described in [docs/devops-mcp.md](docs/devops-mcp.md).

@@ -26,6 +26,7 @@ export function useScrollBehavior(
 	pendingScrollToMessage: number | null
 	setPendingScrollToMessage: React.Dispatch<React.SetStateAction<number | null>>
 	scrolledPastUserMessage: ClineMessage | null
+	topVisibleIndex: number
 	handleRangeChanged: (range: ListRange) => void
 } {
 	// Refs
@@ -40,6 +41,7 @@ export function useScrollBehavior(
 	const [isAtTop, setIsAtTop] = useState(false)
 	const [pendingScrollToMessage, setPendingScrollToMessage] = useState<number | null>(null)
 	const [scrolledPastUserMessage, setScrolledPastUserMessage] = useState<ClineMessage | null>(null)
+	const [topVisibleIndex, setTopVisibleIndex] = useState(0)
 
 	// Find all user feedback messages
 	const userFeedbackMessages = useMemo(() => {
@@ -58,37 +60,126 @@ export function useScrollBehavior(
 		return indices
 	}, [groupedMessages])
 
-	// Navigate to the previous user message (going up in the conversation)
-	const goToPreviousUserMessage = useCallback(() => {
-		const startIndex = visibleRangeRef.current.startIndex
-		// Find the closest user message that is above the current viewport
-		for (let i = userMessageIndices.length - 1; i >= 0; i--) {
-			if (userMessageIndices[i] < startIndex) {
-				virtuosoRef.current?.scrollToIndex({
-					index: userMessageIndices[i],
-					behavior: "smooth",
-					align: "center",
-				})
-				return
-			}
-		}
-	}, [userMessageIndices])
+	const getScroller = useCallback(
+		() => scrollContainerRef.current?.querySelector<HTMLElement>('[data-virtuoso-scroller="true"]') ?? null,
+		[],
+	)
 
-	// Navigate to the next user message (going down in the conversation)
-	const goToNextUserMessage = useCallback(() => {
-		const startIndex = visibleRangeRef.current.startIndex
-		// Find the closest user message that is below the current viewport
-		for (const idx of userMessageIndices) {
-			if (idx > startIndex) {
-				virtuosoRef.current?.scrollToIndex({
-					index: idx,
-					behavior: "smooth",
-					align: "center",
-				})
+	// The row at the top of the viewport, read from the DOM. Virtuoso's rangeChanged can't be used
+	// for this: it reports the rendered range, which includes the 3000px increaseViewportBy band
+	// above the viewport, so its startIndex sits well above what the user is looking at.
+	// The reading line sits just below the sticky prompt header, so a prompt that navigation
+	// aligned under the header counts as the top row.
+	const getTopVisibleRow = useCallback((): { index: number; cutOff: boolean } | null => {
+		const scroller = getScroller()
+		if (!scroller) {
+			return null
+		}
+		const scrollerTop = scroller.getBoundingClientRect().top
+		const readingLine = scrollerTop + STICKY_HEADER_HEIGHT + 2
+		for (const row of scroller.querySelectorAll<HTMLElement>("[data-index]")) {
+			const rect = row.getBoundingClientRect()
+			if (rect.height > 0 && rect.bottom > readingLine) {
+				const index = Number(row.dataset.index)
+				if (Number.isNaN(index)) {
+					continue
+				}
+				return { index, cutOff: rect.top < scrollerTop - 4 }
+			}
+		}
+		return null
+	}, [getScroller])
+
+	// The last prompt navigated to, so repeated clicks during a smooth scroll step from the
+	// target rather than from wherever the animation happens to be.
+	const navTargetRef = useRef<{ index: number; at: number } | null>(null)
+	const NAV_TARGET_TTL_MS = 800
+
+	const scrollToRow = useCallback(
+		(index: number) => {
+			disableAutoScrollRef.current = true
+			navTargetRef.current = { index, at: Date.now() }
+			// Smooth-scrolling to a row that isn't rendered goes through estimated heights and
+			// Virtuoso corrects it in several animations, which is slow and can land off-target.
+			const rendered = !!getScroller()?.querySelector(`[data-index="${index}"]`)
+			const isFirstPrompt = userMessageIndices[0] === index
+			virtuosoRef.current?.scrollToIndex({
+				index,
+				align: "start",
+				behavior: rendered ? "smooth" : "auto",
+				offset: isFirstPrompt ? 0 : -STICKY_HEADER_HEIGHT,
+			})
+		},
+		[getScroller, userMessageIndices],
+	)
+
+	const getNavigationAnchor = useCallback((): { index: number; cutOff: boolean } => {
+		const target = navTargetRef.current
+		if (target && Date.now() - target.at < NAV_TARGET_TTL_MS) {
+			return { index: target.index, cutOff: false }
+		}
+		return getTopVisibleRow() ?? { index: visibleRangeRef.current.startIndex, cutOff: false }
+	}, [getTopVisibleRow])
+
+	// Smooth scroll to bottom with debounce
+	const scrollToBottomSmooth = useMemo(
+		() =>
+			debounce(
+				() => {
+					virtuosoRef.current?.scrollTo({
+						top: Number.MAX_SAFE_INTEGER,
+						behavior: "smooth",
+					})
+				},
+				10,
+				{ immediate: true },
+			),
+		[],
+	)
+
+	// Scroll to the very top of the conversation. Disables auto-scroll so streaming
+	// output doesn't yank the view back down.
+	const scrollToTopSmooth = useCallback(() => {
+		disableAutoScrollRef.current = true
+		navTargetRef.current = null
+		const rendered = !!getScroller()?.querySelector('[data-index="0"]')
+		virtuosoRef.current?.scrollToIndex({
+			index: 0,
+			align: "start",
+			behavior: rendered ? "smooth" : "auto",
+		})
+	}, [getScroller])
+
+	// Navigate to the previous user message (going up in the conversation). A prompt cut off at
+	// the top is brought fully into view first; above the first prompt it goes to the top.
+	const goToPreviousUserMessage = useCallback(() => {
+		const anchor = getNavigationAnchor()
+		if (anchor.cutOff && userMessageIndices.includes(anchor.index)) {
+			scrollToRow(anchor.index)
+			return
+		}
+		for (let i = userMessageIndices.length - 1; i >= 0; i--) {
+			if (userMessageIndices[i] < anchor.index) {
+				scrollToRow(userMessageIndices[i])
 				return
 			}
 		}
-	}, [userMessageIndices])
+		scrollToTopSmooth()
+	}, [getNavigationAnchor, userMessageIndices, scrollToRow, scrollToTopSmooth])
+
+	// Navigate to the next user message (going down in the conversation); past the last prompt it
+	// goes to the bottom, which re-engages auto-scroll.
+	const goToNextUserMessage = useCallback(() => {
+		const anchor = getNavigationAnchor()
+		for (const idx of userMessageIndices) {
+			if (idx > anchor.index) {
+				scrollToRow(idx)
+				return
+			}
+		}
+		navTargetRef.current = null
+		scrollToBottomSmooth()
+	}, [getNavigationAnchor, userMessageIndices, scrollToRow, scrollToBottomSmooth])
 
 	// Track scroll position to detect which user message has been scrolled past
 	// Shows the most recent user message that's above the current viewport
@@ -166,56 +257,46 @@ export function useScrollBehavior(
 			setIsAtTop(scrollableElement.scrollTop <= 16)
 		}
 
-		const handleScroll = () => {
+		const sync = () => {
 			syncAtTop()
 			checkScrolledPastUserMessage()
+			setTopVisibleIndex(getTopVisibleRow()?.index ?? 0)
+		}
+
+		// One layout read per frame: the checks call getBoundingClientRect on several rows, and
+		// running them on every scroll event made smooth navigation janky.
+		let frame: number | null = null
+		const handleScroll = () => {
+			if (frame !== null) {
+				return
+			}
+			frame = requestAnimationFrame(() => {
+				frame = null
+				sync()
+			})
 		}
 
 		scrollableElement.addEventListener("scroll", handleScroll, { passive: true })
 
-		syncAtTop()
-		checkScrolledPastUserMessage()
+		sync()
 
 		return () => {
+			if (frame !== null) {
+				cancelAnimationFrame(frame)
+			}
 			scrollableElement.removeEventListener("scroll", handleScroll)
 		}
-	}, [checkScrolledPastUserMessage])
+	}, [checkScrolledPastUserMessage, getTopVisibleRow])
 
 	// Handler for when visible range changes in Virtuoso
 	const handleRangeChanged = useCallback((range: ListRange) => {
 		visibleRangeRef.current = range
 	}, [])
-	const scrollToBottomSmooth = useMemo(
-		() =>
-			debounce(
-				() => {
-					virtuosoRef.current?.scrollTo({
-						top: Number.MAX_SAFE_INTEGER,
-						behavior: "smooth",
-					})
-				},
-				10,
-				{ immediate: true },
-			),
-		[],
-	)
 
-	// Smooth scroll to bottom with debounce
 	const scrollToBottomAuto = useCallback(() => {
 		virtuosoRef.current?.scrollTo({
 			top: Number.MAX_SAFE_INTEGER,
 			behavior: "auto", // instant causes crash
-		})
-	}, [])
-
-	// Scroll to the very top of the conversation. Disables auto-scroll so streaming
-	// output doesn't yank the view back down, mirroring goToPreviousUserMessage.
-	const scrollToTopSmooth = useCallback(() => {
-		disableAutoScrollRef.current = true
-		virtuosoRef.current?.scrollToIndex({
-			index: 0,
-			align: "start",
-			behavior: "smooth",
 		})
 	}, [])
 
@@ -392,6 +473,10 @@ export function useScrollBehavior(
 				disableAutoScrollRef.current = true
 			}
 		}
+		// Manual scrolling moves away from the last navigation target.
+		if (wheelEvent.deltaY && scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
+			navTargetRef.current = null
+		}
 	}, [])
 	useEvent("wheel", handleWheel, window, { passive: true }) // passive improves scrolling performance
 
@@ -413,6 +498,7 @@ export function useScrollBehavior(
 		pendingScrollToMessage,
 		setPendingScrollToMessage,
 		scrolledPastUserMessage,
+		topVisibleIndex,
 		handleRangeChanged,
 		goToPreviousUserMessage,
 		goToNextUserMessage,

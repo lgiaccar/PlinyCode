@@ -26,6 +26,7 @@ import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
 import TaskUsageCounter from "./TaskUsageCounter"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
+import TokenUsagePanel from "./TokenUsagePanel"
 
 const IS_DEV = process.env.IS_DEV === "true"
 interface TaskHeaderProps {
@@ -256,6 +257,11 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							tokensIn={tokensIn}
 							tokensOut={tokensOut}
 							useAutoCondense={false} // Disable auto-condense configuration in UI for now
+						/>
+						<TokenUsagePanel
+							clineMessages={clineMessages}
+							selectedModelId={selectedModelId}
+							showCost={isCostAvailable}
 						/>
 					</div>
 				)}

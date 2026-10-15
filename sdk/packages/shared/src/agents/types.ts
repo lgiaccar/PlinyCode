@@ -177,6 +177,10 @@ export interface AgentUsageEvent extends AgentEventMetadata {
 	estimated?: boolean;
 	/** Where this turn's input tokens came from (system prompt, rules, conversation, ...). */
 	contextBreakdown?: ContextBreakdownTokens;
+	/** Hidden reasoning tokens for this turn, when the provider reports them (part of outputTokens). */
+	reasoningTokens?: number;
+	/** The concrete model that served this turn, when a router model picked it. */
+	modelId?: string;
 
 	/** Accumulated totals */
 	totalInputTokens: number;

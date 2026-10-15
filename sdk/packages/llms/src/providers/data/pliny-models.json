@@ -385,8 +385,14 @@
 		{
 			"id": "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking",
 			"tool_call": true,
-			"note": "preset thinking budget",
-			"pricing": { "input": 3, "output": 15 },
+			"cache_control": true,
+			"note": "preset thinking budget; prompt caching measured against the live gateway 2026-10-15",
+			"pricing": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
 			"priceSource": "PUBLIC_ESTIMATE: priced as Claude Sonnet 4.6, the preset's base model; the preset is not listed on the Pliny Model Catalog page",
 			"name": "Claude Sonnet 4.6 (high thinking)",
 			"summary": "Sonnet 4.6 with a large thinking budget preset: best for planning, design and tricky debugging. Slower and costlier per turn (thinking is billed as output), and no image input."
@@ -394,7 +400,13 @@
 		{
 			"id": "aws-bedrock-vmodels/claude-4-6-sonet-medium-thinking",
 			"tool_call": true,
-			"pricing": { "input": 3, "output": 15 },
+			"cache_control": true,
+			"pricing": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
 			"priceSource": "PUBLIC_ESTIMATE: priced as Claude Sonnet 4.6, the preset's base model; the preset is not listed on the Pliny Model Catalog page",
 			"name": "Claude Sonnet 4.6 (medium thinking)",
 			"summary": "Sonnet 4.6 with a medium thinking budget: a balance of reasoning depth and speed. No image input."

@@ -724,6 +724,8 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 				cost: usageEvent.totalCost,
 				...(usageEvent.estimated ? { estimated: true } : {}),
 				...(usageEvent.contextBreakdown ? { contextBreakdown: usageEvent.contextBreakdown } : {}),
+				...(usageEvent.reasoningTokens ? { reasoningTokens: usageEvent.reasoningTokens } : {}),
+				...(usageEvent.modelId ? { modelId: usageEvent.modelId } : {}),
 			}
 			messages.push({
 				ts: state.nextTs(),

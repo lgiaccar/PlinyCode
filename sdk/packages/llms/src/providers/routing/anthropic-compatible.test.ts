@@ -686,12 +686,13 @@ describe("Pliny prompt caching", () => {
 				"snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0",
 			),
 		).toBe(true);
+		// The thinking presets cache too (measured against the live gateway).
+		expect(applies("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")).toBe(
+			true,
+		);
 	});
 
-	it("skips Claude presets without cache_control and non-Claude models", () => {
-		expect(applies("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")).toBe(
-			false,
-		);
+	it("skips models without cache_control", () => {
 		expect(applies("azure-openai/gpt-5.2")).toBe(false);
 		expect(applies("snps-provider/qwen3-coder-480b-a35b-inst-fp8")).toBe(false);
 	});
@@ -699,6 +700,11 @@ describe("Pliny prompt caching", () => {
 
 describe("withContentBlockCacheBreakpoints", () => {
 	const marker = { type: "ephemeral" };
+	const mark = (text: string) => [
+		{ type: "text", text, cache_control: marker },
+	];
+	const markerCount = (out: unknown) =>
+		JSON.stringify(out).match(/cache_control/g)?.length ?? 0;
 
 	it("leaves a body without cache intent unchanged", () => {
 		const body = {
@@ -708,7 +714,7 @@ describe("withContentBlockCacheBreakpoints", () => {
 		expect(withContentBlockCacheBreakpoints(body)).toBe(body);
 	});
 
-	it("marks the system prompt and the newest assistant text as content blocks", () => {
+	it("marks the system prompt, the newest tool result and the end of the previous step", () => {
 		const out = withContentBlockCacheBreakpoints({
 			model: "m",
 			cache_control: marker,
@@ -726,21 +732,82 @@ describe("withContentBlockCacheBreakpoints", () => {
 
 		expect(out.cache_control).toBeUndefined();
 		expect(out.messages).toEqual([
-			{
-				role: "system",
-				content: [{ type: "text", text: "sys", cache_control: marker }],
-			},
-			{ role: "user", content: "task" },
+			{ role: "system", content: mark("sys") },
+			{ role: "user", content: mark("task") },
 			{
 				role: "assistant",
-				content: [{ type: "text", text: "reading a", cache_control: marker }],
+				content: "reading a",
 				tool_calls: [{ id: "c1" }],
 			},
-			{ role: "tool", tool_call_id: "c1", content: "file a" },
+			{ role: "tool", tool_call_id: "c1", content: mark("file a") },
 		]);
 	});
 
-	it("falls back past tool-only assistant turns and blank text to the newest text", () => {
+	it("advances past tool-only assistant turns without changing them", () => {
+		const out = withContentBlockCacheBreakpoints({
+			cache_control: marker,
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "task" },
+				{ role: "assistant", content: null, tool_calls: [{ id: "c1" }] },
+				{ role: "tool", tool_call_id: "c1", content: "file a" },
+				{ role: "assistant", content: null, tool_calls: [{ id: "c2" }] },
+				{ role: "tool", tool_call_id: "c2", content: "file b" },
+			],
+		});
+		const messages = out.messages as Record<string, unknown>[];
+
+		// The newest result is written; the previous call's tail (file a) is read back.
+		expect(messages[5]).toEqual({
+			role: "tool",
+			tool_call_id: "c2",
+			content: mark("file b"),
+		});
+		expect(messages[3]).toEqual({
+			role: "tool",
+			tool_call_id: "c1",
+			content: mark("file a"),
+		});
+		expect(messages[1]).toEqual({ role: "user", content: "task" });
+		expect(messages[2]).toEqual({
+			role: "assistant",
+			content: null,
+			tool_calls: [{ id: "c1" }],
+		});
+		expect(markerCount(out)).toBe(3);
+	});
+
+	it("re-marks the previous tail across a step with many parallel tool calls", () => {
+		const results = Array.from({ length: 12 }, (_, i) => ({
+			role: "tool",
+			tool_call_id: `c${i}`,
+			content: `result ${i}`,
+		}));
+		const out = withContentBlockCacheBreakpoints({
+			cache_control: marker,
+			messages: [
+				{ role: "system", content: "sys" },
+				{ role: "user", content: "task" },
+				{
+					role: "assistant",
+					content: null,
+					tool_calls: results.map((r) => ({ id: r.tool_call_id })),
+				},
+				...results,
+			],
+		});
+		const messages = out.messages as Record<string, unknown>[];
+
+		expect(messages[1]).toEqual({ role: "user", content: mark("task") });
+		expect(messages.at(-1)).toEqual({
+			role: "tool",
+			tool_call_id: "c11",
+			content: mark("result 11"),
+		});
+		expect(markerCount(out)).toBe(3);
+	});
+
+	it("skips blank text when looking for a place to mark", () => {
 		const out = withContentBlockCacheBreakpoints({
 			cache_control: marker,
 			messages: [
@@ -752,12 +819,13 @@ describe("withContentBlockCacheBreakpoints", () => {
 						{ type: "text", text: " " },
 					],
 				},
-				{ role: "assistant", content: null, tool_calls: [{ id: "c1" }] },
-				{ role: "tool", tool_call_id: "c1", content: "file a" },
+				{ role: "assistant", content: "done" },
+				{ role: "user", content: "   " },
 			],
 		});
 		const messages = out.messages as Record<string, unknown>[];
 
+		expect(messages[2]).toEqual({ role: "assistant", content: mark("done") });
 		expect(messages[1]).toEqual({
 			role: "user",
 			content: [
@@ -765,14 +833,10 @@ describe("withContentBlockCacheBreakpoints", () => {
 				{ type: "text", text: " " },
 			],
 		});
-		expect(messages[2]).toEqual({
-			role: "assistant",
-			content: null,
-			tool_calls: [{ id: "c1" }],
-		});
+		expect(messages[3]).toEqual({ role: "user", content: "   " });
 	});
 
-	it("never uses more than the system and tail breakpoints", () => {
+	it("never uses more than four breakpoints and drops every other marker", () => {
 		const out = withContentBlockCacheBreakpoints({
 			cache_control: marker,
 			messages: [
@@ -781,15 +845,20 @@ describe("withContentBlockCacheBreakpoints", () => {
 					role: "user",
 					content: [{ type: "text", text: "one", cache_control: marker }],
 				},
-				{ role: "assistant", content: "two" },
+				{ role: "assistant", content: "two", cache_control: marker },
 				{ role: "user", content: "three", cache_control: marker },
+				{ role: "assistant", content: "four" },
+				{ role: "user", content: "five", cache_control: marker },
 			],
 		});
+		const messages = out.messages as Record<string, unknown>[];
 
-		expect(JSON.stringify(out).match(/cache_control/g)).toHaveLength(2);
-		expect((out.messages as Record<string, unknown>[])[3]).toEqual({
+		expect(markerCount(out)).toBe(3);
+		expect(messages[5]).toEqual({ role: "user", content: mark("five") });
+		expect(messages[3]).toEqual({ role: "user", content: mark("three") });
+		expect(messages[1]).toEqual({
 			role: "user",
-			content: [{ type: "text", text: "three", cache_control: marker }],
+			content: [{ type: "text", text: "one" }],
 		});
 	});
 });

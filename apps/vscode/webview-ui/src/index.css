@@ -69,3 +69,18 @@
 		margin: calc(var(--design-unit) * 1px) 0;
 	}
 }
+
+/* Token usage chart series (task header TokenUsagePanel). Categorical slots chosen for colour-blind
+   separation on VS Code's dark and light surfaces; VS Code tags <body> with vscode-light/vscode-dark. */
+:root {
+	--token-series-cache-read: #3987e5;
+	--token-series-cache-write: #d95926;
+	--token-series-input: #199e70;
+	--token-series-output: #c98500;
+}
+body.vscode-light {
+	--token-series-cache-read: #2a78d6;
+	--token-series-cache-write: #eb6834;
+	--token-series-input: #1baf7a;
+	--token-series-output: #eda100;
+}
