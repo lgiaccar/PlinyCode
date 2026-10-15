@@ -7,6 +7,7 @@ import {
 	QueuePipelineRequest,
 } from "@shared/proto/cline/pipeline"
 import { useEffect, useRef, useState } from "react"
+import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { CiBoardServiceClient, PipelineServiceClient, UiServiceClient } from "@/services/grpc-client"
 
@@ -28,6 +29,7 @@ export function PipelineLaunchForm() {
 	const [error, setError] = useState("")
 	const [notice, setNotice] = useState("")
 	const [revision, setRevision] = useState(0)
+	const [reload, setReload] = useState(0)
 	const launch = useRef<{ id: string; fingerprint: string }>()
 	const submitting = useRef(false)
 
@@ -75,7 +77,7 @@ export function PipelineLaunchForm() {
 		return () => {
 			cancelled = true
 		}
-	}, [repoRoot])
+	}, [repoRoot, reload])
 
 	useEffect(() => {
 		setSchema(undefined)
@@ -331,9 +333,11 @@ export function PipelineLaunchForm() {
 				</div>
 			</fieldset>
 			{error && (
-				<div className="text-sm text-error break-words" role="alert">
-					{error}
-				</div>
+				<DevOpsErrorText
+					className="text-sm text-error break-words"
+					error={error}
+					onSignedIn={() => setReload((current) => current + 1)}
+				/>
 			)}
 			{notice && (
 				<div className="text-sm text-description" role="status">

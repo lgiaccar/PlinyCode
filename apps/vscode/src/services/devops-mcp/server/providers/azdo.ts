@@ -3,7 +3,7 @@
 import { type PipelineSchema, parsePipelineInputs } from "../../pipelines/pipeline-inputs"
 import { type Auth, adoAuth } from "../auth"
 import { DevOpsError } from "../errors"
-import type { Remote } from "../repo"
+import { adoCollectionUrl, type Remote } from "../repo"
 import {
 	type Check,
 	type FailedStep,
@@ -84,14 +84,10 @@ export class AzureDevOpsProvider implements PipelineProvider {
 	constructor(
 		private readonly remote: Remote,
 		fetchImpl?: Fetch,
-		auth: Auth = adoAuth(),
+		auth: Auth = adoAuth(remote),
 	) {
-		// On-premises Azure DevOps Server: {origin}/{collection path}/{project}, where the collection path may
-		// itself have multiple segments (e.g. "tfs/Some_Collection") that must stay separate path segments,
-		// not one encoded blob. Cloud: https://dev.azure.com/{org}/{project}.
-		this.orgUrl = remote.origin
-			? `${remote.origin}/${(remote.collection ?? "").split("/").map(encodeURIComponent).join("/")}`
-			: `https://dev.azure.com/${encodeURIComponent(remote.owner)}`
+		// On-premises Azure DevOps Server: {collection URL}/{project}. Cloud: https://dev.azure.com/{org}/{project}.
+		this.orgUrl = adoCollectionUrl(remote) ?? `https://dev.azure.com/${encodeURIComponent(remote.owner)}`
 		this.projectUrl = `${this.orgUrl}/${encodeURIComponent(remote.project ?? "")}`
 		this.repoUrl = `${this.projectUrl}/_git/${encodeURIComponent(remote.repo)}`
 		this.http = new Http(auth, { Accept: "application/json" }, fetchImpl)

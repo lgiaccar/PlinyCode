@@ -1,6 +1,7 @@
 import { type CiTargetView, UpdateCiTargetRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { useState } from "react"
+import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CiBoardServiceClient } from "@/services/grpc-client"
@@ -122,7 +123,16 @@ export const CiTargetSection = ({ target, failingOnly = false }: { target: CiTar
 					targetId={target.id}
 				/>
 			)}
-			{(error || target.error) && <div className="text-xs text-error break-words mt-1">{error || target.error}</div>}
+			{(error || target.error) && (
+				<DevOpsErrorText
+					className="text-xs text-error break-words mt-1"
+					error={error || target.error || ""}
+					onSignedIn={() => {
+						setError(undefined)
+						void refresh()
+					}}
+				/>
+			)}
 			{target.loading && target.items.length === 0 && <div className="text-xs text-description mt-1">Checking…</div>}
 			{!target.loading && !target.error && target.items.length === 0 && (
 				<div className="text-xs text-description mt-1">

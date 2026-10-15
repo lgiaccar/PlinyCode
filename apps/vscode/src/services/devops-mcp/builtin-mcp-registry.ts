@@ -89,6 +89,8 @@ export interface DevOpsServerStatus {
 	editorError?: string
 	enabled: boolean
 	registerWithEditor: boolean
+	/** Azure DevOps Server hosts with a personal access token stored in the editor. */
+	adoServerHosts: string[]
 }
 
 /** What the webview handlers need from the DevOps server, without importing `vscode`. */
@@ -98,6 +100,9 @@ export interface DevOpsServerControl {
 	restart(): Promise<void>
 	setEnabled(enabled: boolean): Promise<void>
 	manualConfig(): Promise<string>
+	/** Asks for and stores a personal access token for `host` (asks which server when empty); false when cancelled. */
+	signInAdoServer(host?: string): Promise<boolean>
+	forgetAdoServerToken(host: string): Promise<void>
 }
 
 let devOpsControl: DevOpsServerControl | undefined

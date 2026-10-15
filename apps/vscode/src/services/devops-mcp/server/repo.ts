@@ -61,6 +61,16 @@ export function sameRepository(a: Remote, b: Remote): boolean {
 	return remoteKey(a).toLowerCase() === remoteKey(b).toLowerCase()
 }
 
+/**
+ * Azure DevOps Server only: `{origin}/{collection path}`, where the collection path may have several segments
+ * (e.g. "tfs/Some_Collection") that must stay separate path segments, not one encoded blob.
+ */
+export function adoCollectionUrl(remote: Remote): string | undefined {
+	return remote.origin
+		? `${remote.origin}/${(remote.collection ?? "").split("/").map(encodeURIComponent).join("/")}`
+		: undefined
+}
+
 const stripGit = (name: string) => (name.endsWith(".git") ? name.slice(0, -4) : name)
 
 /** Returns [scheme, host, port, path] for https://, ssh:// and scp-style (git@host:path) URLs. */

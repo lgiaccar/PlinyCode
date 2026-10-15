@@ -3,6 +3,7 @@ import type { DevOpsServerStatus } from "@shared/proto/cline/mcp"
 import { NewTaskRequest } from "@shared/proto/cline/task"
 import { CopyIcon, PlayIcon, RefreshCcwIcon } from "lucide-react"
 import { useEffect, useState } from "react"
+import { AdoServerSignInButton } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { useExtensionState } from "@/context/ExtensionStateContext"
@@ -182,6 +183,43 @@ const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerSta
 							Microsoft work account. An existing <code>gh auth login</code> / <code>az login</code>, or a{" "}
 							<code>GITHUB_TOKEN</code> / <code>AZURE_DEVOPS_PAT</code> environment variable, works too.
 						</p>
+						<p className="m-0 mt-2 mb-2 text-description">
+							An on-premises Azure DevOps Server (TFS) takes only a personal access token. Store one per server
+							here; it is kept in the editor's secret storage and every window uses it.
+						</p>
+						{status.adoServerHosts.length > 0 && (
+							<ul className="m-0 mb-2 p-0 list-none flex flex-col gap-1">
+								{status.adoServerHosts.map((host) => (
+									<li className="flex items-center gap-2" key={host}>
+										<span className="codicon codicon-key text-description" />
+										<code className="flex-1 min-w-0 truncate">{host}</code>
+										<Button
+											disabled={busy}
+											onClick={() =>
+												run(() => McpServiceClient.signInAdoServer(StringRequest.create({ value: host })))
+											}
+											size="xs"
+											title={`Replace the token for ${host}`}
+											variant="ghost">
+											Replace
+										</Button>
+										<Button
+											disabled={busy}
+											onClick={() =>
+												run(() =>
+													McpServiceClient.forgetAdoServerToken(StringRequest.create({ value: host })),
+												)
+											}
+											size="xs"
+											title={`Forget the token for ${host}`}
+											variant="ghost">
+											Forget
+										</Button>
+									</li>
+								))}
+							</ul>
+						)}
+						<AdoServerSignInButton />
 					</div>
 
 					<div>

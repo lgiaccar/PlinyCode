@@ -5,6 +5,7 @@ import { AzureDevOpsProvider } from "../server/providers/azdo"
 import { GitHubProvider } from "../server/providers/github"
 import type { PipelineRun, Provider, PullRequest } from "../server/providers/types"
 import { loadContext, pushProblem, type Remote, type RepoContext, remoteBranchHead, remoteKey } from "../server/repo"
+import type { BrokerProvider } from "../shared/broker-protocol"
 import type { CiWatchSource } from "./ci-watcher"
 
 /** Runs listed per poll; the ones for the watched commit are picked out of these. */
@@ -33,11 +34,11 @@ export interface ProviderCache {
  * not pop one up.
  */
 export function createProviderCache(
-	silentEditorToken: (provider: "github" | "ado", host: string) => Promise<string | undefined>,
+	silentEditorToken: (provider: BrokerProvider, host: string, server?: string) => Promise<string | undefined>,
 ): ProviderCache {
 	const providers = new Map<string, Provider>()
-	const editorToken: EditorTokenSource = (provider, host, interactive) =>
-		interactive ? Promise.resolve(undefined) : silentEditorToken(provider, host)
+	const editorToken: EditorTokenSource = (provider, host, interactive, server) =>
+		interactive ? Promise.resolve(undefined) : silentEditorToken(provider, host, server)
 	const forRemote = (remote: Remote): Provider => {
 		const key = remoteKey(remote)
 		let provider = providers.get(key)
@@ -45,7 +46,7 @@ export function createProviderCache(
 			provider =
 				remote.kind === "github"
 					? new GitHubProvider(remote, undefined, githubAuth(remote.host, editorToken))
-					: new AzureDevOpsProvider(remote, undefined, adoAuth(editorToken))
+					: new AzureDevOpsProvider(remote, undefined, adoAuth(remote, editorToken))
 			providers.set(key, provider)
 		}
 		return provider

@@ -1,6 +1,7 @@
 import { AddCiTargetRequest, type CiRepo } from "@shared/proto/cline/ci_board"
 import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import { useEffect, useState } from "react"
+import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { CiBoardServiceClient } from "@/services/grpc-client"
 import { classifyCiInput } from "./ciBoardUtils"
@@ -114,7 +115,13 @@ export const AddCiTargetForm = ({ existing = [] }: { existing?: { id: string; la
 					{notice}
 				</div>
 			)}
-			{error && <div className="text-xs text-error break-words">{error}</div>}
+			{error && (
+				<DevOpsErrorText
+					className="text-xs text-error break-words"
+					error={error}
+					onSignedIn={() => setError(undefined)}
+				/>
+			)}
 		</div>
 	)
 }

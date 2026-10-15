@@ -1,6 +1,7 @@
 import { EmptyRequest } from "@shared/proto/cline/common"
 import type { PipelineHistory } from "@shared/proto/cline/pipeline"
 import { useEffect, useState } from "react"
+import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import ViewHeader from "@/components/common/ViewHeader"
 import { Button } from "@/components/ui/button"
 import { useExtensionState } from "@/context/ExtensionStateContext"
@@ -63,11 +64,7 @@ export default function PipelinesView({ onDone }: { onDone: () => void }) {
 						/>
 					</Button>
 				</div>
-				{error && (
-					<div className="text-sm text-error break-words" role="alert">
-						{error}
-					</div>
-				)}
+				{error && <DevOpsErrorText className="text-sm text-error break-words" error={error} onSignedIn={refresh} />}
 				{!history ? (
 					<div className="text-sm text-description">Loading...</div>
 				) : history.launches.length === 0 ? (

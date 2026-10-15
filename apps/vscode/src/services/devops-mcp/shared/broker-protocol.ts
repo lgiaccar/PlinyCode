@@ -3,7 +3,8 @@
  * PlinyCode extension host. One JSON object per line, one request per connection.
  *
  * The broker lets the server use the editor's own GitHub / Microsoft sign-in
- * (vscode.authentication) although it runs in a separate process.
+ * (vscode.authentication), and the Azure DevOps Server tokens the user stored
+ * in the editor, although it runs in a separate process.
  */
 
 export const BROKER_PATH_ENV = "DEVOPS_MCP_BROKER"
@@ -11,12 +12,21 @@ export const BROKER_SECRET_ENV = "DEVOPS_MCP_BROKER_SECRET"
 
 export interface BrokerRequest {
 	secret: string
-	provider: "github" | "ado"
-	/** Git host, e.g. github.com or a GitHub Enterprise host. */
+	/**
+	 * `ado` is Azure DevOps Services (a Microsoft sign-in); `ado-server` is an
+	 * on-premises Azure DevOps Server, which takes a personal access token the
+	 * user stored for its host.
+	 */
+	provider: BrokerProvider
+	/** Git host, e.g. github.com, a GitHub Enterprise host or an Azure DevOps Server host. */
 	host: string
 	/** When true the editor may show its sign-in prompt; otherwise only existing sessions are used. */
 	interactive: boolean
+	/** `ado-server` only: the collection URL, e.g. https://host/tfs/Collection, for the token prompt. */
+	server?: string
 }
+
+export type BrokerProvider = "github" | "ado" | "ado-server"
 
 export type BrokerResponse = { token: string } | { error: string }
 

@@ -4,24 +4,32 @@
  *   2. the editor's existing sign-in, through the PlinyCode token broker;
  *   3. a one-time CLI login (`gh auth login`, `az login`);
  *   4. the editor's sign-in prompt (first-time login), through the broker.
+ * An on-premises Azure DevOps Server takes only personal access tokens, so it
+ * uses the token stored for its host in the editor first, then AZURE_DEVOPS_PAT,
+ * then the editor's prompt for a token (see `adoServerAuth`).
  * Nothing is ever stored by this process.
  */
 import { exec, execFile } from "node:child_process"
 import net from "node:net"
+import { adoServerSignInMessage } from "../../../shared/adoServerAuth"
 import {
 	ADO_RESOURCE_ID,
 	BROKER_PATH_ENV,
 	BROKER_SECRET_ENV,
+	type BrokerProvider,
 	type BrokerRequest,
 	type BrokerResponse,
 } from "../shared/broker-protocol"
 import { DevOpsError } from "./errors"
+import { adoCollectionUrl, type Remote } from "./repo"
 
 export interface Auth {
 	/** Returns the Authorization header value. */
 	header(): Promise<string>
 	/** Forgets the cached credential, e.g. after a 401. */
 	invalidate(): void
+	/** Added to the error when the server still answers 401 after the credential was fetched again. */
+	readonly rejectedHint?: string
 }
 
 interface Credential {
@@ -35,9 +43,10 @@ const SILENT_BROKER_TIMEOUT_MS = 15_000
 const INTERACTIVE_BROKER_TIMEOUT_MS = 5 * 60_000
 
 export function requestBrokerToken(
-	provider: BrokerRequest["provider"],
+	provider: BrokerProvider,
 	host: string,
 	interactive: boolean,
+	server?: string,
 ): Promise<string | undefined> {
 	const brokerPath = process.env[BROKER_PATH_ENV]
 	const secret = process.env[BROKER_SECRET_ENV]
@@ -54,7 +63,7 @@ export function requestBrokerToken(
 		socket.setTimeout(interactive ? INTERACTIVE_BROKER_TIMEOUT_MS : SILENT_BROKER_TIMEOUT_MS, () => done())
 		socket.on("error", () => done())
 		socket.on("connect", () => {
-			const request: BrokerRequest = { secret, provider, host, interactive }
+			const request: BrokerRequest = { secret, provider, host, interactive, server }
 			socket.write(`${JSON.stringify(request)}\n`)
 		})
 		socket.on("data", (chunk) => {
@@ -94,6 +103,7 @@ class ChainedAuth implements Auth {
 	constructor(
 		private readonly sources: Source[],
 		private readonly hint: string,
+		readonly rejectedHint?: string,
 	) {}
 
 	async header(): Promise<string> {
@@ -148,7 +158,11 @@ export function githubAuth(host: string, editorToken: EditorTokenSource = reques
 	)
 }
 
-export function adoAuth(editorToken: EditorTokenSource = requestBrokerToken): Auth {
+export function adoAuth(remote: Remote, editorToken: EditorTokenSource = requestBrokerToken): Auth {
+	const server = adoCollectionUrl(remote)
+	if (server) {
+		return adoServerAuth(remote.host, server, editorToken)
+	}
 	const broker = (interactive: boolean) => async () => {
 		const token = await editorToken("ado", "dev.azure.com", interactive)
 		return token ? { header: `Bearer ${token}`, expiresAt: Date.now() + BROKER_REUSE_MS } : undefined
@@ -156,8 +170,8 @@ export function adoAuth(editorToken: EditorTokenSource = requestBrokerToken): Au
 	return new ChainedAuth(
 		[
 			async () => {
-				const pat = process.env.AZURE_DEVOPS_PAT || process.env.AZURE_DEVOPS_EXT_PAT
-				return pat ? { header: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`, expiresAt: FOREVER } : undefined
+				const pat = envPat()
+				return pat ? { header: basic(pat), expiresAt: FOREVER } : undefined
 			},
 			broker(false),
 			async () => {
@@ -177,5 +191,36 @@ export function adoAuth(editorToken: EditorTokenSource = requestBrokerToken): Au
 			broker(true),
 		],
 		"Sign in with your Microsoft work account from the editor when asked, run `az login` once, or set AZURE_DEVOPS_PAT.",
+	)
+}
+
+const envPat = () => process.env.AZURE_DEVOPS_PAT || process.env.AZURE_DEVOPS_EXT_PAT
+
+const basic = (pat: string) => `Basic ${Buffer.from(`:${pat}`).toString("base64")}`
+
+/**
+ * An on-premises Azure DevOps Server. It ignores Microsoft (Entra ID) tokens and
+ * treats such requests as anonymous (TF400813), so only personal access tokens
+ * are tried: the one stored for this host in the editor, AZURE_DEVOPS_PAT, and
+ * last the editor's prompt for one.
+ */
+function adoServerAuth(host: string, server: string, editorToken: EditorTokenSource): Auth {
+	const stored = (interactive: boolean) => async () => {
+		const pat = await editorToken("ado-server", host, interactive, server)
+		// Asked again now and then, so a token replaced or forgotten in the editor takes effect.
+		return pat ? { header: basic(pat), expiresAt: Date.now() + BROKER_REUSE_MS } : undefined
+	}
+	const signIn = `${adoServerSignInMessage(host)} Use "Sign in to Azure DevOps Server" in the CI Board, the Pipelines view or the PlinyCode DevOps card, or set AZURE_DEVOPS_PAT and restart the editor.`
+	return new ChainedAuth(
+		[
+			stored(false),
+			async () => {
+				const pat = envPat()
+				return pat ? { header: basic(pat), expiresAt: FOREVER } : undefined
+			},
+			stored(true),
+		],
+		signIn,
+		`The token was not accepted: it may have expired, been revoked or lack a scope. ${signIn}`,
 	)
 }

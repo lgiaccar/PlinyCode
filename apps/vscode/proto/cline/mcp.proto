@@ -28,6 +28,10 @@ service McpService {
   rpc setDevOpsServerEnabled(BooleanRequest) returns (DevOpsServerStatus);
   // Copies an MCP config for other clients to the clipboard
   rpc copyDevOpsServerConfig(EmptyRequest) returns (Empty);
+  // Asks for and stores a personal access token for an Azure DevOps Server host (empty: ask which server).
+  // Returns false when the user cancelled.
+  rpc signInAdoServer(StringRequest) returns (Boolean);
+  rpc forgetAdoServerToken(StringRequest) returns (DevOpsServerStatus);
 }
 
 message DevOpsServerStatus {
@@ -43,6 +47,8 @@ message DevOpsServerStatus {
   optional string editor_error = 7;
   bool enabled = 8;
   bool register_with_editor = 9;
+  // Azure DevOps Server hosts with a personal access token stored in the editor
+  repeated string ado_server_hosts = 10;
 }
 
 message ToggleMcpServerRequest {
