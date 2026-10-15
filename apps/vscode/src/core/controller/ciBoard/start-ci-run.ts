@@ -74,12 +74,13 @@ export async function startCiRun(
 		}
 	}
 
-	// An action that edits and pushes needs Agent mode; Investigate reads only, in Ask mode.
+	// An action that edits and pushes runs in Agent mode; Investigate reads only, in Ask mode. The
+	// run's session is built in that mode whatever the mode switch shows: flipping the switch here
+	// would rebuild, and cancel the turn of, the task that is still displayed at this point.
 	if (controller.stateManager.getGlobalSettingsKey("mode") !== run.mode) {
-		await controller.togglePlanActMode(run.mode)
 		void HostProvider.window.showMessage({
 			type: ShowMessageType.INFORMATION,
-			message: `Switched to ${MODE_NAMES[run.mode]} mode to run "${run.action.label}".`,
+			message: `"${run.action.label}" runs in ${MODE_NAMES[run.mode]} mode; the mode switch is left as it is.`,
 		})
 	}
 
@@ -89,6 +90,7 @@ export async function startCiRun(
 		recordRecentWorkspace: false,
 		modelId,
 		title: runTitle(run, false),
+		mode: run.mode,
 	})
 	if (!conversationId) {
 		return undefined

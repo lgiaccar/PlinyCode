@@ -204,7 +204,9 @@ the model in the chat while it is displayed does not move it, and it stays pinne
 
 1. If the conversation it last started for this pull request is still running, the board opens it instead.
 2. The board gets a working copy of the branch (see [Worktrees](#worktrees)).
-3. The mode switch moves to the action's mode (Agent, or Ask for Investigate), and a notice says so.
+3. The run's conversation is built in the action's mode: Agent, since an action edits and pushes, or Ask for
+   Investigate. The mode switch is left where it is: moving it would rebuild, and cancel the turn of, the task
+   that is still displayed when the run starts. A notice says so when the switch shows another mode.
 4. It starts a conversation in that working copy and shows it. If a task is already running and the background
    holds as many tasks as it can, the board asks first, because starting one stops the running task.
 

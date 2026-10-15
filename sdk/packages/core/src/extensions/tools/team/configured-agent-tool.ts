@@ -1,10 +1,14 @@
 import {
+	type AgentConfig,
 	type AgentEvent,
 	type AgentResult,
 	type AgentTool,
 	type AgentToolContext,
 	createTool,
 	type HookErrorMode,
+	type ToolApprovalRequest,
+	type ToolApprovalResult,
+	type ToolPolicy,
 	zodToJsonSchema,
 } from "@plinycode/shared";
 import { z } from "zod";
@@ -15,10 +19,13 @@ import {
 	type DelegatedAgentConfigProvider,
 	type DelegatedAgentRuntimeConfig,
 } from "./delegated-agent";
-import type {
-	SpawnAgentOutput,
-	SubAgentEndContext,
-	SubAgentStartContext,
+import {
+	createSubAgentProgressReporter,
+	DEFAULT_SUB_AGENT_TIMEOUT_MS,
+	type SpawnAgentOutput,
+	type SubAgentEndContext,
+	type SubAgentStartContext,
+	spawnAgentOutputFromResult,
 } from "./spawn-agent-tool";
 
 const CONFIGURED_AGENT_TOOL_NAME_PREFIX = "subagent_";
@@ -47,6 +54,14 @@ export interface ConfiguredAgentToolConfig {
 	hookErrorMode?: HookErrorMode;
 	onSubAgentStart?: (context: SubAgentStartContext) => void | Promise<void>;
 	onSubAgentEnd?: (context: SubAgentEndContext) => void | Promise<void>;
+	/** Per-tool policy for the configured agents' own tool calls. */
+	toolPolicies?: Record<string, ToolPolicy>;
+	/** Approval callback for the configured agents' tool calls. */
+	requestToolApproval?: (
+		request: ToolApprovalRequest,
+	) => Promise<ToolApprovalResult> | ToolApprovalResult;
+	/** The request projection (context compaction) a run uses; read when it starts. */
+	getPrepareTurn?: () => AgentConfig["prepareTurn"];
 }
 
 function sanitizeAgentName(name: string): string {
@@ -160,8 +175,12 @@ export function createConfiguredAgentTools(
 					const tools = options.createSubAgentTools
 						? await options.createSubAgentTools(config, input, context)
 						: [];
-					// The parent approves delegation; child tools run autonomously,
-					// matching generic subagents and teammates. Do not inherit approval policy.
+					const reporter = createSubAgentProgressReporter(
+						context,
+						options.onSubAgentEvent,
+					);
+					// The agent's tool calls follow the host's policies and approval
+					// like the parent's: a configured agent edits the same files.
 					const subAgent = createDelegatedAgent({
 						kind: "subagent",
 						prompt: config.systemPrompt,
@@ -170,12 +189,16 @@ export function createConfiguredAgentTools(
 						maxIterations: config.maxIterations,
 						parentAgentId: context.agentId,
 						abortSignal: context.signal,
-						onEvent: options.onSubAgentEvent,
+						onEvent: reporter.onEvent,
 						hookErrorMode: options.hookErrorMode,
+						toolPolicies: options.toolPolicies,
+						requestToolApproval: options.requestToolApproval,
+						prepareTurn: options.getPrepareTurn?.(),
 					});
 					const subAgentId = subAgent.getAgentId();
 					const conversationId = subAgent.getConversationId();
 					const parentAgentId = context.agentId;
+					reporter.bind(subAgentId);
 					const spawnInput = {
 						systemPrompt: config.systemPrompt,
 						task: input.prompt,
@@ -196,15 +219,10 @@ export function createConfiguredAgentTools(
 
 					try {
 						const result: AgentResult = await subAgent.run(input.prompt);
-						const output: SpawnAgentOutput = {
-							text: result.text,
-							iterations: result.iterations,
-							finishReason: result.finishReason,
-							usage: {
-								inputTokens: result.usage.inputTokens,
-								outputTokens: result.usage.outputTokens,
-							},
-						};
+						const output: SpawnAgentOutput = spawnAgentOutputFromResult(
+							result,
+							reporter.progress(),
+						);
 						if (options.onSubAgentEnd) {
 							try {
 								await options.onSubAgentEnd({
@@ -238,7 +256,7 @@ export function createConfiguredAgentTools(
 						throw error;
 					}
 				},
-				timeoutMs: 300000,
+				timeoutMs: DEFAULT_SUB_AGENT_TIMEOUT_MS,
 				retryable: false,
 			});
 			return tool as unknown as AgentTool;

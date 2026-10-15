@@ -1,4 +1,11 @@
-import type { AgentEvent, AgentTool } from "@plinycode/shared";
+import type {
+	AgentConfig,
+	AgentEvent,
+	AgentTool,
+	ToolApprovalRequest,
+	ToolApprovalResult,
+	ToolPolicy,
+} from "@plinycode/shared";
 import {
 	createBuiltinTools,
 	resolveToolPresetName,
@@ -14,6 +21,16 @@ import { filterDisabledTools } from "../../../services/global-settings";
 import type { CoreSessionConfig } from "../../../types/config";
 import type { ActiveSession } from "../../../types/session";
 
+/**
+ * How deep delegation may go. The root agent is at depth 0 and may spawn;
+ * its sub-agents (depth 1) may not: a chain of sub-agents multiplies cost
+ * and context with nobody watching, and nothing a sub-agent does needs it.
+ */
+export const MAX_SUB_AGENT_DEPTH = 1;
+
+/** Iterations a sub-agent run gets when the host sets no limit of its own. */
+export const DEFAULT_SUB_AGENT_MAX_ITERATIONS = 40;
+
 export interface SpawnToolDeps {
 	getSession(sessionId: string): ActiveSession | undefined;
 	onAgentEvent(
@@ -28,6 +45,24 @@ export interface SessionSubAgentLifecycleCallbacks {
 	onSubAgentEvent: (event: AgentEvent) => void;
 	onSubAgentStart: (context: SubAgentStartContext) => void;
 	onSubAgentEnd: (context: SubAgentEndContext) => void;
+}
+
+export interface SessionSpawnToolOptions {
+	/** Depth of the agent that owns this tool; its sub-agents are one deeper. */
+	depth?: number;
+	/**
+	 * Host tools a sub-agent gets besides the built-ins, e.g. the host's own
+	 * shell. Tools whose name a built-in already has are left out.
+	 */
+	extraTools?: AgentTool[];
+	/** Per-tool policy for the sub-agents' calls, normally the session's. */
+	toolPolicies?: Record<string, ToolPolicy>;
+	/** Approval callback for the sub-agents' calls, normally the session's. */
+	requestToolApproval?: (
+		request: ToolApprovalRequest,
+	) => Promise<ToolApprovalResult> | ToolApprovalResult;
+	/** Context compaction for sub-agent runs, read when a run starts. */
+	getPrepareTurn?: () => AgentConfig["prepareTurn"];
 }
 
 export function createSessionSubAgentLifecycleCallbacks(
@@ -59,12 +94,14 @@ export function createSessionSpawnTool(
 	config: CoreSessionConfig,
 	rootSessionId: string,
 	toolExecutors?: Partial<ToolExecutors>,
+	options: SessionSpawnToolOptions = {},
 ): AgentTool {
 	const lifecycle = createSessionSubAgentLifecycleCallbacks(
 		deps,
 		config,
 		rootSessionId,
 	);
+	const depth = options.depth ?? 0;
 	const createSubAgentTools = () => {
 		const tools: AgentTool[] = config.enableTools
 			? createBuiltinTools({
@@ -73,9 +110,19 @@ export function createSessionSpawnTool(
 					executors: toolExecutors,
 				})
 			: [];
-		if (config.enableSpawnAgent) {
+		const taken = new Set(tools.map((tool) => tool.name));
+		for (const tool of options.extraTools ?? []) {
+			if (!taken.has(tool.name)) {
+				tools.push(tool);
+				taken.add(tool.name);
+			}
+		}
+		if (config.enableSpawnAgent && depth + 1 < MAX_SUB_AGENT_DEPTH) {
 			tools.push(
-				createSessionSpawnTool(deps, config, rootSessionId, toolExecutors),
+				createSessionSpawnTool(deps, config, rootSessionId, toolExecutors, {
+					...options,
+					depth: depth + 1,
+				}),
 			);
 		}
 		return filterDisabledTools(tools);
@@ -118,7 +165,12 @@ export function createSessionSpawnTool(
 				},
 			updateConnectionDefaults: () => {},
 		},
+		defaultMaxIterations:
+			config.subAgentMaxIterations ?? DEFAULT_SUB_AGENT_MAX_ITERATIONS,
 		createSubAgentTools,
+		toolPolicies: options.toolPolicies,
+		requestToolApproval: options.requestToolApproval,
+		getPrepareTurn: options.getPrepareTurn,
 		...lifecycle,
 	}) as AgentTool;
 }

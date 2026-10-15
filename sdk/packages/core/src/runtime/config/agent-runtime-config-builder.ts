@@ -54,6 +54,8 @@ export interface CreateAgentRuntimeConfigInput {
 	/** Pre-built tool array (builtins + plugin-contributed + session extras). */
 	readonly tools?: readonly AgentTool<unknown, unknown>[];
 	readonly toolContextMetadata?: Record<string, unknown>;
+	/** Where the request's text came from, for the usage report's context breakdown. */
+	readonly contextSources?: AgentRuntimeConfig["contextSources"];
 	/** Pre-resolved plugin list from the plugin loader. */
 	readonly plugins?: readonly AgentRuntimePlugin[];
 	/** Runtime hooks supplied by the session/runtime builder. */
@@ -127,6 +129,7 @@ export function createAgentRuntimeConfig(
 		toolExecution,
 		toolPolicies: agentConfig.toolPolicies,
 		toolContextMetadata: input.toolContextMetadata,
+		contextSources: input.contextSources,
 		requestToolApproval: agentConfig.requestToolApproval,
 	};
 

@@ -7,7 +7,10 @@ import {
 } from "@plinycode/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionRecord } from "../../types/sessions";
-import { SessionHistorySearchService } from "./session-history-search";
+import {
+	normalizeWorkspaceRoot,
+	SessionHistorySearchService,
+} from "./session-history-search";
 
 const tempDirs: string[] = [];
 
@@ -105,6 +108,52 @@ describe("SessionHistorySearchService", () => {
 		expect(service.search({ query: "quokka" })).toEqual([]);
 		expect(service.search({ query: "wombat" })[0]?.ordinal).toBe(4);
 		await service.dispose();
+	});
+
+	it("filters by a workspace root however its slashes and case are written, and ignores editor state", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "cline-session-search-"));
+		tempDirs.push(dir);
+		const sessions = [
+			session({
+				sessionId: "win",
+				workspaceRoot: "D:\\Work\\Repo",
+				cwd: "D:\\Work\\Repo",
+			}),
+			session({
+				sessionId: "other",
+				workspaceRoot: "D:\\Work\\Other",
+				cwd: "D:\\Work\\Other",
+			}),
+		];
+		const service = new SessionHistorySearchService(
+			{
+				listSessions: async () => sessions,
+				readSessionMessages: async () => [
+					{
+						role: "user",
+						content:
+							"fix the kangaroo parser\n\n<editor_state>\nActive file: src/platypus.ts\n</editor_state>",
+					},
+				],
+			},
+			{ dbPath: join(dir, "search.db") },
+		);
+
+		await service.refreshNow();
+		const hits = service.search({
+			query: "kangaroo",
+			workspaceRoot: "d:/work/repo/",
+		});
+		expect(hits.map((hit) => hit.sessionId)).toEqual(["win"]);
+		expect(service.search({ query: "platypus" })).toEqual([]);
+		await service.dispose();
+	});
+
+	it("normalizes workspace roots for the index", () => {
+		expect(normalizeWorkspaceRoot("D:\\Work\\Repo\\")).toBe("d:/work/repo");
+		expect(normalizeWorkspaceRoot("  ")).toBe("");
+		expect(normalizeWorkspaceRoot(undefined)).toBe("");
+		expect(normalizeWorkspaceRoot("/")).toBe("/");
 	});
 
 	it("weights titles above paths and returns one hit per session", async () => {

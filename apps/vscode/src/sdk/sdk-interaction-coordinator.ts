@@ -80,6 +80,12 @@ interface SdkInteractionCoordinatorOptions {
 	 */
 	onToolApprovalAsk?: (request: ToolApprovalRequest) => Promise<void>
 	/**
+	 * How the chat names the agent behind a request ("sub-agent 2"), or
+	 * undefined for the root agent. A sub-agent's approval ask is preceded by
+	 * a row saying who asks, since its own events never reach the chat.
+	 */
+	describeAgent?: (agentId: string) => string | undefined
+	/**
 	 * The task's working directory, used to relativize the absolute filesystem paths
 	 * shown in tool-approval asks (display only). Optional for tests.
 	 */
@@ -183,6 +189,18 @@ export class SdkInteractionCoordinator {
 			Logger.warn(`[SdkController] onToolApprovalAsk failed; showing plain approval ask: ${error}`)
 		}
 
+		const agentLabel = this.options.describeAgent?.(request.agentId)
+		const whoAsks: ClineMessage[] = agentLabel
+			? [
+					{
+						ts: this.nextMessageTs(),
+						type: "say",
+						say: "info",
+						text: `↳ ${agentLabel} asks for approval:`,
+						partial: false,
+					},
+				]
+			: []
 		const toolAskMessage: ClineMessage = buildToolApprovalAskMessage(
 			request.toolName,
 			request.input,
@@ -190,7 +208,7 @@ export class SdkInteractionCoordinator {
 			this.options.getCwd?.(),
 		)
 
-		this.options.messages.appendAndEmit([toolAskMessage], {
+		this.options.messages.appendAndEmit([...whoAsks, toolAskMessage], {
 			type: "status",
 			payload: { sessionId: this.options.getSessionId(), status: "running" },
 		})

@@ -90,7 +90,9 @@ The file has the same shape as the FreeAuto one. The differences:
 
 Chat rows read `BalanceAuto → **Claude Sonnet 5** (call 1 · route: coding ·
 classifier: code · ~12k tok)`, naming each model by its catalog name; sub-agent rows are prefixed with
-`↳ sub-agent`. The end-of-turn summary lists the models used. Every attempt is
+`↳ sub-agent`. Each sub-agent run keeps its own call log, sticky model and failover budget under a key of
+its own (`<session>:sub:<n>`), found again by the engine's agent id, so parallel sub-agents never share
+one and a failure benches the model of the run that failed. The end-of-turn summary lists the models used. Every attempt is
 appended to `pliny-free-auto-calls.jsonl` with `profile: "balance"`, so
 `scripts/summarize-free-auto-log.ts` compares it against the free profiles on
 real use, including how often a turn stayed on free models.

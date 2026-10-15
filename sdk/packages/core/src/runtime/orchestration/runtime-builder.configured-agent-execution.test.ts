@@ -229,8 +229,10 @@ Write a concise commit message.`,
 				modelId: "gpt-4.1",
 				maxIterations: 3,
 				parentAgentId: "parent-agent",
-				requestToolApproval: undefined,
-				toolPolicies: undefined,
+				// The agent's own calls follow the session's policies and approval,
+				// like the parent's: it edits the same files.
+				requestToolApproval,
+				toolPolicies: effectiveToolPolicies,
 			}),
 		);
 		expect(delegatedConfig?.tools.map((tool) => tool.name).sort()).toEqual([
@@ -291,9 +293,12 @@ Write a concise commit message.`,
 		);
 		expect((await child.run("Use the commit skill")).status).toBe("completed");
 		expect(executeSkill).toHaveBeenCalledTimes(1);
-		expect(requestToolApproval).not.toHaveBeenCalled();
+		// The child's own tool call went through the session's approval.
+		expect(requestToolApproval).toHaveBeenCalledWith(
+			expect.objectContaining({ toolName: "skills" }),
+		);
 
-		// Approval remains enforced at the parent delegation boundary.
+		// Approval is also enforced at the parent delegation boundary.
 		const executeDelegation = vi.spyOn(reviewer, "execute");
 		for (const approved of [false, true]) {
 			executeDelegation.mockClear();

@@ -31,4 +31,10 @@ export const ACTION_METADATA: ActionMetadata[] = [
 		shortName: "MCP",
 		icon: "codicon-server",
 	},
+	{
+		id: "useSubagents",
+		label: "Delegate to sub-agents",
+		shortName: "Sub-agents",
+		icon: "codicon-organization",
+	},
 ]

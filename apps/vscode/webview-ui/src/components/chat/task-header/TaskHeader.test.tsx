@@ -3,7 +3,21 @@ import { EditMessageAndRegenerateRequest } from "@shared/proto/cline/task"
 import { fireEvent, render, screen } from "@testing-library/react"
 import type { PropsWithChildren } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { autoCompactThresholdFor } from "./autoCompactThreshold"
 import TaskHeader from "./TaskHeader"
+
+describe("autoCompactThresholdFor", () => {
+	it("is 90% of the model's input limit, as a share of its context window", () => {
+		// FreeAuto: a 256k window with a 92k input budget.
+		expect(autoCompactThresholdFor({ contextWindow: 256_000, maxInputTokens: 92_000 })).toBeCloseTo(0.3234, 3)
+		// A catalog model whose limit is its window.
+		expect(autoCompactThresholdFor({ contextWindow: 200_000, maxInputTokens: 200_000 })).toBeCloseTo(0.9, 3)
+		// Only a window known: the engine assumes 90% of it is usable input.
+		expect(autoCompactThresholdFor({ contextWindow: 128_000 })).toBeCloseTo(0.81, 3)
+		expect(autoCompactThresholdFor(undefined)).toBeUndefined()
+		expect(autoCompactThresholdFor({ contextWindow: 0 })).toBeUndefined()
+	})
+})
 
 vi.mock("@/components/ui/tooltip", () => ({
 	Tooltip: ({ children }: PropsWithChildren) => <>{children}</>,

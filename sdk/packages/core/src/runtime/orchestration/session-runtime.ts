@@ -87,6 +87,11 @@ export interface RuntimeBuilderInput {
 	requestToolApproval?: (
 		request: ToolApprovalRequest,
 	) => Promise<ToolApprovalResult> | ToolApprovalResult;
+	/**
+	 * Context compaction for delegated runs (configured agents), read when a
+	 * run starts: the host builds it after the runtime.
+	 */
+	subAgentPrepareTurn?: () => AgentConfig["prepareTurn"];
 }
 
 export interface RuntimeBuilder {

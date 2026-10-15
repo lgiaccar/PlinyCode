@@ -83,6 +83,8 @@ async function generateAssistantMessageForRequest(
 		conversationId: trimNonEmpty(ctx.config.conversationId),
 		runId: ctx.state.runId,
 		iteration: ctx.state.iteration,
+		// Lets the provider's usage report split the context by source.
+		contextSources: ctx.config.contextSources?.(),
 	});
 	let request: AgentModelRequest = {
 		systemPrompt: ctx.config.systemPrompt,

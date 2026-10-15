@@ -3,9 +3,10 @@ import { mentionRegexGlobal } from "@shared/context-mentions"
 import { parseMentions } from "@/core/mentions"
 import type { StateManager } from "@/core/storage/StateManager"
 import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
+import { getMemoryMaxTokens } from "@/hosts/vscode/memory-settings"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { Logger } from "@/shared/services/Logger"
-import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
+import { builtinSlashCommands } from "./builtin-slash-commands"
 import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command-expansion"
 
 export interface SdkSlashMentionResolverOptions {
@@ -118,7 +119,8 @@ export class SdkSlashMentionResolver {
 				globalToggles: this.options.stateManager.getGlobalSettingsKey("globalWorkflowToggles"),
 				workspaceToggles: this.options.stateManager.getWorkspaceStateKey("workflowToggles"),
 			})
-			return expandSlashCommands(text, [...service.listRuntimeCommands(), ...BUILTIN_SLASH_COMMANDS], {
+			const builtins = builtinSlashCommands({ memoryEnabled: getMemoryMaxTokens() > 0 })
+			return expandSlashCommands(text, [...service.listRuntimeCommands(), ...builtins], {
 				disabledWorkflowNames,
 				workflowRecords,
 			})

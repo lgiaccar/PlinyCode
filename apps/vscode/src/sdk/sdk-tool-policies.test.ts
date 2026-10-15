@@ -1,6 +1,34 @@
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
 import { describe, expect, it } from "vitest"
-import { buildToolPolicies, isToolAutoApproved } from "./sdk-tool-policies"
+import { buildToolPolicies, isSubAgentDeniedTool, isSubAgentTool, isToolAutoApproved } from "./sdk-tool-policies"
+
+describe("sub-agent tools", () => {
+	it("follows the Delegate to sub-agents toggle, on by default and for settings saved before it existed", () => {
+		expect(isToolAutoApproved("spawn_agent", DEFAULT_AUTO_APPROVAL_SETTINGS)).toBe(true)
+		expect(isToolAutoApproved("subagent_reviewer", DEFAULT_AUTO_APPROVAL_SETTINGS)).toBe(true)
+		const legacy = { ...DEFAULT_AUTO_APPROVAL_SETTINGS, actions: { ...DEFAULT_AUTO_APPROVAL_SETTINGS.actions } }
+		delete legacy.actions.useSubagents
+		expect(isToolAutoApproved("spawn_agent", legacy)).toBe(true)
+		const off = {
+			...DEFAULT_AUTO_APPROVAL_SETTINGS,
+			actions: { ...DEFAULT_AUTO_APPROVAL_SETTINGS.actions, useSubagents: false },
+		}
+		expect(isToolAutoApproved("spawn_agent", off)).toBe(false)
+		expect(buildToolPolicies(DEFAULT_AUTO_APPROVAL_SETTINGS).spawn_agent).toEqual({ autoApprove: false })
+	})
+
+	it("names the tools a sub-agent does not get", () => {
+		expect(isSubAgentTool("spawn_agent")).toBe(true)
+		expect(isSubAgentTool("subagent_code_reviewer")).toBe(true)
+		expect(isSubAgentTool("read_files")).toBe(false)
+		for (const denied of ["ask_advisor", "save_memory", "search_conversations", "read_conversation"]) {
+			expect(isSubAgentDeniedTool(denied)).toBe(true)
+		}
+		for (const allowed of ["run_commands", "wait", "update_todo_list", "github__get_pull_request"]) {
+			expect(isSubAgentDeniedTool(allowed)).toBe(false)
+		}
+	})
+})
 
 describe("isToolAutoApproved", () => {
 	it("does not auto-approve command tools by default", () => {

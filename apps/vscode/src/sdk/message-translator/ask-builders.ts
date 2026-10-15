@@ -1,7 +1,7 @@
 // Tool-approval ask message builder and compaction notice helpers. Split out
 // of message-translator.ts (see message-translator/index.ts).
 
-import type { ClineAskUseSubagents, ClineCompactionInfo, ClineMessage } from "@shared/ExtensionMessage"
+import type { ClineAskUseSubagents, ClineCompactionInfo, ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
 import { getStringField, parseToolInput } from "./tool-input-parse"
 import {
 	buildMcpToolPayload,
@@ -96,6 +96,62 @@ export function parseCompactionNoticeMetadata(metadata: Record<string, unknown> 
 
 function asFiniteNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+/**
+ * The summarizer's call, from a completed compaction notice or a persisted
+ * summary message's metadata, as the usage row that adds it to the
+ * conversation's cost. Undefined when the compaction used no model or the
+ * stream reported nothing.
+ */
+export function buildCompactionUsageMessage(summarizerUsage: unknown, ts: number): ClineMessage | undefined {
+	if (!summarizerUsage || typeof summarizerUsage !== "object") {
+		return undefined
+	}
+	const usage = summarizerUsage as Record<string, unknown>
+	const inputTokens = asFiniteNumber(usage.inputTokens) ?? 0
+	const outputTokens = asFiniteNumber(usage.outputTokens) ?? 0
+	const cacheReads = asFiniteNumber(usage.cacheReadTokens) ?? 0
+	const cacheWrites = asFiniteNumber(usage.cacheWriteTokens) ?? 0
+	const cost = asFiniteNumber(usage.totalCost) ?? 0
+	if (inputTokens === 0 && outputTokens === 0 && cost === 0) {
+		return undefined
+	}
+	const payload: ClineSubagentUsageInfo = {
+		source: "compaction",
+		tokensIn: Math.max(0, inputTokens - cacheReads - cacheWrites),
+		tokensOut: outputTokens,
+		cacheWrites,
+		cacheReads,
+		cost,
+	}
+	return { ts, type: "say", say: "subagent_usage", text: JSON.stringify(payload), partial: false }
+}
+
+/**
+ * The row shown when compaction ran and the request is still over the
+ * model's input limit: one message alone can be too large for the model.
+ */
+export function buildCompactionInsufficientMessage(
+	metadata: Record<string, unknown> | undefined,
+	ts: number,
+): ClineMessage | undefined {
+	if (metadata?.phase !== "insufficient") {
+		return undefined
+	}
+	const tokensAfter = asFiniteNumber(metadata.tokensAfter)
+	const maxInputTokens = asFiniteNumber(metadata.maxInputTokens)
+	const sizes =
+		tokensAfter !== undefined && maxInputTokens !== undefined
+			? ` (about ${Math.round(tokensAfter / 1000)}k of the model's ${Math.round(maxInputTokens / 1000)}k input tokens)`
+			: ""
+	return {
+		ts,
+		type: "say",
+		say: "info",
+		text: `⚠ The context is still over the model's input limit after compaction${sizes}: the latest message alone may be too large for this model. Shorten it, start a new task, or switch to a model with a larger window.`,
+		partial: false,
+	}
 }
 
 /** Build the say:"compaction" divider message for a compaction status payload. */

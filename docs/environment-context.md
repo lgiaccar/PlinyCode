@@ -52,7 +52,11 @@ A conversation that started without a snapshot never gets one later: it started 
 
 `buildClineSystemPrompt` in [cline.ts](../sdk/packages/shared/src/prompt/cline.ts) renders the entry for every provider from its `gitSnapshot` option ([git-snapshot.ts](../sdk/packages/shared/src/prompt/git-snapshot.ts)). A host that passes only the older `latestGitBranchName` and `latestGitCommitHash` fields gets the branch line from those.
 
-Sub-agents are started by the engine with their own prompt and do not go through this path, so nothing is gathered for them.
+Sub-agents are started by the engine with their own prompt and do not go through this path; the extension hands the conversation's snapshot and pinned date to the engine (`subAgentPrompt` on the session config), and the sub-agent's prompt shows the same `<env>` block as the root's ([agent-tools.md](agent-tools.md), "Sub-agents").
+
+### The date is pinned too
+
+The `<env>` block's `Date:` line sits above the snapshot, and the same reasoning applies to it: filled in from the clock, it changed the prompt's prefix the first time a conversation was rebuilt on a later day. `ConversationPromptDates` in [conversation-prompt-date.ts](../apps/vscode/src/sdk/context/conversation-prompt-date.ts) fixes the date when the conversation's first config is built and hands it to every later build through the `currentDate` option of `buildClineSystemPrompt`. It is stored with the snapshot in the session metadata, under `promptDate`, so a resume after a restart shows the same date. A conversation that started before the date was stored gets today's date on its next build, once. When the current day matters to a task, the model runs a command for it, as it does for the git state.
 
 ### The date is pinned too
 
@@ -82,7 +86,7 @@ The state is read through the host bridge's window service: `getOpenTabs`, and `
 
 - Only when the block differs from the last one sent in that conversation. With the same file, cursor and tabs, the message goes out as typed.
 - When every file was closed, a conversation that was told about open files is told once that none is open.
-- Not for prompts the extension writes itself: the task-resumption prompt and the plan-to-act continuation. Messages the engine adds during a run (hook context, the unfinished-turn reminders) and sub-agent prompts do not pass through this function at all.
+- Not for prompts the extension writes itself: the task-resumption prompt and the plan-to-act continuation. Messages the engine adds during a run (hook context, the unfinished-turn reminders) and the tasks handed to sub-agents do not pass through this function at all.
 - Messages queued or steered while the agent is running do get it.
 
 The last block of each conversation is kept in memory. When a session starts from a transcript (resume, rebuild, after a restart), the tracker takes the last block found in that transcript, so reopening a conversation does not repeat a block the model already has, and a transcript compacted past its blocks gets a new one.

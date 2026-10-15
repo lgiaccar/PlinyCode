@@ -8,7 +8,11 @@
  * always sum to the displayed total.
  */
 
-import { CHARS_PER_TOKEN, estimateTokens } from "./tokens";
+import {
+	CHARS_PER_TOKEN,
+	estimateTokens,
+	serializeForTokenEstimate,
+} from "./tokens";
 
 export interface ContextBreakdownInput {
 	/** The composed system prompt sent with the request (base prompt + any merged rules). */
@@ -78,7 +82,8 @@ function splitMessageChars(message: unknown): {
 			case "image":
 			case "file":
 			case "media":
-				other += safeStringify(part).length;
+				// Binary payloads count as images, not as their base64 text.
+				other += serializeForTokenEstimate(part).length;
 				break;
 			default:
 				conversation += safeStringify(part).length;

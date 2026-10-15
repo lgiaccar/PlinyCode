@@ -118,6 +118,42 @@ describe("SdkBackgroundSessions", () => {
 		expect(registry.has("next")).toBe(true)
 	})
 
+	it("records a sub-agent's run totals from its tool result, for spawn_agent and configured agents alike", () => {
+		registry.add(makeSession("a"), "Task A")
+		for (const toolName of ["spawn_agent", "subagent_reviewer"]) {
+			recordUsage.mockClear()
+			registry.handleEvent(agentEvent("a", { type: "content_start", contentType: "tool", toolName, toolCallId: "c1" }))
+			registry.handleEvent(
+				agentEvent("a", {
+					type: "content_end",
+					contentType: "tool",
+					toolName,
+					toolCallId: "c1",
+					output: {
+						text: "done",
+						usage: { inputTokens: 500, outputTokens: 50, cacheReadTokens: 200, totalCost: 0.02 },
+					},
+				}),
+			)
+			expect(recordUsage).toHaveBeenCalledWith(
+				"a",
+				expect.objectContaining({ type: "usage", inputTokens: 500, outputTokens: 50, cacheReadTokens: 200, cost: 0.02 }),
+			)
+		}
+		// A result without usage records nothing.
+		recordUsage.mockClear()
+		registry.handleEvent(
+			agentEvent("a", {
+				type: "content_end",
+				contentType: "tool",
+				toolName: "spawn_agent",
+				toolCallId: "c2",
+				output: { text: "x" },
+			}),
+		)
+		expect(recordUsage).not.toHaveBeenCalled()
+	})
+
 	it("ignores done events of sub-agents", async () => {
 		registry.add(makeSession("a"), "Task A")
 		registry.handleEvent(agentEvent("a", { type: "done", reason: "completed", parentAgentId: "parent" }))

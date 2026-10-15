@@ -1444,10 +1444,13 @@ describe("createContextCompactionPrepareTurn", () => {
 			emitStatusNotice,
 		});
 
-		expect(result).toBeUndefined();
+		// The summarizer's failure is diagnosed, and basic compaction then keeps
+		// the request from going out over budget.
+		expect(result?.messages).toBeDefined();
+		expect(result?.messages[0]?.metadata?.kind).not.toBe("compaction_summary");
 		expect(emitStatusNotice).toHaveBeenCalledWith(
-			"auto-compaction-skipped",
-			expect.objectContaining({ phase: "skipped" }),
+			"auto-compacted",
+			expect.objectContaining({ phase: "completed", strategy: "basic" }),
 		);
 		expect(logger.log).toHaveBeenCalledWith(
 			"Skipped agentic compaction: summarizer returned no summary text",
@@ -1623,6 +1626,315 @@ describe("createContextCompactionPrepareTurn", () => {
 			role: "assistant",
 			content: "Recent assistant state",
 		});
+	});
+
+	function toolResultMessage(id: string, text: string): LlmsProviders.Message {
+		return {
+			role: "user",
+			content: [
+				{
+					type: "tool_result",
+					tool_use_id: id,
+					name: "read_files",
+					content: text,
+				},
+			],
+		} as LlmsProviders.Message;
+	}
+
+	it("runs basic compaction when the agentic strategy finds nothing to fold", async () => {
+		// An earlier summary already covers everything before the latest typed
+		// prompt, and that turn is what fills the context: agentic returns
+		// nothing, and the request would go out as it is.
+		const createMessage = vi.fn();
+		createHandlerMock.mockReturnValue({ createMessage });
+		const log = vi.fn();
+		const emitStatusNotice = vi.fn();
+		const messages: LlmsProviders.Message[] = [
+			{
+				role: "user",
+				content: [{ type: "text", text: "Context summary:\n\nEarlier work." }],
+				metadata: {
+					kind: "compaction_summary",
+					displayRole: "system",
+					userRunSpan: 1,
+					summary: "Earlier work.",
+					details: { readFiles: [], modifiedFiles: [] },
+					tokensBefore: 100,
+					generatedAt: 1,
+				},
+			} as unknown as LlmsProviders.Message,
+			{ role: "user", content: "Latest request" },
+			{ role: "assistant", content: `Reading a lot ${"x".repeat(2000)}` },
+			toolResultMessage("t1", "y".repeat(2000)),
+			{ role: "assistant", content: `More reading ${"z".repeat(2000)}` },
+			toolResultMessage("t2", "w".repeat(2000)),
+		];
+		const prepareTurn = createContextCompactionPrepareTurn({
+			providerId: "anthropic",
+			modelId: "mock-model",
+			providerConfig: {
+				providerId: "anthropic",
+				modelId: "mock-model",
+			} as LlmsProviders.ProviderConfig,
+			compaction: {
+				enabled: true,
+				strategy: "agentic",
+				preserveRecentTokens: 1,
+			},
+			logger: { debug: vi.fn(), log },
+		});
+
+		const result = await prepareTurn?.({
+			agentId: "agent-1",
+			conversationId: "conv-1",
+			parentAgentId: null,
+			iteration: 1,
+			abortSignal: new AbortController().signal,
+			systemPrompt: "You are helpful.",
+			tools: [],
+			messages,
+			apiMessages: messages,
+			model: {
+				id: "mock-model",
+				provider: "anthropic",
+				info: { id: "mock-model", maxInputTokens: 1_000 },
+			},
+			emitStatusNotice,
+		});
+
+		expect(createMessage).not.toHaveBeenCalled();
+		expect(result?.messages).toBeDefined();
+		expect(result?.messages.length).toBeLessThan(messages.length);
+		expect(log).toHaveBeenCalledWith(
+			"Agentic compaction found nothing to fold; falling back to basic compaction",
+			expect.objectContaining({ severity: "warn" }),
+		);
+		expect(emitStatusNotice).toHaveBeenCalledWith(
+			"auto-compacted",
+			expect.objectContaining({ phase: "completed", strategy: "basic" }),
+		);
+	});
+
+	it("reports the summarizer's usage with the compaction and keeps it on the summary", async () => {
+		createHandlerMock.mockReturnValue({
+			createMessage: vi.fn(() =>
+				streamChunks([
+					{ type: "text", text: "Summary of the old turn." },
+					{
+						type: "usage",
+						inputTokens: 1_200,
+						outputTokens: 40,
+						totalCost: 0.0123,
+					} as FakeChunk,
+					{ type: "done", id: "summary", success: true },
+				]),
+			),
+		});
+		const emitStatusNotice = vi.fn();
+		const messages: LlmsProviders.Message[] = [
+			{ role: "user", content: `Old task ${"a".repeat(600)}` },
+			{ role: "assistant", content: `Old answer ${"b".repeat(600)}` },
+			{ role: "user", content: "Latest request" },
+			{ role: "assistant", content: "Latest answer" },
+		];
+		const prepareTurn = createContextCompactionPrepareTurn({
+			providerId: "anthropic",
+			modelId: "mock-model",
+			providerConfig: {
+				providerId: "anthropic",
+				modelId: "mock-model",
+			} as LlmsProviders.ProviderConfig,
+			compaction: {
+				enabled: true,
+				strategy: "agentic",
+				preserveRecentTokens: 1,
+			},
+			logger: { debug: vi.fn(), log: vi.fn() },
+		});
+
+		const result = await prepareTurn?.({
+			agentId: "agent-1",
+			conversationId: "conv-1",
+			parentAgentId: null,
+			iteration: 1,
+			abortSignal: new AbortController().signal,
+			systemPrompt: "You are helpful.",
+			tools: [],
+			messages,
+			apiMessages: messages,
+			model: {
+				id: "mock-model",
+				provider: "anthropic",
+				info: { id: "mock-model", maxInputTokens: 300 },
+			},
+			emitStatusNotice,
+		});
+
+		const usage = {
+			providerId: "anthropic",
+			modelId: "mock-model",
+			inputTokens: 1_200,
+			outputTokens: 40,
+			totalCost: 0.0123,
+		};
+		expect(result?.messages[0]?.metadata).toMatchObject({
+			kind: "compaction_summary",
+			summarizerUsage: usage,
+		});
+		expect(emitStatusNotice).toHaveBeenCalledWith(
+			"auto-compacted",
+			expect.objectContaining({
+				phase: "completed",
+				strategy: "agentic",
+				summarizerUsage: usage,
+			}),
+		);
+	});
+
+	it("trims inside the latest turn on the next call when the summary left the request over the trigger", async () => {
+		createHandlerMock.mockReturnValue({
+			createMessage: vi.fn(() =>
+				streamChunks([
+					{ type: "text", text: "Summary of the old turn." },
+					{ type: "done", id: "summary", success: true },
+				]),
+			),
+		});
+		const log = vi.fn();
+		const emitStatusNotice = vi.fn();
+		const messages: LlmsProviders.Message[] = [
+			{ role: "user", content: "Old task" },
+			{ role: "assistant", content: "Old answer" },
+			{ role: "user", content: "Latest request" },
+			{ role: "assistant", content: `Reading a lot ${"x".repeat(3000)}` },
+			toolResultMessage("t1", "y".repeat(3000)),
+			{ role: "assistant", content: `More reading ${"z".repeat(3000)}` },
+			toolResultMessage("t2", "w".repeat(3000)),
+		];
+		const prepareTurn = createContextCompactionPrepareTurn({
+			providerId: "anthropic",
+			modelId: "mock-model",
+			providerConfig: {
+				providerId: "anthropic",
+				modelId: "mock-model",
+			} as LlmsProviders.ProviderConfig,
+			compaction: {
+				enabled: true,
+				strategy: "agentic",
+				preserveRecentTokens: 1,
+			},
+			logger: { debug: vi.fn(), log },
+		});
+		const call = (input: LlmsProviders.Message[], iteration: number) =>
+			prepareTurn?.({
+				agentId: "agent-1",
+				conversationId: "conv-1",
+				parentAgentId: null,
+				iteration,
+				abortSignal: new AbortController().signal,
+				systemPrompt: "You are helpful.",
+				tools: [],
+				messages: input,
+				apiMessages: input,
+				model: {
+					id: "mock-model",
+					provider: "anthropic",
+					info: { id: "mock-model", maxInputTokens: 1_500 },
+				},
+				emitStatusNotice,
+			});
+
+		// First call: the old turn is summarized; the latest turn stays verbatim
+		// and the request is still over the trigger.
+		const first = await call(messages, 1);
+		expect(first?.messages[0]?.metadata?.kind).toBe("compaction_summary");
+		expect(first?.messages).toHaveLength(6);
+		expect(log).not.toHaveBeenCalledWith(
+			"Agentic compaction found nothing to fold; falling back to basic compaction",
+			expect.anything(),
+		);
+
+		// Next call: nothing new to fold, so basic compaction trims inside the turn.
+		const second = await call(first?.messages ?? [], 2);
+		expect(second?.messages).toBeDefined();
+		expect(log).toHaveBeenCalledWith(
+			"Agentic compaction found nothing to fold; falling back to basic compaction",
+			expect.objectContaining({ severity: "warn" }),
+		);
+		expect(emitStatusNotice).toHaveBeenLastCalledWith(
+			"auto-compacted",
+			expect.objectContaining({ phase: "completed", strategy: "basic" }),
+		);
+		const secondTokens = (second?.messages ?? []).reduce(
+			(total, message) => total + estimateJsonTokens(message),
+			0,
+		);
+		expect(secondTokens).toBeLessThan(totalJsonTokens(first?.messages ?? []));
+	});
+
+	it("says when one message alone keeps the request over the limit", async () => {
+		createHandlerMock.mockReturnValue({
+			createMessage: vi.fn(() =>
+				streamChunks([
+					{ type: "text", text: "Summary." },
+					{ type: "done", id: "summary", success: true },
+				]),
+			),
+		});
+		const emitStatusNotice = vi.fn();
+		const messages: LlmsProviders.Message[] = [
+			{ role: "user", content: "Old task" },
+			{ role: "assistant", content: "Old answer" },
+			{ role: "user", content: `Here is a huge paste ${"p".repeat(30_000)}` },
+		];
+		const prepareTurn = createContextCompactionPrepareTurn({
+			providerId: "anthropic",
+			modelId: "mock-model",
+			providerConfig: {
+				providerId: "anthropic",
+				modelId: "mock-model",
+			} as LlmsProviders.ProviderConfig,
+			compaction: {
+				enabled: true,
+				strategy: "agentic",
+				preserveRecentTokens: 1,
+			},
+			logger: { debug: vi.fn(), log: vi.fn() },
+		});
+		const call = (input: LlmsProviders.Message[], iteration: number) =>
+			prepareTurn?.({
+				agentId: "agent-1",
+				conversationId: "conv-1",
+				parentAgentId: null,
+				iteration,
+				abortSignal: new AbortController().signal,
+				systemPrompt: "You are helpful.",
+				tools: [],
+				messages: input,
+				apiMessages: input,
+				model: {
+					id: "mock-model",
+					provider: "anthropic",
+					info: { id: "mock-model", maxInputTokens: 1_000 },
+				},
+				emitStatusNotice,
+			});
+
+		const first = await call(messages, 1);
+		expect(emitStatusNotice).not.toHaveBeenCalledWith(
+			"auto-compaction-insufficient",
+			expect.anything(),
+		);
+		await call(first?.messages ?? [], 2);
+		expect(emitStatusNotice).toHaveBeenCalledWith(
+			"auto-compaction-insufficient",
+			expect.objectContaining({
+				phase: "insufficient",
+				maxInputTokens: 1_000,
+				tokensAfter: expect.any(Number),
+			}),
+		);
 	});
 
 	it("falls back to basic compaction when the agentic request fails", async () => {
@@ -3869,8 +4181,10 @@ describe("createContextCompactionPrepareTurn", () => {
 			},
 		});
 
+		// Nothing older than the latest turn to summarize: the summarizer is not
+		// called, and only basic compaction, which trims inside the turn, runs.
 		expect(createHandlerMock).not.toHaveBeenCalled();
-		expect(result).toBeUndefined();
+		expect(result?.messages[0]?.metadata?.kind).not.toBe("compaction_summary");
 	});
 
 	it("does not immediately re-trigger basic compaction on the next turn after accounting for the protected tail", async () => {

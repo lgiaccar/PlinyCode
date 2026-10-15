@@ -44,6 +44,8 @@ Design and operations notes are in `docs/`:
 - The CI watcher (`watch_ci`), which wakes a conversation when CI finishes, is described in [docs/devops-mcp.md](docs/devops-mcp.md).
 - [docs/ci-board.md](docs/ci-board.md): the CI Board, which watches many pull requests and branches with one status per pipeline, has a free model triage their failures (severity, summary, markdown reports), runs fixes (actions) against them in git worktrees on the free auto-router, and with auto-watch fixes conflicts and small test deltas by itself under its own approval rules.
 - [docs/context-management-audit.md](docs/context-management-audit.md): the audit of sub-agents, task isolation, context compression, memory and knowledge, with each finding's site and the wave that fixes it.
+- [docs/rules.md](docs/rules.md): which rules files reach the model (including `AGENTS.md` and `CLAUDE.md` files below the root, listed by path and scope), the rules budget and the order rules are inlined in.
+- [docs/context-compaction.md](docs/context-compaction.md): when the conversation is compacted, the agentic and basic strategies and the fallback between them, overflow recovery, what the summarizer costs, and the context bar's threshold marker.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.

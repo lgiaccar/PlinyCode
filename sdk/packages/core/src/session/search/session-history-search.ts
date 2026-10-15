@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
 	formatSessionSearchPreview,
 	formatSessionSearchTitle,
+	stripModeNotices,
 } from "@plinycode/shared";
 import { loadSqliteDb, nowIso, type SqliteDb } from "@plinycode/shared/db";
 import { resolveDbDataDir } from "@plinycode/shared/storage";
@@ -11,7 +12,9 @@ import type { SessionRecord } from "../../types/sessions";
 import { offTheRecordMessageIndices } from "../off-the-record";
 
 // 3: side-question (off-the-record) turns are left out of the index.
-const INDEX_VERSION = 3;
+// 4: workspace roots are stored normalized (normalizeWorkspaceRoot), and the
+//    editor-state and mode-notice blocks are left out of message text.
+const INDEX_VERSION = 4;
 const DEFAULT_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const MAX_INDEXED_TEXT_LENGTH = 128 * 1024;
 const MAX_SESSIONS = 100_000;
@@ -93,7 +96,25 @@ function messageText(message: unknown): string {
 	const record = asRecord(message);
 	const output: SearchableTextAccumulator = { length: 0, parts: [] };
 	appendSearchableText(record?.content ?? message, output);
-	return output.parts.join("\n").trim();
+	// The editor state a host appends to typed messages (open tabs, cursor)
+	// and mode notices are not what the user said: indexed, every open file
+	// name matched a search.
+	return stripModeNotices(output.parts.join("\n"));
+}
+
+/**
+ * A workspace root as the index stores and compares it: forward slashes, no
+ * trailing slash, and lower case on Windows, where the same folder can reach
+ * the index as `D:\repo` from one window and `d:/repo/` from another. The
+ * folder filter compares with plain equality, so roots must agree first.
+ */
+export function normalizeWorkspaceRoot(root: string | undefined): string {
+	const trimmed = (root ?? "").trim();
+	if (!trimmed) return "";
+	const slashed = trimmed.replaceAll("\\", "/").replace(/\/+$/, "") || "/";
+	return /^[a-zA-Z]:/.test(slashed) || process.platform === "win32"
+		? slashed.toLowerCase()
+		: slashed;
 }
 
 function messageRole(message: unknown): string {
@@ -282,7 +303,8 @@ export class SessionHistorySearchService {
 			Math.max(limit * 20, 200),
 			MAX_SEARCH_CANDIDATES,
 		);
-		const workspaceRoot = input.workspaceRoot?.trim();
+		const workspaceRoot =
+			normalizeWorkspaceRoot(input.workspaceRoot) || undefined;
 		const rows = db
 			.prepare(
 				`WITH matches AS MATERIALIZED (
@@ -428,7 +450,7 @@ export class SessionHistorySearchService {
 				-1,
 				"session",
 				session.startedAt,
-				session.workspaceRoot,
+				normalizeWorkspaceRoot(session.workspaceRoot),
 				title,
 				session.prompt?.trim() ?? "",
 			);
@@ -447,7 +469,7 @@ export class SessionHistorySearchService {
 					ordinal,
 					messageRole(message),
 					session.startedAt,
-					session.workspaceRoot,
+					normalizeWorkspaceRoot(session.workspaceRoot),
 					"",
 					content,
 				);

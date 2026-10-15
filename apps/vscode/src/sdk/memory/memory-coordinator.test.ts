@@ -61,6 +61,22 @@ describe("memory-distiller", () => {
 		])
 		expect(parseDistillReply("no json here", "")).toEqual([])
 	})
+
+	it("compares whole entries, and skips what the user dismissed before", () => {
+		const reply = JSON.stringify({
+			memories: [
+				{ text: "Use bun", scope: "repo" },
+				{ text: "Run build:sdk after engine changes", scope: "repo" },
+			],
+		})
+		// "Use bun" occurs inside a longer entry but is not one itself: it is new.
+		const parsed = parseDistillReply(reply, "## Notes\n\n- Use bun, not npm, for every script")
+		expect(parsed.map((memory) => memory.text)).toEqual(["Use bun", "Run build:sdk after engine changes"])
+		// Dismissed before: not proposed again.
+		expect(parseDistillReply(reply, "", new Set(["use bun"])).map((memory) => memory.text)).toEqual([
+			"Run build:sdk after engine changes",
+		])
+	})
 })
 
 let root: string
@@ -138,6 +154,26 @@ describe("MemoryCoordinator", () => {
 		await coordinator.maybeOfferDistill("conv")
 		await coordinator.maybeOfferDistill("conv")
 		expect(deps.complete).toHaveBeenCalledTimes(1)
+	})
+
+	it("remembers how far it distilled, and what the user dismissed, across a reload", async () => {
+		const first = makeCoordinator()
+		await first.coordinator.maybeOfferDistill("conv")
+		const [offered] = proposals(first.rows)
+		// Keep the first memory, leave the second unchecked.
+		await first.coordinator.resolveProposal(offered.proposal?.id ?? "", true, ["0"])
+
+		// A new window: nothing new in the conversation, so no model call.
+		const second = makeCoordinator()
+		await second.coordinator.maybeOfferDistill("conv")
+		expect(second.deps.complete).not.toHaveBeenCalled()
+
+		// /distill reads the whole conversation again, but the unchecked memory is
+		// not proposed a second time and the saved one is already in memory.
+		await second.coordinator.distillNow()
+		expect(second.deps.complete).toHaveBeenCalledTimes(1)
+		expect(proposals(second.rows)).toHaveLength(0)
+		expect(second.rows.some((row) => (row.text ?? "").includes("No new memories"))).toBe(true)
 	})
 
 	it("keeps a pending proposal across a reload until it is resolved", async () => {

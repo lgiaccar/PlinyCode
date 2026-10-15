@@ -77,6 +77,27 @@ export function countMemoryEntries(text: string): number {
 	return parseBlocks(text).filter((block) => block.kind === "entry").length
 }
 
+/**
+ * The entries of a memory file, each as `save_memory` compares them: one line,
+ * lower case, single spaces, without the `(details: …)` pointer. A proposal or
+ * an insertion is a duplicate when its key is in this set: whole entries, so a
+ * short memory that happens to occur inside a longer one is not a duplicate.
+ */
+export function memoryEntryKeys(text: string): Set<string> {
+	const keys = new Set<string>()
+	for (const block of parseBlocks(text)) {
+		if (block.kind === "entry") {
+			keys.add(memoryEntryKey(block.text.replace(/ \(details: [^)]*\)$/, "")))
+		}
+	}
+	return keys
+}
+
+/** How two entries are compared: see memoryEntryKeys. */
+export function memoryEntryKey(text: string): string {
+	return comparable(text)
+}
+
 interface TruncatedMemory {
 	text: string
 	keptEntries: number
