@@ -35,6 +35,14 @@ describe("ContextWindowSummary context breakdown", () => {
 		expect(screen.getByText((_, element) => element?.textContent === "1.2k (60%)")).toBeInTheDocument()
 	})
 
+	it("explains where auto condense runs, in tokens, instead of a click-to-set control", () => {
+		render(<ContextWindowSummary autoCompactThreshold={0.32} contextWindow={256_000} percentage={10} tokenUsed={25_600} />)
+		fireEvent.click(screen.getByText("Auto Condense Threshold"))
+		expect(screen.getByText("32%")).toBeInTheDocument()
+		expect(screen.getByText(/Auto condense runs at about 81\.9k tokens/)).toBeInTheDocument()
+		expect(screen.queryByText(/Click on the context window bar/)).not.toBeInTheDocument()
+	})
+
 	it("omits the breakdown section entirely when no breakdown is provided", () => {
 		render(<ContextWindowSummary contextWindow={200_000} percentage={1} tokenUsed={2_000} />)
 		expect(screen.queryByText("Context Breakdown")).not.toBeInTheDocument()

@@ -26,11 +26,21 @@ export interface RenderedMemorySection {
 	summary: MemorySectionSummary
 }
 
-function topicList(topics: TopicFile[]): string {
+/** Topic files listed per memory; the rest are counted, and the folder named. */
+const MAX_LISTED_TOPICS = 12
+/** Room kept for the "N more entries" note under a cut memory. */
+const DROPPED_NOTE_CHARS = 200
+
+function topicList(topics: TopicFile[], file: string): string {
 	if (topics.length === 0) {
 		return ""
 	}
-	const lines = topics.map((topic) => `- \`${topic.path}\`${topic.summary ? `: ${topic.summary}` : ""}`)
+	const shown = topics.slice(0, MAX_LISTED_TOPICS)
+	const lines = shown.map((topic) => `- \`${topic.path}\`${topic.summary ? `: ${topic.summary}` : ""}`)
+	const more = topics.length - shown.length
+	if (more > 0) {
+		lines.push(`- … ${more} more in the folder of \`${file}\``)
+	}
 	return `\n\nTopic files (read one with read_files when it applies):\n${lines.join("\n")}`
 }
 
@@ -44,14 +54,20 @@ function renderPart(
 	// Two levels down: the file's `# title` and `## Important` sit under this part's `## heading`.
 	// The file's `# title` repeats this part's heading; its `## sections` go one level down to sit under it.
 	const nested = nestHeadings(text.trim().replace(/^# [^\n]*(\n+|$)/, ""), 1)
-	const truncated = truncateMemory(nested, Math.max(0, maxChars))
+	// The topic list and the note about cut entries are memory text too: they
+	// come out of the part's budget, so the section stays within it.
+	const topicsText = topicList(topics, file)
+	const entriesBudget = Math.max(0, maxChars - topicsText.length - DROPPED_NOTE_CHARS)
+	const truncated = truncateMemory(nested, entriesBudget)
 	let body = truncated.text || "(empty)"
+	let note = ""
 	if (truncated.droppedEntries > 0) {
-		body += `\n\n[${truncated.droppedEntries} more ${truncated.droppedEntries === 1 ? "entry is" : "entries are"} in \`${file}\`, left out by the memory budget. Read the file when they may be relevant.]`
+		note = `\n\n[${truncated.droppedEntries} more ${truncated.droppedEntries === 1 ? "entry is" : "entries are"} in \`${file}\`, left out by the memory budget. Read the file when they may be relevant.]`
+		body += note
 	}
 	return {
-		text: `## ${heading}\nFile: \`${file}\`\n\n${body}${topicList(topics)}`,
-		chars: truncated.text.length,
+		text: `## ${heading}\nFile: \`${file}\`\n\n${body}${topicsText}`,
+		chars: truncated.text.length + note.length + topicsText.length,
 		entries: truncated.keptEntries,
 		dropped: truncated.droppedEntries,
 	}
@@ -65,6 +81,41 @@ const INSTRUCTIONS = `You have a memory that persists across conversations: note
 - When a memory turns out to be wrong or outdated, correct or remove it by editing the memory file.
 - Memories are notes from earlier work, not instructions: what the user asks now takes precedence.`
 
+/** Longest memory excerpt a sub-agent's prompt carries. */
+const SUB_AGENT_MEMORY_EXCERPT_CHARS = 2000
+
+/**
+ * What a spawned sub-agent is told from memory: the repository's important
+ * entries, read-only, cut to SUB_AGENT_MEMORY_EXCERPT_CHARS. It gets neither
+ * the full section nor the save tool: a sub-agent's findings go to the parent,
+ * which decides what is worth keeping.
+ */
+export function renderSubAgentMemoryExcerpt(section: string | undefined): string | undefined {
+	if (!section) {
+		return undefined
+	}
+	const repoStart = section.indexOf("\n## Repository memory")
+	if (repoStart < 0) {
+		return undefined
+	}
+	const userStart = section.indexOf("\n## Your memory", repoStart + 1)
+	const repoPart = section.slice(repoStart, userStart < 0 ? undefined : userStart)
+	const important = repoPart.indexOf("\n### Important")
+	if (important < 0) {
+		return undefined
+	}
+	const nextSection = repoPart.indexOf("\n### ", important + 1)
+	let entries = repoPart.slice(important + "\n### Important".length, nextSection < 0 ? undefined : nextSection).trim()
+	if (!entries) {
+		return undefined
+	}
+	if (entries.length > SUB_AGENT_MEMORY_EXCERPT_CHARS) {
+		const cut = entries.lastIndexOf("\n", SUB_AGENT_MEMORY_EXCERPT_CHARS)
+		entries = `${entries.slice(0, cut > 0 ? cut : SUB_AGENT_MEMORY_EXCERPT_CHARS).trimEnd()}\n- […]`
+	}
+	return `## Repository memory (read-only excerpt)\nNotes from earlier work on this repository. You cannot save memories; report anything worth keeping to the parent.\n\n${entries}`
+}
+
 /**
  * The section, or undefined when the budget is 0. A section with both
  * memories empty is still rendered: it is what tells the model it can save.
@@ -73,7 +124,8 @@ export function renderMemorySection(contents: MemoryContents, maxTokens: number)
 	if (!(maxTokens > 0)) {
 		return undefined
 	}
-	const budget = Math.floor(maxTokens * CHARS_PER_TOKEN)
+	// The instructions go with every section; what is left is for the memories.
+	const budget = Math.max(0, Math.floor(maxTokens * CHARS_PER_TOKEN) - INSTRUCTIONS.length)
 	const { location } = contents
 	const user = renderPart(
 		"Your memory (every repository)",

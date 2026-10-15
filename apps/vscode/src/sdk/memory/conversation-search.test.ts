@@ -58,6 +58,8 @@ describe("ConversationSearch with the full-text index", () => {
 
 		const hits = await search.search({ query: "pager", workspaceRoot: "/work/a/", excludeSessionId: "current" })
 		expect(hits.map((entry) => entry.sessionId)).toEqual(["s1"])
+		// The folder goes to the index's own filter, so other workspaces cannot crowd it out.
+		expect(index.search).toHaveBeenCalledWith(expect.objectContaining({ workspaceRoot: "/work/a/" }))
 		expect(index.start).toHaveBeenCalledTimes(1)
 
 		await search.search({ query: "pager" })
@@ -85,6 +87,18 @@ describe("ConversationSearch without SQLite", () => {
 		expect((await search.search({ query: "pager", workspaceRoot: "/work/b" })).map((entry) => entry.sessionId)).toEqual([
 			"s2",
 		])
+	})
+})
+
+describe("messageToText", () => {
+	it("leaves out the editor state and mode notices the extension added", async () => {
+		const { messageToText } = await import("./conversation-search")
+		const text = messageToText(
+			user(
+				"<mode_notice>The user switched from plan mode to act mode.</mode_notice>\nfix the pager\n\n<editor_state>\nActive file: src/app.ts\n</editor_state>",
+			),
+		)
+		expect(text).toBe("fix the pager")
 	})
 })
 

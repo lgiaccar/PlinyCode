@@ -623,6 +623,7 @@ describe("vscode-to-file-migration", () => {
 			executeAllCommands: true,
 			useBrowser: true,
 			useMcp: true,
+			useSubagents: true,
 		}
 
 		it("enables all auto-approval actions for a legacy user with yoloModeToggled in VSCode storage", async () => {

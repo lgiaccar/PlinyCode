@@ -113,7 +113,27 @@ What to remember:`
  * SdkController.resolveSlashCommands. Declared as kind "skill" so the
  * workflow enable/disable toggles never apply to them.
  */
-export const BUILTIN_SLASH_COMMANDS: AvailableRuntimeCommand[] = [
+/**
+ * What /remember expands into while memory is off (`plinycode.memory.maxTokens`
+ * is 0): there is no save_memory tool then, and instructions to call it would
+ * only make the model improvise.
+ */
+const REMEMBER_WHILE_OFF_INSTRUCTIONS =
+	"The user asked to remember something, but PlinyCode's memory is turned off (`plinycode.memory.maxTokens` is 0), so nothing can be saved. Tell the user that, and that they can turn memory on in Settings → Features → Memory. What they wanted remembered:"
+
+/**
+ * The built-in commands as the session resolves them: /remember says memory is
+ * off when it is, instead of asking for a tool the session does not have.
+ */
+export function builtinSlashCommands(options: { memoryEnabled: boolean }): AvailableRuntimeCommand[] {
+	return options.memoryEnabled
+		? BUILTIN_SLASH_COMMANDS
+		: BUILTIN_SLASH_COMMANDS.map((command) =>
+				command.id === "builtin:remember" ? { ...command, instructions: REMEMBER_WHILE_OFF_INSTRUCTIONS } : command,
+			)
+}
+
+const BUILTIN_SLASH_COMMANDS: AvailableRuntimeCommand[] = [
 	{
 		id: "builtin:deep-planning",
 		name: "deep-planning",

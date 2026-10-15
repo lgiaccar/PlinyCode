@@ -171,6 +171,166 @@ describe("translateSessionEvent — chunk events", () => {
 })
 
 // ---------------------------------------------------------------------------
+// translateSessionEvent — compaction cost and limits
+// ---------------------------------------------------------------------------
+
+describe("translateSessionEvent — compaction cost", () => {
+	function notice(message: string, metadata: Record<string, unknown>): CoreSessionEvent {
+		return {
+			type: "agent_event",
+			payload: { sessionId: "session-1", event: { type: "notice", noticeType: "status", message, metadata } },
+		} as unknown as CoreSessionEvent
+	}
+
+	it("adds the summarizer's call as a usage row with source compaction", () => {
+		const state = new MessageTranslatorState()
+		translateSessionEvent(notice("auto-compacting", { kind: "auto_compaction", phase: "started" }), state)
+		const completed = translateSessionEvent(
+			notice("auto-compacted", {
+				kind: "auto_compaction",
+				phase: "completed",
+				tokensBefore: 90_000,
+				tokensAfter: 30_000,
+				summarizerUsage: {
+					providerId: "pliny",
+					modelId: "snps-provider/qwen3-6-35b",
+					inputTokens: 60_000,
+					outputTokens: 2_000,
+					cacheReadTokens: 10_000,
+					totalCost: 0.03,
+				},
+			}),
+			state,
+		)
+		expect(completed.messages.map((m) => m.say)).toEqual(["compaction", "subagent_usage"])
+		expect(JSON.parse(completed.messages[1].text ?? "{}")).toEqual({
+			source: "compaction",
+			tokensIn: 50_000,
+			tokensOut: 2_000,
+			cacheWrites: 0,
+			cacheReads: 10_000,
+			cost: 0.03,
+		})
+	})
+
+	it("says when the request is still over the limit after compaction", () => {
+		const state = new MessageTranslatorState()
+		const result = translateSessionEvent(
+			notice("auto-compaction-insufficient", {
+				kind: "auto_compaction",
+				phase: "insufficient",
+				tokensAfter: 150_000,
+				maxInputTokens: 92_000,
+			}),
+			state,
+		)
+		expect(result.messages).toHaveLength(1)
+		expect(result.messages[0].say).toBe("info")
+		expect(result.messages[0].text).toContain("still over the model's input limit")
+		expect(result.messages[0].text).toContain("150k of the model's 92k")
+	})
+
+	it("rebuilds the summarizer's usage row from a persisted compaction summary", () => {
+		const messages = [
+			{ role: "user", content: "Original task" },
+			{ role: "assistant", content: "Working on it" },
+			{
+				role: "user",
+				content: [{ type: "text", text: "Context summary:\n\nWe did things." }],
+				metadata: {
+					kind: "compaction_summary",
+					displayRole: "system",
+					userRunSpan: 1,
+					summary: "We did things.",
+					details: { readFiles: [], modifiedFiles: [] },
+					tokensBefore: 50_000,
+					generatedAt: 1,
+					summarizerUsage: {
+						providerId: "pliny",
+						modelId: "m",
+						inputTokens: 40_000,
+						outputTokens: 1_000,
+						totalCost: 0.02,
+					},
+				},
+			},
+			{ role: "user", content: "Continue" },
+		] as unknown as SdkMessage[]
+		const rows = sdkMessagesToClineMessages(messages as MessageWithMetadata[])
+		const usage = rows.find((row) => row.say === "subagent_usage")
+		expect(usage).toBeDefined()
+		expect(JSON.parse(usage?.text ?? "{}")).toMatchObject({ source: "compaction", tokensIn: 40_000, cost: 0.02 })
+		// The summary itself stays out of the chat.
+		expect(rows.some((row) => (row.text ?? "").includes("Context summary"))).toBe(false)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// translateSessionEvent — sub-agents
+// ---------------------------------------------------------------------------
+
+describe("translateSessionEvent — sub-agent rows", () => {
+	function agentEvent(event: Record<string, unknown>): CoreSessionEvent {
+		return { type: "agent_event", payload: { sessionId: "session-1", event } } as unknown as CoreSessionEvent
+	}
+
+	it("carries a sub-agent's cost and cache tokens into the usage row, for configured agents too", () => {
+		const state = new MessageTranslatorState()
+		translateSessionEvent(
+			agentEvent({
+				type: "content_start",
+				contentType: "tool",
+				toolName: "subagent_reviewer",
+				toolCallId: "c1",
+				input: { prompt: "Review the diff" },
+			}),
+			state,
+		)
+		expect(state.getSpawnAgentItems().map((item) => item.prompt)).toEqual(["Review the diff"])
+
+		// Live progress names the engine's agent id, so approvals can be attributed.
+		translateSessionEvent(
+			agentEvent({
+				type: "content_update",
+				contentType: "tool",
+				toolName: "subagent_reviewer",
+				toolCallId: "c1",
+				update: { subAgentId: "agent_7", toolCalls: 3, inputTokens: 100, outputTokens: 10, totalCost: 0.01 },
+			}),
+			state,
+		)
+		expect(state.subAgentLabel("agent_7")).toBe("sub-agent 1")
+		expect(state.subAgentLabel("someone-else")).toBeUndefined()
+
+		const result = translateSessionEvent(
+			agentEvent({
+				type: "content_end",
+				contentType: "tool",
+				toolName: "subagent_reviewer",
+				toolCallId: "c1",
+				output: {
+					text: "No problems.",
+					iterations: 2,
+					finishReason: "completed",
+					usage: { inputTokens: 1000, outputTokens: 80, cacheReadTokens: 400, cacheWriteTokens: 100, totalCost: 0.05 },
+				},
+			}),
+			state,
+		)
+		const usageRow = result.messages.find((message) => message.say === "subagent_usage")
+		expect(usageRow).toBeDefined()
+		expect(JSON.parse(usageRow?.text ?? "{}")).toEqual({
+			source: "subagents",
+			tokensIn: 500,
+			tokensOut: 80,
+			cacheWrites: 100,
+			cacheReads: 400,
+			cost: 0.05,
+		})
+	})
+})
+
+// ---------------------------------------------------------------------------
 // translateSessionEvent — pending prompts
 // ---------------------------------------------------------------------------
 

@@ -106,7 +106,7 @@ describe("summarizeInstructionContext", () => {
 		expect(summary.memoryChars).toBe(memory.length - "# Memory\n".length)
 		expect(summary.inlineRules).toEqual(["Workspace AGENTS.md", ".cursor/rules/git.md"])
 		expect(formatInstructionContextRow({ inlineRules: [], onDemandRules: [], skills: [], memoryChars: 4000 })).toBe(
-			"Context: memory (~1k tokens)",
+			"Context: memory (~1.3k tokens)",
 		)
 	})
 
@@ -118,7 +118,7 @@ describe("summarizeInstructionContext", () => {
 			rulesChars: 26_800,
 			skillsChars: 400,
 		})
-		expect(text).toBe("Context: 1 rule in the prompt (~6.7k tokens): `AGENTS.md` · 1 skill (~100 tokens): `a`")
+		expect(text).toBe("Context: 1 rule in the prompt (~8.9k tokens): `AGENTS.md` · 1 skill (~134 tokens): `a`")
 	})
 })
 

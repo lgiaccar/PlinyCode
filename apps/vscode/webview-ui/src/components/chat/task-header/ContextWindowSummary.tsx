@@ -174,11 +174,10 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 					title="Auto Condense Threshold"
 					value={<span className="text-muted-foreground">{`${(autoCompactThreshold * 100).toFixed(0)}%`}</span>}>
 					<div className="space-y-1">
-						<p className="text-xs leading-relaxed text-white">
-							Click on the context window bar to set a new threshold.
-						</p>
 						<p className="text-xs leading-relaxed mt-0 mb-0">
-							When the context window usage exceeds this threshold, the task will be automatically condensed.
+							Auto condense runs at about {formatTokenNumber(Math.round(autoCompactThreshold * contextWindow))}{" "}
+							tokens: 90% of the model&apos;s input limit, which can be below its context window. It measures the
+							request on an estimate, so it can run a little before the bar reaches the marker.
 						</p>
 					</div>
 				</AccordionItem>

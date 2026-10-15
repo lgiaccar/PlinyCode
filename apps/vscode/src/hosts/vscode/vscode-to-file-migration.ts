@@ -303,6 +303,7 @@ function migrateYoloModeToAutoApprovalSettings(vscodeContext: vscode.ExtensionCo
 				executeAllCommands: true,
 				useBrowser: true,
 				useMcp: true,
+				useSubagents: true,
 			},
 		}
 		storage.globalState.update("autoApprovalSettings", migrated)

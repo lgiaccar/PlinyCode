@@ -49,6 +49,7 @@ import {
 import type { ConfiguredAgentConfig } from "../../extensions/tools/team/configured-agent-config";
 import { loadConfiguredAgentConfigs } from "../../extensions/tools/team/configured-agent-config";
 import { createConfiguredAgentTools } from "../../extensions/tools/team/configured-agent-tool";
+import { createSubAgentGuidanceExtension } from "../../extensions/tools/team/subagent-guidance";
 import {
 	filterDisabledTools,
 	isModelToolEnabledGlobally,
@@ -567,9 +568,14 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 				: normalized.mode === "ask"
 					? createAskModeCommandGuardExtension()
 					: undefined;
-		const injectedExtensions = [userInstructionPlugin, modeCommandGuard].filter(
-			(extension) => extension !== undefined,
-		);
+		const subAgentGuidance = normalized.enableSpawnAgent
+			? createSubAgentGuidanceExtension()
+			: undefined;
+		const injectedExtensions = [
+			userInstructionPlugin,
+			modeCommandGuard,
+			subAgentGuidance,
+		].filter((extension) => extension !== undefined);
 		const runtimeExtensions =
 			injectedExtensions.length > 0
 				? [...(extensions ?? config.extensions ?? []), ...injectedExtensions]
@@ -645,6 +651,13 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			extensions: runtimeExtensions,
 			logger: logger ?? config.logger,
 			workspaceMetadata: config.workspaceMetadata,
+			// What a sub-agent's own system prompt shows about where it runs.
+			mode: normalized.mode,
+			clineIdeName: config.subAgentPrompt?.ide,
+			clinePlatform: config.subAgentPrompt?.platform,
+			gitSnapshot: config.subAgentPrompt?.gitSnapshot,
+			currentDate: config.subAgentPrompt?.currentDate,
+			promptSuffix: config.subAgentPrompt?.suffix,
 		});
 		if (normalized.enableSpawnAgent) {
 			if (configuredAgents.configs.length > 0) {
@@ -679,6 +692,9 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 							onSubAgentEvent: input.onSubAgentEvent,
 							onSubAgentStart: input.onSubAgentStart,
 							onSubAgentEnd: input.onSubAgentEnd,
+							toolPolicies: effectiveToolPolicies,
+							requestToolApproval: input.requestToolApproval,
+							getPrepareTurn: input.subAgentPrepareTurn,
 						}),
 						effectiveToolPolicies,
 					),

@@ -450,7 +450,7 @@ export function createContextCompactionPrepareTurn(
 			estimateMessageTokens,
 			logger: config.logger,
 		};
-		let executedStrategy = configuredStrategy;
+		let executedStrategy: string = configuredStrategy;
 		let result: CoreCompactionResult | undefined;
 		if (effectiveMode === "overflow_recovery") {
 			// The provider already rejected the request, so recovery must end
@@ -538,6 +538,29 @@ export function createContextCompactionPrepareTurn(
 				executedStrategy = "basic";
 				result = await BUILTIN_COMPACTION_STRATEGIES.basic(builtinOptions);
 			}
+			// The agentic strategy never cuts before the latest typed prompt and
+			// folds nothing twice, so once everything before that prompt is in a
+			// summary it returns nothing, and the request would go out as it is
+			// until the provider rejected it. Basic compaction can trim inside
+			// the latest turn, so it runs then. A summary that leaves the request
+			// over the trigger is not retried here: the next model call compacts
+			// again, finds nothing new to fold, and lands in this branch.
+			if (
+				strategy === "agentic" &&
+				!result?.messages &&
+				!context.abortSignal?.aborted
+			) {
+				config.logger?.log(
+					"Agentic compaction found nothing to fold; falling back to basic compaction",
+					{ severity: "warn", requestTriggerTokens },
+				);
+				const basicResult =
+					await BUILTIN_COMPACTION_STRATEGIES.basic(builtinOptions);
+				if (basicResult?.messages) {
+					executedStrategy = "basic";
+					result = basicResult;
+				}
+			}
 		}
 
 		if (result?.messages) {
@@ -546,6 +569,24 @@ export function createContextCompactionPrepareTurn(
 				0,
 			);
 			const afterRequestTokens = requestOverheadTokens + afterMessageTokens;
+			if (
+				effectiveMode === "auto" &&
+				executedStrategy === "basic" &&
+				afterRequestTokens > requestTriggerTokens
+			) {
+				// Only one typed message that is itself too large can leave the
+				// request over the trigger after basic compaction, which keeps
+				// every typed message whole. Say so now, instead of letting the
+				// provider's rejection explain it later.
+				context.emitStatusNotice?.(`${noticePrefix}compaction-insufficient`, {
+					kind: statusReason,
+					reason: statusReason,
+					phase: "insufficient",
+					iteration: context.iteration,
+					tokensAfter: afterRequestTokens,
+					maxInputTokens,
+				});
+			}
 			config.logger?.log("Context compaction completed", {
 				severity: "info",
 				strategy: executedStrategy,
@@ -574,6 +615,10 @@ export function createContextCompactionPrepareTurn(
 				messagesBefore: beforeMessageCount,
 				messagesAfter: result.messages.length,
 				maxInputTokens,
+				strategy: executedStrategy,
+				...(result.summarizerUsage
+					? { summarizerUsage: result.summarizerUsage }
+					: {}),
 			});
 			if (
 				result.budget &&

@@ -36,10 +36,17 @@ same two fields. Resuming a task keeps them (`historyItemToSessionMetadata`). A 
 this feature has no binding and counts as bound to its workspace root (`sessionRecordWorkspacePath`).
 
 The task runs in the workspace's first folder: that is its `cwd` and `workspaceRoot`. While a task is
-displayed, `SdkController.getWorkspaceRoot()` returns that folder rather than the window's, so mentions, file
-reads, diff edits, slash commands and session rebuilds (mode switch, compaction, edit-and-regenerate) stay in
-the conversation's workspace, and `ensureWorkspaceManager()` searches the workspace's folders. The override is
+displayed, `SdkController.getWorkspaceRoot()` returns that folder rather than the window's, so mentions, diff
+edits, slash commands and session rebuilds (mode switch, compaction, edit-and-regenerate) stay in the
+conversation's workspace, and `ensureWorkspaceManager()` searches the workspace's folders. The override is
 cleared with the task.
+
+What a session's tools do with a relative path does not depend on which task is displayed: the engine's
+`read_files` tool resolves it against the session's own `cwd` before the extension's executor sees it, and the
+search, file-finding and shell tools take their folder from the session config. A CI Board task running in a
+worktree in the background therefore reads its own files while another task is shown. The same holds for the
+session's mode: it is fixed when the session is built, and a background task keeps it whatever the mode switch
+shows (the switch rebuilds the displayed session only).
 
 Starting in another workspace than the window's is only possible when its first folder exists; otherwise the
 start fails with an error row asking for another workspace.
