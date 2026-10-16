@@ -24,6 +24,28 @@ covered later turns cannot come back), loop and mistake counters, queued
 notices, the router's per-turn state and errors VS Code reports late for files
 those turns edited.
 
+## What the chat shows
+
+The webview keeps its copy of the chat in step with the extension through
+`seq` and `epoch` stamps (`messageReducer.ts`): rows and state snapshots from
+an older epoch are dropped, and an unstamped row counts as epoch 0. A restart
+opens a new epoch, so the rows it keeps and the edited prompt are put on the
+new task through the message coordinator, which stamps them, right after the
+task is installed and before anything is awaited. Each state snapshot reads the
+transcript and its epoch together.
+
+Before this, the rows were added unstamped after several awaits. When a state
+post or a row of the new turn reached the webview first, the kept rows and the
+edited prompt were dropped. The new turn's first request row (an
+`api_req_started` row whose text is `{}`) then became the first row, and the
+task header showed it as the conversation's prompt: the "{}" bubble.
+
+A row of the new epoch can still reach the webview before the restart's
+snapshot (a hook row, for example). The reducer then moves to the new epoch
+but keeps the old transcript, so when the snapshot arrives it drops the rows
+from older epochs that the snapshot doesn't contain (the abandoned turns) and
+puts the rest in the snapshot's order.
+
 ## Mapping a chat row to the history
 
 The chat and the saved history do not line up one to one, so the row is

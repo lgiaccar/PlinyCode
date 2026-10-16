@@ -1,11 +1,17 @@
 import { CheckpointChangesSummaryRequest } from "@shared/proto/cline/checkpoints"
 import { EditMessageAndRegenerateRequest } from "@shared/proto/cline/task"
 import type React from "react"
-import { useMemo, useState } from "react"
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 import Thumbnails from "@/components/common/Thumbnails"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { CheckpointsServiceClient, TaskServiceClient } from "@/services/grpc-client"
+import ResizablePromptText, { MIN_PROMPT_HEIGHT } from "./ResizablePromptText"
 import { highlightText } from "./task-header/Highlights"
+
+/** Height a prompt in the chat is cut to until the user drags it (about 14 lines). */
+export const PROMPT_DEFAULT_MAX_HEIGHT = 240
+/** The edit box opens no taller than this share of the view. */
+const EDIT_BOX_MAX_VIEW_FRACTION = 0.5
 
 interface UserMessageProps {
 	text?: string
@@ -17,6 +23,8 @@ interface UserMessageProps {
 	restoreWorkspaceDisabledReason?: string
 	/** Asked as an off-the-record side question: it and its answer are left out of later requests. */
 	offTheRecord?: boolean
+	/** Height the text is cut to until the user drags it; the task header uses a smaller one. */
+	defaultMaxHeight?: number
 }
 
 const UserMessage: React.FC<UserMessageProps> = ({
@@ -27,6 +35,7 @@ const UserMessage: React.FC<UserMessageProps> = ({
 	canRestoreWorkspace = true,
 	restoreWorkspaceDisabledReason = "PlinyCode cannot revert files for this message.",
 	offTheRecord = false,
+	defaultMaxHeight = PROMPT_DEFAULT_MAX_HEIGHT,
 }) => {
 	const [isEditing, setIsEditing] = useState(false)
 	const [editedText, setEditedText] = useState(text ?? "")
@@ -61,6 +70,35 @@ const UserMessage: React.FC<UserMessageProps> = ({
 		resetEditState()
 		setIsEditing(false)
 	}
+
+	// The edit box opens fitted to the prompt (up to half the view) and grows
+	// with typing, until the user drags its corner; from then on their height
+	// stands.
+	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const autoHeightRef = useRef<number | undefined>(undefined)
+	const fitTextarea = useCallback((onlyGrow: boolean) => {
+		const element = textareaRef.current
+		if (!element) {
+			return
+		}
+		const userResized = autoHeightRef.current !== undefined && Math.abs(element.offsetHeight - autoHeightRef.current) > 2
+		if (onlyGrow && (userResized || element.scrollHeight <= element.clientHeight)) {
+			return
+		}
+		const cap = Math.max(MIN_PROMPT_HEIGHT, Math.round(window.innerHeight * EDIT_BOX_MAX_VIEW_FRACTION))
+		element.style.height = "auto"
+		const borders = element.offsetHeight - element.clientHeight
+		const fitted = Math.min(element.scrollHeight + borders, cap)
+		element.style.height = `${fitted}px`
+		autoHeightRef.current = element.offsetHeight
+	}, [])
+	const growTextarea = () => fitTextarea(true)
+	useLayoutEffect(() => {
+		if (isEditing) {
+			autoHeightRef.current = undefined
+			fitTextarea(false)
+		}
+	}, [isEditing, fitTextarea])
 
 	const handleEditingKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Escape") {
@@ -189,11 +227,16 @@ const UserMessage: React.FC<UserMessageProps> = ({
 			{isEditing ? (
 				<div className="flex flex-col gap-2" onKeyDown={handleEditingKeyDown}>
 					<textarea
-						className="w-full box-border rounded-xs border border-vscode-input-border bg-vscode-input-background text-vscode-input-foreground p-2 text-sm resize-vertical"
+						className="w-full box-border rounded-xs border border-vscode-input-border bg-vscode-input-background text-vscode-input-foreground p-2 text-sm resize-y overflow-y-auto"
 						disabled={!!savingMode}
-						onChange={(event) => setEditedText(event.target.value)}
+						onChange={(event) => {
+							setEditedText(event.target.value)
+							growTextarea()
+						}}
 						onKeyDown={handleTextareaKeyDown}
-						rows={Math.max(3, editedText.split("\n").length)}
+						ref={textareaRef}
+						rows={3}
+						style={{ minHeight: MIN_PROMPT_HEIGHT }}
 						value={editedText}
 					/>
 					{(editedImages.length > 0 || editedFiles.length > 0) && (
@@ -293,9 +336,11 @@ const UserMessage: React.FC<UserMessageProps> = ({
 							Side question · not in the context
 						</span>
 					)}
-					<span className="ph-no-capture text-sm" style={{ display: "block" }}>
-						{highlightedText}
-					</span>
+					<ResizablePromptText contentKey={text} defaultMaxHeight={defaultMaxHeight} messageTs={messageTs}>
+						<span className="ph-no-capture text-sm" style={{ display: "block" }}>
+							{highlightedText}
+						</span>
+					</ResizablePromptText>
 				</>
 			)}
 			{!isEditing && ((images && images.length > 0) || (files && files.length > 0)) && (

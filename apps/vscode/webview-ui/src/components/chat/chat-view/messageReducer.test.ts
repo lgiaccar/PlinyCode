@@ -235,3 +235,56 @@ describe("messageReducer — deterministic", () => {
 		})
 	})
 })
+
+describe("messageReducer — restart from here", () => {
+	function prompt(ts: number, seq: number, epoch: number, text: string): ClineMessage {
+		return { ts, type: "say", say: "user_feedback", text, partial: false, seq, epoch }
+	}
+	function requestRow(ts: number, seq: number, epoch: number): ClineMessage {
+		return { ts, type: "say", say: "api_req_started", text: "{}", partial: false, seq, epoch }
+	}
+
+	// Before the restart: task (1), first prompt's answer (2), the prompt being edited (3) and
+	// what followed it (4), all at epoch 1.
+	function beforeRestart(): ReplicaState {
+		return applyStateSnapshot(
+			createReplicaState(),
+			[
+				msg(1, 1, 1, false, "task"),
+				msg(2, 2, 1, false, "answer"),
+				prompt(3, 3, 1, "old prompt"),
+				msg(4, 4, 1, false, "old reply"),
+			],
+			1,
+			5,
+		)
+	}
+	// What the restart posts at epoch 2: the kept rows restamped, then the edited prompt.
+	const restartSnapshot = [msg(1, 10, 2, false, "task"), msg(2, 11, 2, false, "answer"), prompt(20, 12, 2, "edited prompt")]
+
+	it("the restart's snapshot replaces the abandoned turns", () => {
+		const s = applyStateSnapshot(beforeRestart(), restartSnapshot, 2, 13)
+		expect(texts(s)).toEqual(["task", "answer", "edited prompt"])
+	})
+
+	it("a new-turn row that races ahead of the snapshot neither keeps the abandoned turns nor goes above the prompt", () => {
+		let s = applyMessage(beforeRestart(), requestRow(30, 14, 2))
+		s = applyStateSnapshot(s, restartSnapshot, 2, 13)
+		expect(texts(s)).toEqual(["task", "answer", "edited prompt", "{}"])
+		expect(s.messages[0].text).toBe("task")
+	})
+
+	it("an empty snapshot of the new epoch does not lose the stamped restart rows that follow", () => {
+		let s = applyStateSnapshot(beforeRestart(), [], 2, 12)
+		s = applyStateSnapshot(s, restartSnapshot, 2, 13)
+		s = applyMessage(s, requestRow(30, 14, 2))
+		expect(texts(s)).toEqual(["task", "answer", "edited prompt", "{}"])
+	})
+
+	it("a same-epoch snapshot still never drops rows of its own epoch it has not seen yet", () => {
+		let s = applyStateSnapshot(createReplicaState(), [msg(1, 1, 2, false, "task")], 2, 5)
+		s = applyMessage(s, msg(2, 6, 2, true, "streaming"))
+		s = applyStateSnapshot(s, [msg(1, 1, 2, false, "task")], 2, 7)
+		expect(texts(s)).toEqual(["task", "streaming"])
+	})
+})
