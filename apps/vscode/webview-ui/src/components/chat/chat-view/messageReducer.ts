@@ -180,10 +180,36 @@ export function applyStateSnapshot(
 		return applyTurnState(state, snapshotTurnState)
 	}
 
-	// Merge each message; never shrink the transcript for the same task/epoch.
+	// Merge each message; never shrink the transcript for the same task/epoch. Rows stamped
+	// with an OLDER epoch that the snapshot (the full transcript) lacks are leftovers from the
+	// transcript a lone newer-epoch message carried forward (see applyMessage): drop them, or
+	// the turns a restart abandoned would stay on screen above the new one.
 	let next = state
+	let prunedLeftovers = false
+	const inSnapshot = new Set(snapshotMessages.map((m) => m.ts))
+	if (snapshotEpoch > 0 && state.messages.some((m) => epochOf(m) < snapshotEpoch)) {
+		const isLeftover = (m: ClineMessage) => epochOf(m) < snapshotEpoch && !inSnapshot.has(m.ts)
+		const leftovers = state.messages.filter(isLeftover)
+		if (leftovers.length > 0) {
+			const seqByTs = new Map(state.seqByTs)
+			for (const m of leftovers) {
+				seqByTs.delete(m.ts)
+			}
+			next = { ...state, messages: state.messages.filter((m) => !isLeftover(m)), seqByTs }
+			prunedLeftovers = true
+		}
+	}
 	for (const message of snapshotMessages) {
 		next = applyMessage(next, message)
+	}
+	if (prunedLeftovers) {
+		// The rows that raced ahead of this snapshot were appended to a transcript it replaces,
+		// so take the snapshot's order, followed by the rows only the replica has.
+		const position = new Map(snapshotMessages.map((m, index) => [m.ts, index]))
+		const fromSnapshot = next.messages
+			.filter((m) => inSnapshot.has(m.ts))
+			.sort((a, b) => (position.get(a.ts) ?? 0) - (position.get(b.ts) ?? 0))
+		next = { ...next, messages: [...fromSnapshot, ...next.messages.filter((m) => !inSnapshot.has(m.ts))] }
 	}
 	if (snapshotVersion > next.stateVersion) {
 		next = next === state ? { ...state } : next

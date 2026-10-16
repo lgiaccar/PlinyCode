@@ -1500,6 +1500,31 @@ export class Controller {
 			)
 			this.task = task
 
+			// Fill the new task's transcript now, before any await, and through the
+			// coordinator so every row is stamped with the epoch the fence above just
+			// opened. The webview drops rows from an older epoch, and unstamped ones
+			// count as epoch 0: added unstamped after the awaits below, the kept rows
+			// and the edited prompt were lost whenever a state post (or a stamped row)
+			// reached the webview first, and the new turn's first request row, whose
+			// text is "{}", then showed up as the conversation's prompt.
+			const editedMessageTs = this.messageTranslatorState.getMinter().nextId()
+			this.messages.replaceMessages([
+				...clineMessages.slice(0, targetIndex).map((message) => ({ ...message })),
+				{
+					ts: editedMessageTs,
+					type: "say",
+					say: editsFirstPrompt ? "task" : "user_feedback",
+					text: editedText,
+					images: input.images,
+					files: input.files,
+					partial: false,
+				},
+			])
+			this.editMessageRestartFocus = {
+				messageTs: editedMessageTs,
+				sessionId: startResult.sessionId,
+			}
+
 			const workspaceRoot =
 				sessionRecord?.workspaceRoot?.trim() ||
 				historyItem?.workspaceRootOnTaskInitialization?.trim() ||
@@ -1523,32 +1548,7 @@ export class Controller {
 				}
 			}
 			await this.taskHistory.updateTaskHistoryItem(newHistoryItem)
-
-			const visibleMessages = clineMessages.slice(0, targetIndex)
-			if (visibleMessages.length > 0) {
-				task.messageStateHandler.addMessages(visibleMessages)
-			}
-			const editedMessageTs = Date.now()
-			task.messageStateHandler.addMessages([
-				{
-					ts: editedMessageTs,
-					type: "say",
-					say: editsFirstPrompt ? "task" : "user_feedback",
-					text: editedText,
-					images: input.images,
-					files: input.files,
-					partial: false,
-				},
-			])
-			this.editMessageRestartFocus = {
-				messageTs: editedMessageTs,
-				sessionId: startResult.sessionId,
-			}
 			await this.postStateToWebview()
-
-			const taskUlid = task.ulid ?? currentTask.ulid
-			if (taskUlid) {
-			}
 
 			this.sessions.fireAndForgetSend(sdkHost, startResult.sessionId, resolvedPrompt, input.images, input.files)
 		} finally {
@@ -1957,9 +1957,16 @@ export class Controller {
 	async getStateToPostToWebview(): Promise<ExtensionState> {
 		try {
 			const { getStateToPostToWebview: buildBaseState } = await import("@core/controller/state/getStateToPostToWebview")
+			// The transcript and its epoch are read together, with no await between
+			// them: an epoch read after the awaits below could belong to a newer
+			// task or restart than the transcript, and the webview would take an
+			// old transcript as the new one (or an empty one, dropping the new rows).
+			const minter = this.messageTranslatorState.getMinter()
+			const activeTaskMessages = this.getActiveTaskMessages()
+			const epoch = minter.epoch
 			const baseState = await buildBaseState({
 				activeTaskId: this.activeTaskId,
-				activeTaskMessages: this.getActiveTaskMessages(),
+				activeTaskMessages,
 				stateManager: this.stateManager,
 				mcpHub: this.mcpHub,
 				backgroundCommandRunning: this.backgroundCommandRunning,
@@ -1984,12 +1991,9 @@ export class Controller {
 				}
 			}
 
-			// Stamp the snapshot with the current epoch and a fresh monotonic version, sampled
-			// from the SAME counter that stamps messages. This lets the webview ignore stale
-			// out-of-order state pushes and fence traffic from a previous task/render. Sampled
-			// synchronously here (no await between sampling and return).
-			const minter = this.messageTranslatorState.getMinter()
-
+			// Stamp the snapshot with the transcript's epoch and a fresh monotonic version from
+			// the SAME counter that stamps messages. This lets the webview ignore stale
+			// out-of-order state pushes and fence traffic from a previous task/render.
 			return await mergeTaskHistoryIntoState({
 				baseState,
 				taskHistory: this.taskHistory,
@@ -2002,7 +2006,7 @@ export class Controller {
 				backgroundTasks: this.background.list(),
 				activeSession,
 				stateVersion: minter.nextSeq(),
-				epoch: minter.epoch,
+				epoch,
 			})
 		} catch (error) {
 			Logger.error("[SdkController] Failed to get state for webview:", error)

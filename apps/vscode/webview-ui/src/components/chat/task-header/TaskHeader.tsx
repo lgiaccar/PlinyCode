@@ -47,6 +47,9 @@ interface TaskHeaderProps {
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
 }
 
+// The header sits above the chat, so its prompt starts shorter than the chat's.
+const TASK_HEADER_PROMPT_MAX_HEIGHT = 160
+
 const BUTTON_CLASS = "max-h-3 border-0 font-bold bg-transparent hover:opacity-100 text-foreground"
 
 const TaskHeader: React.FC<TaskHeaderProps> = ({
@@ -239,6 +242,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						<div className="mt-1">
 							<UserMessage
 								canRestoreWorkspace={canRestoreWorkspaceFromMessage(clineMessages, task.ts)}
+								defaultMaxHeight={TASK_HEADER_PROMPT_MAX_HEIGHT}
 								files={task.files}
 								images={task.images}
 								messageTs={task.ts}
