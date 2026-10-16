@@ -6,7 +6,8 @@ vi.mock("@/services/grpc-client", () => ({
 	CheckpointsServiceClient: { checkpointLatestChangesSummary: vi.fn() },
 }))
 
-import ResizablePromptText, { MIN_PROMPT_HEIGHT, resetRememberedPromptHeights } from "../ResizablePromptText"
+// Heights are remembered per message ts for the whole module, so every test uses its own ts.
+import ResizablePromptText, { MIN_PROMPT_HEIGHT } from "../ResizablePromptText"
 import UserMessage from "../UserMessage"
 
 // jsdom does no layout: give every element the size of a long prompt cut to
@@ -37,7 +38,6 @@ describe("ResizablePromptText", () => {
 	let restoreLayout: (() => void) | undefined
 
 	beforeEach(() => {
-		resetRememberedPromptHeights()
 		// jsdom has no PointerEvent; without one the events lose clientY and button.
 		if (typeof window.PointerEvent === "undefined") {
 			class PointerEventPolyfill extends MouseEvent {

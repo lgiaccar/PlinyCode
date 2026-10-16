@@ -9,7 +9,7 @@ import ResizablePromptText, { MIN_PROMPT_HEIGHT } from "./ResizablePromptText"
 import { highlightText } from "./task-header/Highlights"
 
 /** Height a prompt in the chat is cut to until the user drags it (about 14 lines). */
-export const PROMPT_DEFAULT_MAX_HEIGHT = 240
+const PROMPT_DEFAULT_MAX_HEIGHT = 240
 /** The edit box opens no taller than this share of the view. */
 const EDIT_BOX_MAX_VIEW_FRACTION = 0.5
 

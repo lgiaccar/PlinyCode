@@ -10,11 +10,6 @@ const KEYBOARD_STEP = 24
 // remounts when the header is folded, comes back at the same height.
 const heightsByMessage = new Map<number, number>()
 
-/** Test hook: forget every remembered height. */
-export function resetRememberedPromptHeights(): void {
-	heightsByMessage.clear()
-}
-
 interface ResizablePromptTextProps {
 	children: React.ReactNode
 	/** Height the text is cut to until the user drags it, in pixels. */
