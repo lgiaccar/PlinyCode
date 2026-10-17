@@ -70,7 +70,7 @@ interface VscodeExtraToolsOptions {
 	 */
 	forSubAgents?: boolean
 	/**
-	 * The window's language servers, for `find_symbol` and `code_navigate`.
+	 * The window's language servers, for `find_symbol`, `code_navigate` and `rename_preview`.
 	 * Absent when the user turned code intelligence off (`plinycode.codeIntel.enabled`).
 	 */
 	codeIntel?: CodeIntelSource

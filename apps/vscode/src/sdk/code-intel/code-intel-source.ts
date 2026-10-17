@@ -37,6 +37,56 @@ export interface CodeHover {
 	documentation: string[]
 }
 
+export type CallDirection = "incoming" | "outgoing"
+
+/** One entry of a call hierarchy: a function that calls the symbol, or one it calls. */
+export interface CodeCall {
+	name: string
+	/** Lower-case symbol kind, as for `CodeSymbol`. */
+	kind: string
+	/** Where the caller or callee is declared. */
+	path: string
+	line: number
+	column: number
+	/**
+	 * The first call site: inside the caller for incoming calls, inside the
+	 * symbol itself for outgoing ones. Absent when the server reports none.
+	 */
+	callSite?: CodeLocation
+}
+
+export interface CodeCallHierarchy {
+	/** The symbol the hierarchy was prepared for. */
+	item: CodeCall
+	calls: CodeCall[]
+}
+
+export interface CodeDiagnostic {
+	severity: "error" | "warning"
+	message: string
+	line: number
+	column: number
+	/** Who reported it: `ts`, `eslint`, `Pylance`, … */
+	source?: string
+	code?: string
+}
+
+/** One text replacement of a rename, with a one-based range in the file as it is now. */
+export interface CodeTextEdit {
+	line: number
+	column: number
+	endLine: number
+	endColumn: number
+	newText: string
+}
+
+export interface CodeRenameResult {
+	/** The server's reason for refusing, when it refused (the position cannot be renamed). */
+	refusal?: string
+	/** The text edits per file, in the order the server returned them. */
+	files: { path: string; edits: CodeTextEdit[] }[]
+}
+
 export interface CodeIntelSource {
 	/** Loads the file into the editor so its language server analyses it, and returns its text. */
 	readDocument(absolutePath: string): Promise<string | undefined>
@@ -49,4 +99,19 @@ export interface CodeIntelSource {
 	definitions(absolutePath: string, line: number, column: number): Promise<CodeLocation[] | undefined>
 	references(absolutePath: string, line: number, column: number): Promise<CodeLocation[] | undefined>
 	hover(absolutePath: string, line: number, column: number): Promise<CodeHover | undefined>
+	/**
+	 * One level of the call hierarchy of the symbol at the position: its callers
+	 * (`incoming`) or the functions it calls (`outgoing`). Undefined when no
+	 * server prepared a hierarchy item there.
+	 */
+	callHierarchy(
+		absolutePath: string,
+		line: number,
+		column: number,
+		direction: CallDirection,
+	): Promise<CodeCallHierarchy | undefined>
+	/** The errors and warnings the editor currently reports for the file. */
+	diagnostics(absolutePath: string): Promise<CodeDiagnostic[] | undefined>
+	/** The edits a rename at the position would make, without applying them. */
+	renameEdits(absolutePath: string, line: number, column: number, newName: string): Promise<CodeRenameResult | undefined>
 }
