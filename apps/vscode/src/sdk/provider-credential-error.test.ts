@@ -15,6 +15,12 @@ describe("describeMissingCredentialError", () => {
 		)
 	})
 
+	it("points Pliny at its key list and PLINY_API_KEY", () => {
+		expect(describeMissingCredentialError("Missing Authorization header", "pliny")).toBe(
+			'Missing API key for provider "pliny". Add a key under Settings → API Configuration → Pliny API Keys, or set PLINY_API_KEY.',
+		)
+	})
+
 	it("does not name a provider when the id is unknown", () => {
 		expect(describeMissingCredentialError("Missing Authorization header")).toBe(
 			"Missing API key for the active provider. Add credentials in Settings, or switch providers.",
@@ -72,6 +78,12 @@ describe("reshapeErrorForWebview - rejected credentials (errorClass auth)", () =
 		)
 		expect(reshaped).toBe(
 			'Provider "mistral" rejected the configured credentials. Re-enter the API key in Settings → API Configuration (checking it is the right kind of key for this provider), or switch providers.\n\nProvider response: {"detail":"Invalid API Key"}',
+		)
+	})
+
+	it("points a rejected Pliny key at the key list", () => {
+		expect(reshapeErrorForWebview({ message: "Unauthorized" }, "pliny", "kimi-k2", "auth")).toBe(
+			'Provider "pliny" rejected the configured credentials. Add another key or switch the active one under Settings → API Configuration → Pliny API Keys (without a stored key, PLINY_API_KEY is used).\n\nProvider response: Unauthorized',
 		)
 	})
 

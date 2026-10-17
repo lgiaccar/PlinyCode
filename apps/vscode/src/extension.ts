@@ -49,6 +49,8 @@ import { installCustomizationWatcher } from "./hosts/vscode/customization-watche
 import { exportDiagnosticsBundle } from "./hosts/vscode/diagnostics-bundle"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
 import { PLAN_EXECUTE_WITH_SETTING_ID } from "./hosts/vscode/plan-settings"
+import { PlinyApiKeys, setPlinyApiKeys } from "./hosts/vscode/pliny-api-keys"
+import { registerPlinyKeyFailover } from "./hosts/vscode/pliny-key-failover"
 import {
 	disposeVscodeCommentReviewController,
 	getVscodeCommentReviewController,
@@ -64,6 +66,7 @@ import { configureInstructionSources } from "./sdk/instruction-sources"
 import { formatLastModelRequest } from "./sdk/last-model-request"
 import { resolveDataDir } from "./sdk/legacy-state-reader"
 import { completeWithUtilityModel } from "./sdk/memory/memory-model"
+import { setPlinyApiKeySource } from "./sdk/pliny-api-key-source"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
 import { pruneSessionTraces } from "./sdk/trace/session-trace"
@@ -104,9 +107,32 @@ export async function activate(context: vscode.ExtensionContext) {
 	const storageContext = createStorageContext({ workspacePath })
 	await exportVSCodeStorageToSharedFiles(context, storageContext)
 
+	// The Pliny API keys from Settings, read from the keychain before the first session is built
+	// (docs/pliny-api-keys.md). Not awaited: session builds wait for it, briefly.
+	const plinyApiKeys = new PlinyApiKeys(context.secrets)
+	setPlinyApiKeys(plinyApiKeys)
+	setPlinyApiKeySource(plinyApiKeys)
+	context.subscriptions.push(plinyApiKeys)
+
 	// 4. Register services and perform common initialization
 	// IMPORTANT: Must be done after host provider is setup and migrations are complete
 	const webview = (await initialize(storageContext)) as VscodeWebviewProvider
+
+	// A new active key reaches the open conversation by rebuilding its session; the failover
+	// offers the next stored key when the gateway rejects this one or its budget is used up.
+	void plinyApiKeys.ready.then(() => {
+		let lastKey = plinyApiKeys.activeKey()
+		context.subscriptions.push(
+			plinyApiKeys.onDidChange(() => {
+				const key = plinyApiKeys.activeKey()
+				if (key !== lastKey) {
+					lastKey = key
+					WebviewProvider.getInstance()?.controller.handlePlinyApiKeyChanged()
+				}
+			}),
+		)
+	})
+	registerPlinyKeyFailover(context, plinyApiKeys)
 
 	// Keep the session traces (docs/trace-and-logs.md) under their folder cap.
 	void pruneSessionTraces()

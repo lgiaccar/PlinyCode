@@ -1,3 +1,4 @@
+import { getActivePlinyApiKey } from "../pliny-api-key-source"
 import { getProviderSettingsManager } from "../provider-migration"
 import type { AwsProviderConfig, EffectiveProviderConfig, GcpProviderConfig, ProviderId } from "./contracts"
 import { toSdkProviderId } from "./sdk-provider-id"
@@ -138,7 +139,8 @@ function assignIfDefined<T extends ConfigKey>(target: Partial<ConfigParts>, key:
 /**
  * Build an {@link EffectiveProviderConfig} from the provider's SDK
  * `providers.json` entry. Pliny, the only provider, keeps all of its
- * configuration there.
+ * configuration there, except the API key the user chose in Settings, which
+ * lives in SecretStorage and takes precedence (sdk/pliny-api-key-source.ts).
  *
  * Mode-dependent model selection is intentionally excluded; callers use
  * `ProviderConfigStore.readSelection(providerId, mode)` for that.
@@ -149,5 +151,6 @@ export function buildEffectiveProviderConfig(providerId: ProviderId): EffectiveP
 	for (const key of Object.keys(providerSettings) as ConfigKey[]) {
 		assignIfDefined(merged, key, providerSettings[key])
 	}
+	assignIfDefined(merged, "apiKey", getActivePlinyApiKey(toSdkProviderId(providerId)))
 	return { providerId, ...merged }
 }

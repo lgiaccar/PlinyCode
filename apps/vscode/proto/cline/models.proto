@@ -12,6 +12,16 @@ option java_package = "bot.cline.proto";
 service ModelsService {
   // Returns the caller's remaining Pliny gateway budget
   rpc getPlinyBudget(EmptyRequest) returns (PlinyBudgetResponse);
+  // Streams the Pliny API keys stored in Settings (names and last four characters only)
+  rpc subscribeToPlinyApiKeys(EmptyRequest) returns (stream PlinyApiKeys);
+  // Asks for a name and a key in VS Code's input boxes, checks the key and stores it
+  rpc addPlinyApiKey(EmptyRequest) returns (PlinyApiKeys);
+  // Asks for a new name for the stored key with this id
+  rpc renamePlinyApiKey(StringRequest) returns (PlinyApiKeys);
+  // Forgets the stored key with this id
+  rpc removePlinyApiKey(StringRequest) returns (PlinyApiKeys);
+  // Makes the stored key with this id the one requests use
+  rpc setActivePlinyApiKey(StringRequest) returns (PlinyApiKeys);
   // Updates API configuration (legacy - uses combined configuration)
   rpc updateApiConfigurationProto(UpdateApiConfigurationRequest) returns (Empty);
   // Lists providers available from the unified SDK-backed catalog
@@ -271,6 +281,23 @@ message PlinyBudgetResponse {
   int64 period_end_ms = 7;
   bool is_blocked = 8;
   string error = 9;
+}
+
+// A Pliny API key stored in Settings, without the key itself
+message PlinyApiKeyInfo {
+  string id = 1;
+  string name = 2;
+  string last4 = 3;
+  bool active = 4;
+  int64 created_at = 5;
+}
+
+message PlinyApiKeys {
+  repeated PlinyApiKeyInfo keys = 1;
+  // Where requests take their key from: "settings", "providersFile", "environment" or "none"
+  string source = 2;
+  // True when PLINY_API_KEY is set in the extension host's environment
+  bool env_key_present = 3;
 }
 
 // Request for updating API configuration (legacy - uses combined configuration)

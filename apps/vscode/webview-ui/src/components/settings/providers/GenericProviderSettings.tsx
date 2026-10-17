@@ -9,6 +9,7 @@ import { ModelInfoView } from "../common/ModelInfoView"
 import ReasoningEffortSelector from "../ReasoningEffortSelector"
 import { useProviderApiKeyField } from "../utils/useProviderApiKeyField"
 import { type ModelPickerSelection, ModelPickerWithManualEntry } from "./ModelPickerWithManualEntry"
+import { PlinyApiKeysSection } from "./PlinyApiKeysSection"
 
 interface GenericProviderBaseUrlFieldConfig {
 	label?: string
@@ -76,17 +77,17 @@ export const GenericProviderSettings = ({
 
 	return (
 		<div>
-			<ApiKeyField
-				disabled={providerId === "pliny"}
-				helpText={
-					providerId === "pliny" ? "This API key will be taken from the PLINY_API_KEY environment variable." : undefined
-				}
-				initialValue={savedApiKeyMask}
-				onChange={handleApiKeyChange}
-				placeholder="Enter API Key..."
-				providerName={providerName}
-				signupUrl={signupUrl}
-			/>
+			{providerId === "pliny" ? (
+				<PlinyApiKeysSection />
+			) : (
+				<ApiKeyField
+					initialValue={savedApiKeyMask}
+					onChange={handleApiKeyChange}
+					placeholder="Enter API Key..."
+					providerName={providerName}
+					signupUrl={signupUrl}
+				/>
+			)}
 
 			{baseUrlField && (
 				<BaseUrlField

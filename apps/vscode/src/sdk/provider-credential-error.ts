@@ -7,7 +7,9 @@ export function describeMissingCredentialError(rawMessage: string, providerId?: 
 	// Only name the provider when the caller actually knows it — a fallback id
 	// here would blame the wrong provider for the missing key.
 	const subject = providerId ? `Missing API key for provider "${providerId}".` : "Missing API key for the active provider."
-	return `${subject} Add credentials in Settings, or switch providers.`
+	return providerId === "pliny"
+		? `${subject} Add a key under Settings → API Configuration → Pliny API Keys, or set PLINY_API_KEY.`
+		: `${subject} Add credentials in Settings, or switch providers.`
 }
 
 /**
@@ -20,7 +22,9 @@ export function describeMissingCredentialError(rawMessage: string, providerId?: 
 export function describeCredentialRejectedError(rawMessage: string, providerId: string): string {
 	const subject = `Provider "${providerId}" rejected the configured credentials.`
 	const guidance =
-		"Re-enter the API key in Settings → API Configuration (checking it is the right kind of key for this provider), or switch providers."
+		providerId === "pliny"
+			? "Add another key or switch the active one under Settings → API Configuration → Pliny API Keys (without a stored key, PLINY_API_KEY is used)."
+			: "Re-enter the API key in Settings → API Configuration (checking it is the right kind of key for this provider), or switch providers."
 	const detail = rawMessage.trim()
 	return detail ? `${subject} ${guidance}\n\nProvider response: ${detail}` : `${subject} ${guidance}`
 }
