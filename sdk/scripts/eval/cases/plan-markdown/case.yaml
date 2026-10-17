@@ -1,0 +1,22 @@
+# Plan mode: explore, then write the plan as plans/<slug>/PLAN.md (markdown only).
+id: plan-markdown
+tags: [plan, editor]
+fixture: greeter
+mode: plan
+model: snps-provider/GLM-5.2
+maxIterations: 5
+prompt: >-
+  Plan how to add a farewell(name) function next to greet(). Write the plan
+  file; do not implement it.
+assertions:
+  - type: file_exists
+    path: plans/add-farewell/PLAN.md
+  - type: file_contains
+    path: plans/add-farewell/PLAN.md
+    regex: 'farewell\(name'
+  - type: file_contains
+    path: src/greet.ts
+    text: "return `Hello, ${name}!`;"
+  - type: no_tool_errors
+  - type: iterations_lte
+    n: 4

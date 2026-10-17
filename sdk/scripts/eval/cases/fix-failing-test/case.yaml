@@ -1,0 +1,20 @@
+# Read, edit, verify: fix an off-by-one so the provided bun test passes.
+id: fix-failing-test
+tags: [act, editor, run_commands, bugfix]
+fixture: buggy-math
+mode: act
+model: snps-aws-bedrock/aws-claude-sonnet-4.6
+maxIterations: 8
+prompt: >-
+  `bun test` fails in this project. Find the bug in math.ts, fix it, and run
+  `bun test` to confirm the tests pass.
+assertions:
+  - type: command_exit_code
+    command: bun test
+    code: 0
+  - type: file_contains
+    path: math.ts
+    regex: 'for \(let i = 0;'
+  - type: no_tool_errors
+  - type: iterations_lte
+    n: 5

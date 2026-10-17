@@ -99,6 +99,10 @@ Model catalog and provider gateway.
 
 `src/catalog/`, `src/providers/`, `src/services/`, `src/tests/`.
 
+### `sdk/scripts`
+
+Repo-level Bun scripts: doc-link check, code metrics, version bump, SDK watch, the Node smoke test, and `eval/`, the eval harness (cases, fixtures, cassettes and `run.ts`; see [docs/eval-harness.md](docs/eval-harness.md)).
+
 ## Key files
 
 | File | Why it matters |
