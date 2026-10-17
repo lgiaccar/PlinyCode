@@ -162,10 +162,18 @@ async function createPr(deps: WorktreeActionDeps, taskId: string, item: HistoryI
 	deps.emitRow(taskId, `Opened draft pull request #${pr.id} from ${branch} into ${target}: ${pr.url}`)
 }
 
+interface RemovalOptions {
+	/** What happens to the conversation, for the modal's details. */
+	note: string
+	/** Never offer to delete the branch (a CI Board worktree's branch is the pull request's). */
+	keepBranch?: boolean
+}
+
 /** The modal for Remove worktree: its message, details and the choices it offers. */
 export function removalPrompt(
 	worktree: TaskWorktree,
 	state: { exists: boolean; dirty: string[]; merged: boolean; unmerged: number; into: string; branchMissing?: boolean },
+	options: RemovalOptions,
 ): { message: string; detail: string; choices: Record<string, { force: boolean; deleteBranch: boolean }> } {
 	const force = state.dirty.length > 0
 	const message = !state.exists
@@ -174,19 +182,21 @@ export function removalPrompt(
 			? `The worktree ${worktree.path} has ${state.dirty.length} uncommitted change(s). Remove it anyway and discard them?`
 			: `Remove the worktree ${worktree.path}?`
 	const verb = force ? "Discard and remove" : "Remove"
-	if (state.branchMissing || state.merged) {
+	if (options.keepBranch || state.branchMissing || state.merged) {
 		const branchNote = state.branchMissing
 			? ""
-			: ` The branch ${worktree.branch} is merged into ${state.into}, so it is deleted too.`
+			: options.keepBranch
+				? ` The branch ${worktree.branch} is kept.`
+				: ` The branch ${worktree.branch} is merged into ${state.into}, so it is deleted too.`
 		return {
 			message,
-			detail: `The conversation keeps its history and continues in ${worktree.repoRoot}.${branchNote}`,
-			choices: { [verb]: { force, deleteBranch: !state.branchMissing } },
+			detail: `${options.note}${branchNote}`,
+			choices: { [verb]: { force, deleteBranch: !options.keepBranch && !state.branchMissing } },
 		}
 	}
 	return {
 		message,
-		detail: `The conversation keeps its history and continues in ${worktree.repoRoot}. The branch ${worktree.branch} has ${state.unmerged} commit(s) that ${state.into} does not; keep it unless you are done with them.`,
+		detail: `${options.note} The branch ${worktree.branch} has ${state.unmerged} commit(s) that ${state.into} does not; keep it unless you are done with them.`,
 		choices: {
 			[`${verb}, keep branch`]: { force, deleteBranch: false },
 			[`${verb} and delete branch`]: { force, deleteBranch: true },
@@ -194,19 +204,32 @@ export function removalPrompt(
 	}
 }
 
-async function remove(deps: WorktreeActionDeps, taskId: string, worktree: TaskWorktree): Promise<void> {
+/**
+ * Asks in a modal (see `removalPrompt`) and removes the worktree as chosen.
+ * Undefined when the user cancelled; the result line otherwise.
+ */
+export async function confirmAndRemoveWorktree(
+	confirm: WorktreeActionDeps["confirm"],
+	worktree: TaskWorktree,
+	options: RemovalOptions,
+): Promise<string | undefined> {
 	const exists = existsSync(worktree.path)
 	const dirty = exists ? await changedPaths(worktree.path) : []
 	const merge = await branchMergeState(worktree.repoRoot, worktree.branch)
-	const prompt = removalPrompt(worktree, { exists, dirty, ...merge, branchMissing: merge.missing })
-	const choice = await deps.confirm(prompt.message, prompt.detail, Object.keys(prompt.choices))
+	const prompt = removalPrompt(worktree, { exists, dirty, ...merge, branchMissing: merge.missing }, options)
+	const choice = await confirm(prompt.message, prompt.detail, Object.keys(prompt.choices))
 	const picked = choice ? prompt.choices[choice] : undefined
-	if (!picked) return
+	if (!picked) return undefined
 	const { branchDeleted } = await removeTaskWorktree(worktree, picked)
+	return `Removed the worktree ${worktree.path}.${branchDeleted ? ` The branch ${worktree.branch} was deleted.` : merge.missing ? "" : ` The branch ${worktree.branch} is kept.`}`
+}
+
+async function remove(deps: WorktreeActionDeps, taskId: string, worktree: TaskWorktree): Promise<void> {
+	const result = await confirmAndRemoveWorktree(deps.confirm, worktree, {
+		note: `The conversation keeps its history and continues in ${worktree.repoRoot}.`,
+	})
+	if (!result) return
 	await deps.setWorktree(taskId, { ...worktree, removedTs: deps.now?.() ?? Date.now() })
 	await deps.afterRemoved(taskId)
-	deps.emitRow(
-		taskId,
-		`Removed the worktree ${worktree.path}.${branchDeleted ? ` The branch ${worktree.branch} was deleted.` : merge.missing ? "" : ` The branch ${worktree.branch} is kept.`}`,
-	)
+	deps.emitRow(taskId, result)
 }

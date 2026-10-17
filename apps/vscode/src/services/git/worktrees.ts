@@ -210,6 +210,11 @@ interface EnsureTaskWorktreeOptions {
 }
 
 const TASK_BRANCH_PREFIX = "plinycode/"
+
+/** Whether `branch` is one "Run in worktree" creates (`plinycode/<slug>-<4 hex>`). */
+export function isTaskBranch(branch: string | undefined): boolean {
+	return !!branch?.startsWith(TASK_BRANCH_PREFIX)
+}
 const MAX_TASK_SLUG = 40
 /** The folder name repeats the start of the slug only, so Windows paths stay short. */
 const MAX_TASK_FOLDER_SLUG = 24

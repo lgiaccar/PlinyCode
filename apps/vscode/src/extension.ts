@@ -57,6 +57,7 @@ import { EDIT_PREVIEW_URI_SCHEME, editPreviewContentProvider, VscodeEditPreview 
 import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
 import { registerWebSearchSettings } from "./hosts/vscode/web-search-settings"
+import { registerWorktreeLifecycle } from "./hosts/vscode/worktree-lifecycle"
 import { ExtensionRegistryInfo } from "./registry"
 import { configureInstructionSources } from "./sdk/instruction-sources"
 import { formatLastModelRequest } from "./sdk/last-model-request"
@@ -271,6 +272,13 @@ export async function activate(context: vscode.ExtensionContext) {
 			completeWithUtilityModel(system, user, signal, cwd ?? process.cwd()),
 	}
 	DevOpsMcpService.activate(context, ciBoardUi).catch((error) => Logger.error("[DevOpsMcp] Failed to start:", error))
+
+	// Worktree cleanup in the background, and PlinyCode: Manage Worktrees (docs/task-worktrees.md#cleanup).
+	registerWorktreeLifecycle(context, {
+		commandId: commands.ManageWorktrees,
+		getController: () => WebviewProvider.getInstance()?.controller,
+		openConversation: ciBoardUi.openConversation,
+	})
 
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
 

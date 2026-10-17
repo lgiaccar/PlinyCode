@@ -42,6 +42,7 @@ import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
 import { openCiWatchSource } from "@/services/devops-mcp/ci-watch/ci-watch-source"
 import { CiWatchStore } from "@/services/devops-mcp/ci-watch/ci-watch-store"
+import type { WorktreeConversation } from "@/services/git/worktree-gc"
 import { ensureTaskWorktree } from "@/services/git/worktrees"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
@@ -87,6 +88,7 @@ import {
 	mergeTaskHistoryIntoState,
 	metadataBoolean,
 	metadataNumber,
+	metadataWorktree,
 	SdkTaskHistory,
 	sessionHistoryRecordToTaskItemFields,
 } from "./sdk-task-history"
@@ -1984,6 +1986,22 @@ export class Controller {
 		if (await this.taskHistory.setTaskWorktree(taskId, worktree)) {
 			await this.postStateToWebview()
 		}
+	}
+
+	/**
+	 * Every conversation's id, title, last activity and worktree, for the
+	 * worktree cleanup and the Manage Worktrees list (docs/task-worktrees.md).
+	 */
+	async listConversationWorktrees(): Promise<WorktreeConversation[]> {
+		return (await this.taskHistory.listHistory({ hydrate: false })).map((record) => {
+			const worktree = metadataWorktree(record.metadata)
+			return {
+				id: record.sessionId,
+				title: sessionRecordTitle(record),
+				ts: sessionRecordLastActiveTs(record),
+				...(worktree ? { worktree } : {}),
+			}
+		})
 	}
 
 	/** Adds an info row to the conversation's chat, when it is the one on screen. */

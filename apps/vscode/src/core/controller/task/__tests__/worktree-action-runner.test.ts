@@ -249,8 +249,17 @@ describe("worktree action helpers", () => {
 
 	it("offers a forget-only removal for a folder that is gone", () => {
 		const worktree = { repoRoot: "/r", branch: "plinycode/x", path: "/r.worktrees/x" }
-		const prompt = removalPrompt(worktree, { exists: false, dirty: [], merged: true, unmerged: 0, into: "main" })
+		const state = { exists: false, dirty: [], merged: true, unmerged: 0, into: "main" }
+		const prompt = removalPrompt(worktree, state, { note: "Gone." })
 		expect(prompt.message).toContain("already gone")
 		expect(prompt.choices).toEqual({ Remove: { force: false, deleteBranch: true } })
+	})
+
+	it("never offers to delete a CI Board worktree's branch", () => {
+		const worktree = { repoRoot: "/r", branch: "feature/x", path: "/r.worktrees/feature-x" }
+		const state = { exists: true, dirty: ["a.txt"], merged: false, unmerged: 3, into: "main" }
+		const prompt = removalPrompt(worktree, state, { note: "CI.", keepBranch: true })
+		expect(prompt.choices).toEqual({ "Discard and remove": { force: true, deleteBranch: false } })
+		expect(prompt.detail).toBe("CI. The branch feature/x is kept.")
 	})
 })

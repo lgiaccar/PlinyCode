@@ -107,6 +107,50 @@ With both empty, a worktree goes next to the repository, in `<repository>.worktr
 paths short. A worktree started from a conversation that itself runs in a worktree still goes next to the main
 checkout, not inside the other worktree's folder.
 
+## Cleanup
+
+PlinyCode removes the worktrees it made once they are no longer needed. The cleanup runs in the background five
+minutes after the window opens and then once a day; when another window already ran it in the last 20 hours
+(a stamp, `worktree-cleanup.json`, in PlinyCode's data folder), it skips that turn.
+
+| Setting                        | Default | What it does                                                                           |
+| ------------------------------ | ------- | -------------------------------------------------------------------------------------- |
+| `plinycode.worktrees.keepDays` | `7`     | Days a PlinyCode worktree is kept after its conversation was last active. `0` turns the cleanup off. |
+
+**Which worktrees it looks at.** The repositories PlinyCode knows: those of conversations with a worktree record,
+and those of the CI Board's runs (its `ci-board.json`). In each, only worktrees under one of the worktree folders
+(`plinycode.worktrees.root`, `plinycode.ci.worktreeRoot`, and `<repository>.worktrees`) that PlinyCode made:
+branch `plinycode/*` (Run in worktree), or a folder a CI Board run works in. A worktree you made yourself is not
+touched, even in the same folder.
+
+**When it removes one.** All of these must hold:
+
+- it has no uncommitted changes (`git status` lists nothing, untracked files included);
+- it is not the main checkout, and no folder open in this window is in it;
+- no conversation that works in it is running, on screen or in the background;
+- it is more than an hour old (a new conversation's worktree exists a moment before its history entry);
+- its conversation was deleted, or has been idle (no activity) for more than `keepDays` days. A CI Board
+  worktree counts the latest of its runs' start times and their conversations' activity.
+
+It runs `git worktree remove` without `--force`, so git itself refuses one that changed in the meantime. A
+`plinycode/*` branch is then deleted with `git branch -d`, which git refuses unless the branch is merged; any
+other branch (a CI Board run's pull request branch) is kept. A conversation whose worktree was removed is marked
+(`removedTs`) like after **Remove worktree**. Each removal, and each failure, is written to PlinyCode's log
+(**PlinyCode: Open Log File**).
+
+### Manage Worktrees
+
+**PlinyCode: Manage Worktrees** (command palette) lists every PlinyCode worktree the cleanup would look at, with
+its branch, whether it is a conversation's or the CI Board's, whether it has uncommitted changes, and how long its
+conversation has been idle (or that it was deleted). Picking one offers **Open in New Window**, **Open
+Conversation** and **Remove Worktree**. Removing a conversation's worktree is the same as its **Remove worktree**
+button; any other asks in the same kind of modal, and never deletes a CI Board run's branch.
+
+This is a command rather than a section in the History view because worktrees do not map one to one onto history
+rows: CI Board worktrees and the worktrees of deleted conversations have no row of their own. The command reuses
+VS Code's quick pick and modal dialogs and needs no new webview state; the task header already has the
+per-conversation buttons.
+
 ## How it fits together
 
 Isolation is a property of the session's working directory. The conversation is started with the worktree as
@@ -125,9 +169,6 @@ for its runs; Run in worktree gives ordinary conversations the same entry point.
 
 ## Not in v1
 
-- **Cleanup.** Worktrees and branches stay after the conversation. Remove them with `git worktree remove <path>`
-  and `git branch -D <branch>` when you are done. A worktree is a full working copy, so a large repository needs
-  its own build in each one.
 - **Background starts.** The checkbox applies to conversations started from the prompt box.
 
 ## For developers
@@ -137,6 +178,8 @@ for its runs; Run in worktree gives ordinary conversations the same entry point.
 | `apps/vscode/src/services/git/worktrees.ts`                 | `ensureTaskWorktree` (branch name, location, base commit, submodules, notes), `isInGitRepository`, and the CI Board's `ensureWorktree`. |
 | `apps/vscode/src/services/git/worktree-merge.ts`            | The git side of Apply (patch, overlap check, `apply --check`), Create PR (commit, push) and Remove worktree.  |
 | `apps/vscode/src/core/controller/task/worktree-action-runner.ts` | The three actions: refusals, modals, info rows and the DevOps provider call. `worktreeAction.ts` wires it to the editor. |
+| `apps/vscode/src/services/git/worktree-gc.ts`               | The cleanup: `findPlinyWorktrees` (which worktrees), `gcVerdict` (the rules) and `collectWorktreeGarbage`. |
+| `apps/vscode/src/hosts/vscode/worktree-lifecycle.ts`        | Schedules the cleanup, reads `plinycode.worktrees.keepDays`, and the Manage Worktrees command.              |
 | `apps/vscode/src/sdk/sdk-task-start-coordinator.ts`         | `TaskStartOptions.worktree`: creates the worktree before the session, moves the task into it, writes the metadata. |
 | `apps/vscode/src/hosts/vscode/worktree-settings.ts`         | Reads `plinycode.worktrees.root` and the CI Board fallback.                                                 |
 | `apps/vscode/proto/cline/task.proto`                        | `NewTaskRequest.worktree`, `TaskItem.worktree_branch`, `TaskService.openTaskWorktree` and `TaskService.worktreeAction`. |

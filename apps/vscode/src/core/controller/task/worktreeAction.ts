@@ -10,7 +10,7 @@ import { isWorktreeActionKind, runWorktreeAction, type WorktreeActionDeps } from
 const DEVOPS_WAIT_MS = 10_000
 
 /** The editor and controller behind the worktree actions. */
-function worktreeActionDeps(controller: Controller): WorktreeActionDeps {
+export function worktreeActionDeps(controller: Controller): WorktreeActionDeps {
 	return {
 		getHistoryItem: (taskId) => controller.getHistoryItem(taskId),
 		isRunning: (taskId) => controller.conversationActivity(taskId) !== "idle",

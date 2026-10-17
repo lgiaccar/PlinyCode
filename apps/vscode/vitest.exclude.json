@@ -62,6 +62,7 @@
 	"src/services/devops-mcp/server/__tests__/review-pipeline-tools.test.ts",
 	"src/services/devops-mcp/server/__tests__/tools.test.ts",
 	"src/services/error/__tests__/ClineError.test.ts",
+	"src/services/git/__tests__/worktree-gc.test.ts",
 	"src/services/git/__tests__/worktree-merge.test.ts",
 	"src/services/git/__tests__/worktrees.test.ts",
 	"src/services/logging/distinctId.test.ts",
