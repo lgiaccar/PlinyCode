@@ -7,7 +7,7 @@
 // entries were left out and where to read them.
 
 import { CHARS_PER_TOKEN } from "@plinycode/shared"
-import { nestHeadings, truncateMemory } from "./memory-file"
+import { nestHeadings, stripEntryMeta, truncateMemory } from "./memory-file"
 import type { MemoryContents, TopicFile } from "./memory-store"
 
 const MEMORY_SECTION_HEADING = "# Memory"
@@ -53,7 +53,13 @@ function renderPart(
 ): { text: string; chars: number; entries: number; dropped: number } {
 	// Two levels down: the file's `# title` and `## Important` sit under this part's `## heading`.
 	// The file's `# title` repeats this part's heading; its `## sections` go one level down to sit under it.
-	const nested = nestHeadings(text.trim().replace(/^# [^\n]*(\n+|$)/, ""), 1)
+	// Entry dates are for pruning, not for the model: stripped, they cost no tokens.
+	const nested = nestHeadings(
+		stripEntryMeta(text)
+			.trim()
+			.replace(/^# [^\n]*(\n+|$)/, ""),
+		1,
+	)
 	// The topic list and the note about cut entries are memory text too: they
 	// come out of the part's budget, so the section stays within it.
 	const topicsText = topicList(topics, file)

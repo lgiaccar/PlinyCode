@@ -17,8 +17,25 @@ import { offTheRecordMessageIndices } from "../off-the-record";
 const INDEX_VERSION = 4;
 const DEFAULT_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const MAX_INDEXED_TEXT_LENGTH = 128 * 1024;
-const MAX_SESSIONS = 100_000;
 const MAX_SEARCH_CANDIDATES = 2_000;
+
+// Size limits: the index keeps the most recently active conversations within
+// both caps and drops the oldest first.
+const DEFAULT_MAX_INDEXED_SESSIONS = 20_000;
+const DEFAULT_MAX_DATABASE_BYTES = 200 * 1024 * 1024;
+// When the database outgrows its byte cap, the session cap is set so the index
+// fills this share of it, leaving room for the conversations that follow; it
+// is raised again only once the database is below the lower share.
+const SIZE_CAP_FILL = 0.9;
+const SIZE_CAP_GROW_BELOW = 0.6;
+// Compaction (FTS5 optimize, then VACUUM) runs after evictions that removed a
+// meaningful share of the indexed documents, and otherwise at most weekly when
+// anything was removed or re-indexed since the last one.
+const DEFAULT_MAINTENANCE_INTERVAL_MS = 7 * 24 * 60 * 60_000;
+const MEANINGFUL_EVICTED_DOCUMENTS = 500;
+const MEANINGFUL_EVICTED_SHARE = 0.1;
+// After a failed compaction (another window holding the database), wait this long.
+const MAINTENANCE_RETRY_MS = 60 * 60_000;
 // FTS5 weights are positional and include the five UNINDEXED metadata columns.
 const SESSION_SEARCH_RANKING = "bm25(0, 0, 0, 0, 0, 0.5, 8.0, 1.0)";
 
@@ -43,6 +60,28 @@ export interface SessionSearchHit {
 export interface SessionHistorySearchOptions {
 	dbPath?: string;
 	reconcileIntervalMs?: number;
+	/** Most conversations indexed; the least recently active go first. Default 20,000. */
+	maxSessions?: number;
+	/** Largest the database may grow (live pages); the least recently active conversations go first. Default 200 MB. */
+	maxDatabaseBytes?: number;
+	/** Longest time between compactions while anything changed. Default a week. */
+	maintenanceIntervalMs?: number;
+	/** Clock, for tests. */
+	now?: () => number;
+}
+
+/** What the index holds, for diagnostics and tests. */
+export interface SessionSearchIndexStats {
+	sessions: number;
+	documents: number;
+	/** Bytes in live database pages: the measure the byte cap applies to. */
+	usedBytes: number;
+	/** The session cap the byte cap set, when it set one. */
+	sessionCap?: number;
+	/** Documents evicted since the last compaction. */
+	evictedDocuments: number;
+	/** When the last compaction ran (ms since epoch). */
+	lastMaintenanceAt?: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -174,6 +213,75 @@ function ensureSearchSchema(db: SqliteDb): void {
 		content,
 		tokenize='unicode61 remove_diacritics 2 tokenchars ''_-@'''
 	);`);
+	db.exec(`CREATE TABLE IF NOT EXISTS search_meta (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);`);
+}
+
+function readMetaNumber(db: SqliteDb, key: string): number | undefined {
+	const row = db
+		.prepare("SELECT value FROM search_meta WHERE key = ?")
+		.get(key) as Record<string, unknown> | null | undefined;
+	const value = Number(row?.value);
+	return row && Number.isFinite(value) ? value : undefined;
+}
+
+function writeMeta(db: SqliteDb, key: string, value: string): void {
+	db.prepare(
+		"INSERT INTO search_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+	).run(key, value);
+}
+
+function deleteMeta(db: SqliteDb, key: string): void {
+	db.prepare("DELETE FROM search_meta WHERE key = ?").run(key);
+}
+
+function addMetaNumber(db: SqliteDb, key: string, amount: number): void {
+	if (amount > 0) {
+		writeMeta(db, key, String((readMetaNumber(db, key) ?? 0) + amount));
+	}
+}
+
+function pragmaNumber(db: SqliteDb, pragma: string): number {
+	const row = db.prepare(`PRAGMA ${pragma}`).get() as
+		| Record<string, unknown>
+		| null
+		| undefined;
+	return Number(row ? Object.values(row)[0] : 0) || 0;
+}
+
+/** Bytes in the database's live pages: its size once compacted. */
+function usedDatabaseBytes(db: SqliteDb): number {
+	return (
+		Math.max(
+			0,
+			pragmaNumber(db, "page_count") - pragmaNumber(db, "freelist_count"),
+		) * pragmaNumber(db, "page_size")
+	);
+}
+
+function countIndexedSessions(db: SqliteDb): number {
+	const row = db
+		.prepare("SELECT COUNT(*) AS count FROM indexed_sessions")
+		.get() as Record<string, unknown> | null | undefined;
+	return Number(row?.count ?? 0);
+}
+
+function countIndexedDocuments(db: SqliteDb): number {
+	const row = db
+		.prepare(
+			"SELECT COALESCE(SUM(document_count), 0) AS count FROM indexed_sessions",
+		)
+		.get() as Record<string, unknown> | null | undefined;
+	return Number(row?.count ?? 0);
+}
+
+/** The least recently active last; a conversation continued today counts as recent however old it is. */
+function byRecencyDesc(a: SessionRecord, b: SessionRecord): number {
+	const time = (session: SessionRecord) =>
+		Date.parse(session.updatedAt || session.startedAt) || 0;
+	return time(b) - time(a);
 }
 
 function initializeSearchDatabase(dbPath: string): {
@@ -202,6 +310,11 @@ export class SessionHistorySearchService {
 	private readonly db: SqliteDb | undefined;
 	private readonly initializationError: unknown | undefined;
 	private readonly intervalMs: number;
+	private readonly maxSessions: number;
+	private readonly maxDatabaseBytes: number;
+	private readonly maintenanceIntervalMs: number;
+	private readonly now: () => number;
+	private nextMaintenanceAttemptAt = 0;
 	private readonly removedDuringRefresh = new Set<string>();
 	private readonly failedEvictionSessionIds = new Set<string>();
 	private timer: ReturnType<typeof setInterval> | undefined;
@@ -222,6 +335,34 @@ export class SessionHistorySearchService {
 		this.initializationError = initialized.error;
 		this.intervalMs =
 			options.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
+		this.maxSessions = Math.max(
+			1,
+			Math.trunc(options.maxSessions ?? DEFAULT_MAX_INDEXED_SESSIONS),
+		);
+		this.maxDatabaseBytes =
+			options.maxDatabaseBytes ?? DEFAULT_MAX_DATABASE_BYTES;
+		this.maintenanceIntervalMs =
+			options.maintenanceIntervalMs ?? DEFAULT_MAINTENANCE_INTERVAL_MS;
+		this.now = options.now ?? Date.now;
+	}
+
+	/** Counts and sizes of the index; undefined without SQLite. */
+	stats(): SessionSearchIndexStats | undefined {
+		const db = this.db;
+		if (!db) return undefined;
+		const totals = db
+			.prepare(
+				"SELECT COUNT(*) AS sessions, COALESCE(SUM(document_count), 0) AS documents FROM indexed_sessions",
+			)
+			.get() as Record<string, unknown> | undefined;
+		return {
+			sessions: Number(totals?.sessions ?? 0),
+			documents: Number(totals?.documents ?? 0),
+			usedBytes: usedDatabaseBytes(db),
+			sessionCap: readMetaNumber(db, "session_cap"),
+			evictedDocuments: readMetaNumber(db, "evicted_documents") ?? 0,
+			lastMaintenanceAt: readMetaNumber(db, "last_maintenance_at"),
+		};
 	}
 
 	start(): void {
@@ -269,8 +410,9 @@ export class SessionHistorySearchService {
 		if (!normalized) return;
 		if (this.refreshPromise) this.removedDuringRefresh.add(normalized);
 		try {
-			this.deleteIndexedSession(db, normalized);
+			const removed = this.deleteIndexedSession(db, normalized);
 			this.failedEvictionSessionIds.delete(normalized);
+			addMetaNumber(db, "evicted_documents", removed);
 		} catch (error) {
 			// Keep failed evictions hidden until reconciliation can retry the
 			// disposable database cleanup successfully.
@@ -372,16 +514,25 @@ export class SessionHistorySearchService {
 	}
 
 	private async reconcile(db: SqliteDb): Promise<void> {
-		const sessions = await this.host.listSessions(MAX_SESSIONS);
+		// The most recently active conversations within the session cap, and
+		// within the smaller cap the byte cap set when the database outgrew it.
+		const listed = [...(await this.host.listSessions(this.maxSessions))]
+			.sort(byRecencyDesc)
+			.slice(0, this.maxSessions);
+		const sizeCap = readMetaNumber(db, "session_cap");
+		const sessions =
+			sizeCap === undefined ? listed : listed.slice(0, Math.max(1, sizeCap));
 		const liveIds = new Set(sessions.map((session) => session.sessionId));
 		const indexed = db
 			.prepare(
-				"SELECT session_id, source_revision, index_version FROM indexed_sessions",
+				"SELECT session_id, source_revision, index_version, document_count FROM indexed_sessions",
 			)
 			.all() as Array<Record<string, unknown>>;
 		const indexedById = new Map(
 			indexed.map((row) => [String(row.session_id), row] as const),
 		);
+		let evicted = 0;
+		let replaced = 0;
 
 		for (const session of sessions) {
 			if (this.isSessionSuppressed(session.sessionId)) continue;
@@ -394,16 +545,19 @@ export class SessionHistorySearchService {
 			) {
 				continue;
 			}
+			replaced += Number(current?.document_count ?? 0);
 			await this.indexSession(db, session, revision);
 		}
 
 		for (const row of indexed) {
 			const sessionId = String(row.session_id);
 			if (!liveIds.has(sessionId) || this.isSessionSuppressed(sessionId)) {
-				this.deleteIndexedSession(db, sessionId);
+				evicted += this.deleteIndexedSession(db, sessionId);
 				this.failedEvictionSessionIds.delete(sessionId);
 			}
 		}
+		addMetaNumber(db, "evicted_documents", evicted);
+		addMetaNumber(db, "replaced_documents", replaced);
 		const currentIndexedSession = db.prepare(
 			"SELECT 1 FROM indexed_sessions WHERE session_id = ? LIMIT 1",
 		);
@@ -414,6 +568,108 @@ export class SessionHistorySearchService {
 			if (!currentIndexedSession.get(sessionId)) {
 				this.failedEvictionSessionIds.delete(sessionId);
 			}
+		}
+		this.enforceSizeCap(db, listed, sessions);
+		this.maybeMaintain(db);
+	}
+
+	/**
+	 * Keeps the database within its byte cap. Over it, the index is compacted
+	 * first (deleted rows only leave the file then), and if it is still over,
+	 * the session cap is lowered so the index fills SIZE_CAP_FILL of the byte
+	 * cap, the least recently active conversations are evicted, and the index
+	 * is compacted again. Well below the cap, a session cap set earlier is
+	 * raised in proportion, so later reconciliations index more again.
+	 */
+	private enforceSizeCap(
+		db: SqliteDb,
+		listed: readonly SessionRecord[],
+		kept: readonly SessionRecord[],
+	): void {
+		let used = usedDatabaseBytes(db);
+		const sizeCap = readMetaNumber(db, "session_cap");
+		if (used > this.maxDatabaseBytes) {
+			this.maintain(db);
+			used = usedDatabaseBytes(db);
+			if (used <= this.maxDatabaseBytes) return;
+			const indexedCount = countIndexedSessions(db);
+			const cap = Math.max(
+				1,
+				Math.floor(
+					(indexedCount * SIZE_CAP_FILL * this.maxDatabaseBytes) / used,
+				),
+			);
+			writeMeta(db, "session_cap", String(cap));
+			let evicted = 0;
+			for (const session of kept.slice(cap)) {
+				evicted += this.deleteIndexedSession(db, session.sessionId);
+			}
+			addMetaNumber(db, "evicted_documents", evicted);
+			this.maintain(db);
+			return;
+		}
+		if (
+			sizeCap !== undefined &&
+			used < SIZE_CAP_GROW_BELOW * this.maxDatabaseBytes
+		) {
+			const indexedCount = countIndexedSessions(db);
+			const grown = Math.floor(
+				(Math.max(indexedCount, 1) * SIZE_CAP_FILL * this.maxDatabaseBytes) /
+					Math.max(used, 1),
+			);
+			if (grown >= listed.length) {
+				deleteMeta(db, "session_cap");
+			} else if (grown > sizeCap) {
+				writeMeta(db, "session_cap", String(grown));
+			}
+		}
+	}
+
+	/**
+	 * Compacts the index when evictions removed a meaningful share of it, or
+	 * when the maintenance interval passed and anything was removed or
+	 * re-indexed since the last compaction.
+	 */
+	private maybeMaintain(db: SqliteDb): void {
+		const now = this.now();
+		const last = readMetaNumber(db, "last_maintenance_at");
+		if (last === undefined) {
+			// A new index has nothing to compact; the interval starts now.
+			writeMeta(db, "last_maintenance_at", String(now));
+			return;
+		}
+		const evicted = readMetaNumber(db, "evicted_documents") ?? 0;
+		const replaced = readMetaNumber(db, "replaced_documents") ?? 0;
+		const documents = countIndexedDocuments(db);
+		const meaningful =
+			evicted >= MEANINGFUL_EVICTED_DOCUMENTS &&
+			evicted >= MEANINGFUL_EVICTED_SHARE * (documents + evicted);
+		const due =
+			now - last >= this.maintenanceIntervalMs && evicted + replaced > 0;
+		if (meaningful || due) {
+			this.maintain(db);
+		}
+	}
+
+	/**
+	 * FTS5 `optimize` merges the index segments, so deleted rows stop taking
+	 * space, and VACUUM gives the freed pages back to the file system. Both
+	 * need the database to themselves: when another window holds it, the
+	 * attempt is retried after MAINTENANCE_RETRY_MS.
+	 */
+	private maintain(db: SqliteDb): void {
+		const now = this.now();
+		if (now < this.nextMaintenanceAttemptAt) return;
+		try {
+			db.exec("INSERT INTO session_search(session_search) VALUES('optimize');");
+			db.exec("VACUUM;");
+			db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+			writeMeta(db, "evicted_documents", "0");
+			writeMeta(db, "replaced_documents", "0");
+			writeMeta(db, "last_maintenance_at", String(now));
+		} catch (error) {
+			this.nextMaintenanceAttemptAt = now + MAINTENANCE_RETRY_MS;
+			console.warn("[hub] session search compaction failed", error);
 		}
 	}
 
@@ -493,7 +749,13 @@ export class SessionHistorySearchService {
 		}
 	}
 
-	private deleteIndexedSession(db: SqliteDb, sessionId: string): void {
+	/** Removes one session's rows; returns how many documents it had. */
+	private deleteIndexedSession(db: SqliteDb, sessionId: string): number {
+		const row = db
+			.prepare(
+				"SELECT document_count FROM indexed_sessions WHERE session_id = ?",
+			)
+			.get(sessionId) as Record<string, unknown> | undefined;
 		db.exec("BEGIN IMMEDIATE;");
 		try {
 			db.prepare("DELETE FROM session_search WHERE session_id = ?").run(
@@ -507,5 +769,6 @@ export class SessionHistorySearchService {
 			db.exec("ROLLBACK;");
 			throw error;
 		}
+		return Number(row?.document_count ?? 0);
 	}
 }

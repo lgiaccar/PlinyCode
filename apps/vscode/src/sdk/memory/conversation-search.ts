@@ -6,7 +6,8 @@
 // built on first use, not at activation: the first build reads every
 // transcript. After that it is refreshed in the background, and a search
 // refreshes it first so the newest conversations are found. Without SQLite
-// FTS5 the search scans the most recent transcripts instead.
+// FTS5 the search scans the most recent transcripts instead. The history
+// view's search uses the same index to match message text (searchContent).
 
 import { offTheRecordMessageIndices } from "@plinycode/core"
 import { stripModeNotices } from "@plinycode/shared"
@@ -69,8 +70,16 @@ interface ConversationSearchInput {
 	limit?: number
 }
 
-const MAX_INDEXED_SESSIONS = 1000
+/**
+ * The index's own caps (SessionHistorySearchService): the most recently
+ * active conversations, at most this many and within MAX_INDEX_BYTES, the
+ * oldest dropped first.
+ */
+export const MAX_INDEXED_SESSIONS = 20_000
+export const MAX_INDEX_BYTES = 200 * 1024 * 1024
 const FALLBACK_SCAN_SESSIONS = 200
+/** Conversations the history view's content search returns, at most (the index's own limit). */
+const MAX_CONTENT_MATCHES = 200
 const DEFAULT_LIMIT = 8
 const MAX_LIMIT = 25
 const SNIPPET_RADIUS = 120
@@ -171,6 +180,31 @@ export class ConversationSearch {
 	}
 
 	/**
+	 * The history view's search by message text: one hit per conversation, best
+	 * first, or undefined without SQLite FTS5 (the view then matches titles and
+	 * paths only). It searches what the index holds without waiting for it to
+	 * catch up, since it runs as the user types: a conversation is found by its
+	 * text once the background refresh (every 5 minutes) or a tool search has
+	 * indexed it. The first call starts the index, whose first build reads
+	 * every transcript in the background.
+	 */
+	searchContent(query: string, workspaceRoot?: string): IndexHit[] | undefined {
+		if (!query.trim()) {
+			return []
+		}
+		const index = this.startedIndex()
+		if (!index?.isAvailable()) {
+			return undefined
+		}
+		try {
+			return index.search({ query, limit: MAX_CONTENT_MATCHES, workspaceRoot })
+		} catch (error) {
+			Logger.debug("[Memory] Content search failed:", error)
+			return undefined
+		}
+	}
+
+	/**
 	 * Messages of one conversation, around `aroundOrdinal` (a hit's ordinal) or
 	 * from the start, as text. Side questions are left out.
 	 */
@@ -220,10 +254,21 @@ export class ConversationSearch {
 
 	/** The index, started on first use and refreshed before each search for at most `readyTimeoutMs`. */
 	private async readyIndex(): Promise<ConversationIndex | undefined> {
+		const index = this.startedIndex()
+		if (!index?.isAvailable()) {
+			return undefined
+		}
+		const timeout = new Promise<void>((resolve) => setTimeout(resolve, this.options.readyTimeoutMs ?? 8000).unref?.())
+		await Promise.race([index.refreshNow().catch(() => {}), timeout])
+		return index
+	}
+
+	/** The index, created and started on first use. */
+	private startedIndex(): ConversationIndex | undefined {
 		if (!this.index) {
 			try {
 				this.index = this.options.createIndex({
-					// The index asks for up to 100,000; listing that many records is too slow for an extension host.
+					// The index asks for its own session cap; never more than MAX_INDEXED_SESSIONS records.
 					listSessions: (limit) =>
 						this.options.source.listSessions(Math.min(limit ?? MAX_INDEXED_SESSIONS, MAX_INDEXED_SESSIONS)),
 					readSessionMessages: (sessionId) => this.options.source.readMessages(sessionId),
@@ -234,11 +279,6 @@ export class ConversationSearch {
 				return undefined
 			}
 		}
-		if (!this.index.isAvailable()) {
-			return undefined
-		}
-		const timeout = new Promise<void>((resolve) => setTimeout(resolve, this.options.readyTimeoutMs ?? 8000).unref?.())
-		await Promise.race([this.index.refreshNow().catch(() => {}), timeout])
 		return this.index
 	}
 

@@ -193,6 +193,15 @@ const HistoryViewItem = ({
 					</div>
 				</div>
 
+				{item.matchSnippet && (
+					// Found by its messages, not its title: the text that matched.
+					<div
+						className="line-clamp-2 break-words text-xs text-description ph-no-capture"
+						data-testid="history-match-snippet">
+						{item.matchSnippet}
+					</div>
+				)}
+
 				<Tooltip>
 					<TooltipContent className="max-w-xs" side="bottom">
 						{workspaceRoot || "Unknown workspace"}

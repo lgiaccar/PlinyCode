@@ -12,6 +12,11 @@
 // - How far each conversation was distilled, and the memories the user
 //   dismissed or left unchecked, are kept in `<memory dir>/distill/<conversation>.json`,
 //   so a reload neither re-reads the whole conversation nor proposes them again.
+// - The same row carries prune proposals: entries not used for 90 days and
+//   orphaned topic files (MemoryStore.pruneCandidates). They are removed only
+//   when checked and approved; kept ones are marked as used.
+// - Once per window, the pending and distill files of deleted conversations
+//   are removed (pruneOrphanFiles).
 
 import { promises as fs } from "node:fs"
 import * as path from "node:path"
@@ -27,7 +32,7 @@ import {
 	parseDistillReply,
 } from "./memory-distiller"
 import { memoryEntryKey } from "./memory-file"
-import type { MemoryStore } from "./memory-store"
+import type { MemoryStore, PruneCandidate } from "./memory-store"
 
 /** What is kept per conversation between windows: see the header. */
 interface DistillState {
@@ -59,7 +64,12 @@ export interface MemoryCoordinatorDeps {
 	/** Whether the session ran in act mode: its own mode, not the mode switch's current position. */
 	isActMode: (sessionId: string) => boolean
 	isBackgroundSession: (sessionId: string) => boolean
+	/** Every conversation in the history, to prune the files of deleted ones. Without it nothing is pruned. */
+	listConversationIds?: () => Promise<readonly string[]>
 }
+
+/** Files of a conversation missing from the history are kept this long after their last change. */
+const ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000
 
 interface PendingRecord {
 	proposal: MemoryProposal
@@ -85,6 +95,7 @@ export class MemoryCoordinator {
 	 */
 	private readonly states = new Map<string, DistillState>()
 	private readonly running = new Set<string>()
+	private housekeeping: Promise<void> | undefined
 
 	constructor(private readonly deps: MemoryCoordinatorDeps) {}
 
@@ -204,8 +215,17 @@ export class MemoryCoordinator {
 			}
 			const latest = await this.loadState(conversationId)
 			await this.saveState(conversationId, { ...latest, upTo: messages.length })
-			const memories = parseDistillReply(reply, `${memory.repoText}\n${memory.userText}`, new Set(latest.dismissed))
-			if (memories.length === 0) {
+			const rediscovered: string[] = []
+			const memories = parseDistillReply(
+				reply,
+				`${memory.repoText}\n${memory.userText}`,
+				new Set(latest.dismissed),
+				rediscovered,
+			)
+			// A memory proposed again is still relevant: its entry counts as used.
+			await this.deps.store.touch(cwd, rediscovered).catch(() => 0)
+			const removals = await this.deps.store.pruneCandidates(cwd).catch(() => [] as PruneCandidate[])
+			if (memories.length === 0 && removals.length === 0) {
 				if (options.manual) this.info("No new memories found in this conversation.")
 				return
 			}
@@ -217,14 +237,27 @@ export class MemoryCoordinator {
 				id: `${conversationId}-${Date.now()}`,
 				conversationId,
 				status: "pending",
-				items: memories.map(
-					(memory, index): MemoryProposalItem => ({
-						id: String(index),
-						scope: memory.scope,
-						text: memory.text,
-						importance: memory.importance,
-					}),
-				),
+				items: [
+					...memories.map(
+						(memory, index): MemoryProposalItem => ({
+							id: String(index),
+							scope: memory.scope,
+							text: memory.text,
+							importance: memory.importance,
+						}),
+					),
+					// Prune proposals ride on the same row: nothing is removed without approval.
+					...removals.map(
+						(candidate, index): MemoryProposalItem => ({
+							id: `remove-${index}`,
+							scope: candidate.scope,
+							text: candidate.text,
+							importance: "normal",
+							action: "remove",
+							...(candidate.topicFile ? { topicFile: candidate.topicFile } : {}),
+						}),
+					),
+				],
 				repo: memory.location.repo.identity,
 			}
 			const record: PendingRecord = { proposal, cwd }
@@ -240,27 +273,35 @@ export class MemoryCoordinator {
 		}
 	}
 
-	/** The user's choice on a proposal row: save the checked items, or dismiss it. */
+	/**
+	 * The user's choice on a proposal row: save the checked memories and
+	 * remove the checked prune items, or dismiss it. A prune item left
+	 * unchecked or dismissed is kept and marked as used, so it is not
+	 * proposed again for another 90 days.
+	 */
 	async resolveProposal(proposalId: string, save: boolean, itemIds: readonly string[]): Promise<void> {
 		const record = [...this.pending.values()].find((candidate) => candidate.proposal.id === proposalId)
 		if (!record || record.proposal.status !== "pending") {
 			return
 		}
 		const conversationId = record.proposal.conversationId
+		const additions = record.proposal.items.filter((item) => item.action !== "remove")
+		const removals = record.proposal.items.filter((item) => item.action === "remove")
 		if (!save) {
 			record.proposal = { ...record.proposal, status: "dismissed" }
 			this.show(record)
 			await this.rememberDismissed(
 				conversationId,
-				record.proposal.items.map((item) => item.text),
+				additions.map((item) => item.text),
 			)
+			await this.keep(record.cwd, removals).catch(() => {})
 			await this.forget(record)
 			return
 		}
-		const chosen = record.proposal.items.filter((item) => itemIds.includes(item.id))
+		const chosen = additions.filter((item) => itemIds.includes(item.id))
 		await this.rememberDismissed(
 			conversationId,
-			record.proposal.items.filter((item) => !itemIds.includes(item.id)).map((item) => item.text),
+			additions.filter((item) => !itemIds.includes(item.id)).map((item) => item.text),
 		)
 		record.proposal = { ...record.proposal, status: "saving" }
 		this.show(record)
@@ -274,7 +315,20 @@ export class MemoryCoordinator {
 				})
 				if (result.inserted) saved++
 			}
-			record.proposal = { ...record.proposal, status: "saved", savedCount: saved }
+			const removed = await this.remove(
+				record.cwd,
+				removals.filter((item) => itemIds.includes(item.id)),
+			)
+			await this.keep(
+				record.cwd,
+				removals.filter((item) => !itemIds.includes(item.id)),
+			)
+			record.proposal = {
+				...record.proposal,
+				status: "saved",
+				savedCount: saved,
+				...(removals.length > 0 ? { removedCount: removed } : {}),
+			}
 		} catch (error) {
 			record.proposal = {
 				...record.proposal,
@@ -288,8 +342,79 @@ export class MemoryCoordinator {
 		await this.forget(record)
 	}
 
+	/** Removes the approved prune items, per memory. Returns how many were removed. */
+	private async remove(cwd: string, items: readonly MemoryProposalItem[]): Promise<number> {
+		let removed = 0
+		for (const scope of ["repo", "user"] as const) {
+			const mine = items.filter((item) => item.scope === scope)
+			if (mine.length === 0) continue
+			removed += await this.deps.store.remove(cwd, scope, {
+				texts: mine.filter((item) => !item.topicFile).map((item) => item.text),
+				topicFiles: mine.flatMap((item) => (item.topicFile ? [item.topicFile] : [])),
+			})
+		}
+		return removed
+	}
+
+	/** Prune items the user kept: marked as used, so they are not proposed again soon. */
+	private async keep(cwd: string, items: readonly MemoryProposalItem[]): Promise<void> {
+		await this.deps.store.touch(
+			cwd,
+			items.filter((item) => !item.topicFile).map((item) => item.text),
+		)
+		for (const scope of ["repo", "user"] as const) {
+			const topics = items.flatMap((item) => (item.scope === scope && item.topicFile ? [item.topicFile] : []))
+			if (topics.length > 0) await this.deps.store.keepTopicFiles(cwd, scope, topics)
+		}
+	}
+
+	/**
+	 * Deletes the `pending/` and `distill/` files of conversations that no
+	 * longer exist. An empty or failed listing proves nothing, so nothing is
+	 * deleted then, and a file changed in the last day is left alone: its
+	 * conversation may not be in the history yet. Returns how many were deleted.
+	 */
+	async pruneOrphanFiles(): Promise<number> {
+		const ids = await this.deps.listConversationIds?.().catch(() => [] as string[])
+		if (!ids || ids.length === 0) {
+			return 0
+		}
+		const live = new Set([...ids, ...this.pending.keys()].map(safeFileName))
+		const cutoff = Date.now() - ORPHAN_GRACE_MS
+		let removed = 0
+		for (const dir of [this.pendingDir, path.join(this.deps.store.rootDir, "distill")]) {
+			const names = await fs.readdir(dir).catch(() => [] as string[])
+			for (const name of names) {
+				if (!name.endsWith(".json") || live.has(name.slice(0, -".json".length))) continue
+				const file = path.join(dir, name)
+				const modified = await fs
+					.stat(file)
+					.then((stat) => stat.mtimeMs)
+					.catch(() => Number.POSITIVE_INFINITY)
+				if (modified > cutoff) continue
+				await fs.rm(file, { force: true }).catch(() => {})
+				removed++
+			}
+		}
+		return removed
+	}
+
+	/** Runs pruneOrphanFiles once per window, in the background. */
+	private scheduleHousekeeping(): void {
+		if (this.housekeeping || !this.deps.listConversationIds) {
+			return
+		}
+		this.housekeeping = this.pruneOrphanFiles().then(
+			(removed) => {
+				if (removed > 0) Logger.debug(`[Memory] Removed ${removed} files of deleted conversations.`)
+			},
+			(error) => Logger.debug("[Memory] Pruning the files of deleted conversations failed:", error),
+		)
+	}
+
 	/** Shows the conversation's unresolved proposal again, at the end of the chat. Called when a conversation is opened. */
 	async showPending(conversationId: string): Promise<void> {
+		this.scheduleHousekeeping()
 		let record = this.pending.get(conversationId)
 		if (!record) {
 			try {

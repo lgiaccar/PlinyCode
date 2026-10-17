@@ -197,6 +197,10 @@ message TaskItem {
   string workspace_kind = 18;
   // Pinned conversations are listed first, in their own section.
   bool is_pinned = 19;
+  // Set when the conversation matched the search query by its message text
+  // only (the full-text index), not by its title or path: the matching text,
+  // with the matched words in [brackets]. Empty otherwise.
+  string match_snippet = 20;
 }
 
 // Request for ask response operation

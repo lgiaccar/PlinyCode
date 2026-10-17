@@ -1,6 +1,6 @@
 import type { SessionHistoryRecord } from "@plinycode/core"
 import { describe, expect, it } from "vitest"
-import { queryTaskHistory, taskHistoryRowMatches } from "./task-history-query"
+import { queryTaskHistory, queryTaskHistoryWithContent, taskHistoryRowMatches } from "./task-history-query"
 
 type TaskHistoryRow = Parameters<typeof taskHistoryRowMatches>[0]
 
@@ -123,6 +123,47 @@ describe("queryTaskHistory", () => {
 				}),
 			),
 		).toEqual(["match"])
+	})
+})
+
+describe("queryTaskHistoryWithContent", () => {
+	const records = [
+		makeRecord("title-new", { prompt: "Fix the frobnicator", updatedAt: "2026-03-03T00:00:00.000Z" }),
+		makeRecord("title-old", { prompt: "frobnicator cleanup", updatedAt: "2026-01-01T00:00:00.000Z" }),
+		makeRecord("content-old", { prompt: "Refactor parser", updatedAt: "2026-01-02T00:00:00.000Z" }),
+		makeRecord("content-new", { prompt: "Build failure", updatedAt: "2026-03-04T00:00:00.000Z" }),
+		makeRecord("content-elsewhere", { prompt: "Other repo", workspaceRoot: "/other", cwd: "/other" }),
+	]
+	// Best first, as the index ranks them; a title match and a deleted conversation among them.
+	const matches = [
+		{ sessionId: "content-old", snippet: "the [frobnicator] regression" },
+		{ sessionId: "title-old", snippet: "[frobnicator] again" },
+		{ sessionId: "deleted", snippet: "[frobnicator]" },
+		{ sessionId: "content-elsewhere", snippet: "[frobnicator] too" },
+		{ sessionId: "content-new", snippet: "a [frobnicator] build" },
+	]
+
+	it("lists title matches first, then conversations found by their messages, with their snippets", () => {
+		const result = queryTaskHistoryWithContent(records, { searchQuery: "frobnicator", sortBy: "mostRelevant" }, matches)
+		expect(ids(result.records)).toEqual(["title-new", "title-old", "content-old", "content-elsewhere", "content-new"])
+		expect(result.snippets.get("content-old")).toBe("the [frobnicator] regression")
+		// A title match carries no snippet: it was found by its title.
+		expect(result.snippets.has("title-old")).toBe(false)
+	})
+
+	it("orders content matches by the chosen sort, and applies the other filters to them", () => {
+		const result = queryTaskHistoryWithContent(
+			records,
+			{ searchQuery: "frobnicator", sortBy: "newest", workspacePath: "/repo" },
+			matches,
+		)
+		expect(ids(result.records)).toEqual(["title-new", "title-old", "content-new", "content-old"])
+	})
+
+	it("is the title search alone without index matches, e.g. without SQLite", () => {
+		const result = queryTaskHistoryWithContent(records, { searchQuery: "frobnicator" }, [])
+		expect(ids(result.records)).toEqual(["title-new", "title-old"])
+		expect(result.snippets.size).toBe(0)
 	})
 })
 

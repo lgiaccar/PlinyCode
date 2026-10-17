@@ -14,7 +14,17 @@ import { promises as fs } from "node:fs"
 import * as path from "node:path"
 import { resolveMemoryDataDir } from "@plinycode/shared/storage"
 import type { GitRunner } from "../context/git-snapshot"
-import { insertMemoryEntry, MEMORY_FILE_NAME, memoryFileTemplate } from "./memory-file"
+import {
+	insertMemoryEntry,
+	MEMORY_FILE_NAME,
+	memoryDate,
+	memoryFileTemplate,
+	referencedTopicFiles,
+	removeMemoryEntries,
+	STALE_AFTER_DAYS,
+	selectStaleEntries,
+	touchMemoryEntries,
+} from "./memory-file"
 import { type RepoIdentity, resolveRepoIdentity } from "./repo-key"
 
 export type MemoryScope = "repo" | "user"
@@ -59,11 +69,33 @@ interface MemorySaveResult {
 	file: string
 	inserted: boolean
 	topicFile?: string
+	/** The existing entry this memory duplicates; its `used` date was bumped instead. */
+	duplicateOf?: string
 }
+
+/** Something prune proposals offer to remove (docs/memory.md). */
+export interface PruneCandidate {
+	scope: MemoryScope
+	/** The entry as one line, or a description of the topic file. */
+	text: string
+	/** Set for an orphaned topic file: its name in the scope's folder. */
+	topicFile?: string
+}
+
+/** Entries and topic files proposed for removal per scope, at most. */
+const MAX_PRUNE_ENTRIES = 5
+const MAX_PRUNE_TOPICS = 3
 
 interface MemoryStoreOptions {
 	rootDir?: string
 	runGit?: GitRunner
+	/** Clock for entry dates, for tests. */
+	now?: () => Date
+}
+
+/** A topic file name as save_memory writes it: no folders, ends in .md, not MEMORY.md. */
+function isTopicFileName(name: string): boolean {
+	return /^[a-z0-9._-]+\.md$/i.test(name) && name !== MEMORY_FILE_NAME && !name.startsWith(".")
 }
 
 /** `Build quirks!` → `build-quirks`. */
@@ -158,12 +190,19 @@ function firstLine(text: string): string {
 export class MemoryStore {
 	readonly rootDir: string
 	private readonly runGit: GitRunner | undefined
+	private readonly now: () => Date
 	private readonly locations = new Map<string, Promise<MemoryLocation>>()
 	private readonly writeQueues = new Map<string, Promise<unknown>>()
 
 	constructor(options: MemoryStoreOptions = {}) {
 		this.rootDir = options.rootDir ?? resolveMemoryDataDir()
 		this.runGit = options.runGit
+		this.now = options.now ?? (() => new Date())
+	}
+
+	/** Today, as entries record it. */
+	private today(): string {
+		return memoryDate(this.now())
 	}
 
 	/** Where `cwd`'s memory lives. Cached per folder: the repository a folder belongs to rarely changes. */
@@ -239,27 +278,141 @@ export class MemoryStore {
 			})
 		}
 
-		const inserted = await this.serialized(file, async () => {
+		const result = await this.serialized(file, async () => {
 			const title = input.scope === "user" ? "My memory" : `Repository memory: ${location.repo.identity}`
-			const result = insertMemoryEntry(
-				await readText(file),
+			const existing = await readText(file)
+			const insertion = insertMemoryEntry(
+				existing,
 				{
 					text: input.text,
 					importance: input.importance,
 					topicFile: topicName,
+					date: this.today(),
 				},
 				title,
 			)
-			if (result.inserted) {
-				await writeAtomically(file, result.content)
+			// A duplicate changes the file too: its date is bumped.
+			if (insertion.content !== existing) {
+				await writeAtomically(file, insertion.content)
 			}
-			return result.inserted
+			return insertion
 		})
 
 		if (input.scope === "repo") {
 			await this.writeRepoNote(location).catch(() => {})
 		}
-		return { file, inserted, topicFile: topicPath }
+		return { file, inserted: result.inserted, topicFile: topicPath, duplicateOf: result.duplicateOf }
+	}
+
+	/**
+	 * Marks as used today the entries, in both memories, that are near
+	 * duplicates of `texts`. Returns how many were marked.
+	 */
+	async touch(cwd: string, texts: readonly string[]): Promise<number> {
+		if (texts.length === 0) {
+			return 0
+		}
+		const location = await this.locate(cwd)
+		let touched = 0
+		for (const file of [location.repoFile, location.userFile]) {
+			touched += await this.serialized(file, async () => {
+				const existing = await readText(file)
+				if (!existing) return 0
+				const result = touchMemoryEntries(existing, texts, this.today())
+				if (result.touched > 0) await writeAtomically(file, result.content)
+				return result.touched
+			})
+		}
+		return touched
+	}
+
+	/**
+	 * Removes entries (exact text, as proposed) and topic files from one
+	 * memory, after the user approved it. A topic file only the removed
+	 * entries pointed to goes with them. Returns how many proposed entries and
+	 * files were removed.
+	 */
+	async remove(
+		cwd: string,
+		scope: MemoryScope,
+		items: { texts: readonly string[]; topicFiles: readonly string[] },
+	): Promise<number> {
+		const location = await this.locate(cwd)
+		const dir = scope === "user" ? location.userDir : location.repoDir
+		const file = scope === "user" ? location.userFile : location.repoFile
+		let removed = 0
+		const orphaned: string[] = []
+		if (items.texts.length > 0) {
+			removed += await this.serialized(file, async () => {
+				const existing = await readText(file)
+				const result = removeMemoryEntries(existing, items.texts)
+				if (result.removed > 0) await writeAtomically(file, result.content)
+				orphaned.push(...result.orphanedTopicFiles)
+				return result.removed
+			})
+		}
+		const referenced = referencedTopicFiles(await readText(file))
+		for (const name of new Set([...orphaned, ...items.topicFiles])) {
+			if (!isTopicFileName(name) || referenced.has(name)) continue
+			const deleted = await fs
+				.rm(path.join(dir, name))
+				.then(() => true)
+				.catch(() => false)
+			// A file that went with its entry is not counted again.
+			if (deleted && items.topicFiles.includes(name)) removed++
+		}
+		return removed
+	}
+
+	/** Keeps orphaned topic files out of prune proposals for another STALE_AFTER_DAYS. */
+	async keepTopicFiles(cwd: string, scope: MemoryScope, names: readonly string[]): Promise<void> {
+		const location = await this.locate(cwd)
+		const dir = scope === "user" ? location.userDir : location.repoDir
+		const now = this.now()
+		for (const name of names) {
+			if (isTopicFileName(name)) {
+				await fs.utimes(path.join(dir, name), now, now).catch(() => {})
+			}
+		}
+	}
+
+	/**
+	 * What a prune proposal offers to remove: entries not used for
+	 * STALE_AFTER_DAYS (not under Important, not pinned, dated), and topic
+	 * files no entry points to that were not changed for as long.
+	 */
+	async pruneCandidates(cwd: string): Promise<PruneCandidate[]> {
+		const location = await this.locate(cwd)
+		const today = this.today()
+		const cutoff = this.now().getTime() - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000
+		const candidates: PruneCandidate[] = []
+		for (const scope of ["repo", "user"] as const) {
+			const file = scope === "user" ? location.userFile : location.repoFile
+			const dir = scope === "user" ? location.userDir : location.repoDir
+			const text = await readText(file)
+			for (const entry of selectStaleEntries(text, today, STALE_AFTER_DAYS, MAX_PRUNE_ENTRIES)) {
+				candidates.push({ scope, text: entry.text })
+			}
+			const referenced = referencedTopicFiles(text)
+			let topics = 0
+			for (const topic of await this.listTopics(dir)) {
+				const name = path.basename(topic.path)
+				if (topics >= MAX_PRUNE_TOPICS) break
+				if (referenced.has(name) || !isTopicFileName(name)) continue
+				const modified = await fs
+					.stat(topic.path)
+					.then((stat) => stat.mtimeMs)
+					.catch(() => Number.POSITIVE_INFINITY)
+				if (modified > cutoff) continue
+				candidates.push({
+					scope,
+					text: `Topic file ${name}${topic.summary ? ` (${topic.summary})` : ""}: no entry points to it`,
+					topicFile: name,
+				})
+				topics++
+			}
+		}
+		return candidates
 	}
 
 	/** The memory file of a scope, created from the template when it does not exist yet. */

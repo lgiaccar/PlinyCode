@@ -11,7 +11,11 @@ import {
 /** The filters and sort order of the history view (the getTaskHistory RPC). */
 export interface TaskHistoryQuery {
 	favoritesOnly?: boolean
-	/** Every whitespace-separated term must appear in the title or the workspace path, in any case. */
+	/**
+	 * Every whitespace-separated term must appear in the title or the workspace
+	 * path, in any case. queryTaskHistoryWithContent adds the conversations whose
+	 * messages match it.
+	 */
 	searchQuery?: string
 	/** "newest" (the default), "oldest", "mostExpensive" or "mostTokens". */
 	sortBy?: string
@@ -109,6 +113,10 @@ function compareBySortOption(a: SessionHistoryRecord, b: SessionHistoryRecord, s
 	}
 }
 
+function comparePinnedFirst(a: SessionHistoryRecord, b: SessionHistoryRecord, sortBy: string | undefined): number {
+	return Number(isSessionRecordPinned(b)) - Number(isSessionRecordPinned(a)) || compareBySortOption(a, b, sortBy)
+}
+
 /**
  * The conversations that match `query`, pinned ones first and each part in
  * the query's sort order. Callers page the result: filtering has to see the
@@ -117,8 +125,53 @@ function compareBySortOption(a: SessionHistoryRecord, b: SessionHistoryRecord, s
 export function queryTaskHistory(records: SessionHistoryRecord[], query: TaskHistoryQuery): SessionHistoryRecord[] {
 	return records
 		.filter((record) => taskHistoryRowMatches(sessionRecordToRow(record), query))
-		.sort(
-			(a, b) =>
-				Number(isSessionRecordPinned(b)) - Number(isSessionRecordPinned(a)) || compareBySortOption(a, b, query.sortBy),
-		)
+		.sort((a, b) => comparePinnedFirst(a, b, query.sortBy))
+}
+
+/** A conversation whose messages match the search, from the full-text index. */
+interface ContentMatch {
+	sessionId: string
+	/** The matching text, with the matched words in [brackets]. */
+	snippet: string
+}
+
+interface TaskHistoryResult {
+	records: SessionHistoryRecord[]
+	/** Per conversation found by its messages only: the text that matched. */
+	snippets: Map<string, string>
+}
+
+/**
+ * queryTaskHistory, plus the conversations found by message text
+ * (`contentMatches`, best first) that pass every other filter. Title and path
+ * matches come first; content-only matches follow, in the index's relevance
+ * order under "Most Relevant" and in the chosen sort order otherwise.
+ */
+export function queryTaskHistoryWithContent(
+	records: SessionHistoryRecord[],
+	query: TaskHistoryQuery,
+	contentMatches: readonly ContentMatch[],
+): TaskHistoryResult {
+	const titleMatches = queryTaskHistory(records, query)
+	const snippets = new Map<string, string>()
+	if (contentMatches.length === 0 || !query.searchQuery?.trim()) {
+		return { records: titleMatches, snippets }
+	}
+	const listed = new Set(titleMatches.map((record) => record.sessionId))
+	const byId = new Map(records.map((record) => [record.sessionId, record]))
+	const otherFilters: TaskHistoryQuery = { ...query, searchQuery: undefined }
+	const contentOnly: SessionHistoryRecord[] = []
+	for (const match of contentMatches) {
+		const record = byId.get(match.sessionId)
+		if (!record || listed.has(match.sessionId) || !taskHistoryRowMatches(sessionRecordToRow(record), otherFilters)) {
+			continue
+		}
+		listed.add(match.sessionId)
+		contentOnly.push(record)
+		snippets.set(match.sessionId, match.snippet)
+	}
+	if (query.sortBy && query.sortBy !== "mostRelevant") {
+		contentOnly.sort((a, b) => comparePinnedFirst(a, b, query.sortBy))
+	}
+	return { records: [...titleMatches, ...contentOnly], snippets }
 }
