@@ -12,11 +12,10 @@
 				// Marked as strict (`!`) entries so exports reachable only from
 				// tests still count as "used" under `--production` — otherwise
 				// knip's production mode drops these entries outright and reports
-				// every test-only-used export as unused. This doesn't cover
-				// `src/sdk/**/*.test.ts`, which vitest.config.ts's `test.include`
-				// causes the Vitest plugin to register as its own (non-strict)
-				// entry, shadowing this glob for that subtree; those findings are
-				// individually documented in `ignore` below instead.
+				// every test-only-used export as unused. knip's Vitest plugin is
+				// disabled below so that vitest.config.ts's `test.include` globs
+				// cannot register the same files as non-strict entries and shadow
+				// these (which is what used to happen for `src/sdk/**`).
 				"src/**/*.test.ts!",
 				"src/**/__tests__/**/*.ts!",
 				"src/test/**/*.ts!"
@@ -24,6 +23,7 @@
 			"project": [
 				"src/**/*.ts!"
 			],
+			"vitest": false,
 			"ignore": [
 				// Consumed only through the `@shared/*` alias from webview-ui, a
 				// separate knip workspace whose imports this workspace's file-reachability
@@ -31,16 +31,13 @@
 				// unreachable even though the webview genuinely imports them.
 				"src/shared/combineHookSequences.ts",
 				"src/shared/slashCommands.ts",
-				// Every export knip still flags below this point is verified used —
-				// only by that module's own `*.test.ts`, not by shipped code. Most of
-				// these are covered by the strict (`!`) test entries above; the
-				// exceptions are files under `src/sdk/**` whose tests are matched by
-				// `vitest.config.ts`'s `test.include: ["src/sdk/**/*.test.ts", ...]`,
-				// which makes knip's Vitest plugin register them as its own (always
-				// non-strict) entry, overriding the strict glob entry declared above
-				// for that subtree. Whole files are listed here (not individual
-				// exports — knip has no per-export ignore) because every remaining
-				// finding in each one is this same test-only pattern.
+				// Every export knip flagged below this point was verified used —
+				// only by that module's own `*.test.ts`, not by shipped code. These
+				// entries date from when the Vitest plugin shadowed the strict test
+				// entries for `src/sdk/**`; with the plugin off they are no longer
+				// needed to keep knip green and can be pruned in a follow-up. Whole
+				// files are listed (not individual exports — knip has no per-export
+				// ignore) because every finding in each one was this same pattern.
 				"src/core/context/instructions/user-instructions/rule-helpers.ts",
 				"src/core/hooks/hook-factory.ts",
 				"src/sdk/cline-session-factory.ts",
