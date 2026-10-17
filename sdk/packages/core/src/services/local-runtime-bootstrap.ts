@@ -322,6 +322,8 @@ export async function prepareLocalRuntimeBootstrap(
 		modelCatalogDefaults,
 		userInstructionService,
 		ruleFilter,
+		hookFilter,
+		onHookStatus,
 		configExtensions,
 		...localConfigFields
 	} = localRuntime ?? {};
@@ -365,6 +367,8 @@ export async function prepareLocalRuntimeBootstrap(
 				rootSessionId: sessionId,
 				logger: localConfig?.logger,
 				workspaceInfo,
+				hookFilter,
+				onHookStatus,
 			})
 		: undefined;
 	const auditHooks = hasRuntimeHooks(localConfig?.hooks)

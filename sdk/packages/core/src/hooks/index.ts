@@ -12,6 +12,11 @@ export {
 	createHookAuditHooks,
 	createHookConfigFileExtension,
 	createHookConfigFileHooks,
+	type HookFileFilter,
+	type HookRuntimeOptions,
+	type HookStatus,
+	type HookStatusEvent,
+	type HookStatusListener,
 	mergeAgentHooks,
 } from "./hook-file-hooks";
 export {
