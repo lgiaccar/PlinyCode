@@ -25,6 +25,9 @@ service WorkspaceService {
   // Opens and focuses the terminal panel.
   rpc openTerminalPanel(OpenTerminalRequest) returns (OpenTerminalResponse);
 
+  // Opens a folder in a new IDE window, e.g. a conversation's git worktree.
+  rpc openFolderInNewWindow(OpenFolderInNewWindowRequest) returns (OpenFolderInNewWindowResponse);
+
   // Searches workspace files/folders by name using the host's native index
   // (e.g. IntelliJ FilenameIndex). Hosts that lack a fast index should leave
   // this UNIMPLEMENTED so the caller can fall back to ripgrep.
@@ -91,3 +94,8 @@ message OpenInFileExplorerPanelRequest {
 message OpenInFileExplorerPanelResponse {}
 message OpenTerminalRequest {}
 message OpenTerminalResponse {}
+message OpenFolderInNewWindowRequest {
+  // Absolute path of the folder to open.
+  string path = 1;
+}
+message OpenFolderInNewWindowResponse {}

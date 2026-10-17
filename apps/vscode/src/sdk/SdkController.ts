@@ -12,7 +12,7 @@ import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
-import type { HistoryItem } from "@shared/HistoryItem"
+import type { HistoryItem, TaskWorktree } from "@shared/HistoryItem"
 import { isPlinyFreeModelId } from "@shared/pliny"
 import { LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
@@ -37,10 +37,12 @@ import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
 import { createVscodeWebSearchSetup } from "@/hosts/vscode/web-search-settings"
+import { configuredTaskWorktreeFolder } from "@/hosts/vscode/worktree-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
 import { openCiWatchSource } from "@/services/devops-mcp/ci-watch/ci-watch-source"
 import { CiWatchStore } from "@/services/devops-mcp/ci-watch/ci-watch-store"
+import { ensureTaskWorktree } from "@/services/git/worktrees"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
@@ -725,6 +727,8 @@ export class Controller {
 			background: this.background,
 			backgroundSessionsInFolder: (cwd) =>
 				this.background.sessions().filter((session) => workspacePathsEqual(session.startConfig?.cwd, cwd)).length,
+			createTaskWorktree: ({ folder, title }) =>
+				ensureTaskWorktree({ repoRoot: folder, title, configuredRoot: configuredTaskWorktreeFolder() }),
 		})
 		this.compaction = new SdkCompactionCoordinator({
 			stateManager: this.stateManager,
@@ -1757,6 +1761,7 @@ export class Controller {
 					isLegacy: false,
 					startedTs: taskMessage.ts || 0,
 					activeMs: 0,
+					worktreeBranch: "",
 				})
 			}
 		}
@@ -1921,6 +1926,11 @@ export class Controller {
 			return
 		}
 		await this.postStateToWebview()
+	}
+
+	/** The git worktree a conversation started with "Run in worktree" works in; undefined for any other. */
+	async getTaskWorktree(taskId: string): Promise<TaskWorktree | undefined> {
+		return (await this.taskHistory.findHistoryItem(taskId))?.worktree
 	}
 
 	/** Pins the conversation to the top of the history list, or unpins it. */

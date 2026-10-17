@@ -5,6 +5,7 @@
  */
 import { randomUUID } from "node:crypto"
 import type { Mode } from "@shared/storage/types"
+import { type EnsuredWorktree, ensureWorktree, worktreeRoot } from "@/services/git/worktrees"
 import { DevOpsError } from "../server/errors"
 import type { Provider } from "../server/providers/types"
 import { loadContext, parseRemote, type Remote, type RepoContext, sameRepository } from "../server/repo"
@@ -31,7 +32,6 @@ import {
 	isBuiltinId,
 	withBuiltins,
 } from "./types"
-import { type EnsuredWorktree, ensureWorktree, worktreeRoot } from "./worktrees"
 
 export type CiTargetInput =
 	| { kind: "pr"; url: string }

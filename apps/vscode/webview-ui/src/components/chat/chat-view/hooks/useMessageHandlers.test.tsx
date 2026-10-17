@@ -80,6 +80,8 @@ function makeChatState(messages: ClineMessage[], overrides: Partial<ChatState> =
 		setPendingResponse: vi.fn(),
 		nextTaskWorkspace: undefined,
 		setNextTaskWorkspace: vi.fn(),
+		nextTaskWorktree: false,
+		setNextTaskWorktree: vi.fn(),
 		textAreaRef: { current: null },
 		lastMessage: last,
 		secondLastMessage: messages.at(-2),
@@ -559,6 +561,21 @@ describe("useMessageHandlers — send routing", () => {
 			expect.objectContaining({ responseType: "messageResponse", text: "something else" }),
 		)
 		expect(setPendingUserMessage).not.toHaveBeenCalled()
+	})
+
+	it("starts a new task in a worktree when 'Run in worktree' is checked, then clears the choice", async () => {
+		mockTurnState = { phase: "idle", seq: 1 }
+		const setNextTaskWorktree = vi.fn()
+		const { result } = renderHook(() =>
+			useMessageHandlers([], makeChatState([], { nextTaskWorktree: true, setNextTaskWorktree })),
+		)
+
+		await act(async () => {
+			await result.current.handleSendMessage("isolated task", [], [])
+		})
+
+		expect(newTask).toHaveBeenCalledWith(expect.objectContaining({ text: "isolated task", worktree: true }))
+		expect(setNextTaskWorktree).toHaveBeenCalledWith(false)
 	})
 
 	it("an empty transcript still starts a NEW task (unchanged behavior)", async () => {

@@ -5,7 +5,7 @@ import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
 import { formatDisplayUserInput, parseUserInputMode, type UserInputMode } from "@plinycode/shared"
 import { resolveSessionDataDir } from "@plinycode/shared/storage"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
-import type { HistoryItem } from "@shared/HistoryItem"
+import type { HistoryItem, TaskWorktree } from "@shared/HistoryItem"
 import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { parseWorkspaceKind } from "@shared/workspaceRef"
@@ -72,6 +72,23 @@ export function metadataBoolean(metadata: SessionHistoryRecord["metadata"] | und
 export function metadataString(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): string | undefined {
 	const value = metadata?.[key]
 	return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
+}
+
+/** The `worktree` of a conversation started with "Run in worktree"; undefined when absent or malformed. */
+export function metadataWorktree(metadata: SessionHistoryRecord["metadata"] | undefined): TaskWorktree | undefined {
+	const value = metadata?.worktree
+	if (!value || typeof value !== "object") {
+		return undefined
+	}
+	const fields = value as Record<string, unknown>
+	const repoRoot = metadataString(fields, "repoRoot")
+	const branch = metadataString(fields, "branch")
+	const worktreePath = metadataString(fields, "path")
+	if (!repoRoot || !branch || !worktreePath) {
+		return undefined
+	}
+	const sourceWorkspacePath = metadataString(fields, "sourceWorkspacePath")
+	return { repoRoot, branch, path: worktreePath, ...(sourceWorkspacePath ? { sourceWorkspacePath } : {}) }
 }
 
 /** Parses an ISO date string into epoch ms, or 0 when blank/unparseable. */
@@ -202,6 +219,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
 		// The workspace binding, kept across resumes like the fields above.
 		...(item.workspacePath ? { workspacePath: item.workspacePath, workspaceKind: item.workspaceKind ?? "folder" } : {}),
+		...(item.worktree ? { worktree: item.worktree } : {}),
 	}
 }
 
@@ -288,6 +306,7 @@ function sanitizeSdkUserMessagesForDisplay(messages: SdkMessage[]): SdkDisplayMe
 
 export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): HistoryItem {
 	const metadata = item.metadata
+	const worktree = metadataWorktree(metadata)
 	return {
 		id: item.sessionId,
 		ts: dateStringToTimestamp(item.updatedAt ?? item.endedAt ?? item.startedAt),
@@ -318,6 +337,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 					workspaceKind: parseWorkspaceKind(metadataString(metadata, "workspaceKind")),
 				}
 			: {}),
+		...(worktree ? { worktree } : {}),
 	}
 }
 
@@ -345,10 +365,12 @@ export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord)
 	activeMs: number
 	workspacePath: string
 	workspaceKind: string
+	worktreeBranch: string
 } {
 	const metadata = item.metadata
 	const workspacePath = sessionRecordWorkspacePath(item)
 	return {
+		worktreeBranch: metadataWorktree(metadata)?.branch ?? "",
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		apiProvider: item.provider ?? "",
 		workspaceRoot: (item.workspaceRoot || item.cwd || "").trim(),

@@ -1,5 +1,23 @@
 import type { WorkspaceKind } from "./workspaceRef"
 
+/**
+ * The git worktree a conversation started with "Run in worktree" works in
+ * (docs/task-worktrees.md). Stored as `worktree` in the session metadata.
+ */
+export interface TaskWorktree {
+	/** Top level of the checkout the worktree was branched from. */
+	repoRoot: string
+	/** The branch created for the conversation, e.g. `plinycode/fix-login-3f2a`. */
+	branch: string
+	/** The worktree's folder. */
+	path: string
+	/**
+	 * The workspace the user started the conversation from. The conversation is
+	 * bound to the worktree, and history filtered by this workspace lists it too.
+	 */
+	sourceWorkspacePath?: string
+}
+
 export type HistoryItem = {
 	id: string
 	ulid?: string // ULID for better tracking and metrics
@@ -22,6 +40,8 @@ export type HistoryItem = {
 	 */
 	workspacePath?: string
 	workspaceKind?: WorkspaceKind
+	/** Set when the conversation runs in a git worktree of its own ("Run in worktree"). */
+	worktree?: TaskWorktree
 	conversationHistoryDeletedRange?: [number, number]
 	isFavorited?: boolean
 	/** Pinned conversations are listed first in the history view, in their own section. */

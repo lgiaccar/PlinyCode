@@ -1,6 +1,7 @@
+import path from "node:path"
 import { createSessionId } from "@plinycode/shared"
 import type { ClineMessage } from "@shared/ExtensionMessage"
-import type { HistoryItem } from "@shared/HistoryItem"
+import type { HistoryItem, TaskWorktree } from "@shared/HistoryItem"
 import type { Settings } from "@shared/storage/state-keys"
 import { type Mode, toMode } from "@shared/storage/types"
 import type { WorkspaceRef } from "@shared/workspaceRef"
@@ -74,6 +75,12 @@ export interface SdkTaskStartCoordinatorOptions {
 	background?: Pick<SdkBackgroundSessions, "isFull" | "add" | "handleSendSettled">
 	/** How many background tasks run in `cwd`; a new task there is warned that they share the working tree. */
 	backgroundSessionsInFolder?: (cwd: string) => number
+	/**
+	 * Creates a git worktree for a conversation started with "Run in worktree":
+	 * a new branch named after `title`, from the current commit of the repository
+	 * that holds `folder` (see `ensureTaskWorktree`). Throws with a message for the user.
+	 */
+	createTaskWorktree?: (input: { folder: string; title: string }) => Promise<TaskWorktree & { notes: string[] }>
 }
 
 export interface TaskStartOptions {
@@ -92,6 +99,13 @@ export interface TaskStartOptions {
 	mode?: Mode
 	/** A title for the conversation's history entry, when the prompt makes a poor one. */
 	title?: string
+	/**
+	 * Runs the conversation in a new git worktree of the workspace's repository
+	 * ("Run in worktree", docs/task-worktrees.md): the worktree becomes its cwd
+	 * and the workspace it is bound to. When the worktree cannot be created, the
+	 * start fails with an error row and nothing runs.
+	 */
+	worktree?: boolean
 }
 
 export type BackgroundStartResult =
@@ -116,10 +130,19 @@ export class SdkTaskStartCoordinator {
 		try {
 			await this.options.clearTask({ detachRunning: true })
 
-			const { cwd, workspace: boundWorkspace } = await this.resolveTaskWorkspace(workspace)
+			const source = await this.resolveTaskWorkspace(workspace)
+			const {
+				cwd,
+				workspace: boundWorkspace,
+				worktree,
+				worktreeNotes,
+			} = startOptions?.worktree
+				? await this.moveIntoWorktree(source, startOptions.title ?? prompt ?? "")
+				: { ...source, worktree: undefined, worktreeNotes: [] }
 			this.options.setActiveTaskWorkspace?.(boundWorkspace, cwd)
 			if (startOptions?.recordRecentWorkspace !== false) {
-				this.options.onWorkspaceUsed?.(boundWorkspace)
+				// The workspace the user picked, not a worktree made for one conversation.
+				this.options.onWorkspaceUsed?.(source.workspace)
 			}
 			const mode = startOptions?.mode ?? this.getCurrentMode()
 			Logger.log(`[SdkController] Building session config: mode=${mode}, cwd=${cwd}`)
@@ -161,12 +184,21 @@ export class SdkTaskStartCoordinator {
 				// another window listing history sees the binding before the first
 				// history update lands.
 				...(boundWorkspace
-					? { sessionMetadata: { workspacePath: boundWorkspace.path, workspaceKind: boundWorkspace.kind } }
+					? {
+							sessionMetadata: {
+								workspacePath: boundWorkspace.path,
+								workspaceKind: boundWorkspace.kind,
+								...(worktree ? { worktree } : {}),
+							},
+						}
 					: {}),
 			}
 
 			const task = this.createAndSetTask(taskSessionId)
 			this.emitInitialTaskMessage(taskSessionId, prompt ?? "", images, files)
+			if (worktree) {
+				this.announceWorktree(worktree, worktreeNotes)
+			}
 			this.warnIfFolderShared(cwd)
 
 			// The turn phase was already set to "streaming" (in SdkController.initTask), but the
@@ -199,6 +231,7 @@ export class SdkTaskStartCoordinator {
 				newHistoryItem.pinnedModelId = startOptions.modelId
 			}
 			if (startOptions?.title) newHistoryItem.task = startOptions.title
+			if (worktree) newHistoryItem.worktree = worktree
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 			await this.options.postStateToWebview()
 
@@ -340,6 +373,15 @@ export class SdkTaskStartCoordinator {
 			})
 
 			this.createAndSetTask(startResult.sessionId)
+			if (historyItem.worktree && cwd !== storedCwd) {
+				this.options.messages.emitHookMessage({
+					ts: Date.now(),
+					type: "say",
+					say: "info",
+					partial: false,
+					text: `The worktree ${historyItem.worktree.path} no longer exists, so this conversation now works in ${cwd}.`,
+				})
+			}
 			await this.options.postStateToWebview()
 
 			Logger.log(`[SdkController] Task resumed: ${taskId} → ${startResult.sessionId}`)
@@ -368,6 +410,55 @@ export class SdkTaskStartCoordinator {
 		}
 		const cwd = await this.options.getWorkspaceRoot()
 		return { cwd, workspace: await this.options.getWindowWorkspace?.() }
+	}
+
+	/**
+	 * "Run in worktree": creates a worktree of the repository that holds the
+	 * task's folder and moves the task into it. The task runs in the same
+	 * subfolder of the worktree when that exists (the window may be open on a
+	 * folder below the repository's top level), and is bound to it as a folder
+	 * workspace; `sourceWorkspacePath` keeps it in the source workspace's history.
+	 */
+	private async moveIntoWorktree(
+		source: { cwd: string; workspace: WorkspaceRef | undefined },
+		title: string,
+	): Promise<{ cwd: string; workspace: WorkspaceRef; worktree: TaskWorktree; worktreeNotes: string[] }> {
+		const create = this.options.createTaskWorktree
+		if (!create) {
+			throw new Error("Running a conversation in a worktree is not available here.")
+		}
+		let created: Awaited<ReturnType<typeof create>>
+		try {
+			created = await create({ folder: source.cwd, title })
+		} catch (error) {
+			throw new Error(
+				`Could not create a git worktree for this conversation: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+		const { notes, ...location } = created
+		const relative = path.relative(location.repoRoot, source.cwd)
+		const subfolder =
+			relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? path.join(location.path, relative) : undefined
+		const cwd = subfolder && (await isDirectory(subfolder)) ? subfolder : location.path
+		const worktree: TaskWorktree = {
+			...location,
+			...(source.workspace ? { sourceWorkspacePath: source.workspace.path } : {}),
+		}
+		return { cwd, workspace: { path: cwd, kind: "folder", folders: [cwd] }, worktree, worktreeNotes: notes }
+	}
+
+	/** Tells the user where a worktree conversation works, once, as an info row. */
+	private announceWorktree(worktree: TaskWorktree, notes: string[]): void {
+		this.options.messages.emitHookMessage({
+			ts: Date.now(),
+			type: "say",
+			say: "info",
+			partial: false,
+			text: [
+				`This conversation works in a git worktree on the new branch ${worktree.branch}: ${worktree.path}. It starts from the current commit of ${worktree.repoRoot}, and your checkout there is not touched.`,
+				...notes,
+			].join("\n\n"),
+		})
 	}
 
 	private getCurrentMode(): Mode {
