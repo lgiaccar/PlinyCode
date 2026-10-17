@@ -223,6 +223,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.exportDiagnostics",
+				"title": "Export Diagnostics Bundle",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.openMemory",
 				"title": "Open Memory",
 				"category": "PlinyCode"

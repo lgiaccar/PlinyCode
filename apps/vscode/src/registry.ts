@@ -34,6 +34,7 @@ const ClineCommands = {
 	CheckForUpdates: prefix + ".checkForUpdates",
 	ExportTaskToMarkdown: prefix + ".exportTaskToMarkdown",
 	ShowLastModelRequest: prefix + ".showLastModelRequest",
+	ExportDiagnostics: prefix + ".exportDiagnostics",
 	OpenMemory: prefix + ".openMemory",
 	SignInAzureDevOpsServer: prefix + ".signInAzureDevOpsServer",
 	ForgetAzureDevOpsServerToken: prefix + ".forgetAzureDevOpsServerToken",

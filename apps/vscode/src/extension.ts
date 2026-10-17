@@ -45,6 +45,7 @@ import { registerAutoUpdater } from "./hosts/vscode/auto-update/AutoUpdater"
 import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extension"
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
+import { exportDiagnosticsBundle } from "./hosts/vscode/diagnostics-bundle"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
 import { PLAN_EXECUTE_WITH_SETTING_ID } from "./hosts/vscode/plan-settings"
 import {
@@ -686,6 +687,15 @@ ${ctx.cellJson || "{}"}
 			}
 			const document = await vscode.workspace.openTextDocument({ language: "json", content: json })
 			await vscode.window.showTextDocument(document, { preview: false })
+		}),
+	)
+
+	// One folder with versions, settings (secrets removed), the last model request,
+	// router logs, trace, logs and the conversation, for a bug report (docs/diagnostics-bundle.md).
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.ExportDiagnostics, async () => {
+			const controller = (WebviewProvider.getVisibleInstance() ?? WebviewProvider.getInstance())?.controller
+			await exportDiagnosticsBundle(context, controller)
 		}),
 	)
 
