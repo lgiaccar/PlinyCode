@@ -91,7 +91,7 @@ Agent engine — tasks, sessions, auth, providers, hooks, runtime.
 
 Shared types & utilities.
 
-`src/agents/`, `src/automation/`, `src/connectors/`, `src/cron/`, `src/db/`, `src/extensions/`, `src/hooks/`, `src/llms/`, `src/logging/`, `src/parse/`, `src/prompt/` (`system/`), `src/providers/`, `src/rpc/`, `src/runtime/`, `src/session/`, `src/storage/`, `src/team/`, `src/tools/`, `src/types/`.
+`src/agents/`, `src/automation/`, `src/connectors/`, `src/cron/`, `src/db/`, `src/extensions/`, `src/hooks/`, `src/llms/`, `src/logging/`, `src/parse/`, `src/prompt/` (`system/`), `src/providers/`, `src/rpc/`, `src/runtime/`, `src/session/`, `src/storage/`, `src/tools/`, `src/types/`.
 
 ### `sdk/packages/llms`
 

@@ -21,7 +21,6 @@ import {
 import type { ToolExecutors } from "../../extensions/tools";
 import { RunCommandExecutionController } from "../../extensions/tools";
 import { cleanupStaleDetachedCommandLogs } from "../../extensions/tools/executors/bash";
-import type { TeamEvent } from "../../extensions/tools/team";
 import type { HookEventPayload } from "../../hooks";
 import { resolveWorkspacePath } from "../../services/config";
 import { resolveCoreDistinctId } from "../../services/distinct-id";
@@ -53,11 +52,6 @@ import type { SessionRow } from "../../session/models/session-row";
 import type { RootSessionArtifacts } from "../../session/services/session-service";
 import { createCoreSessionSnapshot } from "../../session/session-snapshot";
 import { SessionVersioningService } from "../../session/session-versioning-service";
-import {
-	formatModePrompt,
-	hasPendingTeamRunWork,
-	notifyTeamRunWaiters,
-} from "../../session/team";
 import {
 	isNonTerminalSessionStatus,
 	SessionSource,
@@ -99,6 +93,7 @@ import {
 	completeAbortedInteractiveTurn,
 	completeInteractiveTurn,
 	executeTurn,
+	formatModePrompt,
 	resolveInteractiveStopExitCode,
 	resolveInteractiveStopStatus,
 	type TurnExecutionHost,
@@ -148,7 +143,7 @@ function recoverDetachedCommandLogsOnce(logger?: BasicLogger): void {
 
 /**
  * Add a host-supplied completion guard to the policy core built. Core's own
- * guard (team obligations) is asked first, so its reminder wins.
+ * guard, when it has one, is asked first, so its reminder wins.
  */
 export function withHostCompletionGuard(
 	policy: AgentConfig["completionPolicy"],
@@ -280,8 +275,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			},
 			enqueuePendingPrompt: (sid, entry) =>
 				this.pendingPromptsController.enqueue(sid, entry),
-			invokeBackendOptional: (method, ...args) =>
-				this.invokeOptional(method, ...args),
 		});
 		this.compactionStateStore = new SessionCompactionStateStore({
 			sessions: this.sessions,
@@ -421,10 +414,8 @@ export class LocalRuntimeHost implements RuntimeHost {
 			model: startInput.config.modelId,
 			cwd: startInput.config.cwd,
 			workspace_root: workspacePath,
-			team_name: startInput.config.teamName,
 			enable_tools: startInput.config.enableTools,
 			enable_spawn: startInput.config.enableSpawnAgent,
-			enable_teams: startInput.config.enableAgentTeams,
 			prompt: startInput.prompt?.trim() || undefined,
 			messages_path: messagesPath,
 		});
@@ -557,10 +548,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 					pluginEventFallbackAutomation,
 				);
 			},
-			onTeamEvent: (event: TeamEvent) => {
-				void this.eventBridge.handleTeamEvent(sessionId, event);
-				bootstrap.config.onTeamEvent?.(event);
-			},
 			createSpawnTool: () =>
 				createSessionSpawnTool(
 					subAgentDeps,
@@ -614,15 +601,12 @@ export class LocalRuntimeHost implements RuntimeHost {
 		});
 		const configWithProvider = bootstrap.config;
 		const providerConfig = bootstrap.providerConfig;
-		if (runtime.teamRuntime && !configWithProvider.teamName?.trim()) {
-			configWithProvider.teamName = runtime.teamRuntime.getTeamName();
-		}
 
-		// Auth-retry hook for every agent in the session (lead, teammates,
-		// subagents): refresh OAuth credentials and propagate the new key to
+		// Auth-retry hook for every agent in the session (lead and
+		// sub-agents): refresh OAuth credentials and propagate the new key to
 		// all connections, then let the runtime retry the failed run. Without
-		// this, a token that expires while the lead is blocked (e.g. in
-		// team_await_runs) kills teammate runs with a raw provider 401.
+		// this, a token that expires while the lead waits on a sub-agent kills
+		// that run with a raw provider 401.
 		const onAuthError = async (): Promise<boolean> => {
 			const liveSession = this.sessions.get(sessionId);
 			if (!liveSession || !isOAuthProvider(liveSession.config.providerId)) {
@@ -803,8 +787,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		if (agentConfig.onEvent) {
 			agent.subscribeEvents(agentConfig.onEvent);
 		}
-		runtime.registerLeadAgent?.(agent);
-
 		const active: ActiveSession = {
 			sessionId,
 			config: configWithProvider,
@@ -827,9 +809,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			interactive: input.interactive === true,
 			persistedMessages: initialMessages,
 			compactionState: initialCompactionState,
-			activeTeamRunIds: new Set<string>(),
-			pendingTeamRunUpdates: [],
-			teamRunWaiters: [],
 			pendingPrompts: [],
 			drainingPendingPrompts: false,
 			pluginSandboxShutdown: bootstrap.pluginSandboxShutdown,
@@ -1041,17 +1020,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 		if (session.drainingPendingPrompts) {
 			this.pendingPromptsController.discardQueue(session);
 		}
-		const teamRuntime = session.runtime.teamRuntime;
-		try {
-			teamRuntime?.cancelOutstandingWork(reason);
-		} finally {
-			if (teamRuntime) {
-				session.activeTeamRunIds.clear();
-				session.pendingTeamRunUpdates.length = 0;
-				notifyTeamRunWaiters(session);
-			}
-			session.agent.abort(reason);
-		}
+		session.agent.abort(reason);
 	}
 
 	async proceedWhileRunning(
@@ -1336,16 +1305,10 @@ export class LocalRuntimeHost implements RuntimeHost {
 			delegatedUpdates.reasoningEffort = undefined;
 			delegatedUpdates.thinkingBudgetTokens = undefined;
 		}
-		const teammateUpdates = {
-			...(updates.apiKey !== undefined ? { apiKey: updates.apiKey } : {}),
-			...(updates.baseUrl !== undefined ? { baseUrl: updates.baseUrl } : {}),
-			...(updates.headers !== undefined ? { headers: updates.headers } : {}),
-		};
 		session.runtime.delegatedAgentConfigProvider?.updateConnectionDefaults(
 			delegatedUpdates,
 		);
 		session.agent.updateConnection(updates);
-		session.runtime.teamRuntime?.updateTeammateConnections(teammateUpdates);
 		// Keep the persisted manifest in sync so session history reflects the
 		// connection the session is now using, not the one it started with.
 		if (updates.providerId || updates.modelId) {
@@ -1436,10 +1399,8 @@ export class LocalRuntimeHost implements RuntimeHost {
 			model: session.config.modelId,
 			cwd: session.config.cwd,
 			workspaceRoot: workspacePath,
-			teamName: session.config.teamName,
 			enableTools: session.config.enableTools,
 			enableSpawn: session.config.enableSpawnAgent,
-			enableTeams: session.config.enableAgentTeams,
 			prompt: session.pendingPrompt,
 			metadata: session.sessionMetadata,
 			startedAt: session.startedAt,
@@ -1538,7 +1499,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		session: ActiveSession,
 		finishReason: AgentResult["finishReason"],
 	): Promise<void> {
-		if (hasPendingTeamRunWork(session)) return;
 		const isAborted = finishReason === "aborted" || session.aborting;
 		const isError = finishReason === "error";
 		await this.shutdownSession(session, {
@@ -1571,8 +1531,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 			endReason: string;
 		},
 	): Promise<void> {
-		notifyTeamRunWaiters(session);
-
 		// Drain an in-flight run before tearing anything down. `stopSession` aborts
 		// first for exactly this reason; callers that arrive here another way — hub
 		// `dispose()` on a restart, most notably — otherwise hit two failures at
@@ -1740,9 +1698,6 @@ export class LocalRuntimeHost implements RuntimeHost {
 		session.config.apiKey = resolved.apiKey;
 		session.agent.updateConnection({ apiKey: resolved.apiKey });
 		session.runtime.delegatedAgentConfigProvider?.updateConnectionDefaults({
-			apiKey: resolved.apiKey,
-		});
-		session.runtime.teamRuntime?.updateTeammateConnections({
 			apiKey: resolved.apiKey,
 		});
 	}

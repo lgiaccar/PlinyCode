@@ -82,7 +82,6 @@ describe("UnifiedSessionPersistenceService", () => {
 				workspaceRoot: "/tmp/project",
 				enableTools: true,
 				enableSpawn: false,
-				enableTeams: false,
 				prompt: "hello",
 				startedAt: "2026-01-01T00:00:00.000Z",
 			});
@@ -167,7 +166,6 @@ describe("UnifiedSessionPersistenceService", () => {
 			workspaceRoot: "/tmp/project",
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: false,
 			startedAt: "2026-01-01T00:00:00.000Z",
 		});
 		const sourceMessages = [
@@ -228,7 +226,6 @@ describe("UnifiedSessionPersistenceService", () => {
 			workspaceRoot: "/tmp/project",
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: false,
 			startedAt: "2026-01-01T00:00:00.000Z",
 		});
 		const sourceMessages = [
@@ -273,7 +270,6 @@ describe("UnifiedSessionPersistenceService", () => {
 			workspaceRoot: "/tmp/project",
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: false,
 			startedAt: "2026-01-01T00:00:00.000Z",
 		});
 		const manifest = JSON.parse(
@@ -331,7 +327,6 @@ describe("UnifiedSessionPersistenceService", () => {
 				workspaceRoot: "/tmp/project",
 				enableTools: true,
 				enableSpawn: true,
-				enableTeams: false,
 				prompt: "hello",
 				startedAt: "2026-01-01T00:00:00.000Z",
 			});
@@ -375,143 +370,6 @@ describe("UnifiedSessionPersistenceService", () => {
 		15_000,
 	);
 
-	sqliteIt(
-		"persists teammate task metadata in the file envelope and usage on messages",
-		async () => {
-			const dbDir = mkdtempSync(join(tmpdir(), "team-task-messages-db-"));
-			const sessionsDir = mkdtempSync(join(tmpdir(), "team-task-messages-"));
-			tempDirs.push(dbDir, sessionsDir);
-
-			const store = new SqliteSessionStore({ sessionsDir: dbDir });
-			stores.push(store);
-			const service = new CoreSessionService(store, {
-				sessionArtifactsDir: sessionsDir,
-			});
-			const rootSessionId = "root-session";
-			await service.createRootSessionWithArtifacts({
-				sessionId: rootSessionId,
-				source: SessionSource.CLI,
-				mode: "user",
-				version: "3.99.0",
-				pid: process.pid,
-				interactive: false,
-				provider: "anthropic",
-				model: "claude-sonnet-4-6",
-				cwd: "/tmp/project",
-				workspaceRoot: "/tmp/project",
-				enableTools: true,
-				enableSpawn: true,
-				enableTeams: true,
-				prompt: "lead task",
-				startedAt: "2026-04-10T19:00:00.000Z",
-			});
-
-			await service.onTeamTaskStart(
-				rootSessionId,
-				"java-haiku-agent",
-				"Write a haiku about Java",
-			);
-			await service.onTeamTaskEnd(
-				rootSessionId,
-				"java-haiku-agent",
-				"completed",
-				"[done] completed",
-				{
-					text: "Classes wrap the world\nWrite once, run on every machine —\nVerbose, yet it soars",
-					usage: {
-						inputTokens: 42,
-						outputTokens: 17,
-						cacheReadTokens: 9,
-						cacheWriteTokens: 0,
-						totalCost: 0.123,
-					},
-					messages: [
-						{
-							role: "user",
-							content: "Write a haiku about Java. Return only the haiku.",
-						},
-						{
-							role: "assistant",
-							content: [
-								{
-									type: "text",
-									text: "Classes wrap the world\nWrite once, run on every machine —\nVerbose, yet it soars",
-								},
-							],
-						},
-					],
-					toolCalls: [],
-					iterations: 1,
-					finishReason: "completed",
-					model: {
-						id: "claude-sonnet-4-6",
-						provider: "anthropic",
-						info: { id: "claude-sonnet-4-6" },
-					},
-					startedAt: new Date("2026-04-10T19:00:01.000Z"),
-					endedAt: new Date("2026-04-10T19:00:02.000Z"),
-					durationMs: 1000,
-				},
-			);
-
-			const childSessions = await service.listSessions(10);
-			const teammateSessionId = childSessions.find((row) =>
-				row.sessionId.includes("__teamtask__java-haiku-agent__"),
-			)?.sessionId;
-			expect(teammateSessionId).toBeTruthy();
-			const row = childSessions.find(
-				(item) => item.sessionId === teammateSessionId,
-			);
-			expect(row?.messagesPath).toBeTruthy();
-			const path = row?.messagesPath as string;
-			const payload = JSON.parse(readFileSync(path, "utf8")) as {
-				agent?: string;
-				sessionId?: string;
-				taskType?: string;
-				origin?: {
-					source?: string;
-					mode?: string;
-					sessionId?: string;
-					parentThreadId?: string;
-					subagent?: string;
-					version?: string;
-				};
-				messages: Array<Record<string, unknown>>;
-			};
-			const user = payload.messages[0] as Record<string, unknown>;
-			const assistant = payload.messages[1] as Record<string, unknown>;
-
-			expect(payload.agent).toBe("teammate");
-			expect(payload.sessionId).toBe(teammateSessionId);
-			expect(payload.taskType).toBe("team");
-			expect(payload.origin).toEqual({
-				source: "cli",
-				mode: "team",
-				sessionId: teammateSessionId,
-				parentThreadId: rootSessionId,
-				subagent: "java-haiku-agent",
-				version: "3.99.0",
-			});
-			expect(assistant.id).toEqual(expect.any(String));
-			expect(user.agent).toBeUndefined();
-			expect(user.sessionId).toBeUndefined();
-			expect(assistant.agent).toBeUndefined();
-			expect(assistant.sessionId).toBeUndefined();
-			expect(assistant.modelInfo).toMatchObject({
-				id: "claude-sonnet-4-6",
-				provider: "anthropic",
-			});
-			expect(assistant.metrics).toMatchObject({
-				inputTokens: 42,
-				outputTokens: 17,
-				cacheReadTokens: 9,
-				cacheWriteTokens: 0,
-				cost: 0.123,
-			});
-			expect(row?.messagesPath).toBe(path);
-		},
-	);
-
 	it("persists plain spawn_agent result usage on child messages", async () => {
 		const sessionsDir = mkdtempSync(join(tmpdir(), "spawn-agent-messages-"));
 		tempDirs.push(sessionsDir);
@@ -529,7 +387,6 @@ describe("UnifiedSessionPersistenceService", () => {
 			workspaceRoot: "/tmp/project",
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: true,
 			prompt: "lead task",
 			startedAt: "2026-04-10T19:00:00.000Z",
 		});
@@ -620,7 +477,6 @@ describe("UnifiedSessionPersistenceService", () => {
 			workspaceRoot: "/tmp/project",
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: false,
 			prompt: "first user message",
 			startedAt: "2026-01-01T00:00:00.000Z",
 		});
@@ -656,7 +512,6 @@ describe("UnifiedSessionPersistenceService", () => {
 			workspaceRoot: "/tmp/project",
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: false,
 			startedAt: "2026-01-01T00:00:00.000Z",
 		});
 
@@ -694,7 +549,6 @@ describe("UnifiedSessionPersistenceService", () => {
 				workspaceRoot: "/tmp/project",
 				enableTools: true,
 				enableSpawn: false,
-				enableTeams: false,
 				prompt: "delete me",
 				startedAt: "2026-04-10T19:00:00.000Z",
 			});
@@ -741,7 +595,6 @@ describe("UnifiedSessionPersistenceService", () => {
 				workspaceRoot: "/tmp/project",
 				enableTools: true,
 				enableSpawn: false,
-				enableTeams: false,
 				prompt: "delete me",
 				startedAt: "2026-04-10T19:00:00.000Z",
 			});

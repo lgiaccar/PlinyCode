@@ -66,9 +66,6 @@ export type {
 	RuntimeLoggerConfig,
 	SaveProviderSettingsActionRequest,
 	SessionLineage,
-	TEAM_LIFECYCLE_EVENT_TYPE,
-	TEAM_PROGRESS_EVENT_TYPE,
-	TeamProgressProjectionEvent,
 	TextContent,
 	ThinkingContent,
 	ToolApprovalRequest,
@@ -333,7 +330,6 @@ export {
 	type ShellExecutorOptions,
 	type StructuredCommandInput,
 	StructuredCommandInputSchema,
-	TEAM_TOOL_NAMES,
 	type ToolCatalogEntry,
 	type ToolClientType,
 	type ToolExecutors,
@@ -343,25 +339,15 @@ export {
 	truncateCommandOutput,
 } from "./extensions/tools";
 export {
-	type AgentTask,
-	AgentTeam,
-	AgentTeamsRuntime,
-	type AgentTeamsRuntimeOptions,
-	type BootstrapAgentTeamsOptions,
-	type BootstrapAgentTeamsResult,
-	bootstrapAgentTeams,
 	buildConfiguredAgentToolDescriptors,
 	buildConfiguredAgentToolName,
 	buildDelegatedAgentConfig,
-	buildTeamProgressSummary,
 	type ConfiguredAgentConfig,
 	type ConfiguredAgentInput,
 	type ConfiguredAgentLoadResult,
 	type ConfiguredAgentReadError,
 	type ConfiguredAgentToolConfig,
 	type ConfiguredAgentToolDescriptor,
-	type CreateAgentTeamsToolsOptions,
-	createAgentTeamsTools,
 	createConfiguredAgentTools,
 	createDelegatedAgent,
 	createDelegatedAgentConfigProvider,
@@ -371,24 +357,16 @@ export {
 	DEFAULT_SUB_AGENT_TIMEOUT_MS,
 	type DelegatedAgentConfigProvider,
 	type DelegatedAgentConnectionConfig,
-	type DelegatedAgentKind,
 	type DelegatedAgentRuntimeConfig,
 	loadConfiguredAgentConfigs,
 	parseConfiguredAgentConfig,
-	reviveTeamStateDates,
 	type SpawnAgentInput,
 	type SpawnAgentOutput,
-	type SpawnTeammateOptions,
 	SUB_AGENT_GUIDANCE,
 	SUB_AGENT_ROLE_RULES,
 	type SubAgentEndContext,
 	type SubAgentProgress,
 	type SubAgentStartContext,
-	type TaskResult,
-	type TeamEvent,
-	type TeamMemberConfig,
-	type TeamTeammateRuntimeConfig,
-	toTeamProgressLifecycleEvent,
 } from "./extensions/tools/team";
 export {
 	createAgentHooksExtension,
@@ -471,10 +449,7 @@ export {
 	SessionNotFoundError,
 	splitCoreSessionConfig,
 } from "./runtime/host/runtime-host";
-export {
-	createTeamName,
-	DefaultRuntimeBuilder,
-} from "./runtime/orchestration/runtime-builder";
+export { DefaultRuntimeBuilder } from "./runtime/orchestration/runtime-builder";
 export {
 	OAuthReauthRequiredError,
 	type RuntimeOAuthResolution,
@@ -681,10 +656,6 @@ export {
 export { ProviderSettingsManager } from "./services/storage/provider-settings-manager";
 export { SqliteSessionStore } from "./services/storage/sqlite-session-store";
 export {
-	SqliteTeamStore,
-	type SqliteTeamStoreOptions,
-} from "./services/storage/team-store";
-export {
 	accumulateUsageTotals,
 	createInitialAccumulatedUsage,
 	getCurrentContextSize,
@@ -739,7 +710,6 @@ export {
 export {
 	deriveSubsessionStatus,
 	makeSubSessionId,
-	makeTeamTaskSubSessionId,
 	sanitizeSessionToken,
 } from "./session/models/session-graph";
 export type { SessionManifest } from "./session/models/session-manifest";
@@ -771,10 +741,6 @@ export {
 	SessionVersioningError,
 	SessionVersioningService,
 } from "./session/session-versioning-service";
-export {
-	FileTeamPersistenceStore,
-	type FileTeamPersistenceStoreOptions,
-} from "./session/stores/team-persistence-store";
 export {
 	countUserRunMessages,
 	getUserRunSpan,
@@ -842,7 +808,6 @@ export type {
 	SessionPendingPrompt,
 	SessionPendingPromptSubmittedEvent,
 	SessionPendingPromptsEvent,
-	SessionTeamProgressEvent,
 	SessionToolEvent,
 } from "./types/events";
 export type {
@@ -863,5 +828,5 @@ export type {
 	SessionRecord,
 	SessionRef,
 } from "./types/sessions";
-export type { ArtifactStore, SessionStore, TeamStore } from "./types/storage";
+export type { ArtifactStore, SessionStore } from "./types/storage";
 export { CORE_BUILD_VERSION } from "./version";

@@ -138,7 +138,6 @@ function makeBaseConfig(overrides: Partial<CoreSessionConfig> = {}): CoreSession
 		mode: "act",
 		enableTools: true,
 		enableSpawnAgent: false,
-		enableAgentTeams: false,
 		...overrides,
 	}
 }
@@ -595,7 +594,6 @@ describe("buildSessionConfig", () => {
 		})
 		const enabled = await buildSessionConfig({ cwd: "/tmp/workspace" })
 		expect(enabled.enableSpawnAgent).toBe(true)
-		expect(enabled.enableAgentTeams).toBe(false)
 
 		mocks.stateManager.getGlobalSettingsKey.mockImplementation(() => undefined)
 		expect((await buildSessionConfig({ cwd: "/tmp/workspace" })).enableSpawnAgent).toBe(true)

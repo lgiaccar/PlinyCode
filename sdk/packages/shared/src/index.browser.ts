@@ -272,7 +272,6 @@ export {
 } from "./parse/shell";
 export {
 	maskSecret,
-	sanitizeFileName,
 	stripUtf8Bom,
 	trimNonEmpty,
 	truncateSplit,
@@ -352,22 +351,6 @@ export {
 	ProviderClientSchema,
 	ProviderProtocolSchema,
 } from "./rpc/runtime";
-export type {
-	TeamProgressCounts,
-	TeamProgressLifecycleEvent,
-	TeamProgressMemberRole,
-	TeamProgressMemberStatus,
-	TeamProgressOutcomeFragmentStatus,
-	TeamProgressOutcomeStatus,
-	TeamProgressProjectionEvent,
-	TeamProgressRunStatus,
-	TeamProgressSummary,
-	TeamProgressTaskStatus,
-} from "./rpc/team-progress";
-export {
-	TEAM_LIFECYCLE_EVENT_TYPE,
-	TEAM_PROGRESS_EVENT_TYPE,
-} from "./rpc/team-progress";
 export type { ClineClientIdentity } from "./runtime/cline-client-identity";
 export {
 	getClineClientIdentity,
@@ -424,7 +407,6 @@ export {
 	isChatWorkspacePath,
 } from "./storage/chat-workspace-paths";
 export * from "./tasks";
-export * from "./team";
 export { createTool } from "./tools/create";
 export { AUTH_ERROR_PATTERNS, isLikelyAuthError } from "./types/auth";
 // VCR is Node-only (uses node:fs, node:path), excluded from browser build

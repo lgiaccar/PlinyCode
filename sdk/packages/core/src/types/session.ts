@@ -29,9 +29,6 @@ export type ActiveSession = {
 	persistedMessages?: LlmsProviders.MessageWithMetadata[];
 	compactionState?: SessionCompactionState;
 	compactionStateWriteQueue?: Promise<void>;
-	activeTeamRunIds: Set<string>;
-	pendingTeamRunUpdates: TeamRunUpdate[];
-	teamRunWaiters: Array<() => void>;
 	pendingPrompts: PendingPrompt[];
 	drainingPendingPrompts: boolean;
 	pluginSandboxShutdown?: () => Promise<void>;
@@ -49,15 +46,6 @@ export type PendingPrompt = {
 	delivery: "queue" | "steer";
 	userImages?: string[];
 	userFiles?: string[];
-};
-
-export type TeamRunUpdate = {
-	runId: string;
-	agentId: string;
-	taskId?: string;
-	status: "completed" | "failed" | "cancelled" | "interrupted";
-	error?: string;
-	iterations?: number;
 };
 
 export type StoredMessageWithMetadata = LlmsProviders.MessageWithMetadata;
@@ -94,7 +82,7 @@ export interface SessionPersistenceAdapter {
 		limit: number;
 		parentSessionId?: string;
 		status?: string;
-		/** Only root sessions: excludes subagent and team-task child rows. */
+		/** Only root sessions: excludes sub-agent child rows. */
 		rootOnly?: boolean;
 	}): Promise<SessionRow[]>;
 	updateSession(

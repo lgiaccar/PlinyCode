@@ -11,14 +11,11 @@ import { dirname, join } from "node:path";
 import type { MessageWithMetadata } from "@plinycode/llms";
 import {
 	type AgentConfig,
-	type AgentEvent,
 	type AgentExtensionAutomationContext,
 	type AgentResult,
 	type AgentRuntimeEvent,
 	type BasicLogger,
 	isChatWorkspacePath,
-	TeamMessageType,
-	type TeamRunRecord,
 } from "@plinycode/shared";
 import {
 	resolveChatWorkspacePath,
@@ -27,7 +24,6 @@ import {
 } from "@plinycode/shared/storage";
 import simpleGit from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TeamEvent } from "../../extensions/tools/team";
 import {
 	createSessionCompactionState,
 	type SessionCompactionState,
@@ -79,7 +75,6 @@ function createManifest(sessionId: string): SessionManifest {
 		workspace_root: "/tmp/project",
 		enable_tools: true,
 		enable_spawn: true,
-		enable_teams: true,
 		prompt: "hello",
 		messages_path: "/tmp/messages.json",
 	};
@@ -153,7 +148,6 @@ function createConfig(
 		mode: "act",
 		enableTools: true,
 		enableSpawnAgent: true,
-		enableAgentTeams: true,
 		...overrides,
 	};
 }
@@ -260,7 +254,6 @@ describe("LocalRuntimeHost", () => {
 					systemPrompt: "You are a test agent",
 					enableTools: false,
 					enableSpawnAgent: false,
-					enableAgentTeams: false,
 				},
 			});
 
@@ -343,7 +336,6 @@ describe("LocalRuntimeHost", () => {
 					sessionId,
 					cwd: workspaceRoot,
 					workspaceRoot,
-					enableAgentTeams: false,
 				}),
 				prompt: "change repository state",
 				interactive: true,
@@ -1037,8 +1029,6 @@ describe("LocalRuntimeHost", () => {
 		const runtimeBuilder = {
 			build: vi.fn().mockReturnValue({
 				tools: [],
-				teamRuntime: undefined,
-				teamRestoredFromPersistence: false,
 				shutdown: vi.fn(),
 			}),
 		};
@@ -1108,8 +1098,6 @@ describe("LocalRuntimeHost", () => {
 		const runtimeBuilder = {
 			build: vi.fn().mockReturnValue({
 				tools: [],
-				teamRuntime: undefined,
-				teamRestoredFromPersistence: false,
 				shutdown: vi.fn(),
 			}),
 		};
@@ -1202,8 +1190,6 @@ describe("LocalRuntimeHost", () => {
 		const runtimeBuilder = {
 			build: vi.fn().mockReturnValue({
 				tools: [],
-				teamRuntime: undefined,
-				teamRestoredFromPersistence: false,
 				shutdown: vi.fn(),
 			}),
 		};
@@ -1268,8 +1254,6 @@ describe("LocalRuntimeHost", () => {
 		const runtimeBuilder = {
 			build: vi.fn().mockReturnValue({
 				tools: [],
-				teamRuntime: undefined,
-				teamRestoredFromPersistence: false,
 				shutdown: vi.fn(),
 			}),
 		};
@@ -1463,102 +1447,6 @@ describe("LocalRuntimeHost", () => {
 		expect(sessionService.updateSessionStatus).not.toHaveBeenCalled();
 		expect(agent.shutdown).toHaveBeenCalledWith("test_dispose");
 		expect(runtime.shutdown).toHaveBeenCalledWith("test_dispose");
-	});
-
-	it("reuses the persisted team name when resuming a session", async () => {
-		const sessionId = "sess-team-resume";
-		const manifest = createManifest(sessionId);
-		const sessionService = {
-			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
-			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
-				manifestPath: "/tmp/manifest.json",
-				messagesPath: "/tmp/messages.json",
-				manifest,
-			}),
-			persistSessionMessages: vi.fn(),
-			updateSessionStatus: vi.fn().mockResolvedValue({
-				updated: true,
-				endedAt: "2026-01-01T00:00:05.000Z",
-			}),
-			writeSessionManifest: vi.fn(),
-			listSessions: vi.fn().mockResolvedValue([
-				{
-					sessionId,
-					source: SessionSource.CLI,
-					pid: process.pid,
-					startedAt: "2026-01-01T00:00:00.000Z",
-					endedAt: null,
-					exitCode: null,
-					status: "running",
-					statusLock: 0,
-					interactive: true,
-					provider: "mock-provider",
-					model: "mock-model",
-					cwd: "/tmp/project",
-					workspaceRoot: "/tmp/project",
-					teamName: "persisted-team",
-					enableTools: true,
-					enableSpawn: true,
-					enableTeams: true,
-					parentSessionId: null,
-					parentAgentId: null,
-					agentId: null,
-					conversationId: null,
-					isSubagent: false,
-					prompt: null,
-					metadata: null,
-					messagesPath: "/tmp/messages.json",
-					updatedAt: "2026-01-01T00:00:00.000Z",
-				},
-			]),
-			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
-		};
-		const runtimeBuilder = {
-			build: vi.fn().mockReturnValue({
-				tools: [],
-				teamRuntime: {
-					getTeamId: vi.fn().mockReturnValue("team_persisted-team"),
-					getTeamName: vi.fn().mockReturnValue("persisted-team"),
-				},
-				teamRestoredFromPersistence: true,
-				shutdown: vi.fn(),
-			}),
-		};
-		const agent = {
-			run: vi.fn().mockResolvedValue(createResult()),
-			continue: vi.fn().mockResolvedValue(createResult()),
-			getMessages: vi.fn().mockReturnValue([]),
-			getAgentId: vi.fn().mockReturnValue("agent-root-1"),
-			getConversationId: vi.fn().mockReturnValue("conv-root-1"),
-			abort: vi.fn(),
-			subscribeEvents: vi.fn().mockReturnValue(() => {}),
-			canStartRun: vi.fn().mockReturnValue(true),
-			shutdown: vi.fn().mockResolvedValue(undefined),
-		};
-		const manager = new RuntimeHostUnderTest({
-			distinctId,
-			sessionService: sessionService as never,
-			runtimeBuilder: runtimeBuilder as never,
-			createAgent: () => agent as never,
-		});
-
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({ sessionId, teamName: undefined }),
-			}),
-		);
-
-		expect(runtimeBuilder.build).toHaveBeenCalledWith(
-			expect.objectContaining({
-				config: expect.objectContaining({
-					sessionId,
-					teamName: "persisted-team",
-				}),
-			}),
-		);
-		expect(
-			sessionService.createRootSessionWithArtifacts,
-		).not.toHaveBeenCalled();
 	});
 
 	it("keeps the stored history origin when resuming a session", async () => {
@@ -3011,147 +2899,6 @@ describe("LocalRuntimeHost", () => {
 		});
 	});
 
-	it("propagates a parent session abort to its team runtime", async () => {
-		const sessionId = "sess-team-abort";
-		const manifest = createManifest(sessionId);
-		const sessionService = {
-			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
-			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
-				manifestPath: "/tmp/manifest.json",
-				messagesPath: "/tmp/messages.json",
-				manifest,
-			}),
-			persistSessionMessages: vi.fn(),
-			updateSessionStatus: vi.fn().mockResolvedValue({ updated: true }),
-			writeSessionManifest: vi.fn(),
-			listSessions: vi.fn().mockResolvedValue([]),
-			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
-		};
-		const makeTeamRun = (
-			id: string,
-			status: TeamRunRecord["status"],
-		): TeamRunRecord => ({
-			id,
-			agentId: "teammate-1",
-			status,
-			message: `${id} task`,
-			priority: 0,
-			retryCount: 0,
-			maxRetries: 0,
-			startedAt: new Date(),
-		});
-		const queuedRun = makeTeamRun("run_queued", "queued");
-		const runningRun = makeTeamRun("run_running", "running");
-		let onTeamEvent: ((event: TeamEvent) => void) | undefined;
-		const cancelOutstandingWork = vi.fn(() => {
-			onTeamEvent?.({
-				type: TeamMessageType.RunCancelled,
-				run: { ...queuedRun, status: "cancelled" },
-				reason: "user cancelled",
-			});
-			onTeamEvent?.({
-				type: TeamMessageType.RunCancelled,
-				run: { ...runningRun, status: "cancelled" },
-				reason: "user cancelled",
-			});
-		});
-		const runtimeBuilder = {
-			build: vi
-				.fn()
-				.mockImplementation((input: { onTeamEvent?: typeof onTeamEvent }) => {
-					onTeamEvent = input.onTeamEvent;
-					return {
-						tools: [],
-						teamRuntime: {
-							getTeamId: vi.fn().mockReturnValue("team_test-team"),
-							getTeamName: vi.fn().mockReturnValue("test-team"),
-							exportState: vi.fn().mockReturnValue({
-								teamId: "team_test-team",
-								teamName: "test-team",
-								members: [],
-								tasks: [],
-								mailbox: [],
-								missionLog: [],
-								runs: [],
-								outcomes: [],
-								outcomeFragments: [],
-							}),
-							cancelOutstandingWork,
-						},
-						shutdown: vi.fn(),
-					};
-				}),
-		};
-		let rejectRun: ((error: Error) => void) | undefined;
-		let markRunStarted: (() => void) | undefined;
-		const runStarted = new Promise<void>((resolve) => {
-			markRunStarted = resolve;
-		});
-		const agent = {
-			run: vi.fn(
-				() =>
-					new Promise<AgentResult>((_resolve, reject) => {
-						rejectRun = reject;
-						markRunStarted?.();
-					}),
-			),
-			continue: vi.fn().mockResolvedValue(createResult()),
-			getMessages: vi.fn().mockReturnValue([]),
-			getAgentId: vi.fn().mockReturnValue("agent-root-1"),
-			getConversationId: vi.fn().mockReturnValue("conv-root-1"),
-			abort: vi.fn(() => rejectRun?.(new Error("user cancelled"))),
-			subscribeEvents: vi.fn().mockReturnValue(() => {}),
-			canStartRun: vi.fn().mockReturnValue(true),
-			shutdown: vi.fn().mockResolvedValue(undefined),
-		};
-		const manager = new RuntimeHostUnderTest({
-			distinctId,
-			sessionService: sessionService as never,
-			runtimeBuilder: runtimeBuilder as never,
-			createAgent: () => agent as never,
-		});
-
-		try {
-			await manager.startSession(
-				normalizeStartInput({
-					config: createConfig({ sessionId }),
-					interactive: true,
-				}),
-			);
-			onTeamEvent?.({ type: TeamMessageType.RunQueued, run: queuedRun });
-			onTeamEvent?.({ type: TeamMessageType.RunStarted, run: runningRun });
-			const rootTurn = manager.runTurn({ sessionId, prompt: "keep working" });
-			await runStarted;
-
-			const abortReason = new Error("user cancelled");
-			await manager.abort(sessionId, abortReason);
-			await expect(rootTurn).resolves.toMatchObject({
-				finishReason: "aborted",
-			});
-
-			expect(cancelOutstandingWork).toHaveBeenCalledOnce();
-			expect(cancelOutstandingWork).toHaveBeenCalledWith(abortReason);
-			expect(agent.abort).toHaveBeenCalledOnce();
-
-			const getSession = Reflect.get(
-				manager as object,
-				"getSessionOrThrow",
-			) as (sessionId: string) => {
-				aborting: boolean;
-				status: string;
-				activeTeamRunIds: Set<string>;
-				pendingTeamRunUpdates: unknown[];
-			};
-			const activeSession = Reflect.apply(getSession, manager, [sessionId]);
-			expect(activeSession.aborting).toBe(false);
-			expect(activeSession.status).toBe("idle");
-			expect(activeSession.activeTeamRunIds.size).toBe(0);
-			expect(activeSession.pendingTeamRunUpdates).toEqual([]);
-		} finally {
-			await manager.dispose();
-		}
-	});
-
 	it("drains queued prompts after a turn that self-aborts (loop detector / mistake limit)", async () => {
 		const sessionId = "sess-self-abort-drains-prompts";
 		const manifest = createManifest(sessionId);
@@ -4539,7 +4286,6 @@ describe("LocalRuntimeHost", () => {
 		const runtimeBuilder = {
 			build: vi.fn().mockReturnValue({
 				tools: [],
-				registerLeadAgent: vi.fn(),
 				shutdown: vi.fn(),
 			}),
 		};
@@ -4726,7 +4472,6 @@ describe("LocalRuntimeHost", () => {
 			runtimeBuilder: {
 				build: vi.fn().mockReturnValue({
 					tools: [],
-					registerLeadAgent: vi.fn(),
 					shutdown: vi.fn(),
 				}),
 			},
@@ -4756,155 +4501,6 @@ describe("LocalRuntimeHost", () => {
 		expect(
 			(await manager.getAccumulatedUsage(sessionId))?.aggregateUsage,
 		).toEqual(aggregateUsage);
-	});
-
-	it("aggregates teammate usage without double-counting lead usage events", async () => {
-		const sessionId = "sess-team-usage";
-		const manifest = createManifest(sessionId);
-		const sessionService = {
-			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
-			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
-				manifestPath: "/tmp/manifest-team-usage.json",
-				messagesPath: "/tmp/messages-team-usage.json",
-				manifest,
-			}),
-			persistSessionMessages: vi.fn(),
-			updateSessionStatus: vi.fn().mockResolvedValue({ updated: true }),
-			updateSession: vi.fn().mockResolvedValue({ updated: true }),
-			writeSessionManifest: vi.fn(),
-			listSessions: vi.fn().mockResolvedValue([]),
-			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
-		};
-		let onTeamEvent: ((event: unknown) => void) | undefined;
-		const runtimeBuilder = {
-			build: vi
-				.fn()
-				.mockImplementation(
-					(input: { onTeamEvent?: (event: unknown) => void }) => {
-						onTeamEvent = input.onTeamEvent;
-						return {
-							tools: [],
-							shutdown: vi.fn(),
-						};
-					},
-				),
-		};
-		let onAgentEvent: ((event: AgentEvent) => void) | undefined;
-		const run = vi.fn().mockImplementation(async () => {
-			onAgentEvent?.({
-				type: "usage",
-				inputTokens: 10,
-				outputTokens: 3,
-				cacheReadTokens: 1,
-				cacheWriteTokens: 2,
-				cost: 0.11,
-				totalInputTokens: 10,
-				totalOutputTokens: 3,
-				totalCacheReadTokens: 1,
-				totalCacheWriteTokens: 2,
-				totalCost: 0.11,
-			});
-			onTeamEvent?.({
-				type: "agent_event",
-				agentId: "investigator",
-				event: {
-					type: "usage",
-					agentId: "agent-teammate-1",
-					conversationId: "conv-teammate-1",
-					inputTokens: 7,
-					outputTokens: 5,
-					cacheReadTokens: 2,
-					cacheWriteTokens: 1,
-					cost: 0.12,
-					totalInputTokens: 7,
-					totalOutputTokens: 5,
-					totalCacheReadTokens: 2,
-					totalCacheWriteTokens: 1,
-					totalCost: 0.12,
-				},
-			});
-			return createResult({
-				text: "lead scheduled teammate",
-				usage: {
-					inputTokens: 10,
-					outputTokens: 3,
-					cacheReadTokens: 1,
-					cacheWriteTokens: 2,
-					totalCost: 0.11,
-				},
-			});
-		});
-		const manager = new RuntimeHostUnderTest({
-			distinctId,
-			sessionService: sessionService as never,
-			runtimeBuilder,
-			createAgent: () =>
-				({
-					run,
-					continue: vi.fn(),
-					abort: vi.fn(),
-					subscribeEvents: vi.fn((listener: (event: AgentEvent) => void) => {
-						onAgentEvent = listener;
-						return () => {};
-					}),
-					canStartRun: vi.fn().mockReturnValue(true),
-					getAgentId: vi.fn().mockReturnValue("agent-root-1"),
-					getConversationId: vi.fn().mockReturnValue("conv-root-1"),
-					shutdown: vi.fn().mockResolvedValue(undefined),
-					getMessages: vi.fn().mockReturnValue([]),
-					messages: [],
-				}) as never,
-		});
-
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({ sessionId }),
-				interactive: true,
-			}),
-		);
-
-		await manager.runTurn({ sessionId, prompt: "run teammate work" });
-
-		const usageSummary = await manager.getAccumulatedUsage(sessionId);
-		const usage = usageSummary?.usage;
-		expect(usage).toMatchObject({
-			inputTokens: 10,
-			outputTokens: 3,
-			cacheReadTokens: 1,
-			cacheWriteTokens: 2,
-		});
-		expect(usage?.totalCost).toBeCloseTo(0.11);
-		const aggregateUsage = usageSummary?.aggregateUsage;
-		expect(aggregateUsage).toMatchObject({
-			inputTokens: 17,
-			outputTokens: 8,
-			cacheReadTokens: 3,
-			cacheWriteTokens: 3,
-		});
-		expect(aggregateUsage?.totalCost).toBeCloseTo(0.23);
-		const persistedMetadata = sessionService.updateSession.mock.calls[0]?.[0]
-			.metadata as Record<string, unknown>;
-		expect(persistedMetadata.totalCost as number).toBeCloseTo(0.11);
-		expect(persistedMetadata.aggregatedAgentsCost as number).toBeCloseTo(0.23);
-		const persistedUsage = persistedMetadata.usage as Record<string, unknown>;
-		const persistedAggregateUsage = persistedMetadata.aggregateUsage as Record<
-			string,
-			unknown
-		>;
-		expect(persistedUsage).toMatchObject({
-			inputTokens: 10,
-			outputTokens: 3,
-			cacheReadTokens: 1,
-			cacheWriteTokens: 2,
-		});
-		expect(persistedUsage.totalCost as number).toBeCloseTo(0.11);
-		expect(persistedAggregateUsage).toMatchObject({
-			inputTokens: 17,
-			outputTokens: 8,
-			cacheReadTokens: 3,
-			cacheWriteTokens: 3,
-		});
-		expect(persistedAggregateUsage.totalCost as number).toBeCloseTo(0.23);
 	});
 
 	it("queues sends with explicit queue or steer delivery and emits snapshots", async () => {
@@ -5105,7 +4701,6 @@ describe("LocalRuntimeHost", () => {
 			capabilities: {
 				enableTools: true,
 				enableSpawn: true,
-				enableTeams: true,
 			},
 			lineage: { isSubagent: false },
 		});
@@ -6894,354 +6489,6 @@ describe("LocalRuntimeHost", () => {
 		});
 	});
 
-	it("auto-continues when async teammate runs complete after lead turn", async () => {
-		const sessionId = "sess-team-auto-continue";
-		const manifest = createManifest(sessionId);
-		const sessionService = {
-			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
-			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
-				manifestPath: "/tmp/manifest-team-auto-continue.json",
-				messagesPath: "/tmp/messages-team-auto-continue.json",
-				manifest,
-			}),
-			persistSessionMessages: vi.fn(),
-			updateSessionStatus: vi.fn().mockResolvedValue({ updated: true }),
-			writeSessionManifest: vi.fn(),
-			listSessions: vi.fn().mockResolvedValue([]),
-			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
-		};
-
-		let onTeamEvent: ((event: unknown) => void) | undefined;
-		const runtimeBuilder = {
-			build: vi
-				.fn()
-				.mockImplementation(
-					(input: { onTeamEvent?: (event: unknown) => void }) => {
-						onTeamEvent = input.onTeamEvent;
-						return {
-							tools: [],
-							shutdown: vi.fn(),
-						};
-					},
-				),
-		};
-
-		const run = vi.fn().mockImplementation(async () => {
-			onTeamEvent?.({
-				type: "run_started",
-				run: {
-					id: "run_0001",
-					agentId: "investigator",
-					status: "running",
-					message: "Investigate",
-					priority: 0,
-					retryCount: 0,
-					maxRetries: 0,
-					startedAt: new Date("2026-01-01T00:00:00.000Z"),
-				},
-			});
-			setTimeout(() => {
-				onTeamEvent?.({
-					type: "run_completed",
-					run: {
-						id: "run_0001",
-						agentId: "investigator",
-						status: "completed",
-						message: "Investigate",
-						priority: 0,
-						retryCount: 0,
-						maxRetries: 0,
-						startedAt: new Date("2026-01-01T00:00:00.000Z"),
-						endedAt: new Date("2026-01-01T00:00:02.000Z"),
-						result: createResult({ iterations: 3 }),
-					},
-				});
-			}, 0);
-			return createResult({
-				text: "lead scheduled teammate",
-				messages: [
-					{ role: "user", content: "run teammate work" },
-					{ role: "assistant", content: "lead scheduled teammate" },
-				],
-			});
-		});
-		const continueFn = vi.fn().mockResolvedValue(
-			createResult({
-				text: "lead processed teammate result",
-				messages: [
-					{ role: "user", content: "run teammate work" },
-					{ role: "assistant", content: "lead scheduled teammate" },
-					{
-						role: "user",
-						content:
-							"System-delivered teammate async run updates:\n- investigator completed",
-					},
-					{ role: "assistant", content: "lead processed teammate result" },
-				],
-			}),
-		);
-		const manager = new RuntimeHostUnderTest({
-			distinctId,
-			sessionService: sessionService as never,
-			runtimeBuilder,
-			createAgent: () =>
-				({
-					run,
-					continue: continueFn,
-					abort: vi.fn(),
-					subscribeEvents: vi.fn().mockReturnValue(() => {}),
-					canStartRun: vi.fn().mockReturnValue(true),
-					getAgentId: vi.fn().mockReturnValue("agent-root-1"),
-					getConversationId: vi.fn().mockReturnValue("conv-root-1"),
-					shutdown: vi.fn().mockResolvedValue(undefined),
-					getMessages: vi.fn().mockReturnValue([]),
-					messages: [],
-				}) as never,
-		});
-
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({ sessionId }),
-				interactive: false,
-			}),
-		);
-		const result = await manager.runTurn({
-			sessionId,
-			prompt: "run teammate work",
-		});
-
-		expect(result?.text).toBe("lead processed teammate result");
-		expect(run).toHaveBeenCalledTimes(1);
-		expect(continueFn).toHaveBeenCalledTimes(1);
-		expect(continueFn.mock.calls[0]?.[0]).toContain(
-			"System-delivered teammate async run updates:",
-		);
-		const finalPersistedMessages = (
-			sessionService.persistSessionMessages as ReturnType<typeof vi.fn>
-		).mock.calls.at(-1)?.[1] as Array<Record<string, unknown>> | undefined;
-		expect(finalPersistedMessages?.at(-1)).toMatchObject({
-			role: "assistant",
-			metrics: {
-				inputTokens: 1,
-				outputTokens: 2,
-				cost: 0,
-			},
-			modelInfo: {
-				id: "mock-model",
-				provider: "mock-provider",
-			},
-		});
-		expect(sessionService.updateSessionStatus).toHaveBeenCalledWith(
-			sessionId,
-			"completed",
-			0,
-		);
-	});
-
-	it("persists failed teammate task messages for team-task sub-sessions", async () => {
-		const sessionId = "sess-team-task-failure-messages";
-		const manifest = createManifest(sessionId);
-		const sessionService = {
-			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
-			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
-				manifestPath: "/tmp/manifest-team-task-failure-messages.json",
-				messagesPath: "/tmp/messages-team-task-failure-messages.json",
-				manifest,
-			}),
-			persistSessionMessages: vi.fn(),
-			updateSessionStatus: vi.fn().mockResolvedValue({ updated: true }),
-			writeSessionManifest: vi.fn(),
-			listSessions: vi.fn().mockResolvedValue([]),
-			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
-			onTeamTaskStart: vi.fn().mockResolvedValue(undefined),
-			onTeamTaskEnd: vi.fn().mockResolvedValue(undefined),
-		};
-
-		let onTeamEvent: ((event: unknown) => void) | undefined;
-		const runtimeBuilder = {
-			build: vi
-				.fn()
-				.mockImplementation(
-					(input: { onTeamEvent?: (event: unknown) => void }) => {
-						onTeamEvent = input.onTeamEvent;
-						return {
-							tools: [],
-							shutdown: vi.fn(),
-						};
-					},
-				),
-		};
-
-		const failedMessages = [
-			{ role: "user", content: [{ type: "text", text: "delegated prompt" }] },
-			{ role: "assistant", content: [{ type: "text", text: "partial work" }] },
-		];
-		const manager = new RuntimeHostUnderTest({
-			distinctId,
-			sessionService: sessionService as never,
-			runtimeBuilder,
-			createAgent: () =>
-				({
-					run: vi.fn().mockImplementation(async () => {
-						onTeamEvent?.({
-							type: "task_start",
-							agentId: "providers-investigator",
-							message: "Investigate provider boundaries",
-						});
-						onTeamEvent?.({
-							type: "task_end",
-							agentId: "providers-investigator",
-							error: new Error("401 Unauthorized"),
-							messages: failedMessages,
-						});
-						return createResult({ text: "lead handled failure" });
-					}),
-					continue: vi.fn(),
-					abort: vi.fn(),
-					subscribeEvents: vi.fn().mockReturnValue(() => {}),
-					canStartRun: vi.fn().mockReturnValue(true),
-					getAgentId: vi.fn().mockReturnValue("agent-root-1"),
-					getConversationId: vi.fn().mockReturnValue("conv-root-1"),
-					shutdown: vi.fn().mockResolvedValue(undefined),
-					getMessages: vi.fn().mockReturnValue([]),
-					messages: [],
-				}) as never,
-		});
-
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({ sessionId }),
-				prompt: "run teammate work",
-				interactive: false,
-			}),
-		);
-
-		expect(sessionService.onTeamTaskStart).toHaveBeenCalledTimes(1);
-		expect(sessionService.onTeamTaskEnd).toHaveBeenCalledWith(
-			sessionId,
-			"providers-investigator",
-			"failed",
-			"[error] 401 Unauthorized",
-			undefined,
-			failedMessages,
-		);
-	});
-
-	it("persists teammate progress updates for team-task sub-sessions", async () => {
-		const sessionId = "sess-team-task-progress";
-		const manifest = createManifest(sessionId);
-		const sessionService = {
-			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
-			createRootSessionWithArtifacts: vi.fn().mockResolvedValue({
-				manifestPath: "/tmp/manifest-team-task-progress.json",
-				messagesPath: "/tmp/messages-team-task-progress.json",
-				manifest,
-			}),
-			persistSessionMessages: vi.fn(),
-			updateSessionStatus: vi.fn().mockResolvedValue({ updated: true }),
-			writeSessionManifest: vi.fn(),
-			listSessions: vi.fn().mockResolvedValue([]),
-			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
-			onTeamTaskStart: vi.fn().mockResolvedValue(undefined),
-			onTeamTaskEnd: vi.fn().mockResolvedValue(undefined),
-			onTeamTaskProgress: vi.fn().mockResolvedValue(undefined),
-		};
-
-		let onTeamEvent: ((event: unknown) => void) | undefined;
-		const runtimeBuilder = {
-			build: vi
-				.fn()
-				.mockImplementation(
-					(input: { onTeamEvent?: (event: unknown) => void }) => {
-						onTeamEvent = input.onTeamEvent;
-						return {
-							tools: [],
-							shutdown: vi.fn(),
-						};
-					},
-				),
-		};
-
-		const manager = new RuntimeHostUnderTest({
-			distinctId,
-			sessionService: sessionService as never,
-			runtimeBuilder,
-			createAgent: () =>
-				({
-					run: vi.fn().mockImplementation(async () => {
-						onTeamEvent?.({
-							type: "task_start",
-							agentId: "providers-investigator",
-							message: "Investigate provider boundaries",
-						});
-						onTeamEvent?.({
-							type: "run_progress",
-							run: {
-								id: "run_00002",
-								agentId: "providers-investigator",
-								status: "running",
-								message: "Investigate provider boundaries",
-								priority: 0,
-								retryCount: 0,
-								maxRetries: 0,
-								continueConversation: false,
-								startedAt: new Date("2026-01-01T00:00:00.000Z"),
-								lastProgressAt: new Date("2026-01-01T00:00:01.000Z"),
-								lastProgressMessage: "heartbeat",
-								currentActivity: "heartbeat",
-							},
-							message: "heartbeat",
-						});
-						onTeamEvent?.({
-							type: "agent_event",
-							agentId: "providers-investigator",
-							event: {
-								type: "content_start",
-								contentType: "text",
-								text: "Drafting the provider boundary analysis now.",
-							},
-						});
-						onTeamEvent?.({
-							type: "task_end",
-							agentId: "providers-investigator",
-							result: createResult(),
-						});
-						return createResult({ text: "lead handled progress" });
-					}),
-					continue: vi.fn(),
-					abort: vi.fn(),
-					subscribeEvents: vi.fn().mockReturnValue(() => {}),
-					canStartRun: vi.fn().mockReturnValue(true),
-					getAgentId: vi.fn().mockReturnValue("agent-root-1"),
-					getConversationId: vi.fn().mockReturnValue("conv-root-1"),
-					shutdown: vi.fn().mockResolvedValue(undefined),
-					getMessages: vi.fn().mockReturnValue([]),
-					messages: [],
-				}) as never,
-		});
-
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({ sessionId }),
-				prompt: "run teammate work",
-				interactive: false,
-			}),
-		);
-
-		expect(sessionService.onTeamTaskProgress).toHaveBeenCalledWith(
-			sessionId,
-			"providers-investigator",
-			"heartbeat",
-			{ kind: "heartbeat" },
-		);
-		expect(sessionService.onTeamTaskProgress).toHaveBeenCalledWith(
-			sessionId,
-			"providers-investigator",
-			"Drafting the provider boundary analysis now.",
-			{ kind: "text" },
-		);
-	});
-
 	describe("LocalRuntimeHost releasing a session mid-run", () => {
 		it("aborts and drains the run before shutting the sandbox down", async () => {
 			// A hub restart disposes its sessions. Tearing one down while a run is in
@@ -7296,7 +6543,6 @@ describe("LocalRuntimeHost", () => {
 					systemPrompt: "You are a test agent",
 					enableTools: false,
 					enableSpawnAgent: false,
-					enableAgentTeams: false,
 				},
 			});
 			const session = (

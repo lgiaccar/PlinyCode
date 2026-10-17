@@ -98,7 +98,6 @@ type LocalOnlyCoreSessionConfigKeys =
 	| "extensionContext"
 	| "extraTools"
 	| "extensions"
-	| "onTeamEvent"
 	| "onConsecutiveMistakeLimitReached";
 
 export type RuntimeSessionConfig = Omit<
@@ -136,7 +135,6 @@ export interface LocalRuntimeStartOptions {
 	extensionContext?: LocalRuntimeBootstrapConfig["extensionContext"];
 	extraTools?: LocalRuntimeBootstrapConfig["extraTools"];
 	extensions?: LocalRuntimeBootstrapConfig["extensions"];
-	onTeamEvent?: LocalRuntimeBootstrapConfig["onTeamEvent"];
 	onConsecutiveMistakeLimitReached?: LocalRuntimeBootstrapConfig["onConsecutiveMistakeLimitReached"];
 	checkpoint?: LocalRuntimeBootstrapConfig["checkpoint"];
 	compaction?: LocalRuntimeBootstrapConfig["compaction"];
@@ -148,7 +146,6 @@ export interface LocalRuntimeStartOptions {
 	 */
 	ruleFilter?: import("../safety/rules").RuleFileFilter;
 	configExtensions?: RuntimeConfigExtensionKind[];
-	onTeamRestored?: () => void;
 }
 
 export interface StartSessionInput {
@@ -190,7 +187,6 @@ export function splitCoreSessionConfig(config: ClineCoreStartConfig): {
 		extensionContext,
 		extraTools,
 		extensions,
-		onTeamEvent,
 		onConsecutiveMistakeLimitReached,
 		checkpoint,
 		compaction,
@@ -204,7 +200,6 @@ export function splitCoreSessionConfig(config: ClineCoreStartConfig): {
 		localConfigOverrides.extensionContext = extensionContext;
 	if (extraTools) localConfigOverrides.extraTools = extraTools;
 	if (extensions) localConfigOverrides.extensions = extensions;
-	if (onTeamEvent) localConfigOverrides.onTeamEvent = onTeamEvent;
 	if (onConsecutiveMistakeLimitReached) {
 		localConfigOverrides.onConsecutiveMistakeLimitReached =
 			onConsecutiveMistakeLimitReached;
@@ -367,7 +362,7 @@ export interface RestoreSessionResult {
 }
 
 export interface ListSessionsOptions {
-	/** Only root sessions: excludes subagent and team-task child rows. */
+	/** Only root sessions: excludes sub-agent child rows. */
 	rootOnly?: boolean;
 }
 

@@ -46,7 +46,7 @@ export interface CreateAgentRuntimeConfigInput {
 	 */
 	readonly conversationId?: string;
 	readonly parentAgentId?: string;
-	/** The role label for teammates (`AgentConfig.role` in sub-agent configs). */
+	/** The role label of a delegated sub-agent (`AgentConfig.role`). */
 	readonly agentRole?: string;
 	/** Pre-built model adapter (produced by `apiHandlerToAgentModel`). */
 	readonly model: AgentModel;

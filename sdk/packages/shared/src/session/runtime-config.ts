@@ -63,9 +63,6 @@ export interface SessionWorkspaceConfig {
 
 export interface SessionExecutionConfig {
 	enableTools: boolean;
-	teamName?: string;
-	missionLogIntervalSteps?: number;
-	missionLogIntervalMs?: number;
 	maxConsecutiveMistakes?: number;
 	toolPolicies?: Record<string, ToolPolicy>;
 }

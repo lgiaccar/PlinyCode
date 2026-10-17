@@ -7,5 +7,3 @@ export {
 export { ProviderSettingsManager } from "./provider-settings-manager";
 export type { SessionStore } from "./session-store";
 export { SqliteSessionStore } from "./sqlite-session-store";
-export type { TeamStore } from "./team-store";
-export { SqliteTeamStore, type SqliteTeamStoreOptions } from "./team-store";

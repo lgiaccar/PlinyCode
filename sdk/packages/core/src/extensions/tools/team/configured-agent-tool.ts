@@ -182,7 +182,6 @@ export function createConfiguredAgentTools(
 					// The agent's tool calls follow the host's policies and approval
 					// like the parent's: a configured agent edits the same files.
 					const subAgent = createDelegatedAgent({
-						kind: "subagent",
 						prompt: config.systemPrompt,
 						configProvider,
 						tools,

@@ -64,19 +64,20 @@ export async function seedAggregateUsageFromArtifacts(input: {
 	rootMessagesPath: string;
 	manifest: SessionManifest;
 }): Promise<SessionAccumulatedUsage> {
-	const teammateUsage = await summarizePersistedTeammateUsage(
+	const childAgentUsage = await summarizePersistedChildAgentUsage(
 		input.sessionDir,
 		input.rootMessagesPath,
 		input.manifest.session_id,
 	);
 	const aggregateUsage = accumulateUsageTotals(
 		input.initialUsage,
-		teammateUsage,
+		childAgentUsage,
 	);
 	return withPersistedAggregateUsageFloor(aggregateUsage, input.manifest);
 }
 
-async function summarizePersistedTeammateUsage(
+/** Usage recorded in the sub-agent message files beside the root transcript. */
+async function summarizePersistedChildAgentUsage(
 	sessionDir: string,
 	rootMessagesPath: string,
 	sessionId: string,

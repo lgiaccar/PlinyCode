@@ -5,10 +5,7 @@ import type { AgentConfig, AgentEvent, AgentResult } from "@plinycode/shared";
 import { normalizeUserInput, stripModeNotices } from "@plinycode/shared";
 import { nanoid } from "nanoid";
 import { readSessionHistoryOriginMetadata } from "../session/history-origin";
-import {
-	parseSubSessionId,
-	parseTeamTaskSubSessionId,
-} from "../session/models/session-graph";
+import { parseSubSessionId } from "../session/models/session-graph";
 import {
 	type SessionManifest,
 	SessionManifestSchema,
@@ -206,10 +203,8 @@ export function toSessionRecord(row: SessionRow): SessionRecord {
 		model: row.model,
 		cwd: row.cwd,
 		workspaceRoot: row.workspaceRoot,
-		teamName: row.teamName ?? undefined,
 		enableTools: row.enableTools,
 		enableSpawn: row.enableSpawn,
-		enableTeams: row.enableTeams,
 		parentSessionId: row.parentSessionId ?? undefined,
 		parentAgentId: row.parentAgentId ?? undefined,
 		agentId: row.agentId ?? undefined,
@@ -272,7 +267,7 @@ export function resolveMetadataWithTitle(input: {
 }
 
 export type MessagesFileContext = {
-	agent: "lead" | "subagent" | "teammate";
+	agent: "lead" | "subagent";
 	sessionId: string;
 	taskType?: string;
 	origin: {
@@ -299,15 +294,6 @@ export function resolveMessagesFileContext(
 		...(historyOrigin?.version ? { version: historyOrigin.version } : {}),
 		...(historyOrigin?.trigger ? { trigger: historyOrigin.trigger } : {}),
 	};
-	const teamTaskMatch = parseTeamTaskSubSessionId(row.sessionId);
-	if (teamTaskMatch) {
-		return {
-			agent: "teammate",
-			sessionId: row.sessionId,
-			taskType: "team",
-			origin,
-		};
-	}
 	const subSessionMatch = parseSubSessionId(row.sessionId);
 	if (subSessionMatch) {
 		return {
@@ -332,7 +318,7 @@ export function buildMessagesFilePayload(input: {
 }): {
 	version: 1;
 	updated_at: string;
-	agent: "lead" | "subagent" | "teammate";
+	agent: "lead" | "subagent";
 	sessionId: string;
 	taskType?: string;
 	origin: MessagesFileContext["origin"];
@@ -395,10 +381,8 @@ export function buildManifestFromRow(
 		model: row.model,
 		cwd: row.cwd,
 		workspace_root: row.workspaceRoot,
-		team_name: row.teamName ?? undefined,
 		enable_tools: row.enableTools,
 		enable_spawn: row.enableSpawn,
-		enable_teams: row.enableTeams,
 		prompt: row.prompt ?? undefined,
 		metadata: overrides?.metadata ?? row.metadata ?? undefined,
 		messages_path: row.messagesPath ?? undefined,
