@@ -1,8 +1,10 @@
 import type { SessionHistoryRecord } from "@plinycode/core"
+import type { ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
 import type { HistoryItem } from "@shared/HistoryItem"
 import getFolderSize from "get-folder-size"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { McpHub } from "@/services/mcp/McpHub"
+import { getConversationApiMetrics } from "@/shared/getApiMetrics"
 import { deleteLegacyTask, readApiConversationHistory, readTaskHistory, readUiMessages } from "./legacy-state-reader"
 import { sdkMessagesToClineMessages } from "./message-translator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
@@ -17,6 +19,7 @@ import {
 	sessionRecordWorkspacePath,
 	updateHistoryItem,
 } from "./sdk-task-history"
+import { extraUsageFromMessages } from "./task-usage-metadata"
 import type { VscodeSessionHost } from "./vscode-session-host"
 
 vi.mock("@/core/storage/disk", () => ({
@@ -680,6 +683,133 @@ describe("SdkTaskHistory", () => {
 		})
 	})
 
+	describe("advisor, compaction and sub-agent usage", () => {
+		// One root call (10 uncached + 7 cached input), one sub-agent run, one
+		// advisor call and one compaction summary, as the transcript's rows.
+		const transcript: ClineMessage[] = [
+			{ ts: 1, type: "say", say: "task", text: "do it" },
+			{
+				ts: 2,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 10, tokensOut: 5, cacheReads: 7, cacheWrites: 0, cost: 0.5 }),
+			},
+			usageRow(3, { source: "subagents", tokensIn: 40, tokensOut: 4, cacheReads: 0, cacheWrites: 0, cost: 0.2 }),
+			usageRow(4, { source: "advisor", tokensIn: 100, tokensOut: 50, cacheReads: 0, cacheWrites: 0, cost: 0.1 }),
+			usageRow(5, { source: "compaction", tokensIn: 30, tokensOut: 10, cacheReads: 0, cacheWrites: 0, cost: 0.05 }),
+		]
+		/** What the engine writes at the end of the turn: the root's usage, and the root's plus the sub-agent's. */
+		const engineUsage = {
+			totalCost: 0.5,
+			aggregatedAgentsCost: 0.7,
+			usage: { inputTokens: 17, outputTokens: 5, cacheReadTokens: 7, cacheWriteTokens: 0, totalCost: 0.5 },
+			aggregateUsage: { inputTokens: 57, outputTokens: 9, cacheReadTokens: 7, cacheWriteTokens: 0, totalCost: 0.7 },
+		}
+
+		function headerTotals() {
+			const metrics = getConversationApiMetrics(transcript)
+			return {
+				totalCost: metrics.totalCost,
+				tokensIn: metrics.totalTokensIn,
+				tokensOut: metrics.totalTokensOut,
+				cacheWrites: metrics.totalCacheWrites ?? 0,
+				cacheReads: metrics.totalCacheReads ?? 0,
+			}
+		}
+
+		async function writeEngineUsage(harness: ReturnType<typeof makeHistory>): Promise<void> {
+			const current = (await harness.getSession("task-1"))?.metadata ?? {}
+			await harness.updateSession("task-1", { metadata: { ...current, ...engineUsage } })
+		}
+
+		function expectHeaderTotals(item: HistoryItem | undefined): void {
+			const header = headerTotals()
+			expect(item?.totalCost).toBeCloseTo(header.totalCost)
+			expect(item).toMatchObject({
+				tokensIn: header.tokensIn,
+				tokensOut: header.tokensOut,
+				cacheReads: header.cacheReads,
+				cacheWrites: header.cacheWrites,
+			})
+		}
+
+		it("shows the header's total when the engine's end-of-turn write lands last", async () => {
+			const harness = makeHistory([makeSessionRecord("task-1")])
+
+			await harness.history.setTaskUsage("task-1", headerTotals(), extraUsageFromMessages(transcript.slice(1)))
+			await writeEngineUsage(harness)
+
+			// The engine overwrote totalCost with the root agent's cost alone.
+			expect((await harness.getSession("task-1"))?.metadata?.totalCost).toBe(0.5)
+			expectHeaderTotals(await harness.history.findHistoryItem("task-1"))
+		})
+
+		it("shows the header's total when the extension's write lands last", async () => {
+			const harness = makeHistory([makeSessionRecord("task-1")])
+
+			await writeEngineUsage(harness)
+			await harness.history.setTaskUsage("task-1", headerTotals(), extraUsageFromMessages(transcript.slice(1)))
+
+			expectHeaderTotals(await harness.history.findHistoryItem("task-1"))
+			const listed = (await harness.history.listHistory({ hydrate: false })).map(sessionHistoryRecordToHistoryItem)
+			expectHeaderTotals(listed[0])
+		})
+
+		it("keeps a background task's advisor cost through the engine's write", async () => {
+			const harness = makeHistory([makeSessionRecord("task-1")])
+
+			await harness.history.updateTaskUsage("task-1", { tokensIn: 10, tokensOut: 5, totalCost: 0.5 })
+			await harness.history.updateTaskUsage(
+				"task-1",
+				{ tokensIn: 100, tokensOut: 50, cacheReads: 0, cacheWrites: 0, totalCost: 0.1 },
+				"advisor",
+			)
+			const current = (await harness.getSession("task-1"))?.metadata ?? {}
+			await harness.updateSession("task-1", {
+				metadata: {
+					...current,
+					totalCost: 0.5,
+					aggregatedAgentsCost: 0.5,
+					aggregateUsage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, totalCost: 0.5 },
+				},
+			})
+
+			const item = await harness.history.findHistoryItem("task-1")
+			expect(item?.totalCost).toBeCloseTo(0.6)
+			expect(item).toMatchObject({ tokensIn: 110, tokensOut: 55 })
+		})
+
+		it("reads a session without extraUsage from its own totals, as before", async () => {
+			const harness = makeHistory([
+				makeSessionRecord("task-1", {
+					metadata: {
+						totalCost: 0.25,
+						tokensIn: 30,
+						tokensOut: 6,
+						cacheReads: 4,
+						cacheWrites: 1,
+						aggregatedAgentsCost: 0.9,
+						aggregateUsage: {
+							inputTokens: 500,
+							outputTokens: 60,
+							cacheReadTokens: 0,
+							cacheWriteTokens: 0,
+							totalCost: 0.9,
+						},
+					},
+				}),
+			])
+
+			expect(await harness.history.findHistoryItem("task-1")).toMatchObject({
+				totalCost: 0.25,
+				tokensIn: 30,
+				tokensOut: 6,
+				cacheReads: 4,
+				cacheWrites: 1,
+			})
+		})
+	})
+
 	it("changes the favorite and pin flags only through their toggles", async () => {
 		const { history } = makeHistory([makeSessionRecord("task-1")])
 		const stale = await history.findHistoryItem("task-1")
@@ -1071,6 +1201,10 @@ describe("SdkTaskHistory", () => {
 		expect(record?.updatedAt).toBe("2026-01-01T00:00:00.000Z")
 	})
 })
+
+function usageRow(ts: number, info: ClineSubagentUsageInfo): ClineMessage {
+	return { ts, type: "say", say: "subagent_usage", text: JSON.stringify(info) }
+}
 
 function makeHistoryItem(id: string, overrides: Partial<HistoryItem> = {}): HistoryItem {
 	return {

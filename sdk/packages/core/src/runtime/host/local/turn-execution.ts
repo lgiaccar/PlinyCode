@@ -237,6 +237,7 @@ async function executeAgentTurn(
 	session.turnAggregateUsageBaseline = aggregateUsageBaseline;
 	session.turnPrimaryUsage = createInitialAccumulatedUsage();
 	session.turnUsageByAgent = new Map<string, SessionAccumulatedUsage>();
+	session.turnSettledAgents = new Set<string>();
 
 	try {
 		// Options are passed only when there are any, so an ordinary turn calls
@@ -289,6 +290,7 @@ async function executeAgentTurn(
 		);
 		return result;
 	} catch (error) {
+		await persistUsageAfterFailedTurn(host, session, aggregateUsageBaseline);
 		try {
 			await host.invoke<void>(
 				"persistSessionMessages",
@@ -310,6 +312,45 @@ async function executeAgentTurn(
 		session.turnAggregateUsageBaseline = undefined;
 		session.turnPrimaryUsage = undefined;
 		session.turnUsageByAgent = undefined;
+		session.turnSettledAgents = undefined;
+	}
+}
+
+/**
+ * A turn that failed after paid calls (the root's, or a sub-agent's that
+ * finished or failed before the error) still spent the money. The live
+ * usage events kept the in-memory totals current; write them to the
+ * session metadata too, since the successful-turn write never comes.
+ */
+async function persistUsageAfterFailedTurn(
+	host: TurnExecutionHost,
+	session: ActiveSession,
+	aggregateUsageBaseline: SessionAccumulatedUsage,
+): Promise<void> {
+	const usage = host.usageBySession.get(session.sessionId);
+	const aggregateUsage = host.aggregateUsageBySession.get(session.sessionId);
+	if (
+		!usage ||
+		!aggregateUsage ||
+		(aggregateUsage.totalCost === aggregateUsageBaseline.totalCost &&
+			aggregateUsage.inputTokens === aggregateUsageBaseline.inputTokens &&
+			aggregateUsage.outputTokens === aggregateUsageBaseline.outputTokens)
+	) {
+		return;
+	}
+	try {
+		await host.persistSessionMetadata(session.sessionId, (current) => ({
+			...(current ?? {}),
+			totalCost: usage.totalCost,
+			aggregatedAgentsCost: aggregateUsage.totalCost,
+			usage,
+			aggregateUsage,
+		}));
+	} catch (persistError) {
+		session.config.logger?.error?.(
+			"Failed to persist session usage after turn error",
+			{ sessionId: session.sessionId, error: persistError },
+		);
 	}
 }
 
