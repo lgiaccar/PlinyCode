@@ -54,6 +54,9 @@ service TaskService {
   rpc resolveMemoryProposal(ResolveMemoryProposalRequest) returns (Empty);
   // Opens the git worktree of the conversation with the given ID in a new VS Code window
   rpc openTaskWorktree(StringRequest) returns (Empty);
+  // Applies, opens a pull request for, or removes the git worktree of a "Run in worktree"
+  // conversation, after the user confirms in a modal (docs/task-worktrees.md)
+  rpc worktreeAction(WorktreeActionRequest) returns (Empty);
 }
 
 // The user's choice on a memory_proposal chat row (docs/memory.md)
@@ -96,6 +99,15 @@ message ExportTaskResult {
   // Absolute path of the written file, or empty when the user cancelled the
   // save dialog (in which case nothing was written).
   string path = 1;
+}
+
+// What to do with a worktree conversation's worktree (TaskService.worktreeAction)
+message WorktreeActionRequest {
+  Metadata metadata = 1;
+  string task_id = 2;
+  // "apply" (bring the changes into the source checkout, staged), "create_pr"
+  // (commit, push and open a pull request) or "remove" (remove the worktree)
+  string action = 3;
 }
 
 // Request message for toggling task favorite status

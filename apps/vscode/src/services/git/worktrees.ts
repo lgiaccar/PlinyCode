@@ -18,16 +18,28 @@ interface GitResult {
 	missing?: boolean
 }
 
-export function git(cwd: string, args: string[], timeoutMs = 120_000): Promise<GitResult> {
+interface GitOptions {
+	/** Extra environment variables, e.g. `GIT_INDEX_FILE`. */
+	env?: NodeJS.ProcessEnv
+	/** Keep stdout as git wrote it (porcelain output starts with significant spaces). */
+	raw?: boolean
+}
+
+export function git(cwd: string, args: string[], timeoutMs = 120_000, options: GitOptions = {}): Promise<GitResult> {
 	return new Promise((resolve) => {
 		execFile(
 			"git",
 			["-C", cwd, ...args],
-			{ windowsHide: true, maxBuffer: 4 * 1024 * 1024, timeout: timeoutMs },
+			{
+				windowsHide: true,
+				maxBuffer: 4 * 1024 * 1024,
+				timeout: timeoutMs,
+				...(options.env ? { env: { ...process.env, ...options.env } } : {}),
+			},
 			(error, stdout, stderr) =>
 				resolve({
 					ok: !error,
-					stdout: String(stdout).trim(),
+					stdout: options.raw ? String(stdout) : String(stdout).trim(),
 					stderr: String(stderr).trim(),
 					...((error as NodeJS.ErrnoException | null)?.code === "ENOENT" ? { missing: true } : {}),
 				}),
@@ -274,7 +286,7 @@ export async function ensureTaskWorktree(options: EnsureTaskWorktreeOptions): Pr
 				`${repoRoot} has uncommitted changes. They are not in the worktree, which starts from the last commit (${head.stdout.slice(0, 8)}).`,
 			)
 		}
-		return { repoRoot, branch, path: target, notes }
+		return { repoRoot, branch, path: target, baseCommit: head.stdout, notes }
 	}
 	throw new Error(`Could not find a free branch name for a worktree under ${root}.`)
 }

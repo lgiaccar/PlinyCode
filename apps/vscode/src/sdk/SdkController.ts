@@ -1974,6 +1974,32 @@ export class Controller {
 		return (await this.taskHistory.findHistoryItem(taskId))?.worktree
 	}
 
+	/** The conversation's history entry; undefined for an unknown one. */
+	async getHistoryItem(taskId: string): Promise<HistoryItem | undefined> {
+		return this.taskHistory.findHistoryItem(taskId)
+	}
+
+	/** Replaces the conversation's worktree record (e.g. marks it removed) and refreshes the task header. */
+	async setTaskWorktree(taskId: string, worktree: TaskWorktree): Promise<void> {
+		if (await this.taskHistory.setTaskWorktree(taskId, worktree)) {
+			await this.postStateToWebview()
+		}
+	}
+
+	/** Adds an info row to the conversation's chat, when it is the one on screen. */
+	emitInfoRow(taskId: string, text: string): void {
+		if (this.task?.taskId !== taskId) {
+			return
+		}
+		this.messages.emitHookMessage({
+			ts: this.messageTranslatorState.getMinter().nextId(),
+			type: "say",
+			say: "info",
+			text,
+			partial: false,
+		})
+	}
+
 	/** Pins the conversation to the top of the history list, or unpins it. */
 	async toggleTaskPin(taskId: string, isPinned: boolean): Promise<void> {
 		if (!(await this.taskHistory.setTaskPinned(taskId, isPinned))) {

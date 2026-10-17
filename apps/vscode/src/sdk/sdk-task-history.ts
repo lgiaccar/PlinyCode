@@ -92,7 +92,16 @@ export function metadataWorktree(metadata: SessionHistoryRecord["metadata"] | un
 		return undefined
 	}
 	const sourceWorkspacePath = metadataString(fields, "sourceWorkspacePath")
-	return { repoRoot, branch, path: worktreePath, ...(sourceWorkspacePath ? { sourceWorkspacePath } : {}) }
+	const baseCommit = metadataString(fields, "baseCommit")
+	const removedTs = typeof fields.removedTs === "number" && fields.removedTs > 0 ? fields.removedTs : undefined
+	return {
+		repoRoot,
+		branch,
+		path: worktreePath,
+		...(sourceWorkspacePath ? { sourceWorkspacePath } : {}),
+		...(baseCommit ? { baseCommit } : {}),
+		...(removedTs ? { removedTs } : {}),
+	}
 }
 
 /** Parses an ISO date string into epoch ms, or 0 when blank/unparseable. */
@@ -958,6 +967,16 @@ export class SdkTaskHistory {
 			spendingLimit: limit,
 			...(remember && limit > 0 ? { spendingStep: limit } : {}),
 		})
+		return true
+	}
+
+	/** Replaces the conversation's worktree record (e.g. marks it removed). Returns false when the task is unknown. */
+	async setTaskWorktree(taskId: string, worktree: TaskWorktree): Promise<boolean> {
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateTaskHistoryItem({ ...historyItem, worktree })
 		return true
 	}
 
