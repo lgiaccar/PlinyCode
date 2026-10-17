@@ -285,8 +285,12 @@ worked on at once without touching your checkout:
 - The board fetches the branch first. An existing worktree of the branch is reused and fast-forwarded when it is
   clean; with local changes or local commits it is left alone, and the agent is told so.
 - Submodules are checked out when the repository has them.
-- Worktrees stay after the run. Remove them with `git worktree remove` when you are done. A worktree is a full
-  working copy, so a C++ repository needs a full build in each one.
+- Worktrees stay after the run, so a follow-up action reuses the build. PlinyCode's daily cleanup removes a
+  board worktree once it is clean and its conversation was deleted or has been idle for
+  `plinycode.worktrees.keepDays` days (default 7); its branch is kept, and the next action makes a new
+  worktree. **PlinyCode: Manage Worktrees** lists them and removes one on demand. See
+  [task-worktrees.md](task-worktrees.md#cleanup). A worktree is a full working copy, so a C++ repository needs a
+  full build in each one.
 
 Conversations started in a worktree are bound to it ([workspace-conversations.md](workspace-conversations.md)), so
 they appear in History under **All workspaces**, or from the board's conversation link. Worktrees are not added

@@ -50,6 +50,20 @@ describe("CiBoardStore", () => {
 		expect(data.targets.map((t) => t.id)).toEqual(["x", "y"])
 	})
 
+	it("lists the runs of every workspace's board, for the worktree cleanup", async () => {
+		const store = new CiBoardStore(file)
+		expect(await store.allLinks()).toEqual([])
+		const link = (conversationId: string) => ({
+			conversationId,
+			actionId: "fix",
+			worktree: `/w/${conversationId}`,
+			startedTs: 1,
+		})
+		await store.update("/repo-a", (d) => ({ ...d, links: { k1: link("c1") } }))
+		await store.update("/repo-b", (d) => ({ ...d, links: { k2: link("c2") } }))
+		expect((await store.allLinks()).map((l) => l.conversationId).sort()).toEqual(["c1", "c2"])
+	})
+
 	it("matches Windows paths without regard to case", async () => {
 		const store = new CiBoardStore(file)
 		await store.update("D:\\dev0\\Repo", (d) => ({ ...d, targets: [boardTarget()] }))
