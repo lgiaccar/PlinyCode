@@ -14,6 +14,7 @@ import {
 	getCiWatchManager,
 	notifyBuiltinMcpToolsChanged,
 	registerBuiltinMcpSource,
+	setCiWatchRepoOpener,
 	setDevOpsServerControl,
 	withDefaultArgument,
 } from "../builtin-mcp-registry"
@@ -110,6 +111,9 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 				ciWatchTools({ enabled: service.ciWatchEnabled, manager: getCiWatchManager(), cwd, openRepo: service.openRepo }),
 			providerFor: (cwd) => service.toolProviderFor(cwd),
 		})
+		// Watches restored after a reload read CI through the same providers as new ones.
+		setCiWatchRepoOpener(service.openRepo)
+		service.disposables.push(new vscode.Disposable(() => setCiWatchRepoOpener(undefined)))
 		service.disposables.push(CiBoardHost.start(service.providers, ciBoardUi))
 		service.disposables.push(PipelineHost.start(service.providers))
 		service.disposables.push(
