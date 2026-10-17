@@ -13,6 +13,7 @@ import { installLastRequestCapture } from "./last-model-request"
 import type { ConversationMemorySnapshots } from "./memory/conversation-memory-snapshots"
 import { installMemory, type MemoryInstallDeps } from "./memory/install-memory"
 import { installRouter, type RouterInstallDeps } from "./router/router-integration"
+import { installSessionTrace, type SessionTrace, type SessionTraceDeps } from "./trace/session-trace"
 
 interface SdkSessionConfigBuilderOptions {
 	stateManager: StateManager
@@ -72,6 +73,8 @@ interface SdkSessionConfigBuilderOptions {
 	memory?: MemoryInstallDeps & { snapshots: Pick<ConversationMemorySnapshots, "prepare"> }
 	/** The advisor tool's settings, budget check and usage sink; the tool is installed when given. */
 	advisor?: Pick<AdvisorInstallDeps, "getSettings" | "checkBudget" | "onUsage">
+	/** The per-session trace (`<dataDir>/traces/<sessionId>.jsonl`); recorded when given. */
+	trace?: SessionTraceDeps
 }
 
 /**
@@ -171,6 +174,9 @@ export class SdkSessionConfigBuilder {
 				}
 			: undefined
 		const nextMessageTs = this.options.nextMessageTs
+		// Installed below, after the router and the advisor; the router reports
+		// its decisions to it through this forwarder, which is bound by then.
+		let trace: SessionTrace | undefined
 		if (emitRow && nextMessageTs) {
 			// Shows which rules and skills each turn's request carries, for
 			// every model: the row is how a user learns a rules file was not
@@ -199,6 +205,7 @@ export class SdkSessionConfigBuilder {
 				reviewEnabled: isReviewBeforeFinishEnabled,
 				// The id is read when the review runs: a new session's is only final once it has started.
 				...(getRunChanges ? { getRunChanges: () => getRunChanges(config.sessionId ?? "") } : {}),
+				...(this.options.trace ? { onCallEvent: (event) => trace?.recordRouterEvent(event) } : {}),
 			})
 		}
 
@@ -214,6 +221,12 @@ export class SdkSessionConfigBuilder {
 				routerSessionKey: () =>
 					config.sessionId?.trim() || (input.newConversation ? undefined : this.options.getSessionId?.()) || input.cwd,
 			})
+		}
+
+		// After the router and the advisor, so it sees the requests they pass on
+		// and the tool hooks they installed.
+		if (this.options.trace) {
+			trace = installSessionTrace(config, this.options.trace)
 		}
 
 		// Outermost, so it records the request every other wrapper passes on.

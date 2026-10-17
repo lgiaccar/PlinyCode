@@ -26,7 +26,7 @@ import { getLatestAnnouncementId } from "./utils/announcements"
  */
 export async function initialize(storageContext: StorageContext): Promise<WebviewProvider> {
 	// Configure the shared Logging class to use HostProvider's output channels and debug logger
-	Logger.subscribe((msg: string) => HostProvider.get().logToChannel(msg)) // File system logging
+	Logger.subscribe((msg: string) => HostProvider.get().logToChannel(msg)) // The rotating log file (file-log-sink.ts)
 	Logger.subscribe((msg: string) => HostProvider.env.debugLog({ value: msg })) // Host debug logging
 
 	// Register the SDK early logger so diagnostic events from

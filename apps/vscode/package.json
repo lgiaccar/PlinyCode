@@ -203,6 +203,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.openLogFile",
+				"title": "Open Log File",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.checkForUpdates",
 				"title": "Check for Updates",
 				"category": "PlinyCode"
@@ -215,6 +220,11 @@
 			{
 				"command": "cline.showLastModelRequest",
 				"title": "Show Last Model Request (debug)",
+				"category": "PlinyCode"
+			},
+			{
+				"command": "cline.exportDiagnostics",
+				"title": "Export Diagnostics Bundle",
 				"category": "PlinyCode"
 			},
 			{
@@ -516,6 +526,11 @@
 					"default": "",
 					"markdownDescription": "Folder for the git worktrees the **CI Board** creates to work on pull requests that are not checked out. Empty puts them next to the repository, in `<repository>.worktrees`."
 				},
+				"plinycode.trace.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Write a trace of every conversation to `traces/<conversation id>.jsonl` in PlinyCode's data folder (`~/.cline/data`): each model request with its messages (secrets redacted, long text cut), each reply's timing, tokens and finish reason, each tool call and result, and each routing decision on `auto-free` and `auto-paid-balanced`. A file stops at 20 MB and the folder is kept under 200 MB. Turning this off stops the writing at once."
+				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",
 					"default": true,
@@ -524,7 +539,7 @@
 				"plinycode.codeIntel.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Give the model the find_symbol, code_navigate and rename_preview tools, which answer through the language servers running in this window: a file's outline and problems, the symbols matching a name, a symbol's definition, references, type, callers and callees, and the edits a rename would make (previewed, never applied). Applies to the next conversation."
+					"description": "Give the model the find_symbol and code_navigate tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, and a symbol's definition, references and type. Applies to the next conversation."
 				},
 				"plinycode.memory.maxTokens": {
 					"type": "integer",
