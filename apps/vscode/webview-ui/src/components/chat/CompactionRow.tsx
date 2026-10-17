@@ -1,6 +1,8 @@
 import type { ClineCompactionInfo, ClineMessage } from "@shared/ExtensionMessage"
 import { FoldVerticalIcon, LoaderCircleIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { compactionPayload, parseSayPayload } from "./chat-payloads"
+import { UndisplayableMessageRow } from "./UndisplayableMessageRow"
 
 /** Mirrors the CLI's formatTokenCount (apps/cli/src/tui/utils/compaction-status.ts). */
 function formatTokenCount(count: number): string {
@@ -11,21 +13,6 @@ function formatTokenCount(count: number): string {
 		return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}k`
 	}
 	return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
-}
-
-function parseCompactionInfo(text: string | undefined): ClineCompactionInfo | undefined {
-	if (!text) {
-		return undefined
-	}
-	try {
-		const parsed = JSON.parse(text)
-		if (parsed && typeof parsed === "object" && typeof parsed.status === "string") {
-			return parsed as ClineCompactionInfo
-		}
-	} catch {
-		// Fall through to undefined for malformed payloads.
-	}
-	return undefined
 }
 
 /** Mirrors the CLI's formatCompactionDividerLabel wording for product consistency. */
@@ -59,11 +46,15 @@ function formatCompactionLabel(info: ClineCompactionInfo): string {
  * its terminal state when it finishes.
  */
 const CompactionRow = ({ message }: { message: ClineMessage }) => {
-	const info = parseCompactionInfo(message.text)
-	if (!info) {
+	if (!message.text) {
 		// Virtuoso cannot handle zero-height items; render a spacer instead of null.
 		return <div aria-hidden className="h-px" />
 	}
+	const parsed = parseSayPayload(message, compactionPayload)
+	if (!parsed.ok) {
+		return <UndisplayableMessageRow error={parsed.error} message={message} />
+	}
+	const info = parsed.value
 
 	const inProgress = info.status === "started"
 	const isFailed = info.status === "failed"

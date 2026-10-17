@@ -3,7 +3,9 @@ import { EmptyRequest } from "@shared/proto/cline/common"
 import { memo, useMemo, useState } from "react"
 import { TaskServiceClient } from "@/services/grpc-client"
 import { CHAT_ROW_EXPANDED_BG_COLOR } from "../common/CodeBlock"
+import { type HookStatusMetadata, hookStatusPayload, parsePayloadText } from "./chat-payloads"
 import { HOOK_OUTPUT_STRING } from "./constants"
+import { UndisplayableMessageRow } from "./UndisplayableMessageRow"
 
 const normalColor = "var(--vscode-foreground)"
 const errorColor = "var(--vscode-errorForeground)"
@@ -45,31 +47,10 @@ interface HookMessageProps {
 	}>
 }
 
-interface HookMetadata {
-	hookName: string
-	toolName?: string
-	status: string
-	exitCode?: number
-	hasJsonResponse?: boolean
-	pendingToolInfo?: {
-		tool: string
-		path?: string
-		command?: string
-		content?: string
-		diff?: string
-		regex?: string
-		url?: string
-		mcpTool?: string
-		mcpServer?: string
-		resourceUri?: string
-	}
-	error?: {
-		type: "timeout" | "validation" | "execution" | "cancellation"
-		message: string
-		details?: string
-		scriptPath?: string
-	}
-}
+type HookMetadata = HookStatusMetadata
+
+/** Stands in for metadata that did not parse, so the hooks below run the same way; the row renders the fallback. */
+const UNREADABLE_HOOK_METADATA: HookMetadata = { hookName: "Unknown", status: "unknown" }
 
 /**
  * Displays a hook execution message with status, pending tool info, and output.
@@ -82,7 +63,7 @@ interface HookMetadata {
  */
 const HookMessage = memo(({ message, CommandOutput }: HookMessageProps) => {
 	// Parse hook metadata and output
-	const { metadata, output } = useMemo(() => {
+	const { parsedMetadata, output } = useMemo(() => {
 		const splitMessage = (text: string) => {
 			const outputIndex = text.indexOf(HOOK_OUTPUT_STRING)
 			if (outputIndex === -1) {
@@ -114,18 +95,16 @@ const HookMessage = memo(({ message, CommandOutput }: HookMessageProps) => {
 
 		const { metadata: metadataStr, output } = splitMessage(message.text || "")
 
-		let hookMetadata: HookMetadata
-		try {
-			hookMetadata = JSON.parse(metadataStr)
-		} catch {
-			hookMetadata = { hookName: "Unknown", status: "unknown" }
-		}
-
-		return { metadata: hookMetadata, output }
+		return { parsedMetadata: parsePayloadText(metadataStr, hookStatusPayload), output }
 	}, [message.text])
+	const metadata = parsedMetadata.ok ? parsedMetadata.value : UNREADABLE_HOOK_METADATA
 
 	// Determine initial expansion state using pure function
 	const [isHookOutputExpanded, setIsHookOutputExpanded] = useState(() => shouldExpandHookByDefault(message, metadata))
+
+	if (!parsedMetadata.ok) {
+		return <UndisplayableMessageRow error={parsedMetadata.error} message={message} />
+	}
 
 	const isRunning = metadata.status === "running"
 	const isCompleted = metadata.status === "completed"
@@ -147,7 +126,8 @@ const HookMessage = memo(({ message, CommandOutput }: HookMessageProps) => {
 					style={{
 						color: normalColor,
 						marginBottom: "-1.5px",
-					}}></span>
+					}}
+				/>
 				<span style={{ color: normalColor, fontWeight: "bold" }}>Hook:</span>
 				<span style={{ color: normalColor }}>{metadata.hookName}</span>
 				{metadata.toolName && (

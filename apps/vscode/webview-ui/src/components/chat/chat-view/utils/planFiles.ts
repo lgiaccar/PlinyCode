@@ -4,7 +4,8 @@
  * root file from the chat transcript so the plan row can offer "Execute plan".
  */
 
-import type { ClineMessage, ClineSayTool } from "@shared/ExtensionMessage"
+import type { ClineMessage } from "@shared/ExtensionMessage"
+import { clineSayToolPayload, parseSayPayload } from "../../chat-payloads"
 
 const ROOT_PLAN_FILE_NAME = "plan.md"
 
@@ -18,12 +19,11 @@ function markdownWritePath(message: ClineMessage): string | undefined {
 	if (!isToolRow || !message.text) {
 		return undefined
 	}
-	let tool: Partial<ClineSayTool>
-	try {
-		tool = JSON.parse(message.text)
-	} catch {
+	const parsed = parseSayPayload(message, clineSayToolPayload)
+	if (!parsed.ok) {
 		return undefined
 	}
+	const tool = parsed.value
 	if (tool.tool !== "newFileCreated" && tool.tool !== "editedExistingFile") {
 		return undefined
 	}

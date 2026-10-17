@@ -1,4 +1,5 @@
-import type { ClineApiReqInfo, ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
+import type { ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
+import { apiReqInfoPayload, parseSayPayload, subagentUsagePayload } from "../chat-payloads"
 
 /** One LLM call's usage, read from its api_req_started row. Token buckets are disjoint. */
 export interface ApiCallUsage {
@@ -43,12 +44,11 @@ export function getApiCallUsages(messages: ClineMessage[]): ApiCallUsage[] {
 		if (message.type !== "say" || message.say !== "api_req_started" || !message.text) {
 			continue
 		}
-		let info: ClineApiReqInfo
-		try {
-			info = JSON.parse(message.text)
-		} catch {
+		const parsed = parseSayPayload(message, apiReqInfoPayload)
+		if (!parsed.ok) {
 			continue
 		}
+		const info = parsed.value
 		const tokensIn = info.tokensIn ?? 0
 		const tokensOut = info.tokensOut ?? 0
 		const cacheReads = info.cacheReads ?? 0
@@ -166,12 +166,11 @@ export function getSideUsage(messages: ClineMessage[]): SideUsage[] {
 		if (message.type !== "say" || message.say !== "subagent_usage" || !message.text) {
 			continue
 		}
-		let info: Partial<ClineSubagentUsageInfo>
-		try {
-			info = JSON.parse(message.text)
-		} catch {
+		const parsed = parseSayPayload(message, subagentUsagePayload)
+		if (!parsed.ok) {
 			continue
 		}
+		const info = parsed.value
 		const source: SideUsageSource = info.source && info.source in SIDE_USAGE_LABELS ? info.source : "subagents"
 		const side = bySource.get(source) ?? {
 			source,

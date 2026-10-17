@@ -1,6 +1,7 @@
 import { ClineMessage, ClineSayTool } from "@shared/ExtensionMessage"
 import { StringRequest } from "@shared/proto/cline/common"
 import { memo, useCallback, useMemo, useState } from "react"
+import { apiReqInfoPayload, clineSayToolPayload, parseSayPayload } from "@/components/chat/chat-payloads"
 import { TypewriterText } from "@/components/chat/TypewriterText"
 import { cleanPathPrefix } from "@/components/common/CodeAccordian"
 import { Button } from "@/components/ui/button"
@@ -70,15 +71,10 @@ const getCurrentActivities = (allMessages: ClineMessage[]): ClineMessage[] => {
 	for (let i = allMessages.length - 1; i >= 0; i--) {
 		const msg = allMessages[i]
 		if (msg.say === "api_req_started" && msg.text) {
-			try {
-				const info = JSON.parse(msg.text)
-				const hasCost = info.cost != null
-				if (!hasCost) {
-					currentApiReqIndex = i
-					break
-				}
-			} catch {
-				// ignore
+			const info = parseSayPayload(msg, apiReqInfoPayload)
+			if (info.ok && info.value.cost == null) {
+				currentApiReqIndex = i
+				break
 			}
 		}
 	}
@@ -286,11 +282,8 @@ export function buildToolsWithReasoning(messages: ClineMessage[]): ToolWithReaso
  * Safely parse tool JSON, returning empty tool on failure.
  */
 function parseToolSafe(text: string | undefined): ClineSayTool {
-	try {
-		return JSON.parse(text || "{}") as ClineSayTool
-	} catch {
-		return {} as ClineSayTool
-	}
+	const parsed = parseSayPayload({ text }, clineSayToolPayload)
+	return parsed.ok ? parsed.value : ({} as ClineSayTool)
 }
 
 /**

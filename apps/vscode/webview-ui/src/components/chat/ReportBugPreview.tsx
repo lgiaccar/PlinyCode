@@ -1,5 +1,6 @@
 import React from "react"
 import MarkdownBlock from "../common/MarkdownBlock"
+import { bugReportPayload, parsePayloadText } from "./chat-payloads"
 
 interface ReportBugPreviewProps {
 	data: string
@@ -8,12 +9,12 @@ interface ReportBugPreviewProps {
 const ReportBugPreview: React.FC<ReportBugPreviewProps> = ({ data }) => {
 	// Parse the JSON data from the context string
 	const bugData = React.useMemo(() => {
-		try {
-			return JSON.parse(data || "{}")
-		} catch (e) {
-			console.error("Failed to parse bug report data", e)
+		const parsed = parsePayloadText(data, bugReportPayload)
+		if (!parsed.ok) {
+			console.error("Failed to parse bug report data", parsed.error)
 			return {}
 		}
+		return parsed.value
 	}, [data])
 
 	return (

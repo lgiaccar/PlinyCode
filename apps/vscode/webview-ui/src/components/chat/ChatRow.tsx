@@ -2,13 +2,8 @@ import { isCiWatchReport } from "@shared/ciWatch"
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import {
 	BrowserActionResult,
-	ClineApiReqInfo,
-	ClineAskQuestion,
-	ClineAskUseMcpServer,
 	ClineMessage,
-	ClinePlanModeResponse,
 	ClineSayBrowserAction,
-	ClineSayTool,
 	COMPLETION_RESULT_CHANGES_FLAG,
 } from "@shared/ExtensionMessage"
 import type { PlanExecutionChoice } from "@shared/planExecution"
@@ -57,6 +52,16 @@ import { CiWatchRow } from "./CiWatchRow"
 import { CommandOutputContent, CommandOutputRow } from "./CommandOutputRow"
 import CompactionRow from "./CompactionRow"
 import { CompletionOutputRow } from "./CompletionOutputRow"
+import {
+	apiReqInfoPayload,
+	askQuestionPayload,
+	clineSayToolPayload,
+	conditionalRulesPayload,
+	parsePayloadText,
+	parseSayPayload,
+	planModeResponsePayload,
+	useMcpServerPayload,
+} from "./chat-payloads"
 import { DiffEditRow } from "./DiffEditRow"
 import ErrorRow from "./ErrorRow"
 import { FeatureTip } from "./FeatureTip"
@@ -72,6 +77,7 @@ import SearchResultsDisplay from "./SearchResultsDisplay"
 import SubagentStatusRow from "./SubagentStatusRow"
 import { ThinkingRow } from "./ThinkingRow"
 import TodoListRow from "./TodoListRow"
+import { UndisplayableMessageRow } from "./UndisplayableMessageRow"
 import UserMessage from "./UserMessage"
 
 const HEADER_CLASSNAMES = "flex items-center gap-2.5 mb-3"
@@ -242,13 +248,15 @@ const ChatRowContent = memo(
 			prevIsLastRef.current = isLast
 		}, [isLast, message.ask, message.say])
 
-		const [cost, _apiReqCancelReason, apiReqStreamingFailedMessage] = useMemo(() => {
-			if (message.text != null && message.say === "api_req_started") {
-				const info: ClineApiReqInfo = JSON.parse(message.text)
-				return [info.cost, info.cancelReason, info.streamingFailedMessage]
-			}
-			return [undefined, undefined, undefined]
-		}, [message.text, message.say])
+		const apiReqInfo = useMemo(
+			() =>
+				message.text != null && message.say === "api_req_started"
+					? parsePayloadText(message.text, apiReqInfoPayload)
+					: undefined,
+			[message.text, message.say],
+		)
+		const cost = apiReqInfo?.ok ? apiReqInfo.value.cost : undefined
+		const apiReqStreamingFailedMessage = apiReqInfo?.ok ? apiReqInfo.value.streamingFailedMessage : undefined
 
 		// when resuming task last won't be api_req_failed but a resume_task message so api_req_started will show loading spinner. that's why we just remove the last api_req_started that failed without streaming anything
 		const apiRequestFailedMessage =
@@ -355,6 +363,11 @@ const ChatRowContent = memo(
 			}, 0) // Delay of 0ms pushes execution after current event cycle
 		}, []) // Dependencies remain empty
 
+		const mcpServerUse = useMemo(
+			() => (type === "use_mcp_server" ? parsePayloadText(message.text, useMcpServerPayload) : undefined),
+			[type, message.text],
+		)
+
 		const [icon, title] = useMemo(() => {
 			switch (type) {
 				case "error":
@@ -373,7 +386,10 @@ const ChatRowContent = memo(
 						<span className="font-bold text-foreground">PlinyCode wants to execute this command:</span>,
 					]
 				case "use_mcp_server":
-					const mcpServerUse = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
+					// A payload that does not parse renders the fallback row, which has no header.
+					if (!mcpServerUse?.ok) {
+						return [null, null]
+					}
 					return [
 						isMcpServerResponding ? (
 							<ProgressIndicator />
@@ -381,8 +397,8 @@ const ChatRowContent = memo(
 							<span className="codicon codicon-server text-foreground mb-[-1.5px]" />
 						),
 						<span className="ph-no-capture font-bold text-foreground break-words">
-							PlinyCode wants to {mcpServerUse.type === "use_mcp_tool" ? "use a tool" : "access a resource"} on the{" "}
-							<code className="break-all">{mcpServerUse.serverName}</code> MCP server:
+							PlinyCode wants to {mcpServerUse.value.type === "use_mcp_tool" ? "use a tool" : "access a resource"}{" "}
+							on the <code className="break-all">{mcpServerUse.value.serverName}</code> MCP server:
 						</span>,
 					]
 				case "api_req_started":
@@ -397,28 +413,21 @@ const ChatRowContent = memo(
 				default:
 					return [null, null]
 			}
-		}, [type, isMcpServerResponding, message.text])
+		}, [type, isMcpServerResponding, mcpServerUse])
 
-		const tool = useMemo(() => {
+		const toolPayload = useMemo(() => {
 			if (message.ask === "tool" || message.say === "tool") {
-				return JSON.parse(message.text || "{}") as ClineSayTool
+				return parsePayloadText(message.text, clineSayToolPayload)
 			}
 			return null
 		}, [message.ask, message.say, message.text])
+		const tool = toolPayload?.ok ? toolPayload.value : null
 
 		const conditionalRulesInfo = useMemo(() => {
 			if (message.say !== "conditional_rules_applied" || !message.text) return null
-			try {
-				const parsed = JSON.parse(message.text) as unknown
-				if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as any).rules)) {
-					return null
-				}
-				return parsed as {
-					rules: Array<{ name: string; matchedConditions: Record<string, string[]> }>
-				}
-			} catch {
-				return null
-			}
+			// A payload that does not parse falls through to the plain-text rendering below.
+			const parsed = parsePayloadText(message.text, conditionalRulesPayload)
+			return parsed.ok ? parsed.value : null
 		}, [message.say, message.text])
 
 		// Helper function to check if file is an image
@@ -436,6 +445,10 @@ const ChatRowContent = memo(
 					<span className="ph-no-capture break-words whitespace-pre-wrap">{names}</span>
 				</div>
 			)
+		}
+
+		if (toolPayload && !toolPayload.ok) {
+			return <UndisplayableMessageRow error={toolPayload.error} message={message} />
 		}
 
 		if (tool) {
@@ -1010,7 +1023,10 @@ const ChatRowContent = memo(
 		}
 
 		if (message.ask === "use_mcp_server" || message.say === "use_mcp_server") {
-			const useMcpServer = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
+			if (!mcpServerUse?.ok) {
+				return <UndisplayableMessageRow error={mcpServerUse?.error ?? "use_mcp_server: no payload"} message={message} />
+			}
+			const useMcpServer = mcpServerUse.value
 			const server = mcpServers.find((server) => server.name === useMcpServer.serverName)
 			return (
 				<div>
@@ -1076,6 +1092,9 @@ const ChatRowContent = memo(
 			case "say":
 				switch (message.say) {
 					case "api_req_started":
+						if (apiReqInfo && !apiReqInfo.ok) {
+							return <UndisplayableMessageRow error={apiReqInfo.error} message={message} />
+						}
 						return (
 							<RequestStartRow
 								apiReqStreamingFailedMessage={apiReqStreamingFailedMessage}
@@ -1183,18 +1202,22 @@ const ChatRowContent = memo(
 								text={message.text}
 							/>
 						)
-					case "user_feedback_diff":
-						const tool = JSON.parse(message.text || "{}") as ClineSayTool
+					case "user_feedback_diff": {
+						const feedbackTool = parseSayPayload(message, clineSayToolPayload)
+						if (!feedbackTool.ok) {
+							return <UndisplayableMessageRow error={feedbackTool.error} message={message} />
+						}
 						return (
 							<div className="w-full -mt-2.5">
 								<CodeAccordian
-									diff={tool.diff!}
+									diff={feedbackTool.value.diff!}
 									isExpanded={isExpanded}
 									isFeedback={true}
 									onToggleExpand={handleToggle}
 								/>
 							</div>
 						)
+					}
 					case "error":
 						return <ErrorRow errorType="error" message={message} />
 					case "diff_error":
@@ -1364,12 +1387,12 @@ const ChatRowContent = memo(
 						let question: string | undefined
 						let options: string[] | undefined
 						let selected: string | undefined
-						try {
-							const parsedMessage = JSON.parse(message.text || "{}") as ClineAskQuestion
-							question = parsedMessage.question
-							options = parsedMessage.options
-							selected = parsedMessage.selected
-						} catch (_e) {
+						const parsedQuestion = parseSayPayload(message, askQuestionPayload)
+						if (parsedQuestion.ok) {
+							question = parsedQuestion.value.question
+							options = parsedQuestion.value.options
+							selected = parsedQuestion.value.selected
+						} else {
 							// legacy messages would pass question directly
 							question = message.text
 						}
@@ -1450,12 +1473,12 @@ const ChatRowContent = memo(
 						let response: string | undefined
 						let options: string[] | undefined
 						let selected: string | undefined
-						try {
-							const parsedMessage = JSON.parse(message.text || "{}") as ClinePlanModeResponse
-							response = parsedMessage.response
-							options = parsedMessage.options
-							selected = parsedMessage.selected
-						} catch (_e) {
+						const parsedResponse = parseSayPayload(message, planModeResponsePayload)
+						if (parsedResponse.ok) {
+							response = parsedResponse.value.response
+							options = parsedResponse.value.options
+							selected = parsedResponse.value.selected
+						} else {
 							// legacy messages would pass response directly
 							response = message.text
 						}
