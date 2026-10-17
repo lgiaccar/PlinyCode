@@ -202,6 +202,35 @@ describe("plan-mode command-guard extension", () => {
 		expect(result?.skip).toBe(true);
 	});
 
+	it("rejects rename_symbol, whichever file names the symbol", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		for (const path of ["src/app.ts", "plans/x/PLAN.md"]) {
+			const result = await runBeforeTool(
+				extension,
+				makeContext("rename_symbol", {
+					path,
+					symbol: "foo",
+					new_name: "bar",
+				}),
+			);
+
+			expect(result?.skip).toBe(true);
+			expect(result?.stop).toBeUndefined();
+			expect(result?.reason).toContain("PLAN MODE");
+			expect(result?.reason).toContain("rename_preview");
+		}
+		expect(
+			await runBeforeTool(
+				extension,
+				makeContext("rename_preview", {
+					path: "src/app.ts",
+					symbol: "foo",
+					new_name: "bar",
+				}),
+			),
+		).toBeUndefined();
+	});
+
 	it("ignores other tools", async () => {
 		const extension = createPlanModeCommandGuardExtension();
 		const result = await runBeforeTool(
@@ -243,6 +272,21 @@ describe("ask-mode command-guard extension", () => {
 			expect(result?.reason).toContain("ASK MODE");
 			expect(result?.reason).toContain(`\`${path}\``);
 		}
+	});
+
+	it("rejects rename_symbol and names the file", async () => {
+		const result = await runBeforeTool(
+			createAskModeCommandGuardExtension(),
+			makeContext("rename_symbol", {
+				path: "src/app.ts",
+				symbol: "foo",
+				new_name: "bar",
+			}),
+		);
+
+		expect(result?.skip).toBe(true);
+		expect(result?.reason).toContain("ASK MODE");
+		expect(result?.reason).toContain("`src/app.ts`");
 	});
 
 	it("rejects apply_patch and names the first file it touches", async () => {
@@ -299,6 +343,7 @@ describe("off-the-record tool guard", () => {
 	it("rejects file writes, markdown included", () => {
 		for (const [tool, input] of [
 			["editor", { path: "README.md", new_text: "x" }],
+			["rename_symbol", { path: "a.ts", symbol: "foo", new_name: "bar" }],
 			[
 				"apply_patch",
 				{ input: "*** Begin Patch\n*** Add File: a.ts\n+x\n*** End Patch" },

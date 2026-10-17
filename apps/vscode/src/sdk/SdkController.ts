@@ -52,6 +52,7 @@ import { checkAdvisorBudget } from "./advisor/advisor-budget"
 import type { AdvisorUsage } from "./advisor/advisor-tool"
 import { CiRunPolicies, type CiRunPolicy, decideCiTool } from "./ci-run-policy"
 import { buildStartSessionInput } from "./cline-session-factory"
+import { describeRenameForApproval } from "./code-intel/code-intel-tools"
 import { type ConversationContext, createConversationContext } from "./context"
 import { createHookStatusRows } from "./hook-status-rows"
 import { createMemoryServices, type MemoryServices } from "./memory"
@@ -489,6 +490,14 @@ export class Controller {
 			setTurnPhase: (phase, anchorTs) => this.turnStateTracker.set(phase, anchorTs),
 			// Open the diff editor preview before the approval buttons render.
 			onToolApprovalAsk: (request) => this.diffEdits.openForApproval(request.toolCallId, request.toolName, request.input),
+			// A rename's input names one symbol; its approval shows the files and lines it edits.
+			describeToolApproval: async (request) =>
+				request.toolName === "rename_symbol" && isCodeIntelEnabled()
+					? describeRenameForApproval(
+							{ cwd: await this.getWorkspaceRoot(), source: createVscodeCodeIntelSource() },
+							request.input,
+						)
+					: undefined,
 			recordApprovedToolMessage: (toolCallId, messageTs) =>
 				this.messageTranslatorState.recordApprovedToolMessageTs(toolCallId, messageTs),
 			recordDeniedToolApproval: (toolCallId, toolName, reason) => {
@@ -539,6 +548,7 @@ export class Controller {
 			foregroundCommands: this.foregroundCommands,
 			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
+			beginEditProblemCheck: (files, cwd) => this.diffEdits.beginExternalEditCheck(files, cwd),
 			getWebSearch: () => createVscodeWebSearchSetup(),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites

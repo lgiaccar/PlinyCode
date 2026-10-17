@@ -1,6 +1,6 @@
 # New problems after an edit
 
-When the `editor` or `apply_patch` tool writes a file, the tool result the model receives also lists the errors VS Code reports for that file that were not there before the edit. The model learns about a type or syntax error it introduced in the same turn, without the user mentioning `@problems`.
+When the `editor` or `apply_patch` tool writes a file, or `rename_symbol` applies a rename, the tool result the model receives also lists the errors VS Code reports for that file that were not there before the edit. The model learns about a type or syntax error it introduced in the same turn, without the user mentioning `@problems`.
 
 ```
 Edited src/a.ts
@@ -35,7 +35,7 @@ The setting `plinycode.edits.reportNewProblems` (default on) turns it off.
 
 - [edit-problems.ts](../apps/vscode/src/sdk/edit-problems.ts): `EditProblemsReporter`, which records the errors before an edit, waits after it and formats the report. It sees the editor only through the `EditDiagnosticsSource` interface.
 - [edit-diagnostics.ts](../apps/vscode/src/hosts/vscode/edit-diagnostics.ts): the VS Code implementation of that interface (`languages.getDiagnostics` for one file and for the whole window, `onDidChangeDiagnostics`, the open documents and tabs) and the setting.
-- [sdk-diff-edit-coordinator.ts](../apps/vscode/src/sdk/sdk-diff-edit-coordinator.ts): `executeEditorTool` and `executeApplyPatchTool` start a check before the disk write and append the report to the executor's result. `SdkController` passes the VS Code source in when it builds the coordinator.
+- [sdk-diff-edit-coordinator.ts](../apps/vscode/src/sdk/sdk-diff-edit-coordinator.ts): `executeEditorTool` and `executeApplyPatchTool` start a check before the disk write and append the report to the executor's result. `SdkController` passes the VS Code source in when it builds the coordinator. `beginExternalEditCheck` starts the same check for `rename_symbol`, which applies a language server's rename through `vscode.workspace.applyEdit` instead of an executor: every file the rename edits counts as an edited file ([agent-tools.md](agent-tools.md#renaming-rename_symbol)).
 
 ## Waiting for the language server
 

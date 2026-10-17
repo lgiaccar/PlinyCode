@@ -5,7 +5,7 @@
  */
 
 import * as path from "path"
-import type { CodeDiagnostic, CodeHover, CodeLocation, CodeSymbol, CodeTextEdit } from "./code-intel-source"
+import type { CodeDiagnostic, CodeFileDiagnostics, CodeHover, CodeLocation, CodeSymbol, CodeTextEdit } from "./code-intel-source"
 
 /** How many result lines a navigation answer shows before summarising the rest. */
 export const MAX_RESULT_LINES = 30
@@ -17,6 +17,10 @@ export const MAX_RENAME_FILES = 20
 export const MAX_RENAME_LINES_PER_FILE = 3
 const MAX_DIAGNOSTIC_LINES = 20
 const MAX_DIAGNOSTIC_CHARS = 200
+/** How many files a workspace-wide problems list shows. */
+const MAX_WORKSPACE_ERROR_FILES = 10
+/** How many errors a workspace-wide problems list shows per file. */
+const MAX_WORKSPACE_ERRORS_PER_FILE = 5
 /** How many symbols a workspace-wide lookup shows. */
 const MAX_WORKSPACE_SYMBOLS = 40
 /** How many outline entries a single file shows. */
@@ -254,6 +258,35 @@ export function formatDiagnostics(diagnostics: readonly CodeDiagnostic[], max = 
 	})
 	if (sorted.length > max) {
 		lines.push(`+${sorted.length - max} more`)
+	}
+	return lines
+}
+
+/**
+ * Errors across the workspace, grouped by file: the files with the most errors
+ * first (ties in path order), each as `path (N errors)` followed by its first
+ * errors indented under it and `  +N more`, then `+N more files with M errors`
+ * for the files that do not fit.
+ */
+export function formatWorkspaceErrors(
+	files: readonly CodeFileDiagnostics[],
+	cwd: string,
+	maxFiles = MAX_WORKSPACE_ERROR_FILES,
+	maxPerFile = MAX_WORKSPACE_ERRORS_PER_FILE,
+): string[] {
+	const sorted = files
+		.filter((file) => file.diagnostics.length > 0)
+		.map((file) => ({ ...file, shown: displayPath(file.path, cwd) }))
+		.sort((a, b) => b.diagnostics.length - a.diagnostics.length || a.shown.localeCompare(b.shown))
+	const lines: string[] = []
+	for (const file of sorted.slice(0, maxFiles)) {
+		lines.push(`${file.shown} (${countOf(file.diagnostics.length, "error")})`)
+		lines.push(...formatDiagnostics(file.diagnostics, maxPerFile).map((line) => `  ${line}`))
+	}
+	const rest = sorted.slice(maxFiles)
+	if (rest.length > 0) {
+		const errors = rest.reduce((total, file) => total + file.diagnostics.length, 0)
+		lines.push(`+${countOf(rest.length, "more file")} with ${countOf(errors, "error")}`)
 	}
 	return lines
 }

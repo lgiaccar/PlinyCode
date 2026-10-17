@@ -16,7 +16,7 @@ The rule is enforced in three places in the engine:
 
 - **The tool preset.** The `ask` preset in [presets.ts](../sdk/packages/core/src/extensions/tools/presets.ts) leaves the `editor` and `apply_patch` tools out, so the model is not offered a way to write.
 - **The ask-mode guard.** `createAskModeCommandGuardExtension` in [command-guard-extension.ts](../sdk/packages/core/src/extensions/tools/command-guard-extension.ts) is a `beforeTool` hook that the runtime builder registers for ask-mode sessions, sub-agents included. It rejects:
-  - every `editor` and `apply_patch` call, markdown files included, in case a host or a sub-agent still exposes one;
+  - every `editor` and `apply_patch` call, markdown files included, in case a host or a sub-agent still exposes one, and every `rename_symbol` call (the extension's rename tool, which it also leaves out of ask-mode sessions);
   - `run_commands` calls on the file-editing blacklist in [command-guard.ts](../sdk/packages/core/src/extensions/tools/command-guard.ts), the same list plan mode uses.
 - **The prompt.** `ASK_MODE_INSTRUCTIONS` in [cline.ts](../sdk/packages/shared/src/prompt/cline.ts) tells the model that it is answering a question, that edits are blocked, and to ask the user to "toggle to Agent mode" when a change should be applied. The chat renders those words, and the former "to Act mode" in older conversations, as a link that switches to Agent mode.
 

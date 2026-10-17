@@ -1,5 +1,5 @@
 import { createMcpTools } from "@plinycode/core"
-import type { AgentTool, AgentToolContext } from "@plinycode/shared"
+import type { AgentMode, AgentTool, AgentToolContext } from "@plinycode/shared"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { getRunningBuiltinMcpSources } from "@/services/devops-mcp/builtin-mcp-registry"
 import type { McpHub } from "@/services/mcp/McpHub"
@@ -7,6 +7,7 @@ import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
 import { Logger } from "@/shared/services/Logger"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import { createCodeIntelTools } from "./code-intel/code-intel-tools"
+import type { EditedFile, EditProblemCheck } from "./edit-problems"
 import type { ProcessRegistry } from "./processes/process-registry"
 import { createProcessTools } from "./processes/process-tools"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
@@ -73,10 +74,18 @@ interface VscodeExtraToolsOptions {
 	 */
 	forSubAgents?: boolean
 	/**
-	 * The window's language servers, for `find_symbol`, `code_navigate` and `rename_preview`.
-	 * Absent when the user turned code intelligence off (`plinycode.codeIntel.enabled`).
+	 * The window's language servers, for `find_symbol`, `code_navigate`, `rename_preview`
+	 * and `rename_symbol`. Absent when the user turned code intelligence off
+	 * (`plinycode.codeIntel.enabled`).
 	 */
 	codeIntel?: CodeIntelSource
+	/** The new-problems check `rename_symbol` runs around its edit, as the edit tools do. */
+	beginEditProblemCheck?: (files: EditedFile[], cwd: string) => EditProblemCheck | undefined
+	/**
+	 * The session's mode. Plan and ask mode write no source file, so they do not
+	 * get `rename_symbol` (the engine's mode guards would reject it anyway).
+	 */
+	mode?: AgentMode
 	/**
 	 * The window's background processes. With it, `run_commands` registers the
 	 * commands it hands over or starts with `background: true`, and the
@@ -186,7 +195,14 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	// Definitions, references, outlines and types from the language servers,
 	// so the model navigates code instead of grepping for it (docs/agent-tools.md).
 	if (options?.codeIntel) {
-		tools.push(...createCodeIntelTools({ cwd: options.cwd ?? process.cwd(), source: options.codeIntel }))
+		tools.push(
+			...createCodeIntelTools({
+				cwd: options.cwd ?? process.cwd(),
+				source: options.codeIntel,
+				allowEdits: options.mode !== "plan" && options.mode !== "ask",
+				beginEditCheck: options.beginEditProblemCheck,
+			}),
+		)
 	}
 
 	// A web search the extension runs itself, for providers without a native one

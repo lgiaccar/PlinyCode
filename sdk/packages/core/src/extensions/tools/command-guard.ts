@@ -593,3 +593,15 @@ export function formatPlanModeBlockedWriteError(
 		"Do not change source, config, or other files; put that change in the plan so it can run after the user switches to act mode."
 	);
 }
+
+/**
+ * Tool error returned in place of a `rename_symbol` call in plan mode: a
+ * rename edits source files, whichever file names the symbol.
+ */
+export function formatPlanModeBlockedRenameError(): string {
+	return (
+		"Rename rejected: nothing was changed. " +
+		"You are in PLAN MODE — a rename edits source files, and only markdown plan files (.md) can be written. " +
+		"Use rename_preview to see the rename's reach, and put the rename in the plan so it can run after the user switches to act mode."
+	);
+}

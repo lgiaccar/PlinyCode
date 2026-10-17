@@ -9,7 +9,9 @@
  *   - the run's own successful `editor` / `apply_patch` calls, for workspaces
  *     without checkpoints (not a git repository, checkpoints switched off).
  *     These are the edits as the model wrote them: no line numbers, and an
- *     edit that a later one overwrote still shows.
+ *     edit that a later one overwrote still shows. A `rename_symbol` call
+ *     counts as an edit but has no text to show here: its input names a
+ *     symbol, not the lines the language server changed.
  *
  * Kept free of I/O so the skip rules and the size cap can be tested directly.
  */
@@ -19,7 +21,7 @@ import type { AgentMessage, AgentToolCallPart } from "@plinycode/shared"
 import { diffLines, structuredPatch } from "diff"
 
 /** Tools whose successful call means the run changed a file. */
-const EDIT_TOOLS = new Set(["editor", "apply_patch"])
+const EDIT_TOOLS = new Set(["editor", "apply_patch", "rename_symbol"])
 
 /** About 6k tokens: room for a real change, small enough for every free model and a quick answer. */
 export const REVIEW_DIFF_MAX_CHARS = 24_000
@@ -228,6 +230,9 @@ export function changesFromToolCalls(messages: readonly AgentMessage[], cwd?: st
 	}
 
 	for (const edit of successfulEdits(messages)) {
+		if (edit.toolName === "rename_symbol") {
+			continue
+		}
 		if (edit.toolName === "editor") {
 			const input = edit.input && typeof edit.input === "object" ? (edit.input as Record<string, unknown>) : undefined
 			if (!input || typeof input.path !== "string") {

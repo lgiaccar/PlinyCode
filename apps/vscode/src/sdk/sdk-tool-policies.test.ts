@@ -1,6 +1,6 @@
 import { DEFAULT_AUTO_APPROVAL_SETTINGS } from "@shared/AutoApprovalSettings"
 import { describe, expect, it } from "vitest"
-import { buildToolPolicies, isSubAgentDeniedTool, isSubAgentTool, isToolAutoApproved } from "./sdk-tool-policies"
+import { buildToolPolicies, isEditTool, isSubAgentDeniedTool, isSubAgentTool, isToolAutoApproved } from "./sdk-tool-policies"
 
 describe("sub-agent tools", () => {
 	it("follows the Delegate to sub-agents toggle, on by default and for settings saved before it existed", () => {
@@ -59,6 +59,19 @@ describe("isToolAutoApproved", () => {
 		const policies = buildToolPolicies(settings)
 		expect(policies.save_memory).toEqual({ autoApprove: false })
 		expect(policies.search_conversations).toEqual({ autoApprove: false })
+	})
+
+	it("approves rename_symbol like a file edit and rename_preview like a file read", () => {
+		const reads = {
+			...DEFAULT_AUTO_APPROVAL_SETTINGS,
+			actions: { ...DEFAULT_AUTO_APPROVAL_SETTINGS.actions, readFiles: true, editFiles: false },
+		}
+		expect(isToolAutoApproved("rename_symbol", reads)).toBe(false)
+		expect(isToolAutoApproved("rename_preview", reads)).toBe(true)
+		const edits = { ...reads, actions: { ...reads.actions, readFiles: false, editFiles: true } }
+		expect(isToolAutoApproved("rename_symbol", edits)).toBe(true)
+		expect(isEditTool("rename_symbol")).toBe(true)
+		expect(buildToolPolicies(reads).rename_symbol).toEqual({ autoApprove: false })
 	})
 
 	it("approves listing and reading background processes like file reads, and stopping one like a command", () => {

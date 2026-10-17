@@ -80,6 +80,12 @@ interface SdkInteractionCoordinatorOptions {
 	 */
 	onToolApprovalAsk?: (request: ToolApprovalRequest) => Promise<void>
 	/**
+	 * Text to show in a manually-approved tool's ask, for a tool whose input alone
+	 * does not tell the user what approving does (`rename_symbol`: the files and
+	 * lines the rename edits). Undefined, or a failure, shows the plain ask.
+	 */
+	describeToolApproval?: (request: ToolApprovalRequest) => Promise<string | undefined>
+	/**
 	 * How the chat names the agent behind a request ("sub-agent 2"), or
 	 * undefined for the root agent. A sub-agent's approval ask is preceded by
 	 * a row saying who asks, since its own events never reach the chat.
@@ -188,6 +194,12 @@ export class SdkInteractionCoordinator {
 		} catch (error) {
 			Logger.warn(`[SdkController] onToolApprovalAsk failed; showing plain approval ask: ${error}`)
 		}
+		let description: string | undefined
+		try {
+			description = await this.options.describeToolApproval?.(request)
+		} catch (error) {
+			Logger.warn(`[SdkController] describeToolApproval failed; showing plain approval ask: ${error}`)
+		}
 
 		const agentLabel = this.options.describeAgent?.(request.agentId)
 		const whoAsks: ClineMessage[] = agentLabel
@@ -206,6 +218,7 @@ export class SdkInteractionCoordinator {
 			request.input,
 			this.nextMessageTs(),
 			this.options.getCwd?.(),
+			description,
 		)
 
 		this.options.messages.appendAndEmit([...whoAsks, toolAskMessage], {

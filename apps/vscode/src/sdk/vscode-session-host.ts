@@ -51,6 +51,7 @@ import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import { getBinaryLocation } from "@/utils/fs"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
+import type { EditedFile, EditProblemCheck } from "./edit-problems"
 import type { HookStatusRowListener } from "./hook-status-rows"
 import type { ProcessRegistry } from "./processes/process-registry"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
@@ -98,12 +99,14 @@ interface VscodeSessionHostOptions {
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/**
-	 * The language servers behind `find_symbol`, `code_navigate` and
-	 * `rename_preview`, read when a
+	 * The language servers behind `find_symbol`, `code_navigate`,
+	 * `rename_preview` and `rename_symbol`, read when a
 	 * session starts so the `plinycode.codeIntel.enabled` setting applies to the
 	 * next conversation. Undefined turns the tools off.
 	 */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/** The new-problems check `rename_symbol` runs around its edit (edit-problems.ts). */
+	beginEditProblemCheck?: (files: EditedFile[], cwd: string) => EditProblemCheck | undefined
 	/**
 	 * The search backend behind `web_search`, read when a session starts so the
 	 * `plinycode.webSearch.*` settings apply to the next conversation. Undefined
@@ -184,6 +187,8 @@ export class VscodeSessionHost implements SdkSessionHost {
 				vscodeTerminalExecutionMode,
 				foregroundCommands: options.foregroundCommands,
 				codeIntel,
+				beginEditProblemCheck: options.beginEditProblemCheck,
+				mode: input.config.mode,
 				webSearch,
 				providerId,
 				modelId,
@@ -199,6 +204,8 @@ export class VscodeSessionHost implements SdkSessionHost {
 					vscodeTerminalExecutionMode,
 					forSubAgents: true,
 					codeIntel,
+					beginEditProblemCheck: options.beginEditProblemCheck,
+					mode: input.config.mode,
 					webSearch,
 					providerId,
 					modelId,

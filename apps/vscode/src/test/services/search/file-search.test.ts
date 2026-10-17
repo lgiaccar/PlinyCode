@@ -336,6 +336,48 @@ describe("File Search", () => {
 			should(result.items).containDeep([{ path: expectedPath, type: "file", label: "main.ts" }])
 		})
 
+		it("falls back to ripgrep when the host index fails for another reason", async () => {
+			sandbox.stub(HostProvider.window, "getOpenTabs").resolves({ paths: [] } as any)
+			sandbox.stub(HostProvider.workspace, "searchWorkspaceItems").rejects(new Error("findFiles timed out after 5000 ms"))
+			spawnStub.returns({
+				stdout: Readable.from(["/workspace/src/main.ts\n"]),
+				stderr: Readable.from([]),
+				on: function (event: string, callback: (code: number) => void) {
+					if (event === "exit") {
+						setImmediate(() => callback(0))
+					}
+					return this
+				},
+				kill: () => {},
+			} as unknown as actualChildProcess.ChildProcess)
+
+			const result = await fileSearch.searchWorkspaceFiles("main", "/workspace", 20)
+
+			should(result.source).equal("ripgrep")
+			should(result.items.map((item) => item.label)).containEql("main.ts")
+		})
+
+		it("keeps a host item whose label names the symbol it declares, though its file name does not match", async () => {
+			sandbox.stub(HostProvider.window, "getOpenTabs").resolves({ paths: [] } as any)
+			sandbox.stub(HostProvider.workspace, "searchWorkspaceItems").resolves(
+				SearchWorkspaceItemsResponse.create({
+					items: [
+						{
+							path: "src/search/file-search.ts",
+							type: SearchWorkspaceItemsRequest_SearchItemType.FILE,
+							label: "src/search/file-search.ts (searchWorkspaceFiles)",
+						},
+						{ path: "src/other.ts", type: SearchWorkspaceItemsRequest_SearchItemType.FILE, label: "other.ts" },
+					],
+				}),
+			)
+
+			const result = await fileSearch.searchWorkspaceFiles("searchWorkspaceFiles", "/workspace", 20)
+
+			should(result.source).equal("host_index")
+			should(result.items.map((item) => item.path)).eql(["src/search/file-search.ts"])
+		})
+
 		it("should apply fuzzy matching for non-empty query", async () => {
 			const mockItems: { path: string; type: "file" | "folder"; label?: string }[] = [
 				{ path: "file1.txt", type: "file", label: "file1.txt" },

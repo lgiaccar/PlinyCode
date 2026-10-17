@@ -1,4 +1,4 @@
-import type { AgentTool } from "@plinycode/shared"
+import type { AgentMode, AgentTool } from "@plinycode/shared"
 import sinon from "sinon"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { registerBuiltinMcpSource, withDefaultArgument } from "@/services/devops-mcp/builtin-mcp-registry"
@@ -16,6 +16,7 @@ vi.mock("@plinycode/core", async () => {
 	}
 })
 
+import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import { createVscodeExtraTools, McpHubToolProvider } from "./vscode-runtime-builder"
 
 describe("McpHubToolProvider", () => {
@@ -100,6 +101,22 @@ describe("createVscodeExtraTools with a built-in server", () => {
 		})
 		expect((await names("/github/wt"))[0]).toBe("plinycode-devops__for_cwd")
 		expect(providerFor).toHaveBeenCalledWith("/github/wt")
+	})
+})
+
+describe("createVscodeExtraTools with code intelligence", () => {
+	const mcpHub = { getServers: () => [] } as never
+	const codeIntel = {} as CodeIntelSource
+
+	it("offers rename_symbol outside plan and ask mode only, since those write no source file", async () => {
+		const renameTools = async (mode?: AgentMode) =>
+			(await createVscodeExtraTools(mcpHub, { cwd: "/repo", codeIntel, mode }))
+				.map((tool) => tool.name)
+				.filter((name) => name.startsWith("rename_"))
+		expect(await renameTools("act")).toEqual(["rename_preview", "rename_symbol"])
+		expect(await renameTools(undefined)).toEqual(["rename_preview", "rename_symbol"])
+		expect(await renameTools("plan")).toEqual(["rename_preview"])
+		expect(await renameTools("ask")).toEqual(["rename_preview"])
 	})
 })
 
