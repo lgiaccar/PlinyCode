@@ -126,6 +126,7 @@ run in a PlinyCode terminal, and the output is read through shell integration
   Their output goes to the log file, not to a terminal. Without the argument
   nothing changes. A background process still running after 24 hours is
   stopped.
+- **Long output is digested.** Output up to 16,000 characters (`COMMAND_DIGEST_THRESHOLD_CHARS`) comes back whole. Longer output, a full build or test log, is saved to a temp file and replaced by a digest of about 13,000 characters at most (`digestCommandOutput` in `output-limits.ts`): the first lines, each error or failure line from the middle with its line number (compiler codes such as `C2512` or `TS2322`, `FAILED`, `Traceback`, `npm ERR!`; lines like `0 errors` are skipped), and the last lines, where the verdict usually is. The notice names the file, and the model reads it with `read_files` line ranges or searches it. Every later request re-sends tool results, so a 48,000-character build log used to cost its full size on each call for the rest of the run.
 - **Wrapped lines.** On Windows the output passes through ConPTY. When a
   line wider than the terminal scrolls off the bottom row, ConPTY breaks it
   with `\r\n`, moves the cursor back to the end of the row and writes that
