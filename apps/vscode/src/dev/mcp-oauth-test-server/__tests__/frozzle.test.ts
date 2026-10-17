@@ -1,5 +1,4 @@
-import { describe, it } from "mocha"
-import "should"
+import { describe, expect, it } from "bun:test"
 import { frozzle } from "../server"
 
 // The `frozzle` tool's value is that its output can't be guessed without
@@ -7,19 +6,19 @@ import { frozzle } from "../server"
 // in sync. If you change frozzle(), update any eval fixtures that assert on it.
 describe("frozzle", () => {
 	it("reverses the string, swaps case, and wraps in guillemets", () => {
-		frozzle("Hello").should.equal("«OLLEh»")
+		expect(frozzle("Hello")).toBe("«OLLEh»")
 	})
 
 	it("leaves digits and spaces in place (only letter case is swapped)", () => {
-		frozzle("Frozzle Me 123").should.equal("«321 Em ELZZORf»")
+		expect(frozzle("Frozzle Me 123")).toBe("«321 Em ELZZORf»")
 	})
 
 	it("handles empty input", () => {
-		frozzle("").should.equal("«»")
+		expect(frozzle("")).toBe("«»")
 	})
 
 	it("swaps each letter's case independently", () => {
-		frozzle("MixedCase").should.equal("«ESAcDEXIm»")
+		expect(frozzle("MixedCase")).toBe("«ESAcDEXIm»")
 	})
 
 	it("is invertible: re-frozzling the inner content restores the original", () => {
@@ -27,6 +26,6 @@ describe("frozzle", () => {
 		// transform to the unwrapped result returns the original input.
 		const original = "AbCdef 99"
 		const inner = frozzle(original).slice(1, -1) // strip « »
-		frozzle(inner).should.equal(`«${original}»`)
+		expect(frozzle(inner)).toBe(`«${original}»`)
 	})
 })

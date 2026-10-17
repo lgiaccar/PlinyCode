@@ -3,16 +3,15 @@
 import { spawn } from "node:child_process"
 import path from "node:path"
 /**
- * Runner for the SDK-adapter + model-catalog `bun test` suites (the same set
- * `vitest.config.ts` covers; `test:vitest` runs them under vitest).
+ * Runs the vitest suites under `bun test` instead (bun maps `vitest` imports to
+ * `bun:test`). The file set is the one `vitest.config.ts` resolves, read from
+ * the config itself so the two runners cannot drift.
  *
  * Why a script instead of a bare `bun test <globs>`:
  *
- *  1. Curated include set. These suites are an explicit list (see
- *     INCLUDE_PATTERNS, kept in sync with `vitest.config.ts` `test.include`),
- *     not the whole tree, so the node-side unit and @vscode/test-cli suites are
- *     not pulled in. `bun test`'s positional args don't expand `**` the way we
- *     need, so we resolve the globs ourselves with bun's `Glob`.
+ *  1. Same include/exclude as vitest. `bun test`'s positional args don't expand
+ *     `**` the way we need, so we resolve the config's globs ourselves with bun's
+ *     `Glob` and drop the bun:test and mocha files vitest.exclude.json lists.
  *
  *  2. One process per file. `bun test` runs all files in a single process by
  *     default, so `mock.module(...)` registrations leak between files — suites
@@ -22,28 +21,27 @@ import path from "node:path"
  *     module registry.
  *
  * Usage:
- *   bun scripts/run-bun-tests.ts            # run the curated set, isolated
+ *   bun scripts/run-bun-tests.ts            # run the vitest set under bun, isolated
  *   bun scripts/run-bun-tests.ts --list     # print the resolved file list only
  */
 import { Glob } from "bun"
-
-// Mirror of vitest.config.ts `test.include`. Keep these in sync.
-const INCLUDE_PATTERNS = [
-	"src/sdk/**/*.test.ts",
-	"src/shared/model-catalog/provider-helpers.test.ts",
-	"src/core/controller/models/__tests__/providerCatalogHandlers.test.ts",
-	"src/core/controller/models/__tests__/resolveModelInfo.test.ts",
-	"src/core/controller/models/__tests__/providerCatalogSmoke.test.ts",
-]
+import picomatch from "picomatch"
+import vitestConfig from "../vitest.config"
 
 const projectRoot = path.resolve(import.meta.dir, "..")
 
 async function resolveFiles(): Promise<string[]> {
+	const include = vitestConfig.test?.include ?? []
+	const exclude = vitestConfig.test?.exclude ?? []
+	const excluded = exclude.length > 0 ? picomatch(exclude, { dot: true }) : () => false
 	const seen = new Set<string>()
-	for (const pattern of INCLUDE_PATTERNS) {
+	for (const pattern of include) {
 		const glob = new Glob(pattern)
 		for await (const match of glob.scan({ cwd: projectRoot, onlyFiles: true })) {
-			seen.add(match)
+			const normalized = match.split(path.sep).join("/")
+			if (!excluded(normalized)) {
+				seen.add(normalized)
+			}
 		}
 	}
 	return [...seen].sort()
