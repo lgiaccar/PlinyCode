@@ -39,6 +39,7 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
 	"searchFiles",
 	"findSymbol",
 	"codeNavigate",
+	"renamePreview",
 ])
 
 /**
@@ -50,6 +51,7 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
 const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set([
 	"find_symbol",
 	"code_navigate",
+	"rename_preview",
 	"process_list",
 	"process_output",
 	"process_kill",
@@ -167,6 +169,7 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *   find_files                         → listFilesRecursive
  *   find_symbol                        → findSymbol (regex: the query, path: the file for an outline)
  *   code_navigate                      → codeNavigate (action, regex: the symbol, path: the file)
+ *   rename_preview                     → renamePreview (regex: the symbol, newName, path: the file)
  *   process_list                       → processList
  *   process_output                     → processOutput (path: the process id)
  *   process_kill                       → processKill (path: the process id)
@@ -226,6 +229,15 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 				tool: "codeNavigate",
 				action: getStringField(parsedInput, "action") ?? "",
 				regex: getStringField(parsedInput, "symbol") ?? "",
+				path: getStringField(parsedInput, "path") ?? "",
+			}
+		}
+
+		case "rename_preview": {
+			return {
+				tool: "renamePreview",
+				regex: getStringField(parsedInput, "symbol") ?? "",
+				newName: getStringField(parsedInput, "new_name") ?? "",
 				path: getStringField(parsedInput, "path") ?? "",
 			}
 		}

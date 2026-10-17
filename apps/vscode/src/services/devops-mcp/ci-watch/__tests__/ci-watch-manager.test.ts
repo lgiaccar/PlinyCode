@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it } from "bun:test"
-import { CiWatchManager, type CiWatchRequest } from "../ci-watch-manager"
+import { CiWatchManager, type CiWatchRequest, type CiWatchRestoreOptions } from "../ci-watch-manager"
+import type { CiWatchTargetSpec } from "../ci-watch-source"
 import type { CiWatchSource } from "../ci-watcher"
-import { FakeClock, FakeHost, HEAD_A, run, SECOND } from "./fakes"
+import { FakeClock, FakeHost, HEAD_A, HEAD_B, MemoryStore, MINUTE, run, SECOND, savedRecord } from "./fakes"
 
 /** A source whose single run is already green, so a watch on it ends at its second poll. */
-function greenSource(polls = { count: 0 }): CiWatchSource {
+function greenSource(polls = { count: 0 }, head = HEAD_A): CiWatchSource {
 	return {
-		head: async () => HEAD_A,
+		head: async () => head,
 		runs: async () => {
 			polls.count++
-			return [run(1, "completed", "success")]
+			return [run(1, "completed", "success", head)]
 		},
 		report: async () => {
 			throw new Error("not used")
@@ -202,5 +203,203 @@ describe("CiWatchManager", () => {
 		expect(clock.pending).toBe(0)
 		await clock.advance(ONE_WATCH)
 		expect(host.delivered).toHaveLength(0)
+	})
+})
+
+describe("CiWatchManager with a store", () => {
+	const target = savedRecord().watch?.target as CiWatchTargetSpec
+	let clock: FakeClock
+	let host: FakeHost
+	let store: MemoryStore
+	let opened: { target: CiWatchTargetSpec; head: string }[]
+	let deleted: Set<string>
+
+	const manager = () => new CiWatchManager(host, { clock, retryMs: 10 * SECOND, maxRetries: 2, store })
+
+	/** Restores with a source that is green at HEAD_B, as if CI finished during the reload. */
+	const restoreOptions = (source = greenSource({ count: 0 }, HEAD_B)): CiWatchRestoreOptions => ({
+		exists: async (id) => !deleted.has(id),
+		openSource: async (spec, head) => {
+			opened.push({ target: spec, head })
+			return source
+		},
+	})
+
+	beforeEach(() => {
+		clock = new FakeClock()
+		host = new FakeHost()
+		store = new MemoryStore()
+		opened = []
+		deleted = new Set()
+	})
+
+	it("saves a watch with its target and state, and forgets it when it is cancelled", async () => {
+		const watching = manager()
+		watching.watch("c1", { ...request(), target })
+		await clock.advance(0)
+		expect(store.saved).toEqual([
+			{
+				conversationId: "c1",
+				watch: {
+					label: "PR #7 (feature → main)",
+					providerKind: "GitHub",
+					target,
+					until: "finished",
+					head: HEAD_A,
+					headSince: 0,
+					headMoves: [],
+					startedAt: 0,
+					deadline: 2 * 60 * MINUTE,
+				},
+			},
+		])
+		watching.cancel("c1")
+		await clock.advance(0)
+		expect(store.saved).toEqual([])
+	})
+
+	it("saves the new head when it moves", async () => {
+		manager().watch("c1", { ...request("PR #7", greenSource({ count: 0 }, HEAD_B)), target })
+		await clock.advance(30 * SECOND)
+		expect(store.saved[0].watch?.head).toBe(HEAD_B)
+		expect(store.saved[0].watch?.headSince).toBe(30 * SECOND)
+		expect(store.saved[0].watch?.headMoves).toEqual([{ from: HEAD_A, to: HEAD_B }])
+	})
+
+	it("does not save a watch it could not rebuild", async () => {
+		manager().watch("c1", request())
+		await clock.advance(0)
+		expect(store.saved).toEqual([])
+	})
+
+	it("resumes a saved watch from where it was, and reports when CI ends", async () => {
+		store.saved = [savedRecord("c1")]
+		await clock.advance(3 * MINUTE)
+		const restored = manager()
+		await restored.restore(restoreOptions())
+		expect(restored.watching("c1")).toBe("PR #7 (feature → main)")
+		// Nothing is shown in the chat for a resumed watch.
+		expect(host.rows).toEqual([])
+		// The source is built at the first poll, from the saved target and the last head seen.
+		expect(opened).toEqual([])
+
+		await clock.advance(ONE_WATCH)
+		expect(opened).toEqual([{ target, head: HEAD_B }])
+		expect(host.delivered).toHaveLength(1)
+		expect(host.delivered[0].prompt).toStartWith("[CI WATCHER] CI passed for PR #7 (feature → main) at bbbbbbbb")
+		// The head move seen before the reload is still in the report.
+		expect(host.delivered[0].prompt).toContain("The head moved while the watcher was waiting (aaaaaaaa → bbbbbbbb)")
+		// The saved wake-up count carried on: 2 before the reload, 3 now.
+		await clock.advance(0)
+		expect(store.saved).toEqual([{ conversationId: "c1", wakeUps: 3 }])
+	})
+
+	it("keeps the saved watch's deadline", async () => {
+		store.saved = [savedRecord("c1")]
+		await clock.advance(2 * 60 * MINUTE - 45 * SECOND)
+		const restored = manager()
+		const pending: CiWatchSource = { ...greenSource(), runs: async () => [run(1, "in_progress")] }
+		await restored.restore(restoreOptions(pending))
+		await clock.advance(2 * MINUTE)
+		expect(host.delivered).toHaveLength(1)
+		expect(host.delivered[0].prompt).toContain("after 2 hours: 1 still running. The watch has ended.")
+	})
+
+	it("reports a watch whose source cannot be rebuilt after its polls fail", async () => {
+		store.saved = [savedRecord("c1")]
+		const restored = manager()
+		await restored.restore({
+			exists: async () => true,
+			openSource: async () => {
+				throw new Error("The checkout at /work/repo is gone")
+			},
+		})
+		await clock.advance(10 * MINUTE)
+		expect(host.delivered).toHaveLength(1)
+		expect(host.delivered[0].prompt).toContain("The checkout at /work/repo is gone")
+	})
+
+	it("drops a watch that ran out of time during the reload, without a report", async () => {
+		store.saved = [savedRecord("c1")]
+		await clock.advance(3 * 60 * MINUTE)
+		const restored = manager()
+		await restored.restore(restoreOptions())
+		expect(restored.watching("c1")).toBeUndefined()
+		await clock.advance(10 * MINUTE)
+		expect(host.delivered).toHaveLength(0)
+		expect(host.notifications).toHaveLength(0)
+		expect(clock.pending).toBe(0)
+		expect(store.saved).toEqual([{ conversationId: "c1", wakeUps: 2 }])
+	})
+
+	it("drops everything about a conversation that was deleted", async () => {
+		const held = { headline: "CI failed.", prompt: "[CI WATCHER] CI failed." }
+		store.saved = [savedRecord("gone", { held }), savedRecord("kept")]
+		deleted.add("gone")
+		const restored = manager()
+		await restored.restore(restoreOptions())
+		expect(restored.watching("gone")).toBeUndefined()
+		expect(restored.watching("kept")).toBe("PR #7 (feature → main)")
+		restored.conversationOpened("gone")
+		await clock.advance(0)
+		expect(host.delivered).toHaveLength(0)
+		expect(store.saved.map((r) => r.conversationId)).toEqual(["kept"])
+	})
+
+	it("sends a held report when its conversation is opened after a restore", async () => {
+		const held = { headline: "CI failed.", prompt: "[CI WATCHER] CI failed for PR #7." }
+		store.saved = [{ conversationId: "c1", held }]
+		const restored = manager()
+		await restored.restore(restoreOptions())
+		expect(host.delivered).toHaveLength(0)
+		restored.conversationOpened("c1")
+		await clock.advance(0)
+		expect(host.delivered).toEqual([{ conversationId: "c1", prompt: held.prompt }])
+		expect(store.saved).toEqual([{ conversationId: "c1", wakeUps: 1 }])
+	})
+
+	it("saves a report that is still waiting for a busy conversation as held", async () => {
+		host.delivery = "busy"
+		manager().watch("c1", { ...request(), target })
+		await clock.advance(ONE_WATCH)
+		expect(store.saved).toEqual([
+			{ conversationId: "c1", held: { headline: expect.any(String), prompt: expect.stringContaining("CI passed") } },
+		])
+	})
+
+	it("keeps the saved watches when disposed, and forgets them when cleared", async () => {
+		const first = manager()
+		first.watch("c1", { ...request(), target })
+		await clock.advance(0)
+		first.dispose()
+		expect(clock.pending).toBe(0)
+		expect(store.saved).toHaveLength(1)
+
+		const second = manager()
+		await second.restore(restoreOptions())
+		expect(second.watching("c1")).toBe("PR #7 (feature → main)")
+		second.clear()
+		await clock.advance(0)
+		expect(store.saved).toEqual([])
+	})
+
+	it("lets a watch started while restoring win over the saved one", async () => {
+		store.saved = [savedRecord("c1")]
+		const restored = manager()
+		let release = () => {}
+		const done = restored.restore({
+			...restoreOptions(),
+			exists: () =>
+				new Promise<boolean>((resolve) => {
+					release = () => resolve(true)
+				}),
+		})
+		await clock.advance(0)
+		restored.watch("c1", { ...request("branch new"), target })
+		release()
+		await done
+		expect(restored.watching("c1")).toBe("branch new")
+		await clock.advance(0)
+		expect(store.saved.map((r) => r.watch?.label)).toEqual(["branch new"])
 	})
 })
