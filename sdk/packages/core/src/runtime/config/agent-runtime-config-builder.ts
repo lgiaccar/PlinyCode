@@ -69,6 +69,8 @@ export interface CreateAgentRuntimeConfigInput {
 		| undefined;
 	/** Seed messages (usually `session.conversation.getMessages()`). */
 	readonly initialMessages?: readonly AgentMessage[];
+	/** How many of the last `initialMessages` are this run's new input (the user message). */
+	readonly seededInputMessageCount?: number;
 	/** Notices the session raises mid-run (loop detection) for the model. */
 	readonly consumeSystemNotice?: AgentRuntimeConfig["consumeSystemNotice"];
 	/**
@@ -121,6 +123,9 @@ export function createAgentRuntimeConfig(
 		plugins: input.plugins,
 		logger: input.logger ?? agentConfig.logger,
 		initialMessages: input.initialMessages,
+		...(input.seededInputMessageCount
+			? { seededInputMessageCount: input.seededInputMessageCount }
+			: {}),
 		completionPolicy:
 			input.completionPolicy === null
 				? undefined

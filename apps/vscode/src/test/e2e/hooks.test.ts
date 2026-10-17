@@ -35,11 +35,8 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 		// Generous timeout: the mock streams word-by-word and CI runners can be slow.
 		await expect(sidebar.getByText("mock Cline API response")).toBeVisible({ timeout: 30_000 })
 
-		// The engine reports the hook run, which shows as a hook_status row.
-		await expect(sidebar.getByText("UserPromptSubmit").first()).toBeVisible({ timeout: 15_000 })
-
-		// UserPromptSubmit is not awaited by the run, so the marker can land
-		// after the response: poll for it.
+		// First half: the engine ran the hook file. UserPromptSubmit is not
+		// awaited by the run, so the marker can land after the response: poll for it.
 		let markerRaw: string | undefined
 		await expect
 			.poll(
@@ -47,9 +44,21 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 					markerRaw = await fs.readFile(markerPath, "utf-8").catch(() => undefined)
 					return markerRaw
 				},
-				{ message: "workspace hook should have written hook-ran.json into the workspace root", timeout: 15_000 },
+				{
+					message:
+						"the engine did not run the workspace hook: no hook-ran.json in the workspace root (hook not discovered, filtered out, or failed to start)",
+					timeout: 15_000,
+				},
 			)
 			.toBeDefined()
+
+		// Second half: the engine reported the run and the extension turned the
+		// report into a hook_status row naming the hook.
+		await expect(
+			sidebar.getByText("UserPromptSubmit").first(),
+			"the hook ran but no UserPromptSubmit hook_status row reached the chat",
+		).toBeVisible({ timeout: 15_000 })
+
 		const marker = JSON.parse(markerRaw ?? "{}")
 
 		// Normalize with realpath: macOS reports temp/workspace paths under

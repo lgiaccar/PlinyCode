@@ -605,6 +605,15 @@ export interface AgentRuntimeConfig {
 	plugins?: readonly AgentRuntimePlugin[];
 	logger?: BasicLogger;
 	initialMessages?: readonly AgentMessage[];
+	/**
+	 * How many of the last `initialMessages` are this run's input, added to
+	 * the transcript by the host before the run (SessionRuntime seeds the user
+	 * message and calls `run("")`). The first run announces them with
+	 * `message-added` after `run-started`, as it does for input passed to
+	 * `run()`, so `onEvent` hooks (the UserPromptSubmit hook file) see the
+	 * user's message.
+	 */
+	seededInputMessageCount?: number;
 	maxIterations?: number;
 	completionPolicy?: {
 		requireCompletionTool?: boolean;
