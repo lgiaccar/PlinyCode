@@ -28,7 +28,10 @@ import type {
 	PluginSetupContext,
 } from "../extensions/contribution-registry";
 import type { HookControl } from "../hooks/contracts";
-import type { ContextBreakdownTokens } from "../llms/context-breakdown";
+import type {
+	ContextBreakdownTokens,
+	ContextSourceTexts,
+} from "../llms/context-breakdown";
 import type { GeneratedMedia } from "../llms/media";
 import type { Message, MessageWithMetadata } from "../llms/messages";
 import type { ModelInfo } from "../llms/model-info";
@@ -856,6 +859,13 @@ export interface AgentConfig {
 	 * Hosts can use this to thread runtime-specific identifiers such as session IDs.
 	 */
 	toolContextMetadata?: Record<string, unknown>;
+	/**
+	 * Host-known sources of the request's context, read before each model
+	 * call for the usage report's context breakdown: the memory section in
+	 * the system prompt and the bodies a slash command pastes. The session
+	 * adds the rules it composed.
+	 */
+	contextSources?: () => ContextSourceTexts;
 	/** Execution guardrails and recovery settings. */
 	execution?: AgentExecutionConfig;
 

@@ -9,6 +9,7 @@ import UserMessage from "@/components/chat/UserMessage"
 import PlinyBudgetIndicator from "@/components/common/PlinyBudgetIndicator"
 import TaskTitleInput from "@/components/history/TaskTitleInput"
 import { getModeSpecificFields } from "@/components/settings/utils/providerUtils"
+import { updateSetting } from "@/components/settings/utils/settingsHandlers"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
 import { useProviderUsageCostDisplay } from "@/hooks/useProviderUsageCostDisplay"
@@ -78,7 +79,10 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		primaryRootIndex,
 		platform,
 		conversationSpendingLimit,
+		useAutoCondense,
+		compactionThreshold,
 	} = useExtensionState()
+	const setCompactionThreshold = useCallback((threshold: number) => updateSetting("compactionThreshold", threshold), [])
 
 	const [isRenaming, setIsRenaming] = useState(false)
 	const renamedTitle = currentTaskItem?.isRenamed ? currentTaskItem.task : undefined
@@ -257,17 +261,20 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						</div>
 
 						<ContextWindow
-							autoCompactThreshold={autoCompactThresholdFor(selectedModelInfo)}
+							autoCompactThreshold={autoCompactThresholdFor(selectedModelInfo, compactionThreshold)}
 							cacheReads={cacheReads}
 							cacheWrites={cacheWrites}
+							compactionThreshold={compactionThreshold}
 							contextBreakdown={contextBreakdown}
 							contextWindow={selectedModelInfo?.contextWindow}
 							hasEstimatedUsage={hasEstimatedUsage}
 							lastApiReqTotalTokens={lastApiReqTotalTokens}
+							maxInputTokens={selectedModelInfo?.maxInputTokens}
+							onCompactionThresholdChange={setCompactionThreshold}
 							onSendMessage={onSendMessage}
 							tokensIn={tokensIn}
 							tokensOut={tokensOut}
-							useAutoCondense={false} // Disable auto-condense configuration in UI for now
+							useAutoCondense={useAutoCondense !== false}
 						/>
 						<TokenUsagePanel
 							clineMessages={clineMessages}

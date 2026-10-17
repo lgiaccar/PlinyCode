@@ -156,6 +156,34 @@ export function expandSlashCommands(
 	return text
 }
 
+/** The bodies a slash command can paste into a user message, for the context breakdown. */
+export interface PastedCommandBodies {
+	/** Built-in commands (kind "skill"), the only skills pasted rather than served by the skills tool. */
+	skillTexts: string[]
+	workflowTexts: string[]
+}
+
+/**
+ * What {@link expandSlashCommands} can paste: every workflow body (a
+ * disabled one may still be in the history from before it was disabled)
+ * and the built-in skill bodies.
+ */
+export function pastedCommandBodies(commands: readonly AvailableRuntimeCommand[]): PastedCommandBodies {
+	const skillTexts: string[] = []
+	const workflowTexts: string[] = []
+	for (const command of commands) {
+		if (!command.instructions) {
+			continue
+		}
+		if (command.kind === "workflow") {
+			workflowTexts.push(command.instructions)
+		} else if (command.kind === "skill" && command.id.startsWith("builtin:")) {
+			skillTexts.push(command.instructions)
+		}
+	}
+	return { skillTexts, workflowTexts }
+}
+
 export interface BuildDisabledWorkflowNamesOptions {
 	/** Discovered workflow records from `listRecords("workflow")`. */
 	records: ReadonlyArray<WorkflowRecordRef>

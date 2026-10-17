@@ -1,6 +1,6 @@
 import type { AvailableRuntimeCommand } from "@plinycode/core"
 import { describe, expect, it } from "vitest"
-import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command-expansion"
+import { buildDisabledWorkflowNames, expandSlashCommands, pastedCommandBodies } from "./slash-command-expansion"
 
 function workflow(name: string, instructions: string): AvailableRuntimeCommand {
 	return { id: name, name, instructions, kind: "workflow" }
@@ -9,6 +9,25 @@ function workflow(name: string, instructions: string): AvailableRuntimeCommand {
 function skill(name: string, instructions: string): AvailableRuntimeCommand {
 	return { id: name, name, instructions, kind: "skill" }
 }
+
+describe("pastedCommandBodies", () => {
+	it("lists the workflow and built-in skill bodies, not the skills the skills tool serves", () => {
+		const builtin: AvailableRuntimeCommand = {
+			id: "builtin:deep-planning",
+			name: "deep-planning",
+			instructions: "Plan deeply.",
+			kind: "skill",
+		}
+		expect(
+			pastedCommandBodies([
+				workflow("release", "Run the release workflow."),
+				workflow("empty", ""),
+				skill("debug", "Use the debugging skill."),
+				builtin,
+			]),
+		).toEqual({ skillTexts: ["Plan deeply."], workflowTexts: ["Run the release workflow."] })
+	})
+})
 
 describe("expandSlashCommands", () => {
 	const commands = [workflow("release", "Run the release workflow."), skill("debug", "Use the debugging skill.")]

@@ -1,4 +1,8 @@
-import { estimateRequestInputTokens } from "@plinycode/shared";
+import {
+	CHARS_PER_TOKEN,
+	estimateRequestInputTokens,
+	tokenCalibration,
+} from "@plinycode/shared";
 import {
 	createSessionCompactionState,
 	projectSessionCompactionState,
@@ -218,6 +222,33 @@ function resolveAutoRequestTargetTokens(input: {
 	);
 }
 
+/** Lowest and highest share of the input limit the trigger can be set to. */
+const MIN_COMPACTION_THRESHOLD_RATIO = 0.1;
+const MAX_COMPACTION_THRESHOLD_RATIO = 0.95;
+
+/**
+ * The share of the input limit at which automatic compaction runs: the
+ * configured ratio (read now when it is a function), clamped, or
+ * COMPACTION_TRIGGER_RATIO.
+ */
+function resolveCompactionThresholdRatio(
+	configured: CoreCompactionConfig["thresholdRatio"],
+): number {
+	let value: number | undefined;
+	try {
+		value = typeof configured === "function" ? configured() : configured;
+	} catch {
+		value = undefined;
+	}
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return COMPACTION_TRIGGER_RATIO;
+	}
+	return Math.min(
+		MAX_COMPACTION_THRESHOLD_RATIO,
+		Math.max(MIN_COMPACTION_THRESHOLD_RATIO, value),
+	);
+}
+
 function translateRequestBudgetToMessages(
 	requestTokens: number,
 	overheadTokens: number,
@@ -305,19 +336,26 @@ export function createContextCompactionPrepareTurn(
 				maxInputTokens: context.model.info?.maxInputTokens,
 				contextWindow: context.model.info?.contextWindow,
 			}) ?? DEFAULT_MAX_INPUT_TOKENS;
-		// The char-based estimate under-counts dense content (disassembly, image
-		// dumps, minified sources). When the provider's actual count for the
-		// PREVIOUS request already exceeds our estimate for the (larger) current
-		// transcript, the estimator is demonstrably under-counting, so scale the
-		// whole budget down by that ratio. Scaling the budget rather than just the
-		// trigger keeps every downstream number — trigger, target and the
-		// projection's message costs — in the same estimate units while still
-		// corresponding to the provider's real limit; raising only the trigger
-		// would start a compaction that then retains too much and still overflows.
+		// Every number here is in estimate units (CHARS_PER_TOKEN characters per
+		// token). The provider's real limit is translated into those units by
+		// scaling the whole budget, rather than re-estimating each message at
+		// another ratio: trigger, target and the projection's message costs then
+		// stay in one unit while corresponding to the provider's real limit;
+		// raising only the trigger would start a compaction that then retains
+		// too much and still overflows.
 		//
-		// Deliberately conservative: it never loosens the budget, engages only on
-		// direct evidence of under-counting, and is capped so a tiny estimate
-		// cannot collapse the budget.
+		// Two ratios feed the scale, and the larger (the more conservative) wins:
+		// - calibrationFactor: real tokens per estimated token for this model,
+		//   learned from the counts providers reported on earlier calls
+		//   (tokenCalibration in @plinycode/shared, persisted by the host). 1 for
+		//   a model without enough observations. Below 1 it loosens the budget
+		//   for a model whose tokenizer packs more characters per token than 3.
+		// - underestimateFactor: the provider's actual count for the PREVIOUS
+		//   request over our estimate for the (larger) current transcript. Direct
+		//   evidence from this conversation that dense content (disassembly,
+		//   image dumps, minified sources) is under-counted, which the per-model
+		//   average lags behind.
+		// The scale is capped so a tiny estimate cannot collapse the budget.
 		const actualPreviousInputTokens =
 			typeof context.previousRequestInputTokens === "number" &&
 			context.previousRequestInputTokens > 0
@@ -325,13 +363,20 @@ export function createContextCompactionPrepareTurn(
 				: 0;
 		const underestimateFactor =
 			actualPreviousInputTokens > 0 && requestInputTokens > 0
-				? Math.min(
-						MAX_INPUT_UNDERESTIMATE_FACTOR,
-						Math.max(1, actualPreviousInputTokens / requestInputTokens),
-					)
-				: 1;
-		const maxInputTokens = rawMaxInputTokens / underestimateFactor;
-		const requestTriggerTokens = maxInputTokens * COMPACTION_TRIGGER_RATIO;
+				? actualPreviousInputTokens / requestInputTokens
+				: 0;
+		const calibrationFactor =
+			CHARS_PER_TOKEN /
+			tokenCalibration.charsPerToken(context.model.id || config.modelId);
+		const budgetScale = Math.min(
+			MAX_INPUT_UNDERESTIMATE_FACTOR,
+			Math.max(calibrationFactor, underestimateFactor),
+		);
+		const thresholdRatio = resolveCompactionThresholdRatio(
+			userCompaction?.thresholdRatio,
+		);
+		const maxInputTokens = rawMaxInputTokens / budgetScale;
+		const requestTriggerTokens = maxInputTokens * thresholdRatio;
 		const messageTriggerTokens = translateRequestBudgetToMessages(
 			requestTriggerTokens,
 			requestOverheadTokens,
@@ -353,9 +398,11 @@ export function createContextCompactionPrepareTurn(
 			rawMaxInputTokens,
 			actualPreviousInputTokens,
 			underestimateFactor,
+			calibrationFactor,
+			budgetScale,
 			requestTriggerTokens,
 			messageTriggerTokens,
-			thresholdRatio: COMPACTION_TRIGGER_RATIO,
+			thresholdRatio,
 			shouldCompact,
 			messageCount: context.messages.length,
 			apiMessageCount: context.apiMessages.length,
@@ -403,7 +450,7 @@ export function createContextCompactionPrepareTurn(
 					triggerTokens: requestTriggerTokens,
 					targetTokens: requestTargetTokens,
 					overheadTokens: requestOverheadTokens,
-					thresholdRatio: COMPACTION_TRIGGER_RATIO,
+					thresholdRatio,
 					utilizationRatio:
 						maxInputTokens > 0 ? requestInputTokens / maxInputTokens : 0,
 				},
@@ -600,7 +647,7 @@ export function createContextCompactionPrepareTurn(
 				tokensSaved: requestInputTokens - afterRequestTokens,
 				utilizationBefore: `${((requestInputTokens / maxInputTokens) * 100).toFixed(1)}%`,
 				utilizationAfter: `${((afterRequestTokens / maxInputTokens) * 100).toFixed(1)}%`,
-				thresholdTrigger: `${(COMPACTION_TRIGGER_RATIO * 100).toFixed(1)}%`,
+				thresholdTrigger: `${(thresholdRatio * 100).toFixed(1)}%`,
 				messagesBefore: beforeMessageCount,
 				messagesAfter: result.messages.length,
 				messagesRemoved: beforeMessageCount - result.messages.length,

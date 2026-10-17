@@ -110,6 +110,8 @@ export interface ExtensionState {
 	chatInputMaxRows?: number
 	useAutoCondense?: boolean
 	compactionStrategy?: string
+	/** `plinycode.compaction.threshold`: auto-condense runs at this share of the model's input limit (0.1 to 0.95). */
+	compactionThreshold?: number
 	webSearchEnabled?: boolean
 	/** `plinycode.updates.prerelease`: the auto-updater also installs pre-releases. */
 	prereleaseUpdatesEnabled?: boolean
@@ -400,7 +402,13 @@ export interface ClineAskQuestion {
 export interface ClineContextBreakdown {
 	systemPrompt?: number
 	rules?: number
+	/** The `# Memory` section of the system prompt (docs/memory.md). */
+	memory?: number
+	/** The tool definitions sent with the request: names, descriptions and input schemas. */
+	tools?: number
+	/** The skills tool's listing and results, and skill bodies pasted by a slash command. */
 	skills?: number
+	/** Workflow bodies pasted by a slash command. */
 	workflows?: number
 	conversation?: number
 	other?: number

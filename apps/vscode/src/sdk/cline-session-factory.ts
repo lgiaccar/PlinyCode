@@ -29,6 +29,7 @@ import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
 import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { getSubAgentLimits } from "@/hosts/vscode/subagent-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
@@ -638,6 +639,8 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 					compaction: {
 						enabled: true,
 						strategy: compactionStrategy,
+						// plinycode.compaction.threshold, read before every model call.
+						thresholdRatio: getCompactionThreshold,
 					},
 				}
 			: {}),

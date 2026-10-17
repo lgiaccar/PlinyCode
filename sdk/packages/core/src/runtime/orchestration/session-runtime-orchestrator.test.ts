@@ -369,6 +369,39 @@ describe("SessionRuntime.getExtensionRegistry", () => {
 		);
 	});
 
+	it("reports the host's context sources with the rules it composed", async () => {
+		const extension: AgentExtension = {
+			name: "rules-ext",
+			manifest: { capabilities: ["rules"] },
+			setup: (api) => {
+				api.registerRule({
+					id: "rules-ext:primary",
+					content: "Always preserve architectural boundaries.",
+				});
+			},
+		};
+		const { deps, configs } = withCapturingFakeRuntime();
+		const session = new SessionRuntime(
+			makeAgentConfig({
+				systemPrompt: "Base prompt.\n\n# Memory\n\n- Bun 1.3",
+				extensions: [extension],
+				contextSources: () => ({
+					memoryText: "\n\n# Memory\n\n- Bun 1.3",
+					workflowTexts: ["## Release\n1. Bump the version and tag it."],
+				}),
+			}),
+			deps,
+		);
+
+		await session.run("go");
+
+		expect(configs[0]?.contextSources?.()).toEqual({
+			memoryText: "\n\n# Memory\n\n- Bun 1.3",
+			workflowTexts: ["## Release\n1. Bump the version and tag it."],
+			rulesText: "Always preserve architectural boundaries.",
+		});
+	});
+
 	it("composes tool-conditional rules only when the tool is enabled", async () => {
 		const conditionalRuleExtension: AgentExtension = {
 			name: "conditional-tool-rule",

@@ -145,7 +145,9 @@ export {
 export {
 	type ContextBreakdownInput,
 	type ContextBreakdownTokens,
+	type ContextSourceTexts,
 	estimateContextBreakdown,
+	SKILLS_LISTING_PREFIX,
 } from "./llms/context-breakdown";
 export * from "./llms/gateway";
 export {
@@ -255,12 +257,19 @@ export {
 } from "./llms/reasoning-options";
 export { serializeAbortReason } from "./llms/requests";
 export {
+	TokenCalibration,
+	type TokenCalibrationSnapshot,
+	tokenCalibration,
+} from "./llms/token-calibration";
+export {
 	CHARS_PER_TOKEN,
+	estimateMeasuredTokens,
 	estimateRequestInputTokens,
 	estimateTokens,
 	estimateValueTokens,
 	IMAGE_TOKEN_ESTIMATE,
 	isBinaryPayload,
+	measureRequestForTokenEstimate,
 	serializeForTokenEstimate,
 	type TokenEstimatedRequest,
 } from "./llms/tokens";

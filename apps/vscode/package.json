@@ -442,6 +442,13 @@
 					],
 					"markdownDescription": "When the model is given the `ask_advisor` tool, which lets a free or cheaper model ask a stronger one (`#plinycode.advisor.model#`) for advice at a hard decision instead of running the whole task on the expensive model. Each call is a paid call of a few cents: its cost is added to the conversation's cost, and it is refused once the conversation has reached its budget (`#plinycode.spending.conversationLimit#`) or its number of calls (`#plinycode.advisor.maxCallsPerConversation#`)."
 				},
+				"plinycode.compaction.threshold": {
+					"type": "number",
+					"default": 0.9,
+					"minimum": 0.1,
+					"maximum": 0.95,
+					"markdownDescription": "Where auto-condense compacts the conversation, as a share of the model's input limit: `0.9` compacts at 90%. A lower value keeps requests smaller and cheaper, a higher one keeps more of the conversation verbatim. Clicking the context bar in the task header sets it at that point. Read before every model call, so a change applies to the running conversation."
+				},
 				"plinycode.devops.enabled": {
 					"type": "boolean",
 					"default": true,

@@ -12,6 +12,7 @@ import { installLastRequestCapture } from "./last-model-request"
 import type { ConversationMemorySnapshots } from "./memory/conversation-memory-snapshots"
 import { installMemory, type MemoryInstallDeps } from "./memory/install-memory"
 import { installRouter, type RouterImageDeps, type RouterInstallDeps } from "./router/router-integration"
+import type { PastedCommandBodies } from "./slash-command-expansion"
 import { installSessionTrace, type SessionTrace, type SessionTraceDeps } from "./trace/session-trace"
 
 interface SdkSessionConfigBuilderOptions {
@@ -75,6 +76,12 @@ interface SdkSessionConfigBuilderOptions {
 	advisor?: Pick<AdvisorInstallDeps, "getSettings" | "checkBudget" | "onUsage">
 	/** The per-session trace (`<dataDir>/traces/<sessionId>.jsonl`); recorded when given. */
 	trace?: SessionTraceDeps
+	/**
+	 * The workflow and built-in skill bodies a slash command can paste, read
+	 * before every model call so the context breakdown counts them apart
+	 * from the conversation.
+	 */
+	pastedCommandBodies?: () => PastedCommandBodies
 }
 
 /**
@@ -126,6 +133,15 @@ export class SdkSessionConfigBuilder {
 		git?.bindToSession(config.sessionId)
 		date?.bindToSession(config.sessionId)
 		memory?.bindToSession(config.sessionId)
+		// What only the host can name in a request, for the usage report's context breakdown
+		// (docs/context-compaction.md): the memory section it appended to the system prompt and the
+		// bodies its slash commands paste. The engine adds the rules and finds the tools itself.
+		const memoryText = memory?.section
+		const pastedBodies = this.options.pastedCommandBodies
+		config.contextSources = () => ({
+			...(memoryText ? { memoryText } : {}),
+			...(pastedBodies?.() ?? {}),
+		})
 		const isBackground = () => this.options.isBackgroundSession?.(config.sessionId) === true
 
 		const onMistakeLimit = this.options.onConsecutiveMistakeLimitReached

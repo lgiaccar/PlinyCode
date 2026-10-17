@@ -565,6 +565,8 @@ message UpdateSettingsRequest {
   optional bool memory_conversation_search_enabled = 51;
   // The webview's "Unlock Pliny paid models" toggle, mirrored so the routers know whether images may use a paid model
   optional bool pliny_paid_models_unlocked = 52;
+  // plinycode.compaction.threshold: the share of the model's input limit at which auto-condense compacts (0.1 to 0.95)
+  optional double compaction_threshold = 53;
 }
 
 message UpdateTerminalConnectionTimeoutRequest {

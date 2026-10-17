@@ -4,9 +4,21 @@ How a conversation is kept inside the model's input limit: when compaction runs,
 
 ## When it runs
 
-Before every model call, the engine estimates the whole request (system prompt, messages and tool definitions) at three characters per token (`CHARS_PER_TOKEN`), with every image or other binary payload counted at a fixed `IMAGE_TOKEN_ESTIMATE` of 1,600 tokens rather than as its base64 text. Compaction runs when the estimate reaches 90% of the model's input limit (`COMPACTION_TRIGGER_RATIO`). The limit is the model's `maxInputTokens`, or 90% of its context window when only that is known; the Pliny catalog sets the limit to the window, FreeAuto uses a 92k budget so the whole free pool stays routable ([pliny-free-auto-router.md](pliny-free-auto-router.md)), and BalanceAuto 128k. When the provider counted the previous request higher than the estimate, the budget is scaled down by that ratio, at most four times.
+Before every model call, the engine estimates the whole request (system prompt, messages and tool definitions) at three characters per token (`CHARS_PER_TOKEN`), with every image or other binary payload counted at a fixed `IMAGE_TOKEN_ESTIMATE` of 1,600 tokens rather than as its base64 text. Compaction runs when the request reaches 90% of the model's input limit (`COMPACTION_TRIGGER_RATIO`), or the share set in `plinycode.compaction.threshold` (0.1 to 0.95). The setting is read before every model call, so a change applies to the running conversation. The limit is the model's `maxInputTokens`, or 90% of its context window when only that is known; the Pliny catalog sets the limit to the window, FreeAuto uses a 92k budget so the whole free pool stays routable ([pliny-free-auto-router.md](pliny-free-auto-router.md)), and BalanceAuto 128k.
+
+The budget is translated into estimate units before it is compared, as described under "Calibrated estimate" below. A model that packs fewer characters into a token than three gets a smaller budget, and one that packs more gets a larger one.
 
 The setting is auto-condense (`useAutoCondense`), on by default; the strategy is `compactionStrategy`, `agentic` by default. A routed model (FreeAuto, BalanceAuto) follows the same setting and only attaches its free summarizer.
+
+## Calibrated estimate
+
+Three characters per token over-counts English and code on most tokenizers, which made compaction run early, and under-counts dense content on some. The engine therefore learns a ratio per model from the counts providers report, with no tokenizer dependency (`tokenCalibration` in [token-calibration.ts](../sdk/packages/shared/src/llms/token-calibration.ts)):
+
+- **Learning.** After each call that reports real usage, the provider layer ([ai-sdk-usage.ts](../sdk/packages/llms/src/providers/ai-sdk-usage.ts), `observeTokenCalibration`) divides the request's estimated text characters by the reported input tokens, less 1,600 per image. The reported count includes cache reads and writes, because the whole request was tokenized. The ratio goes into an exponential moving average (weight 0.2), kept under two ids: the model that served the call, and the session's own model when that differs. For FreeAuto and BalanceAuto, the second is a blend of the models they route to.
+- **Guards.** Calls under 1,000 input tokens and ratios outside 1 to 10 are ignored, as they come from a provider counting only uncached input or from a truncated request. The average is clamped to 2.0 to 5.0 characters per token. A model with fewer than three observations, or none, keeps three characters per token. At most 200 models are kept, and the least recently seen ones are dropped first.
+- **Persistence.** The extension loads `<dataDir>/token-calibration.json` (`~/.cline/data/` unless `CLINE_DATA_DIR` says otherwise) at startup and writes it a few seconds after calls teach it something (`persistTokenCalibration` in core). Each write first merges the file, keeping each model's most recent entry, so windows that run side by side do not overwrite each other.
+- **Compaction.** The budget is divided by the larger of two factors. The calibration factor is 3 divided by the model's ratio: 1 when the model has no calibration, below 1 for a model that packs more characters into a token. The underestimate factor is the provider's count for the previous request divided by the estimate of the current one; it is direct evidence that this conversation's content is denser than the average. The result is capped at four. Before calibration, the underestimate factor could only tighten the budget, never loosen it. It keeps that role for a calibrated model; it no longer has a floor of 1, because the calibration factor now sets the floor. Every other number (trigger, target, message costs) stays in estimate units, as before.
+- **The context bar.** When a provider reports no usage, the fallback estimate the bar shows (with a `~`) uses the calibrated ratio, as does the raw context breakdown.
 
 ## The strategies
 
@@ -25,7 +37,24 @@ The summarizer's call is a model call like any other. Its tokens and cost come b
 
 ## The context bar
 
-The task header's bar divides the last request's tokens by the model's context window. Compaction runs at 90% of the model's input limit, which on FreeAuto is about a third of the advertised window, so the bar carries a marker where auto-condense runs (`autoCompactThreshold` in [ContextWindow.tsx](../apps/vscode/webview-ui/src/components/chat/task-header/ContextWindow.tsx)), and the hover card explains it. The hover card's context breakdown shows the rules apart from the rest of the system prompt: the engine passes the rules it composed as request metadata (`contextSources`), which the provider's usage report uses. Skills and workflows pasted by a slash command are not broken out yet.
+The task header's bar divides the last request's tokens by the model's context window. Compaction runs at 90% of the model's input limit by default, which on FreeAuto is about a third of the advertised window. The bar therefore carries a marker where auto-condense runs (`autoCompactThreshold` in [ContextWindow.tsx](../apps/vscode/webview-ui/src/components/chat/task-header/ContextWindow.tsx)), and the hover card explains it.
+
+**Setting the threshold from the bar.** While auto-condense is on, the bar is a slider. Clicking it sets `plinycode.compaction.threshold` at that point: the click position, a share of the window, is turned into a share of the input limit (`compactionThresholdAt` in [autoCompactThreshold.ts](../apps/vscode/webview-ui/src/components/chat/task-header/autoCompactThreshold.ts)), rounded to a whole percent and clamped to 10% to 95%. With the bar focused, the arrow keys move the threshold by 5%, and Home and End jump to 10% and 95%. The marker moves at once and the setting is saved to the user's VS Code settings, which the extension reads before the next model call. A click past the input limit, on FreeAuto's right two thirds for example, sets 95%.
+
+**The context breakdown.** The hover card splits the last request by source. The provider's usage report computes the split ([context-breakdown.ts](../sdk/packages/shared/src/llms/context-breakdown.ts)) and scales it so the parts add up to the reported prompt size. Each bucket comes from:
+
+| Bucket | Source |
+| ------ | ------ |
+| System Prompt | the system prompt, less the rules and the memory section |
+| Rules | the rules the session composed into the system prompt, passed as request metadata (`contextSources.rulesText`) |
+| Memory | the `# Memory` section the extension appended to the system prompt ([memory.md](memory.md)), passed as `contextSources.memoryText`; counted only when the prompt contains it |
+| Tools | the serialized tool definitions sent with the request (name, description, input schema), MCP tools included, less the `skills` tool's listing |
+| Skills | the `skills` tool's listing of skills (its description from `Available skills:` on), the results of `skills` tool calls, and built-in skill bodies a slash command pasted (`/deep-planning`) |
+| Workflows | workflow bodies a slash command pasted into a user message. The extension passes every known workflow body (`contextSources.workflowTexts`), and each one found in a user message counts here |
+| Conversation | the rest of the messages: text, reasoning, tool calls and results |
+| Other | images, attached files and generated media |
+
+The host-side sources (memory, pasted bodies) are read before every model call through `CoreSessionConfig.contextSources`, set in [sdk-session-config-builder.ts](../apps/vscode/src/sdk/sdk-session-config-builder.ts). The engine adds the rules. The router's addendum and the preferred-language line stay in System Prompt.
 
 ## Prompt caching
 

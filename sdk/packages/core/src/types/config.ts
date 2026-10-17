@@ -184,6 +184,13 @@ export type CoreCompactionStrategy = "basic" | "agentic";
 export interface CoreCompactionConfig {
 	enabled?: boolean;
 	strategy?: CoreCompactionStrategy;
+	/**
+	 * Share of the model's input limit at which automatic compaction runs,
+	 * from 0.1 to 0.95; COMPACTION_TRIGGER_RATIO (0.9) when unset. A function
+	 * is read before every model call, so a changed setting applies to the
+	 * running session.
+	 */
+	thresholdRatio?: number | (() => number | undefined);
 	preserveRecentTokens?: number;
 	summarizer?: CoreCompactionSummarizerConfig;
 	compact?: (
@@ -280,6 +287,13 @@ export interface CoreSessionConfig
 	sessionId?: string;
 	workspaceRoot?: string;
 	systemPrompt: string;
+	/**
+	 * Parts of the request only the host can name, for the usage report's
+	 * context breakdown: the memory section it appended to `systemPrompt`
+	 * and the bodies its slash commands paste into user messages. Read
+	 * before every model call.
+	 */
+	contextSources?: AgentConfig["contextSources"];
 	hooks?: AgentHooks;
 	hookErrorMode?: HookErrorMode;
 	logger?: BasicLogger;

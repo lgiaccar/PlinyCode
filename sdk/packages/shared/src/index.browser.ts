@@ -120,6 +120,7 @@ export {
 export {
 	type ContextBreakdownInput,
 	type ContextBreakdownTokens,
+	type ContextSourceTexts,
 	estimateContextBreakdown,
 } from "./llms/context-breakdown";
 export * from "./llms/gateway";

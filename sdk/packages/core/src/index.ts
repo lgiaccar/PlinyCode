@@ -657,6 +657,10 @@ export {
 export { ProviderSettingsManager } from "./services/storage/provider-settings-manager";
 export { SqliteSessionStore } from "./services/storage/sqlite-session-store";
 export {
+	persistTokenCalibration,
+	TOKEN_CALIBRATION_FILE_NAME,
+} from "./services/token-calibration-file";
+export {
 	accumulateUsageTotals,
 	createInitialAccumulatedUsage,
 	getCurrentContextSize,

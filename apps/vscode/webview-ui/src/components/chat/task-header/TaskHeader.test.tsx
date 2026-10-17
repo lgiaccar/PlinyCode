@@ -3,7 +3,7 @@ import { EditMessageAndRegenerateRequest } from "@shared/proto/cline/task"
 import { fireEvent, render, screen } from "@testing-library/react"
 import type { PropsWithChildren } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { autoCompactThresholdFor } from "./autoCompactThreshold"
+import { autoCompactThresholdFor, compactionThresholdAt } from "./autoCompactThreshold"
 import TaskHeader from "./TaskHeader"
 
 describe("autoCompactThresholdFor", () => {
@@ -16,6 +16,24 @@ describe("autoCompactThresholdFor", () => {
 		expect(autoCompactThresholdFor({ contextWindow: 128_000 })).toBeCloseTo(0.81, 3)
 		expect(autoCompactThresholdFor(undefined)).toBeUndefined()
 		expect(autoCompactThresholdFor({ contextWindow: 0 })).toBeUndefined()
+	})
+
+	it("follows the plinycode.compaction.threshold setting", () => {
+		expect(autoCompactThresholdFor({ contextWindow: 200_000, maxInputTokens: 100_000 }, 0.6)).toBeCloseTo(0.3, 5)
+		// Out-of-range settings clamp to 10%..95% of the input limit.
+		expect(autoCompactThresholdFor({ contextWindow: 200_000, maxInputTokens: 100_000 }, 2)).toBeCloseTo(0.475, 5)
+	})
+})
+
+describe("compactionThresholdAt", () => {
+	it("turns a click position on the bar into a share of the input limit", () => {
+		const freeAuto = { contextWindow: 256_000, maxInputTokens: 92_000 }
+		// The default marker position maps back to the default threshold.
+		expect(compactionThresholdAt(autoCompactThresholdFor(freeAuto) ?? 0, freeAuto)).toBe(0.9)
+		expect(compactionThresholdAt(0.18, freeAuto)).toBe(0.5)
+		expect(compactionThresholdAt(0.9, freeAuto)).toBe(0.95)
+		expect(compactionThresholdAt(0, freeAuto)).toBe(0.1)
+		expect(compactionThresholdAt(0.5, undefined)).toBeUndefined()
 	})
 })
 

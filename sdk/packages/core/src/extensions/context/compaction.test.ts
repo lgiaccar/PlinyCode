@@ -2,13 +2,17 @@ import type * as LlmsProviders from "@plinycode/llms";
 import {
 	estimateRequestInputTokens,
 	type MessageWithMetadata,
+	tokenCalibration,
 } from "@plinycode/shared";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createSessionCompactionState,
 	projectSessionCompactionState,
 } from "../../session/models/session-compaction";
-import type { CoreCompactionContext } from "../../types/config";
+import type {
+	CoreCompactionConfig,
+	CoreCompactionContext,
+} from "../../types/config";
 import { buildAgenticSummaryInputBudget } from "./agentic-compaction";
 import { runBasicCompaction } from "./basic-compaction";
 import {
@@ -1139,6 +1143,7 @@ describe("createContextCompactionPrepareTurn", () => {
 		const run = async (opts: {
 			maxInputTokensMultiple: number;
 			previousRequestInputTokens?: number;
+			thresholdRatio?: CoreCompactionConfig["thresholdRatio"];
 		}) => {
 			const messages = transcript();
 			const maxInputTokens = Math.ceil(
@@ -1151,7 +1156,11 @@ describe("createContextCompactionPrepareTurn", () => {
 					providerId: "openrouter",
 					modelId: "test/model",
 				} as LlmsProviders.ProviderConfig,
-				compaction: { enabled: true, strategy: "basic" },
+				compaction: {
+					enabled: true,
+					strategy: "basic",
+					thresholdRatio: opts.thresholdRatio,
+				},
 				logger: undefined,
 			});
 			return await prepareTurn?.({
@@ -1221,6 +1230,86 @@ describe("createContextCompactionPrepareTurn", () => {
 					previousRequestInputTokens: estimate() * 100,
 				}),
 			).resolves.toBeUndefined();
+		});
+
+		describe("calibrated ratio and threshold", () => {
+			/** Teach the model a ratio, past the minimum number of samples. */
+			const calibrate = (charsPerToken: number) => {
+				for (let index = 0; index < 5; index++) {
+					tokenCalibration.observe(
+						"test/model",
+						charsPerToken * 10_000,
+						10_000,
+					);
+				}
+			};
+
+			afterEach(() => {
+				tokenCalibration.clear();
+			});
+
+			it("tightens the budget for a model that packs fewer characters into a token", async () => {
+				calibrate(2.5);
+				// 3 / 2.5 = 1.2 real tokens per estimated one: the 1.05x budget is
+				// really 0.875x the estimate.
+				await expect(
+					run({ maxInputTokensMultiple: 1.05 }),
+				).resolves.toBeDefined();
+			});
+
+			it("loosens the budget for a model that packs more characters into a token", async () => {
+				// Uncalibrated, an estimate past the trigger compacts.
+				await expect(
+					run({ maxInputTokensMultiple: 0.95 }),
+				).resolves.toBeDefined();
+				calibrate(4);
+				// 3 / 4 = 0.75: the 0.95x budget is really 1.27x the estimate.
+				await expect(
+					run({ maxInputTokensMultiple: 0.95 }),
+				).resolves.toBeUndefined();
+			});
+
+			it("lets this conversation's provider count override a looser calibration", async () => {
+				calibrate(4);
+				await expect(
+					run({
+						maxInputTokensMultiple: 1.05,
+						previousRequestInputTokens: Math.ceil(estimate() * 1.5),
+					}),
+				).resolves.toBeDefined();
+			});
+
+			it("compacts at the configured threshold, read on every call", async () => {
+				let ratio = 0.5;
+				await expect(
+					run({ maxInputTokensMultiple: 1.05, thresholdRatio: () => ratio }),
+				).resolves.toBeDefined();
+				ratio = 0.9;
+				await expect(
+					run({ maxInputTokensMultiple: 1.05, thresholdRatio: () => ratio }),
+				).resolves.toBeUndefined();
+			});
+
+			it("clamps the threshold and falls back on a bad value", async () => {
+				// 0.01 clamps to 0.1, still far below the estimate: compacts.
+				await expect(
+					run({ maxInputTokensMultiple: 1.05, thresholdRatio: 0.01 }),
+				).resolves.toBeDefined();
+				await expect(
+					run({
+						maxInputTokensMultiple: 1.05,
+						thresholdRatio: Number.NaN,
+					}),
+				).resolves.toBeUndefined();
+				await expect(
+					run({
+						maxInputTokensMultiple: 1.05,
+						thresholdRatio: () => {
+							throw new Error("setting unreadable");
+						},
+					}),
+				).resolves.toBeUndefined();
+			});
 		});
 	});
 

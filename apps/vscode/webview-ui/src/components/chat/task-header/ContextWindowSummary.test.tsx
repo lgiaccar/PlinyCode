@@ -35,12 +35,64 @@ describe("ContextWindowSummary context breakdown", () => {
 		expect(screen.getByText((_, element) => element?.textContent === "1.2k (60%)")).toBeInTheDocument()
 	})
 
-	it("explains where auto condense runs, in tokens, instead of a click-to-set control", () => {
-		render(<ContextWindowSummary autoCompactThreshold={0.32} contextWindow={256_000} percentage={10} tokenUsed={25_600} />)
+	it("lists the tools and memory buckets in the legend", () => {
+		render(
+			<ContextWindowSummary
+				contextBreakdown={{
+					systemPrompt: 2_000,
+					rules: 500,
+					memory: 500,
+					tools: 6_000,
+					skills: 400,
+					workflows: 600,
+					conversation: 10_000,
+					other: 0,
+				}}
+				contextWindow={200_000}
+				percentage={10}
+				tokenUsed={20_000}
+			/>,
+		)
+
+		fireEvent.click(screen.getByText("Context Breakdown"))
+
+		const labels = ["System Prompt", "Rules", "Memory", "Tools", "Skills", "Workflows", "Conversation"]
+		for (const label of labels) {
+			expect(screen.getByText(label)).toBeInTheDocument()
+		}
+		expect(screen.queryByText("Other")).not.toBeInTheDocument()
+		// 6k of 20k: the tool definitions are 30% of the request.
+		expect(screen.getByText((_, element) => element?.textContent === "6.0k (30%)")).toBeInTheDocument()
+	})
+
+	it("explains where auto condense runs, in tokens and as the setting's share of the input limit", () => {
+		render(
+			<ContextWindowSummary
+				autoCompactThreshold={0.25}
+				compactionThreshold={0.7}
+				contextWindow={256_000}
+				percentage={10}
+				tokenUsed={25_600}
+			/>,
+		)
 		fireEvent.click(screen.getByText("Auto Condense Threshold"))
-		expect(screen.getByText("32%")).toBeInTheDocument()
-		expect(screen.getByText(/Auto condense runs at about 81\.9k tokens/)).toBeInTheDocument()
-		expect(screen.queryByText(/Click on the context window bar/)).not.toBeInTheDocument()
+		expect(screen.getByText("25%")).toBeInTheDocument()
+		expect(screen.getByText(/Auto condense runs at about 64.0k tokens: 70% of the model's input limit/)).toBeInTheDocument()
+		expect(screen.queryByText(/Click the bar to move the marker/)).not.toBeInTheDocument()
+	})
+
+	it("says the bar sets the threshold when it can", () => {
+		render(
+			<ContextWindowSummary
+				autoCompactThreshold={0.32}
+				canSetThreshold
+				contextWindow={256_000}
+				percentage={10}
+				tokenUsed={25_600}
+			/>,
+		)
+		fireEvent.click(screen.getByText("Auto Condense Threshold"))
+		expect(screen.getByText(/Click the bar to move the marker/)).toBeInTheDocument()
 	})
 
 	it("omits the breakdown section entirely when no breakdown is provided", () => {

@@ -7,6 +7,12 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Progress } from "@/components/ui/progress"
 import { SlashServiceClient } from "@/services/grpc-client"
 import { formatLargeNumber as formatTokenNumber } from "@/utils/format"
+import {
+	autoCompactThresholdFor,
+	clampCompactionThreshold,
+	compactionThresholdAt,
+	DEFAULT_COMPACTION_THRESHOLD,
+} from "./autoCompactThreshold"
 import CompactTaskButton from "./buttons/CompactTaskButton"
 import { ContextWindowSummary } from "./ContextWindowSummary"
 
@@ -29,10 +35,23 @@ interface ContextWindowProgressProps extends ContextWindowInfoProps {
 	 * Drawn as a marker on the bar; undefined draws none.
 	 */
 	autoCompactThreshold?: number
+	/** The model's input limit, to turn a click on the bar into a share of it. */
+	maxInputTokens?: number
+	/** `plinycode.compaction.threshold`: the share of the input limit the marker stands for. */
+	compactionThreshold?: number
+	/**
+	 * Set the threshold (a share of the input limit). Given, and with auto
+	 * condense on, clicking the bar or using the arrow keys on it moves the
+	 * marker.
+	 */
+	onCompactionThresholdChange?: (threshold: number) => void
 	hasEstimatedUsage?: boolean
 	contextBreakdown?: ClineContextBreakdown
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
 }
+
+/** How far one arrow key press moves the threshold, as a share of the input limit. */
+const THRESHOLD_KEY_STEP = 0.05
 
 const ConfirmationDialog = memo<{
 	onConfirm: (e: React.MouseEvent) => void
@@ -70,6 +89,9 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 	contextWindow = 0,
 	lastApiReqTotalTokens = 0,
 	autoCompactThreshold,
+	maxInputTokens,
+	compactionThreshold = DEFAULT_COMPACTION_THRESHOLD,
+	onCompactionThresholdChange,
 	onSendMessage,
 	useAutoCondense,
 	tokensIn,
@@ -82,6 +104,68 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 	const [isOpened, setIsOpened] = useState(false)
 	const [confirmationNeeded, setConfirmationNeeded] = useState(false)
 	const progressBarRef = useRef<HTMLDivElement>(null)
+	// The threshold just set, shown until the setting comes back in the extension state.
+	const [pendingThreshold, setPendingThreshold] = useState<number | undefined>(undefined)
+	useEffect(() => {
+		setPendingThreshold(undefined)
+	}, [compactionThreshold])
+	const threshold = pendingThreshold ?? compactionThreshold
+	const markerPosition =
+		pendingThreshold !== undefined
+			? autoCompactThresholdFor({ contextWindow, maxInputTokens }, pendingThreshold)
+			: autoCompactThreshold
+	const canSetThreshold =
+		useAutoCondense && onCompactionThresholdChange !== undefined && markerPosition !== undefined && contextWindow > 0
+
+	const setThreshold = useCallback(
+		(next: number | undefined) => {
+			if (next === undefined || !onCompactionThresholdChange) {
+				return
+			}
+			const rounded = Math.round(next * 100) / 100
+			setPendingThreshold(rounded)
+			onCompactionThresholdChange(rounded)
+		},
+		[onCompactionThresholdChange],
+	)
+
+	const handleBarClick = useCallback(
+		(event: React.MouseEvent<HTMLDivElement>) => {
+			if (!canSetThreshold) {
+				return
+			}
+			const rect = event.currentTarget.getBoundingClientRect()
+			if (rect.width <= 0) {
+				return
+			}
+			const position = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+			setThreshold(compactionThresholdAt(position, { contextWindow, maxInputTokens }))
+		},
+		[canSetThreshold, contextWindow, maxInputTokens, setThreshold],
+	)
+
+	const handleBarKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			if (!canSetThreshold) {
+				return
+			}
+			const steps: Record<string, number> = {
+				ArrowLeft: -THRESHOLD_KEY_STEP,
+				ArrowDown: -THRESHOLD_KEY_STEP,
+				ArrowRight: THRESHOLD_KEY_STEP,
+				ArrowUp: THRESHOLD_KEY_STEP,
+				Home: -1,
+				End: 1,
+			}
+			const step = steps[event.key]
+			if (step === undefined) {
+				return
+			}
+			event.preventDefault()
+			setThreshold(clampCompactionThreshold(threshold + step))
+		},
+		[canSetThreshold, setThreshold, threshold],
+	)
 
 	const handleCompactClick = useCallback(
 		(e: React.MouseEvent) => {
@@ -170,9 +254,11 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 						<HoverCard>
 							<HoverCardContent className="bg-menu rounded-xs shadow-sm">
 								<ContextWindowSummary
-									autoCompactThreshold={autoCompactThreshold}
+									autoCompactThreshold={markerPosition}
 									cacheReads={cacheReads}
 									cacheWrites={cacheWrites}
+									canSetThreshold={canSetThreshold}
+									compactionThreshold={threshold}
 									contextBreakdown={contextBreakdown}
 									contextWindow={tokenData.max}
 									hasEstimatedUsage={hasEstimatedUsage}
@@ -183,28 +269,40 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 								/>
 							</HoverCardContent>
 							<HoverCardTrigger asChild>
-								{/* TODO: Re-add role="slider", aria-value*, onKeyDown, onClick, and tabIndex
-								    when click-to-set-threshold is implemented. See PR #9348 for context. */}
+								{/* With auto condense on, the bar is a slider for where it runs: a click
+								    sets the threshold at that point, the arrow keys move it in 5% steps. */}
 								<div
-									className="relative w-full text-foreground context-window-progress brightness-100"
+									aria-label={canSetThreshold ? "Auto condense threshold" : undefined}
+									aria-valuemax={canSetThreshold ? 95 : undefined}
+									aria-valuemin={canSetThreshold ? 10 : undefined}
+									aria-valuenow={canSetThreshold ? Math.round(threshold * 100) : undefined}
+									aria-valuetext={
+										canSetThreshold && markerPosition !== undefined
+											? `Auto condense at ${Math.round(threshold * 100)}% of the input limit, about ${formatTokenNumber(Math.round(markerPosition * tokenData.max))} tokens`
+											: undefined
+									}
+									className={`relative w-full text-foreground context-window-progress brightness-100${canSetThreshold ? " cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-ring" : ""}`}
+									data-testid="context-window-bar"
+									onClick={handleBarClick}
 									onFocus={handleFocus}
-									ref={progressBarRef}>
+									onKeyDown={handleBarKeyDown}
+									ref={progressBarRef}
+									role={canSetThreshold ? "slider" : undefined}
+									tabIndex={canSetThreshold ? 0 : undefined}>
 									<Progress
 										aria-label="Context window usage progress"
 										color="success"
 										value={tokenData.percentage}
 									/>
-									{autoCompactThreshold !== undefined &&
-										autoCompactThreshold > 0 &&
-										autoCompactThreshold < 1 && (
-											<div
-												aria-label="Auto condense threshold"
-												className="absolute top-0 bottom-0 w-px bg-foreground opacity-60 pointer-events-none"
-												data-testid="auto-compact-threshold"
-												style={{ left: `${(autoCompactThreshold * 100).toFixed(1)}%` }}
-												title={`Auto condense runs at about ${formatTokenNumber(Math.round(autoCompactThreshold * tokenData.max))} tokens`}
-											/>
-										)}
+									{markerPosition !== undefined && markerPosition > 0 && markerPosition < 1 && (
+										<div
+											aria-hidden={true}
+											className="absolute top-0 bottom-0 w-px bg-foreground opacity-60 pointer-events-none"
+											data-testid="auto-compact-threshold"
+											style={{ left: `${(markerPosition * 100).toFixed(1)}%` }}
+											title={`Auto condense runs at about ${formatTokenNumber(Math.round(markerPosition * tokenData.max))} tokens`}
+										/>
+									)}
 									{isOpened}
 								</div>
 							</HoverCardTrigger>

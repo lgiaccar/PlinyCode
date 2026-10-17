@@ -12,6 +12,7 @@ import {
 	getDefaultShell,
 	getPowerShellEdition,
 	getShellKind,
+	SKILLS_LISTING_PREFIX,
 	validateWithZod,
 	zodToJsonSchema,
 } from "@plinycode/shared";
@@ -901,7 +902,8 @@ export function createSkillsTool(
 				?.filter((s) => !s.disabled)
 				.map((s) => describeSkillForTool(s));
 			if (skills && skills.length > 0) {
-				return `${baseDescription} Available skills: ${skills.join("; ")}.`;
+				// The context breakdown counts the listing as skills, from the prefix on.
+				return `${baseDescription}${SKILLS_LISTING_PREFIX}${skills.join("; ")}.`;
 			}
 			return baseDescription;
 		},

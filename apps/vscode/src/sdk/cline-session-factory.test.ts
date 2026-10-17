@@ -533,6 +533,7 @@ describe("buildSessionConfig", () => {
 		expect(config.compaction).toEqual({
 			enabled: true,
 			strategy: "agentic",
+			thresholdRatio: expect.any(Function),
 		})
 	})
 
@@ -553,6 +554,7 @@ describe("buildSessionConfig", () => {
 		expect(config.compaction).toEqual({
 			enabled: true,
 			strategy: "basic",
+			thresholdRatio: expect.any(Function),
 		})
 	})
 
@@ -573,6 +575,7 @@ describe("buildSessionConfig", () => {
 		expect(config.compaction).toEqual({
 			enabled: true,
 			strategy: "agentic",
+			thresholdRatio: expect.any(Function),
 		})
 	})
 
@@ -628,6 +631,7 @@ describe("buildSessionConfig", () => {
 		expect(enabledConfig.compaction).toEqual({
 			enabled: true,
 			strategy: "agentic",
+			thresholdRatio: expect.any(Function),
 		})
 	})
 

@@ -70,6 +70,78 @@ describe("ContextWindow auto condense marker", () => {
 	})
 })
 
+describe("ContextWindow click-to-set threshold", () => {
+	// A 200k window with a 100k input limit: the default 90% threshold sits at 45% of the bar.
+	const props = {
+		autoCompactThreshold: 0.45,
+		compactionThreshold: 0.9,
+		contextWindow: 200_000,
+		lastApiReqTotalTokens: 40_000,
+		maxInputTokens: 100_000,
+	}
+
+	const mockBarWidth = (bar: HTMLElement) => {
+		bar.getBoundingClientRect = () =>
+			({ left: 0, width: 200, top: 0, height: 4, right: 200, bottom: 4, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+	}
+
+	it("sets the threshold where the bar is clicked and moves the marker there", () => {
+		const onChange = vi.fn()
+		render(<ContextWindow {...props} onCompactionThresholdChange={onChange} useAutoCondense={true} />)
+		const bar = screen.getByRole("slider", { name: "Auto condense threshold" })
+		mockBarWidth(bar)
+
+		// 30% of the window is 60k tokens: 60% of the 100k input limit.
+		fireEvent.click(bar, { clientX: 60 })
+
+		expect(onChange).toHaveBeenCalledWith(0.6)
+		expect(Number.parseFloat(screen.getByTestId("auto-compact-threshold").style.left)).toBeCloseTo(30, 5)
+		expect(bar).toHaveAttribute("aria-valuenow", "60")
+	})
+
+	it("clamps a click past the input limit to the highest threshold", () => {
+		const onChange = vi.fn()
+		render(<ContextWindow {...props} onCompactionThresholdChange={onChange} useAutoCondense={true} />)
+		const bar = screen.getByRole("slider")
+		mockBarWidth(bar)
+		fireEvent.click(bar, { clientX: 190 })
+		expect(onChange).toHaveBeenCalledWith(0.95)
+	})
+
+	it("moves the threshold with the arrow keys, Home and End", () => {
+		const onChange = vi.fn()
+		render(<ContextWindow {...props} onCompactionThresholdChange={onChange} useAutoCondense={true} />)
+		const bar = screen.getByRole("slider")
+		expect(bar).toHaveAttribute("tabindex", "0")
+		expect(bar).toHaveAttribute("aria-valuemin", "10")
+		expect(bar).toHaveAttribute("aria-valuemax", "95")
+
+		fireEvent.keyDown(bar, { key: "ArrowLeft" })
+		expect(onChange).toHaveBeenLastCalledWith(0.85)
+		fireEvent.keyDown(bar, { key: "ArrowLeft" })
+		expect(onChange).toHaveBeenLastCalledWith(0.8)
+		fireEvent.keyDown(bar, { key: "ArrowUp" })
+		expect(onChange).toHaveBeenLastCalledWith(0.85)
+		fireEvent.keyDown(bar, { key: "Home" })
+		expect(onChange).toHaveBeenLastCalledWith(0.1)
+		fireEvent.keyDown(bar, { key: "End" })
+		expect(onChange).toHaveBeenLastCalledWith(0.95)
+		fireEvent.keyDown(bar, { key: "a" })
+		expect(onChange).toHaveBeenCalledTimes(5)
+	})
+
+	it("is not a slider while auto condense is off", () => {
+		const onChange = vi.fn()
+		render(<ContextWindow {...props} onCompactionThresholdChange={onChange} useAutoCondense={false} />)
+		expect(screen.queryByRole("slider")).not.toBeInTheDocument()
+		const bar = screen.getByTestId("context-window-bar")
+		mockBarWidth(bar)
+		fireEvent.click(bar, { clientX: 60 })
+		fireEvent.keyDown(bar, { key: "ArrowLeft" })
+		expect(onChange).not.toHaveBeenCalled()
+	})
+})
+
 describe("ContextWindow compact button", () => {
 	beforeEach(() => {
 		condense.mockClear()

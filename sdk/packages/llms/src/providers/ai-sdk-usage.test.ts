@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import {
+	measureRequestForTokenEstimate,
+	tokenCalibration,
+} from "@plinycode/shared";
+import { afterEach, describe, expect, it } from "vitest";
 import fixtures from "../../fixtures/usage.json";
-import { applyUsageEstimateFallback, normalizeUsage } from "./ai-sdk-usage";
+import {
+	applyUsageEstimateFallback,
+	calibratedCharsPerToken,
+	normalizeUsage,
+	observeTokenCalibration,
+} from "./ai-sdk-usage";
 
 /**
  * These tests validate usage normalization across different AI SDK stream result shapes.
@@ -628,6 +637,72 @@ describe("ai-sdk usage normalization", () => {
 			);
 			expect(result.estimated).toBeUndefined();
 			expect(result).toEqual(usage);
+		});
+	});
+
+	describe("token calibration", () => {
+		const request = (modelId: string, sessionModelId?: string) => ({
+			modelId,
+			systemPrompt: "You are a coding agent. ".repeat(500),
+			messages: [],
+			tools: [],
+			...(sessionModelId ? { metadata: { sessionModelId } } : {}),
+		});
+		const real = (inputTokens: number) => ({
+			inputTokens,
+			outputTokens: 10,
+			cacheReadTokens: 0,
+			cacheWriteTokens: 0,
+		});
+
+		afterEach(() => {
+			tokenCalibration.clear();
+		});
+
+		it("learns the served model's ratio, and the session's router, from reported usage", () => {
+			const sample = request("served-model", "pliny/free-auto");
+			const chars = measureRequestForTokenEstimate(sample).textChars;
+			for (let index = 0; index < 3; index++) {
+				observeTokenCalibration(real(Math.round(chars / 4)), sample);
+			}
+			expect(tokenCalibration.charsPerToken("served-model")).toBeCloseTo(4, 2);
+			expect(tokenCalibration.charsPerToken("pliny/free-auto")).toBeCloseTo(
+				4,
+				2,
+			);
+			expect(
+				calibratedCharsPerToken(request("other", "pliny/free-auto")),
+			).toBeCloseTo(4, 2);
+		});
+
+		it("learns nothing from an estimated usage", () => {
+			const sample = request("served-model");
+			for (let index = 0; index < 3; index++) {
+				observeTokenCalibration({ ...real(3_000), estimated: true }, sample);
+			}
+			expect(tokenCalibration.snapshot().models).toEqual({});
+		});
+
+		it("estimates a missing usage at the calibrated ratio", () => {
+			const sample = request("served-model");
+			const chars = measureRequestForTokenEstimate(sample).textChars;
+			const uncalibrated = applyUsageEstimateFallback(
+				{ ...real(0), outputTokens: 0 },
+				sample,
+				undefined,
+			);
+			expect(uncalibrated.inputTokens).toBe(Math.ceil(chars / 3));
+			for (let index = 0; index < 3; index++) {
+				observeTokenCalibration(real(Math.round(chars / 4)), sample);
+			}
+			const calibrated = applyUsageEstimateFallback(
+				{ ...real(0), outputTokens: 0 },
+				sample,
+				undefined,
+			);
+			expect(calibrated.estimated).toBe(true);
+			expect(calibrated.inputTokens).toBeLessThan(uncalibrated.inputTokens);
+			expect(calibrated.inputTokens).toBeCloseTo(chars / 4, -1);
 		});
 	});
 });

@@ -66,8 +66,54 @@ export function estimateValueTokens(value: unknown): number {
 	return estimateTokens(serializeForTokenEstimate(value).length);
 }
 
-export function estimateTokens(chars: number): number {
-	return Math.max(1, Math.ceil(chars / CHARS_PER_TOKEN));
+/**
+ * Tokens for `chars` characters of text. `charsPerToken` defaults to the
+ * conservative CHARS_PER_TOKEN; a model's calibrated ratio (see
+ * token-calibration.ts) can be passed instead.
+ */
+export function estimateTokens(
+	chars: number,
+	charsPerToken: number = CHARS_PER_TOKEN,
+): number {
+	return Math.max(1, Math.ceil(chars / charsPerToken));
+}
+
+/**
+ * The text characters of `value`'s JSON and the number of binary payloads in
+ * it. Binary payloads are not counted as text: each is worth a fixed
+ * IMAGE_TOKEN_ESTIMATE whatever the model's characters-per-token ratio, so a
+ * calibrated ratio must not scale them.
+ */
+export function measureForTokenEstimate(value: unknown): {
+	textChars: number;
+	binaryPayloads: number;
+} {
+	let binaryPayloads = 0;
+	try {
+		const serialized =
+			JSON.stringify(value, (_key, nested: unknown) => {
+				if (typeof nested === "string" && isBinaryPayload(nested)) {
+					binaryPayloads += 1;
+					return "";
+				}
+				return nested;
+			}) ?? "";
+		return { textChars: serialized.length, binaryPayloads };
+	} catch {
+		return { textChars: safeStringify(value).length, binaryPayloads: 0 };
+	}
+}
+
+/** Tokens of a measurement from measureForTokenEstimate. */
+export function estimateMeasuredTokens(
+	measured: { textChars: number; binaryPayloads: number },
+	charsPerToken: number = CHARS_PER_TOKEN,
+): number {
+	return Math.max(
+		1,
+		Math.ceil(measured.textChars / charsPerToken) +
+			measured.binaryPayloads * IMAGE_TOKEN_ESTIMATE,
+	);
 }
 
 export interface TokenEstimatedRequest {
@@ -99,19 +145,33 @@ function safeStringify(value: unknown): string {
 	}
 }
 
-/**
- * Estimate the complete provider request payload so request execution and
- * pre-request policies use the same definition of input utilization.
- */
-export function estimateRequestInputTokens(
+/** measureForTokenEstimate of the parts of a request the provider counts as input. */
+export function measureRequestForTokenEstimate(
 	request: TokenEstimatedRequest,
-): number {
-	const serialized = serializeForTokenEstimate({
+): {
+	textChars: number;
+	binaryPayloads: number;
+} {
+	return measureForTokenEstimate({
 		systemPrompt: request.systemPrompt,
 		messages: request.messages,
 		tools: request.tools,
 	});
-	// Deliberately over-estimate slightly to leave room for provider formatting,
-	// tool schema overhead, and tokenizer drift.
-	return estimateTokens(serialized.length);
+}
+
+/**
+ * Estimate the complete provider request payload so request execution and
+ * pre-request policies use the same definition of input utilization. At the
+ * default CHARS_PER_TOKEN this deliberately over-estimates slightly, leaving
+ * room for provider formatting and tokenizer drift; pass a model's calibrated
+ * ratio for a closer figure.
+ */
+export function estimateRequestInputTokens(
+	request: TokenEstimatedRequest,
+	charsPerToken: number = CHARS_PER_TOKEN,
+): number {
+	return estimateMeasuredTokens(
+		measureRequestForTokenEstimate(request),
+		charsPerToken,
+	);
 }
