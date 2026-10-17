@@ -25,6 +25,8 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 	const [pendingResponse, setPendingResponse] = useState<PendingResponse | undefined>(undefined)
 	// Where the next conversation starts when it is not the window's workspace.
 	const [nextTaskWorkspace, setNextTaskWorkspace] = useState<WorkspaceRef | undefined>(undefined)
+	// Whether the next conversation runs in a git worktree of its own ("Run in worktree").
+	const [nextTaskWorktree, setNextTaskWorktree] = useState(false)
 
 	// Refs
 	const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -86,6 +88,8 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 		setPendingResponse,
 		nextTaskWorkspace,
 		setNextTaskWorkspace,
+		nextTaskWorktree,
+		setNextTaskWorktree,
 
 		// Refs
 		textAreaRef,

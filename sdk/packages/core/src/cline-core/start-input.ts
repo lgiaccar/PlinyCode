@@ -85,6 +85,8 @@ function coreConfigFromLocalRuntime(
 		modelCatalogDefaults: _modelCatalogDefaults,
 		userInstructionService: _userInstructionService,
 		ruleFilter: _ruleFilter,
+		hookFilter: _hookFilter,
+		onHookStatus: _onHookStatus,
 		configExtensions: _configExtensions,
 		...localConfig
 	} = localRuntime;

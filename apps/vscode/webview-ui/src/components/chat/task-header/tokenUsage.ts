@@ -34,7 +34,8 @@ export interface ApiCallSummary {
 /**
  * The main agent's LLM calls, in order. A live call leaves an empty api_req_started row (the
  * spinner) and a second one carrying usage; only rows with token counts or a cost are calls.
- * Sub-agent and advisor usage arrive as subagent_usage rows and are not included.
+ * Sub-agent, advisor and compaction usage arrive as subagent_usage rows and are not included
+ * (see getSideUsage).
  */
 export function getApiCallUsages(messages: ClineMessage[]): ApiCallUsage[] {
 	const calls: ApiCallUsage[] = []
@@ -136,23 +137,57 @@ export function formatPercent(rate: number): string {
 	return `${(rate * 100).toFixed(rate > 0 && rate < 0.1 ? 1 : 0)}%`
 }
 
-/** Usage of sub-agents and advisor calls (subagent_usage rows), which the per-call bars leave out. */
-export function getSideUsage(messages: ClineMessage[]): { rows: number; tokens: number; cost: number } {
-	const side = { rows: 0, tokens: 0, cost: 0 }
+type SideUsageSource = ClineSubagentUsageInfo["source"]
+
+/** Usage that does not come from the main agent's calls, for one source: its row count, tokens and cost. */
+export interface SideUsage {
+	source: SideUsageSource
+	label: string
+	rows: number
+	tokens: number
+	cost: number
+	estimated: boolean
+}
+
+// Shown in this order, each on its own line.
+const SIDE_USAGE_LABELS: Record<SideUsageSource, string> = {
+	subagents: "Sub-agents",
+	advisor: "Advisor",
+	compaction: "Compaction",
+}
+
+/**
+ * Usage the per-call bars leave out (subagent_usage rows), one entry per source that has any:
+ * sub-agent runs, advisor calls and the compaction summarizer's calls.
+ */
+export function getSideUsage(messages: ClineMessage[]): SideUsage[] {
+	const bySource = new Map<SideUsageSource, SideUsage>()
 	for (const message of messages) {
 		if (message.type !== "say" || message.say !== "subagent_usage" || !message.text) {
 			continue
 		}
+		let info: Partial<ClineSubagentUsageInfo>
 		try {
-			const info = JSON.parse(message.text) as Partial<ClineSubagentUsageInfo>
-			side.rows += 1
-			side.tokens += (info.tokensIn ?? 0) + (info.tokensOut ?? 0) + (info.cacheReads ?? 0) + (info.cacheWrites ?? 0)
-			side.cost += info.cost ?? 0
+			info = JSON.parse(message.text)
 		} catch {
-			// Ignore malformed rows
+			continue
 		}
+		const source: SideUsageSource = info.source && info.source in SIDE_USAGE_LABELS ? info.source : "subagents"
+		const side = bySource.get(source) ?? {
+			source,
+			label: SIDE_USAGE_LABELS[source],
+			rows: 0,
+			tokens: 0,
+			cost: 0,
+			estimated: false,
+		}
+		side.rows += 1
+		side.tokens += (info.tokensIn ?? 0) + (info.tokensOut ?? 0) + (info.cacheReads ?? 0) + (info.cacheWrites ?? 0)
+		side.cost += info.cost ?? 0
+		side.estimated ||= info.estimated === true
+		bySource.set(source, side)
 	}
-	return side
+	return (Object.keys(SIDE_USAGE_LABELS) as SideUsageSource[]).flatMap((source) => bySource.get(source) ?? [])
 }
 
 /**

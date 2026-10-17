@@ -27,6 +27,7 @@ import {
 	type SubAgentEndContext,
 	type SubAgentStartContext,
 	spawnAgentOutputFromResult,
+	spawnAgentUsageFromProgress,
 } from "./spawn-agent-tool";
 
 const ConfiguredAgentInputSchema = z.object({
@@ -145,6 +146,7 @@ export function createConfiguredAgentTools(
 									input: spawnInput,
 									result: output,
 									agentResult: result,
+									usage: output.usage,
 								});
 							} catch {
 								// Best-effort observer callback.
@@ -161,6 +163,7 @@ export function createConfiguredAgentTools(
 									input: spawnInput,
 									error:
 										error instanceof Error ? error : new Error(String(error)),
+									usage: spawnAgentUsageFromProgress(reporter.progress()),
 								});
 							} catch {
 								// Best-effort observer callback.

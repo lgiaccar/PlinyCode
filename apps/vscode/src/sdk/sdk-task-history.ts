@@ -5,7 +5,7 @@ import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
 import { formatDisplayUserInput, parseUserInputMode, type UserInputMode } from "@plinycode/shared"
 import { resolveSessionDataDir } from "@plinycode/shared/storage"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
-import type { HistoryItem } from "@shared/HistoryItem"
+import type { HistoryItem, TaskWorktree } from "@shared/HistoryItem"
 import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
 import type { WorkspaceRef } from "@shared/workspaceRef"
 import { parseWorkspaceKind } from "@shared/workspaceRef"
@@ -21,6 +21,16 @@ import {
 import type { MessageIdMinter } from "./message-id-minter"
 import { sdkMessagesToClineMessages } from "./message-translator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
+import {
+	addExtraUsage,
+	EXTRA_USAGE_METADATA_KEY,
+	type ExtraUsage,
+	type ExtraUsageSource,
+	readExtraUsage,
+	readTaskUsageTotals,
+	type TaskUsageTotals,
+	USAGE_METADATA_KEYS,
+} from "./task-usage-metadata"
 import type { VscodeSessionHost } from "./vscode-session-host"
 
 export interface TaskUsage {
@@ -30,12 +40,6 @@ export interface TaskUsage {
 	cacheReads?: number
 	cacheWrites?: number
 }
-
-/** History metadata fields that hold usage totals. */
-const USAGE_METADATA_KEYS = ["totalCost", "tokensIn", "tokensOut", "cacheWrites", "cacheReads"] as const
-
-/** Stored usage totals of a task, as kept in its history metadata. */
-type TaskUsageTotals = Record<(typeof USAGE_METADATA_KEYS)[number], number>
 
 interface SdkTaskHistoryOptions {
 	mcpHub: McpHub
@@ -72,6 +76,23 @@ export function metadataBoolean(metadata: SessionHistoryRecord["metadata"] | und
 export function metadataString(metadata: SessionHistoryRecord["metadata"] | undefined, key: string): string | undefined {
 	const value = metadata?.[key]
 	return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
+}
+
+/** The `worktree` of a conversation started with "Run in worktree"; undefined when absent or malformed. */
+export function metadataWorktree(metadata: SessionHistoryRecord["metadata"] | undefined): TaskWorktree | undefined {
+	const value = metadata?.worktree
+	if (!value || typeof value !== "object") {
+		return undefined
+	}
+	const fields = value as Record<string, unknown>
+	const repoRoot = metadataString(fields, "repoRoot")
+	const branch = metadataString(fields, "branch")
+	const worktreePath = metadataString(fields, "path")
+	if (!repoRoot || !branch || !worktreePath) {
+		return undefined
+	}
+	const sourceWorkspacePath = metadataString(fields, "sourceWorkspacePath")
+	return { repoRoot, branch, path: worktreePath, ...(sourceWorkspacePath ? { sourceWorkspacePath } : {}) }
 }
 
 /** Parses an ISO date string into epoch ms, or 0 when blank/unparseable. */
@@ -202,6 +223,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
 		// The workspace binding, kept across resumes like the fields above.
 		...(item.workspacePath ? { workspacePath: item.workspacePath, workspaceKind: item.workspaceKind ?? "folder" } : {}),
+		...(item.worktree ? { worktree: item.worktree } : {}),
 	}
 }
 
@@ -288,15 +310,12 @@ function sanitizeSdkUserMessagesForDisplay(messages: SdkMessage[]): SdkDisplayMe
 
 export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): HistoryItem {
 	const metadata = item.metadata
+	const worktree = metadataWorktree(metadata)
 	return {
 		id: item.sessionId,
 		ts: dateStringToTimestamp(item.updatedAt ?? item.endedAt ?? item.startedAt),
 		task: formatDisplayUserInput(metadataString(metadata, "title") ?? item.prompt ?? ""),
-		tokensIn: metadataNumber(metadata, "tokensIn") ?? 0,
-		tokensOut: metadataNumber(metadata, "tokensOut") ?? 0,
-		cacheWrites: metadataNumber(metadata, "cacheWrites") ?? 0,
-		cacheReads: metadataNumber(metadata, "cacheReads") ?? 0,
-		totalCost: metadataNumber(metadata, "totalCost") ?? 0,
+		...readTaskUsageTotals(metadata),
 		size: metadataNumber(metadata, "size"),
 		isFavorited: metadataBoolean(metadata, "isFavorited") ?? metadataBoolean(metadata, "is_favorited") ?? false,
 		isPinned: metadataBoolean(metadata, "isPinned") === true || undefined,
@@ -318,6 +337,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 					workspaceKind: parseWorkspaceKind(metadataString(metadata, "workspaceKind")),
 				}
 			: {}),
+		...(worktree ? { worktree } : {}),
 	}
 }
 
@@ -345,10 +365,12 @@ export function sessionHistoryRecordToTaskItemFields(item: SessionHistoryRecord)
 	activeMs: number
 	workspacePath: string
 	workspaceKind: string
+	worktreeBranch: string
 } {
 	const metadata = item.metadata
 	const workspacePath = sessionRecordWorkspacePath(item)
 	return {
+		worktreeBranch: metadataWorktree(metadata)?.branch ?? "",
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		apiProvider: item.provider ?? "",
 		workspaceRoot: (item.workspaceRoot || item.cwd || "").trim(),
@@ -765,10 +787,11 @@ export class SdkTaskHistory {
 
 	/**
 	 * Writes `item` over the session's history record. Usage totals are only
-	 * changed through `nextUsage`, which gets the totals stored right now;
-	 * every other write keeps the stored ones. Callers such as rename, favorite
-	 * and active-time pass a HistoryItem read earlier, and letting its stale
-	 * totals through made the history list's cost drift from the task header.
+	 * changed through `usage.next`, which gets the totals stored right now,
+	 * and `extraUsage` only through `usage.extra`; every other write keeps the
+	 * stored ones. Callers such as rename, favorite and active-time pass a
+	 * HistoryItem read earlier, and letting its stale totals through made the
+	 * history list's cost drift from the task header.
 	 *
 	 * The favorite and pin flags work the same way: they change only through
 	 * `flags` (their toggles). Every other write keeps the stored flag, because
@@ -779,9 +802,13 @@ export class SdkTaskHistory {
 	private async updateSession(
 		sessionId: string,
 		item: HistoryItem,
-		nextUsage?: (stored: TaskUsageTotals) => TaskUsageTotals,
+		usage?: {
+			next?: (stored: TaskUsageTotals) => TaskUsageTotals
+			extra?: (stored: ExtraUsage | undefined) => ExtraUsage
+		},
 		flags?: { isFavorited?: boolean; isPinned?: boolean },
 	): Promise<void> {
+		const nextUsage = usage?.next
 		const {
 			metadata: writtenMetadata,
 			title: writtenTitle,
@@ -791,6 +818,9 @@ export class SdkTaskHistory {
 			const metadata: Record<string, unknown> = {
 				...(existing?.metadata ?? {}),
 				...historyItemToSessionMetadata(item, existing?.model),
+			}
+			if (usage?.extra) {
+				metadata[EXTRA_USAGE_METADATA_KEY] = usage.extra(readExtraUsage(existing?.metadata))
 			}
 			if (existing) {
 				const stored = Object.fromEntries(
@@ -1016,7 +1046,13 @@ export class SdkTaskHistory {
 		return (await this.listHistory()).map(sessionHistoryRecordToHistoryItem)
 	}
 
-	async updateTaskUsage(taskId: string | undefined, usage: TaskUsage): Promise<void> {
+	/**
+	 * Adds one call's (or one event's) usage to the task's totals. `source`
+	 * names a call the engine does not see (the advisor's, the compaction
+	 * summarizer's), which is also added to `extraUsage`, so the engine's
+	 * end-of-turn write cannot drop it (see task-usage-metadata.ts).
+	 */
+	async updateTaskUsage(taskId: string | undefined, usage: TaskUsage, source?: ExtraUsageSource): Promise<void> {
 		Logger.log(
 			`[SdkController] Task usage: tokensIn=${usage.tokensIn}, tokensOut=${usage.tokensOut}, cost=${usage.totalCost ?? 0}`,
 		)
@@ -1031,20 +1067,29 @@ export class SdkTaskHistory {
 		}
 
 		// Added to the totals stored at write time, not to this possibly stale item's.
-		await this.updateSession(taskId, { ...historyItem, ts: Date.now() }, (stored) => ({
-			tokensIn: stored.tokensIn + usage.tokensIn,
-			tokensOut: stored.tokensOut + usage.tokensOut,
-			cacheReads: stored.cacheReads + (usage.cacheReads ?? 0),
-			cacheWrites: stored.cacheWrites + (usage.cacheWrites ?? 0),
-			totalCost: stored.totalCost + (usage.totalCost ?? 0),
-		}))
+		await this.updateSession(
+			taskId,
+			{ ...historyItem, ts: Date.now() },
+			{
+				next: (stored) => ({
+					tokensIn: stored.tokensIn + usage.tokensIn,
+					tokensOut: stored.tokensOut + usage.tokensOut,
+					cacheReads: stored.cacheReads + (usage.cacheReads ?? 0),
+					cacheWrites: stored.cacheWrites + (usage.cacheWrites ?? 0),
+					totalCost: stored.totalCost + (usage.totalCost ?? 0),
+				}),
+				...(source ? { extra: (stored: ExtraUsage | undefined) => addExtraUsage(stored, source, usage) } : {}),
+			},
+		)
 	}
 
 	/**
 	 * Replaces the task's usage totals, e.g. with what the task header shows
 	 * at the end of a turn, so the history list and the open task agree.
+	 * `extra` replaces `extraUsage` with the transcript's advisor and
+	 * compaction totals.
 	 */
-	async setTaskUsage(taskId: string | undefined, totals: TaskUsageTotals): Promise<void> {
+	async setTaskUsage(taskId: string | undefined, totals: TaskUsageTotals, extra?: ExtraUsage): Promise<void> {
 		if (!taskId) {
 			return
 		}
@@ -1052,7 +1097,11 @@ export class SdkTaskHistory {
 		if (!historyItem) {
 			return
 		}
-		await this.updateSession(taskId, { ...historyItem, ts: Date.now() }, () => totals)
+		await this.updateSession(
+			taskId,
+			{ ...historyItem, ts: Date.now() },
+			{ next: () => totals, ...(extra ? { extra: () => extra } : {}) },
+		)
 	}
 
 	private async getCachedTaskSize(host: VscodeSessionHost, record: SessionHistoryRecord): Promise<number | undefined> {

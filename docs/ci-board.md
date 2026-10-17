@@ -329,7 +329,8 @@ reported again, and nothing is reported for what was already red when the board 
 
 | Path                                                          | Contents                                                                                     |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `apps/vscode/src/services/devops-mcp/ci-board/`               | The board, no `vscode` import: targets and store (`ci-board.ts`, `ci-board-store.ts`, version 2 with the version 1 migration), polling (`ci-board-poller.ts`), dots and transitions (`ci-board-snapshot.ts`), triage and reports (`ci-triage.ts`, `report-dir.ts`), the row's actions, its per-pipeline fixes and their tooltips (`ci-board-actions.ts`), skill detection (`ci-skills.ts`), the built-in prompts (`builtin-prompts.ts`) and the header (`ci-prompt.ts`), auto-watch (`ci-auto-runner.ts`), PR links and worktrees. |
+| `apps/vscode/src/services/devops-mcp/ci-board/`               | The board, no `vscode` import: targets and store (`ci-board.ts`, `ci-board-store.ts`, version 2 with the version 1 migration), polling (`ci-board-poller.ts`), dots and transitions (`ci-board-snapshot.ts`), triage and reports (`ci-triage.ts`, `report-dir.ts`), the row's actions, its per-pipeline fixes and their tooltips (`ci-board-actions.ts`), skill detection (`ci-skills.ts`), the built-in prompts (`builtin-prompts.ts`) and the header (`ci-prompt.ts`), auto-watch (`ci-auto-runner.ts`) and PR links. |
+| `apps/vscode/src/services/git/worktrees.ts`                   | The worktree helpers (`ensureWorktree`, `worktreeRoot`), shared with **Run in worktree** ([task-worktrees.md](task-worktrees.md)). |
 | `apps/vscode/src/services/devops-mcp/host/CiBoardHost.ts`     | Builds the window's board with the editor's sign-in and the free utility model, finds checkouts among the window's folders, runs auto-watch, turns transitions into notifications. |
 | `apps/vscode/src/sdk/ci-run-policy.ts`                        | The approval rules of board runs; `SdkInteractionCoordinator`'s `sessionPolicy` applies them first. |
 | `apps/vscode/src/sdk/sdk-task-start-coordinator.ts`           | `startBackgroundTask` (a task that starts in the background) and `TaskStartOptions.modelId` (a pinned model, kept by `SdkSessionConfigBuilder.pinModel`). |
@@ -340,6 +341,6 @@ reported again, and nothing is reported for what was already red when the board 
 A conversation in a worktree runs the DevOps tools against the worktree: `BuiltinMcpSource.providerFor(cwd)`
 fills in `workspace` for calls that leave it out, where the server would otherwise use the window's first folder.
 
-Tests: `bun test src/services/devops-mcp` (needs `git` on `PATH`; the worktree and report tests use temporary
+Tests: `bun test src/services/devops-mcp src/services/git` (needs `git` on `PATH`; the worktree and report tests use temporary
 repositories); `bunx vitest run --config vitest.config.ts src/sdk/ci-run-policy.test.ts src/sdk/sdk-task-start-coordinator.test.ts src/sdk/sdk-session-config-builder.test.ts src/sdk/sdk-interaction-coordinator.test.ts`;
 and in `webview-ui`, `bunx vitest run src/components/ciBoard`.

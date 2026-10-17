@@ -80,9 +80,13 @@ tokens: uncached input plus cache reads plus cache writes.
 The panel's header row (**Token usage** · calls · cost · hit rate) folds it away and keeps those
 totals in view. It starts open; the choice is remembered per webview in `localStorage`.
 
-The panel reads the `api_req_started` rows, so it covers the main agent's calls. Sub-agent and
-advisor usage appear as one extra line. Each row carries `modelId` and `reasoningTokens` when
-known:
+The panel reads the `api_req_started` rows, so its bars and summary cover the main agent's calls.
+Usage from elsewhere arrives as `subagent_usage` rows, each tagged with its `source`, and the
+summary shows one line per source under it, with a small label: **Sub-agents** (one row per batch
+of `spawn_agent` runs), **Advisor** (one row per `ask_advisor` call) and **Compaction** (the
+summarizer's call), each with its row count when there is more than one, its tokens and its cost.
+The task header's total adds them all. Each `api_req_started` row carries `modelId` and
+`reasoningTokens` when known:
 
 - **The routed model:** `routed-agent-model.ts` tags the usage event with the model that served
   the call. The tag travels through `AgentTokenUsage.modelId` into the saved message metrics and

@@ -21,7 +21,7 @@ A provider that rejects the request as too large gets one basic compaction and a
 
 ## What the summarizer costs
 
-The summarizer's call is a model call like any other. Its tokens and cost come back with the compaction result (`summarizerUsage`), are kept in the summary message's metadata, and are shown as a usage row with `source: "compaction"`, the row type that also carries sub-agent and advisor cost, so the task header, the conversation budget and the history record include it. A reopened conversation rebuilds the row from the summary message. On the routers the summarizer is a free model, and the row's cost is zero.
+The summarizer's call is a model call like any other. Its tokens and cost come back with the compaction result (`summarizerUsage`), are kept in the summary message's metadata, and are shown as a usage row with `source: "compaction"`, the row type that also carries sub-agent and advisor cost, so the task header, the conversation budget and the history record include it. A reopened conversation rebuilds the row from the summary message, and a task running in the background, which has no rows, adds the notice's usage to its history record. The engine's own usage leaves the summarizer out, so the history record keeps it under `extraUsage`, beside the advisor's ([advisor-tool.md](advisor-tool.md), "Cost and the conversation budget"). On the routers the summarizer is a free model, and the row's cost is zero.
 
 ## The context bar
 

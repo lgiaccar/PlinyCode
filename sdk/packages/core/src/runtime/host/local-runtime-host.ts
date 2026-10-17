@@ -509,6 +509,12 @@ export class LocalRuntimeHost implements RuntimeHost {
 			) => this.eventBridge.dispatchAgentEvent(rootSessionId, config, event),
 			invokeBackendOptional: (method: string, ...args: unknown[]) =>
 				this.invokeOptional(method, ...args),
+			settleSubAgentUsage: (
+				rootSessionId: string,
+				subAgentId: string,
+				usage: Parameters<AgentEventBridge["settleSubAgentUsage"]>[2],
+			) =>
+				this.eventBridge.settleSubAgentUsage(rootSessionId, subAgentId, usage),
 		};
 		// A resumed session keeps the provenance it was initiated with
 		// (automation trigger, import source): the start input's metadata

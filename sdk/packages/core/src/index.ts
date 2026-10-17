@@ -383,6 +383,11 @@ export {
 	HookEventNameSchema,
 	type HookEventPayload,
 	HookEventPayloadSchema,
+	type HookFileFilter,
+	type HookRuntimeOptions,
+	type HookStatus,
+	type HookStatusEvent,
+	type HookStatusListener,
 	listHookConfigFiles,
 	mergeAgentHooks,
 	parseHookEventPayload,
@@ -425,6 +430,7 @@ export {
 export { LocalRuntimeHost } from "./runtime/host/local-runtime-host";
 export type {
 	CommandExecutionRuntimeService,
+	LocalRuntimeStartOptions,
 	PendingPromptMutationResult,
 	PendingPromptsDeleteInput,
 	PendingPromptsListInput,

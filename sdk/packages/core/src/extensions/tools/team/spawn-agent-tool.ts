@@ -79,6 +79,14 @@ export interface SubAgentEndContext {
 	result?: SpawnAgentOutput;
 	agentResult?: AgentResult;
 	error?: Error;
+	/**
+	 * What the run's own model calls used, set whether it finished or failed:
+	 * the run's figures on success, the progress sums on failure (a failed or
+	 * timed-out run was still billed for the calls it made). Runs it delegated
+	 * are not included: each reports its own end. `result.usage` does include
+	 * them, so a parent sees one figure per delegation.
+	 */
+	usage?: SpawnAgentOutput["usage"];
 }
 
 /**
@@ -194,11 +202,28 @@ function addNestedRunUsage(nested: NestedRunUsage, output: unknown): void {
 	nested.totalCost += read("totalCost");
 }
 
+/** A run's usage as the progress sums report it, for a run that has no result. */
+export function spawnAgentUsageFromProgress(
+	progress: SubAgentProgress,
+): SpawnAgentOutput["usage"] {
+	return {
+		inputTokens: progress.inputTokens,
+		outputTokens: progress.outputTokens,
+		cacheReadTokens: progress.cacheReadTokens,
+		cacheWriteTokens: progress.cacheWriteTokens,
+		totalCost: progress.totalCost,
+	};
+}
+
 /**
  * Forwards a sub-agent's events to the host's observer and, after each model
  * call and each tool, reports the run's progress through the parent tool
  * call's `emitUpdate`, so the host can show tokens, cost and the current
  * tool while the sub-agent runs.
+ *
+ * Once bound, each forwarded event carries the sub-agent's id and its
+ * parent's (`agentId`, `parentAgentId`): the runtime's events name no agent,
+ * and without them the host counted a sub-agent's usage as the root agent's.
  */
 export function createSubAgentProgressReporter(
 	context: AgentToolContext,
@@ -250,7 +275,15 @@ export function createSubAgentProgressReporter(
 		nestedUsage: () => ({ ...nested }),
 		onEvent: (event) => {
 			try {
-				onEvent?.(event);
+				onEvent?.(
+					progress.subAgentId && !event.agentId
+						? {
+								...event,
+								agentId: progress.subAgentId,
+								parentAgentId: context.agentId,
+							}
+						: event,
+				);
 			} catch {
 				// The host's observer must not break the run.
 			}
@@ -467,11 +500,20 @@ export function createSpawnAgentTool(
 							`The sub-agent was stopped after ${Math.round(timeoutMs / 60000)} minutes without finishing.`,
 						);
 					}
+					// The result carries what the whole subtree used (the parent's
+					// header and budget see one figure per delegation), but the end
+					// callback settles this sub-agent's own usage only: each nested
+					// run settles its own under its id, so passing the subtree total
+					// here would count the nested runs twice.
 					const output = spawnAgentOutputFromResult(
 						result,
 						reporter.progress(),
 						reporter.nestedUsage(),
 					);
+					const ownUsage = spawnAgentOutputFromResult(
+						result,
+						reporter.progress(),
+					).usage;
 					if (config.onSubAgentEnd) {
 						try {
 							await config.onSubAgentEnd({
@@ -481,6 +523,7 @@ export function createSpawnAgentTool(
 								input,
 								result: output,
 								agentResult: result,
+								usage: ownUsage,
 							});
 						} catch {
 							// Best-effort observer callback.
@@ -497,6 +540,7 @@ export function createSpawnAgentTool(
 								input,
 								error:
 									error instanceof Error ? error : new Error(String(error)),
+								usage: spawnAgentUsageFromProgress(reporter.progress()),
 							});
 						} catch {
 							// Best-effort observer callback.

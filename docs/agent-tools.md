@@ -46,6 +46,28 @@ Three extension tools that answer through the language servers running in the VS
 - Language servers only know files they have loaded: a workspace symbol search misses cold files, and a file outside the window's folders (a worktree, another repository) gets file-local answers at best.
 - `plinycode.codeIntel.enabled` (default on) adds the tools to the next conversation; off removes them.
 
+## Web search (`web_search`)
+
+An extension tool that searches the public web and returns titles, URLs and snippets, so the model can look up documentation, error messages and release notes, then read the pages worth reading with `fetch_web_content`. Code is in `apps/vscode/src/sdk/web/` (the tool and the search backends, host-agnostic) and `apps/vscode/src/hosts/vscode/web-search-settings.ts` (settings, the API key, the command).
+
+- `web_search({ query, site?, count? })`. `site` limits the search to one site (it becomes `site:<host>` in the query). `count` is 1 to 10, `plinycode.webSearch.maxResults` (default 8) when omitted.
+- The answer is one block per hit, `n. Title — host`, then the URL and a snippet of at most 200 characters, each indented on its own line, and ends with `Read a page with fetch_web_content before relying on it.` No hits gives a line saying so and suggesting a rephrased query.
+- It runs in parallel with the other read tools, is retried once on failure, and times out after 30 s (each HTTP request after 15 s). An HTTP error comes back as the engine's name, the status and the first 200 characters of the body.
+- It is approved with `fetch_web_content`, under the **Use the browser** auto-approve toggle, and sub-agents get it too. The chat row shows the query and, expanded, the results.
+- The engine's own `web_search` is a provider-native model tool (Anthropic's server-side search), which the Pliny gateway never offers. The extension's tool is added only when the session's provider has no native one, so an Anthropic-direct configuration keeps the native search.
+
+| `plinycode.webSearch.provider` | What answers | Needs |
+| --- | --- | --- |
+| `duckduckgo-html` (default) | DuckDuckGo's script-free results page (`html.duckduckgo.com`), scraped | Nothing. It is a page, not an API: a markup change or a bot check breaks it, and a bot check is reported as an error that suggests another provider. |
+| `searxng` | A SearXNG instance's JSON API (`<endpoint>/search?format=json`) | `plinycode.webSearch.endpoint`, and the `json` format enabled on the instance. Recommended for teams: one self-hosted instance, no key, no scraping. |
+| `brave` | The Brave Search API | A subscription token. |
+| `google-cse` | Google Programmable Search (Custom Search JSON API) | An API key, and the engine id in `plinycode.webSearch.googleCx`. |
+
+- **API key.** Run **PlinyCode: Set Web Search API Key** (`cline.setWebSearchApiKey`), pick Brave or Google, and paste the key. It is kept in the editor's secret storage (the OS keychain), one per provider, never in settings; an empty value removes it. The key is read at search time, so a new one applies to running conversations.
+- **On and off.** `plinycode.webSearch.enabled` (default on), which is also the **Web Search** switch in Settings → Features, adds the tool to the next conversation. The engine's flag for its native search follows the same setting, so one switch covers both.
+- **Proxy.** Requests go through the extension's `fetch` (`apps/vscode/src/shared/net.ts`), the same proxy- and CA-aware one the Pliny gateway calls use.
+- **Privacy.** The query leaves your network for the chosen provider, along with your IP address or the proxy's. Turn the setting off, or point it at a SearXNG instance you run, when that matters.
+
 ## Shell commands (`run_commands`)
 
 With Terminal Execution Mode set to VS Code Terminal (the default), commands
@@ -101,7 +123,7 @@ Commands that outlive their `run_commands` call: one handed over to the terminal
 
 ## Read-only tools run concurrently
 
-`read_files`, `search_codebase`, `find_files`, `process_list`, `process_output` and `fetch_web_content` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
+`read_files`, `search_codebase`, `find_files`, `process_list`, `process_output`, `fetch_web_content` and `web_search` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
 
 The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts`) keeps every open tool by call id for this, so each one finishes into its own row.
 
@@ -118,7 +140,7 @@ The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts
   - `maxIterations` (default 40, 5 to 200): model calls per run. A configured agent's own `maxIterations` takes precedence; one without uses this setting.
 
   Each run also stops after 20 minutes and gets the same context compaction as the root session. Every running sub-agent makes its own model calls, so raising depth or concurrency raises what one delegation can cost, and on a paid model it reaches the conversation's budget sooner.
-- **Cost.** The tool reports progress (`emitUpdate`) after each model call and tool: the sub-agents row shows tool calls, tokens and cost live. Its result carries the run's tokens, cache tokens and cost, which the `subagent_usage` row adds to the task header, the budget check and the history record; a task running in the background records them from the tool result. A sub-agent's result includes what the sub-agents it started used (`spawnAgentOutputFromResult`'s `nested` figures), so at depth 2 the root pays for the whole tree. The chat shows nothing else of a sub-agent's work.
+- **Cost.** The tool reports progress (`emitUpdate`) after each model call and tool: the sub-agents row shows tool calls, tokens and cost live. Its result carries the run's tokens, cache tokens and cost, which the `subagent_usage` row adds to the task header, the budget check and the history record; a task running in the background records them from the tool result. A sub-agent's result includes what the sub-agents it started used (`spawnAgentOutputFromResult`'s `nested` figures), so at depth 2 the root pays for the whole tree. The chat shows nothing else of a sub-agent's work. In the engine, the progress reporter tags each of the sub-agent's events with its id and its parent's (`agentId`, `parentAgentId`), so its usage is counted as the sub-agent's and not the root agent's, and when the run ends, finished or failed, its own totals are settled into the session's aggregate usage under its id (`settleSubAgentUsage` in `core/src/services/agent-events.ts`). The settled figure leaves out the runs it delegated, which settle their own, so a nested run is not counted twice. A repeated end or a late event changes nothing, a turn that fails afterwards still writes the aggregate to the session metadata, and a resumed session reads it back as the floor of the usage it re-adds from the message files, so each run counts once.
 - **Configured agents.** Markdown files with YAML frontmatter (`name`, `description`, and optionally `tools`, `skills`, `providerId`, `modelId`, `maxIterations`) and the agent's prompt as the body, in the workspace's `.cline/agents/` or the global agents folder (`~/.cline/agents/`, or `$CLINE_DIR/agents`). `.yml` and `.yaml` files load too. A workspace agent hides a global one of the same name. The Rules panel's **Agents** tab lists them with their tool name, description, model and path; a file that does not parse is listed with the reason. Each has a switch: a switched-off agent's tool gets a tool policy with `enabled: false` when the next conversation starts (`withDisabledAgentPolicies` in `configured-agents.ts`), which the engine's runtime builder removes from the request. The switches are stored by file path in `localAgentToggles` (workspace) and `globalAgentToggles`. **New agent** writes `<name>.md` from a template with `name` and `description` filled in and every optional field commented out with what leaving it out means, then opens it. Each enabled agent adds a tool, with its description, to every request.
 - **Routing.** On FreeAuto and BalanceAuto, a sub-agent run takes the `subagent` route and keeps its own call log and failover budget, keyed by the engine's agent id, so parallel sub-agents and the root never share one ([pliny-free-auto-router.md](pliny-free-auto-router.md)).
 

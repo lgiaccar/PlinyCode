@@ -36,6 +36,8 @@ export type ActiveSession = {
 	turnAggregateUsageBaseline?: SessionAccumulatedUsage;
 	turnPrimaryUsage?: SessionAccumulatedUsage;
 	turnUsageByAgent?: Map<string, SessionAccumulatedUsage>;
+	/** Sub-agents of this turn whose usage was settled from their result. */
+	turnSettledAgents?: Set<string>;
 	lastInteractiveTurnFinishReason?: AgentFinishReason;
 };
 

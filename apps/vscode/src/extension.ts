@@ -57,6 +57,7 @@ import { DIFF_VIEW_URI_SCHEME, diffContentProvider } from "./hosts/vscode/Vscode
 import { EDIT_PREVIEW_URI_SCHEME, editPreviewContentProvider, VscodeEditPreview } from "./hosts/vscode/VscodeEditPreview"
 import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
 import { exportVSCodeStorageToSharedFiles } from "./hosts/vscode/vscode-to-file-migration"
+import { registerWebSearchSettings } from "./hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "./registry"
 import { configureInstructionSources } from "./sdk/instruction-sources"
 import { formatLastModelRequest } from "./sdk/last-model-request"
@@ -232,13 +233,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	registerAutoUpdater(context)
+	// web_search: its API key command, and the engine's native flag kept in step with the setting.
+	registerWebSearchSettings(context, commands.SetWebSearchApiKey)
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			// Keep the Settings view's pre-release checkbox and memory settings, and the model named on
+			// Keep the Settings view's pre-release, memory and web search settings, and the model named on
 			// the Execute plan button, in step with edits made in VS Code's settings.
 			if (
 				event.affectsConfiguration("plinycode.updates.prerelease") ||
 				event.affectsConfiguration("plinycode.memory") ||
+				event.affectsConfiguration("plinycode.webSearch.enabled") ||
 				event.affectsConfiguration(PLAN_EXECUTE_WITH_SETTING_ID)
 			) {
 				void WebviewProvider.getInstance()?.controller.postStateToWebview()

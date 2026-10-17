@@ -145,6 +145,19 @@ export interface LocalRuntimeStartOptions {
 	 * the VS Code Rules panel). Evaluated whenever the system prompt is built.
 	 */
 	ruleFilter?: import("../safety/rules").RuleFileFilter;
+	/**
+	 * Drops hook files the host has disabled (a per-file toggle, or a global
+	 * hooks switch). Evaluated each time a hook file would run, so toggles
+	 * apply to live sessions. Only used when `configExtensions` includes
+	 * `"hooks"`.
+	 */
+	hookFilter?: import("../../hooks/hook-file-hooks").HookFileFilter;
+	/**
+	 * Reports each hook file run: `running` before it starts, then one of
+	 * `completed`, `failed` or `cancelled`. Lets a host show hook status in
+	 * its UI. Only used when `configExtensions` includes `"hooks"`.
+	 */
+	onHookStatus?: import("../../hooks/hook-file-hooks").HookStatusListener;
 	configExtensions?: RuntimeConfigExtensionKind[];
 }
 

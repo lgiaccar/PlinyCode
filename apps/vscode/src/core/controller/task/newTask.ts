@@ -70,6 +70,8 @@ export async function newTask(controller: Controller, request: NewTaskRequest): 
 		undefined,
 		filteredTaskSettings,
 		workspace,
+		// "Run in worktree": a new git worktree and branch for this conversation (docs/task-worktrees.md).
+		request.worktree ? { worktree: true } : undefined,
 	)
 	return String.create({ value: taskId || "" })
 }

@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.3-test.5",
+	"version": "0.2.3-test.6",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -240,6 +240,11 @@
 			{
 				"command": "cline.forgetAzureDevOpsServerToken",
 				"title": "Forget Azure DevOps Server Token",
+				"category": "PlinyCode"
+			},
+			{
+				"command": "cline.setWebSearchApiKey",
+				"title": "Set Web Search API Key",
 				"category": "PlinyCode"
 			},
 			{
@@ -526,6 +531,11 @@
 					"default": "",
 					"markdownDescription": "Folder for the git worktrees the **CI Board** creates to work on pull requests that are not checked out. Empty puts them next to the repository, in `<repository>.worktrees`."
 				},
+				"plinycode.worktrees.root": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Folder for the git worktrees of conversations started with **Run in worktree**. Each repository gets a subfolder named after it. Empty uses `#plinycode.ci.worktreeRoot#` when that is set, and otherwise puts them next to the repository, in `<repository>.worktrees`."
+				},
 				"plinycode.trace.enabled": {
 					"type": "boolean",
 					"default": true,
@@ -540,6 +550,45 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Give the model the find_symbol and code_navigate tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, and a symbol's definition, references and type. Applies to the next conversation."
+				},
+				"plinycode.webSearch.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Give the model the `web_search` tool, which searches the public web with the provider set in `#plinycode.webSearch.provider#` and returns titles, URLs and snippets. Queries leave your network for that provider. Applies to the next conversation."
+				},
+				"plinycode.webSearch.provider": {
+					"type": "string",
+					"enum": [
+						"duckduckgo-html",
+						"searxng",
+						"brave",
+						"google-cse"
+					],
+					"enumDescriptions": [
+						"DuckDuckGo's HTML results page. Needs no key, but it is scraped and can break or hit a bot check.",
+						"A SearXNG instance's JSON API, at the URL in plinycode.webSearch.endpoint. Recommended for teams.",
+						"The Brave Search API. Needs a subscription token (PlinyCode: Set Web Search API Key).",
+						"Google Programmable Search. Needs an API key (PlinyCode: Set Web Search API Key) and plinycode.webSearch.googleCx."
+					],
+					"default": "duckduckgo-html",
+					"description": "Which search engine answers the web_search tool."
+				},
+				"plinycode.webSearch.endpoint": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Base URL of the SearXNG instance used when `#plinycode.webSearch.provider#` is `searxng`, e.g. `https://searx.example.com`. The instance must allow the `json` output format."
+				},
+				"plinycode.webSearch.googleCx": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Search engine id (`cx`) of the Google Programmable Search engine used when `#plinycode.webSearch.provider#` is `google-cse`."
+				},
+				"plinycode.webSearch.maxResults": {
+					"type": "integer",
+					"default": 8,
+					"minimum": 1,
+					"maximum": 10,
+					"description": "How many results a web search returns when the model does not ask for a number."
 				},
 				"plinycode.memory.maxTokens": {
 					"type": "integer",

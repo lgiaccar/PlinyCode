@@ -45,6 +45,8 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		task,
 		nextTaskWorkspace,
 		setNextTaskWorkspace,
+		nextTaskWorktree,
+		setNextTaskWorktree,
 		clineAsk,
 	} = chatState
 
@@ -61,7 +63,14 @@ export const InputSection: React.FC<InputSectionProps> = ({
 
 	return (
 		<>
-			{!task && <NewTaskWorkspacePicker onChange={setNextTaskWorkspace} value={nextTaskWorkspace} />}
+			{!task && (
+				<NewTaskWorkspacePicker
+					onChange={setNextTaskWorkspace}
+					onWorktreeChange={setNextTaskWorktree}
+					value={nextTaskWorkspace}
+					worktree={nextTaskWorktree}
+				/>
+			)}
 			{activeQuote && (
 				<div style={{ marginBottom: "-12px", marginTop: "10px" }}>
 					<QuotedMessagePreview

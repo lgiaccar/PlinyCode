@@ -46,7 +46,7 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
  * Tools whose row shows the tool's answer: the translator copies the output
  * into `content` when the call completes. The classic read tools get their
  * content elsewhere (the file itself, the search display), so this is only
- * for the extension's code intelligence and background process tools.
+ * for the extension's code intelligence, background process and web search tools.
  */
 const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set([
 	"find_symbol",
@@ -55,6 +55,7 @@ const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set([
 	"process_list",
 	"process_output",
 	"process_kill",
+	"web_search",
 ])
 
 /** The say-tool row with the tool's output as its content, for tools that show it. */

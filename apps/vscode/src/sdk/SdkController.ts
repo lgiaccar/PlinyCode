@@ -12,7 +12,7 @@ import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
-import type { HistoryItem } from "@shared/HistoryItem"
+import type { HistoryItem, TaskWorktree } from "@shared/HistoryItem"
 import { isPlinyFreeModelId } from "@shared/pliny"
 import { LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
@@ -36,10 +36,13 @@ import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
+import { createVscodeWebSearchSetup } from "@/hosts/vscode/web-search-settings"
+import { configuredTaskWorktreeFolder } from "@/hosts/vscode/worktree-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
 import { openCiWatchSource } from "@/services/devops-mcp/ci-watch/ci-watch-source"
 import { CiWatchStore } from "@/services/devops-mcp/ci-watch/ci-watch-store"
+import { ensureTaskWorktree } from "@/services/git/worktrees"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
@@ -53,7 +56,7 @@ import { type ConversationContext, createConversationContext } from "./context"
 import { createMemoryServices, type MemoryServices } from "./memory"
 import { MemoryCoordinator } from "./memory/memory-coordinator"
 import { completeWithUtilityModel } from "./memory/memory-model"
-import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
+import { compactionUsageFromNotice, MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
@@ -103,6 +106,7 @@ import {
 	taskHistoryRowMatches,
 } from "./task-history-query"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
+import { readTaskUsageTotals } from "./task-usage-metadata"
 import { TurnStateTracker } from "./turn-state-tracker"
 import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
@@ -329,6 +333,23 @@ export class Controller {
 		this.background = new SdkBackgroundSessions({
 			stopSession: (session, reason) => this.sessions.stopSession(session, reason),
 			recordUsage: (sessionId, event) => {
+				if (event.type === "notice") {
+					// The compaction summarizer's call, which the engine's usage leaves out.
+					const summarizer = compactionUsageFromNotice(event)
+					if (summarizer) {
+						const usage = {
+							tokensIn: summarizer.tokensIn,
+							tokensOut: summarizer.tokensOut,
+							cacheReads: summarizer.cacheReads,
+							cacheWrites: summarizer.cacheWrites,
+							totalCost: summarizer.cost,
+						}
+						Promise.resolve(this.taskHistory.updateTaskUsage(sessionId, usage, "compaction")).catch((error) => {
+							Logger.error("[SdkController] Failed to persist background compaction usage:", error)
+						})
+					}
+					return
+				}
 				if (event.type !== "usage") {
 					return
 				}
@@ -507,6 +528,7 @@ export class Controller {
 			foregroundCommands: this.foregroundCommands,
 			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
+			getWebSearch: () => createVscodeWebSearchSetup(),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
 				// (vscode-session-host.ts, sdk-terminal-execution-mode-coordinator.ts):
@@ -723,6 +745,8 @@ export class Controller {
 			background: this.background,
 			backgroundSessionsInFolder: (cwd) =>
 				this.background.sessions().filter((session) => workspacePathsEqual(session.startConfig?.cwd, cwd)).length,
+			createTaskWorktree: ({ folder, title }) =>
+				ensureTaskWorktree({ repoRoot: folder, title, configuredRoot: configuredTaskWorktreeFolder() }),
 		})
 		this.compaction = new SdkCompactionCoordinator({
 			stateManager: this.stateManager,
@@ -887,13 +911,17 @@ export class Controller {
 			return
 		}
 		this.taskHistory
-			.updateTaskUsage(sessionId, {
-				tokensIn: usage.inputTokens,
-				tokensOut: usage.outputTokens,
-				cacheReads: usage.cacheReadTokens,
-				cacheWrites: usage.cacheWriteTokens,
-				totalCost: usage.totalCost,
-			})
+			.updateTaskUsage(
+				sessionId,
+				{
+					tokensIn: usage.inputTokens,
+					tokensOut: usage.outputTokens,
+					cacheReads: usage.cacheReadTokens,
+					cacheWrites: usage.cacheWriteTokens,
+					totalCost: usage.totalCost,
+				},
+				"advisor",
+			)
 			.catch((error) => Logger.error("[SdkController] Failed to persist background advisor usage:", error))
 	}
 
@@ -1702,11 +1730,7 @@ export class Controller {
 				isFavorited: isSessionRecordFavorited(item),
 				isPinned: isSessionRecordPinned(item),
 				size: metadataNumber(metadata, "size") ?? 0,
-				totalCost: metadataNumber(metadata, "totalCost") ?? 0,
-				tokensIn: metadataNumber(metadata, "tokensIn") ?? 0,
-				tokensOut: metadataNumber(metadata, "tokensOut") ?? 0,
-				cacheWrites: metadataNumber(metadata, "cacheWrites") ?? 0,
-				cacheReads: metadataNumber(metadata, "cacheReads") ?? 0,
+				...readTaskUsageTotals(metadata),
 				...sessionHistoryRecordToTaskItemFields(item),
 			}
 		})
@@ -1755,6 +1779,7 @@ export class Controller {
 					isLegacy: false,
 					startedTs: taskMessage.ts || 0,
 					activeMs: 0,
+					worktreeBranch: "",
 				})
 			}
 		}
@@ -1919,6 +1944,11 @@ export class Controller {
 			return
 		}
 		await this.postStateToWebview()
+	}
+
+	/** The git worktree a conversation started with "Run in worktree" works in; undefined for any other. */
+	async getTaskWorktree(taskId: string): Promise<TaskWorktree | undefined> {
+		return (await this.taskHistory.findHistoryItem(taskId))?.worktree
 	}
 
 	/** Pins the conversation to the top of the history list, or unpins it. */
