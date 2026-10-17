@@ -91,7 +91,8 @@ interface VscodeSessionHostOptions {
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/**
-	 * The language servers behind `find_symbol` and `code_navigate`, read when a
+	 * The language servers behind `find_symbol`, `code_navigate` and
+	 * `rename_preview`, read when a
 	 * session starts so the `plinycode.codeIntel.enabled` setting applies to the
 	 * next conversation. Undefined turns the tools off.
 	 */
