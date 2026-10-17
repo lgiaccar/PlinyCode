@@ -7,7 +7,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HUB_DEFAULT_COMMAND_TIMEOUT_MS } from "@plinycode/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	createDefaultMcpServerClientFactory,
@@ -568,25 +567,26 @@ describe("remote MCP OAuth connection", () => {
 });
 
 describe("default connect budget", () => {
-	it("keeps the doubled initialize budget well under the hub command timeout", () => {
+	// The most a server that never answers may add to session creation when it
+	// has no explicit `timeout`.
+	const MAX_SESSION_START_DELAY_MS = 15_000;
+
+	it("keeps the doubled initialize budget short", () => {
 		// MCP initialize runs on the session.create critical path, and connect()
-		// can spend the budget twice (newline then Content-Length framing). If
-		// the doubled total approaches HUB_DEFAULT_COMMAND_TIMEOUT_MS, a server
-		// that never initializes stalls session.create past the hub deadline and
-		// the whole session is torn down (a hung server used to kill the CLI
-		// this way). Keep headroom for the rest of session creation.
+		// can spend the budget twice (newline then Content-Length framing), so a
+		// server that never initializes holds up session start for twice the
+		// budget.
 		expect(DEFAULT_MCP_CONNECT_TIMEOUT_MS * 2).toBeLessThanOrEqual(
-			HUB_DEFAULT_COMMAND_TIMEOUT_MS / 2,
+			MAX_SESSION_START_DELAY_MS,
 		);
 	});
 
-	it("keeps the remote connect budget well under the hub command timeout", () => {
+	it("keeps the remote connect budget short", () => {
 		// Remote (SSE/streamable HTTP) connect also runs on the session.create
 		// critical path. Without this bound an offline remote server stalls
-		// session.create past the hub deadline and takes the whole session
-		// down (this crashed the CLI).
+		// session start for the full request timeout.
 		expect(DEFAULT_HTTP_MCP_CONNECT_TIMEOUT_MS).toBeLessThanOrEqual(
-			HUB_DEFAULT_COMMAND_TIMEOUT_MS / 2,
+			MAX_SESSION_START_DELAY_MS,
 		);
 	});
 });

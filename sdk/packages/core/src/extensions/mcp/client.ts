@@ -45,12 +45,11 @@ type JsonRpcMessage = {
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 // Initialize budget when no timeout is configured. This wait sits on the
-// session-create critical path, which the hub caps at 30s
-// (HUB_DEFAULT_COMMAND_TIMEOUT_MS), and connect() may spend it twice (newline
-// then Content-Length framing), so the doubled total MUST stay well under
-// that cap or a hung server takes the whole session down with it. 3s covers
-// typical stdio startup while keeping the worst case (~6s per server, probed
-// in parallel) far from the hub deadline. Slow-starting servers (JVM-based
+// session-create critical path, and connect() may spend it twice (newline
+// then Content-Length framing), so the doubled total must stay small or a
+// hung server holds up the start of every session. 3s covers typical stdio
+// startup while keeping the worst case (~6s per server, probed in parallel)
+// short. Slow-starting servers (JVM-based
 // ones like Oracle SQLcl, uvx downloading a package on first run) need an
 // explicit `timeout`, which overrides this in either direction. Dead commands
 // still fail fast through the spawn error/exit path; only an alive-but-silent
@@ -58,14 +57,12 @@ const MCP_PROTOCOL_VERSION = "2024-11-05";
 export const DEFAULT_MCP_CONNECT_TIMEOUT_MS = 3_000;
 // Connect budget for remote (SSE/streamable HTTP) servers when no timeout is
 // configured. Like the stdio initialize budget above, connect runs on the
-// session-create critical path capped by the hub at 30s
-// (HUB_DEFAULT_COMMAND_TIMEOUT_MS). Without its own budget an unreachable
-// server spends the full request timeout (60s by default, with the SSE
-// transport stuck in a reconnect loop), stalling session.create past the hub
-// deadline and tearing the whole session down. 10s is generous for a healthy
-// remote handshake (DNS, TLS, OAuth discovery) while staying far from the hub
-// cap; servers connect in parallel. An explicit `timeout` overrides this in
-// either direction.
+// session-create critical path. Without its own budget an unreachable server
+// spends the full request timeout (60s by default, with the SSE transport
+// stuck in a reconnect loop), stalling session creation for that long. 10s is
+// generous for a healthy remote handshake (DNS, TLS, OAuth discovery) while
+// keeping session start responsive; servers connect in parallel. An explicit
+// `timeout` overrides this in either direction.
 export const DEFAULT_HTTP_MCP_CONNECT_TIMEOUT_MS = 10_000;
 const DEFAULT_HTTP_MCP_REDIRECT_URL =
 	"http://127.0.0.1:1456/mcp/oauth/callback";
