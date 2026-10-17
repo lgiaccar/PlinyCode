@@ -31,6 +31,16 @@
  *
  *   # Record everything (no filter)
  *   CLINE_VCR=record CLINE_VCR_FILTER="" CLINE_VCR_CASSETTE=./fixtures/all.json cline task "hello"
+ *
+ * Entry points:
+ *   initVcr(mode)        - the original env-driven switch (CLINE_VCR_* only).
+ *   installVcrFromEnv()  - the same, but also reads the PLINYCODE_VCR_* names
+ *                          (each CLINE_VCR_* name is an alias) and returns a
+ *                          handle with the VCR fetch and a stop() method.
+ *   startVcr(options)    - programmatic: one cassette, optional global patch,
+ *                          stop() restores fetch and (record) writes the file.
+ *                          The eval harness (sdk/scripts/eval) uses this to
+ *                          give each case its own cassette in one process.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -40,7 +50,7 @@ import type { VcrRecording } from "./types/vcr";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-type VcrMode = "record" | "playback";
+export type VcrMode = "record" | "playback";
 
 interface VcrConfig {
 	mode: VcrMode;
@@ -53,6 +63,45 @@ interface VcrConfig {
 	 * are intercepted and non-matching requests pass through to the real network.
 	 */
 	filter: string;
+}
+
+/** Options for {@link startVcr}. */
+export interface VcrOptions {
+	mode: VcrMode;
+	/** Cassette file to read (playback) or write on stop() (record). */
+	cassettePath: string;
+	/**
+	 * Only record/replay requests whose path contains this substring; other
+	 * requests go to `baseFetch`. Empty (the default) intercepts everything,
+	 * and in playback an unmatched request then throws.
+	 */
+	filter?: string;
+	/**
+	 * Record: save sanitized request bodies. Playback always asserts the
+	 * bodies a cassette carries; cassettes without them are not checked.
+	 */
+	includeRequestBody?: boolean;
+	/** Playback: milliseconds between SSE chunks (default 100). */
+	sseDelayMs?: number;
+	/** Replace `globalThis.fetch` with the VCR fetch until stop() (default true). */
+	patchGlobalFetch?: boolean;
+	/** The real fetch to record through or pass through to (default: the global fetch). */
+	baseFetch?: typeof fetch;
+}
+
+/** A running VCR, returned by {@link startVcr} and {@link installVcrFromEnv}. */
+export interface VcrSession {
+	readonly mode: VcrMode;
+	readonly cassettePath: string;
+	/** The recording/replaying fetch, for clients that take an explicit fetch. */
+	readonly fetch: typeof fetch;
+	/** Playback: how many cassette entries were served out of the total. */
+	stats(): { used: number; total: number };
+	/**
+	 * Restore the global fetch (when it was patched) and, in record mode,
+	 * write the cassette. Safe to call more than once.
+	 */
+	stop(): void;
 }
 
 interface InternalVcrRecording extends VcrRecording {
@@ -478,6 +527,29 @@ function getVcrConfig(vcrMode: string | undefined): VcrConfig | null {
 	return { mode: vcrMode, cassettePath, filter, includeRequestBody };
 }
 
+/** {@link VcrOptions} with every default applied. */
+interface ResolvedVcrOptions extends VcrConfig {
+	sseDelayMs: number;
+	patchGlobalFetch: boolean;
+	baseFetch: typeof fetch;
+}
+
+function readSseDelayEnv(value: string | undefined): number {
+	return Number.parseInt(value ?? "100", 10);
+}
+
+function resolveVcrOptions(options: VcrOptions): ResolvedVcrOptions {
+	return {
+		mode: options.mode,
+		cassettePath: resolve(options.cassettePath),
+		filter: options.filter ?? "",
+		includeRequestBody: options.includeRequestBody === true,
+		sseDelayMs: options.sseDelayMs ?? 100,
+		patchGlobalFetch: options.patchGlobalFetch !== false,
+		baseFetch: options.baseFetch ?? globalThis.fetch,
+	};
+}
+
 // ── Record mode ─────────────────────────────────────────────────────────
 
 /** An in-progress stream capture that can be finalized synchronously. */
@@ -493,15 +565,13 @@ interface InFlightCapture {
 	finalized: boolean;
 }
 
-function startRecordingRequests(
-	cassettePath: string,
-	filter: string,
-	includeRequestBody: boolean,
-): void {
+function startRecordingRequests(options: ResolvedVcrOptions): VcrSession {
+	const { cassettePath, filter, includeRequestBody } = options;
 	const recordings: InternalVcrRecording[] = [];
 	/** Streams still being consumed, finalized on flush or on process exit. */
 	const inFlight: InFlightCapture[] = [];
-	const originalFetch = globalThis.fetch;
+	const originalGlobalFetch = globalThis.fetch;
+	const originalFetch = options.baseFetch;
 
 	/** Convert accumulated chunks into a recording entry. */
 	function finalizeCapture(capture: InFlightCapture): void {
@@ -535,7 +605,7 @@ function startRecordingRequests(
 		});
 	}
 
-	globalThis.fetch = Object.assign(
+	const vcrFetch: typeof fetch = Object.assign(
 		async (
 			input: string | URL | Request,
 			init?: RequestInit,
@@ -612,6 +682,9 @@ function startRecordingRequests(
 		},
 		{ preconnect: (_url: string | URL) => {} },
 	);
+	if (options.patchGlobalFetch) {
+		globalThis.fetch = vcrFetch;
+	}
 
 	const filterDesc = filter ? `matching path "*${filter}*"` : "all paths";
 	process.stderr.write(
@@ -627,7 +700,9 @@ function startRecordingRequests(
 		saved = true;
 
 		// Restore original fetch
-		globalThis.fetch = originalFetch;
+		if (options.patchGlobalFetch) {
+			globalThis.fetch = originalGlobalFetch;
+		}
 
 		// Finalize any in-flight stream captures with whatever data
 		// has been received so far (critical for SSE streams that may
@@ -655,7 +730,13 @@ function startRecordingRequests(
 		);
 	};
 
-	registerDisposable(saveRecordings);
+	return {
+		mode: "record",
+		cassettePath,
+		fetch: vcrFetch,
+		stats: () => ({ used: recordings.length, total: recordings.length }),
+		stop: saveRecordings,
+	};
 }
 
 // ── Playback mode ───────────────────────────────────────────────────────
@@ -739,26 +820,22 @@ async function assertRequestBodyMatches(input: {
 	}
 }
 
-function startPlayingBackRequests(cassettePath: string, filter: string): void {
+function startPlayingBackRequests(options: ResolvedVcrOptions): VcrSession {
+	const { cassettePath, filter, sseDelayMs } = options;
 	if (!existsSync(cassettePath)) {
-		process.stderr.write(`[VCR] Cassette file not found: ${cassettePath}\n`);
-		process.exit(1);
+		throw new Error(`[VCR] Cassette file not found: ${cassettePath}`);
 	}
 
 	const recordings: VcrRecording[] = JSON.parse(
 		readFileSync(cassettePath, "utf-8"),
 	);
 
-	const sseDelayMs = Number.parseInt(
-		process.env.CLINE_VCR_SSE_DELAY ?? "100",
-		10,
-	);
-
 	// Track which recordings have been consumed (each can be used once)
 	const consumed = new Array<boolean>(recordings.length).fill(false);
-	const originalFetch = globalThis.fetch;
+	const originalGlobalFetch = globalThis.fetch;
+	const originalFetch = options.baseFetch;
 
-	globalThis.fetch = Object.assign(
+	const vcrFetch: typeof fetch = Object.assign(
 		async (
 			input: string | URL | Request,
 			init?: RequestInit,
@@ -854,9 +931,10 @@ function startPlayingBackRequests(cassettePath: string, filter: string): void {
 			// No match found
 			if (!filter) {
 				// Full isolation mode, so no filter means nothing should leak
+				const used = consumed.filter(Boolean).length;
 				throw new Error(
 					`[VCR] No matching recording for ${method} ${url} (path: ${normalizedPath}). ` +
-						`${recordings.length} recording(s) loaded from ${cassettePath}.`,
+						`${recordings.length} recording(s) loaded from ${cassettePath}, ${used} already used.`,
 				);
 			}
 
@@ -865,6 +943,9 @@ function startPlayingBackRequests(cassettePath: string, filter: string): void {
 		},
 		{ preconnect: (_url: string | URL) => {} },
 	);
+	if (options.patchGlobalFetch) {
+		globalThis.fetch = vcrFetch;
+	}
 
 	const filterDesc = filter
 		? `(only paths matching "*${filter}*", all other requests go through normally)`
@@ -872,6 +953,26 @@ function startPlayingBackRequests(cassettePath: string, filter: string): void {
 	process.stderr.write(
 		`[VCR] Playing back ${recordings.length} recorded HTTP interaction(s) from ${cassettePath} ${filterDesc}\n`,
 	);
+
+	let stopped = false;
+	return {
+		mode: "playback",
+		cassettePath,
+		fetch: vcrFetch,
+		stats: () => ({
+			used: consumed.filter(Boolean).length,
+			total: recordings.length,
+		}),
+		stop: () => {
+			if (stopped) {
+				return;
+			}
+			stopped = true;
+			if (options.patchGlobalFetch && globalThis.fetch === vcrFetch) {
+				globalThis.fetch = originalGlobalFetch;
+			}
+		},
+	};
 }
 
 // ── Public API ──────────────────────────────────────────────────────────
@@ -888,13 +989,87 @@ export function initVcr(vcrMode: string | undefined): void {
 		return;
 	}
 
+	const options = resolveVcrOptions({
+		...config,
+		sseDelayMs: readSseDelayEnv(process.env.CLINE_VCR_SSE_DELAY),
+	});
 	if (config.mode === "record") {
-		startRecordingRequests(
-			config.cassettePath,
-			config.filter,
-			config.includeRequestBody,
-		);
+		registerDisposable(startRecordingRequests(options).stop);
 	} else {
-		startPlayingBackRequests(config.cassettePath, config.filter);
+		if (!existsSync(options.cassettePath)) {
+			process.stderr.write(
+				`[VCR] Cassette file not found: ${options.cassettePath}\n`,
+			);
+			process.exit(1);
+		}
+		startPlayingBackRequests(options);
 	}
+}
+
+/**
+ * Start a VCR on one cassette. Playback throws when the cassette is missing.
+ * Unlike {@link initVcr} nothing is registered with `disposeAll()`: the
+ * caller owns the session and must call `stop()` (which, when recording,
+ * is what writes the cassette).
+ */
+export function startVcr(options: VcrOptions): VcrSession {
+	const resolved = resolveVcrOptions(options);
+	return resolved.mode === "record"
+		? startRecordingRequests(resolved)
+		: startPlayingBackRequests(resolved);
+}
+
+function readVcrEnv(
+	env: Record<string, string | undefined>,
+	name: string,
+): string | undefined {
+	return env[`PLINYCODE_VCR${name}`] ?? env[`CLINE_VCR${name}`];
+}
+
+/**
+ * Install the VCR described by the environment, patching `globalThis.fetch`.
+ *
+ * Reads `PLINYCODE_VCR` (`record` | `playback`) and, for each setting, the
+ * `PLINYCODE_VCR_*` name first and the `CLINE_VCR_*` name as an alias:
+ * `_CASSETTE` (required), `_FILTER`, `_INCLUDE_REQUEST_BODY` and
+ * `_SSE_DELAY`. Returns `undefined` (and changes nothing) when no mode is
+ * set, or when the cassette is missing. In record mode the cassette is also
+ * written by `disposeAll()`, like {@link initVcr}.
+ *
+ * Clients that captured a fetch reference before this call (such as the
+ * extension's proxy-aware fetch in `apps/vscode/src/shared/net.ts`) bypass
+ * the patch: hand them the returned `fetch` explicitly.
+ */
+export function installVcrFromEnv(
+	env: Record<string, string | undefined> = process.env,
+): VcrSession | undefined {
+	const mode = readVcrEnv(env, "")?.trim();
+	if (!mode) {
+		return undefined;
+	}
+	if (mode !== "record" && mode !== "playback") {
+		throw new Error(
+			`[VCR] Invalid PLINYCODE_VCR value: "${mode}". Expected "record" or "playback".`,
+		);
+	}
+	const cassettePath = readVcrEnv(env, "_CASSETTE")?.trim();
+	if (!cassettePath) {
+		process.stderr.write(
+			"[VCR] No PLINYCODE_VCR_CASSETTE: requests will not be recorded or played back.\n",
+		);
+		return undefined;
+	}
+	const includeRequestBody = readVcrEnv(env, "_INCLUDE_REQUEST_BODY");
+	const session = startVcr({
+		mode,
+		cassettePath,
+		filter: readVcrEnv(env, "_FILTER") ?? "",
+		includeRequestBody:
+			includeRequestBody === "1" || includeRequestBody === "true",
+		sseDelayMs: readSseDelayEnv(readVcrEnv(env, "_SSE_DELAY")),
+	});
+	if (mode === "record") {
+		registerDisposable(session.stop);
+	}
+	return session;
 }

@@ -4,6 +4,8 @@ import type { McpHub } from "@/services/mcp/McpHub"
 
 // Past conversations are read like files. A saved memory is sent with every
 // later request, so saving one is approved like a file edit (docs/memory.md).
+// Listing background processes and reading their logs are reads; stopping one
+// is approved like a command (COMMAND_TOOLS).
 const READ_TOOLS = [
 	"read_files",
 	"read_file",
@@ -14,9 +16,13 @@ const READ_TOOLS = [
 	"find_files",
 	"find_symbol",
 	"code_navigate",
+	"rename_preview",
 	"search_conversations",
 	"read_conversation",
+	"process_list",
+	"process_output",
 ]
+const COMMAND_TOOLS = ["run_commands", "execute_command", "process_kill"]
 const EDIT_TOOLS = ["editor", "replace_in_file", "write_to_file", "apply_patch", "delete_file", "save_memory"]
 
 /**
@@ -59,7 +65,7 @@ export function buildToolPolicies(
 
 	set(READ_TOOLS)
 	set(EDIT_TOOLS)
-	set(["run_commands", "execute_command"])
+	set(COMMAND_TOOLS)
 	set(["fetch_web_content", "web_fetch", "web_search"])
 	// Delegation follows its own toggle; the sub-agent's own calls then follow
 	// the same policies as the root's, since they edit the same files.
@@ -125,7 +131,7 @@ export function isEditTool(toolName: string): boolean {
 }
 
 function isCommandTool(toolName: string): boolean {
-	return toolName === "run_commands" || toolName === "execute_command"
+	return COMMAND_TOOLS.includes(toolName)
 }
 
 function isBrowserTool(toolName: string): boolean {

@@ -9,6 +9,11 @@
  *
  *   - **Background (backgroundExec):** Delegates to the SDK's createShellExecutor()
  *     for headless child_process.spawn execution.
+ *
+ * With a ProcessRegistry, a terminal command handed over while still running
+ * is registered as a background process, and `background: true` starts a
+ * command as a child process that the call does not wait for
+ * (docs/agent-tools.md, "Background processes").
  */
 
 import {
@@ -21,7 +26,7 @@ import {
 	type StructuredCommandInput,
 	truncateCommandOutput,
 } from "@plinycode/core"
-import type { AgentTool } from "@plinycode/shared"
+import type { AgentTool, AgentToolContext } from "@plinycode/shared"
 import { ClineTempManager } from "@services/temp"
 import * as fs from "fs"
 import { StateManager } from "@/core/storage/StateManager"
@@ -32,10 +37,13 @@ import {
 	getUnobservedTerminalCommandDisposition,
 	type ITerminalProcess,
 	type TerminalCompletionDetails,
+	type TerminalInfo,
 } from "@/integrations/terminal/types"
 import { ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { getShellForProfile } from "@/utils/shell"
+import type { ProcessRegistry } from "./processes/process-registry"
+import { processConversationId } from "./processes/process-tools"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 
 // ---------------------------------------------------------------------------
@@ -72,6 +80,17 @@ const FOREGROUND_LONG_RUNNING_NOTE =
 export const PROCEED_LOG_MAX_BYTES = 10 * 1024 * 1024
 const PROCEED_LOG_FINAL_MESSAGE_MAX_CHARS = 4096
 
+/** A `background: true` command still running after this long is stopped, like a runaway process. */
+const BACKGROUND_PROCESS_MAX_MS = 24 * 60 * 60 * 1000
+
+/** After Ctrl+C, how long a handed-over terminal command gets to stop before its terminal is closed. */
+const TERMINAL_KILL_GRACE_MS = 2000
+
+/** How the model learns about `background`, in place of advice to detach commands by hand. */
+const BACKGROUND_ARGUMENT_NOTE =
+	"For a server, watcher or other job you do not want to wait for, set `background: true`: the call returns at once " +
+	"with a process id, process_output reads its output and process_kill stops it."
+
 /** Options for creating the VSCode run_commands tool. */
 interface VscodeRunCommandsToolOptions {
 	/** Workspace root directory. */
@@ -90,6 +109,18 @@ interface VscodeRunCommandsToolOptions {
 	 * kills the process tree.
 	 */
 	foregroundCommands?: SdkForegroundCommandCoordinator
+	/**
+	 * The window's background processes, owned by SdkController. When given,
+	 * a terminal command handed over while still running is registered there,
+	 * and the tool takes a `background` argument.
+	 */
+	processes?: ProcessRegistry
+}
+
+/** Where a command that outlives its tool call is registered. */
+interface ProcessTracking {
+	registry: ProcessRegistry
+	conversationId: string
 }
 
 // ---------------------------------------------------------------------------
@@ -130,25 +161,56 @@ interface DetachedCommandLog {
 	fail(error: unknown): void
 }
 
-function createDetachedCommandLog(terminalCommand: string, existingLines: string[]): DetachedCommandLog {
-	const logFilePath = ClineTempManager.createTempFilePath("proceed-while-running")
-	const stream = fs.createWriteStream(logFilePath, { flags: "a" })
-	const sizeCapMessage = `[Log size cap of ${PROCEED_LOG_MAX_BYTES} bytes reached; further output is not logged.]`
-	stream.on("error", (error) => {
-		Logger.error(`[VscodeRunCommands] Failed writing proceed-while-running log ${logFilePath}:`, error)
-	})
+/**
+ * A temp log file that takes at most PROCEED_LOG_MAX_BYTES of output, plus a
+ * short closing line. A detached devserver can log for days; once the cap is
+ * hit further writes are refused.
+ */
+interface CappedLogFile {
+	path: string
+	/** Appends the text, or returns false (writing nothing) when it would pass the cap. */
+	tryWrite(text: string): boolean
+	/** Writes the closing line and closes the file. Later calls do nothing. */
+	end(message: string): void
+}
 
+const LOG_SIZE_CAP_MESSAGE = `[Log size cap of ${PROCEED_LOG_MAX_BYTES} bytes reached; further output is not logged.]`
+
+function openCappedLogFile(prefix: string): CappedLogFile {
+	const logFilePath = ClineTempManager.createTempFilePath(prefix)
+	const stream = fs.createWriteStream(logFilePath, { flags: "a" })
+	stream.on("error", (error) => {
+		Logger.error(`[VscodeRunCommands] Failed writing command log ${logFilePath}:`, error)
+	})
 	let bytesWritten = 0
-	const tryWriteLine = (line: string): boolean => {
-		const chunk = `${line}\n`
-		const chunkBytes = Buffer.byteLength(chunk)
-		if (bytesWritten + chunkBytes > PROCEED_LOG_MAX_BYTES) {
-			return false
-		}
-		bytesWritten += chunkBytes
-		stream.write(chunk)
-		return true
+	let ended = false
+	return {
+		path: logFilePath,
+		tryWrite: (text) => {
+			const textBytes = Buffer.byteLength(text)
+			if (ended || bytesWritten + textBytes > PROCEED_LOG_MAX_BYTES) {
+				return false
+			}
+			bytesWritten += textBytes
+			stream.write(text)
+			return true
+		},
+		end: (message) => {
+			if (ended) {
+				return
+			}
+			ended = true
+			// Output obeys the strict cap, but reserve a small bounded allowance for
+			// the terminal status so a full log never hides completion or failure.
+			stream.write(`${message.slice(0, PROCEED_LOG_FINAL_MESSAGE_MAX_CHARS)}\n`)
+			stream.end()
+		},
 	}
+}
+
+function createDetachedCommandLog(terminalCommand: string, existingLines: string[]): DetachedCommandLog {
+	const file = openCappedLogFile("proceed-while-running")
+	const tryWriteLine = (line: string): boolean => file.tryWrite(`${line}\n`)
 
 	let sizeCapReached = !tryWriteLine(`[Running command: ${terminalCommand}]`)
 	for (const line of existingLines) {
@@ -166,20 +228,17 @@ function createDetachedCommandLog(terminalCommand: string, existingLines: string
 		}
 		settled = true
 		removeAttachedListeners()
-		// Output obeys the strict cap, but reserve a small bounded allowance for
-		// the terminal status so a full log never hides completion or failure.
-		stream.write(`${message.slice(0, PROCEED_LOG_FINAL_MESSAGE_MAX_CHARS)}\n`)
-		stream.end()
+		file.end(message)
 	}
 
 	return {
-		path: logFilePath,
+		path: file.path,
 		attach: (process) => {
 			const onLine = (line: string): void => {
 				// Check the cap before writing: a single huge line (e.g. a dumped
 				// binary blob or minified bundle) must not blow past the cap.
 				if (!tryWriteLine(line)) {
-					tryWriteLine(sizeCapMessage)
+					tryWriteLine(LOG_SIZE_CAP_MESSAGE)
 					process.removeListener("line", onLine)
 				}
 			}
@@ -202,7 +261,7 @@ function createDetachedCommandLog(terminalCommand: string, existingLines: string
 				process.removeListener("error", onError)
 			}
 			if (sizeCapReached) {
-				tryWriteLine(sizeCapMessage)
+				tryWriteLine(LOG_SIZE_CAP_MESSAGE)
 			} else {
 				process.on("line", onLine)
 			}
@@ -258,7 +317,7 @@ function narrowTerminalNote(columns: number | undefined): string | undefined {
 
 type DetachReason = "user" | "timeout" | "steer"
 
-function formatDetachedResult(logFilePath: string, output: string, reason: DetachReason): string {
+function formatDetachedResult(logFilePath: string, output: string, reason: DetachReason, processId?: string): string {
 	return [
 		reason === "user"
 			? "The user chose to proceed while the command is starting or still running in their terminal."
@@ -266,8 +325,85 @@ function formatDetachedResult(logFilePath: string, output: string, reason: Detac
 				? "The user sent a new message while the command was still starting or running, so PlinyCode stopped waiting for it and left it running in the terminal. Read the user's message and act on it first."
 				: `The command was still starting or running after ${FOREGROUND_COMMAND_AUTO_PROCEED_MS / 1000} seconds, so PlinyCode automatically proceeded while leaving it running in the terminal.`,
 		`This is partial output; further output is being redirected to this file, which you can read to check progress: ${logFilePath}`,
+		...(processId ? [`It is tracked as process ${processId}: process_output reads its log and process_kill stops it.`] : []),
 		output.length > 0 ? `Output so far:\n${output}` : "No output so far.",
 	].join("\n")
+}
+
+/** A handed-over terminal command in the ProcessRegistry, before and after its process exists. */
+interface TrackedTerminalCommand {
+	id: string
+	/** The command is running in this terminal: follow its end, and apply a kill asked for before it started. */
+	attach(terminalInfo: TerminalInfo, process: ITerminalProcess): void
+	/** The command never started. */
+	fail(): void
+}
+
+function trackTerminalCommand(
+	tracking: ProcessTracking,
+	terminalManager: VscodeTerminalManager,
+	command: string,
+	cwd: string,
+	logPath: string,
+): TrackedTerminalCommand {
+	const { registry } = tracking
+	let terminalInfo: TerminalInfo | undefined
+	// Kills asked for before the command had a terminal, settled once it has one or fails.
+	const pendingKills: Array<() => void> = []
+	const settlePendingKills = (): void => {
+		for (const settle of pendingKills.splice(0)) {
+			settle()
+		}
+	}
+
+	// VS Code cannot kill a terminal's foreground process: send Ctrl+C, and if
+	// the command is still running after a grace period, close the terminal.
+	const interrupt = async (target: TerminalInfo): Promise<void> => {
+		try {
+			terminalManager.sendInterrupt(target)
+		} catch (error) {
+			Logger.warn(`[VscodeRunCommands] Failed to send Ctrl+C to process ${registered.id}: ${error}`)
+		}
+		await new Promise((resolve) => setTimeout(resolve, TERMINAL_KILL_GRACE_MS))
+		if (registry.get(registered.id)?.status === "running" && target.busy) {
+			try {
+				terminalManager.disposeTerminal(target)
+			} catch (error) {
+				Logger.warn(`[VscodeRunCommands] Failed to close the terminal of process ${registered.id}: ${error}`)
+			}
+		}
+	}
+
+	const registered = registry.register({
+		conversationId: tracking.conversationId,
+		command,
+		cwd,
+		source: "terminal",
+		logPath,
+		kill: () => (terminalInfo ? interrupt(terminalInfo) : new Promise<void>((resolve) => pendingKills.push(resolve))),
+	})
+
+	return {
+		id: registered.id,
+		attach: (info, process) => {
+			terminalInfo = info
+			process.once("completed", (details?: TerminalCompletionDetails) => {
+				if (details?.unobservedCommand) {
+					registry.markLost(registered.id)
+				} else {
+					registry.markExited(registered.id, typeof details?.exitCode === "number" ? details.exitCode : undefined)
+				}
+			})
+			process.once("error", () => registry.markLost(registered.id))
+			if (pendingKills.length > 0) {
+				void interrupt(info).finally(settlePendingKills)
+			}
+		},
+		fail: () => {
+			registry.markExited(registered.id)
+			settlePendingKills()
+		},
+	}
 }
 
 type PreStartControl = "detach" | "abort"
@@ -283,6 +419,7 @@ export async function executeForeground(
 	terminalProfileId?: string,
 	sessionId?: string,
 	userMessageSignal?: AbortSignal,
+	processes?: ProcessTracking,
 ): Promise<string> {
 	const terminalCommand = formatCommandForTerminal(command)
 	const abortedError = (output?: string): CommandAbortedError =>
@@ -302,6 +439,10 @@ export async function executeForeground(
 	// late command would re-block the turn the button just released.
 	const state: { phase: "waiting" | "started" | "detached" | "aborted" } = { phase: "waiting" }
 	let detachedLog: DetachedCommandLog | undefined
+	// The handed-over command in the ProcessRegistry, registered with its log.
+	let tracked: TrackedTerminalCommand | undefined
+	const track = (logPath: string): TrackedTerminalCommand | undefined =>
+		processes ? trackTerminalCommand(processes, terminalManager, terminalCommand, cwd, logPath) : undefined
 	let detachReason: DetachReason | undefined
 	let applyDetach: ((reason: DetachReason) => void) | undefined
 	let resolvePreStartControl!: (control: PreStartControl) => void
@@ -313,6 +454,7 @@ export async function executeForeground(
 			state.phase = "detached"
 			detachReason = reason
 			detachedLog = createDetachedCommandLog(terminalCommand, [])
+			tracked = track(detachedLog.path)
 			resolvePreStartControl("detach")
 		} else if (state.phase === "started") {
 			applyDetach?.(reason)
@@ -354,10 +496,12 @@ export async function executeForeground(
 			try {
 				const process = terminalManager.runCommand(terminalInfo, terminalCommand, { reveal })
 				log.attach(process)
+				tracked?.attach(terminalInfo, process)
 				void process.catch((error) => log.fail(error))
 				process.detach()
 			} catch (error) {
 				log.fail(error)
+				tracked?.fail()
 			}
 		}
 		const acquisition = terminalPromise.then(
@@ -369,6 +513,7 @@ export async function executeForeground(
 				startDetached(outcome.terminalInfo, log)
 			} else {
 				log.fail(outcome.error)
+				tracked?.fail()
 			}
 		}
 		const finishAbortedAcquisition = (outcome: Awaited<typeof acquisition>): void => {
@@ -395,7 +540,7 @@ export async function executeForeground(
 				throw new Error("Detached command log was not initialized")
 			}
 			void acquisition.then((outcome) => finishDetachedAcquisition(outcome, log))
-			return formatDetachedResult(log.path, "", detachReason ?? "timeout")
+			return formatDetachedResult(log.path, "", detachReason ?? "timeout", tracked?.id)
 		}
 
 		// Acquisition and a user action can resolve in the same microtask turn.
@@ -412,7 +557,7 @@ export async function executeForeground(
 				throw new Error("Detached command log was not initialized")
 			}
 			finishDetachedAcquisition(firstOutcome, log)
-			return formatDetachedResult(log.path, "", detachReason ?? "timeout")
+			return formatDetachedResult(log.path, "", detachReason ?? "timeout", tracked?.id)
 		}
 		if (firstOutcome.type === "error") {
 			throw firstOutcome.error
@@ -472,6 +617,8 @@ export async function executeForeground(
 				detachReason = reason
 				detachedLog = createDetachedCommandLog(terminalCommand, outputLines)
 				detachedLog.attach(process)
+				tracked = track(detachedLog.path)
+				tracked?.attach(terminalInfo, process)
 				// detach() flushes any partial line (reaching both bufferLine and
 				// the log) before resolving the awaited promise. After that the
 				// partial output is final: stop buffering so the remaining
@@ -498,7 +645,7 @@ export async function executeForeground(
 			}
 
 			if (detachedLog !== undefined) {
-				return formatDetachedResult(detachedLog.path, output, detachReason ?? "timeout")
+				return formatDetachedResult(detachedLog.path, output, detachReason ?? "timeout", tracked?.id)
 			}
 
 			const completionDetails = process.getCompletionDetails?.()
@@ -610,18 +757,137 @@ function takeShellSnapshot(): ShellSnapshot {
  */
 export function createVscodeRunCommandsTool(options: VscodeRunCommandsToolOptions): AgentTool {
 	const state = { snapshot: takeShellSnapshot() }
-	return createShellTool(createVscodeShellExecutor(options, state), {
+	const terminalMode = (options.vscodeTerminalExecutionMode ?? "vscodeTerminal") === "vscodeTerminal"
+	const notes = [
+		terminalMode ? FOREGROUND_LONG_RUNNING_NOTE : undefined,
+		options.processes ? BACKGROUND_ARGUMENT_NOTE : undefined,
+	]
+	const longRunningNote = notes.filter((note): note is string => note !== undefined).join(" ") || undefined
+	const tool = createShellTool(createVscodeShellExecutor(options, state), {
 		cwd: options.cwd,
 		bashTimeoutMs: options.bashTimeoutMs,
-		longRunningNote:
-			(options.vscodeTerminalExecutionMode ?? "vscodeTerminal") === "vscodeTerminal"
-				? FOREGROUND_LONG_RUNNING_NOTE
-				: undefined,
+		longRunningNote,
 		shell: () => {
 			state.snapshot = takeShellSnapshot()
 			return state.snapshot.shell
 		},
 	})
+	if (options.processes) {
+		addBackgroundArgument(tool)
+	}
+	return tool
+}
+
+/**
+ * Marks a tool call made with `background: true` on the context the engine
+ * hands to the executor (it copies the context's own keys, symbols included).
+ */
+const RUN_IN_BACKGROUND = Symbol("plinycode.runCommandsInBackground")
+
+type RunCommandsContext = AgentToolContext & { [RUN_IN_BACKGROUND]?: boolean }
+
+/**
+ * Adds the optional `background` argument to the engine's run_commands. The
+ * tool is changed in place, because its description is a getter that must
+ * keep being read for each model request.
+ */
+function addBackgroundArgument(tool: AgentTool): void {
+	const schema = tool.inputSchema as { properties?: Record<string, unknown> }
+	tool.inputSchema = {
+		...tool.inputSchema,
+		properties: {
+			...(schema.properties ?? {}),
+			background: {
+				type: "boolean",
+				description:
+					"Start the commands as background processes and return at once with their ids, without waiting for them to finish.",
+			},
+		},
+	}
+	const execute = tool.execute.bind(tool)
+	tool.execute = (input, context) => {
+		if (input && typeof input === "object" && !Array.isArray(input) && "background" in input) {
+			const { background, ...rest } = input as Record<string, unknown>
+			if (background === true || background === "true") {
+				const backgroundContext: RunCommandsContext = { ...context, [RUN_IN_BACKGROUND]: true }
+				return execute(rest, backgroundContext)
+			}
+			return execute(rest, context)
+		}
+		return execute(input, context)
+	}
+}
+
+/**
+ * Starts a command as a child process the call does not wait for: its output
+ * goes to a log file, and the ProcessRegistry can stop it by aborting it,
+ * which kills the process tree.
+ */
+function startBackgroundProcess(
+	command: ShellCommand,
+	cwd: string,
+	context: AgentToolContext,
+	executor: ShellExecutor,
+	tracking: ProcessTracking,
+): string {
+	const displayCommand = formatCommandForTerminal(command)
+	const log = openCappedLogFile("background-process")
+	log.tryWrite(`[Running command: ${displayCommand}]\n`)
+	let sizeCapReached = false
+	const controller = new AbortController()
+	let settle!: () => void
+	const settled = new Promise<void>((resolve) => {
+		settle = resolve
+	})
+
+	const registered = tracking.registry.register({
+		conversationId: tracking.conversationId,
+		command: displayCommand,
+		cwd,
+		source: "child",
+		logPath: log.path,
+		kill: async () => {
+			controller.abort(new Error("Stopped with process_kill"))
+			await settled
+		},
+	})
+
+	// The executor streams output through emitUpdate while the command runs,
+	// and resolves with the same output once it ends; only the stream is logged.
+	const childContext: AgentToolContext = {
+		...context,
+		signal: controller.signal,
+		userMessageSignal: undefined,
+		emitUpdate: (update) => {
+			const chunk = (update as { chunk?: unknown } | undefined)?.chunk
+			if (typeof chunk === "string" && chunk.length > 0 && !sizeCapReached && !log.tryWrite(chunk)) {
+				sizeCapReached = true
+			}
+		},
+	}
+	const finish = (message: string, exitCode?: number): void => {
+		log.end(sizeCapReached ? `\n${LOG_SIZE_CAP_MESSAGE}\n${message}` : `\n${message}`)
+		tracking.registry.markExited(registered.id, exitCode)
+	}
+	void executor(command, cwd, childContext)
+		.then(
+			() => finish("[Command completed with exit code 0]", 0),
+			(error: unknown) => {
+				if (error instanceof CommandExitError) {
+					finish(`[Command exited with code ${error.exitCode}]`, error.exitCode)
+				} else if (controller.signal.aborted) {
+					finish("[Command stopped]")
+				} else {
+					finish(`[Command failed: ${error instanceof Error ? error.message : String(error)}]`)
+				}
+			},
+		)
+		.finally(settle)
+
+	return (
+		`Started ${displayCommand} as process ${registered.id} (log: ${log.path}). ` +
+		"Use process_output to read it and process_kill to stop it."
+	)
 }
 
 function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state: { snapshot: ShellSnapshot }): ShellExecutor {
@@ -632,15 +898,31 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 	let bgExecutor: ShellExecutor | undefined
 	let bgExecutorShell: string | undefined
 
+	// The executor for `background: true`: the same spawn, without the tool's timeout.
+	let processExecutor: ShellExecutor | undefined
+	let processExecutorShell: string | undefined
+
 	// Lazy-init terminal manager reference
 	let terminalManager: VscodeTerminalManager | undefined
 
 	return async (command, commandCwd, context): Promise<string> => {
-		Logger.log(`[VscodeRunCommands] Executing command in ${executionMode} mode`)
-
 		// Execute with the shell named in the model request that produced this
 		// tool call, not the setting's current value (see createVscodeRunCommandsTool).
 		const { profileId, shell } = state.snapshot
+		const processes: ProcessTracking | undefined = options.processes
+			? { registry: options.processes, conversationId: processConversationId(context) }
+			: undefined
+
+		if (processes && (context as RunCommandsContext)[RUN_IN_BACKGROUND]) {
+			Logger.log("[VscodeRunCommands] Starting a background process")
+			if (!processExecutor || processExecutorShell !== shell) {
+				processExecutorShell = shell
+				processExecutor = createShellExecutor({ shell, env: { SHELL: shell }, timeoutMs: BACKGROUND_PROCESS_MAX_MS })
+			}
+			return startBackgroundProcess(command, commandCwd || cwd, context, processExecutor, processes)
+		}
+
+		Logger.log(`[VscodeRunCommands] Executing command in ${executionMode} mode`)
 
 		if (executionMode === "backgroundExec") {
 			// Background path — use SDK's createShellExecutor.
@@ -679,6 +961,7 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 			profileId,
 			context.sessionId,
 			context.userMessageSignal,
+			processes,
 		)
 	}
 }

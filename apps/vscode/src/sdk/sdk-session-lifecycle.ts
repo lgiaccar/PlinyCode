@@ -7,6 +7,7 @@ import { Logger } from "@/shared/services/Logger"
 import type { ActiveSession } from "./cline-session-factory"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import type { ConversationEditorState } from "./context/editor-state"
+import type { ProcessRegistry } from "./processes/process-registry"
 import { forgetSession } from "./router/router-health"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { buildToolPolicies } from "./sdk-tool-policies"
@@ -35,8 +36,10 @@ interface SdkSessionLifecycleOptions {
 	getTerminalManager?: () => VscodeTerminalManager
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
-	/** The language servers behind `find_symbol` and `code_navigate`; undefined leaves the tools out. */
+	/** The language servers behind `find_symbol`, `code_navigate` and `rename_preview`; undefined leaves the tools out. */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/** The window's background processes, for `run_commands` and the `process_*` tools. */
+	processes?: ProcessRegistry
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void
 	onSendError: (error: unknown, sessionId: string) => Promise<void> | void
@@ -459,6 +462,7 @@ export class SdkSessionLifecycle {
 				getTerminalManager: this.options.getTerminalManager,
 				foregroundCommands: this.options.foregroundCommands,
 				getCodeIntel: this.options.getCodeIntel,
+				processes: this.options.processes,
 			})
 				.then((sdkHost) => {
 					this.ensureSharedHostSubscription(sdkHost)

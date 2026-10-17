@@ -7,6 +7,8 @@ import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
 import { Logger } from "@/shared/services/Logger"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import { createCodeIntelTools } from "./code-intel/code-intel-tools"
+import type { ProcessRegistry } from "./processes/process-registry"
+import { createProcessTools } from "./processes/process-tools"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
 import { createTodoTool } from "./vscode-todo-tool"
@@ -70,10 +72,16 @@ interface VscodeExtraToolsOptions {
 	 */
 	forSubAgents?: boolean
 	/**
-	 * The window's language servers, for `find_symbol` and `code_navigate`.
+	 * The window's language servers, for `find_symbol`, `code_navigate` and `rename_preview`.
 	 * Absent when the user turned code intelligence off (`plinycode.codeIntel.enabled`).
 	 */
 	codeIntel?: CodeIntelSource
+	/**
+	 * The window's background processes. With it, `run_commands` registers the
+	 * commands it hands over or starts with `background: true`, and the
+	 * `process_list`, `process_output` and `process_kill` tools are added.
+	 */
+	processes?: ProcessRegistry
 }
 
 export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExtraToolsOptions): Promise<AgentTool[]> {
@@ -145,8 +153,14 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 				bashTimeoutMs: executionMode === "vscodeTerminal" ? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS : undefined,
 				vscodeTerminalExecutionMode: executionMode,
 				foregroundCommands: options.forSubAgents ? undefined : options.foregroundCommands,
+				processes: options.processes,
 			}),
 		)
+		// The model's handle on the commands that outlive their run_commands call
+		// (docs/agent-tools.md, "Background processes").
+		if (options.processes) {
+			tools.push(...createProcessTools({ registry: options.processes }))
+		}
 		Logger.log(
 			`[VscodeRuntimeTools] Added custom run_commands tool (mode=${executionMode}, timeoutMs=${executionMode === "vscodeTerminal" ? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS : "default"})`,
 		)

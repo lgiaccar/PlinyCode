@@ -1,6 +1,7 @@
 import type { PipelineRun, Provider, PullRequest, RunReport } from "../../server/providers/types"
 import type { RepoContext } from "../../server/repo"
 import type { CiWatchConversationHost, CiWatchDelivery } from "../ci-watch-manager"
+import type { CiWatchPersistence, CiWatchRecord } from "../ci-watch-store"
 import type { CiWatchClock } from "../ci-watcher"
 
 /** Lets promise chains started by a timer callback run to completion. */
@@ -179,5 +180,46 @@ export class FakeHost implements CiWatchConversationHost {
 
 	notify(conversationId: string, message: string): void {
 		this.notifications.push({ conversationId, message })
+	}
+}
+
+/** A saved record of a PR watch two minutes in, whose head moved once. */
+export function savedRecord(conversationId = "c1", overrides: Partial<CiWatchRecord> = {}): CiWatchRecord {
+	return {
+		conversationId,
+		watch: {
+			label: "PR #7 (feature → main)",
+			providerKind: "GitHub",
+			target: {
+				cwd: "/work/repo",
+				remote: { kind: "github", host: "github.com", owner: "octo", repo: "hello" },
+				pr: 7,
+				branch: "feature",
+			},
+			until: "finished",
+			head: HEAD_B,
+			headSince: 60 * SECOND,
+			headMoves: [{ from: HEAD_A, to: HEAD_B }],
+			startedAt: 0,
+			deadline: 2 * 60 * MINUTE,
+		},
+		wakeUps: 2,
+		...overrides,
+	}
+}
+
+/** A store in memory: `saved` is what the last save wrote. */
+export class MemoryStore implements CiWatchPersistence {
+	saves = 0
+
+	constructor(public saved: CiWatchRecord[] = []) {}
+
+	async load(): Promise<CiWatchRecord[]> {
+		return structuredClone(this.saved)
+	}
+
+	async save(records: CiWatchRecord[]): Promise<void> {
+		this.saves++
+		this.saved = structuredClone(records)
 	}
 }

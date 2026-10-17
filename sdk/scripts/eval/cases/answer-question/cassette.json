@@ -1,0 +1,20 @@
+[
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_0_0\",\"type\":\"function\",\"function\":{\"name\":\"read_files\",\"arguments\":\"{\\\"files\\\":[{\\\"path\\\":\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"src/greet.ts\\\"}]}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":3900,\"completion_tokens\":30,\"total_tokens\":3930}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"greet(\\\"Ada\\\") returns the string \\\"Hello, Ada!\\\": it fills the name into a \\\"Hello, <name>!\\\" template.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":4000,\"completion_tokens\":30,\"total_tokens\":4030}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	}
+]
