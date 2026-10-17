@@ -188,6 +188,13 @@ describe("FreeAuto router model", () => {
 		expect(router?.metadata).toMatchObject({ provider: "pliny", router: true });
 	});
 
+	it("accepts images on every profile, which the extension's router describes for its free models", () => {
+		const models = buildPlinyModels();
+		for (const profile of PLINY_ROUTER_PROFILES) {
+			expect(models[profile.id]?.capabilities).toContain("images");
+		}
+	});
+
 	it("declares a context window at least as large as most of the pool", () => {
 		const models = buildPlinyModels();
 		const routerWindow = models[PLINY_FREE_AUTO_MODEL_ID]?.contextWindow ?? 0;

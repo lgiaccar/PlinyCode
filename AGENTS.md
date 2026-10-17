@@ -26,7 +26,7 @@ This file covers the whole repo. Read the guide nearest to the code you're chang
 Design and operations notes are in `docs/`:
 
 - [docs/releasing.md](docs/releasing.md): releases, `-test.N` pre-releases and the auto-updater. Read it before any version or release work.
-- [docs/pliny-free-auto-router.md](docs/pliny-free-auto-router.md), [docs/pliny-free-auto-thinking.md](docs/pliny-free-auto-thinking.md) and [docs/pliny-balance-auto.md](docs/pliny-balance-auto.md): how the FreeAuto and BalanceAuto models route and keep runs going.
+- [docs/pliny-free-auto-router.md](docs/pliny-free-auto-router.md), [docs/pliny-free-auto-thinking.md](docs/pliny-free-auto-thinking.md) and [docs/pliny-balance-auto.md](docs/pliny-balance-auto.md): how the FreeAuto and BalanceAuto models route, keep runs going, and hand images to models that cannot see them (`plinycode.router.images`).
 - [docs/devops-mcp.md](docs/devops-mcp.md): the built-in DevOps MCP server for GitHub and Azure DevOps.
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.
@@ -36,7 +36,7 @@ Design and operations notes are in `docs/`:
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
 - [docs/task-worktrees.md](docs/task-worktrees.md): **Run in worktree**, which starts a conversation on a new branch in a git worktree of its own (where it goes, `plinycode.worktrees.root`, the task header chip), and what v1 leaves out (merge-back, cleanup).
-- [docs/agent-tools.md](docs/agent-tools.md): how the editing, search, file-finding and web search tools behave (including the `web_search` backends and settings), how `run_commands` handles long-running commands and narrow terminals, the background processes it leaves running (`process_list`, `process_output`, `process_kill`), which tools run concurrently, and the `update_todo_list` task list.
+- [docs/agent-tools.md](docs/agent-tools.md): how the editing, search, file-finding, web search and `view_image` tools behave (including the `web_search` backends and settings), how `run_commands` handles long-running commands and narrow terminals, the background processes it leaves running (`process_list`, `process_output`, `process_kill`), which tools run concurrently, and the `update_todo_list` task list.
 - [docs/edit-problems.md](docs/edit-problems.md): how edit results list the new errors VS Code reports for the edited files, and the `plinycode.edits.reportNewProblems` setting.
 - [docs/environment-context.md](docs/environment-context.md): the git snapshot in the system prompt (taken once per conversation) and the editor state sent with each user message, and how both stay out of the chat.
 - [docs/memory.md](docs/memory.md): repo memory: the per-repository and per-user `MEMORY.md` files loaded into the system prompt within `plinycode.memory.maxTokens`, `save_memory` and `/remember`, distillation proposals, and the past-conversation search tools.

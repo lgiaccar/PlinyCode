@@ -11,7 +11,7 @@ import { installInstructionContextRows } from "./instruction-context-rows"
 import { installLastRequestCapture } from "./last-model-request"
 import type { ConversationMemorySnapshots } from "./memory/conversation-memory-snapshots"
 import { installMemory, type MemoryInstallDeps } from "./memory/install-memory"
-import { installRouter, type RouterInstallDeps } from "./router/router-integration"
+import { installRouter, type RouterImageDeps, type RouterInstallDeps } from "./router/router-integration"
 import type { PastedCommandBodies } from "./slash-command-expansion"
 import { installSessionTrace, type SessionTrace, type SessionTraceDeps } from "./trace/session-trace"
 
@@ -70,6 +70,8 @@ interface SdkSessionConfigBuilderOptions {
 	 * the git snapshot, and the memory and conversation search tools.
 	 */
 	memory?: MemoryInstallDeps & { snapshots: Pick<ConversationMemorySnapshots, "prepare"> }
+	/** What the routers do with images their models cannot see (`router/router-images.ts`). */
+	routerImages?: RouterImageDeps
 	/** The advisor tool's settings, budget check and usage sink; the tool is installed when given. */
 	advisor?: Pick<AdvisorInstallDeps, "getSettings" | "checkBudget" | "onUsage">
 	/** The per-session trace (`<dataDir>/traces/<sessionId>.jsonl`); recorded when given. */
@@ -211,6 +213,7 @@ export class SdkSessionConfigBuilder {
 				// The id is read when the review runs: a new session's is only final once it has started.
 				...(getRunChanges ? { getRunChanges: () => getRunChanges(config.sessionId ?? "") } : {}),
 				...(this.options.trace ? { onCallEvent: (event) => trace?.recordRouterEvent(event) } : {}),
+				...(this.options.routerImages ? { images: this.options.routerImages } : {}),
 			})
 		}
 

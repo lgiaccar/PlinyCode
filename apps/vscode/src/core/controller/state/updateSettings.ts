@@ -71,6 +71,11 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 			controller.stateManager.setGlobalState("chatInputMaxRows", request.chatInputMaxRows)
 		}
 
+		// The webview keeps "Unlock Pliny paid models" itself; the routers read this copy (router-images.ts).
+		if (request.plinyPaidModelsUnlocked !== undefined) {
+			controller.stateManager.setGlobalState("plinyPaidModelsUnlocked", request.plinyPaidModelsUnlocked)
+		}
+
 		// Update MCP display mode setting
 		if (request.mcpDisplayMode !== undefined) {
 			// Convert proto enum to string type
