@@ -1,4 +1,4 @@
-import type { AgentTool } from "@plinycode/shared";
+import type { AgentEvent, AgentTool } from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CoreSessionConfig } from "../../../types/config";
 import {
@@ -9,6 +9,7 @@ import {
 
 const runMock = vi.fn();
 const agentConstructorSpy = vi.fn();
+const subAgentListeners: Array<(event: AgentEvent) => void> = [];
 
 vi.mock("../../orchestration/session-runtime-orchestrator", () => ({
 	SessionRuntime: class MockSessionRuntime {
@@ -21,7 +22,8 @@ vi.mock("../../orchestration/session-runtime-orchestrator", () => ({
 		getConversationId(): string {
 			return "conv-sub-1";
 		}
-		subscribeEvents(): () => void {
+		subscribeEvents(listener: (event: AgentEvent) => void): () => void {
+			subAgentListeners.push(listener);
 			return () => {};
 		}
 		async run(input: string): Promise<unknown> {
@@ -41,9 +43,26 @@ function tool(name: string): AgentTool {
 
 const deps = {
 	getSession: () => undefined,
-	onAgentEvent: () => {},
+	onAgentEvent: vi.fn(),
 	invokeBackendOptional: async () => {},
+	settleSubAgentUsage: vi.fn(),
 };
+
+function emitSubAgentEvent(event: AgentEvent): void {
+	for (const listener of subAgentListeners) {
+		listener(event);
+	}
+}
+
+const usageEvent = {
+	type: "usage",
+	inputTokens: 30,
+	outputTokens: 6,
+	cacheReadTokens: 4,
+	cost: 0.05,
+	totalInputTokens: 30,
+	totalOutputTokens: 6,
+} as AgentEvent;
 
 const config = {
 	providerId: "pliny",
@@ -60,6 +79,7 @@ const context = { agentId: "root", iteration: 1 };
 describe("createSessionSpawnTool", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		subAgentListeners.length = 0;
 		runMock.mockResolvedValue({
 			text: "done",
 			iterations: 1,
@@ -130,5 +150,69 @@ describe("createSessionSpawnTool", () => {
 		};
 		expect(agentConfig.systemPrompt).toContain("Be careful");
 		expect(agentConfig.systemPrompt).toContain("<env>");
+	});
+
+	it("tags the sub-agent's events with its id and settles its usage from the result", async () => {
+		runMock.mockImplementation(async () => {
+			emitSubAgentEvent(usageEvent);
+			return {
+				text: "done",
+				iterations: 1,
+				finishReason: "completed",
+				usage: {
+					inputTokens: 30,
+					outputTokens: 6,
+					cacheReadTokens: 4,
+					totalCost: 0.05,
+				},
+			};
+		});
+		const spawn = createSessionSpawnTool(deps, config, "root-session");
+		await spawn.execute({ task: "look around" }, context);
+
+		// Without the ids the host counted the sub-agent's usage as the root's.
+		expect(deps.onAgentEvent).toHaveBeenCalledWith(
+			"root-session",
+			config,
+			expect.objectContaining({
+				type: "usage",
+				agentId: "sub-agent-1",
+				parentAgentId: "root",
+			}),
+		);
+		expect(deps.settleSubAgentUsage).toHaveBeenCalledTimes(1);
+		expect(deps.settleSubAgentUsage).toHaveBeenCalledWith(
+			"root-session",
+			"sub-agent-1",
+			expect.objectContaining({
+				inputTokens: 30,
+				outputTokens: 6,
+				cacheReadTokens: 4,
+				totalCost: 0.05,
+			}),
+		);
+	});
+
+	it("settles a failed sub-agent's usage from its progress", async () => {
+		runMock.mockImplementation(async () => {
+			emitSubAgentEvent(usageEvent);
+			throw new Error("model failed");
+		});
+		const spawn = createSessionSpawnTool(deps, config, "root-session");
+		await expect(
+			spawn.execute({ task: "look around" }, context),
+		).rejects.toThrow("model failed");
+
+		expect(deps.settleSubAgentUsage).toHaveBeenCalledWith(
+			"root-session",
+			"sub-agent-1",
+			{
+				inputTokens: 30,
+				outputTokens: 6,
+				cacheReadTokens: 4,
+				cacheWriteTokens: 0,
+				totalCost: 0.05,
+			},
+		);
 	});
 });

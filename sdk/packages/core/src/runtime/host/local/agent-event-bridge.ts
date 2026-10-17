@@ -8,6 +8,7 @@ import {
 	type AgentEventContext,
 	extractAgentEventMetadata,
 	handleAgentEvent,
+	settleSubAgentUsage,
 } from "../../../services/agent-events";
 import type { CoreSessionConfig } from "../../../types/config";
 import type { CoreSessionEvent } from "../../../types/events";
@@ -60,6 +61,23 @@ export class AgentEventBridge {
 		// A non-root (sub-agent) event carries its own metadata, and a session
 		// that was already deregistered has no live usage baseline to update.
 		handleAgentEvent(ctx, event, { isPrimaryAgentEvent: false });
+	}
+
+	/** See {@link settleSubAgentUsage}. */
+	settleSubAgentUsage(
+		sessionId: string,
+		subAgentId: string,
+		usage: Parameters<typeof settleSubAgentUsage>[2],
+	): void {
+		settleSubAgentUsage(
+			{
+				sessionId,
+				liveSession: this.deps.getSession(sessionId),
+				aggregateUsageBySession: this.deps.aggregateUsageBySession,
+			},
+			subAgentId,
+			usage,
+		);
 	}
 
 	async handlePluginEvent(

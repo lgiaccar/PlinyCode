@@ -92,6 +92,19 @@ An advisor call is a paid call.
   reopened, so the cost is not lost. For a task in the background, which has
   no chat rows until reopened, the controller adds the cost to its history
   record directly.
+- **The history record.** The engine never sees an advisor call, and at the
+  end of every turn it writes its own `totalCost` (the root agent's calls
+  only) over the one the extension keeps. So the extension also keeps the
+  advisor's tokens and cost, and the compaction summarizer's, under a
+  metadata key of its own, `extraUsage` (`{ advisor, compaction }`), which
+  the engine never writes: the open task rewrites it from its usage rows with
+  every usage update, a background task adds each call to it. The history
+  list reads the engine's aggregate (root agent plus sub-agents) plus
+  `extraUsage`, or the extension's running totals when they are larger (they
+  run ahead between the engine's writes), so the order of the two writes no
+  longer matters and the history total matches the task header's. A
+  conversation saved before `extraUsage` existed reads as it did. The code is
+  in `apps/vscode/src/sdk/task-usage-metadata.ts`.
 
 ## Chat rows
 
@@ -103,15 +116,12 @@ consulted**" with the reason. No proto or webview change was needed.
 
 ## Known limitations
 
-- The engine writes its own `totalCost` (root-agent model calls only) to the
-  session metadata at the end of a turn. That write can land after the
-  extension's `setTaskUsage`, and then the history list leaves out advisor
-  (and sub-agent) cost until the next usage event rewrites the total. The task
-  header and the budget check read the chat rows and are not affected.
-  Sub-agent cost reaches the same `subagent_usage` row type from the
-  `spawn_agent` tool result ([agent-tools.md](agent-tools.md), "Sub-agents"),
-  and the compaction summarizer's from the compaction notice
-  ([context-compaction.md](context-compaction.md)).
+- The engine and the extension each read the session metadata, change it and
+  write it back whole. An extension write that lands between the engine's
+  read and its write is lost; for the open task the next usage update
+  rewrites `extraUsage` from the chat rows, but a background task's advisor
+  call caught in that window would be missing from the history record until
+  the task is reopened.
 - The call count is per conversation; two VS Code windows on the same
   conversation keep separate in-memory counts (the count read back from the
   conversation still applies on the next session start).

@@ -255,6 +255,32 @@ describe("SdkSessionEventCoordinator", () => {
 				say: "api_req_started",
 				text: JSON.stringify({ tokensIn: 20, tokensOut: 5, cacheReads: 7, cost: 0.25 }),
 			},
+			{
+				ts: 4,
+				type: "say",
+				say: "subagent_usage",
+				text: JSON.stringify({
+					source: "advisor",
+					tokensIn: 100,
+					tokensOut: 50,
+					cacheReads: 0,
+					cacheWrites: 0,
+					cost: 0.1,
+				}),
+			},
+			{
+				ts: 5,
+				type: "say",
+				say: "subagent_usage",
+				text: JSON.stringify({
+					source: "subagents",
+					tokensIn: 40,
+					tokensOut: 4,
+					cacheReads: 0,
+					cacheWrites: 0,
+					cost: 0.2,
+				}),
+			},
 		]
 		const { coordinator, options, event } = makeCoordinator({
 			task: { taskId: "task-1", messageStateHandler: { getClineMessages: () => transcript } },
@@ -268,12 +294,20 @@ describe("SdkSessionEventCoordinator", () => {
 
 		await coordinator.handleSessionEvent(event)
 
-		expect(options.taskHistory.setTaskUsage).toHaveBeenCalledWith("task-1", {
-			totalCost: 0.75,
-			tokensIn: 30,
-			tokensOut: 10,
+		const [taskId, totals, extra] = options.taskHistory.setTaskUsage.mock.calls[0]
+		expect(taskId).toBe("task-1")
+		expect(totals).toEqual({
+			totalCost: expect.closeTo(1.05),
+			tokensIn: 170,
+			tokensOut: 64,
 			cacheWrites: 0,
 			cacheReads: 7,
+		})
+		// The advisor's call also goes where the engine's end-of-turn write cannot reach;
+		// the sub-agents' usage is the engine's own.
+		expect(extra).toEqual({
+			advisor: { totalCost: 0.1, tokensIn: 100, tokensOut: 50, cacheWrites: 0, cacheReads: 0 },
+			compaction: { totalCost: 0, tokensIn: 0, tokensOut: 0, cacheWrites: 0, cacheReads: 0 },
 		})
 		expect(options.taskHistory.updateTaskUsage).not.toHaveBeenCalled()
 	})

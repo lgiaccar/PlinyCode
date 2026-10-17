@@ -15,6 +15,7 @@ import {
 	getSideUsage,
 	groupCallsByModel,
 	promptTokens,
+	type SideUsage,
 	summarizeApiCalls,
 } from "./tokenUsage"
 
@@ -241,7 +242,7 @@ const TokenUsagePanel: React.FC<TokenUsagePanelProps> = ({ clineMessages, select
 										: modelLabel(modelGroups[0]?.modelId || undefined)
 							}
 							showCost={showCost}
-							side={!selectedGroup && side.rows > 0 ? side : undefined}
+							side={!selectedGroup && side.length > 0 ? side : undefined}
 							usage={usage}
 						/>
 					)}
@@ -280,7 +281,8 @@ const UsageLines: React.FC<{
 	model: string
 	usage: Omit<ApiCallSummary, "models"> & { models?: ApiCallSummary["models"] }
 	showCost: boolean
-	side?: { rows: number; tokens: number; cost: number }
+	/** Usage outside the main agent's calls, one line per source. */
+	side?: SideUsage[]
 }> = ({ caption, model, usage, showCost, side }) => {
 	const approx = usage.estimated ? "~" : ""
 	return (
@@ -321,17 +323,25 @@ const UsageLines: React.FC<{
 					</>
 				)}
 			</div>
-			{side && (
-				<div>
-					+ sub-agents and advisor: {formatTokens(side.tokens)} tokens
-					{showCost && (
-						<>
-							<Dot />
-							{formatCost(side.cost)}
-						</>
-					)}
+			{side?.map((entry) => (
+				<div className="flex items-center gap-1 min-w-0" data-testid="token-usage-side" key={entry.source}>
+					<span className="shrink-0 px-1 rounded-xs bg-(--vscode-badge-background) text-(--vscode-badge-foreground) text-[10px] leading-4">
+						{entry.label}
+					</span>
+					<span className="truncate">
+						{entry.rows > 1 && `×${entry.rows} · `}
+						{entry.estimated ? "~" : ""}
+						{formatTokens(entry.tokens)} tokens
+						{showCost && (
+							<>
+								<Dot />
+								{entry.estimated ? "~" : ""}
+								{formatCost(entry.cost)}
+							</>
+						)}
+					</span>
 				</div>
-			)}
+			))}
 		</div>
 	)
 }

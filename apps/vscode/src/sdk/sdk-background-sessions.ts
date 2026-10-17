@@ -73,7 +73,7 @@ interface BackgroundEntry {
 export interface SdkBackgroundSessionsOptions {
 	/** Stops a finished (or no longer wanted) background session. */
 	stopSession: (session: ActiveSession, reason: string) => Promise<void>
-	/** Persists token/cost usage reported by a background session. */
+	/** Persists token/cost usage reported by a background session: a usage event, or a compaction notice. */
 	recordUsage: (sessionId: string, event: Extract<CoreSessionEvent, { type: "agent_event" }>["payload"]["event"]) => void
 	/** Shows a non-modal notification; `onOpen` reopens the task when its action is chosen. */
 	notify: (message: string, onOpen: () => void) => void
@@ -236,7 +236,8 @@ export class SdkBackgroundSessions implements BackgroundInteractionSink {
 					}
 					break
 				}
-				if (agentEvent.type === "usage") {
+				// A compaction notice carries the summarizer's usage.
+				if (agentEvent.type === "usage" || agentEvent.type === "notice") {
 					this.options.recordUsage(sessionId, agentEvent)
 				} else if (agentEvent.type === "done" && entry.runningSubagents === 0) {
 					entry.lastDoneReason = agentEvent.reason
