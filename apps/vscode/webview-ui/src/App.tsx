@@ -5,9 +5,11 @@ import McpView from "./components/mcp/configuration/McpConfigurationView"
 import PipelinesView from "./components/pipelines/PipelinesView"
 import SettingsView from "./components/settings/SettingsView"
 import { useExtensionState } from "./context/ExtensionStateContext"
+import { useMirrorPaidModelsUnlock } from "./hooks/useMirrorPaidModelsUnlock"
 import { Providers } from "./Providers"
 
 const AppContent = () => {
+	useMirrorPaidModelsUnlock()
 	const {
 		didHydrateState,
 		showMcp,
