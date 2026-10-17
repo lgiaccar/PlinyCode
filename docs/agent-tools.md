@@ -70,6 +70,15 @@ The `@` menu in the chat input asks the host for candidate files (`searchWorkspa
 - A query that looks like an identifier (three characters or more) also asks the language servers for workspace symbols (`vscode.executeWorkspaceSymbolProvider`, at most 1.5 s). The files declaring classes, interfaces, functions, enums, structs, modules, namespaces or constants whose names contain the query come first, labelled `path (Symbol)`, so `@ChatRowProps` offers the file that declares it.
 - Each `findFiles` call is cancelled after 5 s. When the index finds nothing in time, or fails, the caller falls back to ripgrep. A directory outside the window's folders (a conversation in a worktree) is answered with gRPC's UNIMPLEMENTED code, which sends the caller to ripgrep without a warning in the log.
 
+## Viewing images (`view_image`)
+
+An extension tool (`apps/vscode/src/sdk/view-image-tool.ts`) that lets the model look at an image file in the workspace: a screenshot a test or the user saved, a diagram, a UI mockup. An extension cannot take a screenshot itself (VS Code has no screen-capture API, and `vscode.env.clipboard` is text-only), so a file on disk is the way in; an image pasted into the prompt reaches the model without it.
+
+- `view_image({ path })`. The path is relative to the session's working directory (the workspace root, or the conversation's worktree) or absolute; after symlinks are resolved it must lie inside that folder.
+- PNG, JPEG, GIF and WebP, told apart by their first bytes rather than the extension, at most 3.75 MB, the largest file whose base64 still fits the gateway's 5 MB per-image limit. A bigger file is refused with a hint to save a smaller copy or a crop.
+- The result is a line such as `Image shots/button.png (PNG, 1280×720, 245 KB)` followed by the image as an image block, the shape `read_files` returns for an image. An image-capable model sees the image. On `auto-free` and `auto-paid-balanced` a free model gets the router's description of it instead, made once per image ("Images" in [pliny-free-auto-router.md](pliny-free-auto-router.md), `plinycode.router.images`). A conversation on a concrete model that cannot see images gets an error saying so.
+- It runs in parallel with the other read tools, is approved with them (the **Read files** auto-approve toggle, and inside the working copy on a CI board run), and sub-agents get it too. The chat shows it as a file read of the image, which opens the image when clicked.
+
 ## Web search (`web_search`)
 
 An extension tool that searches the public web and returns titles, URLs and snippets, so the model can look up documentation, error messages and release notes, then read the pages worth reading with `fetch_web_content`. Code is in `apps/vscode/src/sdk/web/` (the tool and the search backends, host-agnostic) and `apps/vscode/src/hosts/vscode/web-search-settings.ts` (settings, the API key, the command).
@@ -147,7 +156,7 @@ Commands that outlive their `run_commands` call: one handed over to the terminal
 
 ## Read-only tools run concurrently
 
-`read_files`, `search_codebase`, `find_files`, `find_symbol`, `code_navigate`, `rename_preview`, `process_list`, `process_output`, `fetch_web_content` and `web_search` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `rename_symbol`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
+`read_files`, `search_codebase`, `find_files`, `find_symbol`, `code_navigate`, `rename_preview`, `process_list`, `process_output`, `view_image`, `fetch_web_content` and `web_search` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `rename_symbol`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
 
 The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts`) keeps every open tool by call id for this, so each one finishes into its own row.
 

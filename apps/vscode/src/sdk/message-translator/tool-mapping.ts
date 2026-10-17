@@ -162,6 +162,7 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *
  * SDK tool names → classic tool names:
  *   read_files/read_file               → readFile
+ *   view_image                         → readFile (path: the image)
  *   list_files                         → listFilesTopLevel / listFilesRecursive
  *   list_code_definition_names         → listCodeDefinitionNames
  *   editor/replace_in_file             → editedExistingFile
@@ -199,6 +200,14 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 				tool: "readFile",
 				path: fileRead?.path ?? "",
 				...readLineRangeFields(fileRead),
+			}
+		}
+
+		case "view_image": {
+			// Shown as a file read: the row names the image, and clicking it opens it in the editor.
+			return {
+				tool: "readFile",
+				path: getStringField(parsedInput, "path") ?? "",
 			}
 		}
 

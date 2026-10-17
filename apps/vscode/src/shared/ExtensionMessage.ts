@@ -443,10 +443,11 @@ export interface ClineCompactionInfo {
 export interface ClineSubagentUsageInfo {
 	/**
 	 * Whose usage the row adds to the conversation's: a sub-agent batch, one
-	 * advisor call (`ask_advisor`), or the model call that summarized the
-	 * context during compaction.
+	 * advisor call (`ask_advisor`), the model call that summarized the
+	 * context during compaction, or one image the router had described for a
+	 * model that cannot see images (`plinycode.router.images`).
 	 */
-	source: "subagents" | "advisor" | "compaction"
+	source: "subagents" | "advisor" | "compaction" | "vision"
 	tokensIn: number
 	tokensOut: number
 	cacheWrites: number

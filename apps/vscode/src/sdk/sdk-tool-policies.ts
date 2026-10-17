@@ -5,7 +5,7 @@ import type { McpHub } from "@/services/mcp/McpHub"
 // Past conversations are read like files. A saved memory is sent with every
 // later request, so saving one is approved like a file edit (docs/memory.md).
 // Listing background processes and reading their logs are reads; stopping one
-// is approved like a command (COMMAND_TOOLS).
+// is approved like a command (COMMAND_TOOLS). Viewing an image file is a read.
 const READ_TOOLS = [
 	"read_files",
 	"read_file",
@@ -21,6 +21,7 @@ const READ_TOOLS = [
 	"read_conversation",
 	"process_list",
 	"process_output",
+	"view_image",
 ]
 const COMMAND_TOOLS = ["run_commands", "execute_command", "process_kill"]
 // `rename_symbol` applies a language server's rename across files, so it is

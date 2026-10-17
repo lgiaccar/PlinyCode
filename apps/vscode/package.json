@@ -452,6 +452,21 @@
 					"default": true,
 					"markdownDescription": "Before a run on an auto router (`auto-free`, `auto-paid-balanced`) that changed files ends, have a second free model read the diff. Problems it is confident about go back to the working model once, to check and fix; the chat shows which model reviewed and how many problems it flagged. The review itself costs nothing. On `auto-paid-balanced`, when a paid model is answering, the round of fixes it asks for is billed like any other call; on `auto-free` nothing is billed."
 				},
+				"plinycode.router.images": {
+					"type": "string",
+					"enum": [
+						"describe",
+						"vision-model",
+						"off"
+					],
+					"default": "describe",
+					"markdownEnumDescriptions": [
+						"Have each image described once, as text, by the cheapest model that can see images, and give the free model the description. About half a cent per image with Claude Haiku 4.5; each image is described once per conversation.",
+						"Run a turn that brings a new image on the cheapest model that can see images, image included. Every call of that turn is billed at that model's price; later turns go back to the free models, which get the image as a description.",
+						"Do not show images to the free models: they are told an image was attached but not shown. Nothing is spent."
+					],
+					"markdownDescription": "What `auto-free` and `auto-paid-balanced` do with an image (pasted into a message, or opened by the `view_image` or `read_files` tool) when the model they route to cannot see images, which no free model can. A model that can see images always gets the image itself. Both paid options need a paid model: on `auto-free` they apply only when **Unlock Pliny paid models** is on (Settings → API configuration), and otherwise fall back to `off` with a notice in the chat. Image descriptions are checked against the conversation's budget (`#plinycode.spending.conversationLimit#`) and their cost is added to the conversation's."
+				},
 				"plinycode.plan.executeWith": {
 					"type": "string",
 					"enum": [

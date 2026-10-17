@@ -285,6 +285,76 @@ said, and the reply's tail. `bun apps/vscode/scripts/summarize-free-auto-log.ts
 --tails` turns that and the call log into per-profile, per-model and per-route
 tables, including how often the classifier actually produced a verdict.
 
+## Images
+
+No free Pliny model accepts image input; five hosted ones do (Claude Sonnet
+5, 4.6 and 4.5, Claude Haiku 4.5 and GPT-5.2: `attachment: true` in the
+catalog, the `images` capability). A FreeAuto conversation with an image in it
+used to fail every call with "auto-free has no model that accepts
+images among its candidates", and kept failing, because the image stays in the
+history. Now the router handles images itself (`router-images.ts`), and the
+FreeAuto profiles declare image input, so the prompt box no longer warns that
+an attached image will be ignored.
+
+A routed call carries images when the user pasted or attached one, or when a
+tool returned one: `view_image` ([agent-tools.md](agent-tools.md)), or
+`read_files` on a PNG. The call is routed as if it had none. A candidate that
+accepts images (on BalanceAuto, the paid Claude models) gets the request as it
+is; any other gets a copy in which each image is replaced by text, according
+to `plinycode.router.images`:
+
+| Setting | A text-only model gets | Spends |
+| --- | --- | --- |
+| `describe` (default) | `<image_description sha="…">…</image_description>`: the image described by the cheapest image-capable model | one call per new image |
+| `vision-model` | a turn that brings a new image runs on the cheapest image-capable model, image included; later turns are routed as usual and get descriptions | that model's price for every call of the turn |
+| `off` | `[An image was attached here but is not shown to you: …]` | nothing |
+
+- **The describer** is the cheapest image-capable model in the catalog the
+  conversation may use, ranked by what a description costs (about 1,600
+  tokens in, 400 out): Claude Haiku 4.5 today, at roughly $0.004 an image. A
+  free model with image input would be chosen first if the catalog ever had
+  one. Router ids are never chosen. It gets a fixed instruction (transcribe
+  all visible text verbatim, describe the layout, what is selected or shows an
+  error, the boxes and arrows of a diagram, the axes and values of a chart,
+  code in a fenced block; no speculation, no advice), the user's latest
+  message for context, and the image; the reply is capped at 1,200 tokens and
+  the call at 60 seconds.
+- **Once per image.** Descriptions are kept per conversation, in memory, by
+  the first 12 hex digits of the image's SHA-256, so the same image re-sent
+  with every later request is described once. Two calls that need the same
+  image at once share one description. An image whose description failed is
+  not retried within the turn. At most eight new images are described per
+  call; the rest get the note. After a window reload the cache is empty and
+  each image still in the history is described once more.
+- **Paid models.** On BalanceAuto paid models are allowed. On FreeAuto they are
+  allowed only while **Unlock Pliny paid models** is on (Settings → API
+  configuration). That toggle lives in the webview's local storage, so the
+  webview mirrors it to the extension (`plinyPaidModelsUnlocked`, sent when it
+  loads and on every change). Without a paid model allowed and no free one
+  that can see images, `describe` and `vision-model` fall back to `off`, and
+  the chat says why and how to turn it on.
+- **Budget and cost.** Before paid image work the conversation's spend is
+  checked against its budget with the advisor's rule
+  ([advisor-tool.md](advisor-tool.md)): it applies on a free model too, and a
+  spent budget replaces the image by a note instead of pausing the run. Each
+  description adds a hidden `subagent_usage` row with `source: "vision"`, so
+  its cost is in the task header (the token panel lists it as **Image
+  descriptions**, one row per image), the next budget check and the history
+  record (`extraUsage.vision`). A task running in the background records it in
+  its history record directly. In `vision-model` mode the turn's calls are
+  ordinary model calls on a paid model and are counted like any other; the
+  completion guard and the judge leave a turn alone while it runs on the paid
+  model.
+- **Rows.** The first description in a conversation adds `🖼 Images were
+  described by **Claude Haiku 4.5** because the free models can't see images
+  (…)`; a `vision-model` turn says which model it runs on, and its routing row
+  shows `route: images`. A paid-locked fallback, an `off` drop, a spent
+  budget and a failed description each get one row (the first two once per
+  conversation, the others once per turn).
+
+The stored conversation is never changed: switching to an image-capable model
+later sends it the real images.
+
 ## Models that think in their content
 
 The gateway exposes no reasoning channel for some self-hosted models: their
