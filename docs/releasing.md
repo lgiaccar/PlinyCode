@@ -6,6 +6,8 @@ and Remote-SSH hosts.
 
 In Claude Code, the `/release` skill walks through the steps below. The `/prerelease` skill ticks the `-test.N`
 version on a PR branch and publishes pre-releases (see [Testing a release before users get it](#testing-a-release-before-users-get-it)).
+To try a PR without publishing anything, install the build its CI attaches (see
+[Installing a pull request's build](#installing-a-pull-requests-build)).
 
 > **The repository is public**, so GitHub releases (and the `.vsix` files) can be downloaded by anyone.
 
@@ -189,6 +191,24 @@ Pre-releases are numbered `<next release>-test.<N>` and tagged `release_<version
 4. A throwaway pre-release can be deleted afterwards, with its tag:
    `gh release delete release_0.1.3-test.2 --repo lgiaccar/PlinyCode --cleanup-tag`, then
    `git tag -d release_0.1.3-test.2`.
+
+## Installing a pull request's build
+
+Every PR that changes the extension (the paths `ext-vscode-test-e2e` watches, including `sdk/packages/**`) gets an
+installable build without publishing a pre-release. The `e2e (ubuntu)` job packages the extension with the same
+`vsce package` production build as `release:package` (only the README differs) and attaches it to the workflow run as
+`PlinyCode-<version>-pr<number>.vsix`, kept for 14 days. `<version>` is whatever `apps/vscode/package.json` says on
+the branch, so a PR that didn't tick the version carries the same number as the last pre-release.
+
+1. Open the PR's **Checks** tab, pick the `ext-vscode-test-e2e` run and scroll to its **Artifacts** (the `e2e (ubuntu)`
+   job's summary links straight to the file). You need to be signed in to GitHub to download it.
+2. GitHub delivers the artifact as a `.zip`; unzip it to get the `.vsix`.
+3. Install it: **Extensions → ⋯ → Install from VSIX…**, then reload the window.
+4. Turn off `plinycode.updates.enabled` while you test it. Otherwise the updater replaces the PR build with any newer
+   published release or pre-release (it only ever installs a higher version than the running one).
+
+The artifact is uploaded even when an e2e test failed, so check the PR's checks before relying on it. Pushes to
+`stage` and `master` attach no build; those are published through the release steps above.
 
 ## Pulling a bad release
 

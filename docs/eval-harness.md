@@ -64,7 +64,7 @@ PLINY_API_KEY=... bun --use-system-ca sdk/scripts/eval/run.ts --record --case cr
 
 ### CI
 
-The `eval-offline` job in [engine-test.yml](../.github/workflows/engine-test.yml) builds the SDK, typechecks the harness (`bun tsc -p sdk/scripts/eval/tsconfig.json`), runs every case offline and uploads `ai_output/eval/` as the `eval-results` artifact. It runs whenever the workflow does, on changes under `sdk/**`.
+The `eval-offline` job in [engine-test.yml](../.github/workflows/engine-test.yml) restores the SDK `dist/` that the workflow's `Quality Checks` job built (through `.github/actions/sdk-dist`), typechecks the harness (`bun tsc -p sdk/scripts/eval/tsconfig.json`), runs every case offline and uploads `ai_output/eval/` as the `eval-results` artifact. It runs whenever the workflow does, on changes under `sdk/**`.
 
 ## Adding a case
 
