@@ -58,6 +58,12 @@ export class CiBoardStore {
 		return key ? sanitize(file.boards[key]) : empty()
 	}
 
+	/** The runs of every window workspace's board, for the worktree cleanup. Never throws. */
+	async allLinks(): Promise<CiLink[]> {
+		const file = await this.read()
+		return Object.values(file.boards).flatMap((board) => Object.values(sanitize(board).links))
+	}
+
 	/** Applies `change` to the workspace's board as it is on disk now, and saves it. */
 	async update(workspace: string, change: (data: CiBoardData) => CiBoardData): Promise<CiBoardData> {
 		const run = this.writeQueue.then(async () => {

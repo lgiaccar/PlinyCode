@@ -16,6 +16,14 @@ export interface TaskWorktree {
 	 * bound to the worktree, and history filtered by this workspace lists it too.
 	 */
 	sourceWorkspacePath?: string
+	/**
+	 * The commit the branch was created from. "Apply" brings over the changes
+	 * since this commit; absent for worktrees made before it was recorded, which
+	 * fall back to the merge base with the source checkout's `HEAD`.
+	 */
+	baseCommit?: string
+	/** When the worktree was removed (Remove worktree, or the daily cleanup); the history stays. */
+	removedTs?: number
 }
 
 export type HistoryItem = {

@@ -233,6 +233,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.manageWorktrees",
+				"title": "Manage Worktrees",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.signInAzureDevOpsServer",
 				"title": "Sign in to Azure DevOps Server (personal access token)",
 				"category": "PlinyCode"
@@ -550,6 +555,12 @@
 					"type": "string",
 					"default": "",
 					"markdownDescription": "Folder for the git worktrees of conversations started with **Run in worktree**. Each repository gets a subfolder named after it. Empty uses `#plinycode.ci.worktreeRoot#` when that is set, and otherwise puts them next to the repository, in `<repository>.worktrees`."
+				},
+				"plinycode.worktrees.keepDays": {
+					"type": "number",
+					"default": 7,
+					"minimum": 0,
+					"markdownDescription": "Days a worktree PlinyCode made (for a **Run in worktree** conversation or a **CI Board** run) is kept after its conversation was last active. Once a day PlinyCode removes those idle longer, and those whose conversation was deleted, but never one with uncommitted changes. `0` turns the cleanup off. **PlinyCode: Manage Worktrees** lists them all."
 				},
 				"plinycode.trace.enabled": {
 					"type": "boolean",

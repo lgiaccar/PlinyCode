@@ -343,9 +343,13 @@ export class SdkTaskStartCoordinator {
 			// A task's stored cwd may have been deleted/moved since the task ran
 			// (or migrated from another machine) — feeding a stale path into the
 			// session bootstrap makes workspace init fail. Fall back to the live
-			// workspace root instead.
+			// workspace root instead; a conversation whose worktree was removed
+			// continues in the checkout it was branched from, when that exists.
 			const storedCwd = historyItem.cwdOnTaskInitialization
-			const cwd = storedCwd && (await isDirectory(storedCwd)) ? storedCwd : await this.options.getWorkspaceRoot()
+			const cwd =
+				storedCwd && (await isDirectory(storedCwd))
+					? storedCwd
+					: ((await worktreeSourceFolder(historyItem, storedCwd)) ?? (await this.options.getWorkspaceRoot()))
 			this.options.setActiveTaskWorkspace?.(
 				historyItem.workspacePath
 					? { path: historyItem.workspacePath, kind: historyItem.workspaceKind ?? "folder", folders: [cwd] }
@@ -558,4 +562,27 @@ export class SdkTaskStartCoordinator {
 			{ type: "status", payload: { sessionId: taskId, status: "error" } },
 		)
 	}
+}
+
+/**
+ * Where a worktree conversation continues once its worktree is gone: the same
+ * subfolder of the checkout it was branched from, else that checkout's top
+ * level; undefined when neither exists or it never ran in a worktree.
+ */
+async function worktreeSourceFolder(historyItem: HistoryItem, storedCwd: string | undefined): Promise<string | undefined> {
+	const worktree = historyItem.worktree
+	if (!worktree) {
+		return undefined
+	}
+	const relative = storedCwd ? path.relative(worktree.path, storedCwd) : ""
+	const candidates = [
+		...(relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? [path.join(worktree.repoRoot, relative)] : []),
+		worktree.repoRoot,
+	]
+	for (const candidate of candidates) {
+		if (await isDirectory(candidate)) {
+			return candidate
+		}
+	}
+	return undefined
 }

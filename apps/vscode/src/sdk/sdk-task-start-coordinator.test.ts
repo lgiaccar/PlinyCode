@@ -1,3 +1,4 @@
+import path from "node:path"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { StateManager } from "@/core/storage/StateManager"
@@ -476,6 +477,37 @@ describe("SdkTaskStartCoordinator", () => {
 		expect(isDirectory).toHaveBeenCalledWith("/missing-task-cwd")
 		expect(options.getWorkspaceRoot).toHaveBeenCalledOnce()
 		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith({ cwd: "/workspace", mode: "act" })
+	})
+
+	it("continues a conversation whose worktree was removed in the checkout it was branched from", async () => {
+		const sub = path.join("/repo", "packages", "app")
+		vi.mocked(isDirectory).mockImplementation(async (folder: string) => folder === sub)
+		const historyItem: HistoryItem = {
+			id: "task-1",
+			task: "old task",
+			ts: 1,
+			tokensIn: 0,
+			tokensOut: 0,
+			totalCost: 0,
+			cwdOnTaskInitialization: path.join("/repo.worktrees", "fix-ab12", "packages", "app"),
+			worktree: {
+				repoRoot: "/repo",
+				branch: "plinycode/fix-ab12",
+				path: path.join("/repo.worktrees", "fix-ab12"),
+				removedTs: 5,
+			},
+		}
+		const { coordinator, options } = makeCoordinator({ historyItem })
+		const emitHookMessage = vi.fn()
+		Object.assign(options.messages, { emitHookMessage })
+
+		await coordinator.reinitExistingTaskFromId("task-1")
+
+		expect(options.getWorkspaceRoot).not.toHaveBeenCalled()
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith({ cwd: sub, mode: "act" })
+		expect(emitHookMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ say: "info", text: expect.stringContaining(`now works in ${sub}`) }),
+		)
 	})
 })
 

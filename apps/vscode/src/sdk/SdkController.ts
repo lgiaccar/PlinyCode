@@ -43,6 +43,7 @@ import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
 import { openCiWatchSource } from "@/services/devops-mcp/ci-watch/ci-watch-source"
 import { CiWatchStore } from "@/services/devops-mcp/ci-watch/ci-watch-store"
+import type { WorktreeConversation } from "@/services/git/worktree-gc"
 import { ensureTaskWorktree } from "@/services/git/worktrees"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
@@ -89,6 +90,7 @@ import {
 	mergeTaskHistoryIntoState,
 	metadataBoolean,
 	metadataNumber,
+	metadataWorktree,
 	SdkTaskHistory,
 	sessionHistoryRecordToTaskItemFields,
 } from "./sdk-task-history"
@@ -1985,6 +1987,48 @@ export class Controller {
 	/** The git worktree a conversation started with "Run in worktree" works in; undefined for any other. */
 	async getTaskWorktree(taskId: string): Promise<TaskWorktree | undefined> {
 		return (await this.taskHistory.findHistoryItem(taskId))?.worktree
+	}
+
+	/** The conversation's history entry; undefined for an unknown one. */
+	async getHistoryItem(taskId: string): Promise<HistoryItem | undefined> {
+		return this.taskHistory.findHistoryItem(taskId)
+	}
+
+	/** Replaces the conversation's worktree record (e.g. marks it removed) and refreshes the task header. */
+	async setTaskWorktree(taskId: string, worktree: TaskWorktree): Promise<void> {
+		if (await this.taskHistory.setTaskWorktree(taskId, worktree)) {
+			await this.postStateToWebview()
+		}
+	}
+
+	/**
+	 * Every conversation's id, title, last activity and worktree, for the
+	 * worktree cleanup and the Manage Worktrees list (docs/task-worktrees.md).
+	 */
+	async listConversationWorktrees(): Promise<WorktreeConversation[]> {
+		return (await this.taskHistory.listHistory({ hydrate: false })).map((record) => {
+			const worktree = metadataWorktree(record.metadata)
+			return {
+				id: record.sessionId,
+				title: sessionRecordTitle(record),
+				ts: sessionRecordLastActiveTs(record),
+				...(worktree ? { worktree } : {}),
+			}
+		})
+	}
+
+	/** Adds an info row to the conversation's chat, when it is the one on screen. */
+	emitInfoRow(taskId: string, text: string): void {
+		if (this.task?.taskId !== taskId) {
+			return
+		}
+		this.messages.emitHookMessage({
+			ts: this.messageTranslatorState.getMinter().nextId(),
+			type: "say",
+			say: "info",
+			text,
+			partial: false,
+		})
 	}
 
 	/** Pins the conversation to the top of the history list, or unpins it. */
