@@ -7,6 +7,7 @@ import { Logger } from "@/shared/services/Logger"
 import type { ActiveSession } from "./cline-session-factory"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import type { ConversationEditorState } from "./context/editor-state"
+import type { EditedFile, EditProblemCheck } from "./edit-problems"
 import type { HookStatusRowListener } from "./hook-status-rows"
 import type { ProcessRegistry } from "./processes/process-registry"
 import { forgetSession } from "./router/router-health"
@@ -38,8 +39,10 @@ interface SdkSessionLifecycleOptions {
 	getTerminalManager?: () => VscodeTerminalManager
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
-	/** The language servers behind `find_symbol`, `code_navigate` and `rename_preview`; undefined leaves the tools out. */
+	/** The language servers behind the code intelligence tools (`find_symbol`, …); undefined leaves the tools out. */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/** The new-problems check `rename_symbol` runs around its edit (edit-problems.ts). */
+	beginEditProblemCheck?: (files: EditedFile[], cwd: string) => EditProblemCheck | undefined
 	/** The search backend behind `web_search`; undefined leaves the tool out. */
 	getWebSearch?: () => WebSearchSetup | undefined
 	/** The window's background processes, for `run_commands` and the `process_*` tools. */
@@ -468,6 +471,7 @@ export class SdkSessionLifecycle {
 				getTerminalManager: this.options.getTerminalManager,
 				foregroundCommands: this.options.foregroundCommands,
 				getCodeIntel: this.options.getCodeIntel,
+				beginEditProblemCheck: this.options.beginEditProblemCheck,
 				getWebSearch: this.options.getWebSearch,
 				processes: this.options.processes,
 				onHookStatus: this.options.onHookStatus,

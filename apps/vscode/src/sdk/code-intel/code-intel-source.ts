@@ -87,6 +87,30 @@ export interface CodeRenameResult {
 	files: { path: string; edits: CodeTextEdit[] }[]
 }
 
+/** The errors one file reports, for a workspace-wide problems list. */
+export interface CodeFileDiagnostics {
+	path: string
+	diagnostics: CodeDiagnostic[]
+}
+
+/** What applying a rename did. */
+export interface CodeRenameApplication {
+	/** The server's reason for refusing, when it refused; nothing was applied then. */
+	refusal?: string
+	/** False when the editor did not apply the edit (a file changed under it, or is read-only). */
+	applied: boolean
+	/**
+	 * The text edits applied per file. File operations that came with them (a
+	 * server that renames a class's file with the class) are applied too, but
+	 * VS Code's API does not list them.
+	 */
+	files: { path: string; edits: CodeTextEdit[] }[]
+	/** Files with text edits that could not be saved, so the change is in the editor only. */
+	unsaved: string[]
+	/** Files that had unsaved changes in the editor before the rename; saving it saved those too. */
+	hadUnsavedChanges: string[]
+}
+
 export interface CodeIntelSource {
 	/** Loads the file into the editor so its language server analyses it, and returns its text. */
 	readDocument(absolutePath: string): Promise<string | undefined>
@@ -112,6 +136,18 @@ export interface CodeIntelSource {
 	): Promise<CodeCallHierarchy | undefined>
 	/** The errors and warnings the editor currently reports for the file. */
 	diagnostics(absolutePath: string): Promise<CodeDiagnostic[] | undefined>
+	/**
+	 * The errors (not warnings) the editor currently reports across the window,
+	 * one entry per file with at least one. Dependencies and git's own files are
+	 * left out.
+	 */
+	workspaceErrors(): Promise<CodeFileDiagnostics[] | undefined>
 	/** The edits a rename at the position would make, without applying them. */
 	renameEdits(absolutePath: string, line: number, column: number, newName: string): Promise<CodeRenameResult | undefined>
+	/**
+	 * Asks for the rename at the position again and applies the server's whole
+	 * edit (file operations included), then saves every file it edited.
+	 * Undefined when no server answered with an edit.
+	 */
+	applyRename(absolutePath: string, line: number, column: number, newName: string): Promise<CodeRenameApplication | undefined>
 }

@@ -43,7 +43,7 @@ export function buildDistillTranscript(messages: readonly unknown[], fromIndex =
 		: transcript
 }
 
-const EDIT_TOOLS = new Set(["editor", "apply_patch", "write_to_file", "replace_in_file"])
+const EDIT_TOOLS = new Set(["editor", "apply_patch", "write_to_file", "replace_in_file", "rename_symbol"])
 
 /** Whether the messages from `fromIndex` on hold an edit tool call that did not fail. */
 export function hasSuccessfulEdit(messages: readonly unknown[], fromIndex = 0): boolean {

@@ -678,7 +678,11 @@ const ChatRowContent = memo(
 								<span className="font-bold">
 									PlinyCode looked up {header.what}{" "}
 									{tool.action === "diagnostics" ? (
-										<code className="break-all">{tool.path}</code>
+										tool.path ? (
+											<code className="break-all">{tool.path}</code>
+										) : (
+											"the workspace"
+										)
 									) : (
 										<>
 											<code className="break-all">{tool.regex}</code> in{" "}
@@ -694,7 +698,7 @@ const ChatRowContent = memo(
 									isExpanded={isExpanded}
 									language="shell-session"
 									onToggleExpand={handleToggle}
-									path={tool.path ?? ""}
+									path={tool.path || "workspace"}
 								/>
 							) : null}
 						</div>
@@ -714,6 +718,35 @@ const ChatRowContent = memo(
 										</>
 									) : null}{" "}
 									in <code className="break-all">{tool.path}</code>:
+								</span>
+							</div>
+							{tool.content ? (
+								<CodeAccordian
+									code={tool.content}
+									isExpanded={isExpanded}
+									language="shell-session"
+									onToggleExpand={handleToggle}
+									path={tool.path ?? ""}
+								/>
+							) : null}
+						</div>
+					)
+				case "renameSymbol":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								{toolIcon("replace-all")}
+								<span className="font-bold">
+									{message.type === "ask" ? "PlinyCode wants to rename " : "PlinyCode renamed "}
+									<code className="break-all">{tool.regex}</code>
+									{tool.newName ? (
+										<>
+											{" "}
+											to <code className="break-all">{tool.newName}</code>
+										</>
+									) : null}{" "}
+									in <code className="break-all">{tool.path}</code>
+									{message.type === "ask" ? " and every file that uses it:" : ":"}
 								</span>
 							</div>
 							{tool.content ? (

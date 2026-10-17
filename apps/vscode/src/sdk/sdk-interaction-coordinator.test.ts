@@ -572,6 +572,45 @@ describe("SdkInteractionCoordinator", () => {
 		expect(coordinator.resolvePendingToolApproval(undefined, "yesButtonClicked")).toBe(true)
 		await expect(approvalPromise).resolves.toEqual({ approved: true })
 	})
+
+	it("puts describeToolApproval's text in the ask, and shows the plain ask when it fails", async () => {
+		const task = createTaskProxy("session-123", vi.fn(), vi.fn())
+		const describeToolApproval = vi
+			.fn()
+			.mockResolvedValueOnce("Renaming `foo` to `bar` will make 2 edits in 1 file and save them.")
+			.mockRejectedValueOnce(new Error("server gone"))
+		const coordinator = new SdkInteractionCoordinator({
+			messages: new SdkMessageCoordinator({ getTask: () => task }),
+			getSessionId: () => "session-123",
+			postStateToWebview: vi.fn().mockResolvedValue(undefined),
+			describeToolApproval,
+		})
+		const request = (toolCallId: string) => ({
+			agentId: "agent",
+			conversationId: "conversation",
+			iteration: 1,
+			toolCallId,
+			toolName: "rename_symbol",
+			input: { path: "a.ts", symbol: "foo", new_name: "bar" },
+			policy: { autoApprove: false },
+		})
+
+		const first = coordinator.handleRequestToolApproval(request("call-1"))
+		await vi.waitFor(() => expect(task.messageStateHandler.getClineMessages()).toHaveLength(1))
+		const ask = JSON.parse(task.messageStateHandler.getClineMessages()[0].text ?? "{}")
+		expect(ask).toMatchObject({
+			tool: "renameSymbol",
+			content: "Renaming `foo` to `bar` will make 2 edits in 1 file and save them.",
+		})
+		expect(coordinator.resolvePendingToolApproval(undefined, "yesButtonClicked")).toBe(true)
+		await expect(first).resolves.toEqual({ approved: true })
+
+		const second = coordinator.handleRequestToolApproval(request("call-2"))
+		await vi.waitFor(() => expect(task.messageStateHandler.getClineMessages()).toHaveLength(2))
+		expect(JSON.parse(task.messageStateHandler.getClineMessages()[1].text ?? "{}").content).toBeUndefined()
+		expect(coordinator.resolvePendingToolApproval(undefined, "noButtonClicked")).toBe(true)
+		await expect(second).resolves.toMatchObject({ approved: false })
+	})
 	describe("background tasks", () => {
 		function setup(backgroundIds: string[] = []) {
 			const task = createTaskProxy("foreground", vi.fn(), vi.fn())

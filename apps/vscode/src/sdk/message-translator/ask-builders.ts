@@ -16,9 +16,16 @@ import type { MessageTranslatorState } from "./translator-state"
  * Build the Cline approval ask message for an SDK tool approval request.
  * Keeps approval prompts aligned with the SDK event translator so the webview
  * can render specialized rows (MCP, commands, subagents) instead of a generic
- * tool approval with missing context.
+ * tool approval with missing context. `description`, when given, becomes the
+ * tool row's content (the rename summary of a `rename_symbol` approval).
  */
-export function buildToolApprovalAskMessage(toolName: string, input: unknown, ts: number, cwd?: string): ClineMessage {
+export function buildToolApprovalAskMessage(
+	toolName: string,
+	input: unknown,
+	ts: number,
+	cwd?: string,
+	description?: string,
+): ClineMessage {
 	const mcpInfo = parseMcpToolName(toolName)
 	if (mcpInfo) {
 		return {
@@ -54,11 +61,12 @@ export function buildToolApprovalAskMessage(toolName: string, input: unknown, ts
 		}
 	}
 
+	const sayTool = toDisplaySayTool(sdkToolToClineSayTool(toolName, input), cwd)
 	return {
 		ts,
 		type: "ask",
 		ask: "tool",
-		text: JSON.stringify(toDisplaySayTool(sdkToolToClineSayTool(toolName, input), cwd)),
+		text: JSON.stringify(description ? { ...sayTool, content: description } : sayTool),
 		partial: false,
 	}
 }

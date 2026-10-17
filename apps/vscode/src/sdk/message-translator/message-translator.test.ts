@@ -4407,6 +4407,14 @@ describe("tool display paths are relativized to the cwd", () => {
 		expect(parseTool(message.text).path).toBe("src/index.ts")
 	})
 
+	it("shows a rename_symbol approval with the rename summary as its content", () => {
+		const input = { path: `${CWD}/src/a.ts`, symbol: "foo", new_name: "bar" }
+		const summary = "Renaming `foo` to `bar` (at src/a.ts:1:10) will make 4 edits in 2 files and save them."
+		const tool = parseTool(buildToolApprovalAskMessage("rename_symbol", input, 1, CWD, summary).text)
+		expect(tool).toMatchObject({ tool: "renameSymbol", path: "src/a.ts", regex: "foo", newName: "bar", content: summary })
+		expect(parseTool(buildToolApprovalAskMessage("rename_symbol", input, 2, CWD).text).content).toBeUndefined()
+	})
+
 	it("reconstructs hook status chips from injected hook context and keeps the completion retag", () => {
 		const messages: SdkMessage[] = [
 			{ role: "user", content: '<user_input mode="act">read the readme</user_input>' } as SdkMessage,

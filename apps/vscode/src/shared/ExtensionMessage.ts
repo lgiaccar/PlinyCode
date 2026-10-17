@@ -296,6 +296,7 @@ export interface ClineSayTool {
 		| "findSymbol"
 		| "codeNavigate"
 		| "renamePreview"
+		| "renameSymbol"
 		| "processList"
 		| "processOutput"
 		| "processKill"
@@ -305,7 +306,7 @@ export interface ClineSayTool {
 	regex?: string
 	/** code_navigate: `definition`, `references`, `hover`, `callers`, `callees` or `diagnostics`. */
 	action?: string
-	/** rename_preview: the name the symbol (in `regex`) would get. */
+	/** rename_preview and rename_symbol: the name the symbol (in `regex`) gets. */
 	newName?: string
 	filePattern?: string
 	operationIsLocatedInWorkspace?: boolean

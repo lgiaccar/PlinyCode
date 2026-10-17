@@ -6,17 +6,20 @@ import type {
 	CodeHover,
 	CodeIntelSource,
 	CodeLocation,
+	CodeRenameApplication,
 	CodeRenameResult,
 	CodeSymbol,
+	CodeTextEdit,
 } from "@/sdk/code-intel/code-intel-source"
+import { workspaceDiagnosticEntries } from "./edit-diagnostics"
 
 /** VS Code settings section that holds every `plinycode.codeIntel.*` setting. */
 const CODE_INTEL_SETTINGS_SECTION = "plinycode.codeIntel"
 
 /**
  * `plinycode.codeIntel.enabled`: whether the model gets the `find_symbol`,
- * `code_navigate` and `rename_preview` tools, which answer through the
- * window's language servers.
+ * `code_navigate`, `rename_preview` and `rename_symbol` tools, which answer
+ * through the window's language servers.
  * See sdk/code-intel/code-intel-tools.ts.
  */
 const CODE_INTEL_ENABLED_SETTING = "enabled"
@@ -177,63 +180,124 @@ export function createVscodeCodeIntelSource(): CodeIntelSource {
 			return { item: prepared, calls: calls.filter((call): call is CodeCall => !!call) }
 		},
 		async diagnostics(absolutePath) {
-			return vscode.languages.getDiagnostics(vscode.Uri.file(absolutePath)).flatMap((diagnostic): CodeDiagnostic[] => {
-				const severity =
-					diagnostic.severity === vscode.DiagnosticSeverity.Error
-						? "error"
-						: diagnostic.severity === vscode.DiagnosticSeverity.Warning
-							? "warning"
-							: undefined
-				if (!severity) {
-					return []
-				}
-				const code = typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code
-				return [
-					{
-						severity,
-						message: diagnostic.message,
-						line: diagnostic.range.start.line + 1,
-						column: diagnostic.range.start.character + 1,
-						source: diagnostic.source || undefined,
-						code: code === undefined || code === "" ? undefined : String(code),
-					},
-				]
+			return vscode.languages.getDiagnostics(vscode.Uri.file(absolutePath)).flatMap(toCodeDiagnostics)
+		},
+		async workspaceErrors() {
+			return workspaceDiagnosticEntries().flatMap(([uri, diagnostics]) => {
+				const errors = diagnostics
+					.filter((diagnostic) => diagnostic.severity === vscode.DiagnosticSeverity.Error)
+					.flatMap(toCodeDiagnostics)
+				return errors.length > 0 ? [{ path: uri.fsPath, diagnostics: errors }] : []
 			})
 		},
 		async renameEdits(absolutePath, line, column, newName): Promise<CodeRenameResult | undefined> {
-			let edit: vscode.WorkspaceEdit | undefined
-			try {
-				edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit | undefined>(
-					"vscode.executeDocumentRenameProvider",
-					vscode.Uri.file(absolutePath),
-					new vscode.Position(line - 1, column - 1),
-					newName,
-				)
-			} catch (error) {
-				// VS Code turns a provider's refusal ("You cannot rename this element.") into a rejected command.
-				const reason = error instanceof Error ? error.message : String(error)
-				return { refusal: reason.trim() || "the language server gave no reason.", files: [] }
-			}
-			if (!edit) {
+			const answer = await requestRename(absolutePath, line, column, newName)
+			if (!answer) {
 				return undefined
 			}
-			return {
-				files: edit
-					.entries()
-					.filter(([uri]) => uri.scheme === "file")
-					.map(([uri, edits]) => ({
-						path: uri.fsPath,
-						edits: edits.map((textEdit) => ({
-							line: textEdit.range.start.line + 1,
-							column: textEdit.range.start.character + 1,
-							endLine: textEdit.range.end.line + 1,
-							endColumn: textEdit.range.end.character + 1,
-							newText: textEdit.newText,
-						})),
-					})),
+			return "refusal" in answer ? { refusal: answer.refusal, files: [] } : { files: textEditsOf(answer.edit) }
+		},
+		async applyRename(absolutePath, line, column, newName): Promise<CodeRenameApplication | undefined> {
+			const answer = await requestRename(absolutePath, line, column, newName)
+			if (!answer) {
+				return undefined
 			}
+			if ("refusal" in answer) {
+				return { refusal: answer.refusal, applied: false, files: [], unsaved: [], hadUnsavedChanges: [] }
+			}
+			const files = textEditsOf(answer.edit)
+			const uris = answer.edit
+				.entries()
+				.map(([uri]) => uri)
+				.filter((uri) => uri.scheme === "file")
+			const openDocument = (uri: vscode.Uri) =>
+				vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri.toString())
+			const hadUnsavedChanges = uris.filter((uri) => openDocument(uri)?.isDirty).map((uri) => uri.fsPath)
+			// The whole edit, file operations included: a server that renames a class's
+			// file with the class gets both, as the editor's own rename would.
+			const applied = await vscode.workspace.applyEdit(answer.edit)
+			if (!applied) {
+				return { applied: false, files, unsaved: [], hadUnsavedChanges }
+			}
+			// applyEdit changes the documents in memory; the checkpoints, the other tools
+			// and the user's build all read the files on disk.
+			const unsaved: string[] = []
+			for (const uri of uris) {
+				try {
+					const document = openDocument(uri) ?? (await vscode.workspace.openTextDocument(uri))
+					if (document.isDirty && !(await document.save())) {
+						unsaved.push(uri.fsPath)
+					}
+				} catch {
+					unsaved.push(uri.fsPath)
+				}
+			}
+			return { applied: true, files, unsaved, hadUnsavedChanges }
 		},
 	}
+}
+
+/** The rename provider's edit, or its refusal; undefined when no provider answered. */
+async function requestRename(
+	absolutePath: string,
+	line: number,
+	column: number,
+	newName: string,
+): Promise<{ edit: vscode.WorkspaceEdit } | { refusal: string } | undefined> {
+	try {
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit | undefined>(
+			"vscode.executeDocumentRenameProvider",
+			vscode.Uri.file(absolutePath),
+			new vscode.Position(line - 1, column - 1),
+			newName,
+		)
+		return edit ? { edit } : undefined
+	} catch (error) {
+		// VS Code turns a provider's refusal ("You cannot rename this element.") into a rejected command.
+		const reason = error instanceof Error ? error.message : String(error)
+		return { refusal: reason.trim() || "the language server gave no reason." }
+	}
+}
+
+/** The text edits of a workspace edit, per file on disk, as one-based plain data. */
+function textEditsOf(edit: vscode.WorkspaceEdit): { path: string; edits: CodeTextEdit[] }[] {
+	return edit
+		.entries()
+		.filter(([uri]) => uri.scheme === "file")
+		.map(([uri, edits]) => ({
+			path: uri.fsPath,
+			edits: edits.map((textEdit) => ({
+				line: textEdit.range.start.line + 1,
+				column: textEdit.range.start.character + 1,
+				endLine: textEdit.range.end.line + 1,
+				endColumn: textEdit.range.end.character + 1,
+				newText: textEdit.newText,
+			})),
+		}))
+}
+
+/** An error or warning as plain data; information and hints are left out. */
+function toCodeDiagnostics(diagnostic: vscode.Diagnostic): CodeDiagnostic[] {
+	const severity =
+		diagnostic.severity === vscode.DiagnosticSeverity.Error
+			? "error"
+			: diagnostic.severity === vscode.DiagnosticSeverity.Warning
+				? "warning"
+				: undefined
+	if (!severity) {
+		return []
+	}
+	const code = typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code
+	return [
+		{
+			severity,
+			message: diagnostic.message,
+			line: diagnostic.range.start.line + 1,
+			column: diagnostic.range.start.character + 1,
+			source: diagnostic.source || undefined,
+			code: code === undefined || code === "" ? undefined : String(code),
+		},
+	]
 }
 
 /** A call hierarchy item as plain data, with the call site when one is given. */

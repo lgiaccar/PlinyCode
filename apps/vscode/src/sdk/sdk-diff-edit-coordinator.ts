@@ -261,6 +261,15 @@ export class SdkDiffEditCoordinator {
 		}
 	}
 
+	/**
+	 * The same check for an edit made outside the two executors (`rename_symbol`,
+	 * which applies a language server's edit), so it shares the reporter's memory
+	 * of late answers and silent file types with the editor's own edits.
+	 */
+	beginExternalEditCheck(files: EditedFile[], cwd: string): EditProblemCheck | undefined {
+		return this.beginProblemCheck(() => files, cwd)
+	}
+
 	/** Drops errors still to be reported for earlier edits; see `EditProblemsReporter.forget`. */
 	forgetEditProblems(): void {
 		this.problemsReporter?.forget()

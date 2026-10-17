@@ -582,7 +582,7 @@
 				"plinycode.codeIntel.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Give the model the find_symbol and code_navigate tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, and a symbol's definition, references and type. Applies to the next conversation."
+					"description": "Give the model the find_symbol, code_navigate, rename_preview and rename_symbol tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, a symbol's definition, references, callers and type, the errors in a file or the workspace, and renames across files (rename_symbol asks for approval like a file edit). Applies to the next conversation."
 				},
 				"plinycode.webSearch.enabled": {
 					"type": "boolean",

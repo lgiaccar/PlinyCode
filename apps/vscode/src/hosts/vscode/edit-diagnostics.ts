@@ -30,11 +30,7 @@ export function createVscodeEditDiagnosticsSource(): EditDiagnosticsSource {
 		getErrors: (absolutePath) => errorsOf(vscode.languages.getDiagnostics(vscode.Uri.file(absolutePath))),
 		getAllErrors: () => {
 			const result = new Map<string, EditProblem[]>()
-			const dataDirectories = plinyCodeDataDirectories()
-			for (const [uri, diagnostics] of vscode.languages.getDiagnostics()) {
-				if (uri.scheme !== "file" || isExcludedPath(uri.fsPath, dataDirectories)) {
-					continue
-				}
+			for (const [uri, diagnostics] of workspaceDiagnosticEntries()) {
 				const errors = errorsOf(diagnostics)
 				if (errors.length > 0) {
 					result.set(uri.fsPath, errors)
@@ -56,6 +52,18 @@ export function createVscodeEditDiagnosticsSource(): EditDiagnosticsSource {
 		isShown: (absolutePath) => findTabs(absolutePath).length > 0,
 		showInBackground,
 	}
+}
+
+/**
+ * Every file's diagnostics, whatever their severity, for the files that are the
+ * model's to see: files on disk, outside dependencies, git's own files and
+ * PlinyCode's data directories.
+ */
+export function workspaceDiagnosticEntries(): [vscode.Uri, vscode.Diagnostic[]][] {
+	const dataDirectories = plinyCodeDataDirectories()
+	return vscode.languages
+		.getDiagnostics()
+		.filter(([uri]) => uri.scheme === "file" && !isExcludedPath(uri.fsPath, dataDirectories))
 }
 
 function errorsOf(diagnostics: readonly vscode.Diagnostic[]): EditProblem[] {

@@ -32,6 +32,7 @@ import {
 	formatAskModeBlockedWriteError,
 	formatOffTheRecordBlockedError,
 	formatPlanModeBlockedCommandError,
+	formatPlanModeBlockedRenameError,
 	formatPlanModeBlockedWriteError,
 	isMarkdownPath,
 } from "./command-guard";
@@ -42,6 +43,13 @@ export const PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME =
 	"core.plan-mode-command-guard";
 export const ASK_MODE_COMMAND_GUARD_EXTENSION_NAME =
 	"core.ask-mode-command-guard";
+
+/**
+ * The VS Code extension's `rename_symbol` tool, which applies a language
+ * server's rename across files. It writes source files whatever its input
+ * names, so plan mode, ask mode and off-the-record turns reject it outright.
+ */
+const RENAME_SYMBOL_TOOL_NAME = "rename_symbol";
 
 function guardRunCommands(
 	input: unknown,
@@ -118,6 +126,8 @@ export function createPlanModeCommandGuardExtension(): AgentExtension {
 				return guardEditor(context.input);
 			case DefaultToolNames.APPLY_PATCH:
 				return guardApplyPatch(context.input);
+			case RENAME_SYMBOL_TOOL_NAME:
+				return { skip: true, reason: formatPlanModeBlockedRenameError() };
 			default:
 				return undefined;
 		}
@@ -134,9 +144,12 @@ export function createPlanModeCommandGuardExtension(): AgentExtension {
 	};
 }
 
-/** The file an `editor` or `apply_patch` call would write, for the error text. */
+/** The file an `editor`, `apply_patch` or `rename_symbol` call would write, for the error text. */
 function findWriteTarget(toolName: string, input: unknown): string | undefined {
-	if (toolName === DefaultToolNames.EDITOR) {
+	if (
+		toolName === DefaultToolNames.EDITOR ||
+		toolName === RENAME_SYMBOL_TOOL_NAME
+	) {
 		const path =
 			input && typeof input === "object"
 				? (input as { path?: unknown }).path
@@ -170,6 +183,7 @@ export function createAskModeCommandGuardExtension(): AgentExtension {
 				);
 			case DefaultToolNames.EDITOR:
 			case DefaultToolNames.APPLY_PATCH:
+			case RENAME_SYMBOL_TOOL_NAME:
 				return {
 					skip: true,
 					reason: formatAskModeBlockedWriteError(
@@ -224,7 +238,8 @@ export function guardOffTheRecordTool(
 				formatOffTheRecordBlockedError(`${reason} can modify files`),
 			);
 		case DefaultToolNames.EDITOR:
-		case DefaultToolNames.APPLY_PATCH: {
+		case DefaultToolNames.APPLY_PATCH:
+		case RENAME_SYMBOL_TOOL_NAME: {
 			const target = findWriteTarget(name, context.input);
 			return {
 				skip: true,

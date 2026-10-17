@@ -24,7 +24,9 @@ const READ_TOOLS = [
 	"view_image",
 ]
 const COMMAND_TOOLS = ["run_commands", "execute_command", "process_kill"]
-const EDIT_TOOLS = ["editor", "replace_in_file", "write_to_file", "apply_patch", "delete_file", "save_memory"]
+// `rename_symbol` applies a language server's rename across files, so it is
+// approved like any other edit (docs/agent-tools.md, "Code intelligence").
+const EDIT_TOOLS = ["editor", "replace_in_file", "write_to_file", "apply_patch", "delete_file", "save_memory", "rename_symbol"]
 
 /**
  * Extension tools a spawned sub-agent does not get (docs/agent-tools.md): the

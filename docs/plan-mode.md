@@ -24,6 +24,7 @@ Plan mode can write markdown files and nothing else. The rule is enforced in two
 - **The plan-mode guard.** [command-guard-extension.ts](../sdk/packages/core/src/extensions/tools/command-guard-extension.ts) is a `beforeTool` hook that the runtime builder registers for plan-mode sessions, sub-agents included. It rejects these calls before they reach approval:
   - `editor` calls whose `path` doesn't end in `.md` or `.markdown`;
   - `apply_patch` patches that touch any non-markdown file, or that have no file header the guard can parse;
+  - every `rename_symbol` call: the extension's rename edits source files whichever file names the symbol, so the error points the model at `rename_preview` and the plan instead. The extension also leaves the tool out of plan-mode sessions ([agent-tools.md](agent-tools.md#renaming-rename_symbol));
   - `run_commands` calls on the file-editing blacklist in [command-guard.ts](../sdk/packages/core/src/extensions/tools/command-guard.ts). Shell redirects to `.md` files are still blocked, so the editor is the only way to write.
 
 A rejected call comes back to the model as a tool error (`skip`, not `stop`), and the run continues. Allowed markdown writes go through the normal edit approval and the "Edit files" auto-approve toggle, the same as edits in act mode.
