@@ -487,10 +487,6 @@ export {
 	SubprocessSandbox,
 	type SubprocessSandboxOptions,
 } from "./runtime/tools/subprocess-sandbox";
-export {
-	type DesktopToolApprovalOptions,
-	requestDesktopToolApproval,
-} from "./runtime/tools/tool-approval";
 export { resolveCoreDistinctId } from "./services/distinct-id";
 export type {
 	GlobalCompactionMode,

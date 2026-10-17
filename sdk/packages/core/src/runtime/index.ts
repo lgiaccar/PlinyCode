@@ -15,7 +15,3 @@ export {
 	SubprocessSandbox,
 	type SubprocessSandboxOptions,
 } from "./tools/subprocess-sandbox";
-export {
-	type DesktopToolApprovalOptions,
-	requestDesktopToolApproval,
-} from "./tools/tool-approval";
