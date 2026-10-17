@@ -46,8 +46,46 @@ import { isSuccessfulEdit } from "./router-review-diff"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import { appendRunLog, type RouterRunEnding, type RouterRunLogRecord } from "./router-run-log"
-import type { RouterCallShape, RouterCallTiming, RouterRequestFeatures, RouterRules } from "./router-types"
+import type {
+	RouterCallShape,
+	RouterCallTiming,
+	RouterClassification,
+	RouterEffort,
+	RouterRequestFeatures,
+	RouterRules,
+} from "./router-types"
 import { type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
+
+/**
+ * What the router did on one call attempt, reported to the session trace
+ * (`sdk/trace/session-trace.ts`). The router's own JSONL logs are separate
+ * and unchanged by this.
+ */
+export interface RouterCallEvent {
+	/** start: a candidate is about to be called; failover: it failed before output and the next one takes over; success/error: how the call ended. */
+	kind: "start" | "failover" | "success" | "error"
+	profile: string
+	subAgent: boolean
+	modelId: string
+	/** start: the route that matched, its candidates in order, and the classifier's verdict when it ran. */
+	route?: string
+	candidates?: string[]
+	effort?: RouterEffort
+	classification?: RouterClassification
+	estimatedTokens?: number
+	callIndex?: number
+	/** failover/error: what went wrong; failover: the model that takes over and whether the failed one was benched. */
+	error?: string
+	nextModelId?: string
+	benched?: boolean
+	/** failover/success/error: the attempt's timing and, once it produced output, the reply's shape. */
+	durationMs?: number
+	ttftMs?: number
+	finishReason?: string
+	textChars?: number
+	reasoningChars?: number
+	toolCalls?: number
+}
 
 export interface RouterInstallDeps {
 	/** Key of the session's router state, and the call log's session id; `getSessionId` overrides it when set. */
@@ -74,6 +112,8 @@ export interface RouterInstallDeps {
 	 * to the run's own edit calls.
 	 */
 	getRunChanges?: ReviewPassOptions["loadCheckpointDiff"]
+	/** Receives each call attempt's routing decision and outcome, for the session trace. */
+	onCallEvent?: (event: RouterCallEvent) => void
 	/** Injectable for tests. */
 	now?: () => number
 	/** Injectable for tests: the wait before retrying after a dropped connection. */
@@ -82,6 +122,18 @@ export interface RouterInstallDeps {
 
 /** Wait before retrying a reply whose connection dropped: long enough for a gateway blip to pass. */
 const TRANSPORT_RETRY_DELAY_MS = 2_000
+
+/** The timing and shape fields of a finished attempt's trace event. */
+function callEventOutcome(timing: RouterCallTiming, shape: RouterCallShape): Partial<RouterCallEvent> {
+	return {
+		durationMs: timing.endedAt - timing.startedAt,
+		...(timing.firstContentAt !== undefined ? { ttftMs: timing.firstContentAt - timing.startedAt } : {}),
+		...(shape.finishReason !== undefined ? { finishReason: shape.finishReason } : {}),
+		textChars: shape.textChars,
+		reasoningChars: shape.reasoningChars,
+		toolCalls: shape.toolCalls,
+	}
+}
 
 /** The hidden prompt that resumes a reply a failed run left unfinished. */
 function continuationPromptFor(error: string): string {
@@ -492,6 +544,18 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						`[FreeAuto] ${isSubAgent ? "sub-agent " : ""}call ${state.calls.length} → ${modelId} ` +
 							`(profile=${profile}, route=${decision.routeName}, effort=${effort ?? "default"}, est=${features.estimatedTokens})`,
 					)
+					deps.onCallEvent?.({
+						kind: "start",
+						profile,
+						subAgent: isSubAgent,
+						modelId,
+						route: decision.routeName,
+						candidates: decision.candidates,
+						...(effort ? { effort } : {}),
+						...(decision.classification ? { classification: decision.classification } : {}),
+						estimatedTokens: features.estimatedTokens,
+						callIndex: state.calls.length,
+					})
 				},
 				onFailover: ({ modelId, nextModelId, error, timing }) => {
 					const rules = rulesFor(profile)
@@ -517,10 +581,27 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 							(nextModelId ? ` → continuing with **${modelLabel(nextModelId)}**` : " · no candidates left"),
 					)
 					Logger.warn(`[FreeAuto] failover ${modelId} → ${nextModelId ?? "(none)"}: ${error}`)
+					deps.onCallEvent?.({
+						kind: "failover",
+						profile,
+						subAgent: isSubAgent,
+						modelId,
+						error,
+						...(nextModelId ? { nextModelId } : {}),
+						benched,
+						durationMs: timing.endedAt - timing.startedAt,
+					})
 				},
 				onCallSuccess: ({ modelId, timing, shape }) => {
 					recordSuccess(modelId)
 					logAttempt(modelId, timing, "success", undefined, shape)
+					deps.onCallEvent?.({
+						kind: "success",
+						profile,
+						subAgent: isSubAgent,
+						modelId,
+						...callEventOutcome(timing, shape),
+					})
 				},
 				onCallError: ({ modelId, error, timing, shape }) => {
 					const state = getSessionState(turnKey)
@@ -529,6 +610,14 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						last.failure = error
 					}
 					logAttempt(modelId, timing, "error", error, shape)
+					deps.onCallEvent?.({
+						kind: "error",
+						profile,
+						subAgent: isSubAgent,
+						modelId,
+						error,
+						...callEventOutcome(timing, shape),
+					})
 					Logger.warn(`[FreeAuto] ${modelId} failed after producing output: ${error}`)
 				},
 			},

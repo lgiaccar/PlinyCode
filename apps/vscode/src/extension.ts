@@ -46,6 +46,7 @@ import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extensi
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
 import { installCustomizationWatcher } from "./hosts/vscode/customization-watcher"
+import { exportDiagnosticsBundle } from "./hosts/vscode/diagnostics-bundle"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
 import { PLAN_EXECUTE_WITH_SETTING_ID } from "./hosts/vscode/plan-settings"
 import {
@@ -62,10 +63,15 @@ import { formatLastModelRequest } from "./sdk/last-model-request"
 import { completeWithUtilityModel } from "./sdk/memory/memory-model"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
+import { pruneSessionTraces } from "./sdk/trace/session-trace"
 import { DevOpsMcpService } from "./services/devops-mcp/host/DevOpsMcpService"
 import { SharedUriHandler, TASK_URI_PATH } from "./services/uri/SharedUriHandler"
 import { ShowMessageType } from "./shared/proto/host/window"
+import { createFileLogSink, type FileLogSink, logFilePath } from "./shared/services/file-log-sink"
 import { fileExistsAtPath } from "./utils/fs"
+
+/** The log file every Logger line goes to, flushed when the extension deactivates. */
+let fileLogSink: FileLogSink | undefined
 
 // This method is called when the VS Code extension is activated.
 // NOTE: This is VS Code specific - services that should be registered
@@ -98,6 +104,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	// 4. Register services and perform common initialization
 	// IMPORTANT: Must be done after host provider is setup and migrations are complete
 	const webview = (await initialize(storageContext)) as VscodeWebviewProvider
+
+	// Keep the session traces (docs/trace-and-logs.md) under their folder cap.
+	void pruneSessionTraces()
 
 	// Before any session starts: which editor's rule and skill files to load,
 	// and the one global rules folder (files in ~/.cline/rules move there).
@@ -204,6 +213,21 @@ export async function activate(context: vscode.ExtensionContext) {
 				return
 			}
 			await openFreeAutoFile(logPath, "call log")
+		}),
+		vscode.commands.registerCommand(commands.OpenLogFile, async () => {
+			const filePath = logFilePath()
+			if (!(await fileExistsAtPath(filePath))) {
+				void vscode.window.showInformationMessage(`PlinyCode has not written its log file yet. It goes to ${filePath}.`)
+				return
+			}
+			try {
+				const document = await vscode.workspace.openTextDocument(filePath)
+				await vscode.window.showTextDocument(document)
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`Could not open the PlinyCode log file at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
 		}),
 	)
 
@@ -669,6 +693,15 @@ ${ctx.cellJson || "{}"}
 		}),
 	)
 
+	// One folder with versions, settings (secrets removed), the last model request,
+	// router logs, trace, logs and the conversation, for a bug report (docs/diagnostics-bundle.md).
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.ExportDiagnostics, async () => {
+			const controller = (WebviewProvider.getVisibleInstance() ?? WebviewProvider.getInstance())?.controller
+			await exportDiagnosticsBundle(context, controller)
+		}),
+	)
+
 	// Register the generateGitCommitMessage command handler
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commands.GenerateCommit, async (scm) => {
@@ -734,6 +767,16 @@ function setupHostProvider(context: ExtensionContext) {
 	const outputChannel = registerClineOutputChannel(context)
 	outputChannel.appendLine("[PlinyCode] Setting up VS Code host...")
 
+	// Every Logger line also goes to <dataDir>/logs/plinycode.log, rotated, so
+	// a bad run leaves something behind once the window is gone. The sink
+	// reports its own trouble straight to the channel: going through Logger
+	// would loop back into it.
+	fileLogSink = createFileLogSink({
+		dir: path.dirname(logFilePath()),
+		onError: (message) => outputChannel.appendLine(message),
+	})
+	const logToFile = (message: string) => fileLogSink?.write(message)
+
 	const createWebview = () => new VscodeWebviewProvider(context)
 	const createEditPreview = () => new VscodeEditPreview()
 	const createCommentReview = () => getVscodeCommentReviewController()
@@ -758,7 +801,7 @@ function setupHostProvider(context: ExtensionContext) {
 		createEditPreview,
 		createCommentReview,
 		vscodeHostBridgeClient,
-		() => {}, // No-op logger, logging is handled via HostProvider.env.debugLog
+		logToFile, // The Output channel is fed through HostProvider.env.debugLog.
 		getCallbackUrl,
 		getBinaryLocation,
 		context.extensionUri.fsPath,
@@ -832,6 +875,8 @@ export async function deactivate() {
 	} finally {
 		// VSCode-specific services
 		disposeVscodeCommentReviewController()
+		// Last, so the lines teardown logged reach the file.
+		await fileLogSink?.flush()
 	}
 }
 
