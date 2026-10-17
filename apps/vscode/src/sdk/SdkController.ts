@@ -1750,10 +1750,15 @@ export class Controller {
 	 *
 	 * @returns the written path, or undefined when the save dialog was cancelled.
 	 */
-	async exportTaskToMarkdown(
+	/**
+	 * The conversation as the Markdown export renders it, without saving it:
+	 * the export command writes it where the user chooses, the diagnostics
+	 * bundle puts it in its folder.
+	 */
+	async renderTaskMarkdown(
 		taskId: string,
 		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
-	): Promise<string | undefined> {
+	): Promise<{ markdown: string; historyItem: HistoryItem }> {
 		const id = taskId?.trim() || this.task?.taskId
 		if (!id) {
 			throw new Error("No task to export")
@@ -1789,7 +1794,14 @@ export class Controller {
 			includeReasoning: options.includeReasoning ?? false,
 			plinyCodeVersion: ExtensionRegistryInfo.version,
 		})
+		return { markdown, historyItem }
+	}
 
+	async exportTaskToMarkdown(
+		taskId: string,
+		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
+	): Promise<string | undefined> {
+		const { markdown, historyItem } = await this.renderTaskMarkdown(taskId, options)
 		return saveMarkdownExport(markdown, {
 			defaultDirectory: historyItem.cwdOnTaskInitialization || (await this.getWorkspaceRoot()),
 			defaultFilename: defaultMarkdownExportFilename(historyItem.ts),

@@ -1,10 +1,29 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
+import { EmptyRequest } from "@shared/proto/cline/common"
 import { memo } from "react"
 import EntitlementError from "@/components/chat/EntitlementError"
 import SpendLimitError from "@/components/chat/SpendLimitError"
+import { UiServiceClient } from "@/services/grpc-client"
 import { ClineError, ClineErrorType } from "../../../../src/services/error/ClineError"
 
 const _errorColor = "var(--vscode-errorForeground)"
+
+/** Runs "PlinyCode: Export Diagnostics Bundle" (docs/diagnostics-bundle.md) from under an error. */
+const ExportDiagnosticsLink = () => (
+	<span className="block text-xs opacity-80 text-foreground">
+		<button
+			className="p-0 m-0 bg-transparent border-0 underline cursor-pointer text-inherit font-inherit"
+			onClick={() =>
+				UiServiceClient.exportDiagnostics(EmptyRequest.create()).catch((error) =>
+					console.error("Failed to export the diagnostics bundle:", error),
+				)
+			}
+			type="button">
+			Export diagnostics
+		</button>{" "}
+		to collect what PlinyCode knows about this run for a bug report.
+	</span>
+)
 
 interface ErrorRowProps {
 	message: ClineMessage
@@ -87,12 +106,18 @@ const ErrorRow = memo(({ message, errorType, apiRequestFailedMessage, apiReqStre
 
 							{/* Display raw API error if different from parsed error message */}
 							{errorMessage !== rawApiError && <div>{rawApiError}</div>}
+							<ExportDiagnosticsLink />
 						</p>
 					)
 				}
 
 				// Regular error message
-				return <p className="m-0 mt-0 whitespace-pre-wrap text-error wrap-anywhere">{message.text}</p>
+				return (
+					<p className="m-0 mt-0 whitespace-pre-wrap text-error wrap-anywhere flex flex-col gap-2">
+						<span>{message.text}</span>
+						<ExportDiagnosticsLink />
+					</p>
+				)
 
 			case "diff_error":
 				return (
