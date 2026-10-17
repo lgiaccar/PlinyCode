@@ -87,9 +87,17 @@ jobs:
 
             # @plinycode/* are local workspace symlinks to source packages; their dist/
             # output must be built before the extension can type-check/compile.
+            # This is the run's one SDK build: vscode-test, which waits for this
+            # job, downloads the dist/ shared below instead of rebuilding.
             - name: Build SDK packages
               working-directory: ${{ github.workspace }}
               run: bun run build:sdk
+
+            - name: Share SDK dist
+              uses: ./.github/actions/sdk-dist
+              with:
+                  mode: upload
+                  name: sdk-dist-vscode
 
             - name: Run Quality Checks (Parallel)
               run: bun run ci:check-all
@@ -158,12 +166,15 @@ jobs:
               if: env.RUN_TESTS == 'true'
               uses: ./.github/actions/setup-toolchain
 
-            # @plinycode/* are local workspace symlinks to source packages; build dist/
-            # before compiling/testing the extension.
-            - name: Build SDK packages
+            # @plinycode/* are local workspace symlinks to source packages; their
+            # dist/ comes from quality-checks (built once on Ubuntu, plain JS and
+            # .d.ts with LF endings, so the Windows leg uses the same files).
+            - name: Restore SDK dist
               if: env.RUN_TESTS == 'true'
-              working-directory: ${{ github.workspace }}
-              run: bun run build:sdk
+              uses: ./.github/actions/sdk-dist
+              with:
+                  mode: download
+                  name: sdk-dist-vscode
 
             # NOTE: The old `npm config set script-shell bash` step is intentionally
             # removed. Scripts are now launched with `bun run`, which uses Bun's own

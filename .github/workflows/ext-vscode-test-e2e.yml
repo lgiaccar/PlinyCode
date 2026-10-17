@@ -140,7 +140,12 @@ jobs:
                   key: playwright-browsers-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
             # @plinycode/* are local workspace symlinks to source packages; build dist/
-            # before building/packaging the extension for E2E.
+            # before building/packaging the extension for E2E. Each leg builds its
+            # own: the build takes 10-20 s, and nothing runs before the legs that
+            # could share it, so a separate build job would add a job start, a
+            # toolchain setup and an upload (more than the build itself) in front of
+            # every leg. engine-test and ext-vscode-test share theirs through
+            # .github/actions/sdk-dist because a job there already runs first.
             - name: Build SDK packages
               if: env.RUN_E2E == 'true'
               working-directory: ${{ github.workspace }}
@@ -163,6 +168,57 @@ jobs:
             - name: Run E2E tests - Non-Linux
               if: env.RUN_E2E == 'true' && matrix.runner != 'ubuntu'
               run: bun run test:e2e:optimal
+
+            # The PR build for testers. test:e2e:optimal packages dist/e2e.vsix with
+            # `vsce package`, which runs the production build (vscode:prepublish),
+            # the same recipe as `bun run release:package` apart from the README
+            # swap. The Ubuntu leg attaches it to the run as
+            # PlinyCode-<version>-pr<number>.vsix, also when a test failed (the
+            # PR's checks say whether e2e passed); it is skipped when packaging
+            # never got that far. The bundle is plain JavaScript, so the Ubuntu
+            # package installs on every OS.
+            - name: Name the PR build
+              id: pr_vsix
+              if: ${{ !cancelled() && env.RUN_E2E == 'true' && matrix.runner == 'ubuntu' && github.event_name == 'pull_request' && hashFiles('apps/vscode/dist/e2e.vsix') != '' }}
+              shell: bash
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  version=$(node -p "require('./package.json').version")
+                  name="PlinyCode-${version}-pr${PR_NUMBER}.vsix"
+                  mkdir -p "$RUNNER_TEMP/pr-vsix"
+                  cp dist/e2e.vsix "$RUNNER_TEMP/pr-vsix/$name"
+                  echo "name=$name" >> "$GITHUB_OUTPUT"
+                  echo "path=$RUNNER_TEMP/pr-vsix/$name" >> "$GITHUB_OUTPUT"
+
+            # A .vsix is already a zip, so the artifact is stored uncompressed.
+            - name: Upload the PR build
+              id: pr_vsix_upload
+              if: ${{ !cancelled() && steps.pr_vsix.outcome == 'success' }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ steps.pr_vsix.outputs.name }}
+                  path: ${{ steps.pr_vsix.outputs.path }}
+                  if-no-files-found: error
+                  retention-days: 14
+                  compression-level: 0
+                  overwrite: true
+
+            - name: Explain how to install the PR build
+              if: ${{ !cancelled() && steps.pr_vsix_upload.outcome == 'success' }}
+              shell: bash
+              env:
+                  VSIX_NAME: ${{ steps.pr_vsix.outputs.name }}
+                  VSIX_URL: ${{ steps.pr_vsix_upload.outputs.artifact-url }}
+              run: |
+                  {
+                    echo "## PR build"
+                    echo
+                    echo "[\`${VSIX_NAME}\`](${VSIX_URL}) is attached to this run for 14 days."
+                    echo "Download it (GitHub delivers it as a .zip; unzip it to get the .vsix), then in VS Code or Cursor"
+                    echo "open **Extensions → ⋯ → Install from VSIX…**, pick the file and reload the window."
+                    echo "Turn off \`plinycode.updates.enabled\` while you test it, or the updater replaces it with any newer published release."
+                  } >> "$GITHUB_STEP_SUMMARY"
 
             # Repo-root relative: the job's `working-directory` default applies to `run`
             # steps only, so an apps/vscode-relative path here silently matches nothing
