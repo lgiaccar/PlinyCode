@@ -21,7 +21,7 @@
 import { classifyProviderError, isPlinySelfHostedModelId, type ModelInfo, type PlinyThinkingControls } from "@plinycode/llms"
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
-import { effortOptions, selectCandidates } from "./router-policy"
+import { effortOptions, selectCandidates, supportsImages } from "./router-policy"
 import { withRouterAddendum } from "./router-prompt"
 import type {
 	RouterCallShape,
@@ -29,6 +29,7 @@ import type {
 	RouterClassification,
 	RouterDecision,
 	RouterEffort,
+	RouterImagePlan,
 	RouterRequestFeatures,
 	RouterRules,
 } from "./router-types"
@@ -75,6 +76,11 @@ export interface RoutedAgentModelDeps {
 		features: RouterRequestFeatures,
 		rules: RouterRules,
 	) => Promise<RouterClassification | undefined>
+	/**
+	 * How a call that carries images is handled (`router-images.ts`). Without
+	 * it, such a call may only go to a candidate that accepts images. Never throws.
+	 */
+	planImages?: (request: AgentModelRequest) => Promise<RouterImagePlan | undefined>
 	/** Injectable for tests. */
 	now?: () => number
 }
@@ -230,14 +236,28 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 			await deps.awaitRules?.()
 			const rules = deps.rules()
 			const features = deps.features(request)
-			const classification = features.hasImages ? undefined : await deps.classify?.(request, features, rules)
-			const decision = selectCandidates({
+			// With images handled, the call is routed as if it had none: a
+			// candidate that cannot see them gets them as text instead.
+			const imagePlan = features.hasImages ? await deps.planImages?.(request) : undefined
+			const routing: RouterRequestFeatures = imagePlan ? { ...features, hasImages: false } : features
+			const classification = routing.hasImages ? undefined : await deps.classify?.(request, routing, rules)
+			const knownModels = deps.knownModels()
+			const routed = selectCandidates({
 				rules,
-				features,
-				knownModels: deps.knownModels(),
+				features: routing,
+				knownModels,
 				isHealthy: deps.isHealthy,
 				classification,
 			})
+			const lead = imagePlan?.leadCandidates ?? []
+			const decision: RouterDecision =
+				lead.length > 0
+					? {
+							...routed,
+							candidates: [...lead, ...routed.candidates.filter((id) => !lead.includes(id))],
+							routeName: "images",
+						}
+					: routed
 
 			const candidates = decision.candidates
 			if (candidates.length === 0) {
@@ -259,6 +279,13 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 			for (let index = 0; index < candidates.length; index += 1) {
 				const modelId = candidates[index]
 				const nextModelId = candidates[index + 1]
+				// Describing images can take a while; it happens before the call's clock starts.
+				const baseRequest =
+					imagePlan && !supportsImages(modelId, knownModels) ? await imagePlan.textOnlyRequest() : request
+				if (request.signal?.aborted) {
+					yield { type: "finish", reason: "aborted" }
+					return
+				}
 				const startedAt = now()
 				const reasoning = effortOptions(decision.effort, decision.reasoningEffort, deps.thinkingControls?.(modelId))
 				// The free models get the extra "how your turn ends" instructions;
@@ -267,7 +294,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 					? withRouterAddendum(request.systemPrompt)
 					: request.systemPrompt
 				const delegateRequest: AgentModelRequest = {
-					...request,
+					...baseRequest,
 					...(systemPrompt !== undefined ? { systemPrompt } : {}),
 					...(reasoning ? { options: { ...request.options, ...reasoning } } : {}),
 				}

@@ -308,6 +308,7 @@ describe("SdkSessionEventCoordinator", () => {
 		expect(extra).toEqual({
 			advisor: { totalCost: 0.1, tokensIn: 100, tokensOut: 50, cacheWrites: 0, cacheReads: 0 },
 			compaction: { totalCost: 0, tokensIn: 0, tokensOut: 0, cacheWrites: 0, cacheReads: 0 },
+			vision: { totalCost: 0, tokensIn: 0, tokensOut: 0, cacheWrites: 0, cacheReads: 0 },
 		})
 		expect(options.taskHistory.updateTaskUsage).not.toHaveBeenCalled()
 	})

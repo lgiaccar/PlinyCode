@@ -95,8 +95,9 @@ An advisor call is a paid call.
 - **The history record.** The engine never sees an advisor call, and at the
   end of every turn it writes its own `totalCost` (the root agent's calls
   only) over the one the extension keeps. So the extension also keeps the
-  advisor's tokens and cost, and the compaction summarizer's, under a
-  metadata key of its own, `extraUsage` (`{ advisor, compaction }`), which
+  advisor's tokens and cost, the compaction summarizer's and the router's
+  image descriptions', under a metadata key of its own, `extraUsage`
+  (`{ advisor, compaction, vision }`), which
   the engine never writes: the open task rewrites it from its usage rows with
   every usage update, a background task adds each call to it. The history
   list reads the engine's aggregate (root agent plus sub-agents) plus

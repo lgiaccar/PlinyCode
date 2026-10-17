@@ -7,6 +7,8 @@
  * without importing each other.
  */
 
+import type { AgentModelRequest } from "@plinycode/shared"
+
 /** A route's matching conditions. All present conditions must hold. */
 export interface RouterRouteCondition {
 	/** Restrict the route to plan or act mode. */
@@ -118,7 +120,7 @@ export interface RouterRequestFeatures {
 	mode: "plan" | "act"
 	/** Latest user prompt, used for keyword matching. */
 	prompt: string
-	/** True when the request carries image parts (no free model accepts them). */
+	/** True when the request carries images, as parts or inside tool results (no free model accepts them). */
 	hasImages: boolean
 	/** True when the call comes from a spawned sub-agent rather than the main agent. */
 	isSubAgent: boolean
@@ -144,6 +146,19 @@ export interface RouterDecision {
 	excludedTooSmall: string[]
 	/** Models excluded because the request carries images they cannot accept. */
 	excludedNoImages: string[]
+}
+
+/**
+ * How a call that carries images is handled (`router-images.ts`). A candidate
+ * that accepts images gets the request as it is; any other gets
+ * `textOnlyRequest()`, in which each image is replaced by its description or
+ * by a note that it was not shown.
+ */
+export interface RouterImagePlan {
+	/** Image-capable models that take the call ahead of the route's candidates (`vision-model`), best first. */
+	leadCandidates?: string[]
+	/** The request for a candidate that cannot see images. Computed once, on first use; never rejects. */
+	textOnlyRequest: () => Promise<AgentModelRequest>
 }
 
 /** One LLM call, as recorded for the end-of-turn summary and the call log. */

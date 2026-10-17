@@ -25,8 +25,9 @@ import {
 	plinyThinkingControls,
 } from "@plinycode/llms"
 import { type AgentModel, type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
-import type { ClineMessage } from "@shared/ExtensionMessage"
+import type { ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
+import type { ModelCallUsage } from "../one-shot-model-call"
 import { createRouterCompletionGuard } from "./completion-guard"
 import { createRoutedAgentModel, isDegenerateOutputError } from "./routed-agent-model"
 import { appendCallLog, type RouterCallLogRecord } from "./router-call-log"
@@ -41,6 +42,13 @@ import {
 	recordSuccess,
 } from "./router-health"
 import { composeHooks } from "./router-hooks"
+import {
+	beginImageTurn,
+	createRouterImageHandler,
+	type RouterImageMode,
+	type RouterImageNotice,
+	requestHasImages,
+} from "./router-images"
 import { createReviewPass, type ReviewPassOptions } from "./router-review"
 import { isSuccessfulEdit } from "./router-review-diff"
 import { defaultRules } from "./router-rules"
@@ -114,10 +122,30 @@ export interface RouterInstallDeps {
 	getRunChanges?: ReviewPassOptions["loadCheckpointDiff"]
 	/** Receives each call attempt's routing decision and outcome, for the session trace. */
 	onCallEvent?: (event: RouterCallEvent) => void
+	/** How routed calls with images are handled (`router-images.ts`); see {@link RouterImageDeps}. */
+	images?: RouterImageDeps
 	/** Injectable for tests. */
 	now?: () => number
 	/** Injectable for tests: the wait before retrying after a dropped connection. */
 	sleep?: (ms: number) => Promise<void>
+}
+
+/**
+ * What the host tells the router about images. Every field is optional: with
+ * none, images are described when a free model can do it and otherwise
+ * replaced by a note, so nothing is spent.
+ */
+export interface RouterImageDeps {
+	/** `plinycode.router.images`, read per call; `describe` when not given. */
+	mode?: () => RouterImageMode
+	/** Whether "Unlock Pliny paid models" is on. A BalanceAuto conversation may use paid models either way. */
+	paidModelsUnlocked?: () => boolean
+	/** The conversation budget, checked before paid image work; see `AdvisorToolDeps.checkBudget`. */
+	checkBudget?: (sessionId: string) => Promise<string | undefined>
+	/** Told what each image description cost, after the call (a background task records it here). */
+	onUsage?: (sessionId: string, usage: ModelCallUsage) => void
+	/** Injectable for tests: the time limit of one description call. */
+	timeoutMs?: number
 }
 
 /** Wait before retrying a reply whose connection dropped: long enough for a gateway blip to pass. */
@@ -273,10 +301,6 @@ function latestUserPrompt(request: AgentModelRequest): string {
 	return ""
 }
 
-function requestHasImages(request: AgentModelRequest): boolean {
-	return request.messages.some((message) => message.content.some((part) => part.type === "image"))
-}
-
 /**
  * Install the router on a session config. Safe to call for any Pliny session;
  * the hooks no-op unless the session's model is a router id.
@@ -291,20 +315,21 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	/**
 	 * Whether the completion guard and the shell-result notes apply to a turn.
 	 * They exist for the free models, which stop early; the paid ones do not.
-	 * A free model (FreeAuto or a concrete free pick) always qualifies. On
-	 * BalanceAuto it depends on who is actually answering: the turn's last call
-	 * must have run on a free model, and a nudge to a paid one would just cost
-	 * a call.
+	 * A free model (FreeAuto or a concrete free pick) qualifies unless FreeAuto
+	 * put the turn's last call on an image-capable paid model
+	 * (`plinycode.router.images: vision-model`). On BalanceAuto it depends on
+	 * who is actually answering: the turn's last call must have run on a free
+	 * model, and a nudge to a paid one would just cost a call.
 	 */
 	const freeModelIsAnswering = (turnKey: string): boolean => {
+		const calls = getSessionState(turnKey).calls
+		const last = calls[calls.length - 1]
 		if (isPlinyFreeModelId(config.modelId)) {
-			return true
+			return !isRouted() || last === undefined || isPlinySelfHostedModelId(last.modelId)
 		}
 		if (!isPlinyBalanceAutoModelId(config.modelId)) {
 			return false
 		}
-		const calls = getSessionState(turnKey).calls
-		const last = calls[calls.length - 1]
 		return last !== undefined && isPlinySelfHostedModelId(last.modelId)
 	}
 
@@ -347,6 +372,70 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			text,
 			partial: false,
 		})
+	}
+
+	// An image description is a call the engine never sees: its cost reaches
+	// the task header, the budget check and the history record through a
+	// hidden usage row, like an advisor call's (task-usage-metadata.ts).
+	const emitVisionUsage = (usage: ModelCallUsage) => {
+		const payload: ClineSubagentUsageInfo = {
+			source: "vision",
+			tokensIn: usage.inputTokens,
+			tokensOut: usage.outputTokens,
+			cacheWrites: usage.cacheWriteTokens,
+			cacheReads: usage.cacheReadTokens,
+			cost: usage.totalCost,
+			...(usage.estimated ? { estimated: true } : {}),
+		}
+		deps.emitRow({
+			ts: deps.nextMessageTs(),
+			type: "say",
+			say: "subagent_usage",
+			text: JSON.stringify(payload),
+			partial: false,
+		})
+	}
+
+	const emitImageNotice = (notice: RouterImageNotice, rowPrefix: string) => {
+		const clock = `\`${formatClock(now())}\` ${rowPrefix}`
+		switch (notice.kind) {
+			case "described":
+				emitInfo(
+					`${clock}🖼 Images were described by **${modelLabel(notice.modelId)}** because the free models can't see images ` +
+						`(${notice.count} image${notice.count === 1 ? "" : "s"}${notice.cost > 0 ? `, $${notice.cost.toFixed(4)}` : ""}; ` +
+						"each image is described once per conversation · plinycode.router.images)",
+				)
+				return
+			case "vision-model":
+				emitInfo(
+					`${clock}🖼 This turn has a new image, so it runs on **${modelLabel(notice.modelId)}**, which can see it ` +
+						"(plinycode.router.images: vision-model)",
+				)
+				return
+			case "off":
+				emitInfo(
+					`${clock}🖼 Images are not shown to the free models (plinycode.router.images: off): the model was told an image was attached.`,
+				)
+				return
+			case "paid-locked":
+				emitInfo(
+					`${clock}⚠ The image was not shown to the model: the free models can't see images, and ` +
+						`${notice.mode === "describe" ? "describing it" : "routing the turn to a model that can"} needs a paid model, ` +
+						"which is locked. Turn on **Unlock Pliny paid models** (Settings → API configuration) to have images " +
+						"described for under a cent each, or switch to an image-capable model.",
+				)
+				return
+			case "budget":
+				emitInfo(
+					`${clock}⚠ The image was not shown to the model: ${notice.reason} The model was told an image was attached.`,
+				)
+				return
+			case "failed":
+				emitInfo(
+					`${clock}⚠ **${modelLabel(notice.modelId)}** could not describe an image (_${notice.error}_) · the model was told it was not shown`,
+				)
+				return
+		}
 	}
 
 	// Core copies this factory into every spawned sub-agent, whose runs happen
@@ -431,8 +520,29 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		// Every other run is a new turn from the router's point of view.
 		if (!continuesTurn) {
 			beginTurn(turnKey, now())
+			if (!isSubAgent) {
+				beginImageTurn(sessionKey())
+			}
 		}
 		refreshRules(profile)
+		const imageHandler = createRouterImageHandler({
+			conversationKey: sessionKey,
+			mode: () => deps.images?.mode?.() ?? "describe",
+			// BalanceAuto's users opted into paid calls; FreeAuto's only by unlocking paid models.
+			paidAllowed: () => isPlinyBalanceAutoModelId(agentConfig.modelId) || deps.images?.paidModelsUnlocked?.() === true,
+			knownModels: () => agentConfig.knownModels as Record<string, ModelInfo> | undefined,
+			createModel: (modelId) => createDefault({ modelId }),
+			checkBudget: () => deps.images?.checkBudget?.(sessionKey()) ?? Promise.resolve(undefined),
+			onUsage: ({ modelId, sha, usage }) => {
+				emitVisionUsage(usage)
+				deps.images?.onUsage?.(sessionKey(), usage)
+				Logger.log(
+					`[FreeAuto] ${modelId} described image ${sha}: $${usage.totalCost.toFixed(4)}${usage.estimated ? " (estimated)" : ""}`,
+				)
+			},
+			onNotice: (notice) => emitImageNotice(notice, rowPrefix),
+			...(deps.images?.timeoutMs !== undefined ? { timeoutMs: deps.images.timeoutMs } : {}),
+		})
 
 		const logAttempt = (
 			modelId: string,
@@ -480,6 +590,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			createDelegate: (modelId) => createDefault({ modelId }),
 			features: (request) => buildFeatures(request, { turnKey, isSubAgent, mode: deps.getMode() }),
 			thinkingControls: plinyThinkingControls,
+			planImages: (request) => imageHandler.plan(request),
 			classify: async (request, features, rules) => {
 				if (!rules.classifier.enabled || features.isSubAgent) {
 					return undefined

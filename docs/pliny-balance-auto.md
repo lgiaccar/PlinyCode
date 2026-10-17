@@ -69,6 +69,13 @@ Two things the router cannot do for hosted models:
 Utility jobs (classifier, compaction summaries, commit messages) stay on free
 models by default. The rules file may point any of them at a paid model.
 
+Images no longer pull a turn onto the paid models. A call with an image is
+routed like any other: the paid Claude candidates get the image itself, and a
+free one gets it as a description made once per image by Claude Haiku 4.5
+(`plinycode.router.images`, see "Images" in
+[pliny-free-auto-router.md](pliny-free-auto-router.md)). Paid models are always
+allowed for this on BalanceAuto, whatever the unlock toggle says.
+
 ## The rules file
 
 Global: `<data dir>/pliny-balance-auto.md`, created on first activation and

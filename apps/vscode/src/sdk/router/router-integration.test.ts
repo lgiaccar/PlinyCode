@@ -604,3 +604,123 @@ describe("installRouter run recovery", () => {
 		expect(rows[0]).toContain(`→ **${names[modelId].name}**`)
 	})
 })
+
+describe("installRouter images", () => {
+	beforeEach(() => {
+		resetHealth()
+		resetSessions()
+	})
+
+	const HAIKU = "snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0"
+	const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+	function imageSetup(images: RouterInstallDeps["images"], sessionId: string) {
+		const rows: Array<{ say?: string; text?: string }> = []
+		let ts = 0
+		const knownModels = {
+			[HAIKU]: {
+				id: HAIKU,
+				name: "Claude Haiku 4.5",
+				capabilities: ["streaming", "tools", "images"],
+				pricing: { input: 1, output: 5 },
+			},
+		}
+		const config = installRouter(
+			{ providerId: "pliny", modelId: PLINY_FREE_AUTO_MODEL_ID, cwd: "/tmp", knownModels } as unknown as CoreSessionConfig,
+			{
+				sessionId,
+				getMode: () => "act",
+				emitRow: (message) => rows.push({ say: message.say, text: message.text }),
+				nextMessageTs: () => ++ts,
+				logCall: () => undefined,
+				now: () => NOW,
+				...(images ? { images } : {}),
+			},
+		)
+		const sent: Array<{ modelId: string; request: AgentModelRequest }> = []
+		const run = async () => {
+			const model = config.agentModelFactory?.({
+				config: { modelId: PLINY_FREE_AUTO_MODEL_ID, knownModels } as never,
+				createDefault: (overrides) => {
+					const modelId = overrides?.modelId ?? "(default)"
+					if (modelId === HAIKU) {
+						return scripted([
+							{ type: "text-delta", text: "A terminal showing: npm ERR! missing script: build" },
+							{ type: "usage", usage: { inputTokens: 1700, outputTokens: 90, totalCost: 0.0021 } },
+							STOP,
+						])
+					}
+					return {
+						async *stream(request: AgentModelRequest) {
+							sent.push({ modelId, request })
+							yield TEXT
+							yield STOP
+						},
+					}
+				},
+			})
+			if (!model) {
+				throw new Error("router did not install a model factory")
+			}
+			const message: AgentMessage = {
+				id: "u",
+				role: "user",
+				content: [
+					{ type: "text", text: "why does the build fail?" },
+					{ type: "image", image: PNG, mediaType: "image/png" },
+				],
+				createdAt: 0,
+			}
+			for await (const _event of await model.stream({ messages: [message], tools: [] })) {
+				// drain
+			}
+		}
+		return { rows, run, sent }
+	}
+
+	it("describes the image, records its cost as a vision usage row and says so once", async () => {
+		const usages: Array<{ sessionId: string; cost: number }> = []
+		const { rows, run, sent } = imageSetup(
+			{
+				paidModelsUnlocked: () => true,
+				checkBudget: async () => undefined,
+				onUsage: (sessionId, usage) => usages.push({ sessionId, cost: usage.totalCost }),
+			},
+			"images-described",
+		)
+		await run()
+		await run()
+
+		const usageRows = rows.filter((row) => row.say === "subagent_usage")
+		expect(usageRows).toHaveLength(1)
+		expect(JSON.parse(usageRows[0].text ?? "{}")).toEqual({
+			source: "vision",
+			tokensIn: 1700,
+			tokensOut: 90,
+			cacheWrites: 0,
+			cacheReads: 0,
+			cost: 0.0021,
+		})
+		expect(usages).toEqual([{ sessionId: "images-described", cost: 0.0021 }])
+		const notices = rows.filter((row) => row.text?.includes("Images were described by"))
+		expect(notices).toHaveLength(1)
+		expect(notices[0].text).toContain("**Claude Haiku 4.5**")
+		// Every free call got the description instead of the image.
+		expect(sent).toHaveLength(2)
+		for (const { request } of sent) {
+			const parts = request.messages[0].content
+			expect(parts.some((part) => part.type === "image")).toBe(false)
+			expect(parts.some((part) => part.type === "text" && part.text.includes("npm ERR! missing script: build"))).toBe(true)
+		}
+	})
+
+	it("with paid models locked, drops the image with a note instead of failing the turn", async () => {
+		const { rows, run, sent } = imageSetup(undefined, "images-locked")
+		await run()
+		expect(rows.some((row) => row.say === "subagent_usage")).toBe(false)
+		expect(rows.some((row) => row.text?.includes("Unlock Pliny paid models"))).toBe(true)
+		expect(sent).toHaveLength(1)
+		const parts = sent[0].request.messages[0].content
+		expect(parts.some((part) => part.type === "text" && part.text.includes("is not shown to you"))).toBe(true)
+	})
+})
