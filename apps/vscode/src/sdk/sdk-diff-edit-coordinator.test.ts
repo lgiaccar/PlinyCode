@@ -54,6 +54,13 @@ class FakeDiagnostics implements EditDiagnosticsSource {
 		return this.errors.get(absolutePath) ?? []
 	}
 
+	getAllErrors(): Map<string, EditProblem[]> {
+		if (this.failReads) {
+			throw new Error("diagnostics unavailable")
+		}
+		return new Map(this.errors)
+	}
+
 	documentVersion(): number | undefined {
 		return undefined
 	}

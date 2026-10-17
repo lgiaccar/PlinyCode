@@ -92,6 +92,9 @@ describe("Edit diagnostics in the editor", function () {
 		)
 		const reported = report.split("\n").filter((line) => line.startsWith("- line "))
 		assert.equal(reported.length, after.length - before.length)
+		// The window-wide read lists the same errors under the file's path.
+		const allErrors = [...source.getAllErrors()].find(([absolutePath]) => arePathsEqual(absolutePath, settings))
+		assert.deepEqual(allErrors?.[1], after)
 		for (const problem of before) {
 			assert.ok(!report.includes(problem.message), `"${problem.message}" was there before the edit`)
 		}
