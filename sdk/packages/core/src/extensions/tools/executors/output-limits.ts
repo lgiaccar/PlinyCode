@@ -48,3 +48,106 @@ export const MAX_READ_OUTPUT_CHARS = 48_000;
 
 /** Max characters returned per search query; beyond this the middle is elided. */
 export const MAX_SEARCH_OUTPUT_CHARS = 48_000;
+
+/** Command output longer than this is digested instead of returned whole. */
+export const COMMAND_DIGEST_THRESHOLD_CHARS = 16_000;
+
+const DIGEST_HEAD_CHARS = 1_500;
+const DIGEST_TAIL_CHARS = 5_000;
+const DIGEST_DIAGNOSTIC_CHARS = 6_000;
+const DIGEST_LINE_CHARS = 400;
+
+const DIAGNOSTIC_LINE =
+	/\b(error|fatal|failed|failure|exception|panic|traceback|assertion)\b|\bC\d{4}\b|\bLNK\d{4}\b|\bTS\d{4}\b|^\s*FAIL\b|\[\s*FAILED\s*\]|npm ERR!|✗|✖/i;
+const BENIGN_LINE =
+	/\b0 (errors?|failed|failures)\b|\bfailed:?\s*0\b|\bno errors?\b|\berrors?:\s*0\b/i;
+
+function clipLine(line: string): string {
+	return line.length > DIGEST_LINE_CHARS
+		? `${line.slice(0, DIGEST_LINE_CHARS)}...`
+		: line;
+}
+
+/**
+ * Shrinks a long command output to what a build or test run needs the model
+ * to see: the first lines, every diagnostic line (errors, failures, compiler
+ * codes) with its line number, and the tail, where the verdict usually is.
+ * `savedTo` names the file holding the whole output; the notice tells the
+ * model to read or search that file instead of re-running the command.
+ * Output at or under the threshold comes back unchanged. The result is
+ * bounded by roughly 13,000 characters however large the input.
+ */
+export function digestCommandOutput(
+	text: string,
+	options: { savedTo?: string; thresholdChars?: number } = {},
+): string {
+	if (
+		text.length <= (options.thresholdChars ?? COMMAND_DIGEST_THRESHOLD_CHARS)
+	) {
+		return text;
+	}
+	const lines = text.split("\n");
+	const keep = new Set<number>();
+
+	let used = 0;
+	let headEnd = 0;
+	while (headEnd < lines.length && used < DIGEST_HEAD_CHARS) {
+		used += clipLine(lines[headEnd]).length + 1;
+		keep.add(headEnd);
+		headEnd += 1;
+	}
+	used = 0;
+	let tailStart = lines.length;
+	while (tailStart > headEnd && used < DIGEST_TAIL_CHARS) {
+		tailStart -= 1;
+		used += clipLine(lines[tailStart]).length + 1;
+		keep.add(tailStart);
+	}
+
+	const diagnostics: number[] = [];
+	for (let index = headEnd; index < tailStart; index += 1) {
+		const line = lines[index];
+		if (DIAGNOSTIC_LINE.test(line) && !BENIGN_LINE.test(line)) {
+			diagnostics.push(index);
+		}
+	}
+	used = 0;
+	let shownDiagnostics = 0;
+	for (const index of diagnostics) {
+		const cost = clipLine(lines[index]).length + 8;
+		if (used + cost > DIGEST_DIAGNOSTIC_CHARS) {
+			break;
+		}
+		used += cost;
+		keep.add(index);
+		shownDiagnostics += 1;
+	}
+
+	const out: string[] = [
+		`[Output digest: ${lines.length} lines, ${text.length} chars. ` +
+			(options.savedTo
+				? `The whole output is saved to ${options.savedTo}: read it with read_files (line ranges) or search it. `
+				: "") +
+			`Showing the first lines, ${shownDiagnostics} of ${diagnostics.length} error/failure lines from the middle (numbered), and the last lines.]`,
+	];
+	let previous = -1;
+	for (let index = 0; index < lines.length; index += 1) {
+		if (!keep.has(index)) {
+			continue;
+		}
+		if (index > previous + 1) {
+			out.push(`[... ${index - previous - 1} lines omitted ...]`);
+		}
+		const inMiddle = index >= headEnd && index < tailStart;
+		out.push(
+			inMiddle
+				? `${index + 1}: ${clipLine(lines[index])}`
+				: clipLine(lines[index]),
+		);
+		previous = index;
+	}
+	if (previous < lines.length - 1) {
+		out.push(`[... ${lines.length - 1 - previous} lines omitted ...]`);
+	}
+	return out.join("\n");
+}

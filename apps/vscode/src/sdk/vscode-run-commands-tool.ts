@@ -17,10 +17,12 @@
  */
 
 import {
+	COMMAND_DIGEST_THRESHOLD_CHARS,
 	CommandAbortedError,
 	CommandExitError,
 	createShellExecutor,
 	createShellTool,
+	digestCommandOutput,
 	MAX_COMMAND_OUTPUT_CHARS,
 	type ShellExecutor,
 	type StructuredCommandInput,
@@ -455,6 +457,29 @@ function trackTerminalCommand(
 
 type PreStartControl = "detach" | "abort"
 
+/**
+ * Short output is returned whole (up to maxOutputChars). Longer output is saved
+ * to a temp file and digested: first lines, error and failure lines, last lines.
+ * A build log then costs a few thousand characters per later request, not
+ * 48,000, and the model reads the file for anything the digest leaves out.
+ */
+function digestOrTruncate(output: string, maxOutputChars: number): string {
+	if (output.length <= COMMAND_DIGEST_THRESHOLD_CHARS) {
+		return truncateCommandOutput(output, { maxChars: maxOutputChars })
+	}
+	let savedTo: string | undefined
+	try {
+		savedTo = ClineTempManager.createTempFilePath("command-output")
+		fs.writeFileSync(savedTo, output)
+	} catch (error) {
+		Logger.warn(
+			`[VscodeRunCommands] Could not save the full command output: ${error instanceof Error ? error.message : String(error)}`,
+		)
+		return truncateCommandOutput(output, { maxChars: maxOutputChars })
+	}
+	return digestCommandOutput(output, { savedTo })
+}
+
 /** Exported for direct unit testing of the CommandExitError/terminalClosed mapping. */
 export async function executeForeground(
 	command: ShellCommand,
@@ -683,9 +708,7 @@ export async function executeForeground(
 				droppedLines > 0
 					? [...outputLines, `\n... (${droppedLines} earlier lines dropped) ...\n`].join("\n")
 					: outputLines.join("\n")
-			const truncated = truncateCommandOutput(bufferedOutput.trim(), {
-				maxChars: maxOutputChars,
-			})
+			const truncated = digestOrTruncate(bufferedOutput.trim(), maxOutputChars)
 			const note =
 				truncated.length > 0
 					? narrowTerminalNote(process.getCompletionDetails?.()?.terminalColumns, terminalInfo.location ?? "panel")

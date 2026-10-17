@@ -59,6 +59,8 @@ export {
 	type WebFetchExecutorOptions,
 } from "./executors/index";
 export {
+	COMMAND_DIGEST_THRESHOLD_CHARS,
+	digestCommandOutput,
 	MAX_COMMAND_OUTPUT_CHARS,
 	truncateCommandOutput,
 } from "./executors/output-limits";
