@@ -8,6 +8,7 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath, retainCheckpointRefs } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
+import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
@@ -34,8 +35,11 @@ import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
 import { ExtensionRegistryInfo } from "@/registry"
-import { getCiBoard, onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
+import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
+import { openCiWatchSource } from "@/services/devops-mcp/ci-watch/ci-watch-source"
+import { CiWatchStore } from "@/services/devops-mcp/ci-watch/ci-watch-store"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
@@ -103,6 +107,9 @@ import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
 import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
 import { WebviewGrpcBridge } from "./webview-grpc-bridge"
+
+/** How long a CI watch restored after a reload waits for the DevOps service before its poll fails. */
+const DEVOPS_WAIT_MS = 2 * 60_000
 
 /**
  * Log a stub warning and return undefined.
@@ -390,6 +397,16 @@ export class Controller {
 					.then(() => sendChatButtonClickedEvent())
 					.catch((error) => Logger.warn(`[SdkController] Failed to open watched task ${conversationId}:`, error))
 			},
+			// Watches survive a window reload; each window workspace resumes its own (docs/devops-mcp.md).
+			persistence: {
+				store: new CiWatchStore(
+					path.join(resolveClineDataDir(), "ci-watches.json"),
+					this.workspaceRootResolver.getWindowWorkspace().then((workspace) => workspace?.path ?? ""),
+				),
+				conversationExists: async (id) => (await this.taskHistory.findHistoryItem(id)) !== undefined,
+				openSource: (target, head) =>
+					openCiWatchSource((cwd) => waitForCiWatchRepoOpener(DEVOPS_WAIT_MS).then((open) => open(cwd)), target, head),
+			},
 		})
 		this.sessionConfigBuilder = new SdkSessionConfigBuilder({
 			stateManager: this.stateManager,
@@ -414,6 +431,7 @@ export class Controller {
 				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
 				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
 			},
+			trace: { enabled: isSessionTraceEnabled },
 		})
 		this.memory = new MemoryCoordinator({
 			store: this.memoryServices.store,
@@ -1769,10 +1787,15 @@ export class Controller {
 	 *
 	 * @returns the written path, or undefined when the save dialog was cancelled.
 	 */
-	async exportTaskToMarkdown(
+	/**
+	 * The conversation as the Markdown export renders it, without saving it:
+	 * the export command writes it where the user chooses, the diagnostics
+	 * bundle puts it in its folder.
+	 */
+	async renderTaskMarkdown(
 		taskId: string,
 		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
-	): Promise<string | undefined> {
+	): Promise<{ markdown: string; historyItem: HistoryItem }> {
 		const id = taskId?.trim() || this.task?.taskId
 		if (!id) {
 			throw new Error("No task to export")
@@ -1808,7 +1831,14 @@ export class Controller {
 			includeReasoning: options.includeReasoning ?? false,
 			plinyCodeVersion: ExtensionRegistryInfo.version,
 		})
+		return { markdown, historyItem }
+	}
 
+	async exportTaskToMarkdown(
+		taskId: string,
+		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
+	): Promise<string | undefined> {
+		const { markdown, historyItem } = await this.renderTaskMarkdown(taskId, options)
 		return saveMarkdownExport(markdown, {
 			defaultDirectory: historyItem.cwdOnTaskInitialization || (await this.getWorkspaceRoot()),
 			defaultFilename: defaultMarkdownExportFilename(historyItem.ts),

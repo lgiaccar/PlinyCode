@@ -54,6 +54,24 @@ const AboutSection = ({ version, renderSectionHeader }: AboutSectionProps) => {
 						</p>
 					</div>
 
+					<h3 className="text-md font-semibold">Diagnostics</h3>
+					<div>
+						<VSCodeButton
+							appearance="secondary"
+							onClick={() =>
+								UiServiceClient.exportDiagnostics(EmptyRequest.create()).catch((error) =>
+									console.error("Failed to export the diagnostics bundle:", error),
+								)
+							}>
+							Export diagnostics bundle
+						</VSCodeButton>
+						<p className="text-sm mt-[5px] text-description">
+							Writes a folder with versions, settings (secrets removed), the last model request, the router logs,
+							the trace and the log file, and the displayed conversation, for a bug report. Check it for anything
+							sensitive before sharing it.
+						</p>
+					</div>
+
 					<h3 className="text-md font-semibold">Community & Support</h3>
 					<p>
 						<VSCodeLink href={PLINYCODE_REPO_URL}>GitHub</VSCodeLink>

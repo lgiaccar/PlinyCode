@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { disposeAll } from "./dispose";
 import type { VcrRecording } from "./types/vcr";
-import { initVcr } from "./vcr";
+import { initVcr, installVcrFromEnv, startVcr } from "./vcr";
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -225,5 +225,143 @@ describe("VCR request body contracts", () => {
 		});
 
 		expect(await response.text()).toBe("ok");
+	});
+});
+
+function writeTextCassette(cassettePath: string, responses: string[]): void {
+	const recordings: VcrRecording[] = responses.map((response) => ({
+		scope: "https://api.example.test",
+		method: "POST",
+		path: "/v1/chat",
+		status: 200,
+		response,
+		responseIsBinary: false,
+		contentType: "text/plain",
+	}));
+	writeFileSync(cassettePath, JSON.stringify(recordings, null, 2));
+}
+
+describe("installVcrFromEnv", () => {
+	it("does nothing when no mode is set", () => {
+		const before = globalThis.fetch;
+		expect(installVcrFromEnv({})).toBeUndefined();
+		expect(globalThis.fetch).toBe(before);
+	});
+
+	it("reads the PLINYCODE_VCR names and patches the global fetch", async () => {
+		const cassettePath = createTempCassettePath();
+		writeTextCassette(cassettePath, ["first"]);
+
+		const session = installVcrFromEnv({
+			PLINYCODE_VCR: "playback",
+			PLINYCODE_VCR_CASSETTE: cassettePath,
+		});
+
+		expect(session?.mode).toBe("playback");
+		expect(globalThis.fetch).toBe(session?.fetch);
+		const response = await fetch("https://other-host.test/v1/chat", {
+			method: "POST",
+		});
+		expect(await response.text()).toBe("first");
+		expect(session?.stats()).toEqual({ used: 1, total: 1 });
+		session?.stop();
+		expect(globalThis.fetch).toBe(ORIGINAL_FETCH);
+	});
+
+	it("accepts the CLINE_VCR names as aliases", () => {
+		const cassettePath = createTempCassettePath();
+		writeTextCassette(cassettePath, ["first"]);
+
+		const session = installVcrFromEnv({
+			CLINE_VCR: "playback",
+			CLINE_VCR_CASSETTE: cassettePath,
+		});
+
+		expect(session?.cassettePath).toBe(path.resolve(cassettePath));
+		session?.stop();
+	});
+
+	it("rejects an unknown mode", () => {
+		expect(() =>
+			installVcrFromEnv({
+				PLINYCODE_VCR: "replay",
+				PLINYCODE_VCR_CASSETTE: "x.json",
+			}),
+		).toThrow(/Invalid PLINYCODE_VCR/);
+	});
+});
+
+describe("startVcr", () => {
+	it("serves a cassette through its own fetch without touching the global one", async () => {
+		const cassettePath = createTempCassettePath();
+		writeTextCassette(cassettePath, ["one", "two"]);
+		const before = globalThis.fetch;
+
+		const session = startVcr({
+			mode: "playback",
+			cassettePath,
+			patchGlobalFetch: false,
+		});
+
+		expect(globalThis.fetch).toBe(before);
+		const first = await session.fetch("https://api.example.test/v1/chat", {
+			method: "POST",
+		});
+		expect(await first.text()).toBe("one");
+		expect(session.stats()).toEqual({ used: 1, total: 2 });
+		session.stop();
+	});
+
+	it("throws a useful error once the cassette runs out", async () => {
+		const cassettePath = createTempCassettePath();
+		writeTextCassette(cassettePath, ["only"]);
+		const session = startVcr({
+			mode: "playback",
+			cassettePath,
+			patchGlobalFetch: false,
+		});
+
+		await session.fetch("https://api.example.test/v1/chat", { method: "POST" });
+		await expect(
+			session.fetch("https://api.example.test/v1/chat", { method: "POST" }),
+		).rejects.toThrow(/1 recording\(s\) loaded .* 1 already used/);
+	});
+
+	it("throws when a playback cassette is missing", () => {
+		expect(() =>
+			startVcr({
+				mode: "playback",
+				cassettePath: path.join(os.tmpdir(), "no-such-vcr-cassette.json"),
+			}),
+		).toThrow(/Cassette file not found/);
+	});
+
+	it("records through the base fetch and writes the cassette on stop", async () => {
+		const cassettePath = createTempCassettePath();
+		const baseFetch = vi.fn(
+			async () =>
+				new Response("data: hello\n\ndata: [DONE]\n\n", {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				}),
+		) as unknown as typeof fetch;
+
+		const session = startVcr({
+			mode: "record",
+			cassettePath,
+			baseFetch,
+			patchGlobalFetch: false,
+		});
+		const response = await session.fetch("https://api.example.test/v1/chat", {
+			method: "POST",
+			body: "{}",
+		});
+		await response.text();
+		session.stop();
+
+		const recordings = readCassette(cassettePath);
+		expect(recordings).toHaveLength(1);
+		expect(recordings[0]?.path).toBe("/v1/chat");
+		expect(recordings[0]?.response).toBe("data: hello\n\ndata: [DONE]\n\n");
 	});
 });

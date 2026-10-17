@@ -1,0 +1,29 @@
+[
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_0_0\",\"type\":\"function\",\"function\":{\"name\":\"read_files\",\"arguments\":\"{\\\"files\\\":[{\\\"path\\\":\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"src/greet.ts\\\"}]}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":4500,\"completion_tokens\":30,\"total_tokens\":4530}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_1_0\",\"type\":\"function\",\"function\":{\"name\":\"editor\",\"arguments\":\"{\\\"path\\\":\\\"plans/add-farewell/PLAN.md\\\",\\\"new_text\\\":\\\"# Add farewell(name)\\\\n\\\\n## Goal\\\\nAdd a `farewell(name)` function next to `greet()` in `src/greet.ts`.\\\\n\\\\n## Steps\\\\n1. In `src/gree\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"t.ts`, export `farewell(name: string): string` returning `Goodbye, ${name}!`.\\\\n2. Mention `farewell` in README.md.\\\\n\\\\n## Verify\\\\n- `farewell(\\\\\\\"Ada\\\\\\\")` returns `Goodbye, Ada!`.\\\\n\\\"}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":4600,\"completion_tokens\":160,\"total_tokens\":4760}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The plan is in plans/add-farewell/PLAN.md: add farewell(name) to src/greet.ts and mention it in the README.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":4800,\"completion_tokens\":40,\"total_tokens\":4840}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	}
+]

@@ -482,4 +482,11 @@ export * from "./tasks";
 export { createTool } from "./tools/create";
 export * from "./types";
 export { AUTH_ERROR_PATTERNS, isLikelyAuthError } from "./types/auth";
-export { initVcr } from "./vcr";
+export {
+	initVcr,
+	installVcrFromEnv,
+	startVcr,
+	type VcrMode,
+	type VcrOptions,
+	type VcrSession,
+} from "./vcr";

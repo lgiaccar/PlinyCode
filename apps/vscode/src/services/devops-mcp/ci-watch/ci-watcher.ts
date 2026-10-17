@@ -16,9 +16,19 @@ export interface CiWatchSource {
 	report(runId: number): Promise<RunReport>
 }
 
-interface CiHeadMove {
+export interface CiHeadMove {
 	from: string
 	to: string
+}
+
+/** What a watch has seen so far: enough to carry on after a window reload. */
+export interface CiWatcherState {
+	/** The last head commit seen. */
+	head: string
+	/** When that head was first seen. */
+	headSince: number
+	headMoves: CiHeadMove[]
+	startedAt: number
 }
 
 interface CiWatchOutcomeBase {
@@ -83,6 +93,10 @@ interface CiWatcherOptions {
 	head: string
 	until: CiWatchUntil
 	onOutcome: (outcome: CiWatchOutcome) => void
+	/** Called when the head commit moves, so the new state can be saved. */
+	onHeadMove?: () => void
+	/** Where an earlier watch got to, when this one carries it on after a reload. */
+	resume?: Omit<CiWatcherState, "head">
 	clock?: CiWatchClock
 	timings?: CiWatchTimings
 }
@@ -93,13 +107,14 @@ export class CiWatcher {
 	private readonly source: CiWatchSource
 	private readonly until: CiWatchUntil
 	private readonly onOutcome: (outcome: CiWatchOutcome) => void
+	private readonly onHeadMove?: () => void
 	private readonly clock: CiWatchClock
 	private readonly timings: CiWatchTimings
 	private readonly startedAt: number
 	private currentHead: string
 	/** When the current head was first seen; the no-run deadline counts from here. */
 	private headSince: number
-	private readonly headMoves: CiHeadMove[] = []
+	private readonly headMoves: CiHeadMove[]
 	private runs: PipelineRun[] = []
 	/** The set of runs that were all complete at the previous poll. */
 	private settledRuns?: string
@@ -111,16 +126,23 @@ export class CiWatcher {
 		this.source = options.source
 		this.until = options.until
 		this.onOutcome = options.onOutcome
+		this.onHeadMove = options.onHeadMove
 		this.clock = options.clock ?? SYSTEM_CLOCK
 		this.timings = options.timings ?? DEFAULT_CI_WATCH_TIMINGS
 		this.currentHead = options.head
-		this.startedAt = this.clock.now()
-		this.headSince = this.startedAt
+		this.startedAt = options.resume?.startedAt ?? this.clock.now()
+		this.headSince = options.resume?.headSince ?? this.startedAt
+		this.headMoves = [...(options.resume?.headMoves ?? [])]
 		this.schedule()
 	}
 
-	get head(): string {
-		return this.currentHead
+	get state(): CiWatcherState {
+		return {
+			head: this.currentHead,
+			headSince: this.headSince,
+			headMoves: [...this.headMoves],
+			startedAt: this.startedAt,
+		}
 	}
 
 	/** Stops the watch without reporting. */
@@ -152,6 +174,7 @@ export class CiWatcher {
 				this.headSince = this.clock.now()
 				this.runs = []
 				this.settledRuns = undefined
+				this.onHeadMove?.()
 			}
 			const runs = await this.source.runs(head)
 			if (this.done) {
