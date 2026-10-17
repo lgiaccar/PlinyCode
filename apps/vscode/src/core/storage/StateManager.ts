@@ -19,7 +19,6 @@ import { FSWatcher } from "chokidar"
 import { initializeDistinctId } from "@/services/logging/distinctId"
 import { canonicalPlinyModelId, isPlinySelfHostedModelId, PLINY_FREE_AUTO_MODEL_ID } from "@/shared/pliny"
 import { Logger } from "@/shared/services/Logger"
-import { AgentConfigLoader } from "../task/tools/subagent/AgentConfigLoader"
 import { readTaskSettingsFromStorage, writeTaskSettingsToStorage } from "./disk"
 import { STATE_MANAGER_NOT_INITIALIZED } from "./error-messages"
 import {
@@ -119,8 +118,6 @@ export class StateManager {
 
 			StateManager.instance.migratePlinyFreeAutoSelection()
 			StateManager.instance.migratePlinyRouterModelIds()
-
-			await AgentConfigLoader.getInstance().ready()
 		} catch (error) {
 			Logger.error("[StateManager] Failed to initialize:", error)
 			throw error
