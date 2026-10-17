@@ -40,6 +40,7 @@ import {
 	type ToolApprovalResult,
 	type ToolPolicy,
 } from "@plinycode/shared"
+import { withDisabledAgentPolicies } from "@/core/context/instructions/user-instructions/configured-agents"
 import { createRuleFileFilter } from "@/core/context/instructions/user-instructions/rule-file-filter"
 import { createHookFileFilter } from "@/core/hooks/hook-toggles"
 import { getHooksEnabledSafe } from "@/core/hooks/hooks-utils"
@@ -212,8 +213,21 @@ export class VscodeSessionHost implements SdkSessionHost {
 			// run, so switching hooks or a file off applies to live sessions.
 			const runHooks = onHookStatus !== undefined && getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled"))
 			const sessionId = input.config.sessionId
+			// Agents switched off in the Rules panel's Agents tab: a disabled tool
+			// policy takes their subagent_<name> tool out of the request.
+			let toolPolicies: Record<string, ToolPolicy> | undefined
+			try {
+				toolPolicies = withDisabledAgentPolicies(
+					input.toolPolicies ?? options.toolPolicies,
+					input.config.workspaceRoot ?? input.config.cwd,
+					stateManager,
+				)
+			} catch (error) {
+				Logger.warn("[VscodeSessionHost] Could not apply the Agents tab toggles:", error)
+			}
 			return {
 				...input,
+				...(toolPolicies ? { toolPolicies } : {}),
 				source: input.source ?? "vscode",
 				localRuntime: {
 					...(input.localRuntime ?? {}),

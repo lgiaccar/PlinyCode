@@ -87,6 +87,50 @@ service FileService {
 
   // Deletes an existing skill directory
   rpc deleteSkillFile(DeleteSkillRequest) returns (SkillsToggles);
+
+  // Lists the configured agents (workspace .cline/agents and the global agents folder)
+  rpc refreshAgents(EmptyRequest) returns (RefreshedAgents);
+
+  // Switches a configured agent on or off
+  rpc toggleAgent(ToggleAgentRequest) returns (RefreshedAgents);
+
+  // Creates a configured agent file from a template and opens it
+  rpc createAgentFile(CreateAgentRequest) returns (RefreshedAgents);
+
+  // Sends an event whenever a rules, skills, hooks or agents file changes on disk
+  rpc subscribeToCustomizationChanges(EmptyRequest) returns (stream Empty);
+}
+
+// A configured agent file, which the model sees as a subagent_<name> tool
+message AgentInfo {
+  string name = 1; // Name from the frontmatter, or the file name when the file did not load
+  string description = 2; // Description from the frontmatter
+  string path = 3; // Full path to the agent file
+  bool enabled = 4; // Whether its tool reaches the model
+  string model = 5; // providerId/modelId from the frontmatter; empty when it uses the conversation's model
+  string tool_name = 6; // The tool the model calls, e.g. subagent_reviewer
+  string error = 7; // Why the file did not load; empty when it did
+}
+
+// Response for the agent RPCs
+message RefreshedAgents {
+  repeated AgentInfo global_agents = 1;
+  repeated AgentInfo local_agents = 2;
+}
+
+// Request to switch a configured agent on or off
+message ToggleAgentRequest {
+  Metadata metadata = 1;
+  string agent_path = 2; // Path to the agent file
+  bool is_global = 3; // Whether this is a global or workspace agent
+  bool enabled = 4;
+}
+
+// Request to create a configured agent file
+message CreateAgentRequest {
+  Metadata metadata = 1;
+  string agent_name = 2; // Name of the agent; also the file name
+  bool is_global = 3; // Whether to create it in the global agents folder or the workspace's .cline/agents
 }
 
 // Response for refreshRules operation

@@ -54,6 +54,36 @@ describe("MemoryProposalRow", () => {
 		expect(resolveMemoryProposal).toHaveBeenCalledWith(expect.objectContaining({ proposalId: "p1", save: false }))
 	})
 
+	it("lists stale entries for removal apart, and applies the choice", () => {
+		const proposal: MemoryProposal = {
+			...PROPOSAL,
+			items: [
+				PROPOSAL.items[0],
+				{ id: "remove-0", scope: "repo", text: "The old build script", importance: "normal", action: "remove" },
+			],
+		}
+		render(<MemoryProposalRow message={row(proposal)} />)
+		expect(screen.getByTestId("memory-proposal-removals").textContent).toMatch(/Not used for 90 days/)
+		fireEvent.click(screen.getAllByRole("checkbox")[0])
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }))
+		expect(resolveMemoryProposal).toHaveBeenCalledWith(
+			expect.objectContaining({ proposalId: "p1", save: true, itemIds: ["remove-0"] }),
+		)
+	})
+
+	it("titles a removal-only proposal as a cleanup and reports what was removed", () => {
+		const proposal: MemoryProposal = {
+			...PROPOSAL,
+			status: "saved",
+			savedCount: 0,
+			removedCount: 1,
+			items: [{ id: "remove-0", scope: "user", text: "Old habit", importance: "normal", action: "remove" }],
+		}
+		render(<MemoryProposalRow message={row(proposal)} />)
+		expect(screen.getByText("Memory cleanup")).toBeTruthy()
+		expect(screen.getByText("Removed 1 item.")).toBeTruthy()
+	})
+
 	it("shows the outcome once resolved, without buttons", () => {
 		render(<MemoryProposalRow message={row({ ...PROPOSAL, status: "saved", savedCount: 2 })} />)
 		expect(screen.getByText("Saved 2 memories.")).toBeTruthy()

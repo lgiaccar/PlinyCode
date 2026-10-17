@@ -11,6 +11,8 @@ Which instruction files reach the model, how much of each, and in what order. Th
 
 The Rules panel's toggles apply to all of them. Rules are re-read on every run, so editing one changes the next request.
 
+The panel has Rules, Skills, Agents and Hooks tabs ([agent-tools.md](agent-tools.md) covers the Agents tab). While it is open, the extension watches the rules, skills, hooks and agents folders of the workspace and of the global locations (`customization-watcher.ts`), and the open tab reloads when a file there changes; nothing is rescanned while the panel is closed.
+
 ## Inlined or listed
 
 The section is resent with every request, so it has a budget:

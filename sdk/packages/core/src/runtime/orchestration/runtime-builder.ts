@@ -42,6 +42,7 @@ import { createDelegatedAgentConfigProvider } from "../../extensions/tools/team"
 import type { ConfiguredAgentConfig } from "../../extensions/tools/team/configured-agent-config";
 import { loadConfiguredAgentConfigs } from "../../extensions/tools/team/configured-agent-config";
 import { createConfiguredAgentTools } from "../../extensions/tools/team/configured-agent-tool";
+import { resolveSubAgentLimits } from "../../extensions/tools/team/sub-agent-limits";
 import { createSubAgentGuidanceExtension } from "../../extensions/tools/team/subagent-guidance";
 import {
 	filterDisabledTools,
@@ -595,6 +596,8 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 							toolPolicies: effectiveToolPolicies,
 							requestToolApproval: input.requestToolApproval,
 							getPrepareTurn: input.subAgentPrepareTurn,
+							defaultMaxIterations: resolveSubAgentLimits(config.subAgentLimits)
+								.maxIterations,
 						}),
 						effectiveToolPolicies,
 					),

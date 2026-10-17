@@ -90,6 +90,47 @@ describe("ConversationSearch without SQLite", () => {
 	})
 })
 
+describe("ConversationSearch.searchContent (the history view)", () => {
+	it("searches what the index holds without waiting for it to catch up", () => {
+		const index = fakeIndex([hit("s1", "/work/a")])
+		index.refreshNow = vi.fn(() => new Promise<void>(() => {}))
+		const search = new ConversationSearch({ source: source(), createIndex: () => index })
+
+		expect(search.searchContent("pager", "/work/a")?.map((entry) => entry.sessionId)).toEqual(["s1"])
+		expect(index.start).toHaveBeenCalledTimes(1)
+		expect(index.refreshNow).not.toHaveBeenCalled()
+		expect(index.search).toHaveBeenCalledWith({ query: "pager", limit: 200, workspaceRoot: "/work/a" })
+		expect(search.searchContent("  ")).toEqual([])
+	})
+
+	it("returns undefined without SQLite, so the view keeps its title search", () => {
+		const search = new ConversationSearch({ source: source(), createIndex: () => fakeIndex([], false) })
+		expect(search.searchContent("pager")).toBeUndefined()
+		const broken = new ConversationSearch({
+			source: source(),
+			createIndex: () => {
+				throw new Error("no sqlite")
+			},
+		})
+		expect(broken.searchContent("pager")).toBeUndefined()
+	})
+
+	it("asks the history for at most the index's session cap", async () => {
+		const listSessions = vi.fn(async () => SESSIONS)
+		let host: Parameters<ConstructorParameters<typeof ConversationSearch>[0]["createIndex"]>[0] | undefined
+		const search = new ConversationSearch({
+			source: { listSessions, readMessages: async () => [] },
+			createIndex: (created) => {
+				host = created
+				return fakeIndex([])
+			},
+		})
+		search.searchContent("pager")
+		await host?.listSessions(100_000)
+		expect(listSessions).toHaveBeenLastCalledWith(20_000)
+	})
+})
+
 describe("messageToText", () => {
 	it("leaves out the editor state and mode notices the extension added", async () => {
 		const { messageToText } = await import("./conversation-search")

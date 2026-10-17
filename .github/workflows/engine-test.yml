@@ -44,10 +44,19 @@ jobs:
             - name: Setup toolchain
               uses: ./.github/actions/setup-toolchain
 
+            # The one SDK build of this run: the test legs and eval-offline, which
+            # all wait for this job, download its dist/ instead of rebuilding.
+            - name: Build SDK
+              run: bun run build:sdk
+
+            - name: Share SDK dist
+              uses: ./.github/actions/sdk-dist
+              with:
+                  mode: upload
+                  name: sdk-dist-engine
+
             - name: Typecheck
-              run: |
-                  bun run build:sdk
-                  bun run types
+              run: bun run types
 
             - name: Lint & Format
               run: |
@@ -80,9 +89,14 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
 
-            - name: Build SDK
+            # dist/ built by quality-checks on Ubuntu. It is plain JS and .d.ts
+            # with LF endings, so the Windows leg uses the same files.
+            - name: Restore SDK dist
               id: build_sdk_step
-              run: bun run build:sdk
+              uses: ./.github/actions/sdk-dist
+              with:
+                  mode: download
+                  name: sdk-dist-engine
 
             # This workflow only triggers on sdk/** changes, so it tests the SDK
             # packages on both runners. The extension (plinycode-dev) is covered by
@@ -114,9 +128,13 @@ jobs:
               uses: ./.github/actions/setup-toolchain
 
             # Under Bun the harness runs engine source through sdk/tsconfig.json's
-            # paths, but @plinycode/llms still resolves @plinycode/shared to dist/.
-            - name: Build SDK
-              run: bun run build:sdk
+            # paths, but @plinycode/llms still resolves @plinycode/shared to dist/,
+            # which quality-checks built.
+            - name: Restore SDK dist
+              uses: ./.github/actions/sdk-dist
+              with:
+                  mode: download
+                  name: sdk-dist-engine
 
             - name: Typecheck eval harness
               run: bun tsc -p sdk/scripts/eval/tsconfig.json

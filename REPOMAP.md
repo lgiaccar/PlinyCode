@@ -8,7 +8,7 @@ This is a directory map. Commands, workflows and rules are in the `AGENTS.md` fi
 
 | Dir | Role |
 |-----|------|
-| `.github/` | Issue and PR templates, CODEOWNERS, Dependabot, the `setup-toolchain` composite action (`actions/`) and the CI workflows (`workflows/`) |
+| `.github/` | Issue and PR templates, CODEOWNERS, Dependabot, the `setup-toolchain` and `sdk-dist` composite actions (`actions/`) and the CI workflows (`workflows/`) |
 | `.vscode/` | Workspace settings, launch configs, tasks |
 | `apps/` | Applications (currently the VS Code extension) |
 | `sdk/` | Internal engine packages |

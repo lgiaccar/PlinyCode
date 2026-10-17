@@ -1,6 +1,8 @@
 import { EmptyRequest } from "@shared/proto/cline/common"
 import {
+	AgentInfo,
 	ClineRulesToggles,
+	RefreshedAgents,
 	RefreshedRules,
 	RuleScope,
 	SkillInfo,
@@ -12,18 +14,21 @@ import {
 	ToggleWindsurfRuleRequest,
 } from "@shared/proto/cline/file"
 import { VSCodeButton, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useClickAway, useWindowSize } from "react-use"
 import styled from "styled-components"
 import PopupModalContainer from "@/components/common/PopupModalContainer"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { FileServiceClient } from "@/services/grpc-client"
+import AgentsTab from "./AgentsTab"
 import HookRow from "./HookRow"
 import NewRuleRow from "./NewRuleRow"
 import RuleRow from "./RuleRow"
 import RulesToggleList from "./RulesToggleList"
 import { estimateSkillListingTokens, formatTokenCount, sumEnabledTokens } from "./tokenFormat"
+
+type CustomizeView = "rules" | "skills" | "hooks" | "agents"
 
 const ClineRulesToggleModal: React.FC = () => {
 	const {
@@ -49,6 +54,8 @@ const ClineRulesToggleModal: React.FC = () => {
 	>([])
 	const [globalSkills, setGlobalSkills] = useState<SkillInfo[]>([])
 	const [localSkills, setLocalSkills] = useState<SkillInfo[]>([])
+	const [globalAgents, setGlobalAgents] = useState<AgentInfo[]>([])
+	const [localAgents, setLocalAgents] = useState<AgentInfo[]>([])
 	const [ruleTokenCounts, setRuleTokenCounts] = useState<Record<string, number>>({})
 
 	const [isVisible, setIsVisible] = useState(false)
@@ -57,7 +64,9 @@ const ClineRulesToggleModal: React.FC = () => {
 	const { width: viewportWidth, height: viewportHeight } = useWindowSize()
 	const [arrowPosition, setArrowPosition] = useState(0)
 	const [menuPosition, setMenuPosition] = useState(0)
-	const [currentView, setCurrentView] = useState<"rules" | "skills" | "hooks">("rules")
+	const [currentView, setCurrentView] = useState<CustomizeView>("rules")
+	const currentViewRef = useRef<CustomizeView>(currentView)
+	currentViewRef.current = currentView
 
 	// Auto-switch to rules tab if hooks become disabled while viewing hooks tab
 	useEffect(() => {
@@ -66,37 +75,34 @@ const ClineRulesToggleModal: React.FC = () => {
 		}
 	}, [currentView, hooksEnabled])
 
-	useEffect(() => {
-		if (isVisible) {
-			FileServiceClient.refreshRules({} as EmptyRequest)
-				.then((response: RefreshedRules) => {
-					// Update state with the response data using all available setters
-					if (response.globalClineRulesToggles?.toggles) {
-						setGlobalClineRulesToggles(response.globalClineRulesToggles.toggles)
-					}
-					if (response.localClineRulesToggles?.toggles) {
-						setLocalClineRulesToggles(response.localClineRulesToggles.toggles)
-					}
-					if (response.localCursorRulesToggles?.toggles) {
-						setLocalCursorRulesToggles(response.localCursorRulesToggles.toggles)
-					}
-					if (response.localWindsurfRulesToggles?.toggles) {
-						setLocalWindsurfRulesToggles(response.localWindsurfRulesToggles.toggles)
-					}
-					if (response.localCopilotRulesToggles?.toggles) {
-						setLocalCopilotRulesToggles(response.localCopilotRulesToggles.toggles)
-					}
-					setRuleTokenCounts(response.tokenCounts ?? {})
-					if (response.localAgentsRulesToggles?.toggles) {
-						setLocalAgentsRulesToggles(response.localAgentsRulesToggles.toggles)
-					}
-				})
-				.catch((error) => {
-					console.error("Failed to refresh rules:", error)
-				})
-		}
+	const refreshRules = useCallback(() => {
+		FileServiceClient.refreshRules({} as EmptyRequest)
+			.then((response: RefreshedRules) => {
+				// Update state with the response data using all available setters
+				if (response.globalClineRulesToggles?.toggles) {
+					setGlobalClineRulesToggles(response.globalClineRulesToggles.toggles)
+				}
+				if (response.localClineRulesToggles?.toggles) {
+					setLocalClineRulesToggles(response.localClineRulesToggles.toggles)
+				}
+				if (response.localCursorRulesToggles?.toggles) {
+					setLocalCursorRulesToggles(response.localCursorRulesToggles.toggles)
+				}
+				if (response.localWindsurfRulesToggles?.toggles) {
+					setLocalWindsurfRulesToggles(response.localWindsurfRulesToggles.toggles)
+				}
+				if (response.localCopilotRulesToggles?.toggles) {
+					setLocalCopilotRulesToggles(response.localCopilotRulesToggles.toggles)
+				}
+				setRuleTokenCounts(response.tokenCounts ?? {})
+				if (response.localAgentsRulesToggles?.toggles) {
+					setLocalAgentsRulesToggles(response.localAgentsRulesToggles.toggles)
+				}
+			})
+			.catch((error) => {
+				console.error("Failed to refresh rules:", error)
+			})
 	}, [
-		isVisible,
 		setGlobalClineRulesToggles,
 		setLocalClineRulesToggles,
 		setLocalCursorRulesToggles,
@@ -105,80 +111,78 @@ const ClineRulesToggleModal: React.FC = () => {
 		setLocalCopilotRulesToggles,
 	])
 
-	// Refresh hooks when hooks tab becomes visible
+	const refreshHooks = useCallback(() => {
+		FileServiceClient.refreshHooks({} as EmptyRequest)
+			.then((response) => {
+				setGlobalHooks(response.globalHooks || [])
+				setWorkspaceHooks(response.workspaceHooks || [])
+			})
+			.catch((error) => console.error("Failed to refresh hooks:", error))
+	}, [])
+
+	const refreshSkills = useCallback(() => {
+		FileServiceClient.refreshSkills({} as EmptyRequest)
+			.then((response) => {
+				setGlobalSkills(response.globalSkills || [])
+				setLocalSkills(response.localSkills || [])
+			})
+			.catch((error) => console.error("Failed to refresh skills:", error))
+	}, [])
+
+	const applyAgents = useCallback((response: RefreshedAgents) => {
+		setGlobalAgents(response.globalAgents || [])
+		setLocalAgents(response.localAgents || [])
+	}, [])
+
+	const refreshAgents = useCallback(() => {
+		FileServiceClient.refreshAgents({} as EmptyRequest)
+			.then(applyAgents)
+			.catch((error) => console.error("Failed to refresh agents:", error))
+	}, [applyAgents])
+
+	// The rules once when the panel opens, and the open tab's list whenever it is shown.
 	useEffect(() => {
-		if (!isVisible || currentView !== "hooks") {
+		if (isVisible) {
+			refreshRules()
+		}
+	}, [isVisible, refreshRules])
+
+	useEffect(() => {
+		if (!isVisible) {
 			return
 		}
-
-		const abortController = new AbortController()
-
-		// Initial refresh when tab opens
-		const refreshHooks = () => {
-			if (abortController.signal.aborted) return
-
-			FileServiceClient.refreshHooks({} as EmptyRequest)
-				.then((response) => {
-					if (!abortController.signal.aborted) {
-						setGlobalHooks(response.globalHooks || [])
-						setWorkspaceHooks(response.workspaceHooks || [])
-					}
-				})
-				.catch((error) => {
-					if (!abortController.signal.aborted) {
-						console.error("Failed to refresh hooks:", error)
-					}
-				})
+		if (currentView === "hooks") {
+			refreshHooks()
+		} else if (currentView === "skills") {
+			refreshSkills()
+		} else if (currentView === "agents") {
+			refreshAgents()
 		}
+	}, [isVisible, currentView, refreshHooks, refreshSkills, refreshAgents])
 
-		// Refresh immediately
-		refreshHooks()
-
-		// Poll every 1 second to detect filesystem changes
-		const pollInterval = setInterval(refreshHooks, 1000)
-
-		return () => {
-			abortController.abort()
-			clearInterval(pollInterval)
-		}
-	}, [isVisible, currentView])
-
-	// Refresh skills when skills tab becomes visible
+	// While the panel is open the extension watches the rules, skills, hooks and
+	// agents folders and says when a file changed; the open tab then reloads.
 	useEffect(() => {
-		if (!isVisible || currentView !== "skills") {
+		if (!isVisible) {
 			return
 		}
-
-		let isCancelled = false
-
-		const refreshSkills = () => {
-			if (isCancelled) return
-
-			FileServiceClient.refreshSkills({} as EmptyRequest)
-				.then((response) => {
-					if (!isCancelled) {
-						setGlobalSkills(response.globalSkills || [])
-						setLocalSkills(response.localSkills || [])
-					}
-				})
-				.catch((error) => {
-					if (!isCancelled) {
-						console.error("Failed to refresh skills:", error)
-					}
-				})
-		}
-
-		// Refresh immediately
-		refreshSkills()
-
-		// Poll every 1 second to detect filesystem changes
-		const pollInterval = setInterval(refreshSkills, 1000)
-
-		return () => {
-			isCancelled = true
-			clearInterval(pollInterval)
-		}
-	}, [isVisible, currentView])
+		const unsubscribe = FileServiceClient.subscribeToCustomizationChanges({} as EmptyRequest, {
+			onResponse: () => {
+				refreshRules()
+				const view = currentViewRef.current
+				if (view === "hooks") {
+					refreshHooks()
+				} else if (view === "skills") {
+					refreshSkills()
+				} else if (view === "agents") {
+					refreshAgents()
+				}
+			},
+			onError: (error) => console.error("Error in customization changes subscription:", error),
+			onComplete: () => {},
+		})
+		return unsubscribe
+	}, [isVisible, refreshRules, refreshHooks, refreshSkills, refreshAgents])
 
 	// Format global rules for display with proper typing
 	const globalRules = Object.entries(globalClineRulesToggles || {})
@@ -417,6 +421,9 @@ const ClineRulesToggleModal: React.FC = () => {
 								<TabButton isActive={currentView === "skills"} onClick={() => setCurrentView("skills")}>
 									Skills
 								</TabButton>
+								<TabButton isActive={currentView === "agents"} onClick={() => setCurrentView("agents")}>
+									Agents
+								</TabButton>
 								{hooksEnabled && (
 									<TabButton isActive={currentView === "hooks"} onClick={() => setCurrentView("hooks")}>
 										Hooks
@@ -446,6 +453,13 @@ const ClineRulesToggleModal: React.FC = () => {
 									matches a skill's description, PlinyCode uses the <span className="font-bold">use_skill</span>{" "}
 									tool to load the full instructions. Skills in <code>.github/skills</code>,{" "}
 									<code>.cursor/skills</code> and <code>.claude/skills</code> are picked up too.
+								</p>
+							) : currentView === "agents" ? (
+								<p>
+									Agents are sub-agents with a fixed prompt, model and tool list, written as markdown files in{" "}
+									<code>.cline/agents</code> or your global agents folder. PlinyCode can hand one a task through
+									its <span className="font-bold">subagent_&lt;name&gt;</span> tool; switch off the ones it
+									should not use.
 								</p>
 							) : (
 								<p>
@@ -682,6 +696,8 @@ const ClineRulesToggleModal: React.FC = () => {
 									</div>
 								</div>
 							</>
+						) : currentView === "agents" ? (
+							<AgentsTab globalAgents={globalAgents} localAgents={localAgents} onAgentsChanged={applyAgents} />
 						) : null}
 					</div>
 				</PopupModalContainer>

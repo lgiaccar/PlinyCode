@@ -5,6 +5,7 @@
 import { PATCH_MARKERS } from "@plinycode/core"
 import type { ClineAskUseMcpServer, ClineSayTool } from "@shared/ExtensionMessage"
 import * as path from "path"
+import { builtinMcpToolDescription } from "@/services/devops-mcp/builtin-mcp-registry"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
 import {
 	extractFileReads,
@@ -535,6 +536,7 @@ export function buildMcpToolPayload(mcpInfo: { serverName: string; toolName: str
 		serverName: mcpInfo.serverName,
 		toolName: mcpInfo.toolName,
 		arguments: argumentsStr,
+		description: builtinMcpToolDescription(mcpInfo.serverName, mcpInfo.toolName),
 	} satisfies ClineAskUseMcpServer)
 }
 

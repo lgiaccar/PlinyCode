@@ -1,6 +1,6 @@
 /** Markdown rendering for tool results, and marker-delimited sections in PR descriptions. */
 import { DevOpsError } from "./errors"
-import type { Check, PipelineRun, PullRequest, Result, RunReport, Status } from "./providers/types"
+import type { Check, PipelineRun, PrThread, PullRequest, Result, RunReport, Status } from "./providers/types"
 
 const ICONS: Record<string, string> = {
 	success: "✅",
@@ -98,6 +98,55 @@ export function checksTable(pr: PullRequest, checks: Check[]): string {
 		"|---|---|---|",
 		...rows,
 	].join("\n")
+}
+
+/** Characters of each comment shown; the model can open the URL for the rest. */
+const COMMENT_CHARS = 300
+const COMMENTS_PER_THREAD = 5
+
+function clip(text: string): string {
+	const flat = text.replace(/\s+/g, " ").trim()
+	return flat.length > COMMENT_CHARS ? `${flat.slice(0, COMMENT_CHARS)}…` : flat
+}
+
+const lastActivity = (thread: PrThread) => Math.max(0, ...thread.comments.map((c) => Date.parse(c.created) || 0))
+
+/** A PR's threads, the most recently active first, each with its latest comments. */
+export function commentsReport(pr: PullRequest, provider: string, threads: PrThread[], limit: number): string {
+	if (!threads.length) {
+		return `PR #${pr.id} has no comments or reviews.`
+	}
+	const sorted = [...threads].sort((a, b) => lastActivity(b) - lastActivity(a))
+	const shown = sorted.slice(0, limit)
+	const unresolved = threads.filter((t) => t.resolved === false).length
+	const out = [
+		`Comments on PR #${pr.id} (${provider}), newest first: ${shown.length} of ${threads.length} threads${unresolved ? `, ${unresolved} unresolved` : ""}.`,
+	]
+	for (const t of shown) {
+		const parts = [
+			t.kind === "review"
+				? `Review: ${t.verdict}`
+				: t.kind === "inline"
+					? `Inline ${t.path}${t.line ? `:${t.line}` : ""}`
+					: "General comment",
+		]
+		if (t.resolved !== undefined) parts.push(t.resolved ? "resolved" : "unresolved")
+		if (t.replyId) parts.push(`reply_to: ${t.replyId}`)
+		out.push("", `- ${parts.join(" · ")}`)
+		const comments = t.comments.slice(-COMMENTS_PER_THREAD)
+		if (t.comments.length > comments.length) {
+			out.push(`  - (${t.comments.length - comments.length} earlier comments)`)
+		}
+		for (const c of comments) {
+			out.push(
+				`  - ${c.author || "(unknown)"}, ${c.created.slice(0, 16).replace("T", " ")}: ${clip(c.body) || "(no text)"}`,
+			)
+		}
+	}
+	if (sorted.length > shown.length) {
+		out.push("", `${sorted.length - shown.length} older threads are not shown; pass a larger \`limit\` to see them.`)
+	}
+	return out.join("\n")
 }
 
 const SECTION_NAME = /^[A-Za-z0-9_-]+$/

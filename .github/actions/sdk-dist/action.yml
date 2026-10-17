@@ -1,0 +1,102 @@
+name: SDK dist
+description: >-
+    Shares the engine packages' compiled output between the jobs of one workflow
+    run. `mode: upload` packs every sdk/packages/<package>/dist directory into one
+    tar and uploads it as an artifact; `mode: download` restores it in place, so a
+    dependent job skips `bun run build:sdk`. The caller checks out the repository
+    first, and in upload mode runs `bun run build:sdk` first.
+
+# dist/ is all a dependant needs: each package's `build` script (bun.mts plus
+# tsc declaration emit) writes only to its own dist/, and the extension, the
+# engine tests and the eval harness resolve @plinycode/* through those dist/
+# exports. The output is plain JavaScript and .d.ts with no symlinks or absolute
+# paths, and .gitattributes checks every file out with LF endings, so a build
+# made on Ubuntu is byte-for-byte what Windows or macOS would build.
+#
+# One tar instead of the raw directories: one file uploads and downloads much
+# faster than ~450 small ones, and it restores the exact layout. Its path stays
+# relative to the workspace because GNU tar (Git Bash on Windows) reads a
+# drive-letter path such as D:\a\_temp\x.tar as host "D".
+
+inputs:
+    mode:
+        description: '"upload" (after `bun run build:sdk`) or "download".'
+        required: true
+    name:
+        description: >-
+            Artifact name. Use one per workflow, so two workflows called from the
+            same run (workflow_call) can't clash.
+        required: false
+        default: sdk-dist
+
+runs:
+    using: composite
+    steps:
+        - name: Check mode
+          if: inputs.mode != 'upload' && inputs.mode != 'download'
+          shell: bash
+          run: |
+              echo "::error::sdk-dist: mode must be 'upload' or 'download', got '${{ inputs.mode }}'"
+              exit 1
+
+        - name: Pack SDK dist
+          if: inputs.mode == 'upload'
+          shell: bash
+          working-directory: ${{ github.workspace }}
+          run: |
+              set -euo pipefail
+              dirs=()
+              for manifest in sdk/packages/*/package.json; do
+                pkg=$(dirname "$manifest")
+                if [ ! -d "$pkg/dist" ]; then
+                  echo "::error::$pkg/dist is missing; run \`bun run build:sdk\` before uploading."
+                  exit 1
+                fi
+                dirs+=("$pkg/dist")
+              done
+              mkdir -p .sdk-dist
+              tar -cf .sdk-dist/sdk-dist.tar "${dirs[@]}"
+              echo "Packed ${dirs[*]} ($(du -h .sdk-dist/sdk-dist.tar | cut -f1))"
+
+        # Kept a week rather than a day so "Re-run failed jobs" on an older run
+        # still finds it; overwrite covers "Re-run all jobs", which uploads again
+        # under the same name in the same run.
+        - name: Upload SDK dist
+          if: inputs.mode == 'upload'
+          uses: actions/upload-artifact@v4
+          with:
+              name: ${{ inputs.name }}
+              path: .sdk-dist/sdk-dist.tar
+              if-no-files-found: error
+              retention-days: 7
+              overwrite: true
+
+        - name: Remove packed SDK dist
+          if: inputs.mode == 'upload'
+          shell: bash
+          working-directory: ${{ github.workspace }}
+          run: rm -rf .sdk-dist
+
+        - name: Download SDK dist
+          if: inputs.mode == 'download'
+          uses: actions/download-artifact@v4
+          with:
+              name: ${{ inputs.name }}
+              path: .sdk-dist
+
+        - name: Unpack SDK dist
+          if: inputs.mode == 'download'
+          shell: bash
+          working-directory: ${{ github.workspace }}
+          run: |
+              set -euo pipefail
+              tar -xf .sdk-dist/sdk-dist.tar
+              rm -rf .sdk-dist
+              for manifest in sdk/packages/*/package.json; do
+                pkg=$(dirname "$manifest")
+                if [ ! -f "$pkg/dist/index.js" ] || [ ! -f "$pkg/dist/index.d.ts" ]; then
+                  echo "::error::$pkg/dist is incomplete after unpacking the SDK dist artifact."
+                  exit 1
+                fi
+              done
+              echo "Restored SDK dist for: $(ls -d sdk/packages/*/dist | tr '\n' ' ')"

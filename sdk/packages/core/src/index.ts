@@ -365,6 +365,7 @@ export {
 	SUB_AGENT_GUIDANCE,
 	SUB_AGENT_ROLE_RULES,
 	type SubAgentEndContext,
+	type SubAgentLimits,
 	type SubAgentProgress,
 	type SubAgentStartContext,
 } from "./extensions/tools/team";

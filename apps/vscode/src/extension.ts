@@ -44,6 +44,7 @@ import { registerAutoUpdater } from "./hosts/vscode/auto-update/AutoUpdater"
 import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extension"
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
+import { installCustomizationWatcher } from "./hosts/vscode/customization-watcher"
 import { exportDiagnosticsBundle } from "./hosts/vscode/diagnostics-bundle"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
 import { PLAN_EXECUTE_WITH_SETTING_ID } from "./hosts/vscode/plan-settings"
@@ -117,6 +118,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	}).catch((error) => Logger.error("[instructions] Failed to configure rule sources:", error))
 
 	// 5. Register services and commands specific to VS Code
+	// The Rules panel refreshes when a rules, skills, hooks or agents file changes.
+	installCustomizationWatcher(context)
+
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(VscodeWebviewProvider.SIDEBAR_ID, webview, {
 			webviewOptions: { retainContextWhenHidden: true },
@@ -218,11 +222,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	// Built-in PR / pipeline MCP server, for PlinyCode and the editor's own AI chat.
-	// The CI board's notifications open the board, or start an action, through these.
+	// The CI board's notifications open the board, or start an action, through these; the Pipelines view's open the view.
 	const ciBoardUi = {
 		openBoard: async () => {
 			;(WebviewProvider.getInstance() as VscodeWebviewProvider).getWebview()?.show(true)
 			await sendCiBoardButtonClickedEvent()
+		},
+		openPipelines: async () => {
+			;(WebviewProvider.getInstance() as VscodeWebviewProvider).getWebview()?.show(true)
+			await sendPipelinesButtonClickedEvent()
 		},
 		runAction: async (targetId: string, itemKey: string, actionId: string) => {
 			try {

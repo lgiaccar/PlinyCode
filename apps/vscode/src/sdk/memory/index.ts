@@ -8,7 +8,7 @@
 import { SessionHistorySearchService } from "@plinycode/core"
 import { getMemoryMaxTokens, isConversationSearchEnabled } from "@/hosts/vscode/memory-settings"
 import { ConversationMemorySnapshots } from "./conversation-memory-snapshots"
-import { ConversationSearch, type ConversationSource } from "./conversation-search"
+import { ConversationSearch, type ConversationSource, MAX_INDEX_BYTES, MAX_INDEXED_SESSIONS } from "./conversation-search"
 import type { MemoryInstallDeps } from "./install-memory"
 import { MemoryStore } from "./memory-store"
 
@@ -27,7 +27,10 @@ export function createMemoryServices(source: ConversationSource): MemoryServices
 		search: new ConversationSearch({
 			source,
 			createIndex: (host) =>
-				new SessionHistorySearchService(host as unknown as ConstructorParameters<typeof SessionHistorySearchService>[0]),
+				new SessionHistorySearchService(host as unknown as ConstructorParameters<typeof SessionHistorySearchService>[0], {
+					maxSessions: MAX_INDEXED_SESSIONS,
+					maxDatabaseBytes: MAX_INDEX_BYTES,
+				}),
 		}),
 		isMemoryEnabled: () => getMemoryMaxTokens() > 0,
 		isSearchEnabled: isConversationSearchEnabled,

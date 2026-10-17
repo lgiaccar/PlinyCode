@@ -7,8 +7,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { DevOpsError } from "./errors"
-import { createTools, INSTRUCTIONS } from "./tools"
+import { callTool, createTools, INSTRUCTIONS } from "./tools"
 
 declare const __DEVOPS_MCP_VERSION__: string
 
@@ -25,19 +24,11 @@ export function createServer(): McpServer {
 				annotations: {
 					title: tool.title,
 					readOnlyHint: tool.readOnly,
-					destructiveHint: tool.name === "pr_update",
+					destructiveHint: tool.destructive ?? false,
 					openWorldHint: true,
 				},
 			},
-			async (args: Record<string, unknown>) => {
-				try {
-					return { content: [{ type: "text" as const, text: await tool.run(args) }] }
-				} catch (error) {
-					// Errors we raise on purpose are written for the model; anything else is a bug worth reporting as-is.
-					const message = error instanceof DevOpsError ? error.message : `Unexpected error: ${String(error)}`
-					return { content: [{ type: "text" as const, text: message }], isError: true }
-				}
-			},
+			(args: Record<string, unknown>) => callTool(tool, args),
 		)
 	}
 	return server

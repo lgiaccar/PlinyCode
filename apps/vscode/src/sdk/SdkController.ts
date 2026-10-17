@@ -100,7 +100,7 @@ import { StatePostDebouncer } from "./state-post-debouncer"
 import {
 	isSessionRecordFavorited,
 	isSessionRecordPinned,
-	queryTaskHistory,
+	queryTaskHistoryWithContent,
 	sessionRecordLastActiveTs,
 	sessionRecordTitle,
 	type TaskHistoryQuery,
@@ -466,6 +466,8 @@ export class Controller {
 			isOfferEnabled: isMemoryDistillOfferEnabled,
 			isActMode: (sessionId) => this.sessionMode(sessionId) === "act",
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
+			listConversationIds: async () =>
+				(await this.taskHistory.listHistory({ hydrate: false })).map((record) => record.sessionId),
 		})
 		this.diffEdits = new SdkDiffEditCoordinator({
 			getCwd: () => this.getWorkspaceRoot(),
@@ -1725,7 +1727,20 @@ export class Controller {
 		}
 		// Filter the whole history and page the result. Paging first hid every
 		// match older than the newest page, e.g. favorites from last month.
-		const matching = queryTaskHistory(await this.taskHistory.listHistory({ hydrate: false }), query)
+		// A search also matches message text through the conversation search
+		// index, when SQLite is available (docs/conversation-history.md); a
+		// .code-workspace binding has no single root to narrow the index query to.
+		const contentMatches = query.searchQuery?.trim()
+			? (this.memoryServices.search.searchContent(
+					query.searchQuery,
+					workspacePath && !workspacePath.toLowerCase().endsWith(".code-workspace") ? workspacePath : undefined,
+				) ?? [])
+			: []
+		const { records: matching, snippets } = queryTaskHistoryWithContent(
+			await this.taskHistory.listHistory({ hydrate: false }),
+			query,
+			contentMatches,
+		)
 		const hasMore = matching.length > offset + limit
 		const tasks = matching.slice(offset, offset + limit).map((item) => {
 			const metadata = item.metadata
@@ -1737,6 +1752,7 @@ export class Controller {
 				isPinned: isSessionRecordPinned(item),
 				size: metadataNumber(metadata, "size") ?? 0,
 				...readTaskUsageTotals(metadata),
+				matchSnippet: snippets.get(item.sessionId) ?? "",
 				...sessionHistoryRecordToTaskItemFields(item),
 			}
 		})
@@ -1785,6 +1801,7 @@ export class Controller {
 					isLegacy: false,
 					startedTs: taskMessage.ts || 0,
 					activeMs: 0,
+					matchSnippet: "",
 					worktreeBranch: "",
 				})
 			}

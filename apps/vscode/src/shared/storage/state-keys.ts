@@ -91,6 +91,8 @@ const USER_SETTINGS_FIELDS = {
 	globalClineRulesToggles: { default: {} as ClineRulesToggles },
 	globalWorkflowToggles: { default: {} as ClineRulesToggles },
 	globalSkillsToggles: { default: {} as Record<string, boolean> },
+	// Configured agents (`.cline/agents/*.md`) switched on or off in the Agents tab, by file path.
+	globalAgentToggles: { default: {} as Record<string, boolean> },
 	planActSeparateModelsSetting: { default: false as boolean, isComputed: true },
 	enableCheckpointsSetting: { default: true as boolean },
 	shellIntegrationTimeout: { default: 4000 as number },
@@ -126,6 +128,7 @@ export const LocalStateKeys = [
 	"localCopilotRulesToggles",
 	"localSkillsToggles",
 	"localHooksToggles",
+	"localAgentToggles",
 	"workflowToggles",
 ] as const
 

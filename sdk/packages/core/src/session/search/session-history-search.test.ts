@@ -484,3 +484,153 @@ describe("SessionHistorySearchService", () => {
 		await service.dispose();
 	});
 });
+
+describe("SessionHistorySearchService size limits", () => {
+	const DAY = 24 * 60 * 60_000;
+
+	function sessionAt(index: number, overrides: Partial<SessionRecord> = {}) {
+		const time = new Date(Date.UTC(2026, 8, 1) + index * 60_000).toISOString();
+		return session({
+			sessionId: `session-${index}`,
+			startedAt: time,
+			updatedAt: time,
+			prompt: `Conversation ${index}`,
+			metadata: { title: `Conversation ${index}` },
+			...overrides,
+		});
+	}
+
+	/** Messages full of words unique to the session, so each one takes real space in the index. */
+	function bulkyMessages(index: number, count: number, wordsPerMessage = 20) {
+		return Array.from({ length: count }, (_, message) => ({
+			role: "user" as const,
+			content: Array.from(
+				{ length: wordsPerMessage },
+				(_, word) => `w${index}x${message}x${word}`,
+			).join(" "),
+		}));
+	}
+
+	async function tempDb(): Promise<string> {
+		const dir = await mkdtemp(join(tmpdir(), "cline-session-search-"));
+		tempDirs.push(dir);
+		return join(dir, "search.db");
+	}
+
+	it("indexes only the most recently active conversations within the session cap", async () => {
+		const sessions = [
+			sessionAt(1),
+			sessionAt(2),
+			// Started first, but continued last: it counts as recent.
+			sessionAt(0, { updatedAt: "2026-10-01T00:00:00.000Z" }),
+		];
+		const service = new SessionHistorySearchService(
+			{
+				listSessions: async () => sessions,
+				readSessionMessages: async (id) => [
+					{ role: "user", content: `marker ${id}` },
+				],
+			},
+			{ dbPath: await tempDb(), maxSessions: 2 },
+		);
+		await service.refreshNow();
+		const found = service
+			.search({ query: "marker" })
+			.map((hit) => hit.sessionId)
+			.sort();
+		expect(found).toEqual(["session-0", "session-2"]);
+		expect(service.stats()?.sessions).toBe(2);
+		await service.dispose();
+	});
+
+	it("keeps the database within its byte cap, dropping the least recently active first", async () => {
+		const sessions = Array.from({ length: 30 }, (_, index) => sessionAt(index));
+		const service = new SessionHistorySearchService(
+			{
+				listSessions: async () => sessions,
+				readSessionMessages: async (id) =>
+					bulkyMessages(Number(id.split("-")[1]), 40),
+			},
+			{ dbPath: await tempDb(), maxDatabaseBytes: 600 * 1024 },
+		);
+		await service.refreshNow();
+		await service.refreshNow();
+		const stats = service.stats();
+		expect(stats?.sessionCap).toBeDefined();
+		expect(stats?.sessions).toBeLessThan(30);
+		expect(stats?.sessions).toBeGreaterThan(0);
+		expect(stats?.usedBytes).toBeLessThanOrEqual(600 * 1024);
+		// The newest conversation is kept, the oldest dropped.
+		expect(service.search({ query: "w29x0x0" })).toHaveLength(1);
+		expect(service.search({ query: "w0x0x0" })).toHaveLength(0);
+		await service.dispose();
+	});
+
+	it("raises the session cap again once the database is well below the byte cap", async () => {
+		let sessions = Array.from({ length: 30 }, (_, index) => sessionAt(index));
+		const service = new SessionHistorySearchService(
+			{
+				listSessions: async () => sessions,
+				readSessionMessages: async (id) =>
+					bulkyMessages(Number(id.split("-")[1]), 40),
+			},
+			{ dbPath: await tempDb(), maxDatabaseBytes: 600 * 1024 },
+		);
+		await service.refreshNow();
+		expect(service.stats()?.sessionCap).toBeDefined();
+		// Most conversations deleted: what is left fits, and the cap goes away.
+		sessions = sessions.slice(-3);
+		await service.refreshNow();
+		await service.refreshNow();
+		expect(service.stats()?.sessionCap).toBeUndefined();
+		expect(service.stats()?.sessions).toBe(3);
+		await service.dispose();
+	});
+
+	it("compacts after evictions that removed a meaningful share, and otherwise weekly", async () => {
+		let now = Date.UTC(2026, 9, 1);
+		let sessions = Array.from({ length: 10 }, (_, index) => sessionAt(index));
+		const dbPath = await tempDb();
+		const service = new SessionHistorySearchService(
+			{
+				listSessions: async () => sessions,
+				readSessionMessages: async (id) =>
+					bulkyMessages(Number(id.split("-")[1]), 60, 40),
+			},
+			{ dbPath, now: () => now },
+		);
+		await service.refreshNow();
+		const built = service.stats();
+		expect(built?.documents).toBeGreaterThan(600);
+		expect(built?.lastMaintenanceAt).toBe(now);
+
+		// A small eviction is not worth a compaction.
+		now += DAY;
+		sessions = sessions.slice(1);
+		await service.refreshNow();
+		expect(service.stats()?.lastMaintenanceAt).toBe(built?.lastMaintenanceAt);
+		expect(service.stats()?.evictedDocuments).toBeGreaterThan(0);
+
+		// Most of the index evicted: compacted right away, and the space is given back.
+		const usedBefore = service.stats()?.usedBytes ?? 0;
+		now += DAY;
+		sessions = sessions.slice(-1);
+		await service.refreshNow();
+		const compacted = service.stats();
+		expect(compacted?.lastMaintenanceAt).toBe(now);
+		expect(compacted?.evictedDocuments).toBe(0);
+		expect(compacted?.usedBytes).toBeLessThan(usedBefore);
+
+		// A re-indexed conversation waits for the weekly compaction.
+		now += DAY;
+		sessions = [{ ...sessions[0], updatedAt: "2026-10-02T00:00:00.000Z" }];
+		await service.refreshNow();
+		expect(service.stats()?.lastMaintenanceAt).toBe(
+			compacted?.lastMaintenanceAt,
+		);
+		now += 7 * DAY;
+		await service.refreshNow();
+		expect(service.stats()?.lastMaintenanceAt).toBe(now);
+		await service.dispose();
+	});
+});

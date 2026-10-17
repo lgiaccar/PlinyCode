@@ -1,5 +1,5 @@
 import { StringRequest } from "@shared/proto/cline/common"
-import { AssociatePipelineRequest, type PipelineLaunchInfo } from "@shared/proto/cline/pipeline"
+import { AssociatePipelineRequest, type PipelineLaunchInfo, PipelineRunAction } from "@shared/proto/cline/pipeline"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { PipelineServiceClient, UiServiceClient } from "@/services/grpc-client"
@@ -14,6 +14,11 @@ const statusLabels: Record<string, string> = {
 	rejected: "Rejected",
 	unknown: "Unconfirmed",
 	awaiting_identification: "Awaiting run ID",
+}
+
+const origins: Record<string, string> = {
+	agent: "Started by the agent",
+	rerun: "Rerun",
 }
 
 export function PipelineRunRow({ launch }: { launch: PipelineLaunchInfo }) {
@@ -33,6 +38,20 @@ export function PipelineRunRow({ launch }: { launch: PipelineLaunchInfo }) {
 			setBusy(false)
 		}
 	}
+	const act = async (action: () => Promise<unknown>) => {
+		setBusy(true)
+		setError("")
+		try {
+			await action()
+		} catch (failure) {
+			setError(pipelineError(failure))
+		} finally {
+			setBusy(false)
+		}
+	}
+	const cancel = () => act(() => PipelineServiceClient.cancelPipelineRun(PipelineRunAction.create({ id: launch.id })))
+	const rerun = (failedOnly: boolean) =>
+		act(() => PipelineServiceClient.rerunPipelineRun(PipelineRunAction.create({ id: launch.id, failedOnly })))
 	const failed = ["failure", "cancelled", "partial"].includes(launch.result) || launch.status === "rejected"
 	return (
 		<li
@@ -71,7 +90,45 @@ export function PipelineRunRow({ launch }: { launch: PipelineLaunchInfo }) {
 			<div className="text-xs text-description wrap-anywhere" title={launch.repoRoot}>
 				{launch.provider === "github" ? "GitHub" : "Azure DevOps"} /{" "}
 				{launch.repoRoot.split(/[\\/]/).filter(Boolean).at(-1)}
+				{origins[launch.origin] ? ` · ${origins[launch.origin]}` : ""}
 			</div>
+			{(launch.canCancel || launch.canRerun) && (
+				<div className="flex items-center gap-2 flex-wrap">
+					{launch.canCancel && (
+						<Button
+							aria-label={`Cancel ${launch.pipelineName} run`}
+							disabled={busy}
+							onClick={cancel}
+							size="sm"
+							title="Ask the provider to stop this run"
+							variant="secondary">
+							Cancel
+						</Button>
+					)}
+					{launch.canRerun && (
+						<Button
+							aria-label={`Rerun ${launch.pipelineName}`}
+							disabled={busy}
+							onClick={() => rerun(false)}
+							size="sm"
+							title="Run the whole pipeline again with the same branch and inputs"
+							variant="secondary">
+							Rerun
+						</Button>
+					)}
+					{launch.canRerun && failed && (
+						<Button
+							aria-label={`Rerun failed jobs of ${launch.pipelineName}`}
+							disabled={busy}
+							onClick={() => rerun(true)}
+							size="sm"
+							title="Run only the jobs that failed again"
+							variant="secondary">
+							Rerun failed jobs
+						</Button>
+					)}
+				</div>
+			)}
 			{launch.updated > 0 && (
 				<div className="text-xs text-description">Updated {new Date(launch.updated).toLocaleTimeString()}</div>
 			)}
