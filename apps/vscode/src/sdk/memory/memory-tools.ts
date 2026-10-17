@@ -4,8 +4,8 @@
  *
  * A dedicated tool rather than the editor, so that:
  * - it works in ask mode, which has no editor, and in plan mode;
- * - the entry lands in the right place by importance (memory-file.ts), and a
- *   duplicate is not added twice;
+ * - the entry lands in the right place by importance (memory-file.ts), dated,
+ *   and a near duplicate bumps the existing entry's date instead of adding a line;
  * - a side question cannot call it (core's off-the-record guard names it).
  *
  * It follows the "Edit files" auto-approve toggle (sdk-tool-policies.ts): a
@@ -102,7 +102,8 @@ export function createSaveMemoryTool(deps: SaveMemoryToolDeps): AgentTool {
 			const cwd = deps.getCwd()
 			const result = await deps.store.save(cwd, input)
 			if (!result.inserted) {
-				return `That memory is already in ${result.file}; nothing was added.`
+				const existing = result.duplicateOf ? ` as "${result.duplicateOf}"` : ""
+				return `That memory is already in ${result.file}${existing}; no line was added, and the existing entry was marked as used today. If the new wording is better, edit that entry instead.`
 			}
 			const where = input.importance === "high" ? "at the top of Important" : "at the top of Notes"
 			const topic = result.topicFile ? ` Details were appended to ${result.topicFile}.` : ""

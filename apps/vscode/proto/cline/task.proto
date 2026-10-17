@@ -205,6 +205,10 @@ message TaskItem {
   // The branch of the conversation's own git worktree ("Run in worktree").
   // Empty for a conversation that runs in its workspace.
   string worktree_branch = 20;
+  // Set when the conversation matched the search query by its message text
+  // only (the full-text index), not by its title, path or worktree branch: the
+  // matching text, with the matched words in [brackets]. Empty otherwise.
+  string match_snippet = 21;
 }
 
 // Request for ask response operation

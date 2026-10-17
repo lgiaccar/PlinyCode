@@ -8,7 +8,7 @@ The filters sit above the list and combine with each other:
 
 | Filter | What it keeps |
 | --- | --- |
-| Search box | Conversations whose title or workspace path contains every word typed, in any case. |
+| Search box | Conversations whose title or workspace path contains every word typed, in any case, then conversations whose messages match (see [Searching message text](#searching-message-text)). |
 | **Favorites** | Starred conversations only. |
 | **Date** | Conversations active in the period: **Today**, **Last 7 days**, **Last 30 days**, or a **Custom range** with a from and a to date and time. |
 | **Workspace** | The window's workspace (the default), all workspaces, or one recent workspace. |
@@ -17,7 +17,18 @@ A conversation runs from its start to its last activity. It is in a period when 
 
 **Clear filters** resets the search, the favorites toggle and the date. It leaves the workspace alone.
 
-The sort menu next to the search box orders the list by newest, oldest, most expensive or most tokens. While a search is typed, **Most Relevant** ranks the loaded results by how well the title matches.
+The sort menu next to the search box orders the list by newest, oldest, most expensive or most tokens. While a search is typed, **Most Relevant** ranks the loaded title matches by how well the title matches, and lists the conversations found by their messages after them, best match first.
+
+## Searching message text
+
+A search also finds conversations by what was said in them, through the full-text index the `search_conversations` tool uses (SQLite FTS5, described in [memory.md](memory.md#searching-earlier-conversations)):
+
+- **Title matches first.** Conversations whose title or path matches come first. The ones found only by their messages follow, each with the text that matched under its title (the matched words in brackets). Under **Most Relevant** they keep the index's order; under the other sorts they follow that sort.
+- **The other filters still apply.** Favorites, date and workspace filter the content matches as they do the rest. With a folder selected, the index query is narrowed to that folder; a `.code-workspace` is filtered after the query.
+- **Words, not substrings.** The index matches whole words and word prefixes (`frob` finds `frobnicator`), every word typed. The title search keeps matching any substring.
+- **Limits.** At most 200 conversations are found by their messages per search. The index covers the most recently active conversations within its caps (20,000 conversations or a 200 MB database), and is refreshed every 5 minutes, so a conversation from the last few minutes is found by its title only until then. The search does not wait for a refresh, since it runs as you type.
+- **First use.** The index is built when it is first needed: by the first search here or the first `search_conversations` call in a window. The first build reads every transcript in the background, and searches made meanwhile find what it has indexed so far.
+- **Without SQLite or FTS5**, the search matches titles and paths only, as before.
 
 ## Pins
 
@@ -31,7 +42,9 @@ The webview asks for one page at a time with `TaskService.getTaskHistory`. `GetT
 
 `queryTaskHistory` in [task-history-query.ts](../apps/vscode/src/sdk/task-history-query.ts) filters the whole history, sorts it with the pinned conversations first, and only then is the result cut into pages. The order matters: the matches may all be older than the newest page. An earlier version paged first and filtered each page, so favorites older than the newest 50 conversations never showed.
 
-The whole history is read from the metadata cache of `SdkTaskHistory`, without loading any messages.
+With a search, `queryTaskHistoryWithContent` appends the content matches from `ConversationSearch.searchContent` ([conversation-search.ts](../apps/vscode/src/sdk/memory/conversation-search.ts)) before paging, and each of them carries `TaskItem.match_snippet`. Title matches have an empty snippet, which is how the webview tells the two apart.
+
+The whole history is read from the metadata cache of `SdkTaskHistory`, without loading any messages; only the content search reads the index.
 
 ## Where the flags are stored
 

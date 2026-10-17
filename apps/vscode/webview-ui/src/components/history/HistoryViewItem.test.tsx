@@ -82,6 +82,28 @@ describe("HistoryViewItem", () => {
 		)
 	}
 
+	it("shows the matching message text of a conversation found by its content", () => {
+		render(
+			<HistoryViewItem
+				handleDeleteHistoryItem={noop}
+				handleHistorySelect={noop}
+				index={0}
+				item={makeItem({ matchSnippet: "the [frobnicator] regression" })}
+				pendingFavoriteToggles={{}}
+				renameTask={noop}
+				selectedItems={[]}
+				toggleFavorite={noop}
+				togglePin={noop}
+			/>,
+		)
+		expect(screen.getByTestId("history-match-snippet").textContent).toBe("the [frobnicator] regression")
+	})
+
+	it("shows no snippet for a title match", () => {
+		renderItem()
+		expect(screen.queryByTestId("history-match-snippet")).toBeNull()
+	})
+
 	it("shows no badge for a task that is not running in the background", () => {
 		renderItem()
 		expect(screen.queryByTestId("background-task-badge")).toBeNull()

@@ -47,7 +47,7 @@ describe("MemoryStore", () => {
 		)
 		const content = await store.read("/work/a")
 		for (let index = 0; index < 10; index++) {
-			expect(content.repoText).toContain(`- fact ${index}\n`)
+			expect(content.repoText).toMatch(new RegExp(`^- fact ${index} <!-- added:\\d{4}-\\d{2}-\\d{2} -->$`, "m"))
 		}
 	})
 
@@ -66,7 +66,7 @@ describe("MemoryStore", () => {
 		)
 		const content = await first.read("/work/a")
 		for (let index = 0; index < 8; index++) {
-			expect(content.repoText).toContain(`- window fact ${index}\n`)
+			expect(content.repoText).toMatch(new RegExp(`^- window fact ${index} <!--`, "m"))
 		}
 		const files = await fs.readdir(path.dirname(content.location.repoFile))
 		expect(files.some((name) => name.endsWith(".lock"))).toBe(false)
@@ -111,6 +111,95 @@ describe("MemoryStore", () => {
 		const file = await store.ensureFile("/work/a", "repo")
 		expect(await fs.readFile(file, "utf8")).toBe("# Repository memory: github.com/org/repo\n\n## Important\n\n## Notes\n")
 	})
+
+	it("dates entries and bumps a near duplicate's date instead of adding a line", async () => {
+		let now = new Date(2026, 9, 1)
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE, now: () => now })
+		const first = await store.save("/work/a", {
+			scope: "repo",
+			text: "Always run bun install with --frozen-lockfile",
+			importance: "normal",
+		})
+		expect(await fs.readFile(first.file, "utf8")).toContain(
+			"- Always run bun install with --frozen-lockfile <!-- added:2026-10-01 -->",
+		)
+
+		now = new Date(2026, 9, 17)
+		const again = await store.save("/work/a", {
+			scope: "repo",
+			text: "always run `bun install --frozen-lockfile`.",
+			importance: "normal",
+		})
+		expect(again.inserted).toBe(false)
+		expect(again.duplicateOf).toBe("Always run bun install with --frozen-lockfile")
+		const text = await fs.readFile(first.file, "utf8")
+		expect(text).toContain("- Always run bun install with --frozen-lockfile <!-- added:2026-10-01 used:2026-10-17 -->")
+		expect(text.match(/frozen-lockfile/g)).toHaveLength(1)
+	})
+
+	it("offers stale notes and orphaned topic files for pruning, and removes only what was approved", async () => {
+		const now = new Date(2026, 9, 17)
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE, now: () => now })
+		const location = await store.locate("/work/a")
+		await fs.mkdir(location.repoDir, { recursive: true })
+		await fs.writeFile(
+			location.repoFile,
+			[
+				"# Repository memory",
+				"",
+				"## Important",
+				"",
+				"- Old but important <!-- added:2025-01-01 -->",
+				"",
+				"## Notes",
+				"",
+				"- Fresh note <!-- added:2026-10-01 -->",
+				"- Stale note (details: stale-topic.md) <!-- added:2026-01-02 -->",
+				"- Pinned stale note <!-- added:2026-01-01 pinned -->",
+				"- Undated hand-written note",
+				"",
+			].join("\n"),
+		)
+		const old = new Date(2026, 0, 1)
+		for (const name of ["stale-topic.md", "orphan.md"]) {
+			await fs.writeFile(path.join(location.repoDir, name), `# ${name}\n\ndetail\n`)
+			await fs.utimes(path.join(location.repoDir, name), old, old)
+		}
+		await fs.writeFile(path.join(location.repoDir, "recent-orphan.md"), "# recent\n")
+
+		const candidates = await store.pruneCandidates("/work/a")
+		expect(candidates).toEqual([
+			{ scope: "repo", text: "Stale note (details: stale-topic.md)" },
+			{ scope: "repo", text: "Topic file orphan.md (orphan.md): no entry points to it", topicFile: "orphan.md" },
+		])
+
+		const removed = await store.remove("/work/a", "repo", {
+			texts: [candidates[0].text],
+			topicFiles: ["orphan.md", "../MEMORY.md"],
+		})
+		expect(removed).toBe(2)
+		const text = await fs.readFile(location.repoFile, "utf8")
+		expect(text).not.toContain("Stale note (details")
+		expect(text).toContain("- Pinned stale note <!-- added:2026-01-01 pinned -->")
+		expect(text).toContain("- Undated hand-written note")
+		const files = await fs.readdir(location.repoDir)
+		// The topic file went with its entry; the hand-made recent one stays.
+		expect(files).not.toContain("stale-topic.md")
+		expect(files).not.toContain("orphan.md")
+		expect(files).toContain("recent-orphan.md")
+	})
+
+	it("keeps a declined prune item out of proposals by marking it as used", async () => {
+		const now = new Date(2026, 9, 17)
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE, now: () => now })
+		const location = await store.locate("/work/a")
+		await fs.mkdir(location.repoDir, { recursive: true })
+		await fs.writeFile(location.repoFile, "# M\n\n## Notes\n\n- Stale note <!-- added:2026-01-02 -->\n")
+		expect(await store.pruneCandidates("/work/a")).toHaveLength(1)
+		expect(await store.touch("/work/a", ["Stale note"])).toBe(1)
+		expect(await fs.readFile(location.repoFile, "utf8")).toContain("- Stale note <!-- added:2026-01-02 used:2026-10-17 -->")
+		expect(await store.pruneCandidates("/work/a")).toEqual([])
+	})
 })
 
 describe("topicFileName", () => {
@@ -148,6 +237,9 @@ describe("renderMemorySection", () => {
 		expect(text).toContain("\n### Notes\n")
 		// The user memory has no important entries: its empty section is left out.
 		expect(userPart).not.toContain("### Important")
+		// The entries are dated in the files, but the dates cost no prompt tokens.
+		expect((await store.read("/work/a")).repoText).toContain("<!-- added:")
+		expect(text).not.toContain("<!--")
 	})
 
 	it("is off at 0 tokens and still explains saving when memory is empty", async () => {
@@ -208,7 +300,8 @@ describe("save_memory", () => {
 		expect(await tool.execute({ text: "Prefer vitest" }, context)).toMatch(
 			/at the top of Notes\. Later conversations will see it\./,
 		)
-		expect(await tool.execute({ text: "Use bun" }, context)).toMatch(/already in/)
+		expect(await tool.execute({ text: "Use bun" }, context)).toMatch(/already in .* as "Use bun"; no line was added/)
+		expect(await tool.execute({ text: "prefer Vitest!" }, context)).toMatch(/marked as used today/)
 	})
 
 	it("says when the saved entry falls outside the memory budget", async () => {

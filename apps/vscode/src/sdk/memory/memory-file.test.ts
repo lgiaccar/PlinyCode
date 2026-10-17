@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest"
 import {
 	countMemoryEntries,
+	hasNearDuplicate,
 	insertMemoryEntry,
 	MAX_ENTRY_CHARS,
+	memoryDate,
+	memoryEntryKeys,
 	memoryFileTemplate,
 	nestHeadings,
 	normalizeEntryText,
+	removeMemoryEntries,
+	selectStaleEntries,
+	stripEntryMeta,
+	touchMemoryEntries,
 	truncateMemory,
 } from "./memory-file"
 
@@ -147,5 +154,143 @@ describe("normalizeEntryText", () => {
 describe("nestHeadings", () => {
 	it("pushes headings down outside code fences", () => {
 		expect(nestHeadings("# A\n## B\n```\n# code\n```\n###### F", 2)).toBe("### A\n#### B\n```\n# code\n```\n###### F")
+	})
+})
+
+describe("entry dates", () => {
+	const TODAY = "2026-10-17"
+
+	it("dates a new entry, stamps undated ones, and keeps hand-written text", () => {
+		const result = insertMemoryEntry(FILE, { text: "Logs go to ai_output/", importance: "normal", date: TODAY })
+		expect(result.inserted).toBe(true)
+		expect(result.content).toContain("- Logs go to ai_output/ <!-- added:2026-10-17 -->")
+		// The entries written by hand get today's date too, so they start ageing.
+		expect(result.content).toContain("- PRs target stage, not master. <!-- added:2026-10-17 -->")
+		// A continuation line stays where it was, below its dated bullet.
+		expect(result.content).toContain(
+			"- The engine resolves through dist/: run build:sdk after engine changes. <!-- added:2026-10-17 -->\n  It does not hot-reload either.",
+		)
+	})
+
+	it("round-trips: a dated entry is recognised, bumped and stripped for the prompt", () => {
+		const content =
+			"# M\n\n## Notes\n\n- Use bun <!-- added:2026-01-05 -->\n- Other <!-- added:2026-01-05 used:2026-02-01 pinned -->\n"
+		const touched = touchMemoryEntries(content, ["use bun"], TODAY)
+		expect(touched.touched).toBe(1)
+		expect(touched.content).toContain("- Use bun <!-- added:2026-01-05 used:2026-10-17 -->")
+		expect(touched.content).toContain("- Other <!-- added:2026-01-05 used:2026-02-01 pinned -->")
+		expect(stripEntryMeta(touched.content)).toBe("# M\n\n## Notes\n\n- Use bun\n- Other\n")
+		// The comment does not change how an entry compares.
+		expect(memoryEntryKeys(touched.content)).toEqual(new Set(["use bun", "other"]))
+	})
+
+	it("parses hand-edited comments tolerantly and treats mangled ones as undated", () => {
+		const content = [
+			"## Notes",
+			"- Spelled out <!-- Added: 2026-01-01 -->",
+			"- Equals and last_used <!--added=2026-01-01 last_used=2026-02-01-->",
+			"- Moved to the middle <!-- added:2026-01-03 --> of the line",
+			"- Impossible date <!-- added:2026-13-45 -->",
+			"- Not ours <!-- a note to self -->",
+			"- No comment at all",
+		].join("\n")
+		expect(selectStaleEntries(content, TODAY, 90, 10).map((entry) => entry.text)).toEqual([
+			"Spelled out",
+			"Moved to the middle of the line",
+			"Equals and last_used",
+		])
+		// Another comment is the user's: it stays in the prompt.
+		expect(stripEntryMeta(content)).toContain("- Not ours <!-- a note to self -->")
+	})
+
+	it("uses the local date", () => {
+		expect(memoryDate(new Date(2026, 0, 2, 23, 59))).toBe("2026-01-02")
+	})
+})
+
+describe("near duplicates", () => {
+	const BASE = "# M\n\n## Notes\n\n- Run build sdk after engine changes <!-- added:2026-01-01 -->\n"
+
+	it("bumps the existing entry instead of adding a near duplicate", () => {
+		const result = insertMemoryEntry(BASE, {
+			text: "run build:sdk after engine changes, always.",
+			importance: "high",
+			date: "2026-10-17",
+		})
+		expect(result.inserted).toBe(false)
+		expect(result.duplicateOf).toBe("Run build sdk after engine changes")
+		expect(result.content).toBe(
+			"# M\n\n## Notes\n\n- Run build sdk after engine changes <!-- added:2026-01-01 used:2026-10-17 -->\n",
+		)
+	})
+
+	it("draws the line at 0.8 Jaccard similarity of the significant words", () => {
+		// 6 of 7 words shared: 0.86.
+		expect(hasNearDuplicate(BASE, "Run build sdk after the engine changes again")).toBe(true)
+		// 6 of 8: 0.75.
+		expect(hasNearDuplicate(BASE, "Run build sdk after engine changes and restart vscode")).toBe(false)
+		// Stop words and punctuation do not count.
+		expect(hasNearDuplicate(BASE, "Run `build:sdk` after the engine changes.")).toBe(true)
+		expect(hasNearDuplicate(BASE, "Run the tests after engine changes")).toBe(false)
+	})
+
+	it("never treats a memory and its negation as duplicates", () => {
+		const content = "## Notes\n\n- Run the full test suite before pushing to the stage branch every time\n"
+		expect(hasNearDuplicate(content, "Never run the full test suite before pushing to the stage branch every time")).toBe(
+			false,
+		)
+		expect(hasNearDuplicate(content, "Run full test suite before pushing to stage branch every single time")).toBe(true)
+	})
+
+	it("adds the topic pointer to the entry a duplicate with details matched", () => {
+		const result = insertMemoryEntry(BASE, {
+			text: "Run build sdk after engine changes",
+			importance: "normal",
+			topicFile: "engine.md",
+			date: "2026-10-17",
+		})
+		expect(result.content).toContain(
+			"- Run build sdk after engine changes (details: engine.md) <!-- added:2026-01-01 used:2026-10-17 -->",
+		)
+	})
+})
+
+describe("pruning", () => {
+	const CONTENT = [
+		"# M",
+		"",
+		"## Important",
+		"",
+		"- Important and old <!-- added:2025-01-01 -->",
+		"",
+		"## Notes",
+		"",
+		"- Recently used <!-- added:2025-01-01 used:2026-10-01 -->",
+		"- Oldest <!-- added:2025-03-01 -->",
+		"- Old with detail (details: old.md) <!-- added:2026-05-01 -->",
+		"  - a nested line",
+		"- Pinned <!-- added:2025-01-01 pinned -->",
+		"- Exactly 89 days <!-- added:2026-07-20 -->",
+		"- Undated",
+		"",
+	].join("\n")
+
+	it("selects entries not used for 90 days, oldest first, never important, pinned or undated ones", () => {
+		expect(selectStaleEntries(CONTENT, "2026-10-17")).toEqual([
+			{ text: "Oldest", lastUsed: "2025-03-01" },
+			{ text: "Old with detail (details: old.md) - a nested line", lastUsed: "2026-05-01" },
+		])
+		expect(selectStaleEntries(CONTENT, "2026-10-17", 90, 1)).toHaveLength(1)
+		expect(selectStaleEntries(CONTENT, "2026-10-18").map((entry) => entry.text)).toContain("Exactly 89 days")
+	})
+
+	it("removes exactly the approved entries with their lines and reports orphaned topic files", () => {
+		const result = removeMemoryEntries(CONTENT, ["Oldest", "Old with detail (details: old.md) - a nested line", "Gone"])
+		expect(result.removed).toBe(2)
+		expect(result.orphanedTopicFiles).toEqual(["old.md"])
+		expect(result.content).not.toContain("Oldest")
+		expect(result.content).not.toContain("a nested line")
+		expect(result.content).toContain("- Recently used <!-- added:2025-01-01 used:2026-10-01 -->\n- Pinned")
+		expect(removeMemoryEntries(CONTENT, ["oldest entry"]).removed).toBe(0)
 	})
 })

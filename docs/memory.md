@@ -21,7 +21,10 @@ memory/
   repos/<repo key>/<topic>.md     detail, read on demand
   repos/<repo key>/repo.json      which repository the key stands for
   pending/<conversation>.json     distill proposals not yet saved or dismissed
+  distill/<conversation>.json     how far a conversation was distilled, and what was turned down
 ```
+
+The `pending/` and `distill/` files of a conversation that was deleted are removed once per window, when the first conversation is opened. Nothing is removed when the history cannot be listed or is empty, nor a file changed in the last day, whose conversation may not be in the history yet.
 
 **Keyed by repository, not by workspace.** The repo key comes from the `origin` remote, with its protocol, user name and `.git` stripped and the result lower-cased. A repository without a remote is keyed by its top-level folder, and a folder outside git by the folder itself ([repo-key.ts](../apps/vscode/src/sdk/memory/repo-key.ts)). This has three consequences:
 
@@ -37,7 +40,11 @@ Knowledge the whole team should share belongs in `AGENTS.md` or a rules file, wh
 
 `MEMORY.md` has two sections, `## Important` and `## Notes`. An entry is a top-level bullet together with the lines under it ([memory-file.ts](../apps/vscode/src/sdk/memory/memory-file.ts)).
 
-- **Insertion.** `save_memory` inserts deterministically: an important entry goes first under `## Important`, any other goes first under `## Notes`, so each section reads newest first. An entry that is already there (compared without case and spacing) is not added again.
+- **Insertion.** `save_memory` inserts deterministically: an important entry goes first under `## Important`, any other goes first under `## Notes`, so each section reads newest first.
+- **Near duplicates.** An entry that is already there is not added again, even worded differently: two memories are the same when the Jaccard similarity of their significant words is at least 0.8. Words are compared in lower case, without punctuation, and without very common words (`the`, `a`, `to`, `in`, `with`, …). A memory and its negation never count as the same (`not`, `no`, `never`, `don't`, `avoid` and `without` are kept and compared), so "use npm" and "never use npm" stay two entries. For a duplicate, the existing entry's `used` date is bumped instead, and the tool result quotes the existing entry so the model can reword it with `editor` if the new wording is better. With `details`, the details still go to the topic file, and the existing entry gets the pointer if it had none.
+- **Dates.** Each entry's first line ends with a comment: `<!-- added:2026-10-17 used:2026-11-02 -->`. `added` is the day it was saved; `used` (left out while it equals `added`) is the last day it was saved again, matched as a duplicate (by `save_memory` or by a distill proposal), or kept when proposed for removal. The comment is removed from the system prompt and from the distiller's input, so it costs no tokens there. It is parsed tolerantly: `Added: …`, `added=…` and `last_used` are understood, a missing or mangled comment just leaves the entry undated, and other HTML comments are left alone. Every write through `save_memory` stamps undated entries with that day's date, so entries written by hand start ageing from then.
+- **Why not "used" when shown.** Every entry is in every conversation's prompt, so being shown says nothing about whether it helped, and bumping on every prompt would rewrite both files at the start of every conversation. Being saved or proposed again is the cheapest signal that a memory still matters; keeping it when its removal is proposed is the other.
+- **Pinning.** Add `pinned` to the comment (`<!-- added:2026-10-17 pinned -->`) to keep a note out of prune proposals for good.
 - **Truncation.** It keeps whole entries from the top of the file. When the budget drops from 20k to 10k tokens, the bottom 10k (the least important entries, and within `## Notes` the oldest) are the ones left out. The prompt says how many entries were left out and gives the file path, so the model can read the rest when it is relevant. New notes go in at the top of their section for this reason: appended at the end of a file already over the budget, a fresh note would have been the first thing cut.
 - **Over the budget.** `save_memory` renders the section the next conversation would see and says in its result when the entry it just saved falls outside it, so the model can tell the user to trim the file or raise the budget instead of promising that later conversations will see it.
 - **Topic files.** Longer detail goes in a topic file. `save_memory` writes `details` there and adds `(details: <topic>.md)` to the entry. The prompt lists each topic file by path and first line, at most 12 per memory with a count of the rest, for `read_files`.
@@ -83,7 +90,7 @@ It is an extension tool, installed by `installMemory` ([install-memory.ts](../ap
 - **Approval.** It is approved like a file edit: it follows the "Edit files" auto-approve toggle ([sdk-tool-policies.ts](../apps/vscode/src/sdk/sdk-tool-policies.ts)). A memory is sent with every later request, so a write prompted by injected text would outlive the conversation.
 - **Side questions are blocked.** Core's off-the-record guard rejects it in a side question (`isOffTheRecordBlockedTool` in [command-guard-extension.ts](../sdk/packages/core/src/extensions/tools/command-guard-extension.ts)).
 
-Writes to one file go through one at a time and land with a rename ([memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)). Each write also holds `<file>.lock`, created exclusively, so two VS Code windows saving at once cannot overwrite each other's entry; a lock older than ten seconds is broken, and a write that waited two seconds goes ahead without it. Reorganising or pruning a memory file is a normal edit with `editor` in act or plan mode; the prompt gives the absolute paths.
+Writes to one file go through one at a time and land with a rename ([memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)). Each write also holds `<file>.lock`, created exclusively, so two VS Code windows saving at once cannot overwrite each other's entry; a lock older than ten seconds is broken, and a write that waited two seconds goes ahead without it. Reorganising or pruning a memory file is a normal edit with `editor` in act or plan mode; the prompt gives the absolute paths. Stale entries are also offered for removal by [prune proposals](#distillation).
 
 `/remember <text>` is a built-in slash command ([builtin-slash-commands.ts](../apps/vscode/src/sdk/builtin-slash-commands.ts)). It expands into instructions to call `save_memory`, choose the scope and importance, and keep the entry to one line. While memory is off it expands into a note telling the model to say so instead. Sub-agents get neither tool: the extension leaves them out of the tools it hands sub-agents (`SUB_AGENT_DENIED_TOOLS`), since a memory outlives the conversation and a sub-agent reports to the parent instead. A sub-agent's prompt does carry a read-only excerpt of the repository's `## Important` entries, at most 2,000 characters (`renderSubAgentMemoryExcerpt` in [memory-section.ts](../apps/vscode/src/sdk/memory/memory-section.ts)).
 
@@ -106,7 +113,7 @@ After a run, a free model reads the conversation and proposes memories, and the 
 
 - The model is the router rules' free utility summarizer (`utility.summarizer`), called through `buildApiHandler` with a model override ([memory-model.ts](../apps/vscode/src/sdk/memory/memory-model.ts)). It costs nothing and needs no budget check.
 - The input is a compact transcript of the messages since the last offer: text, tool calls on one line, and the start of each tool result. Side questions are left out. The transcript is capped at 24k characters, keeping the end.
-- The current memory goes with it, so known facts are skipped. A proposal is a duplicate only when it equals a whole entry (compared without case and spacing), as in `save_memory`.
+- The current memory goes with it, so known facts are skipped. A proposal that is a near duplicate of an entry, as in `save_memory`, is not proposed; the entry it matched is marked as used instead.
 - The reply is JSON, at most 8 memories. A timeout (90 s) or an unusable reply ends silently, unless the user typed `/distill`.
 - **Kept between windows.** How far each conversation was distilled, and the memories the user dismissed or left unchecked, are stored in `memory/distill/<conversation>.json`. A reload does not re-read the whole conversation, and a memory the user turned down is not proposed for that conversation again, `/distill` included.
 
@@ -115,6 +122,12 @@ After a run, a free model reads the conversation and proposes memories, and the 
 - Nothing is written until **Save**.
 - `TaskService.resolveMemoryProposal` saves the checked items through the same store as `save_memory`, then updates the row in place (same `ts`).
 - Rows the extension emits are not part of the transcript, so an unresolved proposal is also written to `memory/pending/<conversation>.json` and shown again when the conversation is reopened.
+
+**Prune proposals.** Each distillation, automatic or `/distill`, also looks for memory that has gone stale (`MemoryStore.pruneCandidates` in [memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)), and lists it on the same row, under "Not used for 90 days", with the kind `remove`. When the model found nothing new but something is stale, the row shows the removals alone, titled **Memory cleanup**.
+
+- **What is proposed.** Entries whose later date (`used`, else `added`) is 90 days old or more, at most 5 per memory, oldest first. Entries under `## Important`, pinned entries and undated entries are never proposed. Topic files that no entry points to and that were not changed for 90 days are proposed too, at most 3 per memory.
+- **Nothing is removed without approval.** Checked removals are applied when the user presses the button, which reads **Apply** while any removal is checked. An entry is removed only if its text is still exactly what was proposed, and a topic file only its removed entries pointed to goes with them.
+- **Kept is used.** A removal left unchecked, or a dismissed row, keeps the entry and marks it as used today (a topic file gets a new modification time), so it is not proposed again for another 90 days.
 
 ## Searching earlier conversations
 
@@ -127,6 +140,9 @@ After a run, a free model reads the conversation and proposes memories, and the 
 - **Side questions.** The index leaves them out (`offTheRecordMessageIndices`), keeping message numbers aligned with the transcript.
 - **Editor state.** The `<editor_state>` and `<mode_notice>` blocks the extension adds to typed messages are left out of the index and of what `read_conversation` returns, so an open file's name does not match a search (index version 4).
 - **Workspace roots** are stored normalized (forward slashes, no trailing slash, lower case on Windows), and the folder filter runs in the index query, so another workspace's conversations cannot crowd this one's out of the candidates.
+- **Size caps.** The index holds the most recently active conversations (by last activity, so an old conversation continued today counts as recent), at most 20,000 of them and at most 200 MB of live database pages, and drops the least recently active first. When the database outgrows 200 MB, it is compacted first, since deleted rows only leave the file then; if it is still over, the number of conversations is lowered so the index fills 90% of the cap, and raised again in proportion once it is below 60%. The history listing the index reads from currently returns at most 2,000 conversations (`MAX_HISTORY_SCAN_LIMIT` in core's [history.ts](../sdk/packages/core/src/runtime/host/history.ts)), so in practice that is the cap until the listing is widened.
+- **Compaction.** FTS5 `optimize` followed by `VACUUM` runs after evictions (deleted conversations, or ones beyond a cap) that removed at least 500 indexed messages and at least 10% of the index, and otherwise at most once a week when anything was removed or re-indexed since the last one. Both block the extension host while they run. When another window holds the database, the attempt is retried an hour later. The counters and the last compaction time are kept in the database (`search_meta`), so all windows share them.
+- **The history view** searches message text through the same index ([conversation-history.md](conversation-history.md#searching-message-text)), without waiting for a refresh.
 
 **Results.**
 
@@ -136,7 +152,7 @@ After a run, a free model reads the conversation and proposes memories, and the 
 
 **Without SQLite or FTS5,** the tools scan the 200 most recent transcripts instead.
 
-`plinycode.memory.conversationSearch` (default on) turns both tools off.
+`plinycode.memory.conversationSearch` (default on) turns both tools off. It does not turn off the history view's content search, which builds the same index on its first search.
 
 ## Settings
 

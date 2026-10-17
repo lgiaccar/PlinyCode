@@ -77,6 +77,18 @@ describe("memory-distiller", () => {
 			"Run build:sdk after engine changes",
 		])
 	})
+
+	it("skips near duplicates of an entry and reports them as rediscovered", () => {
+		const rediscovered: string[] = []
+		const parsed = parseDistillReply(
+			MODEL_REPLY,
+			"## Notes\n\n- git log hangs without the no-pager flag in agent terminals <!-- added:2026-01-01 -->",
+			new Set(),
+			rediscovered,
+		)
+		expect(parsed.map((memory) => memory.text)).toEqual(["The user prefers short answers"])
+		expect(rediscovered).toEqual(["git log hangs without --no-pager in agent terminals"])
+	})
 })
 
 let root: string
@@ -198,6 +210,75 @@ describe("MemoryCoordinator", () => {
 		const { coordinator, rows } = makeCoordinator({ complete: vi.fn(async () => '{"memories": []}') })
 		await coordinator.distillNow()
 		expect(rows.map((row) => row.text)).toContain("No new memories found in this conversation.")
+	})
+
+	it("proposes stale entries for removal on the same row and removes only the approved ones", async () => {
+		const { coordinator, rows, store } = makeCoordinator({ complete: vi.fn(async () => '{"memories": []}') })
+		const location = await store.locate("/work/a")
+		await fs.mkdir(location.repoDir, { recursive: true })
+		await fs.writeFile(
+			location.repoFile,
+			"# M\n\n## Notes\n\n- Stale one <!-- added:2000-01-01 -->\n- Stale two <!-- added:2000-01-02 -->\n",
+		)
+		await coordinator.distillNow()
+		const [offered] = proposals(rows)
+		expect(offered.proposal?.items).toEqual([
+			{ id: "remove-0", scope: "repo", text: "Stale one", importance: "normal", action: "remove" },
+			{ id: "remove-1", scope: "repo", text: "Stale two", importance: "normal", action: "remove" },
+		])
+		// Nothing removed before the user approves.
+		expect(await fs.readFile(location.repoFile, "utf8")).toContain("Stale one")
+
+		await coordinator.resolveProposal(offered.proposal?.id ?? "", true, ["remove-0"])
+		const last = proposals(rows).pop()?.proposal
+		expect(last?.status).toBe("saved")
+		expect(last?.removedCount).toBe(1)
+		const text = await fs.readFile(location.repoFile, "utf8")
+		expect(text).not.toContain("Stale one")
+		// The unchecked one is kept and counts as used, so it is not proposed again soon.
+		expect(text).toMatch(/- Stale two <!-- added:2000-01-02 used:\d{4}-\d{2}-\d{2} -->/)
+		expect(await store.pruneCandidates("/work/a")).toEqual([])
+	})
+
+	it("keeps every prune item when the proposal is dismissed", async () => {
+		const { coordinator, rows, store } = makeCoordinator({ complete: vi.fn(async () => '{"memories": []}') })
+		const location = await store.locate("/work/a")
+		await fs.mkdir(location.repoDir, { recursive: true })
+		await fs.writeFile(location.repoFile, "# M\n\n## Notes\n\n- Stale one <!-- added:2000-01-01 -->\n")
+		await coordinator.distillNow()
+		await coordinator.resolveProposal(proposals(rows)[0].proposal?.id ?? "", false, [])
+		expect(await fs.readFile(location.repoFile, "utf8")).toMatch(/- Stale one <!-- added:2000-01-01 used:/)
+	})
+
+	it("removes the pending and distill files of deleted conversations, once per window", async () => {
+		const listConversationIds = vi.fn(async () => ["live"])
+		const { coordinator } = makeCoordinator({ listConversationIds })
+		const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+		for (const dir of ["pending", "distill"]) {
+			await fs.mkdir(path.join(root, dir), { recursive: true })
+			for (const name of ["live", "deleted"]) {
+				await fs.writeFile(path.join(root, dir, `${name}.json`), "{}")
+				await fs.utimes(path.join(root, dir, `${name}.json`), old, old)
+			}
+		}
+		// Changed today: its conversation may not be in the history yet.
+		await fs.writeFile(path.join(root, "pending", "brand-new.json"), "{}")
+
+		expect(await coordinator.pruneOrphanFiles()).toBe(2)
+		expect((await fs.readdir(path.join(root, "pending"))).sort()).toEqual(["brand-new.json", "live.json"])
+		expect(await fs.readdir(path.join(root, "distill"))).toEqual(["live.json"])
+
+		// An empty listing proves nothing: nothing is deleted.
+		const empty = makeCoordinator({ listConversationIds: async () => [] })
+		await fs.utimes(path.join(root, "pending", "brand-new.json"), old, old)
+		expect(await empty.coordinator.pruneOrphanFiles()).toBe(0)
+
+		// Opening conversations runs it once in the background.
+		listConversationIds.mockClear()
+		const scheduled = makeCoordinator({ listConversationIds })
+		await scheduled.coordinator.showPending("live")
+		await scheduled.coordinator.showPending("live")
+		expect(listConversationIds).toHaveBeenCalledTimes(1)
 	})
 
 	it("/distill reports a failed model call", async () => {

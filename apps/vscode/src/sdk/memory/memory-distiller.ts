@@ -6,7 +6,7 @@
 import { offTheRecordMessageIndices } from "@plinycode/core"
 import { extractJsonObjects } from "../router/router-classifier"
 import { messageToText } from "./conversation-search"
-import { memoryEntryKey, memoryEntryKeys, normalizeEntryText } from "./memory-file"
+import { hasNearDuplicate, memoryEntryKey, memoryEntryKeys, normalizeEntryText, stripEntryMeta } from "./memory-file"
 
 const MAX_DISTILL_TRANSCRIPT_CHARS = 24_000
 const MAX_MEMORY_CONTEXT_CHARS = 8_000
@@ -77,8 +77,11 @@ Output one JSON object and nothing else:
 - At most ${MAX_PROPOSED_MEMORIES} memories, the most valuable first. Most conversations deserve zero to three. If nothing is worth keeping, output {"memories": []}.`
 
 export function buildDistillUserPrompt(transcript: string, repoMemory: string, userMemory: string): string {
-	const cap = (text: string) =>
-		text.trim().length > MAX_MEMORY_CONTEXT_CHARS ? `${text.trim().slice(0, MAX_MEMORY_CONTEXT_CHARS)}\n…` : text.trim()
+	const cap = (raw: string) => {
+		// Entry dates mean nothing to the distiller.
+		const text = stripEntryMeta(raw).trim()
+		return text.length > MAX_MEMORY_CONTEXT_CHARS ? `${text.slice(0, MAX_MEMORY_CONTEXT_CHARS)}\n…` : text
+	}
 	return [
 		"<current_repository_memory>",
 		cap(repoMemory) || "(empty)",
@@ -96,13 +99,16 @@ export function buildDistillUserPrompt(transcript: string, repoMemory: string, u
 
 /**
  * The memories in the model's reply, normalized, minus any already an entry
- * of `existing` (compared as whole entries: a memory that only occurs inside
- * a longer one is new) and any the user dismissed before.
+ * of `existing` (an exact or near duplicate of a whole entry: a memory that
+ * only occurs inside a longer one is new) and any the user dismissed before.
+ * The ones left out as duplicates of an entry go to `rediscovered`, so that
+ * entry can be marked as used.
  */
 export function parseDistillReply(
 	reply: string,
 	existing: string,
 	dismissed: ReadonlySet<string> = new Set(),
+	rediscovered: string[] = [],
 ): DistilledMemory[] {
 	const known = memoryEntryKeys(existing)
 	const seen = new Set<string>()
@@ -113,7 +119,11 @@ export function parseDistillReply(
 			const item = asRecord(raw)
 			const text = typeof item?.text === "string" ? normalizeEntryText(item.text) : ""
 			const key = memoryEntryKey(text)
-			if (!text || seen.has(key) || known.has(key) || dismissed.has(key)) continue
+			if (!text || seen.has(key) || dismissed.has(key)) continue
+			if (known.has(key) || hasNearDuplicate(existing, text)) {
+				rediscovered.push(text)
+				continue
+			}
 			seen.add(key)
 			memories.push({
 				text,

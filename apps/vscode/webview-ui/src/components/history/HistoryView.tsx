@@ -342,14 +342,24 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 	}, [tasks])
 
 	// The extension filters, sorts and pages the list, pinned conversations
-	// first. Only the relevance ranking of a search happens here.
+	// first. Only the relevance ranking of a search happens here: title matches
+	// are ranked by how well the title matches, and the conversations found by
+	// their messages (matchSnippet) follow in the extension's relevance order.
 	const taskHistorySearchResults = useMemo(() => {
 		if (!searchQuery || sortOption !== "mostRelevant") {
 			return tasks
 		}
-		const ranked = fuse.search(searchQuery).map(({ item }) => item)
+		const titleMatches = tasks.filter((task) => !task.matchSnippet)
+		const ranked = fuse
+			.search(searchQuery)
+			.map(({ item }) => item)
+			.filter((task) => !task.matchSnippet)
 		const rankedIds = new Set(ranked.map((task) => task.id))
-		return [...ranked, ...tasks.filter((task) => !rankedIds.has(task.id))]
+		return [
+			...ranked,
+			...titleMatches.filter((task) => !rankedIds.has(task.id)),
+			...tasks.filter((task) => task.matchSnippet),
+		]
 	}, [tasks, searchQuery, fuse, sortOption])
 
 	// Sections: "Pinned", then "Today" and "Older" for the date-based sorts.
