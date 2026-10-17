@@ -8,9 +8,11 @@ export {
 export {
 	buildConfiguredAgentToolDescriptors,
 	buildConfiguredAgentToolName,
+	type ConfiguredAgentToolDescriptor,
+} from "./configured-agent-names";
+export {
 	type ConfiguredAgentInput,
 	type ConfiguredAgentToolConfig,
-	type ConfiguredAgentToolDescriptor,
 	createConfiguredAgentTools,
 } from "./configured-agent-tool";
 export {
@@ -24,8 +26,8 @@ export {
 export {
 	createSpawnAgentTool,
 	createSubAgentProgressReporter,
-	DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
 	DEFAULT_SUB_AGENT_TIMEOUT_MS,
+	type NestedRunUsage,
 	resolveSpawnAgentInstructions,
 	type SpawnAgentInput,
 	type SpawnAgentOutput,
@@ -35,6 +37,14 @@ export {
 	type SubAgentStartContext,
 	spawnAgentOutputFromResult,
 } from "./spawn-agent-tool";
+export {
+	DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
+	DEFAULT_SUB_AGENT_MAX_DEPTH,
+	DEFAULT_SUB_AGENT_MAX_ITERATIONS,
+	resolveSubAgentLimits,
+	SUB_AGENT_MAX_DEPTH_CEILING,
+	type SubAgentLimits,
+} from "./sub-agent-limits";
 export {
 	createSubAgentGuidanceExtension,
 	SUB_AGENT_GUIDANCE,

@@ -1,11 +1,13 @@
 import type { AgentEvent, AgentTool } from "@plinycode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CoreSessionConfig } from "../../../types/config";
 import {
-	createSessionSpawnTool,
+	DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
+	DEFAULT_SUB_AGENT_MAX_DEPTH,
 	DEFAULT_SUB_AGENT_MAX_ITERATIONS,
-	MAX_SUB_AGENT_DEPTH,
-} from "./spawn-tool";
+	resolveSubAgentLimits,
+} from "../../../extensions/tools/team/sub-agent-limits";
+import type { CoreSessionConfig } from "../../../types/config";
+import { createSessionSpawnTool } from "./spawn-tool";
 
 const runMock = vi.fn();
 const agentConstructorSpy = vi.fn();
@@ -89,7 +91,7 @@ describe("createSessionSpawnTool", () => {
 	});
 
 	it("gives a sub-agent the host's extra tools next to the built-ins, without duplicates or a nested spawn_agent", async () => {
-		expect(MAX_SUB_AGENT_DEPTH).toBe(1);
+		expect(DEFAULT_SUB_AGENT_MAX_DEPTH).toBe(1);
 		const spawn = createSessionSpawnTool(
 			deps,
 			config,
@@ -122,7 +124,7 @@ describe("createSessionSpawnTool", () => {
 		const prepareTurn = vi.fn(async () => undefined);
 		const spawn = createSessionSpawnTool(
 			deps,
-			{ ...config, subAgentMaxIterations: 7 },
+			{ ...config, subAgentLimits: { maxIterations: 7 } },
 			"root-session",
 			undefined,
 			{
@@ -214,5 +216,204 @@ describe("createSessionSpawnTool", () => {
 				totalCost: 0.05,
 			},
 		);
+	});
+});
+
+type CapturedAgentConfig = {
+	tools: AgentTool[];
+	maxIterations?: number;
+	onEvent?: (event: AgentEvent) => void;
+};
+
+function capturedConfig(call: number): CapturedAgentConfig {
+	return agentConstructorSpy.mock.calls[call][0] as CapturedAgentConfig;
+}
+
+function toolNames(call: number): string[] {
+	return capturedConfig(call).tools.map((t) => t.name);
+}
+
+describe("sub-agent limits", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		runMock.mockResolvedValue({
+			text: "done",
+			iterations: 1,
+			finishReason: "completed",
+			usage: { inputTokens: 1, outputTokens: 1 },
+		});
+	});
+
+	it("resolves to the old constants when the host sets nothing", () => {
+		expect(resolveSubAgentLimits(undefined)).toEqual({
+			maxDepth: 1,
+			maxConcurrent: 3,
+			maxIterations: 40,
+		});
+		expect(DEFAULT_MAX_CONCURRENT_SUB_AGENTS).toBe(3);
+		expect(DEFAULT_SUB_AGENT_MAX_ITERATIONS).toBe(40);
+		// Invalid values fall back; depth never goes past the ceiling.
+		expect(
+			resolveSubAgentLimits({
+				maxDepth: 0,
+				maxConcurrent: -2,
+				maxIterations: Number.NaN,
+			}),
+		).toEqual({ maxDepth: 1, maxConcurrent: 3, maxIterations: 40 });
+		expect(resolveSubAgentLimits({ maxDepth: 9 }).maxDepth).toBe(2);
+	});
+
+	it("with depth 2 gives the first level spawn_agent and the second none", async () => {
+		const spawn = createSessionSpawnTool(
+			deps,
+			{
+				...config,
+				subAgentLimits: { maxDepth: 2 },
+			} as CoreSessionConfig,
+			"root-session",
+		);
+		expect(spawn.description).toContain("may delegate once more");
+
+		await spawn.execute({ task: "level one" }, context);
+		expect(toolNames(0)).toContain("spawn_agent");
+
+		const nested = capturedConfig(0).tools.find(
+			(t) => t.name === "spawn_agent",
+		) as AgentTool;
+		expect(nested.description).toContain(
+			"cannot ask the user, save memories or delegate further",
+		);
+		await nested.execute({ task: "level two" }, {
+			agentId: "sub-agent-1",
+			iteration: 1,
+		} as never);
+		expect(toolNames(1)).not.toContain("spawn_agent");
+	});
+
+	it("caps a host's depth above the ceiling at one nested level", async () => {
+		const spawn = createSessionSpawnTool(
+			deps,
+			{
+				...config,
+				subAgentLimits: { maxDepth: 5 },
+			} as CoreSessionConfig,
+			"root-session",
+		);
+		await spawn.execute({ task: "level one" }, context);
+		const nested = capturedConfig(0).tools.find(
+			(t) => t.name === "spawn_agent",
+		) as AgentTool;
+		await nested.execute({ task: "level two" }, {
+			agentId: "sub-agent-1",
+			iteration: 1,
+		} as never);
+		expect(toolNames(1)).not.toContain("spawn_agent");
+	});
+
+	it("keeps spawn_agent away from sub-agents when spawning is off, whatever the depth", async () => {
+		const spawn = createSessionSpawnTool(
+			deps,
+			{
+				...config,
+				enableSpawnAgent: false,
+				subAgentLimits: { maxDepth: 2 },
+			} as CoreSessionConfig,
+			"root-session",
+		);
+		await spawn.execute({ task: "look" }, context);
+		expect(toolNames(0)).not.toContain("spawn_agent");
+	});
+
+	it("runs at most maxConcurrent sub-agents at once", async () => {
+		let active = 0;
+		let peak = 0;
+		const releases: Array<() => void> = [];
+		runMock.mockImplementation(async () => {
+			active++;
+			peak = Math.max(peak, active);
+			await new Promise<void>((resolve) => releases.push(resolve));
+			active--;
+			return {
+				text: "done",
+				iterations: 1,
+				finishReason: "completed",
+				usage: { inputTokens: 1, outputTokens: 1 },
+			};
+		});
+		const spawn = createSessionSpawnTool(
+			deps,
+			{
+				...config,
+				subAgentLimits: { maxConcurrent: 2 },
+			} as CoreSessionConfig,
+			"root-session",
+		);
+		const runs = [1, 2, 3, 4].map((n) =>
+			spawn.execute({ task: `task ${n}` }, context),
+		);
+		const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+		await settle();
+		expect(active).toBe(2);
+		while (releases.length > 0 || active > 0) {
+			releases.shift()?.();
+			await settle();
+		}
+		await Promise.all(runs);
+		expect(peak).toBe(2);
+		expect(runMock).toHaveBeenCalledTimes(4);
+	});
+
+	it("adds what a sub-agent's own sub-agents used to its result", async () => {
+		runMock.mockImplementationOnce(async () => {
+			const { onEvent } = capturedConfig(0);
+			onEvent?.({
+				type: "content_end",
+				contentType: "tool",
+				toolName: "spawn_agent",
+				toolCallId: "nested-1",
+				output: {
+					text: "nested report",
+					usage: {
+						inputTokens: 100,
+						outputTokens: 10,
+						cacheReadTokens: 50,
+						totalCost: 0.5,
+					},
+				},
+			} as AgentEvent);
+			return {
+				text: "done",
+				iterations: 2,
+				finishReason: "completed",
+				usage: { inputTokens: 20, outputTokens: 2, totalCost: 0.25 },
+			};
+		});
+		const spawn = createSessionSpawnTool(
+			deps,
+			{
+				...config,
+				subAgentLimits: { maxDepth: 2 },
+			} as CoreSessionConfig,
+			"root-session",
+		);
+		const output = (await spawn.execute({ task: "delegate" }, context)) as {
+			usage: Record<string, number>;
+		};
+		expect(output.usage).toEqual({
+			inputTokens: 120,
+			outputTokens: 12,
+			cacheReadTokens: 50,
+			totalCost: 0.75,
+		});
+		// The session total settles the sub-agent's own calls only: the nested
+		// run settles its own usage under its id, so adding it here as well
+		// would count it twice.
+		expect(deps.settleSubAgentUsage).toHaveBeenCalledTimes(1);
+		const settled = vi.mocked(deps.settleSubAgentUsage).mock.calls[0]?.[2];
+		expect(settled).toMatchObject({
+			inputTokens: 20,
+			outputTokens: 2,
+			totalCost: 0.25,
+		});
 	});
 });

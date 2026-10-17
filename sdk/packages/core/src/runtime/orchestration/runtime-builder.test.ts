@@ -192,6 +192,37 @@ You are a code reviewer.`,
 		expect(runtime.tools.map((tool) => tool.name)).toContain("spawn_agent");
 	});
 
+	it("leaves out a configured agent whose tool policy is disabled", async () => {
+		const tempHome = mkdtempSync(join(tmpdir(), "cline-agent-home-"));
+		const workspaceRoot = mkdtempSync(join(tmpdir(), "cline-agent-workspace-"));
+		tempDirs.push(tempHome, workspaceRoot);
+		setHomeDir(tempHome);
+
+		const agentsDir = join(workspaceRoot, ".cline", "agents");
+		mkdirSync(agentsDir, { recursive: true });
+		for (const name of ["reviewer", "tester"]) {
+			writeFileSync(
+				join(agentsDir, `${name}.md`),
+				`---\nname: ${name}\ndescription: Does ${name} work\n---\nYou are ${name}.`,
+				"utf8",
+			);
+		}
+
+		const runtime = await new DefaultRuntimeBuilder().build({
+			config: makeBaseConfig({
+				cwd: workspaceRoot,
+				workspaceRoot,
+				enableSpawnAgent: true,
+				toolPolicies: { subagent_reviewer: { enabled: false } },
+			}),
+			createSpawnTool: makeSpawnTool,
+		});
+
+		const names = runtime.tools.map((tool) => tool.name);
+		expect(names).toContain("subagent_tester");
+		expect(names).not.toContain("subagent_reviewer");
+	});
+
 	it("does not register root skills when only configured agents declare skills", async () => {
 		const tempHome = mkdtempSync(join(tmpdir(), "cline-agent-home-"));
 		const workspaceRoot = mkdtempSync(join(tmpdir(), "cline-agent-workspace-"));
