@@ -47,6 +47,7 @@ Design and operations notes are in `docs/`:
 - [docs/rules.md](docs/rules.md): which rules files reach the model (including `AGENTS.md` and `CLAUDE.md` files below the root, listed by path and scope), the rules budget and the order rules are inlined in.
 - [docs/context-compaction.md](docs/context-compaction.md): when the conversation is compacted, the agentic and basic strategies and the fallback between them, overflow recovery, what the summarizer costs, and the context bar's threshold marker.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
+- [docs/eval-harness.md](docs/eval-harness.md): the eval harness in `sdk/scripts/eval`: cases (a fixture, a prompt, a model and assertions) run as headless engine sessions, replayed offline from VCR cassettes in CI (`eval-offline`) or recorded against the live gateway with `--record`, and how to add a case.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.
 
@@ -73,7 +74,7 @@ PRs target the `stage` branch, not `master`. Every workflow in `.github/workflow
 | Workflow          | Runs when the PR changes                                  | On a push to `stage`/`master`                       | What it checks                                                                   |
 | ----------------- | --------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `docs-check`      | anything                                                  | always                                              | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
-| `engine-test`     | `sdk/**`, `bun.lock`, its own workflow file, `.github/actions/**` | same path filter (no run at all otherwise)  | engine build, `bun run types`, lint and format, engine tests on Ubuntu (Node 22 and 24) and Windows (Node 22) |
+| `engine-test`     | `sdk/**`, `bun.lock`, its own workflow file, `.github/actions/**` | same path filter (no run at all otherwise)  | engine build, `bun run types`, lint and format, engine tests on Ubuntu (Node 22 and 24) and Windows (Node 22), offline eval cases (`eval-offline`) |
 | `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock`, `.github/actions/**` | all jobs                | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
 | `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | all jobs                                            | Playwright e2e on Ubuntu, Windows and macOS                                      |
 

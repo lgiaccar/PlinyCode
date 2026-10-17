@@ -1,0 +1,38 @@
+[
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Let me look at math.ts first.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_0_0\",\"type\":\"function\",\"function\":{\"name\":\"read_files\",\"arguments\":\"{\\\"files\\\":[{\\\"pat\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"h\\\":\\\"math.ts\\\"}]}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[],\"usage\":{\"prompt_tokens\":4100,\"completion_tokens\":40,\"total_tokens\":4140}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The loop starts at index 1, so the first value is skipped.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_1_0\",\"type\":\"function\",\"function\":{\"name\":\"editor\",\"arguments\":\"{\\\"path\\\":\\\"math.ts\\\",\\\"old_text\\\":\\\"for (let i = 1; i < values.length;\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" i++) {\\\",\\\"new_text\\\":\\\"for (let i = 0; i < values.length; i++) {\\\"}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[],\"usage\":{\"prompt_tokens\":4400,\"completion_tokens\":90,\"total_tokens\":4490}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_2_0\",\"type\":\"function\",\"function\":{\"name\":\"run_commands\",\"arguments\":\"{\\\"commands\\\":[\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"bun test\\\"]}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[],\"usage\":{\"prompt_tokens\":4700,\"completion_tokens\":30,\"total_tokens\":4730}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-3\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-3\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Fixed the off-by-one in `sum` (the loop now starts at 0); `bun test` passes.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-3\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-3\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"aws-claude-sonnet-4.6\",\"choices\":[],\"usage\":{\"prompt_tokens\":5000,\"completion_tokens\":30,\"total_tokens\":5030}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	}
+]
