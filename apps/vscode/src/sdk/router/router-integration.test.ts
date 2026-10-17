@@ -275,6 +275,50 @@ describe("installRouter completion guard", () => {
 		})
 	})
 
+	it("moves the turn to the default route's lead after six failed commands, once", async () => {
+		const { config, rows } = install()
+		const state = getSessionState("s")
+		state.calls.push({ modelId: "snps-provider/kimi-k2.6", startedAt: NOW, routeName: "default" })
+		state.stickyModelId = "snps-provider/kimi-k2.6"
+		const failCommand = (id: string) =>
+			config.hooks?.afterTool?.({
+				snapshot: { agentId: "root", iteration: 2 } as never,
+				tool: { name: "run_commands" } as never,
+				toolCall: { type: "tool-call", toolCallId: id, toolName: "run_commands", input: {} },
+				input: {},
+				result: {
+					output: [
+						{
+							query: "build",
+							result: "[Command exited with code 1]",
+							error: "Command exited with code 1",
+							success: false,
+						},
+					],
+				},
+				startedAt: new Date(NOW),
+				endedAt: new Date(NOW),
+				durationMs: 0,
+			})
+		for (let i = 1; i <= 5; i += 1) {
+			await failCommand(`c${i}`)
+		}
+		expect(state.stickyModelId).toBe("snps-provider/kimi-k2.6")
+		expect(state.run.escalated).toBeFalsy()
+
+		await failCommand("c6")
+		expect(state.run.failedCommands).toBe(6)
+		expect(state.run.escalated).toBe(true)
+		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(rows.some((row) => row.includes("6 commands have failed this turn"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
+
+		// Later failures do not switch again.
+		const switchRows = rows.filter((row) => row.includes("switching to")).length
+		await failCommand("c7")
+		expect(rows.filter((row) => row.includes("switching to")).length).toBe(switchRows)
+	})
+
 	it("adds nothing to a successful result, but still counts the tool call", async () => {
 		const { config } = install()
 		const result = await config.hooks?.afterTool?.({
