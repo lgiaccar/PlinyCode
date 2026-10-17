@@ -8,6 +8,7 @@ import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import type { SdkTaskHistory, TaskUsage } from "./sdk-task-history"
 import type { TaskProxy } from "./task-proxy"
+import { extraUsageFromMessages } from "./task-usage-metadata"
 
 export interface SdkSessionEventCoordinatorOptions {
 	messageTranslatorState: MessageTranslatorState
@@ -44,7 +45,9 @@ export class SdkSessionEventCoordinator {
 	 * task header shows (every usage row in the transcript), rather than
 	 * adding each event's delta: deltas raced with other history writes and
 	 * with the engine's own end-of-turn total, so the history list's cost
-	 * drifted from the header. Without the transcript, falls back to adding
+	 * drifted from the header. The advisor's and the summarizer's rows also
+	 * go to `extraUsage`, which the engine's write never touches
+	 * (task-usage-metadata.ts). Without the transcript, falls back to adding
 	 * the delta.
 	 */
 	private persistTaskUsage(usage: TaskUsage | undefined): Promise<void> {
@@ -53,13 +56,17 @@ export class SdkSessionEventCoordinator {
 		const messages = task?.messageStateHandler?.getClineMessages() ?? []
 		if (task && messages.length > 0) {
 			const metrics = getConversationApiMetrics(messages)
-			return this.options.taskHistory.setTaskUsage(taskId, {
-				totalCost: metrics.totalCost,
-				tokensIn: metrics.totalTokensIn,
-				tokensOut: metrics.totalTokensOut,
-				cacheWrites: metrics.totalCacheWrites ?? 0,
-				cacheReads: metrics.totalCacheReads ?? 0,
-			})
+			return this.options.taskHistory.setTaskUsage(
+				taskId,
+				{
+					totalCost: metrics.totalCost,
+					tokensIn: metrics.totalTokensIn,
+					tokensOut: metrics.totalTokensOut,
+					cacheWrites: metrics.totalCacheWrites ?? 0,
+					cacheReads: metrics.totalCacheReads ?? 0,
+				},
+				extraUsageFromMessages(messages.slice(1)),
+			)
 		}
 		return usage ? this.options.taskHistory.updateTaskUsage(taskId, usage) : Promise.resolve()
 	}

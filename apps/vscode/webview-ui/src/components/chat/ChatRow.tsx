@@ -865,10 +865,40 @@ const ChatRowContent = memo(
 										: "PlinyCode searched the web for:"}
 								</span>
 							</div>
-							<div className="bg-code border border-editor-group-border overflow-hidden rounded-xs select-text py-[9px] px-2.5">
-								<span className="ph-no-capture whitespace-nowrap overflow-hidden text-ellipsis mr-2 text-left [direction:rtl]">
-									{`${tool.path}\u200E`}
-								</span>
+							<div className="bg-code border border-editor-group-border overflow-hidden rounded-xs">
+								{tool.content ? (
+									<div
+										aria-label={isExpanded ? "Collapse search results" : "Expand search results"}
+										className="flex items-center cursor-pointer select-none py-[9px] px-2.5"
+										onClick={handleToggle}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" || e.key === " ") {
+												e.preventDefault()
+												e.stopPropagation()
+												handleToggle()
+											}
+										}}>
+										<span className="ph-no-capture whitespace-nowrap overflow-hidden text-ellipsis mr-2 text-left flex-1">
+											{tool.path}
+										</span>
+										{isExpanded ? (
+											<ChevronDownIcon className="shrink-0 size-4" />
+										) : (
+											<ChevronRightIcon className="shrink-0 size-4" />
+										)}
+									</div>
+								) : (
+									<div className="select-text py-[9px] px-2.5">
+										<span className="ph-no-capture whitespace-nowrap overflow-hidden text-ellipsis mr-2 text-left [direction:rtl]">
+											{`${tool.path}\u200E`}
+										</span>
+									</div>
+								)}
+								{tool.content && isExpanded ? (
+									<div className="ph-no-capture border-t border-editor-group-border py-2 px-2.5 text-xs whitespace-pre-wrap break-words select-text">
+										{tool.content}
+									</div>
+								) : null}
 							</div>
 						</div>
 					)

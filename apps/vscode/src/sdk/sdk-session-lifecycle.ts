@@ -15,6 +15,7 @@ import { buildToolPolicies } from "./sdk-tool-policies"
 import { isSyntheticUserPrompt } from "./sdk-user-message-mapping"
 import type { SdkSessionHost } from "./session-host"
 import { VscodeSessionHost } from "./vscode-session-host"
+import type { WebSearchSetup } from "./web/web-search-tool"
 
 type RequestToolApprovalHandler = NonNullable<Parameters<typeof VscodeSessionHost.create>[0]["requestToolApproval"]>
 type AskQuestionHandler = NonNullable<Parameters<typeof VscodeSessionHost.create>[0]["askQuestion"]>
@@ -39,6 +40,8 @@ interface SdkSessionLifecycleOptions {
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/** The language servers behind `find_symbol`, `code_navigate` and `rename_preview`; undefined leaves the tools out. */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/** The search backend behind `web_search`; undefined leaves the tool out. */
+	getWebSearch?: () => WebSearchSetup | undefined
 	/** The window's background processes, for `run_commands` and the `process_*` tools. */
 	processes?: ProcessRegistry
 	/** Hook file runs in the shared host's sessions, posted as `hook_status` rows. */
@@ -465,6 +468,7 @@ export class SdkSessionLifecycle {
 				getTerminalManager: this.options.getTerminalManager,
 				foregroundCommands: this.options.foregroundCommands,
 				getCodeIntel: this.options.getCodeIntel,
+				getWebSearch: this.options.getWebSearch,
 				processes: this.options.processes,
 				onHookStatus: this.options.onHookStatus,
 			})

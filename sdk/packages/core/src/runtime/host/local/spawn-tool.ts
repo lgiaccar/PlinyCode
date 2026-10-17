@@ -39,6 +39,15 @@ export interface SpawnToolDeps {
 		event: AgentEvent,
 	): void;
 	invokeBackendOptional(method: string, ...args: unknown[]): Promise<void>;
+	/**
+	 * Adds a finished sub-agent's usage to the root session's accumulated
+	 * usage, keyed by the sub-agent's id so it counts once.
+	 */
+	settleSubAgentUsage(
+		rootSessionId: string,
+		subAgentId: string,
+		usage: NonNullable<SubAgentEndContext["usage"]>,
+	): void;
 }
 
 export interface SessionSubAgentLifecycleCallbacks {
@@ -80,6 +89,12 @@ export function createSessionSubAgentLifecycleCallbacks(
 			);
 		},
 		onSubAgentEnd: (context) => {
+			// Usage first and synchronously: the parent's turn may end as soon
+			// as the tool returns, and its end writes the accumulated usage.
+			const usage = context.usage ?? context.result?.usage;
+			if (usage) {
+				deps.settleSubAgentUsage(rootSessionId, context.subAgentId, usage);
+			}
 			void deps.invokeBackendOptional(
 				"handleSubAgentEnd",
 				rootSessionId,

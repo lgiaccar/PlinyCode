@@ -38,7 +38,12 @@
 //   - history-replay.ts      — sdkMessagesToClineMessages (persisted history)
 //   - error-reshape.ts       — reshapeErrorForWebview
 
-export { buildCompactionMessage, buildToolApprovalAskMessage, parseCompactionNoticeMetadata } from "./ask-builders"
+export {
+	buildCompactionMessage,
+	buildToolApprovalAskMessage,
+	compactionUsageFromNotice,
+	parseCompactionNoticeMetadata,
+} from "./ask-builders"
 export { reshapeErrorForWebview } from "./error-reshape"
 export type { SdkMessagesToClineMessagesOptions } from "./history-replay"
 export { sdkMessagesToClineMessages } from "./history-replay"

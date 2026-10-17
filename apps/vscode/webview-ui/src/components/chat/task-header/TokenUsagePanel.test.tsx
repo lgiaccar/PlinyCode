@@ -1,8 +1,8 @@
-import type { ClineApiReqInfo, ClineMessage } from "@shared/ExtensionMessage"
+import type { ClineApiReqInfo, ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import TokenUsagePanel from "./TokenUsagePanel"
-import { formatPercent, formatTokens, getApiCallUsages, groupCallsByModel, summarizeApiCalls } from "./tokenUsage"
+import { formatPercent, formatTokens, getApiCallUsages, getSideUsage, groupCallsByModel, summarizeApiCalls } from "./tokenUsage"
 
 vi.mock("@/context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({
@@ -15,6 +15,10 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 let nextTs = 1
 function apiReq(info: ClineApiReqInfo): ClineMessage {
 	return { ts: nextTs++, type: "say", say: "api_req_started", text: JSON.stringify(info), partial: false }
+}
+
+function usageRow(info: ClineSubagentUsageInfo): ClineMessage {
+	return { ts: nextTs++, type: "say", say: "subagent_usage", text: JSON.stringify(info), partial: false }
 }
 
 const SONNET = "snps-aws-bedrock/global.anthropic.claude-sonnet-5"
@@ -74,6 +78,29 @@ describe("tokenUsage", () => {
 			[KIMI, 1],
 			["pliny/auto-paid-balanced", 1],
 		])
+	})
+
+	it("splits the usage outside the main agent's calls by source, in a fixed order", () => {
+		const side = getSideUsage([
+			usageRow({ source: "compaction", tokensIn: 50, tokensOut: 10, cacheReads: 0, cacheWrites: 0, cost: 0 }),
+			usageRow({
+				source: "advisor",
+				tokensIn: 100,
+				tokensOut: 20,
+				cacheReads: 0,
+				cacheWrites: 0,
+				cost: 0.2,
+				estimated: true,
+			}),
+			usageRow({ source: "subagents", tokensIn: 300, tokensOut: 30, cacheReads: 10, cacheWrites: 5, cost: 0.4 }),
+			usageRow({ source: "advisor", tokensIn: 100, tokensOut: 20, cacheReads: 0, cacheWrites: 0, cost: 0.1 }),
+		])
+		expect(side.map((entry) => [entry.label, entry.rows, entry.tokens, entry.estimated])).toEqual([
+			["Sub-agents", 1, 345, false],
+			["Advisor", 2, 240, true],
+			["Compaction", 1, 60, false],
+		])
+		expect(side[1].cost).toBeCloseTo(0.3)
 	})
 
 	it("formats compactly", () => {
@@ -178,6 +205,32 @@ describe("TokenUsagePanel", () => {
 	it("hides cost when the provider does not show it", () => {
 		render(<TokenUsagePanel clineMessages={conversation} showCost={false} />)
 		expect(screen.getByTestId("token-usage-lines")).not.toHaveTextContent("$")
+	})
+
+	it("shows sub-agent, advisor and compaction usage on a labelled line each", () => {
+		render(
+			<TokenUsagePanel
+				clineMessages={[
+					...conversation,
+					usageRow({ source: "advisor", tokensIn: 3_000, tokensOut: 400, cacheReads: 0, cacheWrites: 0, cost: 0.03 }),
+					usageRow({
+						source: "subagents",
+						tokensIn: 10_000,
+						tokensOut: 900,
+						cacheReads: 2_000,
+						cacheWrites: 0,
+						cost: 0.1,
+					}),
+					usageRow({ source: "advisor", tokensIn: 1_000, tokensOut: 100, cacheReads: 0, cacheWrites: 0, cost: 0.01 }),
+				]}
+				showCost
+			/>,
+		)
+
+		const side = screen.getAllByTestId("token-usage-side").map((line) => line.textContent)
+		expect(side).toEqual(["Sub-agents13k tokens · $0.10", "Advisor×2 · 4.5k tokens · $0.04"])
+		// The main agent's summary leaves them out.
+		expect(screen.getByTestId("token-usage-lines")).toHaveTextContent("3 calls · $0.07")
 	})
 
 	it("names calls without a model after the selected model", () => {

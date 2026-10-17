@@ -36,6 +36,7 @@ import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
+import { createVscodeWebSearchSetup } from "@/hosts/vscode/web-search-settings"
 import { configuredTaskWorktreeFolder } from "@/hosts/vscode/worktree-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
@@ -56,7 +57,7 @@ import { createHookStatusRows } from "./hook-status-rows"
 import { createMemoryServices, type MemoryServices } from "./memory"
 import { MemoryCoordinator } from "./memory/memory-coordinator"
 import { completeWithUtilityModel } from "./memory/memory-model"
-import { MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
+import { compactionUsageFromNotice, MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
@@ -106,6 +107,7 @@ import {
 	taskHistoryRowMatches,
 } from "./task-history-query"
 import { createTaskProxy, type TaskProxy } from "./task-proxy"
+import { readTaskUsageTotals } from "./task-usage-metadata"
 import { TurnStateTracker } from "./turn-state-tracker"
 import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
@@ -332,6 +334,23 @@ export class Controller {
 		this.background = new SdkBackgroundSessions({
 			stopSession: (session, reason) => this.sessions.stopSession(session, reason),
 			recordUsage: (sessionId, event) => {
+				if (event.type === "notice") {
+					// The compaction summarizer's call, which the engine's usage leaves out.
+					const summarizer = compactionUsageFromNotice(event)
+					if (summarizer) {
+						const usage = {
+							tokensIn: summarizer.tokensIn,
+							tokensOut: summarizer.tokensOut,
+							cacheReads: summarizer.cacheReads,
+							cacheWrites: summarizer.cacheWrites,
+							totalCost: summarizer.cost,
+						}
+						Promise.resolve(this.taskHistory.updateTaskUsage(sessionId, usage, "compaction")).catch((error) => {
+							Logger.error("[SdkController] Failed to persist background compaction usage:", error)
+						})
+					}
+					return
+				}
 				if (event.type !== "usage") {
 					return
 				}
@@ -515,6 +534,7 @@ export class Controller {
 			foregroundCommands: this.foregroundCommands,
 			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
+			getWebSearch: () => createVscodeWebSearchSetup(),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
 				// (vscode-session-host.ts, sdk-terminal-execution-mode-coordinator.ts):
@@ -897,13 +917,17 @@ export class Controller {
 			return
 		}
 		this.taskHistory
-			.updateTaskUsage(sessionId, {
-				tokensIn: usage.inputTokens,
-				tokensOut: usage.outputTokens,
-				cacheReads: usage.cacheReadTokens,
-				cacheWrites: usage.cacheWriteTokens,
-				totalCost: usage.totalCost,
-			})
+			.updateTaskUsage(
+				sessionId,
+				{
+					tokensIn: usage.inputTokens,
+					tokensOut: usage.outputTokens,
+					cacheReads: usage.cacheReadTokens,
+					cacheWrites: usage.cacheWriteTokens,
+					totalCost: usage.totalCost,
+				},
+				"advisor",
+			)
 			.catch((error) => Logger.error("[SdkController] Failed to persist background advisor usage:", error))
 	}
 
@@ -1712,11 +1736,7 @@ export class Controller {
 				isFavorited: isSessionRecordFavorited(item),
 				isPinned: isSessionRecordPinned(item),
 				size: metadataNumber(metadata, "size") ?? 0,
-				totalCost: metadataNumber(metadata, "totalCost") ?? 0,
-				tokensIn: metadataNumber(metadata, "tokensIn") ?? 0,
-				tokensOut: metadataNumber(metadata, "tokensOut") ?? 0,
-				cacheWrites: metadataNumber(metadata, "cacheWrites") ?? 0,
-				cacheReads: metadataNumber(metadata, "cacheReads") ?? 0,
+				...readTaskUsageTotals(metadata),
 				...sessionHistoryRecordToTaskItemFields(item),
 			}
 		})
