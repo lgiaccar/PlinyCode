@@ -437,6 +437,11 @@ const BALANCE_AUTO_MAX_INPUT_TOKENS = 128_000;
  * can honor, while the policy can still route a genuinely huge request to
  * GLM-5.2. `maxInputTokens` is lower on purpose: it only sets when compaction
  * starts (see FREE_AUTO_MAX_INPUT_TOKENS).
+ *
+ * It declares image input although no free model has it: the extension's
+ * router hands a text-only model each image as a description, or as a note
+ * that it was not shown (`plinycode.router.images`), so an image attached to a
+ * FreeAuto conversation is never refused outright.
  */
 function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 	return {
@@ -446,7 +451,7 @@ function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 		contextWindow: 256_000,
 		maxInputTokens: FREE_AUTO_MAX_INPUT_TOKENS,
 		maxTokens: 32_768,
-		capabilities: ["streaming", "tools"],
+		capabilities: ["streaming", "tools", "images"],
 		family: "pliny-router",
 		// Routes only to free self-hosted models.
 		pricing: SELF_HOSTED_PRICING,

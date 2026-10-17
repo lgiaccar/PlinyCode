@@ -10,6 +10,7 @@ import { createCodeIntelTools } from "./code-intel/code-intel-tools"
 import type { ProcessRegistry } from "./processes/process-registry"
 import { createProcessTools } from "./processes/process-tools"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
+import { createViewImageTool } from "./view-image-tool"
 import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
 import { createTodoTool } from "./vscode-todo-tool"
 import { createWaitTool } from "./vscode-wait-tool"
@@ -182,6 +183,10 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	// A task list the model keeps and the user sees, so long runs do not lose
 	// track of what is left.
 	tools.push(createTodoTool())
+
+	// Screenshots and diagrams saved in the workspace; the routers describe them
+	// for models that cannot see images (docs/agent-tools.md).
+	tools.push(createViewImageTool({ cwd: options?.cwd ?? process.cwd() }))
 
 	// Definitions, references, outlines and types from the language servers,
 	// so the model navigates code instead of grepping for it (docs/agent-tools.md).

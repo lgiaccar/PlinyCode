@@ -50,6 +50,9 @@ const GLOBAL_STATE_FIELDS = {
 	},
 	welcomeViewCompleted: { default: undefined as boolean | undefined },
 	mcpDisplayMode: { default: DEFAULT_MCP_DISPLAY_MODE as McpDisplayMode },
+	// The webview's "Unlock Pliny paid models" toggle (kept in its localStorage), mirrored here so the
+	// extension knows whether a FreeAuto conversation may spend money on images (plinycode.router.images).
+	plinyPaidModelsUnlocked: { default: false as boolean },
 } satisfies FieldDefinitions
 
 // Fields that map directly to ApiHandlerOptions in @shared/api.ts

@@ -706,9 +706,10 @@ describe("SdkTaskHistory", () => {
 		})
 	})
 
-	describe("advisor, compaction and sub-agent usage", () => {
+	describe("advisor, compaction, image description and sub-agent usage", () => {
 		// One root call (10 uncached + 7 cached input), one sub-agent run, one
-		// advisor call and one compaction summary, as the transcript's rows.
+		// advisor call, one compaction summary and one image description, as the
+		// transcript's rows.
 		const transcript: ClineMessage[] = [
 			{ ts: 1, type: "say", say: "task", text: "do it" },
 			{
@@ -720,6 +721,7 @@ describe("SdkTaskHistory", () => {
 			usageRow(3, { source: "subagents", tokensIn: 40, tokensOut: 4, cacheReads: 0, cacheWrites: 0, cost: 0.2 }),
 			usageRow(4, { source: "advisor", tokensIn: 100, tokensOut: 50, cacheReads: 0, cacheWrites: 0, cost: 0.1 }),
 			usageRow(5, { source: "compaction", tokensIn: 30, tokensOut: 10, cacheReads: 0, cacheWrites: 0, cost: 0.05 }),
+			usageRow(6, { source: "vision", tokensIn: 1600, tokensOut: 100, cacheReads: 0, cacheWrites: 0, cost: 0.02 }),
 		]
 		/** What the engine writes at the end of the turn: the root's usage, and the root's plus the sub-agent's. */
 		const engineUsage = {
