@@ -52,6 +52,7 @@ import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-c
 import { isSubAgentDeniedTool } from "./sdk-tool-policies"
 import type { SdkSessionHost } from "./session-host"
 import { createVscodeExtraTools } from "./vscode-runtime-builder"
+import type { WebSearchSetup } from "./web/web-search-tool"
 
 interface VscodeSessionHostOptions {
 	mcpHub: McpHub
@@ -98,6 +99,12 @@ interface VscodeSessionHostOptions {
 	 * next conversation. Undefined turns the tools off.
 	 */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/**
+	 * The search backend behind `web_search`, read when a session starts so the
+	 * `plinycode.webSearch.*` settings apply to the next conversation. Undefined
+	 * turns the tool off.
+	 */
+	getWebSearch?: () => WebSearchSetup | undefined
 	/** The window's background processes, for `run_commands` and the `process_*` tools. */
 	processes?: ProcessRegistry
 }
@@ -157,12 +164,18 @@ export class VscodeSessionHost implements SdkSessionHost {
 		const prepareStartSessionInput = async (input: ClineCoreStartInput): Promise<ClineCoreStartInput> => {
 			const vscodeTerminalExecutionMode = StateManager.get().getGlobalStateKey("vscodeTerminalExecutionMode")
 			const codeIntel = options.getCodeIntel?.()
+			const webSearch = options.getWebSearch?.()
+			const providerId = input.config.providerId
+			const modelId = input.config.modelId
 			const extraTools = await createVscodeExtraTools(options.mcpHub, {
 				cwd: input.config.cwd,
 				getTerminalManager: options.getTerminalManager,
 				vscodeTerminalExecutionMode,
 				foregroundCommands: options.foregroundCommands,
 				codeIntel,
+				webSearch,
+				providerId,
+				modelId,
 				processes: options.processes,
 			})
 			// A sub-agent gets the extension's tools too (its shell, `wait`, the
@@ -175,6 +188,9 @@ export class VscodeSessionHost implements SdkSessionHost {
 					vscodeTerminalExecutionMode,
 					forSubAgents: true,
 					codeIntel,
+					webSearch,
+					providerId,
+					modelId,
 					processes: options.processes,
 				})
 			).filter((tool) => !isSubAgentDeniedTool(tool.name))

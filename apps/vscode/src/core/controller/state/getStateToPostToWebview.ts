@@ -5,13 +5,14 @@
 // without inheriting the entire classic Controller implementation.
 
 import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
-import { isModelToolEnabledGlobally, readCompactionStrategyGlobally } from "@plinycode/core"
+import { readCompactionStrategyGlobally } from "@plinycode/core"
 import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
+import { isWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
@@ -58,7 +59,7 @@ export async function getStateToPostToWebview(controller: {
 	const mode = stateManager.getGlobalSettingsKey("mode")
 	const useAutoCondense = stateManager.getGlobalSettingsKey("useAutoCondense")
 	const compactionStrategy = readCompactionStrategyGlobally()
-	const webSearchEnabled = isModelToolEnabledGlobally("web_search")
+	const webSearchEnabled = isWebSearchEnabled()
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
 	const memoryMaxTokens = getMemoryMaxTokens()

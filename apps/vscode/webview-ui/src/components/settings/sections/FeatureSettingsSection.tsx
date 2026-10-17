@@ -167,7 +167,7 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 							</div>
 							<FeatureRow
 								checked={webSearchEnabled}
-								description="Let the model search the web when the selected provider and model support it. Applies to new tasks."
+								description="Give the model a web_search tool (plinycode.webSearch.enabled). The search engine is set in plinycode.webSearch.provider; queries leave your network for it. Applies to new tasks."
 								label="Web Search"
 								onChange={(checked) => updateSetting("webSearchEnabled", checked)}
 							/>
