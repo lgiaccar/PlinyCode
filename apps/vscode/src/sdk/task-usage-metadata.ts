@@ -12,7 +12,8 @@ import type { ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMess
  * - **The extension** writes the totals the task header shows
  *   (`tokensIn`, `tokensOut`, `cacheReads`, `cacheWrites`, `totalCost`) on
  *   every usage event, and, under `extraUsage`, the calls the engine never
- *   sees: the advisor's (`ask_advisor`) and the compaction summarizer's.
+ *   sees: the advisor's (`ask_advisor`), the compaction summarizer's and the
+ *   router's image descriptions (`vision`).
  *
  * Both write `totalCost`, and the engine's end-of-turn write could land last
  * with the root agent's cost alone, so the history list dropped advisor,
@@ -37,12 +38,12 @@ export const EXTRA_USAGE_METADATA_KEY = "extraUsage"
  * Calls made outside the engine's agents. The review pass and the routers'
  * classifier and completion judge run on free models and record no usage.
  */
-export type ExtraUsageSource = "advisor" | "compaction"
+export type ExtraUsageSource = "advisor" | "compaction" | "vision"
 
 /** `extraUsage`: totals per source. Unknown sources (from a newer build) are kept and counted. */
 export type ExtraUsage = Partial<Record<string, TaskUsageTotals>>
 
-const EXTRA_USAGE_SOURCES: readonly string[] = ["advisor", "compaction"] satisfies ExtraUsageSource[]
+const EXTRA_USAGE_SOURCES: readonly string[] = ["advisor", "compaction", "vision"] satisfies ExtraUsageSource[]
 
 type Metadata = Record<string, unknown> | null | undefined
 
@@ -109,9 +110,9 @@ export function addExtraUsage(
 }
 
 /**
- * The advisor's and the summarizer's calls, from the transcript's usage rows
- * (`subagent_usage` with that source). Both sources are always present, so
- * writing the result marks the session as keeping `extraUsage`.
+ * The advisor's, the summarizer's and the image describer's calls, from the
+ * transcript's usage rows (`subagent_usage` with that source). Every source is
+ * always present, so writing the result marks the session as keeping `extraUsage`.
  */
 export function extraUsageFromMessages(messages: ClineMessage[]): ExtraUsage {
 	const extra: ExtraUsage = Object.fromEntries(EXTRA_USAGE_SOURCES.map((source) => [source, emptyTotals()]))
