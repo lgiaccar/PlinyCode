@@ -60,7 +60,6 @@
 									"!@plinycode/llms/models/*",
 									"!@plinycode/llms/providers",
 									"!@plinycode/llms/providers/*",
-									"!@plinycode/core/hub",
 									"!@plinycode/core/rpc",
 									"!@plinycode/shared/browser",
 									"!@plinycode/shared/node",

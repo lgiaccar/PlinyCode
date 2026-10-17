@@ -46,7 +46,6 @@ Package `plinycode-dev`. Entry: `src/extension.ts` bundles to `dist/extension.js
 | Path | Role |
 |------|------|
 | `controller/` | One directory per RPC service, one file per RPC: checkpoints, commands, file, MCP, models, slash commands, state, task, UI, web. `index.ts` re-exports `Controller` from `src/sdk/SdkController.ts` |
-| `task/` | `focus-chain/` and `tools/subagent/`. The agent loop itself runs in `@plinycode/core` |
 | `context/` | Context tracking (`context-tracking/`, `instructions/`) |
 | `storage/` | Persistence (`utils/`) |
 | `workspace/` | Workspace logic (`utils/`) |

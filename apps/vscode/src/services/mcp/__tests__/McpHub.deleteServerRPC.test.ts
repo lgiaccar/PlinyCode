@@ -25,7 +25,8 @@ mock.module("@/core/storage/disk", diskMock)
 mock.module("fs/promises", fsPromisesMock)
 mock.module("node:fs/promises", fsPromisesMock)
 
-// The settings write goes through settingsLock.ts, which writes the file with
+// The settings write goes through @plinycode/core's `updateMcpSettingsFile`
+// (the unit-test stub re-exports the real one), which writes the file with
 // synchronous `node:fs` (temp file + rename), not `fs/promises`. Wrap
 // writeFileSync/renameSync at the module level so a test can observe that the
 // real settings path is only ever produced by an atomic rename — never written
@@ -145,7 +146,7 @@ describe("McpHub.deleteServerRPC", () => {
 
 		// A reader must never observe the real settings file in a truncated or
 		// empty state, since a client that reads it mid-write could conclude
-		// there are no servers. settingsLock.ts writes synchronously via node:fs:
+		// there are no servers. updateMcpSettingsFile writes synchronously via node:fs:
 		// it writes the new contents to a temp file, then renames that temp file
 		// onto the real settings path. So writeFileSync must only ever target a
 		// path other than the settings file, and the real path only changes via

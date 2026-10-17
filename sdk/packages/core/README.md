@@ -80,7 +80,6 @@ Use `@plinycode/core` for host-facing runtime assembly:
 - `ClineCore.create(...)`
 - `createRuntimeHost(...)`
 - `LocalRuntimeHost`
-- `HubRuntimeHost` and `RemoteRuntimeHost`
 - `DefaultRuntimeBuilder`
 
 `ClineCore` is the app-facing session API. The lower-level `RuntimeHost`

@@ -2,6 +2,7 @@ import { setTimeout as setTimeoutPromise } from "node:timers/promises"
 import { sendMcpServersUpdate } from "@core/controller/mcp/subscribeToMcpServers"
 import { getMcpSettingsFilePath as getMcpSettingsFilePathHelper } from "@core/storage/disk"
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
+import { updateMcpSettingsFile } from "@plinycode/core"
 import { MAX_MCP_TIMEOUT_SECONDS, type McpServer, type McpToolCallResponse, MIN_MCP_TIMEOUT_SECONDS } from "@shared/mcp"
 import { convertMcpServersToProtoMcpServers } from "@shared/proto-conversions/mcp/mcp-server-conversion"
 import type { FSWatcher } from "chokidar"
@@ -14,12 +15,12 @@ import { expandEnvironmentVariables } from "@/utils/envExpansion"
 import type { McpOAuthManager } from "./McpOAuthManager"
 import {
 	configsRequireRestart,
+	mcpSettingsLockOptions,
 	readAndValidateMcpSettingsFile,
 	readPostWriteMcpSettings,
 	serverGainedOAuthTokens,
 } from "./mcp-settings-store"
 import { McpTimeoutSecondsSchema, ServerConfigSchema } from "./schemas"
-import { updateMcpSettingsFile } from "./settingsLock"
 import { augmentMcpTimeoutError, resolveMcpServerTimeoutMs } from "./timeout"
 import { setupFileWatcher } from "./transport-factory"
 import type { McpConnection, McpServerConfig } from "./types"
@@ -423,21 +424,25 @@ export async function toggleServerDisabledRPC(
 	host.isConnecting = true
 	try {
 		// Hold the cross-process lock across read-modify-write so a concurrent
-		// writer (CLI, OAuth handshake, another window) cannot clobber this
+		// writer (an OAuth handshake, another window) cannot clobber this
 		// toggle. Connection rebuild stays OUTSIDE the lock: connectToServer can
 		// trigger SDK OAuth writes that take the same (non-reentrant) lock.
 		const settingsPath = await getMcpSettingsFilePathHelper(await host.getSettingsDirectoryPath())
-		await updateMcpSettingsFile(settingsPath, (validated) => {
-			const servers = validated.mcpServers as Record<string, any>
+		await updateMcpSettingsFile(
+			settingsPath,
+			(validated) => {
+				const servers = validated.mcpServers as Record<string, any>
 
-			if (!servers[serverName]) {
-				throw new Error(`Server "${serverName}" not found in MCP configuration`)
-			}
+				if (!servers[serverName]) {
+					throw new Error(`Server "${serverName}" not found in MCP configuration`)
+				}
 
-			servers[serverName].disabled = disabled
-			validated.mcpServers = servers
-			return validated
-		})
+				servers[serverName].disabled = disabled
+				validated.mcpServers = servers
+				return validated
+			},
+			mcpSettingsLockOptions,
+		)
 		const config = await readPostWriteMcpSettings(host)
 
 		// Rebuild the connection so the toggle takes effect. A disabled
@@ -553,27 +558,31 @@ export async function toggleToolAutoApproveRPC(
 ): Promise<McpServer[]> {
 	try {
 		const settingsPath = await getMcpSettingsFilePathHelper(await host.getSettingsDirectoryPath())
-		const { config, autoApprove } = await updateMcpSettingsFile(settingsPath, (parsed) => {
-			// Initialize autoApprove if it doesn't exist
-			const servers = parsed.mcpServers as Record<string, any>
-			if (!servers[serverName].autoApprove) {
-				servers[serverName].autoApprove = []
-			}
-
-			const approve = servers[serverName].autoApprove
-			for (const toolName of toolNames) {
-				const toolIndex = approve.indexOf(toolName)
-
-				if (shouldAllow && toolIndex === -1) {
-					// Add tool to autoApprove list
-					approve.push(toolName)
-				} else if (!shouldAllow && toolIndex !== -1) {
-					// Remove tool from autoApprove list
-					approve.splice(toolIndex, 1)
+		const { config, autoApprove } = await updateMcpSettingsFile(
+			settingsPath,
+			(parsed) => {
+				// Initialize autoApprove if it doesn't exist
+				const servers = parsed.mcpServers as Record<string, any>
+				if (!servers[serverName].autoApprove) {
+					servers[serverName].autoApprove = []
 				}
-			}
-			return { config: parsed, autoApprove: approve }
-		})
+
+				const approve = servers[serverName].autoApprove
+				for (const toolName of toolNames) {
+					const toolIndex = approve.indexOf(toolName)
+
+					if (shouldAllow && toolIndex === -1) {
+						// Add tool to autoApprove list
+						approve.push(toolName)
+					} else if (!shouldAllow && toolIndex !== -1) {
+						// Remove tool from autoApprove list
+						approve.splice(toolIndex, 1)
+					}
+				}
+				return { config: parsed, autoApprove: approve }
+			},
+			mcpSettingsLockOptions,
+		)
 		host.recordSettingsFingerprint(config.mcpServers as Record<string, McpServerConfig>)
 
 		// Update the tools list to reflect the change
@@ -603,27 +612,31 @@ export async function toggleToolAutoApprove(
 ): Promise<void> {
 	try {
 		const settingsPath = await getMcpSettingsFilePathHelper(await host.getSettingsDirectoryPath())
-		const { autoApprove, mcpServers } = await updateMcpSettingsFile(settingsPath, (config) => {
-			// Initialize autoApprove if it doesn't exist
-			const servers = config.mcpServers as Record<string, any>
-			if (!servers[serverName].autoApprove) {
-				servers[serverName].autoApprove = []
-			}
-
-			const approve = servers[serverName].autoApprove
-			for (const toolName of toolNames) {
-				const toolIndex = approve.indexOf(toolName)
-
-				if (shouldAllow && toolIndex === -1) {
-					// Add tool to autoApprove list
-					approve.push(toolName)
-				} else if (!shouldAllow && toolIndex !== -1) {
-					// Remove tool from autoApprove list
-					approve.splice(toolIndex, 1)
+		const { autoApprove, mcpServers } = await updateMcpSettingsFile(
+			settingsPath,
+			(config) => {
+				// Initialize autoApprove if it doesn't exist
+				const servers = config.mcpServers as Record<string, any>
+				if (!servers[serverName].autoApprove) {
+					servers[serverName].autoApprove = []
 				}
-			}
-			return { autoApprove: approve as string[], mcpServers: servers as Record<string, McpServerConfig> }
-		})
+
+				const approve = servers[serverName].autoApprove
+				for (const toolName of toolNames) {
+					const toolIndex = approve.indexOf(toolName)
+
+					if (shouldAllow && toolIndex === -1) {
+						// Add tool to autoApprove list
+						approve.push(toolName)
+					} else if (!shouldAllow && toolIndex !== -1) {
+						// Remove tool from autoApprove list
+						approve.splice(toolIndex, 1)
+					}
+				}
+				return { autoApprove: approve as string[], mcpServers: servers as Record<string, McpServerConfig> }
+			},
+			mcpSettingsLockOptions,
+		)
 		host.recordSettingsFingerprint(mcpServers)
 
 		// Update the tools list to reflect the change
@@ -661,40 +674,44 @@ export async function addRemoteServer(
 ): Promise<McpServer[]> {
 	try {
 		const settingsPath = await getMcpSettingsFilePathHelper(await host.getSettingsDirectoryPath())
-		await updateMcpSettingsFile(settingsPath, (current) => {
-			const servers = current.mcpServers as Record<string, any>
-			if (servers[serverName]) {
-				throw new Error(`An MCP server with the name "${serverName}" already exists`)
-			}
+		await updateMcpSettingsFile(
+			settingsPath,
+			(current) => {
+				const servers = current.mcpServers as Record<string, any>
+				if (servers[serverName]) {
+					throw new Error(`An MCP server with the name "${serverName}" already exists`)
+				}
 
-			const serverConfig = {
-				url: serverUrl,
-				type: transportType,
-				disabled: false,
-				autoApprove: [],
-			}
+				const serverConfig = {
+					url: serverUrl,
+					type: transportType,
+					disabled: false,
+					autoApprove: [],
+				}
 
-			// Expand environment variables for validation
-			const expandedConfig = expandEnvironmentVariables(serverConfig)
+				// Expand environment variables for validation
+				const expandedConfig = expandEnvironmentVariables(serverConfig)
 
-			const urlValidation = z.string().url().safeParse(expandedConfig.url)
-			if (!urlValidation.success) {
-				throw new Error(`Invalid server URL: ${expandedConfig.url}. Please provide a valid URL.`)
-			}
+				const urlValidation = z.string().url().safeParse(expandedConfig.url)
+				if (!urlValidation.success) {
+					throw new Error(`Invalid server URL: ${expandedConfig.url}. Please provide a valid URL.`)
+				}
 
-			const parsedConfig = ServerConfigSchema.parse(expandedConfig)
+				const parsedConfig = ServerConfigSchema.parse(expandedConfig)
 
-			servers[serverName] = parsedConfig
+				servers[serverName] = parsedConfig
 
-			// We don't write the zod-transformed version to the file.
-			// The above parse() call adds the transportType field to the server config
-			// It would be fine if this was written, but we don't want to clutter up the file with internal details
+				// We don't write the zod-transformed version to the file.
+				// The above parse() call adds the transportType field to the server config
+				// It would be fine if this was written, but we don't want to clutter up the file with internal details
 
-			// ToDo: We could benefit from input / output types reflecting the non-transformed / transformed versions
-			const serversToWrite = { ...servers, [serverName]: serverConfig }
-			current.mcpServers = serversToWrite
-			return current
-		})
+				// ToDo: We could benefit from input / output types reflecting the non-transformed / transformed versions
+				const serversToWrite = { ...servers, [serverName]: serverConfig }
+				current.mcpServers = serversToWrite
+				return current
+			},
+			mcpSettingsLockOptions,
+		)
 		const settings = await readPostWriteMcpSettings(host)
 
 		await host.updateServerConnectionsRPC(settings.mcpServers as Record<string, McpServerConfig>)
@@ -726,17 +743,21 @@ export async function deleteServerRPC(host: DeleteServerRPCHost, serverName: str
 		await host.clearOAuthForConnection(serverName)
 
 		const settingsPath = await getMcpSettingsFilePathHelper(await host.getSettingsDirectoryPath())
-		await updateMcpSettingsFile(settingsPath, (parsed) => {
-			const servers = parsed.mcpServers as Record<string, any>
+		await updateMcpSettingsFile(
+			settingsPath,
+			(parsed) => {
+				const servers = parsed.mcpServers as Record<string, any>
 
-			if (!servers[serverName]) {
-				throw new Error(`${serverName} not found in MCP configuration`)
-			}
+				if (!servers[serverName]) {
+					throw new Error(`${serverName} not found in MCP configuration`)
+				}
 
-			delete servers[serverName]
-			parsed.mcpServers = servers
-			return parsed
-		})
+				delete servers[serverName]
+				parsed.mcpServers = servers
+				return parsed
+			},
+			mcpSettingsLockOptions,
+		)
 		const config = await readPostWriteMcpSettings(host)
 		const mcpServers = config.mcpServers as Record<string, McpServerConfig>
 
@@ -774,21 +795,25 @@ export async function updateServerTimeoutRPC(
 		}
 
 		const settingsPath = await getMcpSettingsFilePathHelper(await host.getSettingsDirectoryPath())
-		await updateMcpSettingsFile(settingsPath, (parsed) => {
-			const servers = parsed.mcpServers as Record<string, any>
+		await updateMcpSettingsFile(
+			settingsPath,
+			(parsed) => {
+				const servers = parsed.mcpServers as Record<string, any>
 
-			if (!servers[serverName]) {
-				throw new Error(`Server "${serverName}" not found in settings`)
-			}
+				if (!servers[serverName]) {
+					throw new Error(`Server "${serverName}" not found in settings`)
+				}
 
-			servers[serverName] = {
-				...servers[serverName],
-				timeout,
-			}
+				servers[serverName] = {
+					...servers[serverName],
+					timeout,
+				}
 
-			parsed.mcpServers = servers
-			return parsed
-		})
+				parsed.mcpServers = servers
+				return parsed
+			},
+			mcpSettingsLockOptions,
+		)
 		const config = await readPostWriteMcpSettings(host)
 		await host.updateServerConnectionsRPC(config.mcpServers as Record<string, McpServerConfig>)
 

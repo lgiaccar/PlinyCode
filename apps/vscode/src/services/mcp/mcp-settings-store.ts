@@ -1,4 +1,5 @@
 import { getMcpSettingsFilePath as getMcpSettingsFilePathHelper } from "@core/storage/disk"
+import type { McpSettingsLockOptions } from "@plinycode/core"
 import chokidar, { type FSWatcher } from "chokidar"
 import deepEqual from "fast-deep-equal"
 import * as fs from "fs/promises"
@@ -9,6 +10,19 @@ import { Logger } from "@/shared/services/Logger"
 import { expandEnvironmentVariables } from "@/utils/envExpansion"
 import { McpSettingsSchema } from "./schemas"
 import type { McpConnection, McpServerConfig } from "./types"
+
+/**
+ * Options for the engine's locked settings write (`updateMcpSettingsFile` from
+ * `@plinycode/core`): sends its messages, such as taking over a lock left by a
+ * crashed window, to the extension log.
+ */
+export const mcpSettingsLockOptions: McpSettingsLockOptions = {
+	logger: {
+		debug: (message) => Logger.debug(message),
+		log: (message, metadata) => (metadata?.severity === "warn" ? Logger.warn(message) : Logger.log(message)),
+		error: (message, metadata) => Logger.error(message, metadata?.error),
+	},
+}
 
 /**
  * Deterministic JSON.stringify that sorts object keys, so semantically equal

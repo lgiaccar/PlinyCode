@@ -19,7 +19,7 @@
     },
     "apps/vscode": {
       "name": "plinycode-dev",
-      "version": "0.2.3-test.9",
+      "version": "0.2.3-test.10",
       "dependencies": {
         "@bufbuild/protobuf": "^2.2.5",
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -209,7 +209,6 @@
       "name": "@plinycode/shared",
       "version": "0.0.83",
       "dependencies": {
-        "aws4fetch": "^1.0.20",
         "jsonrepair": "^3.13.2",
         "zod": "^4.3.6",
       },
@@ -1434,8 +1433,6 @@
     "async": ["async@3.2.6", "", {}, "sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA=="],
 
     "asynckit": ["asynckit@0.4.0", "", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
-
-    "aws4fetch": ["aws4fetch@1.0.20", "", {}, "sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g=="],
 
     "axios": ["axios@1.18.0", "", { "dependencies": { "follow-redirects": "^1.16.0", "form-data": "^4.0.5", "https-proxy-agent": "^5.0.1", "proxy-from-env": "^2.1.0" } }, "sha512-E32NzpYKp++W7XRe52rHiXV2ehxmh3wbdgO7MHeFM+vqxLBYHzt0ElkiImtOBxtOmyp0yoC8C6uESVV84Y2/hw=="],
 

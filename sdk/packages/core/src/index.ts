@@ -278,10 +278,8 @@ export {
 	type SetMcpServerDisabledOptions,
 	setMcpServerDisabled,
 	type UpdateMcpServerOAuthStateOptions,
-	updateMcpServerOAuthState,
 	updateMcpServerOAuthStateAsync,
 	updateMcpSettingsFile,
-	updateMcpSettingsFileSync,
 } from "./extensions/mcp";
 export {
 	ALL_DEFAULT_TOOL_NAMES,
@@ -487,10 +485,6 @@ export {
 	SubprocessSandbox,
 	type SubprocessSandboxOptions,
 } from "./runtime/tools/subprocess-sandbox";
-export {
-	type DesktopToolApprovalOptions,
-	requestDesktopToolApproval,
-} from "./runtime/tools/tool-approval";
 export { resolveCoreDistinctId } from "./services/distinct-id";
 export type {
 	GlobalCompactionMode,

@@ -6,7 +6,6 @@ import { HostProvider } from "@/hosts/host-provider"
 import { Logger } from "@/shared/services/Logger"
 import type { StorageContext } from "@/shared/storage/storage-context"
 import { StateManager } from "./core/storage/StateManager"
-import { AgentConfigLoader } from "./core/task/tools/subagent/AgentConfigLoader"
 import { ExtensionRegistryInfo } from "./registry"
 import { purgeRemovedProviderSignIns } from "./sdk/provider-migration"
 import { registerClineClientIdentity } from "./services/ClineClientIdentity"
@@ -118,7 +117,6 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
  */
 export async function tearDown(): Promise<void> {
 	try {
-		AgentConfigLoader.getInstance()?.dispose()
 		ErrorService.get().dispose()
 		// Dispose all webview instances
 		await WebviewProvider.disposeAllInstances()

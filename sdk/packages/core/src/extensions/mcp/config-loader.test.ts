@@ -22,9 +22,8 @@ import {
 	resolveMcpServerRegistration,
 	resolveMcpServerRegistrations,
 	setMcpServerDisabled,
-	updateMcpServerOAuthState,
+	updateMcpServerOAuthStateAsync,
 	updateMcpSettingsFile,
-	updateMcpSettingsFileSync,
 } from "./config-loader";
 
 describe("mcp config loader", () => {
@@ -452,7 +451,7 @@ describe("mcp config loader", () => {
 			"utf8",
 		);
 
-		setMcpServerDisabled({ filePath, name: "docs", disabled: true });
+		await setMcpServerDisabled({ filePath, name: "docs", disabled: true });
 		const disabled = JSON.parse(await readFile(filePath, "utf8")) as {
 			otherSetting?: boolean;
 			mcpServers?: Record<
@@ -467,7 +466,7 @@ describe("mcp config loader", () => {
 			disabled: true,
 		});
 
-		setMcpServerDisabled({ filePath, name: "docs", disabled: false });
+		await setMcpServerDisabled({ filePath, name: "docs", disabled: false });
 		const enabled = JSON.parse(await readFile(filePath, "utf8")) as {
 			mcpServers?: Record<string, { disabled?: boolean }>;
 		};
@@ -517,7 +516,7 @@ describe("mcp config loader", () => {
 			},
 		]);
 
-		updateMcpServerOAuthState(
+		await updateMcpServerOAuthStateAsync(
 			"linear",
 			(current) => ({
 				...current,
@@ -565,8 +564,8 @@ describe("mcp config loader", () => {
 		const objectPrototype = Object.prototype as { oauth?: unknown };
 		const originalOauth = objectPrototype.oauth;
 		try {
-			expect(() =>
-				updateMcpServerOAuthState(
+			await expect(
+				updateMcpServerOAuthStateAsync(
 					"__proto__",
 					() => ({
 						tokens: {
@@ -575,7 +574,7 @@ describe("mcp config loader", () => {
 					}),
 					{ filePath },
 				),
-			).toThrow("Unknown MCP server: __proto__");
+			).rejects.toThrow("Unknown MCP server: __proto__");
 			expect(objectPrototype.oauth).toBe(originalOauth);
 		} finally {
 			if (originalOauth === undefined) {
@@ -615,20 +614,20 @@ describe("mcp config loader", () => {
 			"utf8",
 		);
 
-		updateMcpServerOAuthState(
-			"linear",
-			() => ({ tokens: { access_token: "linear-token" } }),
-			{
-				filePath,
-			},
-		);
-		updateMcpServerOAuthState(
-			"github",
-			() => ({ tokens: { access_token: "github-token" } }),
-			{
-				filePath,
-			},
-		);
+		// Started together in one process with no lock held: the second update
+		// must wait its turn rather than fail or overwrite the first.
+		await Promise.all([
+			updateMcpServerOAuthStateAsync(
+				"linear",
+				() => ({ tokens: { access_token: "linear-token" } }),
+				{ filePath },
+			),
+			updateMcpServerOAuthStateAsync(
+				"github",
+				() => ({ tokens: { access_token: "github-token" } }),
+				{ filePath },
+			),
+		]);
 
 		const written = JSON.parse(await readFile(filePath, "utf8"));
 		expect(written.mcpServers.linear.oauth?.tokens?.access_token).toBe(
@@ -661,7 +660,7 @@ describe("mcp config loader", () => {
 		utimesSync(lockPath, stale, stale);
 
 		let ran = false;
-		updateMcpSettingsFileSync(filePath, () => {
+		await updateMcpSettingsFile(filePath, () => {
 			ran = true;
 		});
 
@@ -682,7 +681,7 @@ describe("mcp config loader", () => {
 		);
 
 		const lockPath = `${filePath}.lock`;
-		updateMcpSettingsFileSync(filePath, () => {
+		await updateMcpSettingsFile(filePath, () => {
 			// Simulate another process reclaiming our lock directory before our
 			// finally release runs. Release must remove only our owner marker and then
 			// rmdir the directory; a populated replacement must survive.
@@ -713,12 +712,12 @@ describe("mcp config loader", () => {
 		);
 
 		let count = 0;
-		expect(() =>
-			updateMcpSettingsFileSync(filePath, (settings) => {
+		await expect(
+			updateMcpSettingsFile(filePath, (settings) => {
 				count += 1;
 				settings.mcpServers = { generated: { counter: count } };
 			}),
-		).toThrow(McpSettingsMutatorPurityError);
+		).rejects.toThrow(McpSettingsMutatorPurityError);
 	});
 });
 
@@ -867,32 +866,79 @@ describe("updateMcpSettingsFile (async acquisition)", () => {
 		expect(Object.keys(written.mcpServers)).toEqual(["docs"]);
 	});
 
-	it("reclaims a stale lock directory on the async path", async () => {
+	it("does not lose a write when many updates start at once in one process", async () => {
 		const filePath = await makeSettingsFile();
-		const lockDir = `${filePath}.lock`;
-		mkdirSync(lockDir);
-		writeFileSync(join(lockDir, "owner.dead"), "dead-owner");
-		const stale = new Date(Date.now() - 60_000);
-		const { utimesSync } = await import("node:fs");
-		utimesSync(lockDir, stale, stale);
+		const names = Array.from({ length: 8 }, (_, index) => `server${index}`);
 
-		let ran = false;
-		await updateMcpSettingsFile(filePath, () => {
-			ran = true;
-		});
+		await Promise.all(
+			names.map((name) =>
+				updateMcpSettingsFile(filePath, (settings) => {
+					const servers = settings.mcpServers as Record<string, unknown>;
+					servers[name] = { transport: { type: "stdio", command: name } };
+				}),
+			),
+		);
 
-		expect(ran).toBe(true);
-		expect(existsSync(lockDir)).toBe(false);
+		const written = JSON.parse(await readFile(filePath, "utf8"));
+		expect(Object.keys(written.mcpServers).sort()).toEqual(names.sort());
+		expect(existsSync(`${filePath}.lock`)).toBe(false);
 	});
 
-	it("fails fast on a reentrant settings update instead of deadlocking the loop", async () => {
+	it("setMcpServerDisabled waits for a held lock without blocking the event loop", async () => {
+		const filePath = await makeSettingsFile();
+		await writeFile(
+			filePath,
+			JSON.stringify({
+				mcpServers: { docs: { transport: { type: "stdio", command: "node" } } },
+			}),
+			"utf8",
+		);
+		const waitSpy = vi.spyOn(Atomics, "wait");
+		const lockDir = `${filePath}.lock`;
+		mkdirSync(lockDir);
+		writeFileSync(join(lockDir, "owner.holder"), "holder");
+		try {
+			let settled = false;
+			const toggle = setMcpServerDisabled({
+				filePath,
+				name: "docs",
+				disabled: true,
+			}).finally(() => {
+				settled = true;
+			});
+
+			// While another process holds the lock, timers on this loop keep
+			// firing and the toggle stays pending.
+			let timerFired = false;
+			await new Promise<void>((resolve) =>
+				setTimeout(() => {
+					timerFired = true;
+					resolve();
+				}, 100),
+			);
+			expect(timerFired).toBe(true);
+			expect(settled).toBe(false);
+
+			unlinkSync(join(lockDir, "owner.holder"));
+			rmdirSync(lockDir);
+			await toggle;
+
+			const written = JSON.parse(await readFile(filePath, "utf8"));
+			expect(written.mcpServers.docs.disabled).toBe(true);
+			expect(waitSpy).not.toHaveBeenCalled();
+		} finally {
+			waitSpy.mockRestore();
+		}
+	});
+
+	it("fails fast on a reentrant settings update instead of waiting on itself", async () => {
 		const filePath = await makeSettingsFile();
 
 		await expect(
 			updateMcpSettingsFile(filePath, () => {
-				// A nested write on the same file would deadlock against the lock we
-				// already hold; the shared reentrancy guard must reject it instead.
-				updateMcpSettingsFileSync(filePath, () => {});
+				// A nested write on the same file from inside a mutator would wait on
+				// the lock we already hold; the reentrancy guard rejects it instead.
+				void updateMcpSettingsFile(filePath, () => {});
 			}),
 		).rejects.toThrow(/Reentrant MCP settings update/);
 

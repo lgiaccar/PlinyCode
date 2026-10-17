@@ -129,7 +129,6 @@ export {
 	HookEventPayloadSchema,
 	parseHookEventPayload,
 } from "./hooks/events";
-export * from "./hub";
 export type {
 	AiSdkFormatterMessage,
 	AiSdkFormatterMessageRole,
@@ -419,24 +418,6 @@ export {
 	getClineEnvironmentConfig,
 	resolveClineEnvironment,
 } from "./runtime/cline-environment";
-export type {
-	ConnectorCliLaunchSpec,
-	ConnectorInstanceRef,
-} from "./runtime/hub-daemon-env";
-export {
-	CLINE_CONNECTOR_CLI_LAUNCH_ENV,
-	CLINE_CONNECTOR_STARTING_INSTANCE_ENV,
-	CLINE_CONNECTOR_SUPERVISED_ENV,
-	CLINE_RUN_AS_HUB_DAEMON_ENV,
-	claimHubDaemonProcess,
-	claimSupervisedConnectorProcess,
-	isHubDaemonProcess,
-	isSupervisedConnectorProcess,
-	readConnectorCliLaunchSpec,
-	readStartingConnectorInstance,
-	setConnectorCliLaunchSpec,
-	setStartingConnectorInstance,
-} from "./runtime/hub-daemon-env";
 export {
 	disableCurrentDirectoryExecutableSearch,
 	NO_DEFAULT_CURRENT_DIRECTORY_IN_EXE_PATH_ENV,
@@ -478,7 +459,6 @@ export {
 	CLINE_WORKSPACES_DIRECTORY_NAME,
 	isChatWorkspacePath,
 } from "./storage/chat-workspace-paths";
-export * from "./tasks";
 export { createTool } from "./tools/create";
 export * from "./types";
 export { AUTH_ERROR_PATTERNS, isLikelyAuthError } from "./types/auth";

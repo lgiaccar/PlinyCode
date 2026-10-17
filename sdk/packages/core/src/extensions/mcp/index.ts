@@ -33,10 +33,8 @@ export {
 	resolveMcpServerRegistration,
 	resolveMcpServerRegistrations,
 	setMcpServerDisabled,
-	updateMcpServerOAuthState,
 	updateMcpServerOAuthStateAsync,
 	updateMcpSettingsFile,
-	updateMcpSettingsFileSync,
 } from "./config-loader";
 export { InMemoryMcpManager } from "./manager";
 export type {

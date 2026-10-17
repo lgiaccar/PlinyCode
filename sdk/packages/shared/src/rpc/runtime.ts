@@ -1,5 +1,4 @@
 import z from "zod";
-import type { HubToolExecutorName } from "../hub";
 import type {
 	ModelModality,
 	ModelOperation,
@@ -19,12 +18,11 @@ export interface ChatRuntimeConfig extends SessionPromptConfig {
 	enableTools: boolean;
 	enableSpawn?: boolean;
 	disableMcpSettingsTools?: boolean;
-	/** Additional Agent Plugins package roots resolved by the hub runtime. */
+	/** Additional Agent Plugins package roots to load for the session. */
 	agentPluginPaths?: string[];
 	autoApproveTools?: boolean;
 	timeoutSeconds?: number;
 	toolPolicies?: SessionExecutionConfig["toolPolicies"];
-	toolExecutors?: HubToolExecutorName[];
 	configExtensions?: RuntimeConfigExtensionKind[];
 }
 
