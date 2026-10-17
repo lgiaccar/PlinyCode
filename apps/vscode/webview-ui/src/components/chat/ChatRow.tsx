@@ -727,6 +727,42 @@ const ChatRowContent = memo(
 							) : null}
 						</div>
 					)
+				case "processList":
+				case "processOutput":
+				case "processKill":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								{toolIcon(tool.tool === "processKill" ? "debug-stop" : "terminal")}
+								<span className="font-bold">
+									{tool.tool === "processList" ? (
+										"PlinyCode listed the background processes:"
+									) : tool.tool === "processOutput" ? (
+										<>
+											PlinyCode read the output of process <code>{tool.path}</code>:
+										</>
+									) : message.type === "ask" ? (
+										<>
+											PlinyCode wants to stop process <code>{tool.path}</code>:
+										</>
+									) : (
+										<>
+											PlinyCode stopped process <code>{tool.path}</code>:
+										</>
+									)}
+								</span>
+							</div>
+							{tool.content ? (
+								<CodeAccordian
+									code={tool.content}
+									isExpanded={isExpanded}
+									language="shell-session"
+									onToggleExpand={handleToggle}
+									path={tool.path || "background processes"}
+								/>
+							) : null}
+						</div>
+					)
 				case "searchFiles":
 					return (
 						<div>

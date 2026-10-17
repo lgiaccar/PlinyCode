@@ -7,6 +7,7 @@ import { Logger } from "@/shared/services/Logger"
 import type { ActiveSession } from "./cline-session-factory"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import type { ConversationEditorState } from "./context/editor-state"
+import type { ProcessRegistry } from "./processes/process-registry"
 import { forgetSession } from "./router/router-health"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { buildToolPolicies } from "./sdk-tool-policies"
@@ -40,6 +41,8 @@ interface SdkSessionLifecycleOptions {
 	getCodeIntel?: () => CodeIntelSource | undefined
 	/** The search backend behind `web_search`; undefined leaves the tool out. */
 	getWebSearch?: () => WebSearchSetup | undefined
+	/** The window's background processes, for `run_commands` and the `process_*` tools. */
+	processes?: ProcessRegistry
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void
 	onSendError: (error: unknown, sessionId: string) => Promise<void> | void
@@ -463,6 +466,7 @@ export class SdkSessionLifecycle {
 				foregroundCommands: this.options.foregroundCommands,
 				getCodeIntel: this.options.getCodeIntel,
 				getWebSearch: this.options.getWebSearch,
+				processes: this.options.processes,
 			})
 				.then((sdkHost) => {
 					this.ensureSharedHostSubscription(sdkHost)
