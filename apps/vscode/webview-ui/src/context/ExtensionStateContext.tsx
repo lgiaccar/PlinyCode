@@ -231,6 +231,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		chatInputMaxRows: 10, // Default value, will be overwritten by extension state
 		useAutoCondense: true,
 		compactionStrategy: "basic",
+		compactionThreshold: 0.9,
 		webSearchEnabled: false,
 		prereleaseUpdatesEnabled: false,
 		conversationSpendingLimit: 5,

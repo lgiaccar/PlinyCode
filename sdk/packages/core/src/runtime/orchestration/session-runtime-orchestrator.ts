@@ -737,8 +737,12 @@ export class SessionRuntime {
 			consumeSystemNotice: () => this.runTracker.consumeSystemNotice(),
 			completionPolicy: toolCallingDisabled ? null : undefined,
 			systemPrompt,
-			contextSources: () =>
-				this.lastRulesText ? { rulesText: this.lastRulesText } : {},
+			// The host's sources (memory, pasted slash commands) plus the rules
+			// this session composed into the system prompt.
+			contextSources: () => ({
+				...this.config.contextSources?.(),
+				...(this.lastRulesText ? { rulesText: this.lastRulesText } : {}),
+			}),
 		});
 		const runtime = this.createAgentRuntimeImpl(runtimeConfig);
 		this.activeRuntime = runtime;

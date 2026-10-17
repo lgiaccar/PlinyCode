@@ -5,6 +5,7 @@ import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-
 import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { ClineEnv } from "@/config"
 import { setPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
+import { setCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { setConversationSearchEnabled, setMemoryDistillOfferEnabled, setMemoryMaxTokens } from "@/hosts/vscode/memory-settings"
 import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { setWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
@@ -156,6 +157,12 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 		}
 		if (request.memoryConversationSearchEnabled !== undefined) {
 			await setConversationSearchEnabled(request.memoryConversationSearchEnabled)
+		}
+
+		// Stored as the plinycode.compaction.threshold VS Code setting (clicking the context bar sets it);
+		// read before every model call
+		if (request.compactionThreshold !== undefined) {
+			await setCompactionThreshold(request.compactionThreshold)
 		}
 
 		if (request.compactionStrategy !== undefined) {

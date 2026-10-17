@@ -456,6 +456,7 @@ export class Controller {
 				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
 			},
 			trace: { enabled: isSessionTraceEnabled },
+			pastedCommandBodies: () => this.slashMentions.pastedCommandBodies(),
 		})
 		this.memory = new MemoryCoordinator({
 			store: this.memoryServices.store,

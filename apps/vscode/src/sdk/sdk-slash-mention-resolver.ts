@@ -7,7 +7,12 @@ import { getMemoryMaxTokens } from "@/hosts/vscode/memory-settings"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
 import { Logger } from "@/shared/services/Logger"
 import { builtinSlashCommands } from "./builtin-slash-commands"
-import { buildDisabledWorkflowNames, expandSlashCommands } from "./slash-command-expansion"
+import {
+	buildDisabledWorkflowNames,
+	expandSlashCommands,
+	type PastedCommandBodies,
+	pastedCommandBodies,
+} from "./slash-command-expansion"
 
 export interface SdkSlashMentionResolverOptions {
 	stateManager: StateManager
@@ -32,8 +37,20 @@ export class SdkSlashMentionResolver {
 	private userInstructionService?: Promise<UserInstructionConfigService>
 	private userInstructionServiceRoot?: string
 	private isDisposed = false
+	/** What the commands found at the last expansion can paste, for the context breakdown. */
+	private lastPastedBodies: PastedCommandBodies = { skillTexts: [], workflowTexts: [] }
 
 	constructor(private readonly options: SdkSlashMentionResolverOptions) {}
+
+	/**
+	 * The workflow and built-in skill bodies a slash command can paste into a
+	 * user message, as of the last message sent: the usage report counts each
+	 * one found in the conversation as workflows or skills rather than
+	 * conversation. Empty until the first message of the window is sent.
+	 */
+	pastedCommandBodies(): PastedCommandBodies {
+		return this.lastPastedBodies
+	}
 
 	async invalidateUserInstructionService(): Promise<void> {
 		const userInstructionServicePromise = this.userInstructionService
@@ -120,7 +137,9 @@ export class SdkSlashMentionResolver {
 				workspaceToggles: this.options.stateManager.getWorkspaceStateKey("workflowToggles"),
 			})
 			const builtins = builtinSlashCommands({ memoryEnabled: getMemoryMaxTokens() > 0 })
-			return expandSlashCommands(text, [...service.listRuntimeCommands(), ...builtins], {
+			const commands = [...service.listRuntimeCommands(), ...builtins]
+			this.lastPastedBodies = pastedCommandBodies(commands)
+			return expandSlashCommands(text, commands, {
 				disabledWorkflowNames,
 				workflowRecords,
 			})

@@ -108,6 +108,33 @@ describe("SdkSessionConfigBuilder", () => {
 		expect(existing.sessionId).toBe("existing")
 	})
 
+	it("names the memory section and the pasted slash-command bodies for the context breakdown", async () => {
+		let bodies = { skillTexts: [] as string[], workflowTexts: ["## Release\n1. Tag it."] }
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			memory: {
+				isMemoryEnabled: () => false,
+				isSearchEnabled: () => false,
+				snapshots: {
+					prepare: async () => ({ section: "\n\n# Memory\n\n- Bun 1.3", bindToSession: vi.fn() }),
+				},
+			} as never,
+			pastedCommandBodies: () => bodies,
+		})
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+
+		expect(config.contextSources?.()).toEqual({
+			memoryText: "\n\n# Memory\n\n- Bun 1.3",
+			skillTexts: [],
+			workflowTexts: ["## Release\n1. Tag it."],
+		})
+		// Read on every call: a workflow found later is counted from then on.
+		bodies = { skillTexts: ["Plan deeply."], workflowTexts: [] }
+		expect(config.contextSources?.()).toMatchObject({ skillTexts: ["Plan deeply."] })
+	})
+
 	describe("git snapshot", () => {
 		const SNAPSHOT = { branch: "feature/env", status: [" M src/app.ts"] }
 

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	CHARS_PER_TOKEN,
+	estimateMeasuredTokens,
 	estimateRequestInputTokens,
+	estimateTokens,
 	estimateValueTokens,
 	IMAGE_TOKEN_ESTIMATE,
 	isBinaryPayload,
+	measureRequestForTokenEstimate,
 	serializeForTokenEstimate,
 } from "./tokens";
 
@@ -59,5 +62,48 @@ describe("token estimate and images", () => {
 		expect(serializeForTokenEstimate(messages)).not.toContain(
 			base64Image.slice(0, 100),
 		);
+	});
+
+	it("gives the same request estimate as the serialized length at the default ratio", () => {
+		const request = {
+			systemPrompt: "You are a coding agent.",
+			messages: [
+				{
+					role: "user",
+					content: [
+						{ type: "text", text: "look".repeat(100) },
+						{ type: "image", data: base64Image, mediaType: "image/png" },
+					],
+				},
+			],
+			tools: [{ name: "read_file", description: "Read a file." }],
+		};
+		expect(estimateRequestInputTokens(request)).toBe(
+			Math.ceil(serializeForTokenEstimate(request).length / CHARS_PER_TOKEN),
+		);
+	});
+
+	it("scales only the text by a calibrated ratio, never the images", () => {
+		const text = "a".repeat(4_000);
+		const measured = measureRequestForTokenEstimate({
+			messages: [
+				{
+					role: "user",
+					content: [
+						{ type: "text", text },
+						{ type: "image", data: base64Image, mediaType: "image/png" },
+					],
+				},
+			],
+		});
+		expect(measured.binaryPayloads).toBe(1);
+		expect(measured.textChars).toBeGreaterThan(text.length);
+		expect(measured.textChars).toBeLessThan(text.length + 200);
+		const atFour = estimateMeasuredTokens(measured, 4);
+		expect(atFour - IMAGE_TOKEN_ESTIMATE).toBe(
+			Math.ceil(measured.textChars / 4),
+		);
+		expect(estimateTokens(4_000, 4)).toBe(1_000);
+		expect(estimateTokens(4_000)).toBe(1_334);
 	});
 });

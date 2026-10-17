@@ -3,6 +3,9 @@ import {
 	type ContextBreakdownTokens,
 	estimateRequestInputTokens,
 	estimateTokens,
+	IMAGE_TOKEN_ESTIMATE,
+	measureRequestForTokenEstimate,
+	tokenCalibration,
 } from "@plinycode/shared";
 import type { AiSdkStreamTotalUsage, AiSdkStreamUsage } from "./vendors/types";
 
@@ -326,7 +329,7 @@ export function normalizeUsage(
  */
 export function applyUsageEstimateFallback(
 	usage: GatewayNormalizedUsage,
-	request: Pick<GatewayStreamRequest, "systemPrompt" | "messages" | "tools">,
+	request: UsageRequest,
 	outputText: string | undefined,
 ): GatewayNormalizedUsage {
 	const hasRealUsage =
@@ -337,10 +340,67 @@ export function applyUsageEstimateFallback(
 	if (hasRealUsage) {
 		return usage;
 	}
+	const charsPerToken = calibratedCharsPerToken(request);
 	return {
 		...usage,
-		inputTokens: estimateRequestInputTokens(request),
-		outputTokens: outputText ? estimateTokens(outputText.length) : 0,
+		inputTokens: estimateRequestInputTokens(request, charsPerToken),
+		outputTokens: outputText
+			? estimateTokens(outputText.length, charsPerToken)
+			: 0,
 		estimated: true,
 	};
+}
+
+type UsageRequest = Pick<
+	GatewayStreamRequest,
+	"systemPrompt" | "messages" | "tools"
+> &
+	Partial<Pick<GatewayStreamRequest, "modelId" | "metadata">>;
+
+/**
+ * The ids a call's token calibration is kept and read under: the model that
+ * served it, then the session's own model when that differs (a router such
+ * as FreeAuto, whose compaction budgets against the blend of the models it
+ * routes to). The agent loop sets `sessionModelId` in the request metadata.
+ */
+function calibrationModelIds(request: UsageRequest): string[] {
+	const sessionModelId = request.metadata?.sessionModelId;
+	const ids = [
+		request.modelId,
+		typeof sessionModelId === "string" ? sessionModelId : undefined,
+	]
+		.map((id) => id?.trim())
+		.filter((id): id is string => Boolean(id));
+	return [...new Set(ids)];
+}
+
+/** The request's model's learned characters per token, or CHARS_PER_TOKEN. */
+export function calibratedCharsPerToken(request: UsageRequest): number {
+	return tokenCalibration.charsPerTokenFor(calibrationModelIds(request));
+}
+
+/**
+ * Fold a call's provider-reported input tokens into the calibration of the
+ * models it ran under (token-calibration.ts in @plinycode/shared). The
+ * reported count includes cache reads and writes, as the whole request is
+ * what was tokenized; images are taken out at their fixed estimate. An
+ * estimated usage teaches nothing and is skipped.
+ */
+export function observeTokenCalibration(
+	usage: GatewayNormalizedUsage,
+	request: UsageRequest,
+): void {
+	if (usage.estimated || usage.inputTokens <= 0) {
+		return;
+	}
+	const modelIds = calibrationModelIds(request);
+	if (modelIds.length === 0) {
+		return;
+	}
+	const measured = measureRequestForTokenEstimate(request);
+	const textTokens =
+		usage.inputTokens - measured.binaryPayloads * IMAGE_TOKEN_ESTIMATE;
+	for (const modelId of modelIds) {
+		tokenCalibration.observe(modelId, measured.textChars, textTokens);
+	}
 }

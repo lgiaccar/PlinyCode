@@ -13,6 +13,7 @@ import { WebviewProvider } from "./core/webview"
 import { createClineAPI } from "./exports"
 import "./utils/path" // necessary to have access to String.prototype.toPosix
 import path from "node:path"
+import { persistTokenCalibration, TOKEN_CALIBRATION_FILE_NAME } from "@plinycode/core"
 import { PLINY_ROUTER_PROFILES } from "@plinycode/llms"
 import type { ExtensionContext } from "vscode"
 import { HostProvider } from "@/hosts/host-provider"
@@ -60,6 +61,7 @@ import { registerWebSearchSettings } from "./hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "./registry"
 import { configureInstructionSources } from "./sdk/instruction-sources"
 import { formatLastModelRequest } from "./sdk/last-model-request"
+import { resolveDataDir } from "./sdk/legacy-state-reader"
 import { completeWithUtilityModel } from "./sdk/memory/memory-model"
 import { callLogPath } from "./sdk/router/router-call-log"
 import { globalRulesPath, initialiseAllRulesFiles, initialiseDefaultRulesFile } from "./sdk/router/router-rules-store"
@@ -107,6 +109,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Keep the session traces (docs/trace-and-logs.md) under their folder cap.
 	void pruneSessionTraces()
+
+	// The per-model characters-per-token ratio learned from reported usage, kept across reloads
+	// (docs/context-compaction.md, "Calibrated estimate").
+	const stopCalibrationPersistence = persistTokenCalibration(path.join(resolveDataDir(), TOKEN_CALIBRATION_FILE_NAME), {
+		onError: (error) => Logger.warn("[tokens] Failed to save the token calibration:", error),
+	})
+	context.subscriptions.push({ dispose: stopCalibrationPersistence })
 
 	// Before any session starts: which editor's rule and skill files to load,
 	// and the one global rules folder (files in ~/.cline/rules move there).
@@ -208,11 +217,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerWebSearchSettings(context, commands.SetWebSearchApiKey)
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			// Keep the Settings view's pre-release, memory and web search settings, and the model named on
-			// the Execute plan button, in step with edits made in VS Code's settings.
+			// Keep the Settings view's pre-release, memory and web search settings, the context bar's
+			// auto-condense marker and the model named on the Execute plan button in step with edits made
+			// in VS Code's settings.
 			if (
 				event.affectsConfiguration("plinycode.updates.prerelease") ||
 				event.affectsConfiguration("plinycode.memory") ||
+				event.affectsConfiguration("plinycode.compaction") ||
 				event.affectsConfiguration("plinycode.webSearch.enabled") ||
 				event.affectsConfiguration(PLAN_EXECUTE_WITH_SETTING_ID)
 			) {

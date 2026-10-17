@@ -85,6 +85,10 @@ async function generateAssistantMessageForRequest(
 		iteration: ctx.state.iteration,
 		// Lets the provider's usage report split the context by source.
 		contextSources: ctx.config.contextSources?.(),
+		// The session's own model (a router's id when one picks the model per
+		// call): the provider also learns its token calibration under it, which
+		// compaction reads for the session.
+		sessionModelId: trimNonEmpty(ctx.config.messageModelInfo?.id),
 	});
 	let request: AgentModelRequest = {
 		systemPrompt: ctx.config.systemPrompt,

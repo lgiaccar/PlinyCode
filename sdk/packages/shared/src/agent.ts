@@ -5,7 +5,10 @@
  *
  */
 
-import type { ContextBreakdownTokens } from "./llms/context-breakdown";
+import type {
+	ContextBreakdownTokens,
+	ContextSourceTexts,
+} from "./llms/context-breakdown";
 import type { GeneratedMedia } from "./llms/media";
 import type { ModelInfo } from "./llms/model-info";
 import type {
@@ -112,7 +115,7 @@ export interface AgentTokenUsage {
 	estimated?: boolean;
 	/**
 	 * Where this request's input tokens came from (system prompt, rules,
-	 * skills, workflows, conversation, other). Not summed across requests —
+	 * memory, tools, skills, workflows, conversation, other). Not summed across requests —
 	 * reflects only the most recent one, same as `estimated`.
 	 */
 	contextBreakdown?: ContextBreakdownTokens;
@@ -625,14 +628,12 @@ export interface AgentRuntimeConfig {
 	/**
 	 * What parts of the request came from where, read before each model call
 	 * and sent as request metadata so the provider's usage report can break
-	 * the context down by source (rules, skills, workflows). Without it those
-	 * buckets read as zero and the rules count as system prompt.
+	 * the context down by source (rules, memory, pasted skills and
+	 * workflows). Without it those buckets read as zero and the rules and
+	 * memory count as system prompt. The tools bucket and the `skills` tool's
+	 * listing and results come from the request itself.
 	 */
-	contextSources?: () => {
-		rulesText?: string;
-		skillsText?: string;
-		workflowsText?: string;
-	};
+	contextSources?: () => ContextSourceTexts;
 	requestToolApproval?: (
 		request: ToolApprovalRequest,
 	) => Promise<ToolApprovalResult> | ToolApprovalResult;

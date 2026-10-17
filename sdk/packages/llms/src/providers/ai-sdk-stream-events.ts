@@ -1,6 +1,7 @@
 import type {
 	AgentModelEvent,
 	AgentModelFinishReason,
+	ContextSourceTexts,
 	GatewayProviderContext,
 	GatewayStreamRequest,
 	GeneratedMedia,
@@ -23,7 +24,12 @@ import {
 	toGeneratedImageMedia,
 } from "./ai-sdk-image-gen";
 import { providerDisablesExternalToolExecution } from "./ai-sdk-message-convert";
-import { applyUsageEstimateFallback, normalizeUsage } from "./ai-sdk-usage";
+import {
+	applyUsageEstimateFallback,
+	calibratedCharsPerToken,
+	normalizeUsage,
+	observeTokenCalibration,
+} from "./ai-sdk-usage";
 import {
 	classifyProviderError,
 	isRetryableBeyondSdkRetries,
@@ -884,8 +890,9 @@ export async function* emitAiSdkEvents(
 			request,
 			outputTextForEstimate,
 		);
+		observeTokenCalibration(estimatedUsage, request);
 		const contextSources = request.metadata?.contextSources as
-			| { rulesText?: string; skillsText?: string; workflowsText?: string }
+			| ContextSourceTexts
 			| undefined;
 		yield {
 			type: "usage",
@@ -895,9 +902,12 @@ export async function* emitAiSdkEvents(
 					{
 						systemPrompt: request.systemPrompt,
 						rulesText: contextSources?.rulesText,
-						skillsText: contextSources?.skillsText,
-						workflowsText: contextSources?.workflowsText,
+						memoryText: contextSources?.memoryText,
+						skillTexts: contextSources?.skillTexts,
+						workflowTexts: contextSources?.workflowTexts,
+						tools: request.tools,
 						messages: request.messages,
+						charsPerToken: calibratedCharsPerToken(request),
 					},
 					estimatedUsage.inputTokens > 0
 						? estimatedUsage.inputTokens

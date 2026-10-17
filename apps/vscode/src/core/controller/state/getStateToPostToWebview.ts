@@ -9,6 +9,7 @@ import { readCompactionStrategyGlobally } from "@plinycode/core"
 import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
+import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
@@ -59,6 +60,7 @@ export async function getStateToPostToWebview(controller: {
 	const mode = stateManager.getGlobalSettingsKey("mode")
 	const useAutoCondense = stateManager.getGlobalSettingsKey("useAutoCondense")
 	const compactionStrategy = readCompactionStrategyGlobally()
+	const compactionThreshold = getCompactionThreshold()
 	const webSearchEnabled = isWebSearchEnabled()
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
@@ -125,6 +127,7 @@ export async function getStateToPostToWebview(controller: {
 		mode,
 		useAutoCondense,
 		compactionStrategy,
+		compactionThreshold,
 		webSearchEnabled,
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,

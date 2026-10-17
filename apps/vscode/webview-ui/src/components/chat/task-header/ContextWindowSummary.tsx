@@ -2,6 +2,7 @@ import type { ClineContextBreakdown } from "@shared/ExtensionMessage"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { memo, useCallback, useMemo, useState } from "react"
 import { formatLargeNumber as formatTokenNumber } from "@/utils/format"
+import { DEFAULT_COMPACTION_THRESHOLD } from "./autoCompactThreshold"
 
 interface TokenUsageInfoProps {
 	tokensIn?: number
@@ -21,8 +22,10 @@ interface TaskContextWindowButtonsProps extends TokenUsageInfoProps {
 	tokenUsed: number
 	contextWindow: number
 	autoCompactThreshold?: number
-	isThresholdChanged?: boolean
-	isThresholdFadingOut?: boolean
+	/** The setting behind the marker: auto condense runs at this share of the model's input limit. */
+	compactionThreshold?: number
+	/** Clicking the bar moves the marker (auto condense is on). */
+	canSetThreshold?: boolean
 	hasEstimatedUsage?: boolean
 	contextBreakdown?: ClineContextBreakdown
 }
@@ -30,6 +33,8 @@ interface TaskContextWindowButtonsProps extends TokenUsageInfoProps {
 const CONTEXT_BREAKDOWN_LABELS: Record<keyof ClineContextBreakdown, string> = {
 	systemPrompt: "System Prompt",
 	rules: "Rules",
+	memory: "Memory",
+	tools: "Tools",
 	skills: "Skills",
 	workflows: "Workflows",
 	conversation: "Conversation",
@@ -141,6 +146,8 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 	cacheReads,
 	percentage,
 	autoCompactThreshold = 0,
+	compactionThreshold = DEFAULT_COMPACTION_THRESHOLD,
+	canSetThreshold,
 	hasEstimatedUsage,
 	contextBreakdown,
 }) => {
@@ -176,9 +183,15 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 					<div className="space-y-1">
 						<p className="text-xs leading-relaxed mt-0 mb-0">
 							Auto condense runs at about {formatTokenNumber(Math.round(autoCompactThreshold * contextWindow))}{" "}
-							tokens: 90% of the model&apos;s input limit, which can be below its context window. It measures the
-							request on an estimate, so it can run a little before the bar reaches the marker.
+							tokens: {(compactionThreshold * 100).toFixed(0)}% of the model&apos;s input limit, which can be below
+							its context window. It measures the request on an estimate calibrated to the model, so it can run a
+							little before or after the bar reaches the marker.
 						</p>
+						{canSetThreshold && (
+							<p className="text-xs leading-relaxed mt-0 mb-0">
+								Click the bar to move the marker, or use the arrow keys when the bar has focus.
+							</p>
+						)}
 					</div>
 				</AccordionItem>
 			)}

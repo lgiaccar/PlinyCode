@@ -65,6 +65,7 @@ The headings inside the files are pushed two levels down, so they stay inside th
 - The repository gets the rest, including whatever the user's memory does not use.
 - Each memory's topic list and its "N more entries" note are counted with it. Only the two headings with their file paths are not.
 - The chat's context row estimates the section at the same three characters per token.
+- The context bar's breakdown shows the section as its own Memory bucket, measured on the last request ([context-compaction.md](context-compaction.md), "The context bar").
 
 For comparison, 4000 tokens is about 12,000 characters: some 60–100 one-line entries, a third of the rules budget (`MAX_RULES_TOTAL_CHARS`), and small enough for the 32k-context free models.
 
