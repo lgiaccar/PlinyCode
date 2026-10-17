@@ -52,6 +52,8 @@ service TaskService {
   rpc deleteAllTaskHistory(EmptyRequest) returns (DeleteAllTaskHistoryCount);
   // Saves the checked memories of a memory_proposal row, or dismisses the row
   rpc resolveMemoryProposal(ResolveMemoryProposalRequest) returns (Empty);
+  // Opens the git worktree of the conversation with the given ID in a new VS Code window
+  rpc openTaskWorktree(StringRequest) returns (Empty);
 }
 
 // The user's choice on a memory_proposal chat row (docs/memory.md)
@@ -73,6 +75,9 @@ message NewTaskRequest {
   // Workspace to start the conversation in: a folder path or a .code-workspace
   // file path (see WorkspaceService). Empty starts it in the window's workspace.
   string workspace_path = 6;
+  // Runs the conversation in a new git worktree of the workspace's repository,
+  // on a branch of its own (docs/task-worktrees.md).
+  bool worktree = 7;
 }
 
 // Request message for exporting a task as a Markdown document
@@ -197,10 +202,13 @@ message TaskItem {
   string workspace_kind = 18;
   // Pinned conversations are listed first, in their own section.
   bool is_pinned = 19;
+  // The branch of the conversation's own git worktree ("Run in worktree").
+  // Empty for a conversation that runs in its workspace.
+  string worktree_branch = 20;
   // Set when the conversation matched the search query by its message text
-  // only (the full-text index), not by its title or path: the matching text,
-  // with the matched words in [brackets]. Empty otherwise.
-  string match_snippet = 20;
+  // only (the full-text index), not by its title, path or worktree branch: the
+  // matching text, with the matched words in [brackets]. Empty otherwise.
+  string match_snippet = 21;
 }
 
 // Request for ask response operation

@@ -27,6 +27,7 @@ import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
 import TaskUsageCounter from "./TaskUsageCounter"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
+import TaskWorktreeChip from "./TaskWorktreeChip"
 import TokenUsagePanel from "./TokenUsagePanel"
 
 const IS_DEV = process.env.IS_DEV === "true"
@@ -202,6 +203,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 								{workspaceLabel}
 							</div>
 						)}
+						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
 						<TaskUsageCounter
@@ -217,11 +219,14 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							tokensOut={tokensOut}
 							totalCost={isCostAvailable ? (totalCost ?? 0) : undefined}
 						/>
-						<TaskWorkingDirectoryBadge
-							platform={platform}
-							taskCwd={currentTaskItem?.cwdOnTaskInitialization}
-							workspaceRoots={workspaceRoots}
-						/>
+						{/* A worktree conversation works outside the window's folders by design; its chip says where. */}
+						{!currentTaskItem?.worktree && (
+							<TaskWorkingDirectoryBadge
+								platform={platform}
+								taskCwd={currentTaskItem?.cwdOnTaskInitialization}
+								workspaceRoots={workspaceRoots}
+							/>
+						)}
 						{currentTaskItem?.id && <RenameTaskButton className={BUTTON_CLASS} onClick={() => setIsRenaming(true)} />}
 						<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
 						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />

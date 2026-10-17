@@ -5,6 +5,7 @@ import {
 	metadataBoolean,
 	metadataNumber,
 	metadataString,
+	metadataWorktree,
 	sessionRecordWorkspacePath,
 } from "./sdk-task-history"
 
@@ -12,14 +13,14 @@ import {
 export interface TaskHistoryQuery {
 	favoritesOnly?: boolean
 	/**
-	 * Every whitespace-separated term must appear in the title or the workspace
-	 * path, in any case. queryTaskHistoryWithContent adds the conversations whose
-	 * messages match it.
+	 * Every whitespace-separated term must appear in the title, the workspace
+	 * path or the worktree branch, in any case. queryTaskHistoryWithContent adds
+	 * the conversations whose messages match it.
 	 */
 	searchQuery?: string
 	/** "newest" (the default), "oldest", "mostExpensive" or "mostTokens". */
 	sortBy?: string
-	/** Only conversations bound to this workspace. */
+	/** Only conversations bound to this workspace, or started from it in a worktree of their own. */
 	workspacePath?: string
 	/** Only conversations last active at or after this time (ms since epoch). 0 or absent = no lower bound. */
 	fromTs?: number
@@ -31,6 +32,10 @@ export interface TaskHistoryQuery {
 interface TaskHistoryRow {
 	title: string
 	workspacePath: string
+	/** A worktree conversation: the workspace it was started from, which lists it too. */
+	sourceWorkspacePath?: string
+	/** A worktree conversation: its branch, which search looks at. */
+	worktreeBranch?: string
 	lastActiveTs: number
 	startedTs: number
 	isFavorited: boolean
@@ -54,9 +59,12 @@ export function isSessionRecordPinned(record: SessionHistoryRecord): boolean {
 
 function sessionRecordToRow(record: SessionHistoryRecord): TaskHistoryRow {
 	const lastActiveTs = sessionRecordLastActiveTs(record)
+	const worktree = metadataWorktree(record.metadata)
 	return {
 		title: sessionRecordTitle(record),
 		workspacePath: sessionRecordWorkspacePath(record),
+		sourceWorkspacePath: worktree?.sourceWorkspacePath,
+		worktreeBranch: worktree?.branch,
 		lastActiveTs,
 		startedTs: metadataNumber(record.metadata, "startedTs") || dateStringToTimestamp(record.startedAt) || lastActiveTs,
 		isFavorited: isSessionRecordFavorited(record),
@@ -70,7 +78,7 @@ export function taskHistoryRowMatches(row: TaskHistoryRow, query: TaskHistoryQue
 	if (query.favoritesOnly && !row.isFavorited) {
 		return false
 	}
-	if (query.workspacePath && (!row.workspacePath || !arePathsEqual(row.workspacePath, query.workspacePath))) {
+	if (query.workspacePath && !rowInWorkspace(row, query.workspacePath)) {
 		return false
 	}
 	// A conversation spans from its start to its last activity; it is in the
@@ -83,12 +91,18 @@ export function taskHistoryRowMatches(row: TaskHistoryRow, query: TaskHistoryQue
 	}
 	const terms = (query.searchQuery ?? "").toLowerCase().split(/\s+/).filter(Boolean)
 	if (terms.length > 0) {
-		const haystack = `${row.title}\n${row.workspacePath}`.toLowerCase()
+		const haystack = `${row.title}\n${row.workspacePath}\n${row.worktreeBranch ?? ""}`.toLowerCase()
 		if (!terms.every((term) => haystack.includes(term))) {
 			return false
 		}
 	}
 	return true
+}
+
+function rowInWorkspace(row: TaskHistoryRow, workspacePath: string): boolean {
+	return [row.workspacePath, row.sourceWorkspacePath].some(
+		(candidate) => !!candidate && arePathsEqual(candidate, workspacePath),
+	)
 }
 
 function totalTokens(record: SessionHistoryRecord): number {

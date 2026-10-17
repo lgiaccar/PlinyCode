@@ -6,12 +6,14 @@ import { WorkspaceSelect, type WorkspaceSelection } from "./WorkspaceSelect"
 const mocks = vi.hoisted(() => ({
 	listRecentWorkspaces: vi.fn(),
 	pickWorkspace: vi.fn(),
+	isGitRepository: vi.fn(),
 }))
 
 vi.mock("@/services/grpc-client", () => ({
 	WorkspaceServiceClient: {
 		listRecentWorkspaces: mocks.listRecentWorkspaces,
 		pickWorkspace: mocks.pickWorkspace,
+		isGitRepository: mocks.isGitRepository,
 	},
 }))
 
@@ -103,6 +105,36 @@ describe("NewTaskWorkspacePicker", () => {
 		fireEvent.change(screen.getByLabelText("select"), { target: { value: "__pick_file__" } })
 		await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ path: "/picked" })))
 		expect(mocks.pickWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "workspaceFile" }))
+	})
+
+	it("offers 'Run in worktree' only for a git repository, and reports the choice", async () => {
+		mocks.listRecentWorkspaces.mockResolvedValue({ current, recent })
+		mocks.isGitRepository.mockImplementation(async ({ value }: { value: string }) => ({ value: value === "" }))
+		const onWorktreeChange = vi.fn()
+		const { rerender } = render(
+			<NewTaskWorkspacePicker onChange={vi.fn()} onWorktreeChange={onWorktreeChange} value={undefined} worktree={false} />,
+		)
+
+		// The window's workspace ("") is a repository.
+		const checkbox = await screen.findByTestId("new-task-worktree")
+		expect(mocks.isGitRepository).toHaveBeenCalledWith(expect.objectContaining({ value: "" }))
+		fireEvent.click(checkbox)
+		expect(onWorktreeChange).toHaveBeenCalledWith(true)
+
+		// Another workspace that is not: the checkbox goes, and the choice is dropped.
+		const other = { path: "/home/dev/other", kind: "folder" as const, folders: ["/home/dev/other"] }
+		rerender(<NewTaskWorkspacePicker onChange={vi.fn()} onWorktreeChange={onWorktreeChange} value={other} worktree />)
+		await waitFor(() => expect(onWorktreeChange).toHaveBeenLastCalledWith(false))
+		expect(screen.queryByTestId("new-task-worktree")).toBeNull()
+	})
+
+	it("does not ask about git when the caller offers no worktree choice", async () => {
+		mocks.listRecentWorkspaces.mockResolvedValue({ current, recent })
+		mocks.isGitRepository.mockClear()
+		render(<NewTaskWorkspacePicker onChange={vi.fn()} value={undefined} />)
+		await waitFor(() => expect(screen.getByTestId("trigger").textContent).toContain("dev/PlinyCode"))
+		expect(mocks.isGitRepository).not.toHaveBeenCalled()
+		expect(screen.queryByTestId("new-task-worktree")).toBeNull()
 	})
 })
 

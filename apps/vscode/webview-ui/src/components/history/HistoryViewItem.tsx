@@ -12,6 +12,7 @@ import {
 	DownloadIcon,
 	FolderIcon,
 	FolderOpenIcon,
+	GitBranchIcon,
 	PencilIcon,
 	PinIcon,
 	StarIcon,
@@ -205,6 +206,7 @@ const HistoryViewItem = ({
 				<Tooltip>
 					<TooltipContent className="max-w-xs" side="bottom">
 						{workspaceRoot || "Unknown workspace"}
+						{item.worktreeBranch && ` (a git worktree on the branch ${item.worktreeBranch})`}
 					</TooltipContent>
 					<TooltipTrigger asChild>
 						<div className="flex items-center gap-1 text-xs text-description min-w-0 w-fit max-w-full">
@@ -212,6 +214,14 @@ const HistoryViewItem = ({
 							<span className="whitespace-nowrap overflow-hidden text-ellipsis min-w-0 opacity-70">
 								{workspaceLabel ?? "Unknown workspace"}
 							</span>
+							{item.worktreeBranch && (
+								<span
+									className="flex items-center gap-0.5 shrink-0 opacity-70"
+									data-testid="history-worktree-marker">
+									<GitBranchIcon size={11} />
+									worktree
+								</span>
+							)}
 						</div>
 					</TooltipTrigger>
 				</Tooltip>

@@ -180,6 +180,29 @@ describe("SdkTaskHistory", () => {
 		expect(historyItemToSessionMetadata(unboundItem)).not.toHaveProperty("workspacePath")
 	})
 
+	it("carries a conversation's worktree through metadata, HistoryItem and TaskItem, and ignores a malformed one", () => {
+		const worktree = {
+			repoRoot: "/repo",
+			branch: "plinycode/fix-ab12",
+			path: "/repo.worktrees/fix-ab12",
+			sourceWorkspacePath: "/repo",
+		}
+		const record = makeSessionRecord("task-wt", {
+			cwd: worktree.path,
+			workspaceRoot: worktree.path,
+			metadata: { title: "Fix", workspacePath: worktree.path, workspaceKind: "folder", worktree },
+		})
+		const item = sessionHistoryRecordToHistoryItem(record)
+		expect(item.worktree).toEqual(worktree)
+		expect(sessionHistoryRecordToTaskItemFields(record).worktreeBranch).toBe("plinycode/fix-ab12")
+		// A resume re-creates the record from the item: the worktree must survive it.
+		expect(historyItemToSessionMetadata(item)).toMatchObject({ worktree })
+
+		const malformed = makeSessionRecord("task-bad", { metadata: { title: "Bad", worktree: { branch: "x" } } })
+		expect(sessionHistoryRecordToHistoryItem(malformed).worktree).toBeUndefined()
+		expect(sessionHistoryRecordToTaskItemFields(malformed).worktreeBranch).toBe("")
+	})
+
 	it("falls back to workspaceRoot for the TaskItem workspace field when cwd is unset", () => {
 		const record = makeSessionRecord("task-workspace-fallback", {
 			cwd: "",

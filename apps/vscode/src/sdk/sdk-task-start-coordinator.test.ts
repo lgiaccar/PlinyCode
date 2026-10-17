@@ -209,6 +209,97 @@ describe("SdkTaskStartCoordinator", () => {
 		expect(options.onWorkspaceUsed).not.toHaveBeenCalled()
 	})
 
+	it("runs a task in a new worktree: the worktree is its cwd, its workspace and its metadata", async () => {
+		const { coordinator, options } = makeCoordinator()
+		const windowWorkspace = { path: "/workspace", kind: "folder" as const, folders: ["/workspace"] }
+		const created = {
+			repoRoot: "/workspace",
+			branch: "plinycode/fix-login-ab12",
+			path: "/workspace.worktrees/fix-login-ab12",
+		}
+		const emitHookMessage = vi.fn()
+		Object.assign(options.messages, { emitHookMessage })
+		options.getWindowWorkspace = vi.fn().mockResolvedValue(windowWorkspace)
+		options.setActiveTaskWorkspace = vi.fn()
+		options.onWorkspaceUsed = vi.fn()
+		options.createTaskWorktree = vi.fn().mockResolvedValue({ ...created, notes: ["uncommitted changes stay behind"] })
+
+		const sessionId = await coordinator.initTask("fix login", undefined, undefined, undefined, undefined, undefined, {
+			worktree: true,
+		})
+
+		const worktree = { ...created, sourceWorkspacePath: "/workspace" }
+		const bound = { path: created.path, kind: "folder", folders: [created.path] }
+		expect(options.createTaskWorktree).toHaveBeenCalledWith({ folder: "/workspace", title: "fix login" })
+		expect(options.setActiveTaskWorkspace).toHaveBeenCalledWith(bound, created.path)
+		// The workspace the user picked is the recent one, not the throwaway worktree.
+		expect(options.onWorkspaceUsed).toHaveBeenCalledWith(windowWorkspace)
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(expect.objectContaining({ cwd: created.path }))
+		expect(options.buildStartSessionInput).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ cwd: created.path }),
+		)
+		expect(options.sessions.startNewSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionMetadata: { workspacePath: created.path, workspaceKind: "folder", worktree },
+			}),
+		)
+		expect(options.createHistoryItemFromSession).toHaveBeenCalledWith(
+			sessionId,
+			"fix login",
+			"model",
+			created.path,
+			created.path,
+			bound,
+		)
+		expect(options.taskHistory.updateTaskHistoryItem).toHaveBeenCalledWith(
+			expect.objectContaining({ id: sessionId, worktree }),
+		)
+		expect(emitHookMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				say: "info",
+				text: expect.stringMatching(/plinycode\/fix-login-ab12[\s\S]*uncommitted changes stay behind/),
+			}),
+		)
+	})
+
+	it("leaves the workspace alone without the worktree option", async () => {
+		const { coordinator, options } = makeCoordinator()
+		options.createTaskWorktree = vi.fn()
+
+		await coordinator.initTask("hello")
+
+		expect(options.createTaskWorktree).not.toHaveBeenCalled()
+		expect(options.sessionConfigBuilder.build).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/workspace" }))
+		expect(options.taskHistory.updateTaskHistoryItem).toHaveBeenCalledWith(
+			expect.not.objectContaining({ worktree: expect.anything() }),
+		)
+	})
+
+	it("starts nothing and shows an error row when the worktree cannot be created", async () => {
+		const { coordinator, options } = makeCoordinator()
+		options.createTaskWorktree = vi.fn().mockRejectedValue(new Error("/workspace is not in a git repository."))
+
+		const sessionId = await coordinator.initTask("hello", undefined, undefined, undefined, undefined, undefined, {
+			worktree: true,
+		})
+
+		expect(sessionId).toBeUndefined()
+		expect(options.setTask).not.toHaveBeenCalled()
+		expect(options.sessions.startNewSession).not.toHaveBeenCalled()
+		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					say: "error",
+					text: expect.stringContaining(
+						"Could not create a git worktree for this conversation: /workspace is not in a git",
+					),
+				}),
+			],
+			expect.anything(),
+		)
+	})
+
 	it("refuses to start in a chosen workspace whose folder is missing", async () => {
 		vi.mocked(isDirectory).mockResolvedValue(false)
 		const { coordinator, options } = makeCoordinator()

@@ -7,7 +7,7 @@
  */
 import { promises as fs } from "node:fs"
 import path from "node:path"
-import { git } from "./worktrees"
+import { git } from "@/services/git/worktrees"
 
 const REPORT_FOLDER = ".plinycode"
 const EXCLUDE_LINE = `/${REPORT_FOLDER}/`
