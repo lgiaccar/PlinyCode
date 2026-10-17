@@ -36,7 +36,6 @@ function session(overrides: Partial<SessionRecord> = {}): SessionRecord {
 		workspaceRoot: "/work/project",
 		enableTools: true,
 		enableSpawn: false,
-		enableTeams: false,
 		isSubagent: false,
 		prompt: "Repair the parser",
 		metadata: { title: "Parser repair" },

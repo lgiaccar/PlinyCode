@@ -531,6 +531,11 @@
 					"default": true,
 					"description": "After PlinyCode edits a file, tell the model which new errors the editor reports for that file, so it can fix them right away. An edit waits up to 3 seconds for the language server; when PlinyCode edits a file that is not open in a tab, as with Background Edit, the file is opened in a background tab while it is checked."
 				},
+				"plinycode.codeIntel.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Give the model the find_symbol and code_navigate tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, and a symbol's definition, references and type. Applies to the next conversation."
+				},
 				"plinycode.memory.maxTokens": {
 					"type": "integer",
 					"default": 4000,
@@ -608,7 +613,7 @@
 		"format": "biome format --config-path ./biome.jsonc --no-errors-on-unmatched --files-ignore-unknown=true --diagnostic-level=error --semicolons=as-needed",
 		"format:fix": "biome check --config-path ./biome.jsonc --changed --since main --no-errors-on-unmatched --files-ignore-unknown=true --write --semicolons=as-needed",
 		"fix:all": "biome check --config-path ./biome.jsonc --no-errors-on-unmatched --files-ignore-unknown=true --write --diagnostic-level=error --unsafe --semicolons=as-needed",
-		"ci:check-all": "bun run --parallel check-types lint format",
+		"ci:check-all": "bun run --parallel check-types lint format test:discovery",
 		"ci:build": "bun run protos && bun run build:webview && bun esbuild.mjs && bun run compile-tests",
 		"pretest": "bun run compile && bun run compile-tests && bun run lint",
 		"test": "bun run test:unit && bun run test:integration",
@@ -616,6 +621,7 @@
 		"test:unit": "bun scripts/run-bun-unit-tests.ts",
 		"test:vitest": "vitest run --config vitest.config.ts",
 		"test:vitest:watch": "vitest --config vitest.config.ts",
+		"test:discovery": "bun scripts/check-test-discovery.ts",
 		"test:bun": "bun scripts/run-bun-tests.ts",
 		"test:bun:unit": "bun scripts/run-bun-unit-tests.ts",
 		"test:coverage": "bun run compile-tests && vscode-test --coverage",

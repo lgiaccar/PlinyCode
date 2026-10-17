@@ -6,7 +6,6 @@ import {
 } from "./model-tool-routing";
 import { resolveToolPresetName, ToolPresets } from "./presets";
 import { createSpawnAgentTool } from "./team/spawn-agent-tool";
-import { TEAM_TOOL_NAMES } from "./team/team-tools";
 import type { DefaultToolsConfig } from "./types";
 
 export interface ToolCatalogEntry {
@@ -33,7 +32,6 @@ export interface BuiltinToolAvailabilityContext {
 	providerId?: string;
 	modelId?: string;
 	enableSpawnAgent?: boolean;
-	enableAgentTeams?: boolean;
 	disabledToolIds?: ReadonlySet<string>;
 	enabledModelToolIds?: ReadonlySet<string>;
 }
@@ -108,12 +106,6 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 			.description,
 		headlessToolNames: ["spawn_agent"],
 	},
-	{
-		id: "teams",
-		description:
-			"Enable team collaboration tools for teammate management, task coordination, mailbox messaging, mission logs, and outcomes.",
-		headlessToolNames: [...TEAM_TOOL_NAMES],
-	},
 ] as const;
 
 const TOOL_NAME_TO_FLAG: Partial<
@@ -163,7 +155,6 @@ type ResolvedToolFlags = Pick<
 	| "enableSubmitAndExit"
 > & {
 	enableSpawnAgent?: boolean;
-	enableAgentTeams?: boolean;
 };
 
 function resolvePresetFlags(context: BuiltinToolAvailabilityContext): {
@@ -185,9 +176,6 @@ function resolvePresetFlags(context: BuiltinToolAvailabilityContext): {
 			...routed,
 			...(typeof context.enableSpawnAgent === "boolean"
 				? { enableSpawnAgent: context.enableSpawnAgent }
-				: {}),
-			...(typeof context.enableAgentTeams === "boolean"
-				? { enableAgentTeams: context.enableAgentTeams }
 				: {}),
 		},
 	};
@@ -220,9 +208,6 @@ function isEntryEnabledByDefault(
 	const { flags } = resolvePresetFlags(context);
 	if (entryId === "spawn_agent") {
 		return flags.enableSpawnAgent === true;
-	}
-	if (entryId === "teams") {
-		return flags.enableAgentTeams === true;
 	}
 	if (entryId === "tasks") {
 		return true;

@@ -21,7 +21,6 @@ function createConfig(
 		systemPrompt: "",
 		enableTools: false,
 		enableSpawnAgent: false,
-		enableAgentTeams: false,
 		...overrides,
 	};
 }

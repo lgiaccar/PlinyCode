@@ -5,6 +5,7 @@ import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTermin
 import { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import type { ActiveSession } from "./cline-session-factory"
+import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import type { ConversationEditorState } from "./context/editor-state"
 import { forgetSession } from "./router/router-health"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
@@ -34,6 +35,8 @@ interface SdkSessionLifecycleOptions {
 	getTerminalManager?: () => VscodeTerminalManager
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
+	/** The language servers behind `find_symbol` and `code_navigate`; undefined leaves the tools out. */
+	getCodeIntel?: () => CodeIntelSource | undefined
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void
 	onSendError: (error: unknown, sessionId: string) => Promise<void> | void
@@ -455,6 +458,7 @@ export class SdkSessionLifecycle {
 				readFileExecutor: this.options.readFileExecutor,
 				getTerminalManager: this.options.getTerminalManager,
 				foregroundCommands: this.options.foregroundCommands,
+				getCodeIntel: this.options.getCodeIntel,
 			})
 				.then((sdkHost) => {
 					this.ensureSharedHostSubscription(sdkHost)

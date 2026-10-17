@@ -20,58 +20,38 @@ import type {
 	ToolExecutors,
 } from "../../extensions/tools";
 import type {
-	AgentTeamsRuntime,
 	DelegatedAgentConfigProvider,
 	SubAgentEndContext,
 	SubAgentStartContext,
-	TeamEvent,
 } from "../../extensions/tools/team";
 import type { WorkspaceManager } from "../../services/workspace/workspace-manager";
 import type { CoreSessionConfig } from "../../types/config";
 import type { RuleFileFilter } from "../safety/rules";
-
-/**
- * Internal structural alias for the lead-agent handle that
- * {@link BuiltRuntime.registerLeadAgent} hands off to
- * `runtime-builder.ts`. Narrowed to only the `.addTools()` surface the
- * callback exercises; avoids depending on the agent runtime's `Agent`
- * class during the PLAN.md §3.6 Step 5 type-only migration. When
- * SessionRuntime is rebuilt in Step 6, this field is expected to be
- * dropped entirely per §3.5 row #2.
- */
-type LeadAgentHandle = {
-	addTools(tools: AgentTool[]): unknown;
-};
 
 export interface BuiltRuntime {
 	tools: AgentTool[];
 	modelTools?: ModelTool[];
 	hooks?: AgentHooks;
 	logger?: BasicLogger;
-	teamRuntime?: AgentTeamsRuntime;
-	teamRestoredFromPersistence?: boolean;
 	delegatedAgentConfigProvider?: DelegatedAgentConfigProvider;
 	extensions?: AgentConfig["extensions"];
 	completionPolicy?: AgentConfig["completionPolicy"];
-	registerLeadAgent?: (agent: LeadAgentHandle) => void;
 	shutdown: (reason: string) => Promise<void> | void;
 }
 
 export interface RuntimeBuilderInput {
 	config: CoreSessionConfig;
 	/**
-	 * Host-resolved stable end-user identity, forwarded so delegated agents
-	 * (sub-agents / teammates) send the same gateway `userId` as the lead.
+	 * Host-resolved stable end-user identity, forwarded so delegated
+	 * sub-agents send the same gateway `userId` as the lead.
 	 */
 	distinctId?: string;
 	hooks?: AgentHooks;
 	extensions?: AgentConfig["extensions"];
-	onTeamEvent?: (event: TeamEvent) => void;
 	onSubAgentEvent?: (event: AgentEvent) => void;
 	onSubAgentStart?: (context: SubAgentStartContext) => void | Promise<void>;
 	onSubAgentEnd?: (context: SubAgentEndContext) => void | Promise<void>;
 	createSpawnTool?: () => AgentTool;
-	onTeamRestored?: () => void;
 	userInstructionService?: UserInstructionConfigService;
 	/** Host predicate that drops rules loaded from disabled files. */
 	ruleFilter?: RuleFileFilter;

@@ -32,7 +32,6 @@ import type {
 import type {
 	SubAgentEndContext,
 	SubAgentStartContext,
-	TeamEvent,
 } from "../extensions/tools/team";
 import { createCheckpointHooks } from "../hooks/checkpoint-hooks";
 import {
@@ -270,7 +269,6 @@ export interface PrepareLocalRuntimeBootstrapOptions {
 	 */
 	defaultFetch?: typeof fetch;
 	onPluginEvent: (event: { name: string; payload?: unknown }) => void;
-	onTeamEvent: (event: TeamEvent) => void;
 	createSubAgentLifecycleCallbacks?: (config: CoreSessionConfig) => {
 		onSubAgentEvent?: (event: AgentEvent) => void;
 		onSubAgentStart?: (context: SubAgentStartContext) => void | Promise<void>;
@@ -313,7 +311,6 @@ export async function prepareLocalRuntimeBootstrap(
 		defaultToolPolicies,
 		defaultFetch,
 		onPluginEvent,
-		onTeamEvent,
 		createSubAgentLifecycleCallbacks,
 		createSpawnTool,
 		localRuntime,
@@ -326,7 +323,6 @@ export async function prepareLocalRuntimeBootstrap(
 		userInstructionService,
 		ruleFilter,
 		configExtensions,
-		onTeamRestored,
 		...localConfigFields
 	} = localRuntime ?? {};
 	const localConfig =
@@ -519,9 +515,7 @@ export async function prepareLocalRuntimeBootstrap(
 			config,
 			hooks,
 			extensions,
-			onTeamEvent,
 			createSpawnTool,
-			onTeamRestored: onTeamRestored,
 			onSubAgentEvent: subAgentLifecycleCallbacks?.onSubAgentEvent,
 			onSubAgentStart: subAgentLifecycleCallbacks?.onSubAgentStart,
 			onSubAgentEnd: subAgentLifecycleCallbacks?.onSubAgentEnd,

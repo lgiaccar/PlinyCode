@@ -624,6 +624,74 @@ const ChatRowContent = memo(
 							/>
 						</div>
 					)
+				case "findSymbol":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								{toolIcon("symbol-class")}
+								<span className="font-bold">
+									{tool.path ? (
+										<>
+											PlinyCode looked up the outline of <code className="break-all">{tool.path}</code>
+											{tool.regex ? (
+												<>
+													{" "}
+													for <code className="break-all">{tool.regex}</code>
+												</>
+											) : null}
+											:
+										</>
+									) : (
+										<>
+											PlinyCode looked up symbols matching <code className="break-all">{tool.regex}</code>:
+										</>
+									)}
+								</span>
+							</div>
+							{tool.content ? (
+								<CodeAccordian
+									code={tool.content}
+									isExpanded={isExpanded}
+									language="shell-session"
+									onToggleExpand={handleToggle}
+									path={tool.path ?? "workspace"}
+								/>
+							) : null}
+						</div>
+					)
+				case "codeNavigate":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								{toolIcon(
+									tool.action === "references"
+										? "references"
+										: tool.action === "hover"
+											? "symbol-property"
+											: "go-to-file",
+								)}
+								<span className="font-bold">
+									PlinyCode looked up{" "}
+									{tool.action === "references"
+										? "the references to"
+										: tool.action === "hover"
+											? "the type of"
+											: "the definition of"}{" "}
+									<code className="break-all">{tool.regex}</code> in{" "}
+									<code className="break-all">{tool.path}</code>:
+								</span>
+							</div>
+							{tool.content ? (
+								<CodeAccordian
+									code={tool.content}
+									isExpanded={isExpanded}
+									language="shell-session"
+									onToggleExpand={handleToggle}
+									path={tool.path ?? ""}
+								/>
+							) : null}
+						</div>
+					)
 				case "searchFiles":
 					return (
 						<div>

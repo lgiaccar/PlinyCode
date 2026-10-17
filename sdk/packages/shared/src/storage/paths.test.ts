@@ -33,7 +33,6 @@ import {
 	resolveRulesConfigSearchPaths,
 	resolveSessionDataDir,
 	resolveSkillsConfigSearchPaths,
-	resolveTeamDataDir,
 	resolveWorkflowsConfigSearchPaths,
 	resolveWorkspaceRulesConfigPaths,
 	setHomeDir,
@@ -50,7 +49,6 @@ type EnvSnapshot = {
 	CLINE_MCP_SETTINGS_PATH: string | undefined;
 	CLINE_PROVIDER_SETTINGS_PATH: string | undefined;
 	CLINE_SESSION_DATA_DIR: string | undefined;
-	CLINE_TEAM_DATA_DIR: string | undefined;
 };
 
 function captureEnv(): EnvSnapshot {
@@ -64,7 +62,6 @@ function captureEnv(): EnvSnapshot {
 		CLINE_MCP_SETTINGS_PATH: process.env.CLINE_MCP_SETTINGS_PATH,
 		CLINE_PROVIDER_SETTINGS_PATH: process.env.CLINE_PROVIDER_SETTINGS_PATH,
 		CLINE_SESSION_DATA_DIR: process.env.CLINE_SESSION_DATA_DIR,
-		CLINE_TEAM_DATA_DIR: process.env.CLINE_TEAM_DATA_DIR,
 	};
 }
 
@@ -80,7 +77,6 @@ function restoreEnv(snapshot: EnvSnapshot): void {
 	process.env.CLINE_PROVIDER_SETTINGS_PATH =
 		snapshot.CLINE_PROVIDER_SETTINGS_PATH;
 	process.env.CLINE_SESSION_DATA_DIR = snapshot.CLINE_SESSION_DATA_DIR;
-	process.env.CLINE_TEAM_DATA_DIR = snapshot.CLINE_TEAM_DATA_DIR;
 }
 
 describe("storage path resolution", () => {
@@ -117,14 +113,6 @@ describe("storage path resolution", () => {
 		process.env.CLINE_DATA_DIR = "/tmp/cline-data";
 
 		expect(resolveSessionDataDir()).toBe(join("/tmp/cline-data", "sessions"));
-	});
-
-	it("falls back to CLINE_DATA_DIR/teams for team storage", () => {
-		snapshot = captureEnv();
-		delete process.env.CLINE_TEAM_DATA_DIR;
-		process.env.CLINE_DATA_DIR = "/tmp/cline-data";
-
-		expect(resolveTeamDataDir()).toBe(join("/tmp/cline-data", "teams"));
 	});
 
 	it("falls back to CLINE_DATA_DIR/connectors for connector storage", () => {

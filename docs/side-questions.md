@@ -9,7 +9,7 @@ Use it for a quick question ("what does this function return?") in the middle of
 - The checkbox is enabled once a conversation has started and the agent is idle. A message sent while the agent works joins its turn, and a reply to a question the agent asked answers that question, so neither can be a side question.
 - It applies to one message and clears itself after the send. While it is ticked, the focused prompt box has a dashed outline.
 - The question shows a **Side question · not in the context** label in the chat, also after the conversation is reopened.
-- A side question changes nothing, in any mode. It runs under ask mode's rules: it can read, search, fetch web pages and run read-only commands, but the agent cannot edit files, run file-editing commands, update the task list, or start sub-agents or teammates. A change made there would be one the conversation is never told about.
+- A side question changes nothing, in any mode. It runs under ask mode's rules: it can read, search, fetch web pages and run read-only commands, but the agent cannot edit files, run file-editing commands, update the task list, or start sub-agents. A change made there would be one the conversation is never told about.
 
 ## How it works
 

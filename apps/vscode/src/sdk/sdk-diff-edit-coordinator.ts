@@ -145,9 +145,10 @@ export class SdkDiffEditCoordinator {
 	 * get a brief preview that lingers shortly after the write so the user sees it land.
 	 */
 	async executeEditorTool(input: EditFileInput, cwd: string, context: AgentToolContext): Promise<string> {
-		const problems = this.beginProblemCheck(() => [
-			{ absolutePath: resolveEditPath(cwd, input.path), displayPath: input.path },
-		])
+		const problems = this.beginProblemCheck(
+			() => [{ absolutePath: resolveEditPath(cwd, input.path), displayPath: input.path }],
+			cwd,
+		)
 		try {
 			const result = await this.applyEditorTool(input, cwd, context, problems)
 			// By now the preview has closed and the edited file is shown, which is when
@@ -200,7 +201,7 @@ export class SdkDiffEditCoordinator {
 	 */
 	async executeApplyPatchTool(input: ApplyPatchInput, cwd: string, context: AgentToolContext): Promise<string> {
 		const patchedFiles = this.problemsReporter?.isEnabled() ? await listPatchedFiles(input, cwd) : []
-		const problems = this.beginProblemCheck(() => patchedFiles)
+		const problems = this.beginProblemCheck(() => patchedFiles, cwd)
 		try {
 			const result = await this.applyPatchTool(input, cwd, context, problems)
 			return problems ? result + (await problems.report(context.signal)) : result
@@ -251,9 +252,9 @@ export class SdkDiffEditCoordinator {
 	 * adds can be told apart afterwards. Never throws: without a check the edit just
 	 * returns the executor's result.
 	 */
-	private beginProblemCheck(listFiles: () => EditedFile[]): EditProblemCheck | undefined {
+	private beginProblemCheck(listFiles: () => EditedFile[], cwd: string): EditProblemCheck | undefined {
 		try {
-			return this.problemsReporter?.begin(listFiles())
+			return this.problemsReporter?.begin(listFiles(), cwd)
 		} catch {
 			// An input the executor will reject (a path outside the cwd, say) has no file to check.
 			return undefined

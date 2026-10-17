@@ -29,9 +29,9 @@ transcript.
 {
   "version": 1,
   "updated_at": "2026-04-22T17:42:10.123Z",
-  "agent": "lead" | "subagent" | "teammate",
+  "agent": "lead" | "subagent",
   "sessionId": "<session-id>",
-  "taskType": "...",              // optional; present for subagent/team runs
+  "taskType": "...",              // optional; present for subagent runs
   "messages": [ /* see below */ ],
   "system_prompt": "..."          // optional
 }
@@ -130,8 +130,8 @@ covered by the LocalRuntimeHost e2e contract test in
    that turn carries the turn's `metrics`. Earlier assistant messages in the
    same turn carry `modelInfo` but no `metrics`.
 
-These behaviors are identical across CLI, desktop sidecar, and subagent /
-team-task session paths.
+These behaviors are identical across CLI, desktop sidecar, and subagent
+session paths.
 
 ## Versioning
 

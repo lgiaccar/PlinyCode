@@ -10,10 +10,7 @@ import type {
 	ToolApprovalResult,
 } from "@plinycode/shared";
 import { SessionRuntime } from "../../../runtime/orchestration/session-runtime-orchestrator";
-import {
-	buildSubAgentSystemPrompt,
-	buildTeammateSystemPrompt,
-} from "./subagent-prompts";
+import { buildSubAgentSystemPrompt } from "./subagent-prompts";
 
 type AgentExtension = NonNullable<AgentConfig["extensions"]>[number];
 
@@ -75,10 +72,7 @@ export interface DelegatedAgentConfigProvider {
 	): void;
 }
 
-export type DelegatedAgentKind = "subagent" | "teammate";
-
 export interface BuildDelegatedAgentConfigOptions {
-	kind: DelegatedAgentKind;
 	prompt: string;
 	tools: AgentTool[];
 	configProvider: DelegatedAgentConfigProvider;
@@ -134,10 +128,7 @@ export function buildDelegatedAgentConfig(
 	options: BuildDelegatedAgentConfigOptions,
 ): AgentConfig & { role?: string } {
 	const runtimeConfig = options.configProvider.getRuntimeConfig();
-	const systemPrompt =
-		options.kind === "teammate"
-			? buildTeammateSystemPrompt(options.prompt, runtimeConfig)
-			: buildSubAgentSystemPrompt(options.prompt, runtimeConfig);
+	const systemPrompt = buildSubAgentSystemPrompt(options.prompt, runtimeConfig);
 
 	return {
 		...options.configProvider.getConnectionConfig(),

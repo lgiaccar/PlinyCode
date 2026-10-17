@@ -26,7 +26,8 @@
 				"npm: build:webview",
 				"npm: dev:webview",
 				"npm: watch:tsc",
-				"npm: watch:esbuild"
+				"npm: watch:esbuild",
+				"npm: watch:sdk"
 			],
 			"presentation": {
 				"reveal": "always"
@@ -35,20 +36,6 @@
 				"kind": "build",
 				"isDefault": true
 			}
-		},
-		{
-			"label": "watch:test",
-			"dependsOn": [
-				"npm: protos",
-				"npm: build:webview:test",
-				"npm: dev:webview",
-				"npm: watch:tsc",
-				"npm: watch:esbuild:test"
-			],
-			"presentation": {
-				"reveal": "always"
-			},
-			"group": "build"
 		},
 		{
 			"type": "shell",
@@ -68,28 +55,6 @@
 				"cwd": "${workspaceFolder}/apps/vscode",
 				"env": {
 					"IS_DEV": "true"
-				}
-			}
-		},
-		{
-			"type": "shell",
-			"command": "bun run build:webview:test",
-			"group": "build",
-			"problemMatcher": [],
-			"isBackground": false,
-			"label": "npm: build:webview:test",
-			"dependsOn": [
-				"npm: protos"
-			],
-			"presentation": {
-				"group": "watch",
-				"reveal": "always"
-			},
-			"options": {
-				"cwd": "${workspaceFolder}/apps/vscode",
-				"env": {
-					"IS_DEV": "true",
-					"IS_TEST": "true"
 				}
 			}
 		},
@@ -171,32 +136,24 @@
 			}
 		},
 		{
+			// Rebuilds sdk/packages/{shared,llms,core} dist/ in dependency order when
+			// their source changes (sdk/scripts/watch-sdk.ts). It does not build on
+			// start: build-sdk:debug does the first full build. The extension host
+			// does not reload dist/, so restart the debug session after a rebuild.
 			"type": "shell",
-			"command": "bun run watch:esbuild:test",
+			"command": "bun run watch:sdk",
 			"group": "build",
 			"problemMatcher": {
-				"pattern": [
-					{
-						"regexp": "^✘ \\[ERROR\\] (.*)$",
-						"message": 1
-					},
-					{
-						"regexp": "^\\s+(.*):(\\d+):(\\d+):$",
-						"file": 1,
-						"line": 2,
-						"column": 3
-					}
-				],
+				"base": "$tsc",
 				"background": {
-					"activeOnStart": true,
-					"beginsPattern": "^\\[watch\\] build started$",
-					"endsPattern": "^\\[watch\\] build finished$"
+					"activeOnStart": false,
+					"beginsPattern": "^\\[watch:sdk\\] build started",
+					"endsPattern": "^\\[watch:sdk\\] build (finished|failed)$"
 				}
 			},
 			"isBackground": true,
-			"label": "npm: watch:esbuild:test",
+			"label": "npm: watch:sdk",
 			"dependsOn": [
-				"npm: protos",
 				"build-sdk:debug"
 			],
 			"presentation": {
@@ -204,10 +161,9 @@
 				"reveal": "always"
 			},
 			"options": {
-				"cwd": "${workspaceFolder}/apps/vscode",
+				"cwd": "${workspaceFolder}",
 				"env": {
-					"IS_DEV": "true",
-					"IS_TEST": "true"
+					"CLINE_SOURCEMAPS": "1"
 				}
 			}
 		},
@@ -251,7 +207,7 @@
 			"label": "tasks: watch-tests",
 			"dependsOn": [
 				"npm: protos",
-				"npm: watch",
+				"watch",
 				"npm: watch-tests"
 			],
 			"problemMatcher": []

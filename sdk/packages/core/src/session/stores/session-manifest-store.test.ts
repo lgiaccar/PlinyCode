@@ -31,7 +31,6 @@ function row(sessionId: string, messagesPath: string): SessionRow {
 		workspaceRoot: root,
 		enableTools: true,
 		enableSpawn: false,
-		enableTeams: false,
 		isSubagent: false,
 		messagesPath,
 		updatedAt: "2026-10-09T00:00:00.000Z",

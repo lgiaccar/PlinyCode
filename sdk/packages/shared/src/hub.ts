@@ -201,11 +201,6 @@ export interface SessionMetrics {
 	totalCost?: number;
 }
 
-export interface HubTeamMembership {
-	teamId: string;
-	role?: "lead" | "teammate" | "contractor";
-}
-
 export interface HubSessionRuntimeSnapshot {
 	runId?: string;
 	status?: HubRuntimeStatus;
@@ -238,7 +233,6 @@ export interface SessionRecord {
 	runtimeSession?: {
 		agentId: string;
 		agentRole?: string;
-		team?: HubTeamMembership;
 	};
 	usage?: SessionMetrics;
 	aggregateUsage?: SessionMetrics;
@@ -257,7 +251,6 @@ export interface HubSessionSnapshot {
 	lastRunId?: string;
 	status: HubRuntimeStatus;
 	metadata?: Record<string, unknown>;
-	team?: HubTeamMembership;
 	runtime?: HubSessionRuntimeSnapshot;
 }
 
@@ -684,7 +677,6 @@ export type HubEventName =
 	| "approval.resolved"
 	| "capability.requested"
 	| "capability.resolved"
-	| "team.progress"
 	| "artifact.created"
 	| "diff.created"
 	| "spoke.started"
@@ -862,7 +854,6 @@ export interface HubSessionRuntimeOptions {
 	checkpointEnabled?: boolean;
 	enableTools?: boolean;
 	enableSpawn?: boolean;
-	enableTeams?: boolean;
 	autoApproveTools?: boolean;
 	configExtensions?: RuntimeConfigExtensionKind[];
 	clientContributions?: HubClientContribution[];
@@ -877,7 +868,6 @@ export interface HubSessionCreateInput {
 	initialMessages?: AgentMessage[];
 	agentId?: string;
 	agentRole?: string;
-	team?: HubTeamMembership;
 	modelSelection?: GatewayModelSelection;
 	runtimeOptions?: HubSessionRuntimeOptions;
 }

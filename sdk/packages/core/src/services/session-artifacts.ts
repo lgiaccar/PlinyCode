@@ -7,10 +7,7 @@ import {
 	unlinkSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-	parseSubSessionId,
-	parseTeamTaskSubSessionId,
-} from "../session/models/session-graph";
+import { parseSubSessionId } from "../session/models/session-graph";
 
 export function nowIso(): string {
 	return new Date().toISOString();
@@ -35,14 +32,6 @@ function childArtifactFileStem(sessionId: string): {
 	rootSessionId: string;
 	fileStem: string;
 } {
-	const teamTask = parseTeamTaskSubSessionId(sessionId);
-	if (teamTask) {
-		return {
-			rootSessionId: teamTask.rootSessionId,
-			fileStem: `${teamTask.agentId}__${teamTask.teamTaskId}`,
-		};
-	}
-
 	const subagent = parseSubSessionId(sessionId);
 	if (subagent) {
 		return {
@@ -129,13 +118,7 @@ export class SessionArtifacts {
 		}
 	}
 
-	public subagentArtifactPaths(
-		sessionId: string,
-		subAgentId: string,
-		activeTeamTaskSessionId?: string,
-	): SessionArtifactPaths {
-		void subAgentId;
-		void activeTeamTaskSessionId;
+	public subagentArtifactPaths(sessionId: string): SessionArtifactPaths {
 		const { rootSessionId, fileStem } = childArtifactFileStem(sessionId);
 		const dir = this.sessionArtifactsDir(rootSessionId);
 		return {

@@ -15,7 +15,6 @@ type LegacyConfig = {
 	cwd: string;
 	enableTools: boolean;
 	enableSpawnAgent: boolean;
-	enableAgentTeams: boolean;
 };
 
 function legacyBuiltinTools(cwd: string): AgentTool[] {
@@ -100,7 +99,6 @@ describe("runtime tool parity", () => {
 			cwd: makeEmptyWorkspaceCwd(),
 			enableTools: true,
 			enableSpawnAgent: true,
-			enableAgentTeams: false,
 		};
 		const createSpawnTool = makeSpawnTool;
 		const expected = normalizeParityToolNames(
@@ -126,7 +124,6 @@ describe("runtime tool parity", () => {
 			cwd: makeEmptyWorkspaceCwd(),
 			enableTools: false,
 			enableSpawnAgent: true,
-			enableAgentTeams: false,
 		};
 		const createSpawnTool = makeSpawnTool;
 		const expected = normalizeParityToolNames(
@@ -152,7 +149,6 @@ describe("runtime tool parity", () => {
 			cwd: makeEmptyWorkspaceCwd(),
 			enableTools: false,
 			enableSpawnAgent: false,
-			enableAgentTeams: false,
 		};
 		const expected = normalizeParityToolNames(
 			legacyBuildRuntimeEnvironment(config).map((tool) => tool.name),

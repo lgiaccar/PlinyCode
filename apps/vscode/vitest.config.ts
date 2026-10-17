@@ -1,30 +1,27 @@
 import path from "node:path"
-import { defineConfig } from "vitest/config"
+import { configDefaults, defineConfig } from "vitest/config"
+// bun:test and mocha files that live under the include directories below. Vitest
+// cannot filter by import, so scripts/check-test-discovery.ts generates this list
+// (`--write`) and `bun run test:discovery` fails when it drifts.
+import vitestExclude from "./vitest.exclude.json"
 
-// Vitest config for the VSCode extension's SDK-adapter and model-catalog
-// unit tests. (The bulk of the extension's unit tests still run under mocha
-// via `test:unit`; these suites are vitest-native.)
+// Vitest config for the extension's vitest-native suites (SDK adapter, model
+// catalog, controller handlers, shared helpers). A `*.test.ts` file belongs to
+// this runner iff it imports from "vitest"; files importing "bun:test" run under
+// `test:unit` and files importing "mocha" under `test:integration`.
 export default defineConfig({
 	test: {
+		// Directory globs, not a file list: a new vitest file under one of these
+		// directories runs without touching this config. A vitest file elsewhere
+		// is caught by `bun run test:discovery`.
 		include: [
 			"src/sdk/**/*.test.ts",
-			"src/sdk/trace/session-trace.test.ts",
-			"src/hosts/vscode/VscodeEditPreview.test.ts",
-			"src/shared/services/file-log-sink.test.ts",
-			"src/hosts/vscode/hostbridge/window/getActiveEditor.test.ts",
-			"src/shared/pliny.test.ts",
-			"src/shared/__tests__/workspacePath.test.ts",
-			"src/shared/__tests__/workspaceRef.test.ts",
-			"src/shared/__tests__/net-tls-fallback.test.ts",
-			"src/shared/proto-conversions/models/**/*.test.ts",
-			"src/core/controller/state/**/*.test.ts",
-			"src/core/controller/slash/**/*.test.ts",
-			"src/services/ClineClientIdentity.test.ts",
-			"src/services/mcp/__tests__/settingsLock.test.ts",
-			"src/core/controller/models/__tests__/providerCatalogHandlers.test.ts",
-			"src/core/controller/models/__tests__/resolveModelInfo.test.ts",
-			"src/core/controller/models/__tests__/providerCatalogSmoke.test.ts",
+			"src/hosts/**/*.test.ts",
+			"src/shared/**/*.test.ts",
+			"src/core/**/*.test.ts",
+			"src/services/**/*.test.ts",
 		],
+		exclude: [...configDefaults.exclude, ...vitestExclude],
 		environment: "node",
 		setupFiles: ["./src/test/vitest-setup.ts"],
 		// Several suites lazily `await import()` their subject inside the first test
@@ -34,10 +31,9 @@ export default defineConfig({
 		// (seen in catalog.test.ts and resolveModelInfo.test.ts). Raise the per-test
 		// timeout so import cost attributed to the first test doesn't cause flakes.
 		testTimeout: 20000,
-		// Some matched files are intentionally-empty placeholders that point to
-		// where the real suite lives (e.g. sdk-control-plane.test.ts), so an
-		// empty file should not fail the run.
-		passWithNoTests: true,
+		// A run that finds no tests is a discovery bug (bad glob, stale exclude),
+		// not a pass.
+		passWithNoTests: false,
 	},
 	resolve: {
 		alias: {

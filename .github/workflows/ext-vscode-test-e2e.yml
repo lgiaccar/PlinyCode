@@ -1,16 +1,22 @@
 name: ext-vscode-test-e2e
 
+# Runs on PRs and on every push to stage (the PR target) and master. A push
+# runs every job (detect-changes forces run_all); PRs go through the path
+# filter below.
 on:
     push:
         branches:
             - master
+            - stage
     pull_request:
         types: [opened, reopened, synchronize, ready_for_review]
     workflow_dispatch:
 
+# A new push to a PR cancels the PR's running checks; pushes to stage and
+# master each get a full run so every merged commit has a result.
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-    cancel-in-progress: true
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
     contents: read
@@ -58,6 +64,7 @@ jobs:
                           - 'apps/vscode/.vscodeignore'
                           - 'apps/vscode/playwright*.ts'
                           - '.github/workflows/ext-vscode-test-e2e.yml'
+                          - '.github/actions/**'
 
     matrix_prep:
         needs: detect-changes
@@ -88,21 +95,14 @@ jobs:
                 working-directory: apps/vscode
         steps:
             - uses: actions/checkout@v4
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: 1.3.14
 
-            # Cache keys below are exact-match only (no restore-keys prefix
+            # Pinned Bun and Node (.tool-versions), Bun install cache and one root
+            # `bun install --frozen-lockfile` for the whole workspace.
+            - name: Setup toolchain
+              uses: ./.github/actions/setup-toolchain
+
+            # The cache keys below are exact-match only (no restore-keys prefix
             # fallbacks); a miss just means a cold install, which is acceptable.
-
-            # Cache Bun's global install cache - keyed on the authoritative root bun.lock.
-            - name: Cache Bun install cache
-              uses: actions/cache@v4
-              id: bun-cache
-              with:
-                  path: ~/.bun/install/cache
-                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
 
             # Cache VS Code installation
             - name: Cache VS Code
@@ -122,14 +122,6 @@ jobs:
                       ~/Library/Caches/ms-playwright
                       ~/AppData/Local/ms-playwright
                   key: playwright-browsers-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-
-            # Single root install resolves the entire bun workspace at once (replaces
-            # the per-package `npm ci` steps for apps/vscode + webview-ui).
-            - name: Install workspace dependencies
-              working-directory: ${{ github.workspace }}
-              run: bun install --frozen-lockfile
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             # @plinycode/* are local workspace symlinks to source packages; build dist/
             # before building/packaging the extension for E2E.

@@ -120,10 +120,8 @@ export function manifestToSessionRecord(
 		model: manifest.model,
 		cwd: manifest.cwd,
 		workspaceRoot: manifest.workspace_root,
-		teamName: manifest.team_name,
 		enableTools: manifest.enable_tools,
 		enableSpawn: manifest.enable_spawn,
-		enableTeams: manifest.enable_teams,
 		isSubagent: false,
 		prompt: manifest.prompt,
 		metadata: manifest.metadata,
@@ -199,7 +197,7 @@ async function listHostSessionRows(
 		const rows = await host.listSessions(requestedLimit);
 		return rows.slice(0, requestedLimit);
 	}
-	// Ask the backend for root rows only so child rows (subagent / team-task
+	// Ask the backend for root rows only so child rows (sub-agent
 	// runs) cannot crowd roots out of the page. Older hubs ignore the flag and
 	// return every row, so keep filtering here and widen the scan until the
 	// page fills or the backend runs out of rows.

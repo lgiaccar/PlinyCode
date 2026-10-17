@@ -30,6 +30,17 @@ Small models often reproduce a block with the wrong indentation, or from a stale
 - Listed through ripgrep (which honors `.gitignore`) when one is available, otherwise by walking the directory and skipping dependency and build folders.
 - It is enabled together with `search_codebase` (same `enableSearch` flag), and auto-approved with the other read tools. An agent file (`.cline/agents/*.md`) that allows `search_codebase` gets it too.
 
+## Code intelligence (`find_symbol`, `code_navigate`)
+
+Two extension tools that answer through the language servers running in the VS Code window, so the model navigates code instead of grepping for it. Code is in `apps/vscode/src/sdk/code-intel/` (the tools and their formatting, host-agnostic) and `apps/vscode/src/hosts/vscode/code-intel-source.ts` (the `vscode.execute*Provider` commands).
+
+- `find_symbol({ query?, path? })`: with `path`, the file's outline as an indented `kind name  line` list, filtered by `query` when both are given; without it, the workspace symbols matching `query` as `kind name  path:line:col`, at most 40.
+- `code_navigate({ action, path, symbol, line? })`: `definition`, `references` or `hover` for a symbol as written in `path`. The tool finds the identifier in the file (the occurrence nearest to `line` when given), so the model never computes a column. Definitions and references come back grouped by file as `line:col  preview`, 30 lines at most, then `+N more in M files`; a hover is reduced to its code-fenced signature lines and a few lines of prose.
+- Both run in parallel with the other read tools and are auto-approved with them; sub-agents get them too.
+- VS Code does not say whether a language server is registered for a file, so an empty answer is retried once after 1.5 s (a server that has just loaded the file may still be indexing), and a second empty answer ends with a line that sends the model to `search_codebase`. A file extension that answers nothing twice is not waited for again in that session.
+- Language servers only know files they have loaded: a workspace symbol search misses cold files, and a file outside the window's folders (a worktree, another repository) gets file-local answers at best.
+- `plinycode.codeIntel.enabled` (default on) adds the tools to the next conversation; off removes them.
+
 ## Shell commands (`run_commands`)
 
 With Terminal Execution Mode set to VS Code Terminal (the default), commands

@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a change or an addition to PlinyCode
+labels: ["enhancement"]
+body:
+    - type: textarea
+      id: problem
+      attributes:
+          label: What is hard or missing today?
+          description: Describe the situation, not the solution. Which mode, model or tool does it involve?
+      validations:
+          required: true
+    - type: textarea
+      id: proposal
+      attributes:
+          label: What would you like PlinyCode to do?
+      validations:
+          required: true
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Workarounds or alternatives you considered
+      validations:
+          required: false

@@ -34,7 +34,6 @@ function seedSessionRecord(
 			workspace_root: "/tmp/e2e-history",
 			enable_tools: true,
 			enable_spawn: false,
-			enable_teams: false,
 			prompt: title,
 			metadata: {
 				title,

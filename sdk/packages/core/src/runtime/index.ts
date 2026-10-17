@@ -1,7 +1,4 @@
-export {
-	createTeamName,
-	DefaultRuntimeBuilder,
-} from "./orchestration/runtime-builder";
+export { DefaultRuntimeBuilder } from "./orchestration/runtime-builder";
 export type {
 	BuiltRuntime,
 	RuntimeBuilder,
