@@ -9,7 +9,7 @@
 import type { AgentTool, AgentToolContext } from "@plinycode/shared"
 import { WATCH_CI_STARTED_PREFIX, WATCH_CI_TOOL_NAME } from "@shared/ciWatch"
 import type { CiWatchManager } from "./ci-watch-manager"
-import { type CiWatchRepoOpener, createCiWatchSource, resolveCiWatchTarget } from "./ci-watch-source"
+import { type CiWatchRepoOpener, ciWatchTargetSpec, createCiWatchSource, resolveCiWatchTarget } from "./ci-watch-source"
 import type { CiWatchUntil } from "./ci-watcher"
 
 interface WatchCiToolOptions {
@@ -60,8 +60,8 @@ export function createWatchCiTool(options: WatchCiToolOptions): AgentTool {
 			"[CI WATCHER], with how many runs passed and failed, the failed jobs and steps and the log lines around " +
 			"each failure. By default it watches the open pull request of the current branch, or the branch's pushed " +
 			"head commit when it has none, and it follows new pushes. A conversation has one watch: calling watch_ci " +
-			"again replaces it, and `cancel: true` stops it. A watch ends by itself after 2 hours, and is lost if the " +
-			"editor window reloads.",
+			"again replaces it, and `cancel: true` stops it. A watch ends by itself after 2 hours, and carries on " +
+			"after the editor window reloads.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -113,6 +113,7 @@ export function createWatchCiTool(options: WatchCiToolOptions): AgentTool {
 				providerKind: repo.provider.kind,
 				head: target.head,
 				until,
+				target: ciWatchTargetSpec(options.cwd, repo, target),
 			})
 			return [
 				`${WATCH_CI_STARTED_PREFIX} for ${target.label} at commit ${target.head.slice(0, 8)} on ${repo.provider.kind}, ` +

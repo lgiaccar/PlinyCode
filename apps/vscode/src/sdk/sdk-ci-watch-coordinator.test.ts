@@ -1,7 +1,9 @@
 import type { TurnPhase } from "@shared/ExtensionMessage"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { getCiWatchManager } from "@/services/devops-mcp/builtin-mcp-registry"
+import { MemoryStore, savedRecord } from "@/services/devops-mcp/ci-watch/__tests__/fakes"
 import type { CiWatchRequest } from "@/services/devops-mcp/ci-watch/ci-watch-manager"
+import type { CiWatchRecord, CiWatchSavedWatch } from "@/services/devops-mcp/ci-watch/ci-watch-store"
 import type { ActiveSession } from "./cline-session-factory"
 import { SdkCiWatchCoordinator } from "./sdk-ci-watch-coordinator"
 
@@ -68,14 +70,19 @@ describe("SdkCiWatchCoordinator", () => {
 			notify: vi.fn<SdkCiWatchCoordinatorOptions["notify"]>(),
 			openTask: vi.fn<SdkCiWatchCoordinatorOptions["openTask"]>(),
 		}
-		coordinator = new SdkCiWatchCoordinator({
+		coordinator = build()
+	})
+
+	function build(persistence?: SdkCiWatchCoordinatorOptions["persistence"]): SdkCiWatchCoordinator {
+		return new SdkCiWatchCoordinator({
 			getDisplayedTaskId: () => displayed,
 			getActiveSession: () => active,
 			getTurnPhase: () => phase,
 			hasPendingInteraction: () => pendingInteraction,
 			...options,
+			persistence,
 		})
-	})
+	}
 
 	afterEach(() => {
 		coordinator.dispose()
@@ -214,5 +221,86 @@ describe("SdkCiWatchCoordinator", () => {
 		coordinator.noteFollowUp("try again")
 		await finishWatch()
 		expect(options.startTurn).toHaveBeenCalledTimes(6)
+	})
+
+	describe("after a window reload", () => {
+		const HELD = { headline: "CI failed.", prompt: "[CI WATCHER] CI failed for PR #7 (feature → main)." }
+		let store: MemoryStore
+		let history: Set<string>
+
+		/** A watch saved a minute ago, before the reload. */
+		const savedWatch = (conversationId: string): CiWatchRecord => {
+			const watch = savedRecord().watch as CiWatchSavedWatch
+			const now = Date.now()
+			return {
+				conversationId,
+				watch: { ...watch, startedAt: now - 60_000, headSince: now - 60_000, deadline: now + 3_600_000 },
+			}
+		}
+
+		const persistence = (): SdkCiWatchCoordinatorOptions["persistence"] => ({
+			store,
+			conversationExists: async (id) => history.has(id),
+			openSource: async () => greenWatch().source,
+		})
+
+		beforeEach(() => {
+			store = new MemoryStore()
+			history = new Set(["c1", "c2"])
+			coordinator.dispose()
+		})
+
+		it("resumes the watches of conversations that still exist and drops the others", async () => {
+			store.saved = [savedWatch("c1"), savedWatch("deleted")]
+			displayed = "other"
+			active = session("other", false)
+			coordinator = build(persistence())
+			await coordinator.restored
+			expect(coordinator.manager.watching("c1")).toBe("PR #7 (feature → main)")
+			expect(coordinator.manager.watching("deleted")).toBeUndefined()
+			expect(store.saved.map((record) => record.conversationId)).toEqual(["c1"])
+
+			// Polling resumes; the conversation is not loaded, so its report is held until it is opened.
+			await vi.advanceTimersByTimeAsync(60_000)
+			expect(options.notify).toHaveBeenCalledTimes(1)
+			expect(store.saved).toEqual([
+				{ conversationId: "c1", held: expect.objectContaining({ headline: expect.any(String) }) },
+			])
+		})
+
+		it("sends a held report when its conversation is opened", async () => {
+			store.saved = [{ conversationId: "c2", held: HELD }]
+			coordinator = build(persistence())
+			await coordinator.restored
+			expect(options.startTurn).not.toHaveBeenCalled()
+
+			displayed = "c2"
+			active = undefined
+			phase = "completed"
+			coordinator.manager.conversationOpened("c2")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(options.startTurn).toHaveBeenCalledWith(HELD.prompt)
+		})
+
+		it("sends a held report to the conversation already on screen when the restore ends", async () => {
+			store.saved = [{ conversationId: "c1", held: HELD }]
+			active = undefined
+			phase = "completed"
+			coordinator = build(persistence())
+			await coordinator.restored
+			await vi.advanceTimersByTimeAsync(0)
+			expect(options.startTurn).toHaveBeenCalledWith(HELD.prompt)
+		})
+
+		it("keeps the saved watches when the window closes", async () => {
+			coordinator = build(persistence())
+			await coordinator.restored
+			coordinator.manager.watch("c1", { ...greenWatch(), target: savedRecord().watch?.target })
+			await vi.advanceTimersByTimeAsync(0)
+			coordinator.dispose()
+			await vi.advanceTimersByTimeAsync(120_000)
+			expect(options.startTurn).not.toHaveBeenCalled()
+			expect(store.saved.map((record) => record.watch?.label)).toEqual(["PR #7 (feature → main)"])
+		})
 	})
 })
