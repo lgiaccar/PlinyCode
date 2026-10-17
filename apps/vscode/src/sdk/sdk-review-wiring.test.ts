@@ -18,7 +18,6 @@ vi.mock("vscode", () => ({
 }))
 
 vi.mock("./cline-session-factory", () => ({ buildSessionConfig: mocks.buildSessionConfig }))
-vi.mock("./hooks-adapter", () => ({ buildAgentHooks: vi.fn(() => ({})) }))
 vi.mock("./instruction-context-rows", () => ({ installInstructionContextRows: vi.fn() }))
 vi.mock("./router/router-integration", () => ({ installRouter: mocks.installRouter }))
 
@@ -32,7 +31,6 @@ describe("reviewer pass wiring", () => {
 		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, sessionId: "session-9" })
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: { getGlobalSettingsKey: () => "act" } as never,
-			emitHookMessage: vi.fn(),
 			emitRow: vi.fn(),
 			nextMessageTs: () => 1,
 			...(getRunChanges ? { getRunChanges } : {}),

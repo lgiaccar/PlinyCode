@@ -553,6 +553,54 @@ describe("AgentRuntime", () => {
 		expect(message).toContain("switch to a model with a larger output limit");
 	});
 
+	it("announces seeded input once, after run-started, without adding it again", async () => {
+		const model = new ScriptedModel([
+			() => [
+				{ type: "text-delta", text: "one" },
+				{ type: "finish", reason: "stop" },
+			],
+			() => [
+				{ type: "text-delta", text: "two" },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		const seeded: AgentMessage = {
+			id: "msg_seeded",
+			role: "user",
+			content: [{ type: "text", text: "seeded prompt" }],
+			createdAt: 0,
+		};
+		const events: string[] = [];
+		const runtime = new AgentRuntime({
+			model,
+			initialMessages: [seeded],
+			seededInputMessageCount: 1,
+			hooks: {
+				onEvent: async (event) => {
+					if (event.type === "run-started") {
+						events.push("run-started");
+					}
+					if (event.type === "message-added") {
+						events.push(`${event.message.role}:${event.message.id}`);
+					}
+				},
+			},
+		});
+
+		const first = await runtime.run("");
+		await runtime.continue();
+
+		expect(events[0]).toBe("run-started");
+		expect(events[1]).toBe("user:msg_seeded");
+		expect(events.filter((event) => event === "user:msg_seeded")).toHaveLength(
+			1,
+		);
+		expect(events.filter((event) => event === "run-started")).toHaveLength(2);
+		expect(
+			first.messages.filter((message) => message.role === "user"),
+		).toHaveLength(1);
+	});
+
 	it("does not persist an empty assistant message when the model stream fails", async () => {
 		const model = new ScriptedModel([
 			() => [{ type: "finish", reason: "error", error: "upstream failed" }],

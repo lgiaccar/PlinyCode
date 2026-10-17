@@ -1760,6 +1760,72 @@ describe("SessionRuntime real AgentRuntime smoke", () => {
 });
 
 // ---------------------------------------------------------------------------
+// user message reaches onEvent hooks (UserPromptSubmit hook files)
+// ---------------------------------------------------------------------------
+
+describe("SessionRuntime user message events", () => {
+	// SessionRuntime seeds the user message into the transcript and calls
+	// run(""), so the runtime only announced it once seededInputMessageCount
+	// existed. Until then the UserPromptSubmit hook file (an onEvent hook on a
+	// user message-added) never ran in a ClineCore session.
+	it("announces each run's user message to extension onEvent hooks once", async () => {
+		const scriptedModel: AgentModel = {
+			async stream() {
+				return (async function* () {
+					yield { type: "text-delta" as const, text: "ok" };
+					yield { type: "finish" as const, reason: "stop" as const };
+				})();
+			},
+		};
+		const seen: string[] = [];
+		const promptHook: AgentExtension = {
+			name: "test.prompt_submit",
+			manifest: { capabilities: ["hooks"] },
+			hooks: {
+				onEvent: async (event) => {
+					if (event.type === "run-started") {
+						seen.push("run-started");
+					}
+					if (event.type === "message-added" && event.message.role === "user") {
+						const part = event.message.content[0];
+						seen.push(
+							`user:${typeof part === "object" && part.type === "text" ? part.text : ""}`,
+						);
+					}
+				},
+			},
+		};
+		const session = new SessionRuntime(
+			makeAgentConfig({ extensions: [promptHook] }),
+			{
+				createAgentRuntimeImpl: (config) =>
+					createAgentRuntime({ ...config, model: scriptedModel }),
+			},
+		);
+
+		await session.run("first prompt");
+		await session.continue("second prompt");
+		// A continue without a message (e.g. after a failure) announces nothing.
+		await session.continue();
+
+		expect(seen).toEqual([
+			"run-started",
+			"user:first prompt",
+			"run-started",
+			"user:second prompt",
+			"run-started",
+		]);
+		expect(session.getMessages().map((message) => message.role)).toEqual([
+			"user",
+			"assistant",
+			"user",
+			"assistant",
+			"assistant",
+		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // external abort signal
 // ---------------------------------------------------------------------------
 

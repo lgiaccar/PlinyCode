@@ -7,7 +7,6 @@ import { type AdvisorInstallDeps, installAdvisor } from "./advisor/advisor-insta
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import type { ConversationGitSnapshots } from "./context/conversation-git-snapshots"
 import type { ConversationPromptDates } from "./context/conversation-prompt-date"
-import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
 import { installInstructionContextRows } from "./instruction-context-rows"
 import { installLastRequestCapture } from "./last-model-request"
 import type { ConversationMemorySnapshots } from "./memory/conversation-memory-snapshots"
@@ -17,7 +16,6 @@ import { installSessionTrace, type SessionTrace, type SessionTraceDeps } from ".
 
 interface SdkSessionConfigBuilderOptions {
 	stateManager: StateManager
-	emitHookMessage: HookMessageEmitter
 	onConsecutiveMistakeLimitReached?: CoreSessionConfig["onConsecutiveMistakeLimitReached"]
 	/**
 	 * Session id the config is being built for. Read lazily because a new
@@ -30,8 +28,8 @@ interface SdkSessionConfigBuilderOptions {
 	/** Mints unique, monotonic message ids from the shared authority. */
 	nextMessageTs?: () => number
 	/**
-	 * Whether a session runs in the background. Its hook, routing and
-	 * mistake-limit rows are dropped instead of landing in the displayed task.
+	 * Whether a session runs in the background. Its routing and mistake-limit
+	 * rows are dropped instead of landing in the displayed task.
 	 */
 	isBackgroundSession?: (sessionId: string | undefined) => boolean
 	/** True while the session's running turn answers an off-the-record side question, which edits nothing. */
@@ -134,17 +132,8 @@ export class SdkSessionConfigBuilder {
 				isBackground() ? { action: "stop", reason: `mistake_limit_reached: ${context.reason}` } : onMistakeLimit(context)
 		}
 
-		const emitHookMessage = this.options.emitHookMessage
-		config.hooks = buildAgentHooks(
-			this.options.stateManager,
-			(message) => {
-				if (!isBackground()) {
-					emitHookMessage(message)
-				}
-			},
-			input.cwd,
-		)
-
+		// Hook files are run by the engine, not by a config hook: see
+		// VscodeSessionHost's prepareStartSessionInput and hook-status-rows.ts.
 		const checkSpendingLimit = this.options.checkSpendingLimit
 		if (checkSpendingLimit) {
 			const baseBeforeModel = config.hooks?.beforeModel

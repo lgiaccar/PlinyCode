@@ -731,6 +731,9 @@ export class SessionRuntime {
 			hooks: this.createRuntimeHooks(),
 			prepareTurn: this.createRuntimePrepareTurn(modelInfo, tools),
 			initialMessages,
+			// The user message appended above is this run's input: the runtime
+			// announces it (message-added), so UserPromptSubmit hooks run.
+			seededInputMessageCount: effectiveUserMessage !== undefined ? 1 : 0,
 			consumeSystemNotice: () => this.runTracker.consumeSystemNotice(),
 			completionPolicy: toolCallingDisabled ? null : undefined,
 			systemPrompt,

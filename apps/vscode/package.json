@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.3-test.7",
+	"version": "0.2.3-test.8",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -486,11 +486,6 @@
 					"minimum": 30,
 					"markdownDescription": "How often the **CI Board** checks its pull requests and branches while it is not on screen, in seconds. It keeps checking so it can notify you when CI fails."
 				},
-				"plinycode.pipelines.notify": {
-					"type": "boolean",
-					"default": true,
-					"markdownDescription": "Show a notification when a run in the **Pipelines** view's run history finishes: one you launched or reran from the view, or one PlinyCode's agent started with `pipeline_run`."
-				},
 				"plinycode.ci.board.notify": {
 					"type": "boolean",
 					"default": true,
@@ -618,27 +613,6 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Let the model search and read your earlier conversations (the search_conversations and read_conversation tools). The search index is built on first use and kept on this machine."
-				},
-				"plinycode.subagents.maxDepth": {
-					"type": "integer",
-					"default": 1,
-					"minimum": 1,
-					"maximum": 2,
-					"markdownDescription": "How many levels of sub-agents may run below the agent you talk to. At `1` its sub-agents cannot delegate; at `2` each of them may start sub-agents of its own, which can multiply the cost of one delegation by up to **Max Concurrent** again. Applies to the next conversation."
-				},
-				"plinycode.subagents.maxConcurrent": {
-					"type": "integer",
-					"default": 3,
-					"minimum": 1,
-					"maximum": 6,
-					"markdownDescription": "How many sub-agents one agent may have running at once; further `spawn_agent` calls wait for a free slot. Each running sub-agent makes its own model calls, so more at once costs more per minute. Applies to the next conversation."
-				},
-				"plinycode.subagents.maxIterations": {
-					"type": "integer",
-					"default": 40,
-					"minimum": 5,
-					"maximum": 200,
-					"markdownDescription": "Most model calls one sub-agent run may make before it has to report back. Also applies to configured agents (`.cline/agents/*.md`) that set no `maxIterations` of their own. Applies to the next conversation."
 				},
 				"plinycode.spending.conversationLimit": {
 					"type": "number",

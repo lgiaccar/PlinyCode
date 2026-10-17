@@ -17,8 +17,6 @@ export function getHookTemplate(hookName: string): string {
 		PreToolUse: getPreToolUseTemplate(),
 		PostToolUse: getPostToolUseTemplate(),
 		UserPromptSubmit: getUserPromptSubmitTemplate(),
-		Notification: getNotificationTemplate(),
-		PreCompact: getPreCompactTemplate(),
 	}
 
 	return templates[hookName] || getDefaultTemplate(hookName)
@@ -342,125 +340,6 @@ else
 fi
 
 echo "[UserPromptSubmit] User submitted prompt (length: $PROMPT_LENGTH)" >&2
-
-# Return result
-echo '{"cancel":false,"contextModification":"","errorMessage":""}'
-`
-}
-
-function getNotificationTemplate(): string {
-	return `#!/bin/bash
-#
-# Notification Hook
-#
-# Executes when Cline reaches a user-attention boundary or emits lifecycle notifications.
-#
-# Input: {
-#   taskId,
-#   notification: {
-#     event: string,
-#     source: string,
-#     message: string,
-#     waitingForUserInput: boolean,
-#     eventVersion: string,
-#     eventId: string,
-#     messageTruncated: boolean,
-#     sourceType: string,
-#     sourceId: string,
-#     requiresUserAction: boolean,
-#     severity: string
-#   },
-#   clineVersion,
-#   timestamp,
-#   ...
-# }
-# Output: { cancel: boolean, contextModification?: string, errorMessage?: string }
-#
-# Typical events:
-# - user_attention (ask prompt requiring user input)
-# - task_complete (task reached completion)
-#
-# Notification hooks are observation-only:
-# - cancel is ignored by the caller
-# - contextModification is ignored by the caller
-# - hook failures are non-fatal
-
-INPUT=$(cat)
-
-if command -v jq &> /dev/null; then
-  EVENT=$(echo "$INPUT" | jq -r '.notification.event // "unknown"')
-  SOURCE=$(echo "$INPUT" | jq -r '.notification.source // "unknown"')
-  WAITING=$(echo "$INPUT" | jq -r '.notification.waitingForUserInput // false')
-  EVENT_VERSION=$(echo "$INPUT" | jq -r '.notification.eventVersion // "unknown"')
-  SOURCE_TYPE=$(echo "$INPUT" | jq -r '.notification.sourceType // "unknown"')
-  REQUIRES_ACTION=$(echo "$INPUT" | jq -r '.notification.requiresUserAction // false')
-  SEVERITY=$(echo "$INPUT" | jq -r '.notification.severity // "info"')
-else
-  EVENT="unknown"
-  SOURCE="unknown"
-  WAITING="false"
-  EVENT_VERSION="unknown"
-  SOURCE_TYPE="unknown"
-  REQUIRES_ACTION="false"
-  SEVERITY="info"
-fi
-
-echo "[Notification] event=$EVENT source=$SOURCE sourceType=$SOURCE_TYPE waitingForUserInput=$WAITING requiresUserAction=$REQUIRES_ACTION severity=$SEVERITY eventVersion=$EVENT_VERSION" >&2
-
-echo '{"cancel":false,"contextModification":"","errorMessage":""}'
-`
-}
-
-function getPreCompactTemplate(): string {
-	return `#!/bin/bash
-#
-# PreCompact Hook
-# 
-# Executes before conversation context is compacted (to free up token space).
-# 
-# Input: { 
-#   taskId, 
-#   preCompact: { 
-#     taskId: string,
-#     ulid: string,
-#     contextSize: number,
-#     compactionStrategy: string,
-#     previousApiReqIndex: number,
-#     tokensIn: number,
-#     tokensOut: number,
-#     tokensInCache: number,
-#     tokensOutCache: number,
-#     deletedRangeStart: number,
-#     deletedRangeEnd: number,
-#     contextJsonPath: string,
-#     contextRawPath: string
-#   }, 
-#   ... 
-# }
-# Output: { cancel: boolean, contextModification?: string, errorMessage?: string }
-# 
-# Use cases:
-# - Archive important conversation parts
-# - Log compaction events
-# - Add summary before context is lost
-
-# Read JSON input from stdin
-INPUT=$(cat)
-
-# Parse input using jq (or fallback to basic parsing)
-if command -v jq &> /dev/null; then
-  CONTEXT_SIZE=$(echo "$INPUT" | jq -r '.preCompact.contextSize')
-  STRATEGY=$(echo "$INPUT" | jq -r '.preCompact.compactionStrategy')
-  TOKENS_IN=$(echo "$INPUT" | jq -r '.preCompact.tokensIn')
-  TOKENS_OUT=$(echo "$INPUT" | jq -r '.preCompact.tokensOut')
-else
-  CONTEXT_SIZE="<size>"
-  STRATEGY="<strategy>"
-  TOKENS_IN="<tokens>"
-  TOKENS_OUT="<tokens>"
-fi
-
-echo "[PreCompact] About to compact conversation (contextSize: $CONTEXT_SIZE, strategy: $STRATEGY, tokensIn: $TOKENS_IN, tokensOut: $TOKENS_OUT)" >&2
 
 # Return result
 echo '{"cancel":false,"contextModification":"","errorMessage":""}'

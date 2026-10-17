@@ -21,7 +21,6 @@ import PopupModalContainer from "@/components/common/PopupModalContainer"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { FileServiceClient } from "@/services/grpc-client"
-import { isMacOSOrLinux } from "@/utils/platformUtils"
 import AgentsTab from "./AgentsTab"
 import HookRow from "./HookRow"
 import NewRuleRow from "./NewRuleRow"
@@ -59,7 +58,6 @@ const ClineRulesToggleModal: React.FC = () => {
 	const [localAgents, setLocalAgents] = useState<AgentInfo[]>([])
 	const [ruleTokenCounts, setRuleTokenCounts] = useState<Record<string, number>>({})
 
-	const isWindows = !isMacOSOrLinux()
 	const [isVisible, setIsVisible] = useState(false)
 	const buttonRef = useRef<HTMLDivElement>(null)
 	const modalRef = useRef<HTMLDivElement>(null)
@@ -318,10 +316,11 @@ const ClineRulesToggleModal: React.FC = () => {
 	}
 
 	// Toggle hook handler
-	const toggleHook = (isGlobal: boolean, hookName: string, enabled: boolean, workspaceName?: string) => {
+	const toggleHook = (isGlobal: boolean, hookName: string, hookPath: string, enabled: boolean, workspaceName?: string) => {
 		FileServiceClient.toggleHook({
 			metadata: {} as any,
 			hookName,
+			hookPath,
 			isGlobal,
 			enabled,
 			workspaceName,
@@ -558,9 +557,7 @@ const ClineRulesToggleModal: React.FC = () => {
 							<>
 								<div className="text-xs text-description mb-4">
 									<p>
-										{isWindows
-											? "On Windows, hooks execute whenever the hook file exists."
-											: "Toggle to enable/disable (chmod +x/-x)."}{" "}
+										Hook files run when their event fires. Switch one off to skip it; new hooks start off.{" "}
 										<VSCodeLink
 											className="text-xs"
 											href="https://docs.cline.bot/features/hooks"
@@ -569,19 +566,6 @@ const ClineRulesToggleModal: React.FC = () => {
 										</VSCodeLink>
 									</p>
 								</div>
-								{/* Hooks Tab */}
-								{/* Windows warning banner */}
-								{isWindows && (
-									<div className="flex items-center gap-2 px-3 py-3 mb-4 bg-vscode-inputValidation-warningBackground border-l-[3px] border-vscode-inputValidation-warningBorder">
-										<i className="codicon codicon-warning text-sm" />
-										<span className="text-base">
-											Hook toggling is not yet supported on Windows in this foundation PR. Hooks can be
-											created, edited, and deleted, and execute whenever the hook file exists. Coming next:
-											JSON-backed hook enabled/disabled state across platforms.
-										</span>
-									</div>
-								)}
-
 								{/* Global Hooks */}
 								<div className="mb-3">
 									<div className="text-sm font-normal mb-2">Global Hooks</div>
@@ -594,15 +578,14 @@ const ClineRulesToggleModal: React.FC = () => {
 													enabled={hook.enabled}
 													hookName={hook.name}
 													isGlobal={true}
-													isWindows={isWindows}
-													key={hook.name}
+													key={hook.absolutePath}
 													onDelete={(hooksToggles) => {
 														// Use response data directly, no need to refresh
 														setGlobalHooks(hooksToggles.globalHooks || [])
 														setWorkspaceHooks(hooksToggles.workspaceHooks || [])
 													}}
-													onToggle={(name: string, newEnabled: boolean) =>
-														toggleHook(true, name, newEnabled)
+													onToggle={(newEnabled: boolean) =>
+														toggleHook(true, hook.name, hook.absolutePath, newEnabled)
 													}
 												/>
 											))}
@@ -619,9 +602,7 @@ const ClineRulesToggleModal: React.FC = () => {
 									<div
 										className={index === workspaceHooks.length - 1 ? "-mb-2.5" : "mb-3"}
 										key={workspace.workspaceName}>
-										<div className="text-sm font-normal mb-2">
-											{workspace.workspaceName}/.clinerules/hooks/
-										</div>
+										<div className="text-sm font-normal mb-2">{workspace.workspaceName}</div>
 										<div className="flex flex-col gap-0">
 											{workspace.hooks
 												.sort((a, b) => a.name.localeCompare(b.name))
@@ -631,15 +612,20 @@ const ClineRulesToggleModal: React.FC = () => {
 														enabled={hook.enabled}
 														hookName={hook.name}
 														isGlobal={false}
-														isWindows={isWindows}
 														key={hook.absolutePath}
 														onDelete={(hooksToggles) => {
 															// Use response data directly, no need to refresh
 															setGlobalHooks(hooksToggles.globalHooks || [])
 															setWorkspaceHooks(hooksToggles.workspaceHooks || [])
 														}}
-														onToggle={(name: string, newEnabled: boolean) =>
-															toggleHook(false, name, newEnabled, workspace.workspaceName)
+														onToggle={(newEnabled: boolean) =>
+															toggleHook(
+																false,
+																hook.name,
+																hook.absolutePath,
+																newEnabled,
+																workspace.workspaceName,
+															)
 														}
 														workspaceName={workspace.workspaceName}
 													/>

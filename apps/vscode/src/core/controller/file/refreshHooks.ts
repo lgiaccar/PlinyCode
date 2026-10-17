@@ -1,85 +1,38 @@
 import { HookInfo, HooksToggles, WorkspaceHooks } from "@shared/proto/cline/file"
-import fs from "fs/promises"
-import os from "os"
 import path from "path"
 import { HostProvider } from "@/hosts/host-provider"
-import { resolveExistingHookPath, VALID_HOOK_TYPES } from "../../hooks/utils"
+import { type HookFile, type HookFileListing, listHookFiles } from "../../hooks/hook-files"
+import { type HookToggleState, isHookFileToggledOn } from "../../hooks/hook-toggles"
 import { Controller } from ".."
 
-export async function refreshHooks(
-	_controller: Controller,
-	_request?: any,
-	globalHooksDirOverride?: string,
-): Promise<HooksToggles> {
-	const globalHooksDir = globalHooksDirOverride || path.join(os.homedir(), "Documents", "Cline", "Hooks")
-	const isWindows = process.platform === "win32"
-
-	// Collect global hooks
-	const globalHooks: HookInfo[] = []
-	for (const hookName of VALID_HOOK_TYPES) {
-		const hookPath = await resolveExistingHookPath(globalHooksDir, hookName)
-		if (hookPath) {
-			globalHooks.push(
-				HookInfo.create({
-					name: hookName,
-					enabled: await isExecutable(hookPath),
-					absolutePath: hookPath,
-				}),
-			)
-		}
-	}
-
-	// Collect workspace hooks from all workspace folders
+/** The hook files the engine discovers for this window's workspace folders. */
+export async function listWindowHookFiles(): Promise<HookFileListing> {
 	const workspacePaths = await HostProvider.workspace.getWorkspacePaths({})
-	const workspaceHooksList: WorkspaceHooks[] = []
+	return listHookFiles(workspacePaths.paths)
+}
 
-	for (const workspacePath of workspacePaths.paths) {
-		const workspaceHooksDir = path.join(workspacePath, ".clinerules", "hooks")
-		const hooks: HookInfo[] = []
-
-		for (const hookName of VALID_HOOK_TYPES) {
-			const hookPath = await resolveExistingHookPath(workspaceHooksDir, hookName)
-			if (hookPath) {
-				hooks.push(
-					HookInfo.create({
-						name: hookName,
-						enabled: await isExecutable(hookPath),
-						absolutePath: hookPath,
-					}),
-				)
-			}
-		}
-
-		// Add all workspaces, even if they have no hooks yet
-		// This allows users to create their first hook via the dropdown
-		const workspaceName = path.basename(workspacePath)
-		workspaceHooksList.push(
-			WorkspaceHooks.create({
-				workspaceName,
-				hooks,
-			}),
-		)
-	}
-
+/** The Hooks tab's listing, with each file's toggle. */
+export function toHooksToggles(state: HookToggleState, listing: HookFileListing): HooksToggles {
+	const toHookInfo = (file: HookFile) =>
+		HookInfo.create({
+			name: file.name,
+			enabled: isHookFileToggledOn(state, file.absolutePath),
+			absolutePath: file.absolutePath,
+		})
 	return HooksToggles.create({
-		globalHooks,
-		workspaceHooks: workspaceHooksList,
-		isWindows,
+		globalHooks: listing.global.map(toHookInfo),
+		// Every workspace folder is listed, even without hooks, so the first
+		// hook can be created from its dropdown.
+		workspaceHooks: listing.workspaces.map((workspace) =>
+			WorkspaceHooks.create({
+				workspaceName: path.basename(workspace.workspacePath),
+				hooks: workspace.files.map(toHookInfo),
+			}),
+		),
+		isWindows: process.platform === "win32",
 	})
 }
 
-async function isExecutable(filePath: string): Promise<boolean> {
-	if (process.platform === "win32") {
-		// On Windows, files are "enabled" if they exist
-		// TODO(PR-9552 follow-up): Replace this temporary file-exists behavior
-		// with JSON-backed cross-platform hook enablement state.
-		return true
-	}
-
-	try {
-		await fs.access(filePath, fs.constants.X_OK)
-		return true
-	} catch {
-		return false
-	}
+export async function refreshHooks(controller: Controller, _request?: unknown): Promise<HooksToggles> {
+	return toHooksToggles(controller.stateManager, await listWindowHookFiles())
 }

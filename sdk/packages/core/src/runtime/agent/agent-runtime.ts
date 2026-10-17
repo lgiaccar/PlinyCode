@@ -71,6 +71,8 @@ export class AgentRuntime {
 	/** One automatic overflow-recovery attempt per run. */
 	private overflowRecoveryAttempted = false;
 	private initialization?: Promise<void>;
+	/** Seeded input the next run announces (`seededInputMessageCount`). */
+	private seededInputMessages: AgentMessage[] = [];
 	private abortController?: AbortController;
 	private modelSteerController?: AbortController;
 	/**
@@ -91,6 +93,12 @@ export class AgentRuntime {
 		this.state.agentRole = resolved.agentRole;
 		this.state.parentAgentId = resolved.parentAgentId;
 		this.state.messages = cloneMessages(resolved.initialMessages ?? []);
+		const seeded = Math.min(
+			Math.max(0, Math.floor(resolved.seededInputMessageCount ?? 0)),
+			this.state.messages.length,
+		);
+		this.seededInputMessages =
+			seeded > 0 ? this.state.messages.slice(-seeded) : [];
 	}
 
 	async run(input: AgentRunInput): Promise<AgentRunResult> {
@@ -334,6 +342,18 @@ export class AgentRuntime {
 		try {
 			await this.callBeforeRunHooks();
 			await this.emit({ type: "run-started", snapshot: this.snapshot() });
+
+			// Input the host put in the transcript before the run: announce it
+			// once, like the input below, so onEvent hooks see the user message.
+			const seededInput = this.seededInputMessages;
+			this.seededInputMessages = [];
+			for (const message of seededInput) {
+				await this.emit({
+					type: "message-added",
+					snapshot: this.snapshot(),
+					message,
+				});
+			}
 
 			for (const message of input ? normalizeInput(input) : []) {
 				this.state.messages.push(message);

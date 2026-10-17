@@ -36,29 +36,3 @@ const userAgent = navigator?.userAgent || ""
 const isChrome = userAgent.indexOf("Chrome") >= 0
 
 export const isSafari = !isChrome && userAgent.indexOf("Safari") >= 0
-
-declare const __NODE_PLATFORM__: string
-
-/**
- * Gets the current platform: 'windows', 'mac', or 'linux'
- * Defaults to 'linux' if platform cannot be determined
- */
-function getCurrentPlatform() {
-	// Fallback to linux if platform is not available
-	switch (__NODE_PLATFORM__) {
-		case "win32":
-			return "windows"
-		case "darwin":
-			return "mac"
-		default:
-			return "linux"
-	}
-}
-
-/**
- * Checks if the platform is macOS or Linux
- * @returns true if platform is darwin (macOS) or linux
- */
-export const isMacOSOrLinux = (): boolean => {
-	return getCurrentPlatform() !== "windows" // Non-Windows
-}

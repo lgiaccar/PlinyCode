@@ -1,6 +1,6 @@
-#!/usr/bin/env node
 // E2E fixture hook: records where it ran and what workspace identity it was
 // given, so the test can assert workspace-scoped discovery and cwd selection.
+// A .js hook runs through node on every platform.
 const fs = require("fs")
 const input = JSON.parse(fs.readFileSync(0, "utf-8"))
 fs.writeFileSync("hook-ran.json", JSON.stringify({ cwd: process.cwd(), workspaceRoots: input.workspaceRoots }))

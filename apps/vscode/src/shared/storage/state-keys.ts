@@ -98,6 +98,8 @@ const USER_SETTINGS_FIELDS = {
 	shellIntegrationTimeout: { default: 4000 as number },
 	defaultTerminalProfile: { default: "default" as string },
 	hooksEnabled: { default: true as boolean },
+	/** Hook file path -> enabled, for global hook files (Rules panel, Hooks tab). */
+	globalHooksToggles: { default: {} as Record<string, boolean> },
 	useAutoCondense: { default: true as boolean },
 	subagentsEnabled: { default: true as boolean },
 	preferredLanguage: { default: "English" as string },
@@ -125,6 +127,7 @@ export const LocalStateKeys = [
 	"localAgentsRulesToggles",
 	"localCopilotRulesToggles",
 	"localSkillsToggles",
+	"localHooksToggles",
 	"localAgentToggles",
 	"workflowToggles",
 ] as const

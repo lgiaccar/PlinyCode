@@ -1,33 +1,22 @@
 import { DeleteHookRequest, DeleteHookResponse } from "@shared/proto/cline/file"
 import fs from "fs/promises"
-import { HookDiscoveryCache } from "../../hooks/HookDiscoveryCache"
-import { resolveExistingHookPath, resolveHooksDirectory } from "../../hooks/utils"
+import { findHookFile } from "../../hooks/hook-files"
+import { clearHookFileToggle } from "../../hooks/hook-toggles"
+import { resolveHookWorkspacePath } from "../../hooks/utils"
 import { Controller } from ".."
-import { refreshHooks } from "./refreshHooks"
+import { listWindowHookFiles, refreshHooks } from "./refreshHooks"
 
-export async function deleteHook(
-	controller: Controller,
-	request: DeleteHookRequest,
-	globalHooksDirOverride?: string,
-): Promise<DeleteHookResponse> {
-	const { hookName, isGlobal, workspaceName } = request
-
-	// Determine hook path
-	const hooksDir = await resolveHooksDirectory(isGlobal, workspaceName, globalHooksDirOverride)
-	const hookPath = await resolveExistingHookPath(hooksDir, hookName)
-
-	// Verify hook exists before attempting deletion
-	if (!hookPath) {
-		throw new Error(`Hook ${hookName} does not exist in ${hooksDir}`)
+export async function deleteHook(controller: Controller, request: DeleteHookRequest): Promise<DeleteHookResponse> {
+	const { hookName, hookPath, isGlobal, workspaceName } = request
+	const workspacePath = isGlobal ? undefined : await resolveHookWorkspacePath(workspaceName)
+	// Only a file the engine would run can be deleted through this request.
+	const hookFile = findHookFile(await listWindowHookFiles(), { hookName, hookPath, isGlobal, workspacePath })
+	if (!hookFile) {
+		throw new Error(`Hook ${hookPath || hookName} does not exist`)
 	}
 
-	// Delete the hook file
-	await fs.unlink(hookPath)
+	await fs.unlink(hookFile.absolutePath)
+	clearHookFileToggle(controller.stateManager, hookFile.absolutePath, isGlobal)
 
-	// Invalidate hook discovery cache
-	await HookDiscoveryCache.getInstance().invalidateAll()
-
-	// Return updated hooks state
-	const hooksToggles = await refreshHooks(controller, undefined, globalHooksDirOverride)
-	return DeleteHookResponse.create({ hooksToggles })
+	return DeleteHookResponse.create({ hooksToggles: await refreshHooks(controller) })
 }
