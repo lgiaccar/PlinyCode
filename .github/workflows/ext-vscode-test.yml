@@ -120,33 +120,48 @@ jobs:
                   } >> "$GITHUB_STEP_SUMMARY"
                   exit "$status"
 
+    # "vscode test" and "vscode test (windows-latest)" are required checks on stage.
+    # A job-level `if` that skips a matrix job reports one check under the raw,
+    # unexpanded name, so the required names never arrive and a PR that changes no
+    # extension path (docs, skills) stays blocked forever. Instead the matrix
+    # always expands: without extension changes each leg runs on a cheap Ubuntu
+    # runner and skips every step after the first, and reports success.
     vscode-test:
         needs: [detect-changes, quality-checks]
-        if: needs.detect-changes.outputs.vscode == 'true'
+        if: ${{ !cancelled() && (needs.quality-checks.result == 'success' || needs.quality-checks.result == 'skipped') }}
         env:
             VSCODE_TEST_VERSION: 1.101.0
+            RUN_TESTS: ${{ needs.detect-changes.outputs.vscode }}
         strategy:
             fail-fast: false
             matrix:
                 os: [ubuntu-latest, windows-latest]
-        runs-on: ${{ matrix.os }}
+        runs-on: ${{ needs.detect-changes.outputs.vscode == 'true' && matrix.os || 'ubuntu-latest' }}
         name: ${{ matrix.os == 'ubuntu-latest' && 'vscode test' || format('vscode test ({0})', matrix.os) }}
         defaults:
             run:
                 shell: bash
                 working-directory: apps/vscode
         steps:
+            - name: No extension changes
+              if: env.RUN_TESTS != 'true'
+              working-directory: ${{ github.workspace }}
+              run: echo "No extension paths changed; nothing to test."
+
             - name: Checkout code
+              if: env.RUN_TESTS == 'true'
               uses: actions/checkout@v4
 
             # Pinned Bun and Node (.tool-versions), Bun install cache and one root
             # `bun install --frozen-lockfile` for the whole workspace.
             - name: Setup toolchain
+              if: env.RUN_TESTS == 'true'
               uses: ./.github/actions/setup-toolchain
 
             # @plinycode/* are local workspace symlinks to source packages; build dist/
             # before compiling/testing the extension.
             - name: Build SDK packages
+              if: env.RUN_TESTS == 'true'
               working-directory: ${{ github.workspace }}
               run: bun run build:sdk
 
@@ -160,15 +175,18 @@ jobs:
             # the workflow `run:` blocks below.
 
             - name: Cache VS Code test runtime
-              if: runner.os == 'Windows'
+              if: env.RUN_TESTS == 'true' && runner.os == 'Windows'
               uses: actions/cache@v4
               with:
                   path: .vscode-test
                   key: vscode-test-runtime-${{ runner.os }}-${{ env.VSCODE_TEST_VERSION }}
 
             # Build the extension and tests (without redundant checks)
+            # Every later test step requires this step's success, so skipping it
+            # skips them too.
             - name: Build Tests and Extension
               id: build_step
+              if: env.RUN_TESTS == 'true'
               run: bun run ci:build
 
             - name: Vitest Suites (SDK adapter + model catalog)
@@ -244,7 +262,7 @@ jobs:
             - name: Save Coverage Reports
               uses: actions/upload-artifact@v4
               # Only upload artifacts on Linux - We only need coverage from one OS
-              if: runner.os == 'Linux'
+              if: env.RUN_TESTS == 'true' && runner.os == 'Linux'
               with:
                   name: pr-coverage-reports
                   path: |

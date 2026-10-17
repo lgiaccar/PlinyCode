@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.3-test.2",
+	"version": "0.2.3-test.3",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -203,6 +203,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.openLogFile",
+				"title": "Open Log File",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.checkForUpdates",
 				"title": "Check for Updates",
 				"category": "PlinyCode"
@@ -215,6 +220,11 @@
 			{
 				"command": "cline.showLastModelRequest",
 				"title": "Show Last Model Request (debug)",
+				"category": "PlinyCode"
+			},
+			{
+				"command": "cline.exportDiagnostics",
+				"title": "Export Diagnostics Bundle",
 				"category": "PlinyCode"
 			},
 			{
@@ -520,6 +530,11 @@
 					"type": "string",
 					"default": "",
 					"markdownDescription": "Folder for the git worktrees of conversations started with **Run in worktree**. Each repository gets a subfolder named after it. Empty uses `#plinycode.ci.worktreeRoot#` when that is set, and otherwise puts them next to the repository, in `<repository>.worktrees`."
+				},
+				"plinycode.trace.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Write a trace of every conversation to `traces/<conversation id>.jsonl` in PlinyCode's data folder (`~/.cline/data`): each model request with its messages (secrets redacted, long text cut), each reply's timing, tokens and finish reason, each tool call and result, and each routing decision on `auto-free` and `auto-paid-balanced`. A file stops at 20 MB and the folder is kept under 200 MB. Turning this off stops the writing at once."
 				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",
