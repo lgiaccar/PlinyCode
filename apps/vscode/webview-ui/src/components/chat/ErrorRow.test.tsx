@@ -1,5 +1,5 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import ErrorRow from "./ErrorRow"
 
@@ -20,6 +20,13 @@ vi.mock("@/context/ExtensionStateContext", () => ({
 		applyProviderModelsResponse: vi.fn(),
 		navigateToSettingsModelPicker: mockNavigateToSettingsModelPicker,
 	}),
+}))
+
+const exportDiagnostics = vi.hoisted(() => vi.fn(async () => ({})))
+vi.mock("@/services/grpc-client", () => ({
+	UiServiceClient: {
+		exportDiagnostics: (request: unknown) => exportDiagnostics(request),
+	},
 }))
 
 // Mock EntitlementError component
@@ -58,6 +65,14 @@ describe("ErrorRow", () => {
 		render(<ErrorRow errorType="error" message={mockMessage} />)
 
 		expect(screen.getByText("Test error message")).toBeInTheDocument()
+	})
+
+	it("offers to export the diagnostics bundle under an error", () => {
+		render(<ErrorRow errorType="error" message={mockMessage} />)
+
+		fireEvent.click(screen.getByRole("button", { name: "Export diagnostics" }))
+
+		expect(exportDiagnostics).toHaveBeenCalledTimes(1)
 	})
 
 	it("renders mistake limit reached error", () => {
