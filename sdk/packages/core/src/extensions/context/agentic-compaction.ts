@@ -19,6 +19,7 @@ import {
 	ensureFilesSection,
 	estimateTokens,
 	extractFileOps,
+	extractLatestUserRequest,
 	findCutIndex,
 	findLatestSummaryIndex,
 	getCompactionSummaryMetadata,
@@ -175,6 +176,7 @@ export async function runAgenticCompaction(options: {
 		return undefined;
 	}
 
+	const latestUserRequest = extractLatestUserRequest(messages);
 	const preProjectionFileOps = extractFileOps(messagesToSummarize);
 	const summarizerProviderConfig = resolveSummarizerConfig({
 		activeProviderConfig: options.providerConfig,
@@ -210,6 +212,7 @@ export async function runAgenticCompaction(options: {
 			previousSummary,
 			conversationText: "",
 			fileOps: preProjectionFileOps,
+			latestUserRequest,
 		}).length,
 	);
 	const availableSummaryInputTokens =
@@ -253,6 +256,7 @@ export async function runAgenticCompaction(options: {
 		previousSummary,
 		conversationText,
 		fileOps,
+		latestUserRequest,
 	});
 	options.logger?.debug("Agentic compaction summarizer diagnostics", {
 		messagesToSummarize: messagesToSummarize.length,
