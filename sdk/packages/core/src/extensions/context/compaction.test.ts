@@ -2005,7 +2005,7 @@ describe("createContextCompactionPrepareTurn", () => {
 				model: {
 					id: "mock-model",
 					provider: "anthropic",
-					info: { id: "mock-model", maxInputTokens: 1_000 },
+					info: { id: "mock-model", maxInputTokens: 2_000 },
 				},
 				emitStatusNotice,
 			});
@@ -2020,7 +2020,7 @@ describe("createContextCompactionPrepareTurn", () => {
 			"auto-compaction-insufficient",
 			expect.objectContaining({
 				phase: "insufficient",
-				maxInputTokens: 1_000,
+				maxInputTokens: 2_000,
 				tokensAfter: expect.any(Number),
 			}),
 		);

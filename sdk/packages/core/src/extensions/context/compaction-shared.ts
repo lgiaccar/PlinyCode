@@ -319,6 +319,33 @@ export function findLastTurnStartIndex(
 	return 0;
 }
 
+/** Longest part of the newest typed prompt the summarizer is shown. */
+const LATEST_REQUEST_CHAR_LIMIT = 4_000;
+
+/**
+ * The text of the newest message the user typed, or undefined when there is
+ * none. The summarizer is told to base the summary's goal on it, so an old
+ * goal carried by a previous summary cannot outlive the request that replaced
+ * it.
+ */
+export function extractLatestUserRequest(
+	messages: MessageWithMetadata[],
+): string | undefined {
+	const index = findLastTurnStartIndex(messages);
+	const message = messages[index];
+	if (!message || !isTurnStartMessage(message)) {
+		return undefined;
+	}
+	const text =
+		typeof message.content === "string"
+			? message.content
+			: message.content
+					.flatMap((block) => (block.type === "text" ? [block.text] : []))
+					.join("\n");
+	const trimmed = text.trim();
+	return trimmed ? truncateText(trimmed, LATEST_REQUEST_CHAR_LIMIT) : undefined;
+}
+
 export function findLastAssistantIndex(
 	messages: MessageWithMetadata[],
 ): number {
@@ -685,17 +712,20 @@ export function buildSummaryRequest(options: {
 	previousSummary?: string;
 	conversationText: string;
 	fileOps: FileOperationSummary;
+	/** The newest message the user typed, even when it is outside the span. */
+	latestUserRequest?: string;
 }): string {
 	const parts: string[] = [
 		`Summarize this session for continuation. Be concise and factual.
 
 ## Goal
-One sentence: what is being built or fixed.
+One sentence: what the user's newest request asks for. Write it from the "Newest user request" below when there is one. A goal in the previous summary that the newest request replaced or narrowed is dropped, not repeated.
 
 ## State
-- Done: completed steps
+- Done: only steps whose result you can see in the conversation (a tool result, a passing run, an edited file). Anything the previous summary calls done that this conversation does not show goes under "Unverified" instead.
 - In Progress: current work
-- Blocked: blockers or open questions
+- Blocked: blockers or open questions, including failing tests or builds that are still failing
+- Unverified: claims you could not confirm (omit if none)
 
 ## Highlights
 Key technical choices or notable findings (omit if none).
@@ -708,8 +738,14 @@ Read: ${options.fileOps.readFiles.join(", ") || "none"}
 Edited: ${options.fileOps.modifiedFiles.join(", ") || "none"}`,
 	];
 
+	if (options.latestUserRequest?.trim()) {
+		parts.push(`Newest user request:\n${options.latestUserRequest.trim()}`);
+	}
+
 	if (options.previousSummary?.trim()) {
-		parts.push(`Previous summary:\n${options.previousSummary.trim()}`);
+		parts.push(
+			`Previous summary (may be stale; the newest user request wins):\n${options.previousSummary.trim()}`,
+		);
 	}
 
 	parts.push(`Conversation:\n${options.conversationText || "(empty)"}`);
@@ -792,7 +828,7 @@ export function buildSummaryMessage(options: {
 		content: [
 			{
 				type: "text",
-				text: `Context summary:\n\n${options.summary}`,
+				text: `Context summary:\n\n${options.summary}\n\nThe user's messages after this summary take precedence over the goal above.`,
 			},
 		],
 		metadata: {
