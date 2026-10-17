@@ -18,13 +18,10 @@ export interface ChatRuntimeConfig extends SessionPromptConfig {
 	logger?: RuntimeLoggerConfig;
 	enableTools: boolean;
 	enableSpawn?: boolean;
-	enableTeams?: boolean;
 	disableMcpSettingsTools?: boolean;
 	/** Additional Agent Plugins package roots resolved by the hub runtime. */
 	agentPluginPaths?: string[];
 	autoApproveTools?: boolean;
-	missionStepInterval?: number;
-	missionTimeIntervalMs?: number;
 	timeoutSeconds?: number;
 	toolPolicies?: SessionExecutionConfig["toolPolicies"];
 	toolExecutors?: HubToolExecutorName[];

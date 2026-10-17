@@ -40,12 +40,9 @@ describe("prompt format helpers", () => {
 		);
 	});
 
-	it("formats wrapped team commands for display", () => {
-		const wrapped = formatUserCommandBlock(
-			"spawn a team of agents for the following task: inspect rpc startup",
-			"team",
-		);
-		expect(formatDisplayUserInput(wrapped)).toBe("/team inspect rpc startup");
+	it("formats wrapped slash commands for display", () => {
+		const wrapped = formatUserCommandBlock("inspect rpc startup", "review");
+		expect(formatDisplayUserInput(wrapped)).toBe("/review inspect rpc startup");
 	});
 
 	it("parses the mode attribute from a user_input wrapper", () => {

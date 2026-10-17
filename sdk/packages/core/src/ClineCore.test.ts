@@ -31,7 +31,6 @@ function createStartInput(): ClineCoreStartInput {
 			mode: "act",
 			enableTools: true,
 			enableSpawnAgent: false,
-			enableAgentTeams: false,
 		},
 		prompt: "hello",
 		interactive: false,
@@ -277,7 +276,6 @@ describe("ClineCore", () => {
 				mode: "act",
 				enableTools: true,
 				enableSpawnAgent: false,
-				enableAgentTeams: false,
 			},
 		});
 
@@ -400,7 +398,7 @@ describe("ClineCore", () => {
 		};
 		createRuntimeHostMock.mockResolvedValue(host);
 
-		const onTeamRestored = vi.fn();
+		const ruleFilter = () => true;
 		const clientContext = {
 			name: "VSCode Extension",
 			version: "3.27.0",
@@ -419,7 +417,7 @@ describe("ClineCore", () => {
 				},
 			},
 			localRuntime: {
-				onTeamRestored,
+				ruleFilter,
 			},
 		});
 
@@ -432,7 +430,7 @@ describe("ClineCore", () => {
 		expect(startInput.localRuntime?.extensionContext?.client).toEqual(
 			clientContext,
 		);
-		expect(startInput.localRuntime?.onTeamRestored).toBe(onTeamRestored);
+		expect(startInput.localRuntime?.ruleFilter).toBe(ruleFilter);
 	});
 
 	it("disposes the runtime host", async () => {
@@ -483,7 +481,6 @@ describe("ClineCore", () => {
 					workspaceRoot: "/tmp/workspace",
 					enableTools: true,
 					enableSpawn: false,
-					enableTeams: false,
 					prompt: "hello",
 					metadata: {},
 					updatedAt: "2026-04-21T02:17:46.169Z",
@@ -554,7 +551,6 @@ describe("ClineCore", () => {
 					workspaceRoot: "/tmp/workspace",
 					enableTools: true,
 					enableSpawn: false,
-					enableTeams: false,
 					isSubagent: false,
 					metadata: { title: "stored title" },
 					updatedAt: "2026-04-21T02:17:46.169Z",

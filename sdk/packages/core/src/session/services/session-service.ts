@@ -30,13 +30,16 @@ class LocalSessionPersistenceAdapter implements SessionPersistenceAdapter {
 	}
 
 	async upsertSession(row: SessionRow): Promise<void> {
+		// team_name and enable_teams are legacy agent-team columns: existing
+		// databases declare enable_teams NOT NULL, so they are written as
+		// constants and never read.
 		this.store.run(
 			`INSERT OR REPLACE INTO sessions (
 				session_id, source, pid, started_at, ended_at, exit_code, status, status_lock, interactive,
 				provider, model, cwd, workspace_root, team_name, enable_tools, enable_spawn, enable_teams,
 				parent_session_id, parent_agent_id, agent_id, conversation_id, is_subagent, prompt,
 				metadata_json, transcript_path, hook_path, messages_path, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				row.sessionId,
 				row.source,
@@ -51,10 +54,8 @@ class LocalSessionPersistenceAdapter implements SessionPersistenceAdapter {
 				row.model,
 				row.cwd,
 				row.workspaceRoot,
-				row.teamName ?? null,
 				row.enableTools ? 1 : 0,
 				row.enableSpawn ? 1 : 0,
-				row.enableTeams ? 1 : 0,
 				row.parentSessionId ?? null,
 				row.parentAgentId ?? null,
 				row.agentId ?? null,
@@ -281,13 +282,14 @@ export class CoreSessionService extends UnifiedSessionPersistenceService {
 	}
 
 	createRootSession(input: CreateRootSessionInput): void {
+		// team_name and enable_teams: legacy columns, see upsertSession.
 		this.store.run(
 			`INSERT OR REPLACE INTO sessions (
 				session_id, source, pid, started_at, ended_at, exit_code, status, status_lock, interactive,
 				provider, model, cwd, workspace_root, team_name, enable_tools, enable_spawn, enable_teams,
 				parent_session_id, parent_agent_id, agent_id, conversation_id, is_subagent, prompt,
 				metadata_json, transcript_path, hook_path, messages_path, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				input.sessionId,
 				input.source,
@@ -302,10 +304,8 @@ export class CoreSessionService extends UnifiedSessionPersistenceService {
 				input.model,
 				input.cwd,
 				input.workspaceRoot,
-				input.teamName ?? null,
 				input.enableTools ? 1 : 0,
 				input.enableSpawn ? 1 : 0,
-				input.enableTeams ? 1 : 0,
 				null,
 				null,
 				null,

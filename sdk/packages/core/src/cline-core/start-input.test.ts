@@ -13,7 +13,6 @@ function createInput(
 			systemPrompt: "",
 			enableTools: true,
 			enableSpawnAgent: true,
-			enableAgentTeams: true,
 			extensionContext: {
 				client: {
 					name: "VSCode Extension",

@@ -355,7 +355,6 @@ export function createSpawnAgentTool(
 			const run = deriveRunSignal(context.signal, timeoutMs);
 			try {
 				const subAgent = createDelegatedAgent({
-					kind: "subagent",
 					prompt: resolveSpawnAgentInstructions(input),
 					configProvider: config.configProvider,
 					tools,

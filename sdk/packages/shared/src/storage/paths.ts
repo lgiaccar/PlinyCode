@@ -241,14 +241,6 @@ export function resolveMemoryDataDir(): string {
 	return join(resolveClineDataDir(), "memory");
 }
 
-export function resolveTeamDataDir(): string {
-	const explicitDir = process.env.CLINE_TEAM_DATA_DIR?.trim();
-	if (explicitDir) {
-		return explicitDir;
-	}
-	return join(resolveClineDataDir(), "teams");
-}
-
 export function resolveConnectorDataDir(): string {
 	const explicitDir = process.env.CLINE_CONNECTOR_DATA_DIR?.trim();
 	if (explicitDir) {

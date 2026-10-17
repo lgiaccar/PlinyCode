@@ -12,7 +12,6 @@ export type {
 	SessionPendingPrompt,
 	SessionPendingPromptSubmittedEvent,
 	SessionPendingPromptsEvent,
-	SessionTeamProgressEvent,
 	SessionToolEvent,
 } from "./events";
 export type {
@@ -24,4 +23,4 @@ export type {
 	StoredProviderSettingsEntry,
 } from "./provider-settings";
 export type { SessionRecord, SessionRef } from "./sessions";
-export type { ArtifactStore, SessionStore, TeamStore } from "./storage";
+export type { ArtifactStore, SessionStore } from "./storage";

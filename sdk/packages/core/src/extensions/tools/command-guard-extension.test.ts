@@ -325,13 +325,12 @@ describe("off-the-record tool guard", () => {
 		).toBeUndefined();
 	});
 
-	it("rejects the task list, sub-agents and teammates, and leaves read tools alone", () => {
+	it("rejects the task list and sub-agents, and leaves read tools alone", () => {
 		for (const tool of [
 			"update_todo_list",
 			"save_memory",
 			"spawn_agent",
 			"subagent_reviewer_ab12",
-			"team_spawn_teammate",
 		]) {
 			expect(guardOffTheRecordTool(makeContext(tool, {}))?.skip).toBe(true);
 		}
