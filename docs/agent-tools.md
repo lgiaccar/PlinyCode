@@ -54,11 +54,23 @@ run in a PlinyCode terminal, and the output is read through shell integration
 
 - **Long-running commands.** A command still running after 5 minutes keeps
   running in the terminal. The call returns with the output so far and the
-  path of a log file that receives the rest. The tool description tells the
-  model this, in place of the generic advice to background long jobs itself
+  path of a log file that receives the rest, and the command is registered
+  as a background process (`p1`, `p2`, …; see below), so the model can
+  read its log with `process_output` and stop it with `process_kill`. The
+  same happens when the user clicks "Proceed While Running" or sends a
+  message while the command runs. The tool description tells the model
+  this, in place of the generic advice to background long jobs itself
   (`longRunningNote` on the engine's `createShellTool`). That way it runs a
   benchmark as an ordinary command and follows it with `wait`, instead of
   launching it with `Start-Process` and losing its output and errors.
+- **`background: true`.** An optional argument for a server, watcher or
+  other job the model does not want to wait for. The commands start as child
+  processes of the extension host, in either terminal mode and in
+  sub-agents, and the call returns at once with
+  `Started <command> as process p3 (log: <path>). Use process_output to read it and process_kill to stop it.`
+  Their output goes to the log file, not to a terminal. Without the argument
+  nothing changes. A background process still running after 24 hours is
+  stopped.
 - **Wrapped lines.** On Windows the output passes through ConPTY. When a
   line wider than the terminal scrolls off the bottom row, ConPTY breaks it
   with `\r\n`, moves the cursor back to the end of the row and writes that
@@ -75,9 +87,21 @@ run in a PlinyCode terminal, and the output is read through shell integration
   this happens in a window, the user is warned to widen the terminal panel or
   switch to Background Exec.
 
+## Background processes (`process_list`, `process_output`, `process_kill`)
+
+Commands that outlive their `run_commands` call: one handed over to the terminal while still running, and one started with `background: true`. The registry (`apps/vscode/src/sdk/processes/process-registry.ts`) is owned by `SdkController`, one per window, and gives each process a short id; the tools are in `process-tools.ts`.
+
+- `process_list()`: this conversation's processes, one line each: `id  status  elapsed  command  log`. The status is `running`, `exited(<code>)` (or `exited` when no code was seen), `killed` or `lost` (PlinyCode can no longer observe a terminal command, which may still be running). The command is cut to 80 characters.
+- `process_output({ id, tail_lines = 100 })`: a line on where the process stands (`p3 has been running for 4m02s: npm run dev`, `p3 exited with code 1 after 2m10s: …`), the log path and size, then the last lines of the log, at most 400 lines and 32 KB, with terminal colors removed. It always reads the log file, never the terminal buffer.
+- `process_kill({ id })`: a terminal command gets Ctrl+C, and if it is still running 2 seconds later its terminal is closed; a child process is stopped with its whole process tree. A kill asked for before a handed-over command has its terminal is applied as soon as it starts.
+- A model sees only its own conversation's processes. Sub-agents run under the root's session id, so they share the root's list.
+- `process_list` and `process_output` run in parallel with the other read tools and follow the read-files approval toggle; `process_kill` follows the commands toggle. A CI board run may use all three on its own processes.
+- The webview's background-command flag is set while a process of the displayed conversation is running, and the Cancel button and an interrupting message then call `cancelBackgroundCommand`, which stops every running process of that conversation.
+- The registry lives in memory. After a window reload the list is empty and the terminals are gone (PlinyCode's terminals are transient), but the log files stay in the temp folder until its cleanup removes files older than 50 hours. Child processes are stopped when the window closes.
+
 ## Read-only tools run concurrently
 
-`read_files`, `search_codebase`, `find_files` and `fetch_web_content` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
+`read_files`, `search_codebase`, `find_files`, `process_list`, `process_output` and `fetch_web_content` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
 
 The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts`) keeps every open tool by call id for this, so each one finishes into its own row.
 
@@ -86,7 +110,7 @@ The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts
 `spawn_agent` runs a sub-agent in its own context and returns only its final report to the model that called it. The engine's tool (`sdk/packages/core/src/extensions/tools/team/`) takes `task` and optional `instructions` (`systemPrompt` is the older name); configured agents from `.cline/agents/*.md` appear as `subagent_<name>` tools with a fixed prompt, model and tool allowlist. The system prompt carries a short section on when to delegate (`subagent-guidance.ts`, only while the tool is in the request): exploration across many files, reviews, long test runs, and independent subtasks that can run in parallel. The setting `subagentsEnabled` (Settings → Advanced) turns the tool off.
 
 - **Prompt.** A sub-agent gets the same base prompt as a root session, with the conversation's git snapshot and pinned date, the session's mode (plan mode edits nothing), a short account of its role, the parent's instructions as rules, and a read-only excerpt of the repository's important memory entries (`subagent-prompts.ts`, `renderSubAgentMemoryExcerpt`). It knows nothing of the conversation itself: the parent's `task` is all it sees.
-- **Tools.** The engine's built-ins plus the extension's own: `run_commands` (always in the background executor, so it cannot race the user's terminal), `wait`, the task list and MCP tools. Not the advisor, `save_memory` or the conversation search (`SUB_AGENT_DENIED_TOOLS` in `sdk-tool-policies.ts`), and not `spawn_agent` itself: delegation goes one level deep (`MAX_SUB_AGENT_DEPTH`).
+- **Tools.** The engine's built-ins plus the extension's own: `run_commands` (always in the background executor, so it cannot race the user's terminal), `wait`, the task list, the background process tools and MCP tools. Not the advisor, `save_memory` or the conversation search (`SUB_AGENT_DENIED_TOOLS` in `sdk-tool-policies.ts`), and not `spawn_agent` itself: delegation goes one level deep (`MAX_SUB_AGENT_DEPTH`).
 - **Approval.** Delegating follows the **Delegate to sub-agents** auto-approve toggle (on by default). The sub-agent's own calls follow the same toggles and policies as the root's, since they edit the same files; an approval it asks for is preceded by a row saying which sub-agent asks.
 - **Limits.** At most 3 sub-agent runs in flight per parent (the rest wait), 40 iterations per run unless the host sets `subAgentMaxIterations`, 20 minutes per run, and the same context compaction as the root session.
 - **Cost.** The tool reports progress (`emitUpdate`) after each model call and tool: the sub-agents row shows tool calls, tokens and cost live. Its result carries the run's tokens, cache tokens and cost, which the `subagent_usage` row adds to the task header, the budget check and the history record; a task running in the background records them from the tool result. The chat shows nothing else of a sub-agent's work.

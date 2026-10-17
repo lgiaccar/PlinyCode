@@ -42,6 +42,8 @@ const READ_TOOLS = new Set([
 	"find_files",
 ])
 const COMMAND_TOOLS = new Set(["run_commands", "execute_command"])
+// A run's own background processes: it sees and stops only those of its conversation.
+const PROCESS_TOOLS = new Set(["process_list", "process_output", "process_kill"])
 const DEVOPS_READ_TOOLS = new Set(["repo_context", "pr_get", "pr_checks", "pipeline_runs", "pipeline_report"])
 
 const caseless = process.platform === "win32"
@@ -339,6 +341,8 @@ export function decideCiTool(policy: CiRunPolicy, toolName: string, input: unkno
 			}
 			if (next.kind === "ask") decision = ASK
 		}
+	} else if (PROCESS_TOOLS.has(toolName)) {
+		decision = APPROVE
 	} else if (toolName.includes("__")) {
 		const tool = toolName.slice(toolName.indexOf("__") + 2)
 		decision =
