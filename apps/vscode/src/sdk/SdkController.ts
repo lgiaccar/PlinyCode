@@ -36,6 +36,7 @@ import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
+import { createVscodeWebSearchSetup } from "@/hosts/vscode/web-search-settings"
 import { configuredTaskWorktreeFolder } from "@/hosts/vscode/worktree-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
@@ -509,6 +510,7 @@ export class Controller {
 			foregroundCommands: this.foregroundCommands,
 			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
+			getWebSearch: () => createVscodeWebSearchSetup(),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
 				// (vscode-session-host.ts, sdk-terminal-execution-mode-coordinator.ts):

@@ -1,4 +1,4 @@
-import { setCompactionStrategyGlobally, setModelToolEnabledGlobally } from "@plinycode/core"
+import { setCompactionStrategyGlobally } from "@plinycode/core"
 import { Empty } from "@shared/proto/cline/common"
 import { PlanActMode, McpDisplayMode as ProtoMcpDisplayMode, UpdateSettingsRequest } from "@shared/proto/cline/state"
 import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-configuration-conversion"
@@ -7,6 +7,7 @@ import { ClineEnv } from "@/config"
 import { setPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { setConversationSearchEnabled, setMemoryDistillOfferEnabled, setMemoryMaxTokens } from "@/hosts/vscode/memory-settings"
 import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
+import { setWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
 import { McpDisplayMode } from "@/shared/McpDisplayMode"
 import { Logger } from "@/shared/services/Logger"
 import { Controller } from ".."
@@ -130,9 +131,10 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 			controller.stateManager.setGlobalState("useAutoCondense", request.useAutoCondense)
 		}
 
-		// Update web search setting (stored in the SDK global settings file; applied when the next session is built)
+		// Stored as the plinycode.webSearch.enabled VS Code setting, read when the next session is built.
+		// The engine's native web_search flag follows it (web-search-settings.ts).
 		if (request.webSearchEnabled !== undefined) {
-			setModelToolEnabledGlobally("web_search", !!request.webSearchEnabled)
+			await setWebSearchEnabled(!!request.webSearchEnabled)
 		}
 
 		// Stored as the plinycode.updates.prerelease VS Code setting, which the auto-updater watches
