@@ -6,7 +6,7 @@ import { E2ETestHelper, e2e } from "./utils/helpers"
 // This spec runs against its own fixture workspace: hooks execute on every
 // prompt once discovered (hooksEnabled defaults to true), so keeping the hook
 // out of the shared workspace fixture spares every other prompt-sending spec
-// the per-prompt hook spawn (a cold PowerShell start on Windows).
+// the per-prompt hook spawn.
 const hooksE2e = e2e.extend({
 	workspaceDir: async ({}, use) => {
 		await use(path.join(E2ETestHelper.E2E_TESTS_DIR, "fixtures", "workspace-hooks"))
@@ -14,11 +14,11 @@ const hooksE2e = e2e.extend({
 })
 
 // The fixture ships a UserPromptSubmit hook
-// (.clinerules/hooks/UserPromptSubmit[.ps1]) that writes hook-ran.json into its
-// working directory, recording process.cwd() and the workspaceRoots it received
-// on stdin. Discovery, cwd selection, and hook input metadata all resolve from
-// the window's actual workspace folders, so the marker must land in this
-// window's workspace root and name it — regardless of what any other Cline
+// (.clinerules/hooks/UserPromptSubmit.js, run through node by the engine on
+// every platform) that writes hook-ran.json into its working directory,
+// recording process.cwd() and the workspaceRoots it received on stdin. The
+// engine runs hook files in the session's workspace, so the marker must land
+// in this window's workspace root and name it — regardless of what any other
 // instance recorded in shared state.
 hooksE2e("Hooks - workspace hook runs from this window's workspace root", async ({ helper, sidebar, workspaceDir }) => {
 	const markerPath = path.join(workspaceDir, "hook-ran.json")
@@ -32,11 +32,14 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 		await inputbox.fill("Trigger the prompt hook")
 		await sidebar.getByTestId("send-button").click()
 
-		// The hook runs during beforeRun, ahead of the model call, so the
-		// marker exists by the time the mock response renders.
 		// Generous timeout: the mock streams word-by-word and CI runners can be slow.
 		await expect(sidebar.getByText("mock Cline API response")).toBeVisible({ timeout: 30_000 })
 
+		// The engine reports the hook run, which shows as a hook_status row.
+		await expect(sidebar.getByText("UserPromptSubmit").first()).toBeVisible({ timeout: 15_000 })
+
+		// UserPromptSubmit is not awaited by the run, so the marker can land
+		// after the response: poll for it.
 		let markerRaw: string | undefined
 		await expect
 			.poll(
@@ -44,7 +47,7 @@ hooksE2e("Hooks - workspace hook runs from this window's workspace root", async 
 					markerRaw = await fs.readFile(markerPath, "utf-8").catch(() => undefined)
 					return markerRaw
 				},
-				{ message: "workspace hook should have written hook-ran.json into the workspace root" },
+				{ message: "workspace hook should have written hook-ran.json into the workspace root", timeout: 15_000 },
 			)
 			.toBeDefined()
 		const marker = JSON.parse(markerRaw ?? "{}")

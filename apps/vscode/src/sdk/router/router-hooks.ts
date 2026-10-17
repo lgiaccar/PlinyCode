@@ -1,11 +1,11 @@
 /**
  * Layer the router's own runtime hooks over the ones the session already has
- * (the file-based hook scripts from `hooks-adapter.ts`), so both keep running.
+ * (other installers' hooks), so both keep running.
  *
  * Only `afterTool` and `afterRun` are composed — the router observes; it never
  * blocks a tool or a run. The base hook is called first and its answer wins on
- * `stop`/`result`; `appendContext` from both sides is concatenated so a hook
- * script's context and the router's note both reach the model.
+ * `stop`/`result`; `appendContext` from both sides is concatenated so the base
+ * hook's context and the router's note both reach the model.
  */
 
 import type {

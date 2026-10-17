@@ -16,6 +16,7 @@ import {
 	createSearchExecutor,
 	type EditorExecutor,
 	type HookEventPayload,
+	type HookStatusEvent,
 	type PendingPromptMutationResult,
 	type PendingPromptsDeleteInput,
 	type PendingPromptsListInput,
@@ -40,6 +41,8 @@ import {
 	type ToolPolicy,
 } from "@plinycode/shared"
 import { createRuleFileFilter } from "@/core/context/instructions/user-instructions/rule-file-filter"
+import { createHookFileFilter } from "@/core/hooks/hook-toggles"
+import { getHooksEnabledSafe } from "@/core/hooks/hooks-utils"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { getDistinctId } from "@/services/logging/distinctId"
@@ -47,6 +50,7 @@ import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import { getBinaryLocation } from "@/utils/fs"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
+import type { HookStatusRowListener } from "./hook-status-rows"
 import type { ProcessRegistry } from "./processes/process-registry"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { isSubAgentDeniedTool } from "./sdk-tool-policies"
@@ -100,6 +104,12 @@ interface VscodeSessionHostOptions {
 	getCodeIntel?: () => CodeIntelSource | undefined
 	/** The window's background processes, for `run_commands` and the `process_*` tools. */
 	processes?: ProcessRegistry
+	/**
+	 * Runs the hook files (docs/rules.md, "Hooks") in this host's sessions and
+	 * reports each run here. Left out, the host runs none: the temporary hosts
+	 * for compaction, checkpoint restore and history run no agent turns.
+	 */
+	onHookStatus?: HookStatusRowListener
 }
 
 export class VscodeSessionHost implements SdkSessionHost {
@@ -178,21 +188,31 @@ export class VscodeSessionHost implements SdkSessionHost {
 					processes: options.processes,
 				})
 			).filter((tool) => !isSubAgentDeniedTool(tool.name))
+			const stateManager = StateManager.get()
+			const onHookStatus = options.onHookStatus
+			// The engine runs the hook files. Its file-hook extension is left out
+			// while hooks are switched off (or for a host that runs none); the
+			// filter also checks the switch, and each file's toggle, before every
+			// run, so switching hooks or a file off applies to live sessions.
+			const runHooks = onHookStatus !== undefined && getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled"))
+			const sessionId = input.config.sessionId
 			return {
 				...input,
 				source: input.source ?? "vscode",
-				// The extension runs file hooks through its own hooks adapter
-				// (status chips, hooksEnabled setting, HookFactory discovery).
-				// Exclude the SDK core's file-hook extension or every hook
-				// would execute twice per event.
 				localRuntime: {
 					...(input.localRuntime ?? {}),
 					// Honor the Rules panel toggles: the SDK discovers rule files
 					// itself, so disabled files must be filtered out here.
-					ruleFilter: createRuleFileFilter(StateManager.get()),
+					ruleFilter: createRuleFileFilter(stateManager),
 					configExtensions: (input.localRuntime?.configExtensions ?? RUNTIME_CONFIG_EXTENSION_KINDS).filter(
-						(kind) => kind !== "hooks",
+						(kind) => kind !== "hooks" || runHooks,
 					),
+					...(runHooks
+						? {
+								hookFilter: createHookFileFilter(stateManager),
+								onHookStatus: (event: HookStatusEvent) => onHookStatus(sessionId, event),
+							}
+						: {}),
 				},
 				config: {
 					...input.config,

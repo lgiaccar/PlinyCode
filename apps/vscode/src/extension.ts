@@ -29,7 +29,6 @@ import { sendAddToInputEvent } from "./core/controller/ui/subscribeToAddToInput"
 import { sendCiBoardButtonClickedEvent } from "./core/controller/ui/subscribeToCiBoardButtonClicked"
 import { sendPipelinesButtonClickedEvent } from "./core/controller/ui/subscribeToPipelinesButtonClicked"
 import { sendShowWebviewEvent } from "./core/controller/ui/subscribeToShowWebview"
-import { HookDiscoveryCache } from "./core/hooks/HookDiscoveryCache"
 import { ensureRulesDirectoryExists } from "./core/storage/disk"
 import { StateManager } from "./core/storage/StateManager"
 import {
@@ -117,35 +116,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	}).catch((error) => Logger.error("[instructions] Failed to configure rule sources:", error))
 
 	// 5. Register services and commands specific to VS Code
-	// Initialize hook discovery cache for performance optimization
-	HookDiscoveryCache.getInstance().initialize(
-		// biome-ignore lint/suspicious/noExplicitAny: Adapt VSCode ExtensionContext to generic interface
-		context as any,
-		(dir: string) => {
-			try {
-				const pattern = new vscode.RelativePattern(dir, "*")
-				const watcher = vscode.workspace.createFileSystemWatcher(pattern)
-				// Ensure watcher is disposed when extension is deactivated
-				context.subscriptions.push(watcher)
-				// Adapt VSCode FileSystemWatcher to generic interface
-				return {
-					onDidCreate: (listener: () => void) => watcher.onDidCreate(listener),
-					onDidChange: (listener: () => void) => watcher.onDidChange(listener),
-					onDidDelete: (listener: () => void) => watcher.onDidDelete(listener),
-					dispose: () => watcher.dispose(),
-				}
-			} catch {
-				return null
-			}
-		},
-		(callback: () => void) => {
-			// Adapt VSCode Disposable to generic interface
-			const disposable = vscode.workspace.onDidChangeWorkspaceFolders(callback)
-			context.subscriptions.push(disposable)
-			return disposable
-		},
-	)
-
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(VscodeWebviewProvider.SIDEBAR_ID, webview, {
 			webviewOptions: { retainContextWhenHidden: true },

@@ -19,10 +19,11 @@ const HOOK_TYPES = [
 	{ name: "TaskResume", description: "Executes when a task is resumed" },
 	{ name: "TaskCancel", description: "Executes when a task is cancelled" },
 	{ name: "TaskComplete", description: "Executes when a task completes" },
+	{ name: "TaskError", description: "Executes when a task stops on an error" },
 	{ name: "PreToolUse", description: "Executes before any tool is used" },
 	{ name: "PostToolUse", description: "Executes after any tool is used" },
 	{ name: "UserPromptSubmit", description: "Executes when user submits a prompt" },
-	{ name: "PreCompact", description: "Executes before conversation compaction" },
+	{ name: "SessionShutdown", description: "Executes when a session shuts down" },
 ]
 
 const NewRuleRow: React.FC<NewRuleRowProps> = ({ isGlobal, ruleType, existingHooks = [], workspaceName }) => {

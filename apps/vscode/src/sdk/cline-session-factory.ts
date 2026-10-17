@@ -33,7 +33,6 @@ import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { fetch } from "@/shared/net"
 import { coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
-import { buildAgentHooks } from "./hooks-adapter"
 import { getHostIdeName } from "./instruction-sources"
 import { resolveDataDir } from "./legacy-state-reader"
 import { renderSubAgentMemoryExcerpt } from "./memory/memory-section"
@@ -665,7 +664,6 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			},
 			logger: sdkLogger,
 		},
-		hooks: buildAgentHooks(StateManager.get()),
 	}
 
 	return config

@@ -6,15 +6,10 @@ import { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 
 const mocks = vi.hoisted(() => ({
 	buildSessionConfig: vi.fn(),
-	buildAgentHooks: vi.fn(() => ({})),
 }))
 
 vi.mock("./cline-session-factory", () => ({
 	buildSessionConfig: mocks.buildSessionConfig,
-}))
-
-vi.mock("./hooks-adapter", () => ({
-	buildAgentHooks: mocks.buildAgentHooks,
 }))
 
 describe("SdkSessionConfigBuilder", () => {
@@ -23,7 +18,6 @@ describe("SdkSessionConfigBuilder", () => {
 		// itself; the user must flip the mode switch.
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
-			emitHookMessage: vi.fn(),
 		})
 
 		mocks.buildSessionConfig.mockResolvedValueOnce({
@@ -49,7 +43,6 @@ describe("SdkSessionConfigBuilder", () => {
 		}))
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
-			emitHookMessage: vi.fn(),
 			getConversationId: () => displayed,
 			gitSnapshots: { prepare: gitPrepare },
 		})
@@ -71,14 +64,14 @@ describe("SdkSessionConfigBuilder", () => {
 		expect(builder.pinnedModel("ci-run")).toBe("pliny/auto-free")
 	})
 
-	it("wires the agent hooks into the SDK config", async () => {
-		const hooks = { beforeModel: vi.fn() }
-		mocks.buildAgentHooks.mockReturnValueOnce(hooks)
-		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
+	// Hook files run in the engine (VscodeSessionHost passes hookFilter and
+	// onHookStatus); the builder adds no file-hook layer of its own.
+	it("keeps the session config's own hooks", async () => {
+		const hooks = { beforeTool: vi.fn() }
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks })
 
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
-			emitHookMessage: vi.fn(),
 		})
 
 		const config = await builder.build({ cwd: "/workspace", mode: "act" })
@@ -91,7 +84,6 @@ describe("SdkSessionConfigBuilder", () => {
 
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: { getGlobalSettingsKey: vi.fn(() => 3) } as never,
-			emitHookMessage: vi.fn(),
 			onConsecutiveMistakeLimitReached,
 		})
 
@@ -104,7 +96,7 @@ describe("SdkSessionConfigBuilder", () => {
 	})
 
 	it("assigns a session id when the config has none, and keeps an existing one", async () => {
-		const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, emitHookMessage: vi.fn() })
+		const builder = new SdkSessionConfigBuilder({ stateManager: {} as never })
 
 		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
 		const fresh = await builder.build({ cwd: "/workspace", mode: "act" })
@@ -128,7 +120,6 @@ describe("SdkSessionConfigBuilder", () => {
 			})
 			const builder = new SdkSessionConfigBuilder({
 				stateManager: {} as never,
-				emitHookMessage: vi.fn(),
 				gitSnapshots,
 				getConversationId,
 			})
@@ -183,7 +174,7 @@ describe("SdkSessionConfigBuilder", () => {
 				gather: vi.fn(),
 				readStored: async () => undefined,
 			})
-			const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, emitHookMessage: vi.fn(), gitSnapshots })
+			const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, gitSnapshots })
 			mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
 
 			await builder.build({ cwd: "/workspace", mode: "act" })
@@ -192,29 +183,21 @@ describe("SdkSessionConfigBuilder", () => {
 		})
 	})
 
-	it("drops hook rows and skips the mistake-limit row for a background session", async () => {
-		const emitHookMessage = vi.fn()
+	it("skips the mistake-limit row for a background session", async () => {
 		const onConsecutiveMistakeLimitReached = vi.fn()
 		const background = new Set<string>()
 		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {} })
 
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
-			emitHookMessage,
 			onConsecutiveMistakeLimitReached,
 			isBackgroundSession: (sessionId) => sessionId !== undefined && background.has(sessionId),
 		})
 		const config = await builder.build({ cwd: "/workspace", mode: "act" })
 		// Rebuilds overwrite the id after build(); the check must follow it.
 		config.sessionId = "task-1"
-		const hookEmitter = (mocks.buildAgentHooks.mock.calls.at(-1) as unknown as [unknown, (m: unknown) => void])[1]
-
-		hookEmitter({ ts: 1 })
-		expect(emitHookMessage).toHaveBeenCalledTimes(1)
 
 		background.add("task-1")
-		hookEmitter({ ts: 2 })
-		expect(emitHookMessage).toHaveBeenCalledTimes(1)
 		const decision = await config.onConsecutiveMistakeLimitReached?.({
 			iteration: 1,
 			consecutiveMistakes: 3,
@@ -231,7 +214,6 @@ describe("SdkSessionConfigBuilder", () => {
 		const promptDates = new ConversationPromptDates({ today, readStored: async () => undefined })
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
-			emitHookMessage: vi.fn(),
 			promptDates,
 			getConversationId: () => displayedTask,
 		})
@@ -252,7 +234,6 @@ describe("SdkSessionConfigBuilder", () => {
 	it("installs the advisor tool, hidden from the model unless the conversation is offered it", async () => {
 		const builder = new SdkSessionConfigBuilder({
 			stateManager: {} as never,
-			emitHookMessage: vi.fn(),
 			advisor: { getSettings: () => DEFAULT_ADVISOR_SETTINGS, checkBudget: async () => undefined },
 		})
 		const tools = [
@@ -273,7 +254,7 @@ describe("SdkSessionConfigBuilder", () => {
 
 	it("adds no advisor tool when the host does not provide one", async () => {
 		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, modelId: "pliny/auto-paid-balanced", extraTools: [] })
-		const builder = new SdkSessionConfigBuilder({ stateManager: {} as never, emitHookMessage: vi.fn() })
+		const builder = new SdkSessionConfigBuilder({ stateManager: {} as never })
 		const config = await builder.build({ cwd: "/workspace", mode: "act" })
 		expect(config.extraTools).toEqual([])
 	})

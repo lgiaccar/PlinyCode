@@ -10,22 +10,17 @@ interface HookRowProps {
 	enabled: boolean
 	absolutePath: string
 	isGlobal: boolean
-	isWindows: boolean
 	workspaceName?: string
-	onToggle: (hookName: string, newEnabled: boolean) => void
+	onToggle: (newEnabled: boolean) => void
 	onDelete: (hooksToggles: HooksToggles) => void
 }
 
-const HookRow: React.FC<HookRowProps> = ({
-	hookName,
-	enabled,
-	absolutePath,
-	isGlobal,
-	isWindows,
-	workspaceName,
-	onToggle,
-	onDelete,
-}) => {
+/** The file's name, e.g. `PreToolUse.ps1`: one event can have a hook file per directory and extension. */
+function hookFileLabel(absolutePath: string, hookName: string): string {
+	return absolutePath.split(/[\\/]/).pop() || hookName
+}
+
+const HookRow: React.FC<HookRowProps> = ({ hookName, enabled, absolutePath, isGlobal, workspaceName, onToggle, onDelete }) => {
 	const handleEditClick = () => {
 		FileServiceClient.openFile(StringRequest.create({ value: absolutePath })).catch((err) =>
 			console.error("Failed to open file:", err),
@@ -36,6 +31,7 @@ const HookRow: React.FC<HookRowProps> = ({
 		FileServiceClient.deleteHook(
 			DeleteHookRequest.create({
 				hookName,
+				hookPath: absolutePath,
 				isGlobal,
 				workspaceName,
 			}),
@@ -51,27 +47,13 @@ const HookRow: React.FC<HookRowProps> = ({
 	return (
 		<div className="mb-2.5">
 			<div className="flex items-center px-2 py-4 rounded bg-text-block-background max-h-4">
-				<span className="flex-1 overflow-hidden break-all whitespace-normal flex items-center mr-1">
-					<span className="ph-no-capture">{hookName}</span>
+				<span className="flex-1 overflow-hidden break-all whitespace-normal flex items-center mr-1" title={absolutePath}>
+					<span className="ph-no-capture">{hookFileLabel(absolutePath, hookName)}</span>
 				</span>
 
 				{/* Toggle Switch */}
 				<div className="flex items-center space-x-2 gap-2">
-					<div
-						title={
-							isWindows
-								? "Hook toggling is not yet supported on Windows in this foundation PR. Hooks execute when the hook file exists."
-								: undefined
-						}>
-						<Switch
-							checked={enabled}
-							className="mx-1"
-							disabled={isWindows}
-							key={hookName}
-							onClick={() => onToggle(hookName, !enabled)}
-							style={isWindows ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
-						/>
-					</div>
+					<Switch checked={enabled} className="mx-1" key={absolutePath} onClick={() => onToggle(!enabled)} />
 					<Button aria-label="Edit hook file" onClick={handleEditClick} size="xs" title="Edit hook file" variant="icon">
 						<PenIcon />
 					</Button>

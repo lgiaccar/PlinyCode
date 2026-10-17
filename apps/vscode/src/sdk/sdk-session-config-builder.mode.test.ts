@@ -14,10 +14,6 @@ vi.mock("./cline-session-factory", () => ({
 	buildSessionConfig: mocks.buildSessionConfig,
 }))
 
-vi.mock("./hooks-adapter", () => ({
-	buildAgentHooks: vi.fn(() => ({})),
-}))
-
 vi.mock("./router/router-integration", () => ({
 	installRouter: vi.fn((config: CoreSessionConfig, deps: RouterInstallDeps) => {
 		mocks.installed.push(deps)
@@ -28,7 +24,6 @@ vi.mock("./router/router-integration", () => ({
 function makeBuilder(globalMode: string, isOffTheRecordTurn?: (sessionId: string | undefined) => boolean) {
 	return new SdkSessionConfigBuilder({
 		stateManager: { getGlobalSettingsKey: (key: string) => (key === "mode" ? globalMode : undefined) } as never,
-		emitHookMessage: vi.fn(),
 		emitRow: vi.fn(),
 		nextMessageTs: () => 1,
 		isOffTheRecordTurn,

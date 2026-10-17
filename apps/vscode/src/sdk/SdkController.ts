@@ -52,6 +52,7 @@ import type { AdvisorUsage } from "./advisor/advisor-tool"
 import { CiRunPolicies, type CiRunPolicy, decideCiTool } from "./ci-run-policy"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { type ConversationContext, createConversationContext } from "./context"
+import { createHookStatusRows } from "./hook-status-rows"
 import { createMemoryServices, type MemoryServices } from "./memory"
 import { MemoryCoordinator } from "./memory/memory-coordinator"
 import { completeWithUtilityModel } from "./memory/memory-model"
@@ -412,7 +413,6 @@ export class Controller {
 		})
 		this.sessionConfigBuilder = new SdkSessionConfigBuilder({
 			stateManager: this.stateManager,
-			emitHookMessage: (msg) => this.messages.emitHookMessage(msg),
 			onConsecutiveMistakeLimitReached: (context) => this.interactions.handleConsecutiveMistakeLimitReached(context),
 			// FreeAuto routing rows. They are ordinary persisted chat rows, minted
 			// from the shared id authority so they never collide with
@@ -506,6 +506,12 @@ export class Controller {
 				})
 			},
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
+			// The engine runs the hook files; each run becomes a hook_status row.
+			onHookStatus: createHookStatusRows({
+				emitRow: (msg) => this.messages.emitHookMessage(msg),
+				nextMessageTs: () => this.messageTranslatorState.getMinter().nextId(),
+				isBackgroundSession: (sessionId) => this.background.has(sessionId),
+			}),
 			foregroundCommands: this.foregroundCommands,
 			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),

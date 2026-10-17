@@ -435,6 +435,7 @@ message Settings {
   optional bool background_edit_enabled = 155;
   optional bool show_feature_tips = 182;
   optional bool pliny_free_auto_migrated_v1 = 190;
+  optional string global_hooks_toggles = 191;
 }
 
 message State {

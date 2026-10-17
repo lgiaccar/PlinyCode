@@ -50,6 +50,7 @@ When you add a value to the `ClineSay` or `ClineAsk` enums, update both the Type
 | Repo memory and past-conversation search         | `src/sdk/memory/`, `webview-ui/src/components/chat/MemoryProposalRow.tsx`                                | [memory.md](../../docs/memory.md)                                                                                                                       |
 | Conversations bound to workspaces                | `src/shared/workspaceRef.ts`, `src/core/workspace/workspace-identity.ts`, `src/core/controller/workspace/`, `webview-ui/src/components/workspace/` | [workspace-conversations.md](../../docs/workspace-conversations.md)                                                                                      |
 | Run in worktree (a conversation on its own branch and git worktree) | `src/services/git/worktrees.ts`, `src/sdk/sdk-task-start-coordinator.ts`, `webview-ui/src/components/workspace/NewTaskWorkspacePicker.tsx`, `webview-ui/src/components/chat/task-header/TaskWorktreeChip.tsx` | [task-worktrees.md](../../docs/task-worktrees.md) |
+| Hook files (run by the engine; per-file toggles, `hook_status` rows) | `src/core/hooks/`, `src/core/controller/file/*Hook*.ts`, `src/sdk/hook-status-rows.ts`, `src/sdk/vscode-session-host.ts` | [rules.md](../../docs/rules.md), "Hooks" |
 
 ## Verifying changes
 

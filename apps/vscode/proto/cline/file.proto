@@ -67,7 +67,7 @@ service FileService {
   // Refreshes all hook toggles (discovers hooks and their enabled state)
   rpc refreshHooks(EmptyRequest) returns (HooksToggles);
 
-  // Toggles a hook on or off via chmod +x/-x
+  // Toggles a hook file on or off (recorded in the hook toggle state, not the file mode)
   rpc toggleHook(ToggleHookRequest) returns (ToggleHookResponse);
 
   // Creates a new hook from template
@@ -249,7 +249,7 @@ message WorkspaceHooks {
 message HooksToggles {
   repeated HookInfo global_hooks = 1;
   repeated WorkspaceHooks workspace_hooks = 2;
-  bool is_windows = 3; // Whether the system is Windows (toggles disabled)
+  bool is_windows = 3; // Whether the system is Windows
 }
 
 // Request to toggle a hook
@@ -257,8 +257,9 @@ message ToggleHookRequest {
   Metadata metadata = 1;
   string hook_name = 2; // Name of the hook (e.g., "TaskStart")
   bool is_global = 3; // Whether this is a global or workspace hook
-  bool enabled = 4; // Whether to enable (chmod +x) or disable (chmod -x)
+  bool enabled = 4; // Whether the hook file runs
   optional string workspace_name = 5; // For multi-root workspaces, specifies which workspace
+  optional string hook_path = 6; // Absolute path of the hook file; without it, the first file named after hook_name
 }
 
 // Response for toggleHook operation
@@ -285,6 +286,7 @@ message DeleteHookRequest {
   string hook_name = 2; // Name of the hook to delete
   bool is_global = 3; // Whether this is a global or workspace hook
   optional string workspace_name = 4; // For multi-root workspaces, specifies which workspace
+  optional string hook_path = 5; // Absolute path of the hook file; without it, the first file named after hook_name
 }
 
 // Response for deleteHook operation

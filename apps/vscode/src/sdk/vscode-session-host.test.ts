@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockClineCoreCreate = vi.hoisted(() => vi.fn())
 const mockCreateVscodeExtraTools = vi.hoisted(() => vi.fn(async () => []))
+const mockSettings = vi.hoisted(() => ({ values: {} as Record<string, unknown> }))
 
 vi.mock("@plinycode/core", async () => {
 	const actual = await vi.importActual<typeof import("@plinycode/core")>("@plinycode/core")
@@ -22,6 +23,8 @@ vi.mock("@/core/storage/StateManager", () => ({
 	StateManager: {
 		get: () => ({
 			getGlobalStateKey: () => undefined,
+			getGlobalSettingsKey: (key: string) => mockSettings.values[key],
+			getWorkspaceStateKey: (key: string) => mockSettings.values[key],
 		}),
 	},
 }))
@@ -34,6 +37,7 @@ import { VscodeSessionHost } from "./vscode-session-host"
 
 describe("VscodeSessionHost", () => {
 	beforeEach(() => {
+		mockSettings.values = {}
 		mockClineCoreCreate.mockReset()
 		mockClineCoreCreate.mockResolvedValue({ runtimeAddress: undefined })
 		mockCreateVscodeExtraTools.mockReset().mockResolvedValue([])
@@ -116,6 +120,57 @@ describe("VscodeSessionHost", () => {
 		})
 		expect(result.source).toBe("vscode")
 		expect(result.config.extraTools).toEqual([{ name: "input-tool" }, { name: "vscode-tool" }])
+	})
+
+	describe("hook files", () => {
+		async function prepareStart(options: { onHookStatus?: (sessionId: string | undefined, event: unknown) => void }) {
+			await VscodeSessionHost.create({
+				// biome-ignore lint/suspicious/noExplicitAny: focused host unit test
+				mcpHub: {} as any,
+				onHookStatus: options.onHookStatus,
+			})
+			const bootstrap = await mockClineCoreCreate.mock.calls[0][0].prepare()
+			const prepared: ClineCoreStartInput = await bootstrap.applyToStartSessionInput({
+				config: { cwd: "/workspace", sessionId: "session-7", extraTools: [] },
+			} as never)
+			return prepared.localRuntime ?? {}
+		}
+
+		it("lets the engine run hook files, with the toggle filter and status reporting, while hooks are on", async () => {
+			const onHookStatus = vi.fn()
+			const localRuntime = await prepareStart({ onHookStatus })
+
+			expect(localRuntime.configExtensions).toContain("hooks")
+			expect(localRuntime.hookFilter?.("/hooks/PreToolUse.js")).toBe(true)
+
+			mockSettings.values.localHooksToggles = { "/hooks/PreToolUse.js": false }
+			expect(localRuntime.hookFilter?.("/hooks/PreToolUse.js")).toBe(false)
+
+			const event = { hookName: "PreToolUse", hookPath: "/hooks/PreToolUse.js", eventName: "tool_call", status: "running" }
+			localRuntime.onHookStatus?.(event as never)
+			expect(onHookStatus).toHaveBeenCalledWith("session-7", event)
+		})
+
+		it("stops hook files mid-session when the hooksEnabled switch goes off", async () => {
+			const localRuntime = await prepareStart({ onHookStatus: vi.fn() })
+			mockSettings.values.hooksEnabled = false
+			expect(localRuntime.hookFilter?.("/hooks/PreToolUse.js")).toBe(false)
+		})
+
+		it("leaves the engine's file-hook extension out while hooks are switched off", async () => {
+			mockSettings.values.hooksEnabled = false
+			const localRuntime = await prepareStart({ onHookStatus: vi.fn() })
+
+			expect(localRuntime.configExtensions).not.toContain("hooks")
+			expect(localRuntime.configExtensions?.length).toBeGreaterThan(0)
+			expect(localRuntime.hookFilter).toBeUndefined()
+			expect(localRuntime.onHookStatus).toBeUndefined()
+		})
+
+		it("runs no hook files in a host without a status listener (compaction, restore, history)", async () => {
+			const localRuntime = await prepareStart({})
+			expect(localRuntime.configExtensions).not.toContain("hooks")
+		})
 	})
 
 	it("prepares the start input of a checkpoint restore with a replacement session", async () => {

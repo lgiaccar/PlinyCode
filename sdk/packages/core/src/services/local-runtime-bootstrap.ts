@@ -358,8 +358,8 @@ export async function prepareLocalRuntimeBootstrap(
 			defaultLogger,
 	};
 
-	// Hosts with their own hook execution layer (the VS Code extension's
-	// hooks adapter) exclude "hooks" so file hooks run exactly once.
+	// A host that must not run file hooks (the VS Code extension while its
+	// hooks setting is off) excludes "hooks"; `hookFilter` skips single files.
 	const fileHookExtension = hasConfigExtension(configExtensions, "hooks")
 		? createHookConfigFileExtension({
 				cwd: input.config.cwd,

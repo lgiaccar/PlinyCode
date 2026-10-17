@@ -34,3 +34,41 @@ Inlined rules fill the budget in this order: the workspace's `AGENTS.md`, the gl
 ## Slash commands
 
 A workflow typed as a slash command pastes its body into the message, cut at 24,000 characters ([agent-tools.md](agent-tools.md), "Slash commands that paste instructions"). Skills are loaded through the `skills` tool instead.
+
+## Hooks
+
+Hook files are scripts that run when an agent event fires. The engine runs them ([hook-file-hooks.ts](../sdk/packages/core/src/hooks/hook-file-hooks.ts)); the extension decides which may run and shows each run in the chat. The Rules panel's **Hooks** tab lists them, creates one from a template, and opens, deletes or switches each one on or off. The tab is hidden while **Settings → Features → Hooks** (the `hooksEnabled` setting) is off, and then no hook file runs.
+
+### Which files
+
+A hook file is named after its event, with an optional extension that picks the interpreter: none or `.sh`/`.bash`/`.zsh` (bash, or the file's shebang), `.js`/`.mjs`/`.cjs` (node), `.ts` (bun), `.py` (`py -3` on Windows, `python3` elsewhere) and `.ps1` (PowerShell). They are read from four directories ([hook-file-config.ts](../sdk/packages/core/src/hooks/hook-file-config.ts)):
+
+- global: `Documents/Cline/Hooks` and `~/.cline/hooks`;
+- the workspace: `.clinerules/hooks` and `.cline/hooks`.
+
+Every matching file runs, so `PreToolUse.ps1` and `PreToolUse.js` in the same directory both run. A session finds its hook files when it starts: a file added later runs from the next conversation, or once a mode switch rebuilds the session.
+
+| File | Runs | Waited for |
+| --- | --- | --- |
+| `TaskStart` | before each run of the agent | no |
+| `UserPromptSubmit` | when a user message is added | no |
+| `PreToolUse` | before each tool call | yes; can cancel the call or add context |
+| `PostToolUse` | after each tool call | yes; can stop the run or add context |
+| `TaskComplete` | when a run completes | no |
+| `TaskCancel` | when a run is cancelled | no |
+| `SessionShutdown` | after `TaskCancel`, when a run is cancelled | no |
+| `TaskError` | when a run ends on an error | no |
+| `TaskResume` | only with `CLINE_HOOK_AGENT_RESUME=1` in the environment, which PlinyCode does not set, so not yet | no |
+
+A hook gets the event as JSON on stdin and may print a JSON object: `{"cancel": true, "errorMessage": "…"}` cancels, `{"contextModification": "…"}` adds a `<hook_context>` block to the conversation. Only `PreToolUse` and `PostToolUse` are waited for (up to two minutes each), so only they can cancel or add context; the other hooks run alongside the agent. The Cline-era runner the extension used before this also waited for `TaskStart` and `UserPromptSubmit` and let them cancel a run, and it never ran `TaskError` or `SessionShutdown`.
+
+### Toggles
+
+Each file's switch is stored by the extension, not in the file: global hooks in the `globalHooksToggles` setting, workspace hooks in the `localHooksToggles` workspace state, keyed by path. The engine asks the extension before every run (`localRuntime.hookFilter`), so switching a file off, or turning **Hooks** off, applies to the next hook run of a live session, on every platform. Turning **Hooks** back on applies to sessions started afterwards.
+
+- A hook created from the tab starts switched off, so the template does not run before it has been edited.
+- A file with no recorded switch runs, with one exception kept from the Cline-era runner: on macOS and Linux, an extensionless file without the executable bit (that runner's "off", set with `chmod -x`) stays off until it is switched on in the tab. Nothing changes file modes any more.
+
+### Status rows
+
+Each run shows as a `hook_status` row with the hook's name, the tool for `PreToolUse` and `PostToolUse`, and its status: running, then completed, failed or cancelled. The engine reports each run (`localRuntime.onHookStatus`) and [hook-status-rows.ts](../apps/vscode/src/sdk/hook-status-rows.ts) turns the report into the row, giving the final status the running row's id so that it replaces the row. A background conversation's rows are dropped, and a failure is also logged with its reason. The wiring is in [vscode-session-host.ts](../apps/vscode/src/sdk/vscode-session-host.ts).
