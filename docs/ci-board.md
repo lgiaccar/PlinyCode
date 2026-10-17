@@ -266,7 +266,7 @@ Runs the board starts have their own approval rules, checked before your auto-ap
 | editing a file outside the worktree, or inside `.git`                   | refused                  | refused        |
 | `rm`, `mv`, `cd`, `Remove-Item`, … or a `>` redirection to a path outside the worktree; `git -C <elsewhere>` | refused | refused |
 | `git rebase`, `commit --amend`, `branch -D`, `worktree`, `remote`, `config --global`; `sudo`; piping a download to a shell; `gh`/`az` commands that change things | your settings | refused |
-| reading outside the worktree and the report folder; MCP tools other than the DevOps server's read-only ones; web tools; `save_memory` | your settings | refused |
+| reading outside the worktree and the report folder; MCP tools other than the DevOps server's read-only ones (`pr_review`, `pr_comment`, `pipeline_run`, `pipeline_cancel` and `pipeline_rerun` are refused with a reason of their own, see [devops-mcp.md](devops-mcp.md#unattended-ci-board-runs)); web tools; `save_memory` | your settings | refused |
 | anything else (editing in the worktree, builds, tests, reads)           | your settings            | approved       |
 
 A refusal comes back to the model with the reason, so it can correct itself (for example push with the explicit

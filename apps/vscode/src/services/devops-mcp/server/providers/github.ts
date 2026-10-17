@@ -11,14 +11,20 @@ import {
 	Http,
 	type JobResult,
 	type MergeState,
+	type NewPrComment,
 	type PipelineDefinition,
 	type PipelineDispatch,
-	type PipelineProvider,
 	type PipelineRun,
+	type PostedComment,
+	type PrComment,
+	type PrThread,
 	type PullRequest,
 	type Result,
+	type ReviewVerdict,
 	type RunReport,
+	repoPath,
 	type Status,
+	type ToolProvider,
 	tail,
 } from "./types"
 
@@ -70,6 +76,28 @@ function mergeState(d: any): MergeState | undefined {
 
 const PR_LIST_PAGE = 100
 
+/** Pages of comments read per list, 100 each: enough for any PR a model should page through. */
+const MAX_COMMENT_PAGES = 5
+
+const REVIEW_VERDICTS: Record<string, string> = {
+	APPROVED: "approved",
+	CHANGES_REQUESTED: "changes requested",
+	COMMENTED: "commented",
+	DISMISSED: "dismissed",
+}
+
+const REVIEW_EVENTS: Record<ReviewVerdict, string> = {
+	approve: "APPROVE",
+	request_changes: "REQUEST_CHANGES",
+	comment: "COMMENT",
+}
+
+const comment = (d: any): PrComment => ({
+	author: d.user?.login ?? "",
+	body: d.body ?? "",
+	created: d.created_at ?? d.submitted_at ?? "",
+})
+
 /**
  * The `lines` lines ending at the last `##[error]` line of a job log.
  *
@@ -90,7 +118,7 @@ export function failureExcerpt(log: string, lines: number): string {
 	return all.slice(Math.max(0, last + 1 - lines), last + 1).join("\n")
 }
 
-export class GitHubProvider implements PipelineProvider {
+export class GitHubProvider implements ToolProvider {
 	readonly kind = "GitHub"
 	readonly maxBodyLength = 65536
 	readonly repoUrl: string
@@ -236,6 +264,146 @@ export class GitHubProvider implements PipelineProvider {
 
 	async getRun(runId: number): Promise<PipelineRun> {
 		return this.run(await this.get(`/actions/runs/${runId}`))
+	}
+
+	async cancelRun(runId: number): Promise<void> {
+		await this.http.request("POST", `${this.api}/actions/runs/${runId}/cancel`)
+	}
+
+	async rerunRun(runId: number, failedOnly: boolean): Promise<PipelineDispatch> {
+		// Both start a new attempt of the same run id; neither returns a body.
+		await this.http.request("POST", `${this.api}/actions/runs/${runId}/${failedOnly ? "rerun-failed-jobs" : "rerun"}`)
+		return { runId, url: `${this.repoUrl}/actions/runs/${runId}` }
+	}
+
+	private async pages(path: string): Promise<any[]> {
+		const all: any[] = []
+		for (let page = 1; page <= MAX_COMMENT_PAGES; page++) {
+			const items = await this.get<any[]>(path, { per_page: 100, page })
+			if (!Array.isArray(items)) break
+			all.push(...items)
+			if (items.length < 100) break
+		}
+		return all
+	}
+
+	/**
+	 * Whether each review thread is resolved, by the id of its first comment. Only GraphQL reports it; without it
+	 * (an old GitHub Enterprise Server, a token without GraphQL access) the threads are listed without the state.
+	 */
+	private async threadResolution(number: number): Promise<Map<number, boolean>> {
+		const resolved = new Map<number, boolean>()
+		try {
+			const data = await this.graphql(
+				"query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { isResolved comments(first: 1) { nodes { databaseId } } } } } } }",
+				{ owner: this.remote.owner, repo: this.remote.repo, number },
+			)
+			for (const node of data?.repository?.pullRequest?.reviewThreads?.nodes ?? []) {
+				const id = node?.comments?.nodes?.[0]?.databaseId
+				if (typeof id === "number") resolved.set(id, Boolean(node.isResolved))
+			}
+		} catch (error) {
+			if (!(error instanceof DevOpsError)) throw error
+		}
+		return resolved
+	}
+
+	async listPrThreads(pr: PullRequest): Promise<PrThread[]> {
+		const [issueComments, reviewComments, reviews, resolution] = await Promise.all([
+			this.pages(`/issues/${pr.id}/comments`),
+			this.pages(`/pulls/${pr.id}/comments`),
+			this.pages(`/pulls/${pr.id}/reviews`),
+			this.threadResolution(pr.id),
+		])
+		// GitHub cannot thread a reply under a general (issue) comment, so those have no reply id.
+		const threads: PrThread[] = issueComments.map((c) => ({ kind: "general", url: c.html_url, comments: [comment(c)] }))
+		const inline = new Map<number, PrThread>()
+		for (const c of [...reviewComments].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))) {
+			const root: number = c.in_reply_to_id ?? c.id
+			let thread = inline.get(root)
+			if (!thread) {
+				thread = {
+					kind: "inline",
+					replyId: String(root),
+					path: c.path,
+					// `line` is null once the commented line is no longer in the diff (an outdated comment).
+					line: c.line ?? c.original_line ?? undefined,
+					resolved: resolution.get(root),
+					url: c.html_url,
+					comments: [],
+				}
+				inline.set(root, thread)
+			}
+			thread.comments.push(comment(c))
+		}
+		threads.push(...inline.values())
+		for (const r of reviews) {
+			const verdict = REVIEW_VERDICTS[r.state]
+			// A bodiless "commented" review only wraps inline comments, which are listed above; PENDING is someone's draft.
+			if (!verdict || (r.state === "COMMENTED" && !r.body)) continue
+			threads.push({ kind: "review", verdict, url: r.html_url, comments: [comment(r)] })
+		}
+		return threads
+	}
+
+	async addPrComment(pr: PullRequest, request: NewPrComment): Promise<PostedComment> {
+		if (request.replyTo !== undefined) {
+			const id = Number(request.replyTo)
+			if (!Number.isSafeInteger(id) || id <= 0) {
+				throw new DevOpsError(
+					`\`reply_to\` takes the id pr_comments shows for an inline thread, not '${request.replyTo}'.`,
+				)
+			}
+			try {
+				const d = await this.http.json("POST", `${this.api}/pulls/${pr.id}/comments/${id}/replies`, {
+					json: { body: request.body },
+				})
+				return { kind: "reply", url: d?.html_url ?? pr.url, replyId: String(id) }
+			} catch (error) {
+				if (error instanceof DevOpsError && error.status === 404) {
+					throw new DevOpsError(
+						`PR #${pr.id} has no inline review comment ${id}. GitHub threads replies only under inline review comments; answer a general comment with a new comment instead.`,
+						404,
+					)
+				}
+				throw error
+			}
+		}
+		if (request.path !== undefined && request.line !== undefined) {
+			const commit = pr.headSha ?? (await this.getPr(pr.id)).headSha
+			const json = {
+				body: request.body,
+				commit_id: commit,
+				path: repoPath(request.path),
+				line: request.line,
+				side: "RIGHT",
+			}
+			try {
+				const d = await this.http.json("POST", `${this.api}/pulls/${pr.id}/comments`, { json })
+				return { kind: "inline comment", url: d?.html_url ?? pr.url, replyId: d?.id ? String(d.id) : undefined }
+			} catch (error) {
+				if (error instanceof DevOpsError && error.status === 422) {
+					throw new DevOpsError(
+						`${error.message}. GitHub takes inline comments only on lines the pull request's diff shows: \`path\` relative to the repository root, \`line\` in the new version of the file.`,
+						422,
+					)
+				}
+				throw error
+			}
+		}
+		const d = await this.http.json("POST", `${this.api}/issues/${pr.id}/comments`, { json: { body: request.body } })
+		return { kind: "comment", url: d?.html_url ?? pr.url }
+	}
+
+	async reviewPr(pr: PullRequest, verdict: ReviewVerdict, body?: string): Promise<string> {
+		if (verdict === "request_changes" && !body?.trim()) {
+			throw new DevOpsError("GitHub needs a `body` to request changes: say what should change.")
+		}
+		const json: Record<string, string> = { event: REVIEW_EVENTS[verdict] }
+		if (body?.trim()) json.body = body
+		const d = await this.http.json("POST", `${this.api}/pulls/${pr.id}/reviews`, { json })
+		const done = verdict === "approve" ? "Approved" : verdict === "request_changes" ? "Requested changes on" : "Commented on"
+		return `${done} PR #${pr.id} on GitHub: ${d?.html_url ?? pr.url}`
 	}
 
 	async findOpenPr(branch: string): Promise<PullRequest | undefined> {

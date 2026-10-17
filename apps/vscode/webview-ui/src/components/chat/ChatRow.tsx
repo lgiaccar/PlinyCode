@@ -938,6 +938,7 @@ const ChatRowContent = memo(
 											name: useMcpServer.toolName || "",
 											description:
 												server?.tools?.find((tool) => tool.name === useMcpServer.toolName)?.description ||
+												useMcpServer.description ||
 												"",
 											autoApprove:
 												server?.tools?.find((tool) => tool.name === useMcpServer.toolName)?.autoApprove ||

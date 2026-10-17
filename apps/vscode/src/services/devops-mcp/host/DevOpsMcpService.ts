@@ -104,6 +104,7 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			provider: service.toolProvider,
 			isRunning: () => service.state === "running",
 			toolNames: () => service.tools.map((t) => t.name),
+			toolDescription: (name) => service.tools.find((t) => t.name === name)?.description,
 			// Its tools only work on a repo with a GitHub or Azure DevOps remote.
 			appliesTo: (cwd) => hasSupportedRemote(cwd),
 			extraTools: (cwd) =>

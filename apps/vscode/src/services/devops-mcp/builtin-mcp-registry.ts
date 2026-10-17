@@ -17,6 +17,8 @@ interface BuiltinMcpSource {
 	isRunning(): boolean
 	/** Current tool names, for building approval policies synchronously. */
 	toolNames(): string[]
+	/** A tool's description, shown in its approval prompt (McpHub, which supplies it for other servers, does not know these). */
+	toolDescription?(toolName: string): string | undefined
 	/**
 	 * Whether the server is any use in a session rooted at `cwd`. Tool schemas
 	 * are sent with every request, so a server that cannot act in this
@@ -64,6 +66,11 @@ export function registerBuiltinMcpSource(source: BuiltinMcpSource): () => void {
 
 export function getRunningBuiltinMcpSources(): BuiltinMcpSource[] {
 	return [...sources.values()].filter((s) => s.isRunning())
+}
+
+/** The description of a built-in server's tool, or undefined when `serverName` is not a built-in server. */
+export function builtinMcpToolDescription(serverName: string, toolName: string): string | undefined {
+	return sources.get(serverName)?.toolDescription?.(toolName)
 }
 
 export function notifyBuiltinMcpToolsChanged(): void {

@@ -129,8 +129,8 @@ const DevOpsServerCard = ({ status, compact = false }: { status: DevOpsServerSta
 			{expanded && !compact && (
 				<div className="bg-code-block-background px-3 pb-3 pt-1 text-sm flex flex-col gap-3">
 					<p className="m-0 text-description">
-						Creates and updates pull requests and reports CI pipeline runs, on GitHub and Azure DevOps. The repository
-						is picked from the workspace's git remote. Try:{" "}
+						Creates, updates and reviews pull requests, and reports, starts, cancels and reruns CI pipeline runs, on
+						GitHub and Azure DevOps. The repository is picked from the workspace's git remote. Try:{" "}
 						{EXAMPLES.map((example, i) => (
 							<span key={example}>
 								{i > 0 && " or "}
