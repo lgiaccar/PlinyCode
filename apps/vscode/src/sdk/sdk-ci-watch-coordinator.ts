@@ -5,7 +5,9 @@ import {
 	type CiWatchConversationHost,
 	type CiWatchDelivery,
 	CiWatchManager,
+	type CiWatchRestoreOptions,
 } from "@/services/devops-mcp/ci-watch/ci-watch-manager"
+import type { CiWatchPersistence } from "@/services/devops-mcp/ci-watch/ci-watch-store"
 import type { ActiveSession } from "./cline-session-factory"
 
 interface SdkCiWatchCoordinatorOptions {
@@ -26,7 +28,17 @@ interface SdkCiWatchCoordinatorOptions {
 	/** Shows a notification with an Open action. */
 	notify: (message: string, onOpen: () => void) => void
 	openTask: (conversationId: string) => void
+	/** Saves the watches so they survive a window reload. Without it they live in memory only. */
+	persistence?: SdkCiWatchPersistence
 	managerOptions?: ConstructorParameters<typeof CiWatchManager>[1]
+}
+
+interface SdkCiWatchPersistence {
+	store: CiWatchPersistence
+	/** Whether the conversation is still in the task history; the watches of deleted ones are dropped. */
+	conversationExists(conversationId: string): Promise<boolean>
+	/** Rebuilds a restored watch's source. */
+	openSource: CiWatchRestoreOptions["openSource"]
 }
 
 /**
@@ -40,13 +52,31 @@ interface SdkCiWatchCoordinatorOptions {
  *   queue, which runs it when the turn ends;
  * - not loaded: the manager keeps it, notifies the user, and sends it when the
  *   conversation is opened.
+ *
+ * With `persistence`, the watches are saved as they change and restored when
+ * the coordinator is built, i.e. after a window reload.
  */
 export class SdkCiWatchCoordinator implements CiWatchConversationHost {
 	readonly manager: CiWatchManager
+	/** Settles when the saved watches have been restored. */
+	readonly restored: Promise<void>
 
 	constructor(private readonly options: SdkCiWatchCoordinatorOptions) {
-		this.manager = new CiWatchManager(this, options.managerOptions)
+		this.manager = new CiWatchManager(this, { ...options.managerOptions, store: options.persistence?.store })
 		setCiWatchManager(this.manager)
+		this.restored = options.persistence ? this.restore(options.persistence) : Promise.resolve()
+	}
+
+	private async restore(persistence: SdkCiWatchPersistence): Promise<void> {
+		await this.manager.restore({
+			exists: (conversationId) => persistence.conversationExists(conversationId),
+			openSource: persistence.openSource,
+		})
+		// The conversation on screen after the reload was opened before its held report came back.
+		const shown = this.options.getDisplayedTaskId()
+		if (shown) {
+			this.manager.conversationOpened(shown)
+		}
 	}
 
 	async deliver(conversationId: string, prompt: string): Promise<CiWatchDelivery> {
@@ -97,8 +127,9 @@ export class SdkCiWatchCoordinator implements CiWatchConversationHost {
 		}
 	}
 
+	/** The window is closing or reloading: stop polling, but keep the saved watches for the next one. */
 	dispose(): void {
-		this.manager.clear()
+		this.manager.dispose()
 		if (getCiWatchManager() === this.manager) {
 			setCiWatchManager(undefined)
 		}

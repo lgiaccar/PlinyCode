@@ -35,7 +35,7 @@ interface SdkSessionLifecycleOptions {
 	getTerminalManager?: () => VscodeTerminalManager
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
-	/** The language servers behind `find_symbol` and `code_navigate`; undefined leaves the tools out. */
+	/** The language servers behind `find_symbol`, `code_navigate` and `rename_preview`; undefined leaves the tools out. */
 	getCodeIntel?: () => CodeIntelSource | undefined
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void

@@ -4,10 +4,11 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import type { AgentToolContext } from "@plinycode/shared"
+import type { PullRequest } from "../../server/providers/types"
 import { CiWatchManager } from "../ci-watch-manager"
-import { resolveCiWatchTarget } from "../ci-watch-source"
+import { type CiWatchTargetSpec, openCiWatchSource, resolveCiWatchTarget } from "../ci-watch-source"
 import { ciWatchTools, createWatchCiTool } from "../watch-ci-tool"
-import { FakeClock, FakeHost, FakeProvider, fakeContext, HEAD_A, run, SECOND } from "./fakes"
+import { FakeClock, FakeHost, FakeProvider, fakeContext, HEAD_A, HEAD_B, MemoryStore, run, SECOND } from "./fakes"
 
 const context = (overrides: Partial<AgentToolContext> = {}): AgentToolContext => ({
 	sessionId: "c1",
@@ -55,6 +56,23 @@ describe("watch_ci", () => {
 		provider.runs = [run(1, "completed", "success")]
 		await clock.advance(60 * SECOND)
 		expect(host.delivered.map((d) => d.conversationId)).toEqual(["c1"])
+	})
+
+	it("saves what it watches, from which the source is rebuilt after a reload", async () => {
+		const store = new MemoryStore()
+		manager = new CiWatchManager(host, { clock, store })
+		await tool().execute({}, context())
+		await clock.advance(0)
+		const target = store.saved[0]?.watch?.target as CiWatchTargetSpec
+		expect(target).toEqual({ cwd: "/work/repo", remote: fakeContext().remote, pr: 7, branch: "feature" })
+
+		const openRepo = async () => ({ ctx: fakeContext(), provider })
+		const source = await openCiWatchSource(openRepo, target, HEAD_A)
+		provider.pr = { ...(provider.pr as PullRequest), headSha: HEAD_B }
+		expect(await source.head()).toBe(HEAD_B)
+
+		const moved = { ...target, remote: { ...target.remote, repo: "other" } }
+		await expect(openCiWatchSource(openRepo, moved, HEAD_A)).rejects.toThrow(/no longer points at the repository/)
 	})
 
 	it("accepts a pull request number sent as a string, and first_failure", async () => {

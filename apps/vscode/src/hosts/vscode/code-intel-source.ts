@@ -1,13 +1,22 @@
 import * as vscode from "vscode"
 import { reduceHoverMarkdown } from "@/sdk/code-intel/code-intel-format"
-import type { CodeHover, CodeIntelSource, CodeLocation, CodeSymbol } from "@/sdk/code-intel/code-intel-source"
+import type {
+	CodeCall,
+	CodeDiagnostic,
+	CodeHover,
+	CodeIntelSource,
+	CodeLocation,
+	CodeRenameResult,
+	CodeSymbol,
+} from "@/sdk/code-intel/code-intel-source"
 
 /** VS Code settings section that holds every `plinycode.codeIntel.*` setting. */
 const CODE_INTEL_SETTINGS_SECTION = "plinycode.codeIntel"
 
 /**
- * `plinycode.codeIntel.enabled`: whether the model gets the `find_symbol` and
- * `code_navigate` tools, which answer through the window's language servers.
+ * `plinycode.codeIntel.enabled`: whether the model gets the `find_symbol`,
+ * `code_navigate` and `rename_preview` tools, which answer through the
+ * window's language servers.
  * See sdk/code-intel/code-intel-tools.ts.
  */
 const CODE_INTEL_ENABLED_SETTING = "enabled"
@@ -26,8 +35,9 @@ export function isCodeIntelEnabled(): boolean {
 
 /**
  * The window's language servers, through VS Code's `vscode.execute*Provider`
- * commands. Each answer is reduced to plain one-based positions so the tools
- * and their tests never see a `vscode.Uri` or `vscode.Range`.
+ * and call hierarchy commands and its diagnostics. Each answer is reduced to
+ * plain one-based positions so the tools and their tests never see a
+ * `vscode.Uri` or `vscode.Range`.
  */
 export function createVscodeCodeIntelSource(): CodeIntelSource {
 	return {
@@ -133,6 +143,116 @@ export function createVscodeCodeIntelSource(): CodeIntelSource {
 			)
 			return reduceHoverMarkdown(values)
 		},
+		async callHierarchy(absolutePath, line, column, direction) {
+			const items = await vscode.commands.executeCommand<vscode.CallHierarchyItem[] | undefined>(
+				"vscode.prepareCallHierarchy",
+				vscode.Uri.file(absolutePath),
+				new vscode.Position(line - 1, column - 1),
+			)
+			const item = items?.[0]
+			const prepared = item && fromCallItem(item)
+			if (!item || !prepared) {
+				return undefined
+			}
+			const calls: (CodeCall | undefined)[] = []
+			if (direction === "incoming") {
+				const incoming = await vscode.commands.executeCommand<vscode.CallHierarchyIncomingCall[] | undefined>(
+					"vscode.provideIncomingCalls",
+					item,
+				)
+				// The call sites of an incoming call are ranges in the caller's file.
+				for (const call of incoming ?? []) {
+					calls.push(fromCallItem(call.from, call.from.uri, call.fromRanges[0]))
+				}
+			} else {
+				const outgoing = await vscode.commands.executeCommand<vscode.CallHierarchyOutgoingCall[] | undefined>(
+					"vscode.provideOutgoingCalls",
+					item,
+				)
+				// The call sites of an outgoing call are ranges in the prepared item's file.
+				for (const call of outgoing ?? []) {
+					calls.push(fromCallItem(call.to, item.uri, call.fromRanges[0]))
+				}
+			}
+			return { item: prepared, calls: calls.filter((call): call is CodeCall => !!call) }
+		},
+		async diagnostics(absolutePath) {
+			return vscode.languages.getDiagnostics(vscode.Uri.file(absolutePath)).flatMap((diagnostic): CodeDiagnostic[] => {
+				const severity =
+					diagnostic.severity === vscode.DiagnosticSeverity.Error
+						? "error"
+						: diagnostic.severity === vscode.DiagnosticSeverity.Warning
+							? "warning"
+							: undefined
+				if (!severity) {
+					return []
+				}
+				const code = typeof diagnostic.code === "object" ? diagnostic.code.value : diagnostic.code
+				return [
+					{
+						severity,
+						message: diagnostic.message,
+						line: diagnostic.range.start.line + 1,
+						column: diagnostic.range.start.character + 1,
+						source: diagnostic.source || undefined,
+						code: code === undefined || code === "" ? undefined : String(code),
+					},
+				]
+			})
+		},
+		async renameEdits(absolutePath, line, column, newName): Promise<CodeRenameResult | undefined> {
+			let edit: vscode.WorkspaceEdit | undefined
+			try {
+				edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit | undefined>(
+					"vscode.executeDocumentRenameProvider",
+					vscode.Uri.file(absolutePath),
+					new vscode.Position(line - 1, column - 1),
+					newName,
+				)
+			} catch (error) {
+				// VS Code turns a provider's refusal ("You cannot rename this element.") into a rejected command.
+				const reason = error instanceof Error ? error.message : String(error)
+				return { refusal: reason.trim() || "the language server gave no reason.", files: [] }
+			}
+			if (!edit) {
+				return undefined
+			}
+			return {
+				files: edit
+					.entries()
+					.filter(([uri]) => uri.scheme === "file")
+					.map(([uri, edits]) => ({
+						path: uri.fsPath,
+						edits: edits.map((textEdit) => ({
+							line: textEdit.range.start.line + 1,
+							column: textEdit.range.start.character + 1,
+							endLine: textEdit.range.end.line + 1,
+							endColumn: textEdit.range.end.character + 1,
+							newText: textEdit.newText,
+						})),
+					})),
+			}
+		},
+	}
+}
+
+/** A call hierarchy item as plain data, with the call site when one is given. */
+function fromCallItem(item: vscode.CallHierarchyItem, siteUri?: vscode.Uri, siteRange?: vscode.Range): CodeCall | undefined {
+	if (item.uri.scheme !== "file") {
+		return undefined
+	}
+	const start = item.selectionRange.start
+	const callSite: CodeLocation | undefined =
+		siteUri && siteRange && siteUri.scheme === "file"
+			? { path: siteUri.fsPath, line: siteRange.start.line + 1, column: siteRange.start.character + 1 }
+			: undefined
+	return {
+		name: item.name,
+		kind: kindName(item.kind),
+		path: item.uri.fsPath,
+		line: start.line + 1,
+		column: start.character + 1,
+		callSite,
 	}
 }
 

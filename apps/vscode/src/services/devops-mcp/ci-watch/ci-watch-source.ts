@@ -4,7 +4,15 @@ import { DevOpsError } from "../server/errors"
 import { AzureDevOpsProvider } from "../server/providers/azdo"
 import { GitHubProvider } from "../server/providers/github"
 import type { PipelineRun, Provider, PullRequest } from "../server/providers/types"
-import { loadContext, pushProblem, type Remote, type RepoContext, remoteBranchHead, remoteKey } from "../server/repo"
+import {
+	loadContext,
+	pushProblem,
+	type Remote,
+	type RepoContext,
+	remoteBranchHead,
+	remoteKey,
+	sameRepository,
+} from "../server/repo"
 import type { BrokerProvider } from "../shared/broker-protocol"
 import type { CiWatchSource } from "./ci-watcher"
 
@@ -143,7 +151,42 @@ export async function resolveCiWatchTarget(repo: CiWatchRepo, input: { pr?: numb
 	return { label: `branch ${branch}`, branch, head, warnings: unpushed ? [unpushed] : [] }
 }
 
-export function createCiWatchSource(repo: CiWatchRepo, target: CiWatchTarget): CiWatchSource {
+/**
+ * What a watch reads, in a form that can be saved: enough to rebuild its
+ * source after a window reload (see `openCiWatchSource`).
+ */
+export interface CiWatchTargetSpec {
+	/** The session's working directory, which `watch_ci` opened the repository from. */
+	cwd: string
+	/** The repository's remote at registration. */
+	remote: Remote
+	/** The pull request, when one is watched. */
+	pr?: number
+	branch: string
+}
+
+export function ciWatchTargetSpec(cwd: string, repo: CiWatchRepo, target: CiWatchTarget): CiWatchTargetSpec {
+	return { cwd, remote: repo.ctx.remote, pr: target.pr?.id, branch: target.branch }
+}
+
+/**
+ * Rebuilds the source of a saved watch, whose last seen head is `head`. Fails
+ * when the checkout is gone or now points at another repository.
+ */
+export async function openCiWatchSource(
+	openRepo: CiWatchRepoOpener,
+	spec: CiWatchTargetSpec,
+	head: string,
+): Promise<CiWatchSource> {
+	const repo = await openRepo(spec.cwd)
+	if (!sameRepository(repo.ctx.remote, spec.remote)) {
+		throw new DevOpsError(`The checkout at ${spec.cwd} no longer points at the repository this watch was started on.`)
+	}
+	const pr = spec.pr === undefined ? undefined : await repo.provider.getPr(spec.pr)
+	return createCiWatchSource(repo, { pr, branch: spec.branch, head })
+}
+
+export function createCiWatchSource(repo: CiWatchRepo, target: Pick<CiWatchTarget, "pr" | "branch" | "head">): CiWatchSource {
 	const { ctx, provider } = repo
 	const { pr, branch } = target
 	let lastHead = target.head

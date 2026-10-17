@@ -92,9 +92,26 @@ Limits:
 - At most 5 reports in a row wake a conversation without a message from you, so a fix → push → watch loop can't
   run unattended for ever. The sixth is shown as a notification and a chat row instead, saying why; any message
   you send resets the count.
-- Watches live in memory: reloading or closing the window loses them, and a report that was waiting for its
-  conversation to be opened.
-- Turning `plinycode.ci.watch` off removes the tool and stops the running watches.
+- Turning `plinycode.ci.watch` off removes the tool, stops the running watches and forgets the saved ones.
+
+Reloads:
+
+- Watches survive a window reload, and closing and reopening the window. Every change (a watch starts, its head
+  moves, it ends, a report is sent or held, the wake-up count changes) is saved to `ci-watches.json` in
+  PlinyCode's data directory, beside the CI Board's `ci-board.json`.
+- For each conversation the file keeps the watch (its label, what it watches: the session's working directory,
+  the repository's remote, the pull request number or branch, and `until`), the last head commit seen with when
+  it was first seen and the earlier head moves, when the watch started and when it gives up, the wake-up count,
+  and a report waiting for the conversation to be opened (also one that was still being delivered).
+- The file is shared by all windows but split by window workspace, like the CI Board: a window resumes only the
+  watches it started.
+- On reload the watch carries on where it was: the same 2-hour limit counted from when it started, the same
+  head commit, the same wake-up count. Its first check reopens the repository; if the checkout is gone or now
+  points at another repository, the checks fail and the watch ends with a report saying so.
+- A watch that ran out of time while the window was closed is dropped without a report. A held report is sent
+  when its conversation is opened (straight away when it is the one on screen after the reload).
+- The watches and held reports of conversations that were deleted (also from another window) are dropped when
+  the window starts.
 
 To watch many pull requests and branches at once, with one status per pipeline and prompts that fix them, use
 the [CI Board](ci-board.md).
@@ -207,7 +224,7 @@ The code is in `apps/vscode/src/services/devops-mcp/`:
 | `host/token-broker.ts`     | Local pipe that hands the editor's sign-in tokens to the server process.                   |
 | `host/ado-server-tokens.ts` | Azure DevOps Server tokens per host in the editor's secret storage, and the prompt that asks for one. |
 | `builtin-mcp-registry.ts`  | How the agent session and the GUI handlers reach the service without importing `vscode`.   |
-| `ci-watch/`                | `watch_ci`: the watcher, its report, and the per-conversation watches. Runs in the extension host and reuses the server's providers. Delivery into conversations is `src/sdk/sdk-ci-watch-coordinator.ts`. |
+| `ci-watch/`                | `watch_ci`: the watcher, its report, the per-conversation watches and the file they are saved to (`ci-watch-store.ts`). Runs in the extension host and reuses the server's providers. Delivery into conversations is `src/sdk/sdk-ci-watch-coordinator.ts`. |
 | `ci-board/`, `host/CiBoardHost.ts` | The CI Board: many PRs and branches at once, free-model failure triage, actions that run prompts in git worktrees, and auto-watch. See [ci-board.md](ci-board.md). |
 
 The built-in server is deliberately not in McpHub, which only manages servers from the user's MCP settings

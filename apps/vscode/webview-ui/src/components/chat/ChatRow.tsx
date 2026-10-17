@@ -76,6 +76,16 @@ import UserMessage from "./UserMessage"
 
 const HEADER_CLASSNAMES = "flex items-center gap-2.5 mb-3"
 
+/** The icon and header words of a code_navigate row, by action; anything else reads as a definition lookup. */
+const CODE_NAVIGATE_HEADERS: Record<string, { icon: string; what: string }> = {
+	definition: { icon: "go-to-file", what: "the definition of" },
+	references: { icon: "references", what: "the references to" },
+	hover: { icon: "symbol-property", what: "the type of" },
+	callers: { icon: "call-incoming", what: "the callers of" },
+	callees: { icon: "call-outgoing", what: "the callees of" },
+	diagnostics: { icon: "warning", what: "the problems in" },
+}
+
 /** One-line summary of a browser-tool message from an old conversation. */
 function describeLegacyBrowserMessage(message: ClineMessage): string {
 	if (message.say === "browser_action_launch" || message.ask === "browser_action_launch") {
@@ -659,26 +669,51 @@ const ChatRowContent = memo(
 							) : null}
 						</div>
 					)
-				case "codeNavigate":
+				case "codeNavigate": {
+					const header = CODE_NAVIGATE_HEADERS[tool.action ?? ""] ?? CODE_NAVIGATE_HEADERS.definition
 					return (
 						<div>
 							<div className={HEADER_CLASSNAMES}>
-								{toolIcon(
-									tool.action === "references"
-										? "references"
-										: tool.action === "hover"
-											? "symbol-property"
-											: "go-to-file",
-								)}
+								{toolIcon(header.icon)}
 								<span className="font-bold">
-									PlinyCode looked up{" "}
-									{tool.action === "references"
-										? "the references to"
-										: tool.action === "hover"
-											? "the type of"
-											: "the definition of"}{" "}
-									<code className="break-all">{tool.regex}</code> in{" "}
-									<code className="break-all">{tool.path}</code>:
+									PlinyCode looked up {header.what}{" "}
+									{tool.action === "diagnostics" ? (
+										<code className="break-all">{tool.path}</code>
+									) : (
+										<>
+											<code className="break-all">{tool.regex}</code> in{" "}
+											<code className="break-all">{tool.path}</code>
+										</>
+									)}
+									:
+								</span>
+							</div>
+							{tool.content ? (
+								<CodeAccordian
+									code={tool.content}
+									isExpanded={isExpanded}
+									language="shell-session"
+									onToggleExpand={handleToggle}
+									path={tool.path ?? ""}
+								/>
+							) : null}
+						</div>
+					)
+				}
+				case "renamePreview":
+					return (
+						<div>
+							<div className={HEADER_CLASSNAMES}>
+								{toolIcon("replace")}
+								<span className="font-bold">
+									PlinyCode previewed renaming <code className="break-all">{tool.regex}</code>
+									{tool.newName ? (
+										<>
+											{" "}
+											to <code className="break-all">{tool.newName}</code>
+										</>
+									) : null}{" "}
+									in <code className="break-all">{tool.path}</code>:
 								</span>
 							</div>
 							{tool.content ? (
