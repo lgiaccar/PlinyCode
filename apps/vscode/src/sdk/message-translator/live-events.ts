@@ -928,25 +928,21 @@ export function translateSessionEvent(event: CoreSessionEvent, state: MessageTra
 		}
 
 		case "agent_event": {
-			// Sub-agent events should NOT produce ClineMessages in the main chat.
-			// The sub-agent's work is represented by the parent's spawn_agent tool
-			// events (content_start/update/end), which we translate into the rich
-			// SubagentStatusRow UI. Without this filter, every sub-agent tool call,
-			// text output, iteration, and usage event floods the main chat.
+			// A sub-agent's events never reach the main chat, where its work is the
+			// parent's spawn_agent status row. They go to the sub-agent's own
+			// transcript, which that row's item opens (subagent-transcripts.ts).
+			// The engine tags every forwarded sub-agent event with its agentId and
+			// parentAgentId (createSubAgentProgressReporter). One that has lost its
+			// parentAgentId but names a sub-agent we know is still that sub-agent's;
+			// any other untagged event is the root agent's.
 			const agentEvent = event.payload.event
-			const isToolLifecycleEvent =
-				agentEvent.type === "content_start" || agentEvent.type === "content_update" || agentEvent.type === "content_end"
-			const isSpawnAgentToolEvent =
-				isToolLifecycleEvent &&
-				agentEvent.contentType === "tool" &&
-				agentEvent.toolName !== undefined &&
-				isSubAgentTool(agentEvent.toolName)
-
-			// Newer SDK events carry parentAgentId on sub-agent events. Older/local
-			// RuntimeEventAdapter output does not, so while spawn_agent calls are in
-			// flight we also suppress every non-spawn_agent event. This preserves the
-			// parent spawn_agent status updates while hiding sub-agent internals.
-			if (agentEvent.parentAgentId || (state.hasRunningSpawnAgents() && !isSpawnAgentToolEvent)) {
+			const transcripts = state.getSubagentTranscripts()
+			const agentId = agentEvent.agentId
+			if (
+				agentEvent.parentAgentId ||
+				(agentId !== undefined && (transcripts.has(agentId) || state.subAgentLabel(agentId) !== undefined))
+			) {
+				transcripts.record(agentEvent, translateAgentEvent)
 				break
 			}
 

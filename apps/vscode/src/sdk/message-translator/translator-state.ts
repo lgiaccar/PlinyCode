@@ -7,6 +7,7 @@ import type { UserInputMode } from "@plinycode/shared"
 import type { ClineContextBreakdown, ClineMessage, ClineSaySubagentStatus, SubagentStatusItem } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
 import { isDeniedToolApprovalMistake } from "../tool-approval-denial"
+import { SubagentTranscripts } from "./subagent-transcripts"
 
 // ---------------------------------------------------------------------------
 // Translation result
@@ -163,6 +164,33 @@ export class MessageTranslatorState {
 	 */
 	currentUiMode(): "plan" | "act" {
 		return this.getUiMode?.() === "plan" ? "plan" : "act"
+	}
+
+	/**
+	 * The live transcripts of this conversation's sub-agents, created on first use.
+	 * Not cleared by the per-iteration `reset()`: a finished sub-agent's transcript
+	 * stays open to the user until the conversation changes (`clearSubagentTranscripts`).
+	 */
+	private subagentTranscripts: SubagentTranscripts | undefined
+
+	getSubagentTranscripts(): SubagentTranscripts {
+		this.subagentTranscripts ??= new SubagentTranscripts(
+			() =>
+				// A sub-agent's rows: same ids, cwd, mode and model sources as the root's.
+				new MessageTranslatorState(
+					this.minter,
+					this.getActiveProviderId,
+					this.getUiMode,
+					this.getCwd,
+					this.getActiveModelId,
+				),
+		)
+		return this.subagentTranscripts
+	}
+
+	/** Forget the sub-agents' transcripts (called at conversation boundaries). */
+	clearSubagentTranscripts(): void {
+		this.subagentTranscripts?.clear()
 	}
 
 	/** The shared minter, exposed so coordinators and history rendering mint from the same source. */
@@ -489,11 +517,6 @@ export class MessageTranslatorState {
 	/** Whether there are any active spawn_agent calls */
 	hasSpawnAgents(): boolean {
 		return this.spawnAgentEntries.size > 0
-	}
-
-	/** Whether any registered spawn_agent call has not finished yet. */
-	hasRunningSpawnAgents(): boolean {
-		return this.getSpawnAgentItems().some((entry) => entry.status === "running" || entry.status === "pending")
 	}
 
 	/** Get all spawn_agent entries as an ordered array */
