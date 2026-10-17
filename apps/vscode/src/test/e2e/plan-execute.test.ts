@@ -47,7 +47,8 @@ e2e(
 
 			// The plan is executed in act mode, in the same conversation.
 			await expect(actSwitch).toHaveAttribute("aria-checked", "true", { timeout: 30_000 })
-			await expect(sidebar.getByText("execute the plan in plans/e2e-plan/PLAN.md")).toBeVisible({ timeout: 30_000 })
+			// .first(): the sticky "Scroll to your message" header repeats the text once the message scrolls away.
+			await expect(sidebar.getByText("execute the plan in plans/e2e-plan/PLAN.md").first()).toBeVisible({ timeout: 30_000 })
 			await expect(sidebar.getByText("The mock plan has been executed.")).toBeVisible({ timeout: 30_000 })
 
 			// Act mode now runs on FreeAuto, and the choice is remembered as a setting.
