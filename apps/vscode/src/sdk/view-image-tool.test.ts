@@ -85,6 +85,20 @@ describe("view_image", () => {
 		await expect(view({})).rejects.toThrow("needs a `path`")
 	})
 
+	it("reports a missing file as missing when the workspace is reached through a link", async () => {
+		// On Windows CI the temp folder is named by its 8.3 short name, which
+		// realpath expands; a junction (or a symlink elsewhere) reproduces the
+		// same mismatch between the cwd as given and its real path.
+		const linked = path.join(root, "linked-workspace")
+		await fs.symlink(workspace, linked, process.platform === "win32" ? "junction" : "dir")
+		const viaLink = (input: unknown) =>
+			createViewImageTool({ cwd: linked }).execute(input, CAN_SEE) as Promise<Array<Record<string, unknown>>>
+		await expect(viaLink({ path: "shots/missing.png" })).rejects.toThrow("does not exist")
+		await expect(viaLink({ path: "no/such/folder/missing.png" })).rejects.toThrow("does not exist")
+		expect((await viaLink({ path: "shots/button.png" }))[1]).toMatchObject({ type: "image", mediaType: "image/png" })
+		await expect(viaLink({ path: "../outside.png" })).rejects.toThrow("is outside the workspace")
+	})
+
 	it("refuses when the conversation's model cannot see images", async () => {
 		await expect(view({ path: "shots/button.png" }, CANNOT_SEE)).rejects.toThrow("The current model cannot view images")
 	})

@@ -102,11 +102,29 @@ function isInside(root: string, target: string): boolean {
 	return !relative.startsWith("..") && !path.isAbsolute(relative)
 }
 
-async function realpathOrSelf(value: string): Promise<string> {
-	try {
-		return await fs.realpath(value)
-	} catch {
-		return value
+/**
+ * The real path of `value`, or for a path that does not exist (yet), the real
+ * path of its nearest existing ancestor with the rest appended. Resolving only
+ * the existing part keeps both sides of the containment check in the same form:
+ * on Windows a temp folder can be named by its 8.3 short name (`RUNNER~1`),
+ * which `realpath` expands, so comparing an unresolved missing path against a
+ * resolved root would call a file inside the workspace "outside" it.
+ */
+async function realpathOfExistingPart(value: string): Promise<string> {
+	const missing: string[] = []
+	let current = value
+	for (;;) {
+		try {
+			const real = await fs.realpath(current)
+			return missing.length > 0 ? path.join(real, ...missing.reverse()) : real
+		} catch {
+			const parent = path.dirname(current)
+			if (parent === current) {
+				return value
+			}
+			missing.push(path.basename(current))
+			current = parent
+		}
 	}
 }
 
@@ -153,9 +171,9 @@ export function createViewImageTool(options: ViewImageToolOptions): AgentTool {
 			}
 
 			const absolute = path.resolve(options.cwd, requested)
-			const real = await realpathOrSelf(absolute)
+			const real = await realpathOfExistingPart(absolute)
 			// Both sides resolved through symlinks, so a link cannot lead out of the workspace.
-			const root = await realpathOrSelf(path.resolve(options.cwd))
+			const root = await realpathOfExistingPart(path.resolve(options.cwd))
 			const comparable = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value)
 			if (!isInside(comparable(root), comparable(real))) {
 				throw new Error(`${requested} is outside the workspace; view_image only opens files inside it.`)
