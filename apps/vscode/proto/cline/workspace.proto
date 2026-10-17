@@ -17,6 +17,10 @@ service WorkspaceService {
   // Opens a native picker for a folder or a .code-workspace file, records the
   // choice as recently used and returns it. An empty path means cancelled.
   rpc pickWorkspace(PickWorkspaceRequest) returns (Workspace);
+  // Whether a conversation started in this workspace can run in a git worktree:
+  // its first folder is in a git repository. An empty path asks about the
+  // window's workspace.
+  rpc isGitRepository(StringRequest) returns (BooleanResponse);
 }
 
 // A workspace a conversation can be bound to.

@@ -69,6 +69,10 @@ While no conversation is open, a **Start in** dropdown above the prompt box list
 the native picker (`WorkspaceService.pickWorkspace`). The choice travels as `NewTaskRequest.workspace_path`
 and applies to that conversation only; the next one defaults to the window's workspace again.
 
+Next to the dropdown, **Run in worktree** (shown when the workspace is a git repository) starts the
+conversation on a new branch in a git worktree of its own. The conversation is bound to the worktree folder,
+and history filtered by the workspace it was started from lists it too; see [task-worktrees.md](task-worktrees.md).
+
 ## Recent workspaces
 
 The last ten workspaces used to start a conversation, plus the workspace of every window opened, are kept in

@@ -3,7 +3,15 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { ensureWorktree, listWorktrees, removeWorktree, worktreeRoot, worktreeSlug } from "../worktrees"
+import {
+	ensureTaskWorktree,
+	ensureWorktree,
+	listWorktrees,
+	removeWorktree,
+	taskBranchSlug,
+	worktreeRoot,
+	worktreeSlug,
+} from "../worktrees"
 
 function git(cwd: string, ...args: string[]): string {
 	return execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
@@ -103,6 +111,94 @@ describe("ensureWorktree", () => {
 		"says when the branch does not exist on the remote",
 		async () => {
 			await expect(ensure("nope")).rejects.toThrow(/Could not fetch 'nope'/)
+		},
+		GIT_TIMEOUT,
+	)
+})
+
+describe("taskBranchSlug", () => {
+	it("makes short lowercase ASCII words of a title", () => {
+		expect(taskBranchSlug("Fix the login page!")).toBe("fix-the-login-page")
+		expect(taskBranchSlug("  Café: résumé  ")).toBe("cafe-resume")
+		expect(taskBranchSlug("???")).toBe("task")
+		const long = taskBranchSlug("Refactor the payment gateway adapter so retries are idempotent")
+		expect(long.length).toBeLessThanOrEqual(40)
+		expect(long).toBe("refactor-the-payment-gateway-adapter-so")
+	})
+})
+
+describe("ensureTaskWorktree", () => {
+	let dir: string
+	let repo: string
+
+	beforeEach(() => {
+		dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "task-wt-")))
+		repo = path.join(dir, "repo")
+		fs.mkdirSync(path.join(repo, "sub"), { recursive: true })
+		git(repo, "init", "-q", "-b", "main")
+		fs.writeFileSync(path.join(repo, "sub", "a.txt"), "a")
+		git(repo, "add", ".")
+		git(repo, "commit", "-q", "-m", "init")
+	})
+
+	afterEach(() => {
+		fs.rmSync(dir, { recursive: true, force: true })
+	})
+
+	it(
+		"branches from HEAD into a folder next to the repository",
+		async () => {
+			const result = await ensureTaskWorktree({ repoRoot: path.join(repo, "sub"), title: "Fix the login page" })
+			expect(result.repoRoot).toBe(repo)
+			expect(result.branch).toMatch(/^plinycode\/fix-the-login-page-[0-9a-f]{4}$/)
+			expect(path.dirname(result.path)).toBe(path.join(dir, "repo.worktrees"))
+			expect(path.basename(result.path)).toBe(`fix-the-login-page-${result.branch.slice(-4)}`)
+			expect(git(result.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(result.branch)
+			expect(git(result.path, "rev-parse", "HEAD")).toBe(git(repo, "rev-parse", "HEAD"))
+			expect(fs.existsSync(path.join(result.path, "sub", "a.txt"))).toBe(true)
+			expect(result.notes).toEqual([])
+			// The user's checkout stays on its branch.
+			expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("main")
+		},
+		GIT_TIMEOUT,
+	)
+
+	it(
+		"uses the configured folder, and says that uncommitted changes stay behind",
+		async () => {
+			fs.writeFileSync(path.join(repo, "draft.txt"), "wip")
+			const root = path.join(dir, "wt")
+			const result = await ensureTaskWorktree({ repoRoot: repo, title: "x", configuredRoot: root })
+			expect(path.dirname(result.path)).toBe(path.join(root, "repo"))
+			expect(result.branch).toMatch(/^plinycode\/x-[0-9a-f]{4}$/)
+			expect(fs.existsSync(path.join(result.path, "draft.txt"))).toBe(false)
+			expect(result.notes[0]).toContain("uncommitted changes")
+		},
+		GIT_TIMEOUT,
+	)
+
+	it(
+		"puts a worktree started from another worktree next to the main checkout",
+		async () => {
+			const first = await ensureTaskWorktree({ repoRoot: repo, title: "first" })
+			const second = await ensureTaskWorktree({ repoRoot: first.path, title: "second" })
+			expect(second.repoRoot).toBe(first.path)
+			expect(path.dirname(second.path)).toBe(path.join(dir, "repo.worktrees"))
+			expect(second.branch).not.toBe(first.branch)
+		},
+		GIT_TIMEOUT,
+	)
+
+	it(
+		"refuses a folder outside a repository and a repository without commits",
+		async () => {
+			const plain = path.join(dir, "plain")
+			fs.mkdirSync(plain)
+			await expect(ensureTaskWorktree({ repoRoot: plain, title: "x" })).rejects.toThrow(/not in a git repository/)
+			const empty = path.join(dir, "empty")
+			fs.mkdirSync(empty)
+			git(empty, "init", "-q")
+			await expect(ensureTaskWorktree({ repoRoot: empty, title: "x" })).rejects.toThrow(/no commit yet/)
 		},
 		GIT_TIMEOUT,
 	)
