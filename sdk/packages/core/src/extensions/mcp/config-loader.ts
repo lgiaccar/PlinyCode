@@ -251,7 +251,10 @@ export interface SetMcpServerDisabledOptions {
 }
 
 export interface McpSettingsLockOptions {
-	/** Maximum time to wait for the lock before failing. Defaults to 10 seconds. */
+	/**
+	 * Maximum time to wait for the lock before failing. Defaults to 20 seconds,
+	 * long enough to outlast and reclaim a lock left by a crashed holder.
+	 */
 	timeoutMs?: number;
 	/** Optional host logger; stale-lock takeover is logged as severity=warn. */
 	logger?: BasicLogger;
@@ -296,7 +299,7 @@ export function resolveDefaultMcpSettingsPath(): string {
 /**
  * Atomically write the MCP settings file using a temp file + rename.
  *
- * Multiple processes (CLI, VSCode extension windows, JetBrains) read and write
+ * Every VS Code window runs its own extension host, and each reads and writes
  * this file concurrently. A plain writeFileSync can be observed half-written by
  * a concurrent reader, surfacing as a JSON parse error or, for a client that
  * treats an unreadable file as "no servers", silently dropping MCP state.
@@ -330,21 +333,22 @@ function atomicWriteSettingsFile(filePath: string, contents: string): void {
  */
 const SETTINGS_LOCK_STALE_MS = 10_000;
 
+/**
+ * Default wait for the lock. Twice the stale threshold, so a waiter that starts
+ * just before a holder crashes still outlasts that lock and reclaims it.
+ */
+const SETTINGS_LOCK_TIMEOUT_MS = 2 * SETTINGS_LOCK_STALE_MS;
+
 /** Poll interval (ms) while waiting for another process to release the lock. */
 const SETTINGS_LOCK_POLL_MS = 25;
 
-const syncSleepBuffer = new Int32Array(new SharedArrayBuffer(4));
-
 /**
- * Lock directories this process currently holds. The on-disk lock is not
- * reentrant, so a settings update whose file is already locked by this process
- * throws rather than waiting. Both acquisition paths register here.
+ * Lock directories this process currently holds. A process holds the lock only
+ * for the synchronous read-modify-write, so the only way to find a lock here
+ * already held is a settings update started from inside a mutator; that throws
+ * instead of waiting on itself.
  */
 const activeLocks = new Set<string>();
-
-function sleepSync(ms: number): void {
-	Atomics.wait(syncSleepBuffer, 0, 0, ms);
-}
 
 function settingsLockDir(filePath: string): string {
 	return `${filePath}.lock`;
@@ -446,67 +450,6 @@ function releaseSettingsLock(lock: AcquiredSettingsLock): void {
 	}
 }
 
-function beginAcquire(filePath: string): { lockDir: string; token: string } {
-	const lockDir = settingsLockDir(filePath);
-	if (activeLocks.has(lockDir)) {
-		throw new Error(
-			`Reentrant MCP settings update for ${filePath}. Keep mutators pure: compute values up front and do not call back into the settings API.`,
-		);
-	}
-	return { lockDir, token: makeLockToken() };
-}
-
-function acquireSettingsLockSync(
-	filePath: string,
-	options: McpSettingsLockOptions,
-): AcquiredSettingsLock {
-	const { lockDir, token } = beginAcquire(filePath);
-	const timeoutMs = options.timeoutMs ?? SETTINGS_LOCK_STALE_MS;
-	const startedAt = Date.now();
-	while (true) {
-		const lock = tryAcquireSettingsLock(lockDir, token);
-		if (lock) {
-			activeLocks.add(lockDir);
-			return lock;
-		}
-		if (Date.now() - startedAt > timeoutMs) {
-			throw new McpSettingsLockTimeoutError(
-				`Timed out waiting for MCP settings lock at ${lockDir} after ${timeoutMs}ms.`,
-			);
-		}
-		reclaimStaleLock(lockDir, options);
-		sleepSync(SETTINGS_LOCK_POLL_MS);
-	}
-}
-
-/**
- * Acquire the settings lock, yielding the event loop (`await delay`) between
- * attempts. Reclaims a stale lock left by a crashed holder and throws
- * McpSettingsLockTimeoutError once `timeoutMs` elapses.
- */
-async function acquireSettingsLockAsync(
-	filePath: string,
-	options: McpSettingsLockOptions,
-): Promise<AcquiredSettingsLock> {
-	const { lockDir, token } = beginAcquire(filePath);
-	const timeoutMs = options.timeoutMs ?? SETTINGS_LOCK_STALE_MS;
-	const startedAt = Date.now();
-	while (true) {
-		const lock = tryAcquireSettingsLock(lockDir, token);
-		if (lock) {
-			activeLocks.add(lockDir);
-			return lock;
-		}
-		if (Date.now() - startedAt > timeoutMs) {
-			throw new McpSettingsLockTimeoutError(
-				`Timed out waiting for MCP settings lock at ${lockDir} after ${timeoutMs}ms.`,
-			);
-		}
-		reclaimStaleLock(lockDir, options);
-		await delay(SETTINGS_LOCK_POLL_MS);
-	}
-}
-
 /**
  * Run the read-modify-write while the lock is held. The body is synchronous and
  * never yields, so a concurrent waiter cannot interleave between the read and
@@ -517,6 +460,7 @@ function runLockedSettingsMutation<T>(
 	filePath: string,
 	mutator: McpSettingsMutator<T>,
 ): T {
+	activeLocks.add(lock.lockDir);
 	try {
 		const settings = loadRawSettingsObject(filePath);
 		const result = runPureSettingsMutator(settings, mutator);
@@ -529,45 +473,63 @@ function runLockedSettingsMutation<T>(
 }
 
 /**
- * Locked MCP settings read-modify-write that blocks the event loop (via
- * `Atomics.wait`) while acquiring the lock.
- *
- * Prefer {@link updateMcpSettingsFile}: async acquisition keeps the event loop
- * free and behaves identically otherwise.
- *
- * TODO: Delete once all callers migrate to {@link updateMcpSettingsFile}.
- *
- * The mutator is synchronous and may be called more than once with the same
- * input to verify it is pure/deterministic. Compute any I/O, logging, network,
- * timestamp, or random values before calling and close over them. Return a value
- * only for a successful update; throw McpSettingsUpdateSkippedError to skip.
+ * Wait for the settings lock, yielding the event loop (`await delay`) between
+ * attempts, then run the mutation in the same synchronous stretch as the
+ * successful attempt. There is no `await` between taking the lock and releasing
+ * it, so a second update in this process never finds the lock held by the
+ * first; it waits only on other processes. Reclaims a stale lock left by a
+ * crashed holder and throws McpSettingsLockTimeoutError once `timeoutMs`
+ * elapses.
  */
-export function updateMcpSettingsFileSync<T>(
+async function acquireAndRunLockedMutation<T>(
 	filePath: string,
+	lockDir: string,
 	mutator: McpSettingsMutator<T>,
-	options: McpSettingsLockOptions = {},
-): T {
-	const lock = acquireSettingsLockSync(filePath, options);
-	return runLockedSettingsMutation(lock, filePath, mutator);
+	options: McpSettingsLockOptions,
+): Promise<T> {
+	const token = makeLockToken();
+	const timeoutMs = options.timeoutMs ?? SETTINGS_LOCK_TIMEOUT_MS;
+	const startedAt = Date.now();
+	while (true) {
+		const lock = tryAcquireSettingsLock(lockDir, token);
+		if (lock) {
+			return runLockedSettingsMutation(lock, filePath, mutator);
+		}
+		if (Date.now() - startedAt > timeoutMs) {
+			throw new McpSettingsLockTimeoutError(
+				`Timed out waiting for MCP settings lock at ${lockDir} after ${timeoutMs}ms.`,
+			);
+		}
+		reclaimStaleLock(lockDir, options);
+		await delay(SETTINGS_LOCK_POLL_MS);
+	}
 }
 
 /**
- * Locked MCP settings read-modify-write that yields the event loop while
- * acquiring the lock, so concurrent work on the same loop keeps running.
+ * Locked MCP settings read-modify-write. Waiting for another process to release
+ * the lock yields the event loop, so nothing on this loop blocks on the lock.
  *
  * The mutator is synchronous and may be called more than once with the same
  * input to verify it is pure/deterministic. Compute any I/O, logging, network,
  * timestamp, or random values before calling and close over them. The lock is
  * held only across the synchronous mutation, never across an `await`. Return a
  * value only for a successful update; throw McpSettingsUpdateSkippedError to skip.
+ *
+ * Calling this from inside a mutator for the same file throws synchronously
+ * (the lock is not reentrant), which fails the outer update.
  */
-export async function updateMcpSettingsFile<T>(
+export function updateMcpSettingsFile<T>(
 	filePath: string,
 	mutator: McpSettingsMutator<T>,
 	options: McpSettingsLockOptions = {},
 ): Promise<T> {
-	const lock = await acquireSettingsLockAsync(filePath, options);
-	return runLockedSettingsMutation(lock, filePath, mutator);
+	const lockDir = settingsLockDir(filePath);
+	if (activeLocks.has(lockDir)) {
+		throw new Error(
+			`Reentrant MCP settings update for ${filePath}. Keep mutators pure: compute values up front and do not call back into the settings API.`,
+		);
+	}
+	return acquireAndRunLockedMutation(filePath, lockDir, mutator, options);
 }
 
 /**
@@ -806,15 +768,15 @@ export function resolveMcpServerRegistration(
 	return server ? parseMcpServerRegistration(serverName, server) : undefined;
 }
 
-export function setMcpServerDisabled(
+export async function setMcpServerDisabled(
 	options: SetMcpServerDisabledOptions,
-): void {
+): Promise<void> {
 	const filePath = options.filePath ?? resolveDefaultMcpSettingsPath();
 	const name = options.name.trim();
 	if (!name) {
 		throw new Error("MCP server settings toggle requires a server name.");
 	}
-	updateMcpSettingsFileSync(filePath, (settings) => {
+	await updateMcpSettingsFile(filePath, (settings) => {
 		const serversValue = settings.mcpServers;
 		if (
 			!serversValue ||
@@ -886,26 +848,6 @@ function buildOAuthStateMutator(
 		}
 		return updated ?? {};
 	};
-}
-
-/**
- * Scoped read-modify-write of one server's `oauth` block that blocks the event
- * loop while acquiring the lock.
- *
- * Prefer {@link updateMcpServerOAuthStateAsync}.
- *
- * TODO: Delete once all callers migrate to {@link updateMcpServerOAuthStateAsync}.
- */
-export function updateMcpServerOAuthState(
-	serverName: string,
-	updater: (current: McpServerOAuthState) => McpServerOAuthState,
-	options: UpdateMcpServerOAuthStateOptions = {},
-): McpServerOAuthState {
-	const filePath = options.filePath ?? resolveDefaultMcpSettingsPath();
-	return updateMcpSettingsFileSync(
-		filePath,
-		buildOAuthStateMutator(serverName, updater, options),
-	);
 }
 
 /**

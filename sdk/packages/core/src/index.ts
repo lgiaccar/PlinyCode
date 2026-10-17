@@ -278,10 +278,8 @@ export {
 	type SetMcpServerDisabledOptions,
 	setMcpServerDisabled,
 	type UpdateMcpServerOAuthStateOptions,
-	updateMcpServerOAuthState,
 	updateMcpServerOAuthStateAsync,
 	updateMcpSettingsFile,
-	updateMcpSettingsFileSync,
 } from "./extensions/mcp";
 export {
 	ALL_DEFAULT_TOOL_NAMES,

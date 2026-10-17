@@ -131,6 +131,9 @@ export function createShellExecutor() {
 	return async () => ""
 }
 
+// The real locked MCP settings write, so the MCP settings tests exercise the
+// actual lock and atomic temp-file + rename write.
+export { updateMcpSettingsFile } from "../../../../sdk/packages/core/src/extensions/mcp/config-loader"
 export { augmentMcpTimeoutError } from "../../../../sdk/packages/core/src/extensions/mcp/timeout"
 // The real createShellTool, so tests exercise the actual description
 // building and shell classification (getShellKind) rather than a stub that

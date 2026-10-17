@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { updateMcpSettingsFile } from "@plinycode/core"
 import type * as vscode from "vscode"
 import { getDocumentsPath } from "@/core/storage/documents-path"
-import { updateMcpSettingsFile } from "@/services/mcp/settingsLock"
+import { mcpSettingsLockOptions } from "@/services/mcp/mcp-settings-store"
 import { Logger } from "@/shared/services/Logger"
 import type { StorageContext } from "@/shared/storage/storage-context"
 import { getServerAuthHash } from "@/utils/mcpAuth"
@@ -330,32 +331,36 @@ export async function migrateLegacyMcpSettings(
 	}
 
 	if (preparedSources.length > 0) {
-		const mergeResult = await updateMcpSettingsFile(sharedSettingsPath, (settings) => {
-			const existingServersValue = settings.mcpServers
-			const servers = isRecord(existingServersValue) ? { ...existingServersValue } : {}
-			let serversAdded = 0
-			let serversSkippedExisting = 0
-			let sourcesMigrated = 0
+		const mergeResult = await updateMcpSettingsFile(
+			sharedSettingsPath,
+			(settings) => {
+				const existingServersValue = settings.mcpServers
+				const servers = isRecord(existingServersValue) ? { ...existingServersValue } : {}
+				let serversAdded = 0
+				let serversSkippedExisting = 0
+				let sourcesMigrated = 0
 
-			for (const prepared of preparedSources) {
-				let sourceAdded = 0
-				for (const [serverName, serverConfig] of Object.entries(prepared.servers)) {
-					if (Object.hasOwn(servers, serverName)) {
-						serversSkippedExisting++
-						continue
+				for (const prepared of preparedSources) {
+					let sourceAdded = 0
+					for (const [serverName, serverConfig] of Object.entries(prepared.servers)) {
+						if (Object.hasOwn(servers, serverName)) {
+							serversSkippedExisting++
+							continue
+						}
+						servers[serverName] = serverConfig
+						serversAdded++
+						sourceAdded++
 					}
-					servers[serverName] = serverConfig
-					serversAdded++
-					sourceAdded++
+					if (sourceAdded > 0) {
+						sourcesMigrated++
+					}
 				}
-				if (sourceAdded > 0) {
-					sourcesMigrated++
-				}
-			}
 
-			settings.mcpServers = servers
-			return { serversAdded, serversSkippedExisting, sourcesMigrated }
-		})
+				settings.mcpServers = servers
+				return { serversAdded, serversSkippedExisting, sourcesMigrated }
+			},
+			mcpSettingsLockOptions,
+		)
 
 		result.serversAdded += mergeResult.serversAdded
 		result.serversSkippedExisting += mergeResult.serversSkippedExisting

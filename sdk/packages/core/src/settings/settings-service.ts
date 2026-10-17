@@ -805,7 +805,7 @@ export class CoreSettingsService {
 				}
 				targetEnabled = current.disabled === true;
 			}
-			setMcpServerDisabled({
+			await setMcpServerDisabled({
 				filePath,
 				name,
 				disabled: !targetEnabled,
