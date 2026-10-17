@@ -521,6 +521,11 @@
 					"default": true,
 					"description": "After PlinyCode edits a file, tell the model which new errors the editor reports for that file, so it can fix them right away. An edit waits up to 3 seconds for the language server; when PlinyCode edits a file that is not open in a tab, as with Background Edit, the file is opened in a background tab while it is checked."
 				},
+				"plinycode.codeIntel.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Give the model the find_symbol and code_navigate tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, and a symbol's definition, references and type. Applies to the next conversation."
+				},
 				"plinycode.memory.maxTokens": {
 					"type": "integer",
 					"default": 4000,

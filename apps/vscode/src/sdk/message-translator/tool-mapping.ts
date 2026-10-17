@@ -37,7 +37,26 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
 	"newFileCreated",
 	"fileDeleted",
 	"searchFiles",
+	"findSymbol",
+	"codeNavigate",
 ])
+
+/**
+ * Tools whose row shows the tool's answer: the translator copies the output
+ * into `content` when the call completes. The classic read tools get their
+ * content elsewhere (the file itself, the search display), so this is only
+ * for the extension's code intelligence tools.
+ */
+const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set(["find_symbol", "code_navigate"])
+
+/** The say-tool row with the tool's output as its content, for tools that show it. */
+export function withToolOutputContent(sayTool: ClineSayTool, toolName: string, output: unknown): ClineSayTool {
+	if (!OUTPUT_CONTENT_TOOLS.has(toolName)) {
+		return sayTool
+	}
+	const content = extractToolOutputText(output)
+	return content ? { ...sayTool, content } : sayTool
+}
 
 /**
  * Relativize a ClineSayTool's filesystem paths against the task cwd before it
@@ -140,6 +159,8 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *   run_commands/execute_command       → (uses say="command", NOT say="tool")
  *   search_codebase/search_files       → searchFiles
  *   find_files                         → listFilesRecursive
+ *   find_symbol                        → findSymbol (regex: the query, path: the file for an outline)
+ *   code_navigate                      → codeNavigate (action, regex: the symbol, path: the file)
  *   fetch_web_content/web_fetch        → webFetch
  *   web_search                         → webSearch
  *   skills/use_skill                   → useSkill
@@ -178,6 +199,25 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 			return {
 				tool: "listCodeDefinitionNames",
 				path: dirPath,
+			}
+		}
+
+		case "find_symbol": {
+			// `regex` carries the query, as for searchFiles; `path` is the file whose
+			// outline is listed, absent for a workspace-wide lookup.
+			return {
+				tool: "findSymbol",
+				regex: getStringField(parsedInput, "query") ?? "",
+				path: getStringField(parsedInput, "path"),
+			}
+		}
+
+		case "code_navigate": {
+			return {
+				tool: "codeNavigate",
+				action: getStringField(parsedInput, "action") ?? "",
+				regex: getStringField(parsedInput, "symbol") ?? "",
+				path: getStringField(parsedInput, "path") ?? "",
 			}
 		}
 
