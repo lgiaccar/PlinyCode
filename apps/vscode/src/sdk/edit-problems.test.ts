@@ -12,6 +12,8 @@ class FakeDiagnostics implements EditDiagnosticsSource {
 	readonly closedAgain: string[] = []
 	private readonly listeners = new Set<(absolutePaths: string[]) => void>()
 	failReads = false
+	/** Only the window-wide read fails; a single file's errors can still be read. */
+	failAllErrorsRead = false
 	failBackgroundOpen = false
 	/** Mimics a host that drops a file's diagnostics once its background tab closes. */
 	forgetOnClose = false
@@ -21,6 +23,13 @@ class FakeDiagnostics implements EditDiagnosticsSource {
 			throw new Error("diagnostics unavailable")
 		}
 		return this.errors.get(absolutePath) ?? []
+	}
+
+	getAllErrors(): Map<string, EditProblem[]> {
+		if (this.failReads || this.failAllErrorsRead) {
+			throw new Error("diagnostics unavailable")
+		}
+		return new Map([...this.errors].filter(([, errors]) => errors.length > 0))
 	}
 
 	documentVersion(absolutePath: string): number | undefined {
@@ -539,6 +548,183 @@ describe("EditProblemsReporter", () => {
 			diagnostics.publish(a.absolutePath, [tsError(12, "Cannot find name 'foo'.")])
 
 			expect(await editThenPublish(b, [])).toBe("")
+		})
+	})
+
+	describe("files the edit did not touch", () => {
+		const cwd = path.resolve("/repo")
+		const importer = file("src/importer.ts")
+		const OTHERS_HEADER = "New problems reported in other files after this edit (fix them if your change caused them):"
+
+		function importError(line: number, name: string): EditProblem {
+			return tsError(line, `Module '"./a"' has no exported member '${name}'.`, "2305")
+		}
+
+		function beginWithCwd(target: ReturnType<typeof file>): EditProblemCheck {
+			const check = reporter.begin([target], cwd)
+			if (!check) {
+				throw new Error("expected a check")
+			}
+			return check
+		}
+
+		/** Edits `target`; the language server then publishes each of `answers` at once. */
+		async function editThenPublishMany(
+			target: ReturnType<typeof file>,
+			answers: [{ absolutePath: string }, EditProblem[]][],
+		): Promise<string> {
+			const check = beginWithCwd(target)
+			check.written()
+			const report = check.report()
+			await vi.advanceTimersByTimeAsync(500)
+			for (const [other, errors] of answers) {
+				diagnostics.publish(other.absolutePath, errors)
+			}
+			await vi.advanceTimersByTimeAsync(TIMINGS.quietPeriodMs)
+			return report
+		}
+
+		it("reports an error that appears in another file, under its path relative to the cwd", async () => {
+			const report = await editThenPublishMany(a, [
+				[a, []],
+				[importer, [importError(3, "foo")]],
+			])
+
+			expect(report).toBe(
+				`\n\n${OTHERS_HEADER}\nsrc/importer.ts\n- line 3: Module '"./a"' has no exported member 'foo'. (ts 2305)`,
+			)
+		})
+
+		it("does not report an error another file had before the edit, even when it moved", async () => {
+			diagnostics.errors.set(importer.absolutePath, [importError(3, "old")])
+
+			const report = await editThenPublishMany(a, [
+				[a, []],
+				[importer, [importError(5, "old")]],
+			])
+
+			expect(report).toBe("")
+		})
+
+		it("keeps the edited file's errors in the first section only", async () => {
+			const report = await editThenPublishMany(a, [
+				[a, [tsError(2, "Cannot find name 'foo'.")]],
+				[importer, [importError(3, "foo")]],
+			])
+
+			expect(report).toBe(
+				[
+					HEADER,
+					"- line 2: Cannot find name 'foo'. (ts 2304)",
+					"",
+					OTHERS_HEADER,
+					"src/importer.ts",
+					`- line 3: Module '"./a"' has no exported member 'foo'. (ts 2305)`,
+				].join("\n"),
+			)
+		})
+
+		it("lists at most five files with five errors each, in path order, and counts the rest", async () => {
+			const importers = Array.from({ length: 7 }, (_, index) => file(`src/importer${index}.ts`))
+			const errors = Array.from({ length: 7 }, (_, index) => importError(index + 1, `name${index}`))
+
+			const report = await editThenPublishMany(a, [
+				[a, []],
+				...importers.reverse().map((other): [typeof other, EditProblem[]] => [other, errors]),
+			])
+
+			const lines = report.trim().split("\n")
+			expect(lines[0]).toBe(OTHERS_HEADER)
+			expect(lines[1]).toBe("src/importer0.ts")
+			expect(lines.slice(2, 7)).toEqual(
+				errors.slice(0, 5).map((error) => `- line ${error.line}: ${error.message} (ts 2305)`),
+			)
+			expect(lines[7]).toBe("and 2 more")
+			expect(lines[8]).toBe("src/importer1.ts")
+			// The header, five files of a path, five errors and a count each, and the count of files.
+			expect(lines).toHaveLength(1 + 5 * 7 + 1)
+			expect(lines.at(-1)).toBe("and 2 more files")
+			expect(report).not.toContain("src/importer5.ts")
+		})
+
+		it("names a file outside the cwd by its absolute path", async () => {
+			const outside = { absolutePath: path.resolve("/elsewhere/x.ts") }
+
+			const report = await editThenPublishMany(a, [
+				[a, []],
+				[outside, [importError(1, "foo")]],
+			])
+
+			expect(report).toContain(`\n${outside.absolutePath.split(path.sep).join("/")}\n- line 1: `)
+		})
+
+		it("adds no waiting time: it reports what has been published when the edited file settles", async () => {
+			const check = beginWithCwd(a)
+			check.written()
+			let report: string | undefined
+			void check.report().then((text) => {
+				report = text
+			})
+
+			await vi.advanceTimersByTimeAsync(500)
+			diagnostics.publish(importer.absolutePath, [importError(3, "foo")])
+			await vi.advanceTimersByTimeAsync(TIMINGS.firstEventTimeoutMs - 500 - 1)
+			// Another file's event is not the edited file's answer, so the wait runs its course...
+			expect(report).toBeUndefined()
+
+			await vi.advanceTimersByTimeAsync(1)
+			// ...and ends when it would have anyway, with the other file's error in the report.
+			expect(report).toBe(
+				`\n\n${OTHERS_HEADER}\nsrc/importer.ts\n- line 3: Module '"./a"' has no exported member 'foo'. (ts 2305)`,
+			)
+		})
+
+		it("does not repeat an error already reported as a late answer", async () => {
+			expect(await editInSilence(a)).toBe("")
+
+			const report = await editThenPublishMany(b, [
+				[b, []],
+				[a, [tsError(12, "Cannot find name 'foo'.")]],
+			])
+
+			expect(report).toBe(
+				[
+					"",
+					"",
+					"New problems reported in files you edited earlier (fix them if your changes caused them):",
+					"src/a.ts",
+					"- line 12: Cannot find name 'foo'. (ts 2304)",
+				].join("\n"),
+			)
+		})
+
+		it("does not report the error again with the next edit of that file", async () => {
+			await editThenPublishMany(a, [
+				[a, []],
+				[importer, [importError(3, "foo")]],
+			])
+			diagnostics.shown.add(importer.absolutePath)
+
+			expect(await editThenPublish(importer, [importError(3, "foo")])).toBe("")
+		})
+
+		it("still reports the edited file when the other files' diagnostics cannot be read", async () => {
+			diagnostics.failAllErrorsRead = true
+
+			const report = await editThenPublishMany(a, [
+				[a, [tsError(2, "Cannot find name 'foo'.")]],
+				[importer, [importError(3, "foo")]],
+			])
+
+			expect(report).toBe(`${HEADER}\n- line 2: Cannot find name 'foo'. (ts 2304)`)
+		})
+
+		it("does not read them while the setting is off", () => {
+			enabled = false
+			const getAllErrors = vi.spyOn(diagnostics, "getAllErrors")
+
+			expect(reporter.begin([a], cwd)).toBeUndefined()
+			expect(getAllErrors).not.toHaveBeenCalled()
 		})
 	})
 

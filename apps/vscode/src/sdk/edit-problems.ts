@@ -17,6 +17,12 @@ export interface EditProblem {
 export interface EditDiagnosticsSource {
 	/** The errors (not warnings or hints) the host currently reports for a file. */
 	getErrors(absolutePath: string): EditProblem[]
+	/**
+	 * The errors the host currently reports for every file on disk, keyed by absolute
+	 * path. Virtual documents and files under node_modules, .git or PlinyCode's own
+	 * data directories are left out.
+	 */
+	getAllErrors(): Map<string, EditProblem[]>
 	/** Calls the listener with the files whose diagnostics changed, whatever their severity. */
 	onDidChangeDiagnostics(listener: (absolutePaths: string[]) => void): { dispose(): void }
 	/**
@@ -59,6 +65,9 @@ const DEFAULT_EDIT_PROBLEM_TIMINGS: EditProblemTimings = {
 const MAX_PROBLEMS_PER_FILE = 10
 /** A patch can touch any number of files; only its first ones are checked. */
 const MAX_FILES_PER_EDIT = 10
+/** An edit can break any number of importers; the report names the first few. */
+const MAX_OTHER_FILES = 5
+const MAX_PROBLEMS_PER_OTHER_FILE = 5
 /** Type errors can run to many lines; the first part names the problem. */
 const MAX_MESSAGE_CHARS = 300
 /** Waits with no diagnostics event after which a file extension stops being waited for. */
@@ -107,6 +116,19 @@ interface ReportSection {
 	problems: EditProblem[]
 }
 
+/** What a check needs to tell which errors in the files the edit did not touch are new. */
+interface OtherFilesContext {
+	/** Keys of every edited file, at its new and its old path. */
+	editedKeys: Set<string>
+	/**
+	 * Per file key, the identities of the errors there before the write; undefined
+	 * when they could not be read, in which case other files are not reported on.
+	 */
+	othersBefore: Map<string, string[]> | undefined
+	/** The directory the report's paths are relative to. */
+	cwd: string | undefined
+}
+
 /** Tracks one edit from just before its write until its result is returned. */
 export interface EditProblemCheck {
 	/** Call as soon as the write has finished; diagnostics events count from here. */
@@ -129,7 +151,10 @@ interface EditProblemsReporterOptions {
 /**
  * Finds the errors an edit introduced: it records a file's errors before the write,
  * waits for the language server to catch up after it, and reports the errors that
- * were not there before.
+ * were not there before. The errors of every other file in the window are recorded
+ * too, so that an edit that breaks other files (a renamed export, say) is told
+ * about the importers the language server has re-checked by the time the edited
+ * files have settled; nothing is waited for on their account.
  *
  * The wait is driven by diagnostics events, and silence is ambiguous: a file type
  * with no language server never produces one, but neither does a server that finds
@@ -169,16 +194,23 @@ export class EditProblemsReporter {
 	}
 
 	/**
-	 * Records the files' errors before an edit writes them. Returns undefined when
-	 * reporting is off or the diagnostics cannot be read; the edit proceeds either way.
+	 * Records the files' errors before an edit writes them, and the errors of every
+	 * other file. Returns undefined when reporting is off or the diagnostics cannot be
+	 * read; the edit proceeds either way. The report names other files relative to
+	 * `cwd`, the directory the edit's paths are relative to.
 	 */
-	begin(files: EditedFile[]): EditProblemCheck | undefined {
+	begin(files: EditedFile[], cwd?: string): EditProblemCheck | undefined {
 		try {
 			if (files.length === 0 || !this.isEnabled()) {
 				return undefined
 			}
 			this.subscribe()
 			const { source } = this.options
+			// Every edited file, not only the ones checked: an error in any of them is not one in another file.
+			const editedKeys = new Set(
+				files.flatMap((file) => [file.absolutePath, file.previousPath ?? file.absolutePath].map(pathKey)),
+			)
+			const othersBefore = this.snapshotAllErrors()
 			const targets = files.slice(0, MAX_FILES_PER_EDIT).map((file): CheckTarget => {
 				const previousPath = file.previousPath ?? file.absolutePath
 				return {
@@ -192,9 +224,25 @@ export class EditProblemsReporter {
 					versionBefore: source.documentVersion(file.absolutePath),
 				}
 			})
-			return this.createCheck(targets)
+			return this.createCheck(targets, { editedKeys, othersBefore, cwd })
 		} catch (error) {
 			Logger.warn(`[EditProblemsReporter] Failed to read diagnostics before an edit: ${error}`)
+			return undefined
+		}
+	}
+
+	/** The identities of every file's errors, keyed like the reporter keys files; undefined when they cannot be read. */
+	private snapshotAllErrors(): Map<string, string[]> | undefined {
+		try {
+			const result = new Map<string, string[]>()
+			for (const [absolutePath, errors] of this.options.source.getAllErrors()) {
+				if (errors.length > 0) {
+					result.set(pathKey(absolutePath), errors.map(identityOf))
+				}
+			}
+			return result
+		} catch (error) {
+			Logger.warn(`[EditProblemsReporter] Failed to read the diagnostics of other files before an edit: ${error}`)
 			return undefined
 		}
 	}
@@ -272,7 +320,35 @@ export class EditProblemsReporter {
 		return sections
 	}
 
-	private createCheck(targets: CheckTarget[]): EditProblemCheck {
+	/**
+	 * Errors in files the edit did not touch that were not there before it. Only what
+	 * the language servers have published by the time the edited files have settled:
+	 * a cold importer the server has not re-checked is not seen. Files already
+	 * reported as answered late are left out, so an error is told once.
+	 */
+	private takeOtherFileProblems(others: OtherFilesContext, lateSections: ReportSection[]): ReportSection[] {
+		if (!others.othersBefore) {
+			return []
+		}
+		const excluded = new Set([...others.editedKeys, ...lateSections.map((section) => pathKey(section.file.absolutePath))])
+		const sections: ReportSection[] = []
+		for (const [absolutePath, errors] of this.options.source.getAllErrors()) {
+			const key = pathKey(absolutePath)
+			if (excluded.has(key)) {
+				continue
+			}
+			const problems = newProblems(errors, others.othersBefore.get(key) ?? [])
+			if (problems.length === 0) {
+				continue
+			}
+			// A file edited earlier whose server was slow hears about these now, not again with its next edit.
+			this.remembered.get(key)?.accountedFor.push(...problems.map(identityOf))
+			sections.push({ file: { absolutePath, displayPath: displayPathOf(absolutePath, others.cwd) }, problems })
+		}
+		return sections.sort((a, b) => a.file.displayPath.localeCompare(b.file.displayPath))
+	}
+
+	private createCheck(targets: CheckTarget[], others: OtherFilesContext): EditProblemCheck {
 		const { source } = this.options
 		const lastEventAt = new Map<string, number>()
 		let writtenAt: number | undefined
@@ -415,7 +491,12 @@ export class EditProblemsReporter {
 						}
 					}
 					const lateSections = this.takeLateAnswers(new Set(targets.map((target) => target.key)))
-					return formatReport(sections, targets.length === 1) + formatLateReport(lateSections)
+					const otherSections = this.takeOtherFileProblems(others, lateSections)
+					return (
+						formatReport(sections, targets.length === 1) +
+						formatLateReport(lateSections) +
+						formatOtherFilesReport(otherSections)
+					)
 				} catch (error) {
 					Logger.warn(`[EditProblemsReporter] Failed to report new problems after an edit: ${error}`)
 					return ""
@@ -453,6 +534,18 @@ function extensionOf(absolutePath: string): string {
 	return (path.extname(absolutePath) || path.basename(absolutePath)).toLowerCase()
 }
 
+/** How the model knows a file: relative to the cwd with forward slashes, or absolute when outside it. */
+function displayPathOf(absolutePath: string, cwd: string | undefined): string {
+	if (cwd) {
+		const relative = path.relative(cwd, absolutePath)
+		const outside = relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
+		if (relative && !outside) {
+			return relative.split(path.sep).join("/")
+		}
+	}
+	return absolutePath.split(path.sep).join("/")
+}
+
 /** An edit moves the lines below it, so an error is the same error wherever it sits. */
 function identityOf(problem: EditProblem): string {
 	return `${problem.source ?? ""}\u0000${problem.code ?? ""}\u0000${problem.message}`
@@ -477,15 +570,15 @@ function newProblems(after: EditProblem[], accountedFor: string[]): EditProblem[
 	return result
 }
 
-function formatProblems(problems: EditProblem[]): string[] {
-	const lines = problems.slice(0, MAX_PROBLEMS_PER_FILE).map((problem) => {
+function formatProblems(problems: EditProblem[], limit = MAX_PROBLEMS_PER_FILE): string[] {
+	const lines = problems.slice(0, limit).map((problem) => {
 		const message = problem.message.replace(/\s*\r?\n\s*/g, " ").trim()
 		const clipped = message.length > MAX_MESSAGE_CHARS ? `${message.slice(0, MAX_MESSAGE_CHARS - 1)}…` : message
 		const origin = [problem.source, problem.code].filter(Boolean).join(" ")
 		return `- line ${problem.line}: ${clipped}${origin ? ` (${origin})` : ""}`
 	})
-	if (problems.length > MAX_PROBLEMS_PER_FILE) {
-		lines.push(`and ${problems.length - MAX_PROBLEMS_PER_FILE} more`)
+	if (problems.length > limit) {
+		lines.push(`and ${problems.length - limit} more`)
 	}
 	return lines
 }
@@ -502,6 +595,20 @@ function formatReport(sections: ReportSection[], singleFile: boolean): string {
 			lines.push(file.displayPath)
 		}
 		lines.push(...formatProblems(problems))
+	}
+	return `\n\n${lines.join("\n")}`
+}
+
+function formatOtherFilesReport(sections: ReportSection[]): string {
+	if (sections.length === 0) {
+		return ""
+	}
+	const lines = ["New problems reported in other files after this edit (fix them if your change caused them):"]
+	for (const { file, problems } of sections.slice(0, MAX_OTHER_FILES)) {
+		lines.push(file.displayPath, ...formatProblems(problems, MAX_PROBLEMS_PER_OTHER_FILE))
+	}
+	if (sections.length > MAX_OTHER_FILES) {
+		lines.push(`and ${sections.length - MAX_OTHER_FILES} more files`)
 	}
 	return `\n\n${lines.join("\n")}`
 }
