@@ -83,10 +83,17 @@ type TraceRecord =
 			modelId: string
 			systemPromptSha256?: string
 			systemPromptChars: number
+			/** Messages in the whole request, written or not. */
 			messageCount: number
-			/** Characters of the messages as serialized, before redaction and truncation. */
+			/** Characters of the whole message list as serialized, before redaction and truncation. */
 			totalChars: number
 			tools: string[]
+			/** Index in the request of the first message written below; 0 on a full record. */
+			fromIndex: number
+			/** Messages written below: those after the previous record of this agent, or all of them. */
+			newMessages: number
+			/** Set when the whole list is written again because the earlier part changed (compaction, restart). */
+			reset?: true
 			messages: unknown[]
 	  })
 	| (TraceRecordBase & {
@@ -354,6 +361,29 @@ export function installSessionTrace(config: CoreSessionConfig, deps: SessionTrac
 	// no snapshot, so the request and stream records read it from here.
 	const runs = new Map<string, { runId?: string; iteration: number; parentAgentId?: string }>()
 	let latestAgentId: string | undefined
+	// How much of each agent's message list the trace already holds, so a
+	// request record carries only the messages added since the last one: the
+	// whole list every iteration would grow a long conversation's file
+	// quadratically. Checked against the id of the last message written, so a
+	// list that was compacted, truncated or restarted is written in full again.
+	const positions = new Map<string, { written: number; lastId?: string }>()
+	const messagesToWrite = (
+		key: string,
+		messages: readonly AgentMessage[],
+	): { fromIndex: number; messages: readonly AgentMessage[]; reset?: true } => {
+		const position = positions.get(key)
+		positions.set(key, { written: messages.length, lastId: messages[messages.length - 1]?.id })
+		if (!position) {
+			return { fromIndex: 0, messages }
+		}
+		const unchanged =
+			messages.length >= position.written &&
+			(position.written === 0 || messages[position.written - 1]?.id === position.lastId)
+		if (!unchanged) {
+			return { fromIndex: 0, messages, reset: true }
+		}
+		return { fromIndex: position.written, messages: messages.slice(position.written) }
+	}
 
 	const fileFor = (sessionId: string): TraceFile => {
 		let file = files.get(sessionId)
@@ -408,6 +438,7 @@ export function installSessionTrace(config: CoreSessionConfig, deps: SessionTrac
 			stream: async function* (request: AgentModelRequest) {
 				safe("request", () => {
 					const systemPrompt = request.systemPrompt ?? ""
+					const written = messagesToWrite(agentId ?? "root", request.messages)
 					record(agentId, {
 						type: "request",
 						modelId,
@@ -416,7 +447,10 @@ export function installSessionTrace(config: CoreSessionConfig, deps: SessionTrac
 						messageCount: request.messages.length,
 						totalChars: JSON.stringify(request.messages).length,
 						tools: request.tools.map((tool) => tool.name),
-						messages: request.messages.map(compactMessage),
+						fromIndex: written.fromIndex,
+						newMessages: written.messages.length,
+						...(written.reset ? { reset: true } : {}),
+						messages: written.messages.map(compactMessage),
 					})
 				})
 				const startedAt = now()

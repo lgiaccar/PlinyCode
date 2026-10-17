@@ -151,6 +151,97 @@ describe("installSessionTrace", () => {
 		expect(lines[1].durationMs).toBeGreaterThanOrEqual(lines[1].ttftMs as number)
 	})
 
+	it("writes only the messages added since the agent's previous request", async () => {
+		const { trace, send } = setup(scripted([STOP]))
+		const first = request("one")
+		await send(first)
+		const second = {
+			...first,
+			messages: [
+				...first.messages,
+				{ id: "m2", role: "assistant" as const, content: [{ type: "text" as const, text: "ok" }], createdAt: 1 },
+				{ id: "m3", role: "user" as const, content: [{ type: "text" as const, text: "two" }], createdAt: 2 },
+			],
+		}
+		await send(second)
+		await trace.flush()
+
+		const requests = (await readTrace("s1")).filter((line) => line.type === "request")
+		expect(requests[0]).toMatchObject({ messageCount: 1, fromIndex: 0, newMessages: 1 })
+		expect(requests[0]).not.toHaveProperty("reset")
+		expect(requests[1]).toMatchObject({ messageCount: 3, fromIndex: 1, newMessages: 2 })
+		expect(requests[1]).not.toHaveProperty("reset")
+		expect((requests[1].messages as Array<{ id: string }>).map((message) => message.id)).toEqual(["m2", "m3"])
+		expect(requests[1].totalChars).toBe(JSON.stringify(second.messages).length)
+	})
+
+	it("writes the whole list again, marked reset, when the earlier part changed", async () => {
+		const { trace, send } = setup(scripted([STOP]))
+		const first = request("one")
+		await send({
+			...first,
+			messages: [
+				...first.messages,
+				{ id: "m2", role: "assistant", content: [{ type: "text", text: "ok" }], createdAt: 1 },
+				{ id: "m3", role: "user", content: [{ type: "text", text: "two" }], createdAt: 2 },
+			],
+		})
+		// Compaction: the list is shorter than what was written.
+		await send({
+			...first,
+			messages: [{ id: "summary", role: "user", content: [{ type: "text", text: "summary of the above" }], createdAt: 3 }],
+		})
+		// Restart from an earlier message: same length as written, another id at the position.
+		await send({
+			...first,
+			messages: [{ id: "edited", role: "user", content: [{ type: "text", text: "one, edited" }], createdAt: 4 }],
+		})
+		// Growth after a reset is incremental again.
+		await send({
+			...first,
+			messages: [
+				{ id: "edited", role: "user", content: [{ type: "text", text: "one, edited" }], createdAt: 4 },
+				{ id: "m5", role: "assistant", content: [{ type: "text", text: "sure" }], createdAt: 5 },
+			],
+		})
+		await trace.flush()
+
+		const requests = (await readTrace("s1")).filter((line) => line.type === "request")
+		expect(requests.map((line) => [line.fromIndex, line.newMessages, line.reset ?? false])).toEqual([
+			[0, 3, false],
+			[0, 1, true],
+			[0, 1, true],
+			[1, 1, false],
+		])
+		expect((requests[1].messages as Array<{ id: string }>)[0].id).toBe("summary")
+		expect((requests[3].messages as Array<{ id: string }>)[0].id).toBe("m5")
+	})
+
+	it("keeps a position per agent, so a sub-agent's requests start from zero", async () => {
+		const { trace, send } = setup(scripted([STOP]))
+		await send(request("root one"), "root-agent")
+		await send(request("sub one"), "sub-agent")
+		await send(
+			{
+				...request("root one"),
+				messages: [
+					...request("root one").messages,
+					{ id: "m2", role: "assistant", content: [{ type: "text", text: "spawned" }], createdAt: 1 },
+				],
+			},
+			"root-agent",
+		)
+		await trace.flush()
+
+		const requests = (await readTrace("s1")).filter((line) => line.type === "request")
+		expect(requests.map((line) => [line.agentId, line.fromIndex, line.newMessages])).toEqual([
+			["root-agent", 0, 1],
+			["sub-agent", 0, 1],
+			["root-agent", 1, 1],
+		])
+		expect(requests[1]).not.toHaveProperty("reset")
+	})
+
 	it("writes nothing while the setting is off", async () => {
 		const { trace, send } = setup(scripted([{ type: "text-delta", text: "hi" }, STOP]), { enabled: () => false })
 		await send()
