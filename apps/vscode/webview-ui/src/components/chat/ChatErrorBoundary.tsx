@@ -5,11 +5,29 @@ interface ChatErrorBoundaryProps {
 	errorTitle?: string
 	errorBody?: string
 	height?: string
+	/** Renders instead of the default error box when a child throws. */
+	fallback?: (error: Error) => React.ReactNode
+	/**
+	 * When any of these change (compared with Object.is) after an error, the
+	 * boundary clears it and renders its children again, so content that threw
+	 * on one update (a partial streaming row) can render on the next.
+	 */
+	resetKeys?: readonly unknown[]
 }
 
 interface ChatErrorBoundaryState {
 	hasError: boolean
 	error: Error | null
+}
+
+function keysChanged(previous: readonly unknown[] | undefined, next: readonly unknown[] | undefined): boolean {
+	if (previous === next) {
+		return false
+	}
+	if (!previous || !next || previous.length !== next.length) {
+		return true
+	}
+	return previous.some((key, index) => !Object.is(key, next[index]))
 }
 
 /**
@@ -31,10 +49,19 @@ class ChatErrorBoundary extends React.Component<ChatErrorBoundaryProps, ChatErro
 		console.error("Component stack:", errorInfo.componentStack)
 	}
 
+	componentDidUpdate(previousProps: ChatErrorBoundaryProps) {
+		if (this.state.hasError && keysChanged(previousProps.resetKeys, this.props.resetKeys)) {
+			this.setState({ hasError: false, error: null })
+		}
+	}
+
 	render() {
-		const { errorTitle, errorBody, height } = this.props
+		const { errorTitle, errorBody, height, fallback } = this.props
 
 		if (this.state.hasError) {
+			if (fallback) {
+				return fallback(this.state.error ?? new Error("Unknown error"))
+			}
 			return (
 				<div
 					style={{

@@ -7,6 +7,7 @@ import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState }
 import { TaskServiceClient } from "@/services/grpc-client"
 import { ToolGroupRenderer } from "./chat-view/components/messages/ToolGroupRenderer"
 import { filterVisibleMessages, groupLowStakesTools } from "./chat-view/utils/messageUtils"
+import { ChatRowErrorBoundary } from "./UndisplayableMessageRow"
 
 /** Messages a transcript view keeps, like the extension's buffer per sub-agent. */
 const MAX_TRANSCRIPT_MESSAGES = 300
@@ -121,23 +122,30 @@ export function SubagentTranscript({ agentId, running, Row }: SubagentTranscript
 				const isLast = index === grouped.length - 1
 				if (Array.isArray(messageOrGroup)) {
 					return (
-						<div className="px-2" key={messageOrGroup[0]?.ts ?? index}>
-							<ToolGroupRenderer allMessages={modifiedMessages} isLastGroup={isLast} messages={messageOrGroup} />
-						</div>
+						<ChatRowErrorBoundary key={messageOrGroup[0]?.ts ?? index} message={messageOrGroup}>
+							<div className="px-2">
+								<ToolGroupRenderer
+									allMessages={modifiedMessages}
+									isLastGroup={isLast}
+									messages={messageOrGroup}
+								/>
+							</div>
+						</ChatRowErrorBoundary>
 					)
 				}
 				return (
-					<Row
-						isExpanded={expandedRows[messageOrGroup.ts] ?? false}
-						isLast={isLast}
-						key={messageOrGroup.ts}
-						lastModifiedMessage={lastModifiedMessage}
-						message={messageOrGroup}
-						onHeightChange={noop}
-						onLastRowContentChange={noop}
-						onSetQuote={noop}
-						onToggleExpand={toggleRow}
-					/>
+					<ChatRowErrorBoundary key={messageOrGroup.ts} message={messageOrGroup}>
+						<Row
+							isExpanded={expandedRows[messageOrGroup.ts] ?? false}
+							isLast={isLast}
+							lastModifiedMessage={lastModifiedMessage}
+							message={messageOrGroup}
+							onHeightChange={noop}
+							onLastRowContentChange={noop}
+							onSetQuote={noop}
+							onToggleExpand={toggleRow}
+						/>
+					</ChatRowErrorBoundary>
 				)
 			})}
 		</div>

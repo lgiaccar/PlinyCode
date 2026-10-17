@@ -2,6 +2,7 @@ import type { ClineMessage } from "@shared/ExtensionMessage"
 import type React from "react"
 import { useMemo } from "react"
 import ChatRow from "@/components/chat/ChatRow"
+import { ChatRowErrorBoundary } from "@/components/chat/UndisplayableMessageRow"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
 import type { MessageHandlers } from "../../types/chatTypes"
@@ -118,20 +119,26 @@ export const createMessageRenderer = (
 	messageHandlers: MessageHandlers,
 	footerActive: boolean,
 ) => {
+	// Each row gets its own error boundary, so one row that throws while rendering
+	// shows a compact fallback instead of blanking the whole list.
 	return (index: number, messageOrGroup: ClineMessage | ClineMessage[]) => (
-		<MessageRenderer
-			expandedRows={expandedRows}
-			footerActive={footerActive}
-			groupedMessages={groupedMessages}
-			index={index}
-			inputValue={inputValue}
-			messageHandlers={messageHandlers}
-			messageOrGroup={messageOrGroup}
-			modifiedMessages={modifiedMessages}
-			onHeightChange={onHeightChange}
-			onLastRowContentChange={onLastRowContentChange}
-			onSetQuote={onSetQuote}
-			onToggleExpand={onToggleExpand}
-		/>
+		<ChatRowErrorBoundary
+			key={Array.isArray(messageOrGroup) ? messageOrGroup[0]?.ts : messageOrGroup.ts}
+			message={messageOrGroup}>
+			<MessageRenderer
+				expandedRows={expandedRows}
+				footerActive={footerActive}
+				groupedMessages={groupedMessages}
+				index={index}
+				inputValue={inputValue}
+				messageHandlers={messageHandlers}
+				messageOrGroup={messageOrGroup}
+				modifiedMessages={modifiedMessages}
+				onHeightChange={onHeightChange}
+				onLastRowContentChange={onLastRowContentChange}
+				onSetQuote={onSetQuote}
+				onToggleExpand={onToggleExpand}
+			/>
+		</ChatRowErrorBoundary>
 	)
 }

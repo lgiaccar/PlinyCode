@@ -1,10 +1,4 @@
-import {
-	ClineAskUseSubagents,
-	ClineMessage,
-	ClineSaySubagentStatus,
-	SubagentExecutionStatus,
-	SubagentStatusItem,
-} from "@shared/ExtensionMessage"
+import { ClineMessage, SubagentExecutionStatus, SubagentStatusItem } from "@shared/ExtensionMessage"
 import {
 	BotIcon,
 	CheckIcon,
@@ -17,7 +11,9 @@ import {
 } from "lucide-react"
 import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
 import MarkdownBlock from "../common/MarkdownBlock"
+import { type PayloadResult, parseSayPayload, subagentStatusPayload, useSubagentsPayload } from "./chat-payloads"
 import { SubagentTranscript, type SubagentTranscriptRowProps } from "./SubagentTranscript"
+import { UndisplayableMessageRow } from "./UndisplayableMessageRow"
 
 interface SubagentStatusRowProps {
 	message: ClineMessage
@@ -78,23 +74,25 @@ const formatCost = (value: number | undefined): string => {
 	}).format(normalized)
 }
 
-function parseSubagentRowData(message: ClineMessage): SubagentRowData | null {
+/** The row's data; null when there is nothing to show yet (no text, no prompts). */
+function parseSubagentRowData(message: ClineMessage): PayloadResult<SubagentRowData | null> {
 	if (!message.text) {
-		return null
+		return { ok: true, value: null }
 	}
 
-	try {
-		if (message.ask === "use_subagents" || message.say === "use_subagents") {
-			const parsed = JSON.parse(message.text) as ClineAskUseSubagents
-			if (!Array.isArray(parsed.prompts)) {
-				return null
-			}
-			const prompts = parsed.prompts.map((prompt) => prompt?.trim()).filter((prompt): prompt is string => !!prompt)
-			if (prompts.length === 0) {
-				return null
-			}
+	if (message.ask === "use_subagents" || message.say === "use_subagents") {
+		const parsed = parseSayPayload(message, useSubagentsPayload)
+		if (!parsed.ok) {
+			return parsed
+		}
+		const prompts = parsed.value.prompts.map((prompt) => prompt?.trim()).filter((prompt): prompt is string => !!prompt)
+		if (prompts.length === 0) {
+			return { ok: true, value: null }
+		}
 
-			return {
+		return {
+			ok: true,
+			value: {
 				status: "pending",
 				items: prompts.map((prompt, index) => ({
 					index: index + 1,
@@ -108,21 +106,15 @@ function parseSubagentRowData(message: ClineMessage): SubagentRowData | null {
 					contextWindow: 0,
 					contextUsagePercentage: 0,
 				})),
-			}
+			},
 		}
-
-		const parsed = JSON.parse(message.text) as ClineSaySubagentStatus
-		if (!Array.isArray(parsed.items)) {
-			return null
-		}
-
-		return {
-			status: parsed.status,
-			items: parsed.items,
-		}
-	} catch {
-		return null
 	}
+
+	const parsed = parseSayPayload(message, subagentStatusPayload)
+	if (!parsed.ok) {
+		return parsed
+	}
+	return { ok: true, value: { status: parsed.value.status, items: parsed.value.items } }
 }
 
 function SubagentPromptText({ prompt, isExpanded, onShowMore }: SubagentPromptTextProps) {
@@ -187,8 +179,12 @@ export default function SubagentStatusRow({ message, isLast, lastModifiedMessage
 	const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({})
 	const [expandedPrompts, setExpandedPrompts] = useState<Record<number, boolean>>({})
 	const [openTranscripts, setOpenTranscripts] = useState<Record<number, boolean>>({})
-	const data = useMemo(() => parseSubagentRowData(message), [message])
+	const parsed = useMemo(() => parseSubagentRowData(message), [message])
 
+	if (!parsed.ok) {
+		return <UndisplayableMessageRow error={parsed.error} message={message} />
+	}
+	const data = parsed.value
 	if (!data) {
 		return <div className="text-foreground opacity-80">Subagent status update unavailable.</div>
 	}

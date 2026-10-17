@@ -28,7 +28,7 @@ To add an RPC:
 3. Write the handler in **`src/core/controller/<domain>/<rpcName>.ts`**, exporting `async function <rpcName>(controller: Controller, request)`. The generated service table imports it by that exact path. `<domain>` is the service name without `Service`, with its first letter lowercased: `TaskService` → `task/`, `McpService` → `mcp/`. Server-streaming RPCs also take a `responseStream` argument; see `ui/subscribeToShowWebview.ts`.
 4. Call it from the webview through the generated client: `TaskServiceClient.newTask(NewTaskRequest.create({ … }))`.
 
-When you add a value to the `ClineSay` or `ClineAsk` enums, update both the TypeScript union in `src/shared/ExtensionMessage.ts` and the proto enum. The two maps in `src/shared/proto-conversions/cline-message.ts` are exhaustive, so `bun run check-types` points at what's missing. Then render it in `webview-ui/src/components/chat/ChatRow.tsx`.
+When you add a value to the `ClineSay` or `ClineAsk` enums, update both the TypeScript union in `src/shared/ExtensionMessage.ts` and the proto enum. The two maps in `src/shared/proto-conversions/cline-message.ts` are exhaustive, so `bun run check-types` points at what's missing. Then render it in `webview-ui/src/components/chat/ChatRow.tsx`. If the row carries JSON in `text`, parse it with `parseSayPayload` and a schema from `webview-ui/src/components/chat/chat-payloads.ts` rather than `JSON.parse`, and render `UndisplayableMessageRow` when it fails. Each row also sits in its own error boundary, so any other render error replaces only that row with the same fallback.
 
 ## State and settings
 
