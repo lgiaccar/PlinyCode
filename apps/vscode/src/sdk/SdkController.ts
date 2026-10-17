@@ -29,6 +29,7 @@ import { StateManager } from "@/core/storage/StateManager"
 import type { WorkspaceRootManager } from "@/core/workspace/WorkspaceRootManager"
 import { HostProvider } from "@/hosts/host-provider"
 import { getAdvisorSettings } from "@/hosts/vscode/advisor-settings"
+import { createVscodeCodeIntelSource, isCodeIntelEnabled } from "@/hosts/vscode/code-intel-source"
 import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
@@ -486,6 +487,7 @@ export class Controller {
 			},
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
 			foregroundCommands: this.foregroundCommands,
+			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
 				// (vscode-session-host.ts, sdk-terminal-execution-mode-coordinator.ts):

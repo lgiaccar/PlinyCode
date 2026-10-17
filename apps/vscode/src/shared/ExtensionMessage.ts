@@ -291,10 +291,14 @@ export interface ClineSayTool {
 		| "saveMemory"
 		| "searchConversations"
 		| "readConversation"
+		| "findSymbol"
+		| "codeNavigate"
 	path?: string
 	diff?: string
 	content?: string
 	regex?: string
+	/** code_navigate: `definition`, `references` or `hover`. */
+	action?: string
 	filePattern?: string
 	operationIsLocatedInWorkspace?: boolean
 	/** Starting line numbers in the original file where each SEARCH block matched */
