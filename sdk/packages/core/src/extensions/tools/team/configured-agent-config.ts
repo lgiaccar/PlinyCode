@@ -110,9 +110,13 @@ function normalizeAgentName(name: string): string {
 	return name.trim().toLowerCase();
 }
 
-function isYamlFile(fileName: string): boolean {
+/**
+ * An agent file is frontmatter plus a prompt body, so `.md` is the natural
+ * extension (and the one the Agents tab creates); `.yml`/`.yaml` still load.
+ */
+function isConfiguredAgentFileName(fileName: string): boolean {
 	const extension = extname(fileName).toLowerCase();
-	return extension === ".yml" || extension === ".yaml";
+	return extension === ".md" || extension === ".yml" || extension === ".yaml";
 }
 
 export function parseConfiguredAgentConfig(
@@ -174,7 +178,7 @@ export function loadConfiguredAgentConfigs(input: {
 		}
 
 		for (const entry of entries) {
-			if (!entry.isFile() || !isYamlFile(entry.name)) {
+			if (!entry.isFile() || !isConfiguredAgentFileName(entry.name)) {
 				continue;
 			}
 

@@ -22,12 +22,11 @@ import {
 	createDelegatedAgent,
 	type DelegatedAgentConfigProvider,
 } from "./delegated-agent";
+import { DEFAULT_MAX_CONCURRENT_SUB_AGENTS } from "./sub-agent-limits";
 
 type AgentExtension = NonNullable<AgentConfig["extensions"]>[number];
 type AgentFinishReason = AgentResult["finishReason"];
 
-/** Sub-agent runs a parent may have in flight at once; the rest wait. */
-export const DEFAULT_MAX_CONCURRENT_SUB_AGENTS = 3;
 /** How long one sub-agent run may take before it is stopped. */
 export const DEFAULT_SUB_AGENT_TIMEOUT_MS = 20 * 60 * 1000;
 
@@ -85,7 +84,8 @@ export interface SubAgentEndContext {
 /**
  * What a parent learns about a sub-agent while it runs, through
  * `context.emitUpdate`: the host's chat shows it live. Tokens and cost are
- * the sums of the sub-agent's model calls so far.
+ * the sums of the sub-agent's model calls so far, plus those of the finished
+ * runs it delegated itself (with a delegation depth above 1).
  */
 export interface SubAgentProgress {
 	subAgentId: string;
@@ -148,12 +148,50 @@ export interface SpawnAgentToolConfig {
 	getPrepareTurn?: () => AgentConfig["prepareTurn"];
 	/** Sub-agent runs allowed at once from this tool; more wait their turn. */
 	maxConcurrent?: number;
+	/**
+	 * Whether the sub-agents this tool spawns get a spawn tool of their own.
+	 * Only changes what the tool's description tells the model.
+	 */
+	subAgentsCanDelegate?: boolean;
 	/** Longest a sub-agent run may take; it is aborted after this. */
 	timeoutMs?: number;
 	/**
 	 * Optional logger forwarded to spawned sub-agent runs.
 	 */
 	logger?: BasicLogger;
+}
+
+/** Tokens and cost of the runs a sub-agent delegated in turn. */
+export interface NestedRunUsage {
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	totalCost: number;
+}
+
+/** `spawn_agent` and the configured agents' `subagent_<name>` tools. */
+function isDelegationToolName(toolName: string): boolean {
+	return toolName === "spawn_agent" || toolName.startsWith("subagent_");
+}
+
+function addNestedRunUsage(nested: NestedRunUsage, output: unknown): void {
+	if (!output || typeof output !== "object") {
+		return;
+	}
+	const usage = (output as { usage?: unknown }).usage;
+	if (!usage || typeof usage !== "object") {
+		return;
+	}
+	const read = (key: keyof NestedRunUsage) => {
+		const value = (usage as Record<string, unknown>)[key];
+		return typeof value === "number" && Number.isFinite(value) ? value : 0;
+	};
+	nested.inputTokens += read("inputTokens");
+	nested.outputTokens += read("outputTokens");
+	nested.cacheReadTokens += read("cacheReadTokens");
+	nested.cacheWriteTokens += read("cacheWriteTokens");
+	nested.totalCost += read("totalCost");
 }
 
 /**
@@ -168,7 +206,10 @@ export function createSubAgentProgressReporter(
 ): {
 	onEvent: (event: AgentEvent) => void;
 	bind: (subAgentId: string) => void;
+	/** The sub-agent's own model calls; see `nestedUsage` for its delegated runs. */
 	progress: () => SubAgentProgress;
+	/** What the runs this sub-agent delegated itself used, once they finished. */
+	nestedUsage: () => NestedRunUsage;
 } {
 	const progress: SubAgentProgress = {
 		subAgentId: "",
@@ -180,9 +221,23 @@ export function createSubAgentProgressReporter(
 		totalCost: 0,
 		contextTokens: 0,
 	};
+	const nested: NestedRunUsage = {
+		inputTokens: 0,
+		outputTokens: 0,
+		cacheReadTokens: 0,
+		cacheWriteTokens: 0,
+		totalCost: 0,
+	};
 	const report = () => {
 		try {
-			context.emitUpdate?.({ ...progress });
+			context.emitUpdate?.({
+				...progress,
+				inputTokens: progress.inputTokens + nested.inputTokens,
+				outputTokens: progress.outputTokens + nested.outputTokens,
+				cacheReadTokens: progress.cacheReadTokens + nested.cacheReadTokens,
+				cacheWriteTokens: progress.cacheWriteTokens + nested.cacheWriteTokens,
+				totalCost: progress.totalCost + nested.totalCost,
+			});
 		} catch {
 			// Progress is best-effort; the run must not fail on a host error.
 		}
@@ -192,6 +247,7 @@ export function createSubAgentProgressReporter(
 			progress.subAgentId = subAgentId;
 		},
 		progress: () => ({ ...progress }),
+		nestedUsage: () => ({ ...nested }),
 		onEvent: (event) => {
 			try {
 				onEvent?.(event);
@@ -215,6 +271,9 @@ export function createSubAgentProgressReporter(
 				progress.toolCalls += 1;
 				if (event.toolName) {
 					progress.latestToolCall = event.toolName;
+					if (isDelegationToolName(event.toolName)) {
+						addNestedRunUsage(nested, event.output);
+					}
 				}
 				report();
 			}
@@ -290,9 +349,15 @@ export function resolveSpawnAgentInstructions(input: SpawnAgentInput): string {
 	return input.instructions?.trim() || input.systemPrompt?.trim() || "";
 }
 
+/**
+ * The tool result of a sub-agent run: its report and what it used. `nested`
+ * is what the runs it delegated used; it is added to the run's own figures,
+ * so the parent pays for the whole subtree.
+ */
 export function spawnAgentOutputFromResult(
 	result: AgentResult,
 	progress?: SubAgentProgress,
+	nested?: NestedRunUsage,
 ): SpawnAgentOutput {
 	const usage = result.usage as AgentResult["usage"] & {
 		cacheReadTokens?: number;
@@ -303,18 +368,27 @@ export function spawnAgentOutputFromResult(
 	// something, so a run that reported nothing keeps a plain output.
 	const positive = (value: number | undefined) =>
 		value !== undefined && value > 0 ? value : undefined;
-	const cacheReadTokens =
-		usage.cacheReadTokens ?? positive(progress?.cacheReadTokens);
-	const cacheWriteTokens =
-		usage.cacheWriteTokens ?? positive(progress?.cacheWriteTokens);
-	const totalCost = usage.totalCost ?? positive(progress?.totalCost);
+	const plus = (own: number | undefined, extra: number | undefined) =>
+		positive(extra) === undefined ? own : (own ?? 0) + (extra ?? 0);
+	const cacheReadTokens = plus(
+		usage.cacheReadTokens ?? positive(progress?.cacheReadTokens),
+		nested?.cacheReadTokens,
+	);
+	const cacheWriteTokens = plus(
+		usage.cacheWriteTokens ?? positive(progress?.cacheWriteTokens),
+		nested?.cacheWriteTokens,
+	);
+	const totalCost = plus(
+		usage.totalCost ?? positive(progress?.totalCost),
+		nested?.totalCost,
+	);
 	return {
 		text: result.text,
 		iterations: result.iterations,
 		finishReason: result.finishReason,
 		usage: {
-			inputTokens: usage.inputTokens,
-			outputTokens: usage.outputTokens,
+			inputTokens: usage.inputTokens + (nested?.inputTokens ?? 0),
+			outputTokens: usage.outputTokens + (nested?.outputTokens ?? 0),
 			...(cacheReadTokens !== undefined ? { cacheReadTokens } : {}),
 			...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
 			...(totalCost !== undefined ? { totalCost } : {}),
@@ -332,6 +406,9 @@ export function createSpawnAgentTool(
 		config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
 	);
 	const timeoutMs = config.timeoutMs ?? DEFAULT_SUB_AGENT_TIMEOUT_MS;
+	const limitsSentence = config.subAgentsCanDelegate
+		? "It has the same working directory and tools as you, except that it cannot ask the user or save memories; it may delegate once more, and its sub-agents cannot. "
+		: "It has the same working directory and tools as you, except that it cannot ask the user, save memories or delegate further. ";
 	return createTool<SpawnAgentInput, SpawnAgentOutput>({
 		name: "spawn_agent",
 		executionMode: "parallel",
@@ -340,7 +417,7 @@ export function createSpawnAgentTool(
 			"Use it for exploration across many files, for independent subtasks that can run in parallel (several calls in one reply), " +
 			"and for anything whose intermediate output you do not need in your own context. " +
 			"The sub-agent starts with no memory of this conversation: put everything it needs in `task`, and ask for a concise report. " +
-			"It has the same working directory and tools as you, except that it cannot ask the user, save memories or delegate further. " +
+			limitsSentence +
 			"Not for one-file reads or single commands: do those yourself.",
 		inputSchema: zodToJsonSchema(SpawnAgentInputSchema),
 		execute: async (input, context) => {
@@ -393,6 +470,7 @@ export function createSpawnAgentTool(
 					const output = spawnAgentOutputFromResult(
 						result,
 						reporter.progress(),
+						reporter.nestedUsage(),
 					);
 					if (config.onSubAgentEnd) {
 						try {

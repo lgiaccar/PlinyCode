@@ -29,6 +29,7 @@ import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
 import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { getSubAgentLimits } from "@/hosts/vscode/subagent-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { fetch } from "@/shared/net"
@@ -622,6 +623,8 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			enabled: enableCheckpoints,
 		},
 		enableSpawnAgent: stateManager.getGlobalSettingsKey("subagentsEnabled") !== false,
+		// plinycode.subagents.*: delegation depth, runs in flight per parent, iterations per run.
+		subAgentLimits: getSubAgentLimits(),
 		// A sub-agent's own prompt shows where it runs, like the root's
 		// (sdk/packages/core: subagent-prompts.ts), with a read-only memory excerpt.
 		subAgentPrompt: {

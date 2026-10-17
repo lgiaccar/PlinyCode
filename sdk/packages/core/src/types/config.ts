@@ -17,6 +17,7 @@ import type {
 	SessionWorkspaceConfig,
 } from "@plinycode/shared";
 import type { ToolRoutingRule } from "../extensions/tools/model-tool-routing";
+import type { SubAgentLimits } from "../extensions/tools/team/sub-agent-limits";
 import type { ProviderConfig } from "./provider-settings";
 
 export type CoreAgentMode = AgentMode;
@@ -290,8 +291,11 @@ export interface CoreSessionConfig
 	 * not copied: a host decides which of its tools a sub-agent may use.
 	 */
 	subAgentExtraTools?: AgentTool[];
-	/** Iteration cap for a spawned sub-agent run; the engine has a default. */
-	subAgentMaxIterations?: number;
+	/**
+	 * Delegation depth, sub-agent runs in flight per parent and iterations per
+	 * run. Unset fields keep the engine's defaults (depth 1, 3, 40).
+	 */
+	subAgentLimits?: SubAgentLimits;
 	/**
 	 * What a spawned sub-agent's own system prompt shows about where it runs,
 	 * supplied by the host like the root prompt's: the editor, platform, the

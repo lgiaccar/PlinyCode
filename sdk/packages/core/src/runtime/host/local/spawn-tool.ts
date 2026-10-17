@@ -17,19 +17,10 @@ import type {
 	SubAgentStartContext,
 } from "../../../extensions/tools/team";
 import { createSpawnAgentTool } from "../../../extensions/tools/team";
+import { resolveSubAgentLimits } from "../../../extensions/tools/team/sub-agent-limits";
 import { filterDisabledTools } from "../../../services/global-settings";
 import type { CoreSessionConfig } from "../../../types/config";
 import type { ActiveSession } from "../../../types/session";
-
-/**
- * How deep delegation may go. The root agent is at depth 0 and may spawn;
- * its sub-agents (depth 1) may not: a chain of sub-agents multiplies cost
- * and context with nobody watching, and nothing a sub-agent does needs it.
- */
-export const MAX_SUB_AGENT_DEPTH = 1;
-
-/** Iterations a sub-agent run gets when the host sets no limit of its own. */
-export const DEFAULT_SUB_AGENT_MAX_ITERATIONS = 40;
 
 export interface SpawnToolDeps {
 	getSession(sessionId: string): ActiveSession | undefined;
@@ -102,6 +93,11 @@ export function createSessionSpawnTool(
 		rootSessionId,
 	);
 	const depth = options.depth ?? 0;
+	const limits = resolveSubAgentLimits(config.subAgentLimits);
+	// The root is at depth 0. This tool's sub-agents run at depth + 1 and get
+	// a spawn tool of their own only while that leaves them above the limit.
+	const subAgentsCanDelegate =
+		config.enableSpawnAgent === true && depth + 1 < limits.maxDepth;
 	const createSubAgentTools = () => {
 		const tools: AgentTool[] = config.enableTools
 			? createBuiltinTools({
@@ -117,7 +113,7 @@ export function createSessionSpawnTool(
 				taken.add(tool.name);
 			}
 		}
-		if (config.enableSpawnAgent && depth + 1 < MAX_SUB_AGENT_DEPTH) {
+		if (subAgentsCanDelegate) {
 			tools.push(
 				createSessionSpawnTool(deps, config, rootSessionId, toolExecutors, {
 					...options,
@@ -165,8 +161,9 @@ export function createSessionSpawnTool(
 				},
 			updateConnectionDefaults: () => {},
 		},
-		defaultMaxIterations:
-			config.subAgentMaxIterations ?? DEFAULT_SUB_AGENT_MAX_ITERATIONS,
+		defaultMaxIterations: limits.maxIterations,
+		maxConcurrent: limits.maxConcurrent,
+		subAgentsCanDelegate,
 		createSubAgentTools,
 		toolPolicies: options.toolPolicies,
 		requestToolApproval: options.requestToolApproval,
