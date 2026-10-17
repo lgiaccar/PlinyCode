@@ -347,6 +347,16 @@ export class VscodeTerminalManager {
 	}
 
 	/**
+	 * Close a terminal whatever is running in it, which ends its command.
+	 * `process_kill` does this when Ctrl+C did not stop a handed-over command.
+	 */
+	disposeTerminal(terminalInfo: ITerminalInfo): void {
+		const vscodeTerminalInfo = terminalInfo as unknown as TerminalInfo
+		this.forgetTerminal(vscodeTerminalInfo.id)
+		TerminalRegistry.disposeTerminal(vscodeTerminalInfo)
+	}
+
+	/**
 	 * @param profileId Terminal profile to create/match the terminal with.
 	 * Defaults to the current setting; callers that captured the profile
 	 * earlier (e.g. when the model request was built) pass it here so a

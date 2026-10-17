@@ -97,6 +97,13 @@ describe("decideCiTool", () => {
 		expect(decideCiTool(auto, "web_fetch", {}).kind).toBe("deny")
 		expect(decideCiTool(guard, "web_fetch", {})).toEqual({ kind: "ask" })
 	})
+
+	it("lets an unattended run follow and stop its own background processes", () => {
+		for (const tool of ["process_list", "process_output", "process_kill"]) {
+			expect(decideCiTool(auto, tool, { id: "p1" })).toEqual({ kind: "approve" })
+			expect(decideCiTool(guard, tool, { id: "p1" })).toEqual({ kind: "ask" })
+		}
+	})
 })
 
 describe("parsing", () => {
