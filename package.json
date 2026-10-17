@@ -38,7 +38,7 @@
     },
     "type": "module",
     "engines": {
-        "bun": "1.3.13",
+        "bun": "1.3.14",
         "node": ">=22"
     },
     "devDependencies": {
@@ -68,5 +68,5 @@
     "trustedDependencies": [
         "grpc-tools"
     ],
-    "packageManager": "bun@1.3.13"
+    "packageManager": "bun@1.3.14"
 }

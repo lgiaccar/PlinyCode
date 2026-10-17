@@ -1,6 +1,6 @@
 # REPOMAP — PlinyCode Monorepo
 
-Bun 1.3.13 / Node >=22. VS Code extension (`plinycode-dev`) plus internal engine packages (`@plinycode/*`).
+Bun 1.3.14 / Node >=22 (pinned in `.tool-versions`). VS Code extension (`plinycode-dev`) plus internal engine packages (`@plinycode/*`).
 
 This is a directory map. Commands, workflows and rules are in the `AGENTS.md` files: the root [AGENTS.md](AGENTS.md), [apps/vscode/AGENTS.md](apps/vscode/AGENTS.md) and [sdk/AGENTS.md](sdk/AGENTS.md).
 
@@ -8,7 +8,7 @@ This is a directory map. Commands, workflows and rules are in the `AGENTS.md` fi
 
 | Dir | Role |
 |-----|------|
-| `.github/` | PR templates, CODEOWNERS, CI workflows |
+| `.github/` | Issue and PR templates, CODEOWNERS, Dependabot, the `setup-toolchain` composite action (`actions/`) and the CI workflows (`workflows/`) |
 | `.vscode/` | Workspace settings, launch configs, tasks |
 | `apps/` | Applications (currently the VS Code extension) |
 | `sdk/` | Internal engine packages |

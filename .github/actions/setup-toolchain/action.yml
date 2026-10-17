@@ -1,0 +1,72 @@
+name: Setup toolchain
+description: >-
+    Installs the Bun and Node.js versions pinned in .tool-versions, restores Bun's
+    global install cache and runs `bun install --frozen-lockfile` at the repository
+    root. The caller checks out the repository first.
+
+# .tool-versions is the single toolchain pin: oven-sh/setup-bun reads its `bun`
+# line and actions/setup-node its `node` line. package.json's `packageManager`
+# and `engines.bun` mirror the Bun version for people, not for CI.
+
+inputs:
+    node-version:
+        description: >-
+            Node.js version to install instead of the .tool-versions pin, for matrix
+            jobs (e.g. "24.x"). Empty installs the pinned version.
+        required: false
+        default: ""
+    install:
+        description: >-
+            Run `bun install --frozen-lockfile` (with Bun's install cache). Set to
+            "false" for jobs that only need the Bun binary.
+        required: false
+        default: "true"
+
+outputs:
+    bun-version:
+        description: The Bun version that was installed.
+        value: ${{ steps.bun.outputs.bun-version }}
+    cache-hit:
+        description: Whether Bun's install cache was restored from an exact key match.
+        value: ${{ steps.bun-cache.outputs.cache-hit }}
+
+runs:
+    using: composite
+    steps:
+        - name: Setup Bun
+          id: bun
+          uses: oven-sh/setup-bun@v2
+          with:
+              bun-version-file: .tool-versions
+
+        # When node-version is empty setup-node reads the pin; when it is set the
+        # file input is left empty, so setup-node never sees both at once.
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+              node-version: ${{ inputs.node-version }}
+              node-version-file: ${{ inputs.node-version == '' && '.tool-versions' || '' }}
+
+        # Bun's global package cache, keyed on the authoritative root bun.lock. The
+        # restore-keys prefix reuses the previous lockfile's cache after a
+        # dependency bump; with --frozen-lockfile a stale entry only means Bun
+        # downloads what changed.
+        - name: Cache Bun install cache
+          if: inputs.install == 'true'
+          id: bun-cache
+          uses: actions/cache@v4
+          with:
+              path: ~/.bun/install/cache
+              key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+              restore-keys: |
+                  ${{ runner.os }}-bun-
+
+        # One root install resolves the whole bun workspace (sdk/packages/*,
+        # apps/vscode, webview-ui) at once.
+        - name: Install workspace dependencies
+          if: inputs.install == 'true'
+          shell: bash
+          working-directory: ${{ github.workspace }}
+          run: bun install --frozen-lockfile
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
