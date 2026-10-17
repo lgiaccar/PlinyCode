@@ -94,11 +94,13 @@ describe("tokenUsage", () => {
 			}),
 			usageRow({ source: "subagents", tokensIn: 300, tokensOut: 30, cacheReads: 10, cacheWrites: 5, cost: 0.4 }),
 			usageRow({ source: "advisor", tokensIn: 100, tokensOut: 20, cacheReads: 0, cacheWrites: 0, cost: 0.1 }),
+			usageRow({ source: "vision", tokensIn: 1600, tokensOut: 300, cacheReads: 0, cacheWrites: 0, cost: 0.0031 }),
 		])
 		expect(side.map((entry) => [entry.label, entry.rows, entry.tokens, entry.estimated])).toEqual([
 			["Sub-agents", 1, 345, false],
 			["Advisor", 2, 240, true],
 			["Compaction", 1, 60, false],
+			["Image descriptions", 1, 1900, false],
 		])
 		expect(side[1].cost).toBeCloseTo(0.3)
 	})

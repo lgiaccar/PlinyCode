@@ -27,9 +27,11 @@ import { useEffect, useState } from "react"
  * (`PLINY_BALANCE_AUTO_MODEL_ID`) routes to paid models too, so it is gated
  * with them behind the paid toggle. The preferences are persisted
  * in the webview's `localStorage` so they survive reloads/restarts; this is a
- * pure display policy and never affects the model actually used by a running
- * task (a previously-selected hidden model keeps working and is shown as the
- * active selection even while locked).
+ * display policy and never changes the model a running task was given (a
+ * previously-selected hidden model keeps working and is shown as the active
+ * selection even while locked). The one thing the paid toggle does decide is
+ * whether FreeAuto may use a paid model for an image the free models cannot
+ * see (`plinycode.router.images`); it is mirrored to the extension for that.
  */
 
 const PLINY_UNLOCK_PAID_STORAGE_KEY = "plinyCode.unlockPaidModels"
@@ -140,6 +142,13 @@ const unlockFreeStore = createUnlockToggleStore(PLINY_UNLOCK_FREE_STORAGE_KEY)
  * Returns `[unlockPaid, setUnlockPaid]`.
  */
 export const usePlinyUnlockPaidModels = unlockPaidStore.useToggle
+
+/**
+ * The paid toggle outside React, for mirroring it to the extension
+ * (`useMirrorPaidModelsUnlock`): the routers read that copy to decide whether
+ * an image may be described by a paid model.
+ */
+export const plinyUnlockPaidStore = { get: unlockPaidStore.get, subscribe: unlockPaidStore.subscribe }
 
 /**
  * Reactive hook over the "unlock free models" preference.

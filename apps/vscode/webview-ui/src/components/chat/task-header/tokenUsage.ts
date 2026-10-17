@@ -154,11 +154,13 @@ const SIDE_USAGE_LABELS: Record<SideUsageSource, string> = {
 	subagents: "Sub-agents",
 	advisor: "Advisor",
 	compaction: "Compaction",
+	vision: "Image descriptions",
 }
 
 /**
  * Usage the per-call bars leave out (subagent_usage rows), one entry per source that has any:
- * sub-agent runs, advisor calls and the compaction summarizer's calls.
+ * sub-agent runs, advisor calls, the compaction summarizer's calls and the router's image
+ * descriptions (one row per image).
  */
 export function getSideUsage(messages: ClineMessage[]): SideUsage[] {
 	const bySource = new Map<SideUsageSource, SideUsage>()

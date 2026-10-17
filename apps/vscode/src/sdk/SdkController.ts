@@ -33,6 +33,7 @@ import { getAdvisorSettings } from "@/hosts/vscode/advisor-settings"
 import { createVscodeCodeIntelSource, isCodeIntelEnabled } from "@/hosts/vscode/code-intel-source"
 import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
+import { getRouterImageMode } from "@/hosts/vscode/router-image-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
@@ -49,7 +50,6 @@ import { coerceToPlinyProvider } from "@/shared/pliny"
 import { ShowMessageRequest, ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
 import { checkAdvisorBudget } from "./advisor/advisor-budget"
-import type { AdvisorUsage } from "./advisor/advisor-tool"
 import { CiRunPolicies, type CiRunPolicy, decideCiTool } from "./ci-run-policy"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { type ConversationContext, createConversationContext } from "./context"
@@ -62,6 +62,7 @@ import type { SubagentTranscripts } from "./message-translator/subagent-transcri
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
+import type { ModelCallUsage } from "./one-shot-model-call"
 import { ProcessRegistry } from "./processes/process-registry"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
@@ -453,7 +454,15 @@ export class Controller {
 			advisor: {
 				getSettings: getAdvisorSettings,
 				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
-				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
+				onUsage: (sessionId, usage) => this.recordBackgroundExtraUsage(sessionId, usage, "advisor"),
+			},
+			routerImages: {
+				mode: getRouterImageMode,
+				// Mirrored from the webview's "Unlock Pliny paid models" toggle (plinyModelFilter.ts).
+				paidModelsUnlocked: () => this.stateManager.getGlobalStateKey("plinyPaidModelsUnlocked") === true,
+				// The advisor's rule: also on a free model, refusing the work rather than pausing the run.
+				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
+				onUsage: (sessionId, usage) => this.recordBackgroundExtraUsage(sessionId, usage, "vision"),
 			},
 			trace: { enabled: isSessionTraceEnabled },
 		})
@@ -912,12 +921,13 @@ export class Controller {
 	}
 
 	/**
-	 * The open task gets an advisor call's cost from the usage row the
-	 * translator derives from the tool result. A background task has no
+	 * The open task gets the cost of an advisor call or an image description
+	 * from its usage row (the translator derives the advisor's from the tool
+	 * result; the router emits the description's). A background task has no
 	 * transcript until it is reopened, so its history record is updated here,
 	 * like its model usage.
 	 */
-	private recordBackgroundAdvisorUsage(sessionId: string, usage: AdvisorUsage): void {
+	private recordBackgroundExtraUsage(sessionId: string, usage: ModelCallUsage, source: "advisor" | "vision"): void {
 		if (!this.background.has(sessionId)) {
 			return
 		}
@@ -931,9 +941,9 @@ export class Controller {
 					cacheWrites: usage.cacheWriteTokens,
 					totalCost: usage.totalCost,
 				},
-				"advisor",
+				source,
 			)
-			.catch((error) => Logger.error("[SdkController] Failed to persist background advisor usage:", error))
+			.catch((error) => Logger.error(`[SdkController] Failed to persist background ${source} usage:`, error))
 	}
 
 	/**

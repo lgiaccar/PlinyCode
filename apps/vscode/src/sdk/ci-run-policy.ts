@@ -40,6 +40,7 @@ const READ_TOOLS = new Set([
 	"search_codebase",
 	"search_files",
 	"find_files",
+	"view_image",
 ])
 const COMMAND_TOOLS = new Set(["run_commands", "execute_command"])
 // A run's own background processes: it sees and stops only those of its conversation.
