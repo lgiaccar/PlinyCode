@@ -516,6 +516,11 @@
 					"default": "",
 					"markdownDescription": "Folder for the git worktrees the **CI Board** creates to work on pull requests that are not checked out. Empty puts them next to the repository, in `<repository>.worktrees`."
 				},
+				"plinycode.worktrees.root": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Folder for the git worktrees of conversations started with **Run in worktree**. Each repository gets a subfolder named after it. Empty uses `#plinycode.ci.worktreeRoot#` when that is set, and otherwise puts them next to the repository, in `<repository>.worktrees`."
+				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",
 					"default": true,

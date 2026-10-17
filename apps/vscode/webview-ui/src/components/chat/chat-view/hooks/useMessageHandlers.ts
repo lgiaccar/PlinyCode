@@ -31,6 +31,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 		lastMessage,
 		nextTaskWorkspace,
 		setNextTaskWorkspace,
+		nextTaskWorktree,
+		setNextTaskWorktree,
 	} = chatState
 	const cancelInFlightRef = useRef(false)
 	const pendingResponseIdRef = useRef(0)
@@ -201,6 +203,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 						files,
 						// A workspace picked for this conversation; empty means the window's.
 						workspacePath: nextTaskWorkspace?.path ?? "",
+						// "Run in worktree": a new branch and git worktree for this conversation.
+						worktree: nextTaskWorktree,
 					})
 					clearSentMessageState()
 					trackPromptSubmitted(false)
@@ -222,6 +226,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 					}
 					// The pick applies to one conversation; the next one defaults to the window's workspace again.
 					setNextTaskWorkspace(undefined)
+					setNextTaskWorktree(false)
 					messageSent = true
 				} else if (turnState?.phase === "awaiting_approval") {
 					await sendAskResponseWithPendingState(
@@ -364,6 +369,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 			chatState,
 			nextTaskWorkspace,
 			setNextTaskWorkspace,
+			nextTaskWorktree,
+			setNextTaskWorktree,
 		],
 	)
 

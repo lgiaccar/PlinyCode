@@ -91,6 +91,26 @@ describe("queryTaskHistory", () => {
 		expect(ids(queryTaskHistory(records, { workspacePath: "/work/all.code-workspace" }))).toEqual(["bound"])
 	})
 
+	it("lists a worktree conversation under its worktree and the workspace it was started from", () => {
+		const worktree = {
+			repoRoot: "/work/shop",
+			branch: "plinycode/fix-cart-ab12",
+			path: "/work/shop.worktrees/fix-cart-ab12",
+			sourceWorkspacePath: "/work/shop",
+		}
+		const records = [
+			makeRecord("wt", {
+				workspaceRoot: worktree.path,
+				metadata: { workspacePath: worktree.path, workspaceKind: "folder", worktree },
+			}),
+			makeRecord("other", { workspaceRoot: "/work/other" }),
+		]
+
+		expect(ids(queryTaskHistory(records, { workspacePath: "/work/shop" }))).toEqual(["wt"])
+		expect(ids(queryTaskHistory(records, { workspacePath: worktree.path }))).toEqual(["wt"])
+		expect(ids(queryTaskHistory(records, { searchQuery: "fix-cart" }))).toEqual(["wt"])
+	})
+
 	it("drops records with no title or no timestamp", () => {
 		const records = [
 			makeRecord("untitled", { prompt: "" }),

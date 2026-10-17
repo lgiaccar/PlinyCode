@@ -48,6 +48,7 @@ When you add a value to the `ClineSay` or `ClineAsk` enums, update both the Type
 | Auto-update from GitHub Releases                 | `src/hosts/vscode/auto-update/`, `scripts/release.ts`                                                    | [releasing.md](../../docs/releasing.md)                                                                                                                  |
 | Repo memory and past-conversation search         | `src/sdk/memory/`, `webview-ui/src/components/chat/MemoryProposalRow.tsx`                                | [memory.md](../../docs/memory.md)                                                                                                                       |
 | Conversations bound to workspaces                | `src/shared/workspaceRef.ts`, `src/core/workspace/workspace-identity.ts`, `src/core/controller/workspace/`, `webview-ui/src/components/workspace/` | [workspace-conversations.md](../../docs/workspace-conversations.md)                                                                                      |
+| Run in worktree (a conversation on its own branch and git worktree) | `src/services/git/worktrees.ts`, `src/sdk/sdk-task-start-coordinator.ts`, `webview-ui/src/components/workspace/NewTaskWorkspacePicker.tsx`, `webview-ui/src/components/chat/task-header/TaskWorktreeChip.tsx` | [task-worktrees.md](../../docs/task-worktrees.md) |
 
 ## Verifying changes
 
