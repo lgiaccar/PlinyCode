@@ -172,6 +172,25 @@ export interface RouterCallRecord {
 	classification?: RouterClassification
 	/** Set when the call failed and the router moved on. */
 	failure?: string
+	/** Tokens and cost the call reported, once it ended with a usage event. */
+	usage?: RouterCallUsage
+}
+
+/**
+ * Token usage and cost of one delegate call, summed over its usage events
+ * (each one is a delta, as the agent loop treats them).
+ */
+export interface RouterCallUsage {
+	inputTokens: number
+	outputTokens: number
+	cacheReadTokens: number
+	cacheWriteTokens: number
+	/** Hidden reasoning tokens, when the provider reported them. */
+	reasoningTokens?: number
+	/** USD the gateway reported or priced from the catalog; absent when no usage event carried a cost. */
+	costUsd?: number
+	/** The counts are a character-based estimate: the provider reported none. */
+	estimated?: boolean
 }
 
 /** Wall-clock timing of one delegate call, reported to the observer. */

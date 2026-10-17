@@ -30,7 +30,7 @@ import { Logger } from "@/shared/services/Logger"
 import type { ModelCallUsage } from "../one-shot-model-call"
 import { createRouterCompletionGuard } from "./completion-guard"
 import { createRoutedAgentModel, isDegenerateOutputError } from "./routed-agent-model"
-import { appendCallLog, type RouterCallLogRecord } from "./router-call-log"
+import { addUsageTotals, appendCallLog, type RouterCallLogRecord, type RouterCallLogUsage } from "./router-call-log"
 import { runClassifier } from "./router-classifier"
 import { runCompletionJudge } from "./router-completion-judge"
 import {
@@ -55,8 +55,10 @@ import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import { appendRunLog, type RouterRunEnding, type RouterRunLogRecord } from "./router-run-log"
 import type {
+	RouterCallRecord,
 	RouterCallShape,
 	RouterCallTiming,
+	RouterCallUsage,
 	RouterClassification,
 	RouterEffort,
 	RouterRequestFeatures,
@@ -161,6 +163,58 @@ function callEventOutcome(timing: RouterCallTiming, shape: RouterCallShape): Par
 		reasoningChars: shape.reasoningChars,
 		toolCalls: shape.toolCalls,
 	}
+}
+
+/** The call log's token counts for a call's usage. */
+function logUsage(usage: RouterCallUsage): RouterCallLogUsage {
+	return {
+		inputTokens: usage.inputTokens,
+		outputTokens: usage.outputTokens,
+		cacheReadTokens: usage.cacheReadTokens,
+		cacheWriteTokens: usage.cacheWriteTokens,
+		...(usage.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
+		...(usage.estimated ? { estimated: true } : {}),
+	}
+}
+
+/**
+ * What a call cost in USD. A free self-hosted model costs nothing whether or
+ * not it reported usage; a paid one costs what its usage events said, and is
+ * unknown when they said nothing.
+ */
+function callCostUsd(modelId: string, usage: RouterCallUsage | undefined): number | undefined {
+	return isPlinySelfHostedModelId(modelId) ? (usage?.costUsd ?? 0) : usage?.costUsd
+}
+
+/** Tokens, cost and models of a set of calls, for the run log. */
+interface CallTotals {
+	usage?: RouterCallLogUsage
+	costUsd?: number
+	models: Record<string, number>
+	paidCalls: number
+	paidCostUsd?: number
+}
+
+function callTotals(calls: readonly RouterCallRecord[]): CallTotals {
+	const totals: CallTotals = { models: {}, paidCalls: 0 }
+	for (const call of calls) {
+		totals.models[call.modelId] = (totals.models[call.modelId] ?? 0) + 1
+		const paid = !isPlinySelfHostedModelId(call.modelId)
+		if (paid) {
+			totals.paidCalls += 1
+		}
+		if (call.usage) {
+			totals.usage = addUsageTotals(totals.usage, logUsage(call.usage))
+		}
+		const cost = callCostUsd(call.modelId, call.usage)
+		if (cost !== undefined) {
+			totals.costUsd = (totals.costUsd ?? 0) + cost
+			if (paid) {
+				totals.paidCostUsd = (totals.paidCostUsd ?? 0) + cost
+			}
+		}
+	}
+	return totals
 }
 
 /** The hidden prompt that resumes a reply a failed run left unfinished. */
@@ -475,6 +529,12 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	const recoveringRuns = new Set<string>()
 	let recoveringRootRun = false
 	let transportRetriesThisTurn = 0
+	// Where each agent's run is (engine run id and iteration), from the
+	// beforeModel hook, so call log lines can be matched with the session trace.
+	const runPositions = new Map<string, { runId?: string; iteration: number }>()
+	let rootPosition: { runId?: string; iteration: number } | undefined
+	// What the current root turn's sub-agent runs spent, for the root run's log line.
+	let turnSubAgents: { calls: number; usage?: RouterCallLogUsage; costUsd?: number } = { calls: 0 }
 	const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 	rememberModelNames(config.knownModels as Record<string, ModelInfo> | undefined)
 
@@ -506,6 +566,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			}
 			latestSubRunKey = undefined
 			turnEdits = { bySubAgents: 0, authors: new Set() }
+			turnSubAgents = { calls: 0 }
 			transportRetriesThisTurn = 0
 		}
 		if (agentId) {
@@ -550,10 +611,25 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			outcome: RouterCallLogRecord["outcome"],
 			error?: string,
 			shape?: RouterCallShape,
+			usage?: RouterCallUsage,
 		) => {
 			const state = getSessionState(turnKey)
 			const call = [...state.calls].reverse().find((entry) => entry.modelId === modelId)
 			const firstCall = call !== undefined && call === state.calls[0]
+			if (call && usage) {
+				call.usage = usage
+			}
+			const costUsd = callCostUsd(modelId, usage)
+			if (isSubAgent) {
+				turnSubAgents.calls += 1
+				if (usage) {
+					turnSubAgents.usage = addUsageTotals(turnSubAgents.usage, logUsage(usage))
+				}
+				if (costUsd !== undefined) {
+					turnSubAgents.costUsd = (turnSubAgents.costUsd ?? 0) + costUsd
+				}
+			}
+			const position = (agentId ? runPositions.get(agentId) : undefined) ?? (isSubAgent ? undefined : rootPosition)
 			logCall({
 				ts: new Date(timing.startedAt).toISOString(),
 				sessionId: sessionKey(),
@@ -577,6 +653,10 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 							toolCalls: shape.toolCalls,
 						}
 					: {}),
+				...(usage ? { usage: logUsage(usage) } : {}),
+				...(costUsd !== undefined ? { costUsd } : {}),
+				...(position?.runId ? { runId: position.runId } : {}),
+				...(position ? { iteration: position.iteration } : {}),
 			})
 		}
 
@@ -668,7 +748,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						callIndex: state.calls.length,
 					})
 				},
-				onFailover: ({ modelId, nextModelId, error, timing }) => {
+				onFailover: ({ modelId, nextModelId, error, timing, usage }) => {
 					const rules = rulesFor(profile)
 					const state = getSessionState(turnKey)
 					state.failovers += 1
@@ -676,7 +756,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 					if (last && last.modelId === modelId) {
 						last.failure = error
 					}
-					logAttempt(modelId, timing, "failover", error)
+					logAttempt(modelId, timing, "failover", error, undefined, usage)
 					const { benched } = recordFailure(modelId, {
 						error,
 						failuresBeforeCooldown: rules.health.failuresBeforeCooldown,
@@ -703,9 +783,9 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						durationMs: timing.endedAt - timing.startedAt,
 					})
 				},
-				onCallSuccess: ({ modelId, timing, shape }) => {
+				onCallSuccess: ({ modelId, timing, shape, usage }) => {
 					recordSuccess(modelId)
-					logAttempt(modelId, timing, "success", undefined, shape)
+					logAttempt(modelId, timing, "success", undefined, shape, usage)
 					deps.onCallEvent?.({
 						kind: "success",
 						profile,
@@ -714,13 +794,13 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						...callEventOutcome(timing, shape),
 					})
 				},
-				onCallError: ({ modelId, error, timing, shape }) => {
+				onCallError: ({ modelId, error, timing, shape, usage }) => {
 					const state = getSessionState(turnKey)
 					const last = state.calls[state.calls.length - 1]
 					if (last && last.modelId === modelId) {
 						last.failure = error
 					}
-					logAttempt(modelId, timing, "error", error, shape)
+					logAttempt(modelId, timing, "error", error, shape, usage)
 					deps.onCallEvent?.({
 						kind: "error",
 						profile,
@@ -980,6 +1060,18 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// models from ending on a failed command, and the run record is what the
 	// summary script reads to compare early-stop rates per model.
 	config.hooks = composeHooks(config.hooks, {
+		beforeModel: ({ snapshot }) => {
+			if (!isRouted()) {
+				return
+			}
+			const position = { ...(snapshot.runId ? { runId: snapshot.runId } : {}), iteration: snapshot.iteration }
+			if (snapshot.agentId) {
+				runPositions.set(snapshot.agentId, position)
+			}
+			if (!snapshot.parentAgentId) {
+				rootPosition = position
+			}
+		},
 		afterTool: ({ snapshot, tool, toolCall, result }) => {
 			if (isRouted() && isSuccessfulEdit(tool.name, result)) {
 				const calls = getSessionState(turnKeyFor(snapshot.agentId, snapshot.parentAgentId)).calls
@@ -1038,6 +1130,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 							? "completion-tool"
 							: "text"
 			const { guardRules, ...run } = state.run
+			const totals = callTotals(state.calls)
+			const subAgents = turnSubAgents
 			logRun({
 				ts: new Date(now()).toISOString(),
 				sessionId: sessionKey(),
@@ -1054,7 +1148,24 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				replyChars: reply.length,
 				replyTail: reply.trim().slice(-120),
 				durationMs: now() - state.turnStartedAt,
+				...(result.runId ? { runId: result.runId } : {}),
+				...(totals.usage ? { usage: totals.usage } : {}),
+				...(totals.costUsd !== undefined ? { costUsd: totals.costUsd } : {}),
+				models: totals.models,
+				paidCalls: totals.paidCalls,
+				...(totals.paidCostUsd !== undefined ? { paidCostUsd: totals.paidCostUsd } : {}),
+				failovers: state.failovers,
+				...(!subAgent && subAgents.calls > 0
+					? {
+							subAgentCalls: subAgents.calls,
+							...(subAgents.usage ? { subAgentUsage: subAgents.usage } : {}),
+							...(subAgents.costUsd !== undefined ? { subAgentCostUsd: subAgents.costUsd } : {}),
+						}
+					: {}),
 			})
+			if (subAgent && snapshot.agentId) {
+				runPositions.delete(snapshot.agentId)
+			}
 		},
 	})
 

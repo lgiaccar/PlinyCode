@@ -58,6 +58,29 @@ describe("composeHooks", () => {
 		expect(await silent.afterTool?.(toolContext)).toEqual({ appendContext: "base" })
 	})
 
+	it("shows the router each model call after the base beforeModel, whose answer is returned unchanged", async () => {
+		const order: string[] = []
+		const context = { snapshot: { agentId: "a", runId: "r", iteration: 2 }, request: { messages: [], tools: [] } } as never
+		const composed = composeHooks(
+			{
+				beforeModel: async () => {
+					order.push("base")
+					return { options: { temperature: 0 } }
+				},
+			},
+			{
+				beforeModel: ({ snapshot }) => {
+					order.push(`router ${snapshot.runId}:${snapshot.iteration}`)
+				},
+			},
+		)
+		expect(await composed.beforeModel?.(context)).toEqual({ options: { temperature: 0 } })
+		expect(order).toEqual(["base", "router r:2"])
+
+		const alone = composeHooks(undefined, { beforeModel: () => undefined })
+		expect(await alone.beforeModel?.(context)).toBeUndefined()
+	})
+
 	it("runs the router's afterRun even when the base hook throws", async () => {
 		const routerAfterRun = vi.fn()
 		const composed = composeHooks(

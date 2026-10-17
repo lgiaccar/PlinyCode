@@ -397,6 +397,127 @@ run; the summary script's "Text-only stops" column counts those per model, so
 the stop rate of each free model can be read off real use instead of
 transcripts.
 
+### Tokens and cost
+
+Each call line also carries what the call used, summed over the usage events
+the gateway streamed for it (`routed-agent-model.ts` hands them to the
+observer with the call's outcome):
+
+| Field | Meaning |
+| --- | --- |
+| `usage` | `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `reasoningTokens` (when the provider reports them), `estimated: true` when the provider reported nothing and the counts are a character-based estimate. Absent when the call ended without a usage event, which is usual for a failover. |
+| `costUsd` | The gateway's cost or the catalog price. Always `0` on a free self-hosted model; absent on a paid model whose call reported no usage. |
+| `runId`, `iteration` | The engine's run and iteration the call belongs to (from the `beforeModel` hook), the same ids as the session trace's records, so a call line can be found in `traces/<session id>.jsonl`. |
+
+A call that fails after its output still logs the usage it reported before the
+failure. All of these are optional: lines written before them still parse.
+
+Each run line gains the totals of its turn, so it doubles as the turn record:
+
+| Field | Meaning |
+| --- | --- |
+| `runId` | The engine's run id. |
+| `usage`, `costUsd` | Tokens and cost of every call the turn made so far, the same calls `calls` counts. A turn that was recovered after a failure has a line per run, and the later lines include the earlier runs' calls. |
+| `models` | Calls per model, in the order each was first used. |
+| `paidCalls`, `paidCostUsd` | The calls that ran on a paid (hosted) model, and their cost: BalanceAuto's paid share of the turn. |
+| `failovers` | Failovers spent in the turn. |
+| `subAgentCalls`, `subAgentUsage`, `subAgentCostUsd` | On the main agent's line, when sub-agents ran in the turn: their calls, tokens and cost. Sub-agent runs also have lines of their own. |
+
+The judge's verdict (`judge`), the guard rules that fired (`guardRules`,
+`nudges`, `escalated`, `guardGaveUp`) and the reviewer's findings (`review`)
+were already on the run line. The run log was extended rather than a `turn`
+record added to the call log because it already holds one line per run with
+those verdicts, and the call log stays one line per model call.
+
+### The summary script
+
+```sh
+bun apps/vscode/scripts/summarize-free-auto-log.ts [calls.jsonl] [--runs runs.jsonl] [--since 2026-10-01] [--tails]
+```
+
+Without a path it reads both logs from the data directory. `--since` takes a
+date (midnight UTC) or a full ISO time. Besides the latency, outcome, run
+ending and guard tables, it prints:
+
+- **Tokens and cost by model** and **by route**: calls, how many reported
+  usage, input, output, cache read and write, reasoning tokens, total cost and
+  cost per priced call. A paid call with no cost is shown as `+N unpriced`
+  rather than counted as free.
+- **BalanceAuto: paid vs free calls**: calls, tokens and cost on paid and on
+  free models, and how many successful main-agent turns stayed free.
+- **Cost per successful turn**: per profile, the main agent's turns that ended
+  on a reply or a completion tool, with total, mean and median cost (sub-agent
+  spend included) and the median tokens and calls per turn.
+
+A sample, from a synthetic log:
+
+```text
+## Tokens and cost by model (all calls)
+
+|  | Calls | With usage | Input | Output | Cache read | Cache write | Reasoning | Cost | Cost/call |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `snps-provider/kimi-k2.6` | 3 | 2 | 31.3k | 730 | 0 | 0 | — | $0 | $0 |
+| `aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking` | 2 | 2 | 42.7k | 3.1k | 30.0k | 12.1k | 1.0k | $0.16 | $0.08 |
+
+## BalanceAuto: paid vs free calls
+
+|  | Calls | Input | Output | Cost | Share of cost |
+| --- | --- | --- | --- | --- | --- |
+| Paid | 3 (50%) | 50.8k | 3.6k | $0.17 | 100% |
+| Free | 3 (50%) | 31.3k | 730 | $0 | 0% |
+
+Successful main-agent turns: 2, 1 (50%) stayed on free models; 1 used a paid model, at $0.16 a turn on average.
+
+## Cost per successful turn (main agent, sub-agents included)
+
+| Profile | Turns | With cost | Total | Mean/turn | Median/turn | Tokens/turn (median, in+out) | Calls/turn (median) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| balance | 2 | 2 | $0.17 | $0.09 | $0.09 | 43.2k | 3 |
+```
+
+The report is built by `apps/vscode/src/sdk/router/router-log-summary.ts`,
+next to the record types, and tested there with old and new lines.
+
+## Measuring the classifier
+
+`apps/vscode/scripts/router-classifier-labels.jsonl` is a hand-labelled set of
+52 requests, written from the tier descriptions in the classifier's prompt
+(`router-classifier.ts`) and the routes in `router-rules.ts`. Each line is
+`{ prompt, expectedTier, expectedThink, note }`, plus `mode` (`plan` or `act`,
+act by default) and `contextTokens` (the conversation size the classifier is
+told, 3 000 by default). It has 15 `quick`, 15 `code`, 14 `reason` and 8
+`huge` labels, 13 of them with thinking on. The `huge` labels all claim at
+least 180k tokens, because the huge-context route admits nothing smaller; a few
+`quick` and `code` labels claim a large but smaller context, so size alone
+must not read as huge.
+
+```sh
+bun apps/vscode/scripts/eval-router-classifier.ts --dry-run          # print what would be sent, no gateway
+PLINY_API_KEY=... bun --use-system-ca apps/vscode/scripts/eval-router-classifier.ts \
+    [--profile smart|balance] [--model <id>] [--timeout <ms>] [--tier reason] [--limit 10]
+```
+
+The script builds each request with `buildClassifierRequest` and asks the
+profile's classifier model through `runClassifier`, as a turn's first call
+does, one label at a time. It prints tier, think and combined accuracy, the
+tier confusion matrix (a `none` column counts labels with no verdict), the
+think confusion matrix and every miss with its note, and writes each result to
+`ai_output/eval/classifier-<timestamp>.jsonl`. The label file lives with the
+extension's scripts rather than in `sdk/scripts/eval`: the classifier is
+extension code, and the eval harness runs the engine without the router.
+
+`router-classifier-eval.test.ts` checks the file's schema, that every tier has
+at least five labels, that thinking is both on and off, that there are no
+duplicates, and that only `huge` labels claim a context the huge route admits.
+It never calls the gateway, and neither does CI.
+
+The first run, on 2026-10-17 with the default classifier
+(`qwen3-6-35b-a3b-1-28dd3`, 8 s timeout): tier 41/52 (79%), think 42/52
+(81%), both 36/52 (69%). `quick` and `code` were all right; four `reason`
+labels (all with thinking on) timed out with no verdict, and `huge` was
+confused with `quick`, `code` and `reason` when the prompt did not say "whole
+repository".
+
 ## The agent terminal
 
 Commands the model runs go through a terminal with `GIT_PAGER=cat`,

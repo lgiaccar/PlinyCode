@@ -102,7 +102,12 @@ its own (`<session>:sub:<n>`), found again by the engine's agent id, so parallel
 one and a failure benches the model of the run that failed. The end-of-turn summary lists the models used. Every attempt is
 appended to `pliny-free-auto-calls.jsonl` with `profile: "balance"`, so
 `scripts/summarize-free-auto-log.ts` compares it against the free profiles on
-real use, including how often a turn stayed on free models.
+real use, including how often a turn stayed on free models. Each line carries
+the call's tokens and `costUsd`, and each run line the turn's totals with its
+`paidCalls` and `paidCostUsd`, so the script's "BalanceAuto: paid vs free
+calls" table and its cost per successful turn show what the paid routes cost
+next to the free ones (see
+[Tokens and cost](pliny-free-auto-router.md#tokens-and-cost)).
 
 The early-stop defences described in
 [pliny-free-auto-router.md](pliny-free-auto-router.md#keeping-runs-going-the-completion-guard-the-judge-and-wait)

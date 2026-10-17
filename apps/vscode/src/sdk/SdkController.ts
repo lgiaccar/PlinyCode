@@ -58,6 +58,7 @@ import { createMemoryServices, type MemoryServices } from "./memory"
 import { MemoryCoordinator } from "./memory/memory-coordinator"
 import { completeWithUtilityModel } from "./memory/memory-model"
 import { compactionUsageFromNotice, MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
+import type { SubagentTranscripts } from "./message-translator/subagent-transcripts"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
@@ -141,6 +142,8 @@ function historyItemToTaskResponse(item: HistoryItem): TaskResponse {
 export class Controller {
 	// SDK session state and the coordinators that drive it.
 	private messageTranslatorState: MessageTranslatorState
+	/** The conversation the sub-agent transcripts belong to; see resetMessageTranslatorAndFence. */
+	private subagentTranscriptsTaskId: string | undefined
 	private turnStateTracker!: TurnStateTracker
 	private messages: SdkMessageCoordinator
 	private sessions: SdkSessionLifecycle
@@ -2047,6 +2050,18 @@ export class Controller {
 	resetMessageTranslatorAndFence(): void {
 		this.messageTranslatorState.reset()
 		this.messageTranslatorState.getMinter().bumpEpoch()
+		// Every follow-up passes through here too, so the sub-agents' transcripts go
+		// only when the conversation itself changed (opened, cleared, resumed).
+		const taskId = this.task?.taskId
+		if (taskId !== this.subagentTranscriptsTaskId) {
+			this.subagentTranscriptsTaskId = taskId
+			this.messageTranslatorState.clearSubagentTranscripts()
+		}
+	}
+
+	/** The open conversation's live sub-agent transcripts (TaskService.subscribeToSubagentMessages). */
+	getSubagentTranscripts(): SubagentTranscripts {
+		return this.messageTranslatorState.getSubagentTranscripts()
 	}
 
 	/**

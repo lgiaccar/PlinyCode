@@ -270,6 +270,10 @@ export function createSubAgentProgressReporter(
 	return {
 		bind: (subAgentId) => {
 			progress.subAgentId = subAgentId;
+			// Name the run to the host at once, before its first model call
+			// ends: the host files the run's events (its transcript) under this
+			// id and can only match them to the tool call once it knows it.
+			report();
 		},
 		progress: () => ({ ...progress }),
 		nestedUsage: () => ({ ...nested }),

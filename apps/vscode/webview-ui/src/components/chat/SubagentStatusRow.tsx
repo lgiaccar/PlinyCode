@@ -15,13 +15,19 @@ import {
 	LoaderCircleIcon,
 	NetworkIcon,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
 import MarkdownBlock from "../common/MarkdownBlock"
+import { SubagentTranscript, type SubagentTranscriptRowProps } from "./SubagentTranscript"
 
 interface SubagentStatusRowProps {
 	message: ClineMessage
 	isLast: boolean
 	lastModifiedMessage?: ClineMessage
+	/**
+	 * The chat's row component, used to render a sub-agent's transcript when its
+	 * item is expanded. Without it the items have no transcript toggle.
+	 */
+	TranscriptRow?: ComponentType<SubagentTranscriptRowProps>
 }
 
 type DisplayStatus = SubagentExecutionStatus | "cancelled"
@@ -177,9 +183,10 @@ function SubagentPromptText({ prompt, isExpanded, onShowMore }: SubagentPromptTe
 	)
 }
 
-export default function SubagentStatusRow({ message, isLast, lastModifiedMessage }: SubagentStatusRowProps) {
+export default function SubagentStatusRow({ message, isLast, lastModifiedMessage, TranscriptRow }: SubagentStatusRowProps) {
 	const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({})
 	const [expandedPrompts, setExpandedPrompts] = useState<Record<number, boolean>>({})
+	const [openTranscripts, setOpenTranscripts] = useState<Record<number, boolean>>({})
 	const data = useMemo(() => parseSubagentRowData(message), [message])
 
 	if (!data) {
@@ -211,6 +218,12 @@ export default function SubagentStatusRow({ message, isLast, lastModifiedMessage
 			[index]: true,
 		}))
 	}
+	const toggleTranscript = (index: number) => {
+		setOpenTranscripts((prev) => ({
+			...prev,
+			[index]: !prev[index],
+		}))
+	}
 
 	return (
 		<div className="mb-2">
@@ -231,6 +244,10 @@ export default function SubagentStatusRow({ message, isLast, lastModifiedMessage
 					const shouldShowStats = !isStreamingPromptUnderConstruction
 					const statsText = `${formatCount(entry.toolCalls)} tools called · ${formatCount(entry.contextTokens)} tokens · ${formatCost(entry.totalCost)}`
 					const latestToolCallText = entry.latestToolCall?.trim() || ""
+					// The transcript is filed under the engine's agent id, which the first
+					// progress update names; the prompt-construction row has none yet.
+					const transcriptAgentId = !isPromptConstructionRow && TranscriptRow ? entry.agentId : undefined
+					const isTranscriptOpen = transcriptAgentId !== undefined && openTranscripts[entry.index] === true
 					return (
 						<div
 							className="rounded-xs border border-editor-group-border px-2 py-1.5"
@@ -245,6 +262,23 @@ export default function SubagentStatusRow({ message, isLast, lastModifiedMessage
 										prompt={entry.prompt}
 									/>
 								</div>
+								{transcriptAgentId !== undefined && (
+									<button
+										aria-expanded={isTranscriptOpen}
+										aria-label={isTranscriptOpen ? "Hide sub-agent transcript" : "Show sub-agent transcript"}
+										className="shrink-0 bg-transparent border-0 p-0 cursor-pointer text-foreground opacity-80 hover:opacity-100"
+										onClick={() => toggleTranscript(entry.index)}
+										title={
+											isTranscriptOpen ? "Hide what the sub-agent did" : "Show what the sub-agent is doing"
+										}
+										type="button">
+										{isTranscriptOpen ? (
+											<ChevronDownIcon className="size-2.5" />
+										) : (
+											<ChevronRightIcon className="size-2.5" />
+										)}
+									</button>
+								)}
 							</div>
 							{shouldShowStats && (
 								<div className="mt-1 text-[11px] opacity-70 min-w-0 whitespace-pre-wrap break-words">
@@ -275,6 +309,13 @@ export default function SubagentStatusRow({ message, isLast, lastModifiedMessage
 							)}
 							{isExpanded && entry.error && entry.status === "failed" && (
 								<div className="mt-2 text-xs text-error whitespace-pre-wrap break-words">{entry.error}</div>
+							)}
+							{transcriptAgentId !== undefined && isTranscriptOpen && TranscriptRow && (
+								<SubagentTranscript
+									agentId={transcriptAgentId}
+									Row={TranscriptRow}
+									running={displayStatus === "running" || displayStatus === "pending"}
+								/>
 							)}
 						</div>
 					)

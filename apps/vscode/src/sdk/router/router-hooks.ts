@@ -2,21 +2,25 @@
  * Layer the router's own runtime hooks over the ones the session already has
  * (other installers' hooks), so both keep running.
  *
- * Only `afterTool` and `afterRun` are composed — the router observes; it never
- * blocks a tool or a run. The base hook is called first and its answer wins on
- * `stop`/`result`; `appendContext` from both sides is concatenated so the base
- * hook's context and the router's note both reach the model.
+ * Only `beforeModel`, `afterTool` and `afterRun` are composed — the router
+ * observes; it never blocks a model call, a tool or a run. The base hook is
+ * called first and its answer wins on `stop`/`result` (and is the only answer
+ * `beforeModel` returns); `appendContext` from both sides is concatenated so
+ * the base hook's context and the router's note both reach the model.
  */
 
 import type {
 	AgentAfterToolContext,
 	AgentAfterToolResult,
+	AgentBeforeModelContext,
 	AgentHooks,
 	AgentRunLifecycleContext,
 	AgentRunResult,
 } from "@plinycode/shared"
 
 interface RouterHooks {
+	/** Sees each model call's run position; it cannot change the request. */
+	beforeModel?: (context: AgentBeforeModelContext) => void
 	afterTool?: (context: AgentAfterToolContext) => AgentAfterToolResult | undefined | Promise<AgentAfterToolResult | undefined>
 	afterRun?: (context: AgentRunLifecycleContext & { result: AgentRunResult }) => void | Promise<void>
 }
@@ -28,6 +32,16 @@ function joinContext(first: string | undefined, second: string | undefined): str
 
 export function composeHooks(base: AgentHooks | undefined, extra: RouterHooks): AgentHooks {
 	const composed: AgentHooks = { ...(base ?? {}) }
+
+	if (extra.beforeModel) {
+		const baseBeforeModel = base?.beforeModel
+		const routerBeforeModel = extra.beforeModel
+		composed.beforeModel = async (context) => {
+			const baseResult = await baseBeforeModel?.(context)
+			routerBeforeModel(context)
+			return baseResult
+		}
+	}
 
 	if (extra.afterTool) {
 		const baseAfterTool = base?.afterTool
