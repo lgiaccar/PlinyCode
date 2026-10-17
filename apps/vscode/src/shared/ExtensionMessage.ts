@@ -294,6 +294,9 @@ export interface ClineSayTool {
 		| "findSymbol"
 		| "codeNavigate"
 		| "renamePreview"
+		| "processList"
+		| "processOutput"
+		| "processKill"
 	path?: string
 	diff?: string
 	content?: string
