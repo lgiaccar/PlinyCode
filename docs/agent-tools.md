@@ -30,14 +30,19 @@ Small models often reproduce a block with the wrong indentation, or from a stale
 - Listed through ripgrep (which honors `.gitignore`) when one is available, otherwise by walking the directory and skipping dependency and build folders.
 - It is enabled together with `search_codebase` (same `enableSearch` flag), and auto-approved with the other read tools. An agent file (`.cline/agents/*.md`) that allows `search_codebase` gets it too.
 
-## Code intelligence (`find_symbol`, `code_navigate`)
+## Code intelligence (`find_symbol`, `code_navigate`, `rename_preview`)
 
-Two extension tools that answer through the language servers running in the VS Code window, so the model navigates code instead of grepping for it. Code is in `apps/vscode/src/sdk/code-intel/` (the tools and their formatting, host-agnostic) and `apps/vscode/src/hosts/vscode/code-intel-source.ts` (the `vscode.execute*Provider` commands).
+Three extension tools that answer through the language servers running in the VS Code window, so the model navigates code instead of grepping for it. Code is in `apps/vscode/src/sdk/code-intel/` (the tools and their formatting, host-agnostic) and `apps/vscode/src/hosts/vscode/code-intel-source.ts` (the `vscode.execute*Provider` and call hierarchy commands, and `vscode.languages.getDiagnostics`). There are three tools with an `action` argument rather than one tool per question because free models mis-fill wide schemas.
 
 - `find_symbol({ query?, path? })`: with `path`, the file's outline as an indented `kind name  line` list, filtered by `query` when both are given; without it, the workspace symbols matching `query` as `kind name  path:line:col`, at most 40.
-- `code_navigate({ action, path, symbol, line? })`: `definition`, `references` or `hover` for a symbol as written in `path`. The tool finds the identifier in the file (the occurrence nearest to `line` when given), so the model never computes a column. Definitions and references come back grouped by file as `line:col  preview`, 30 lines at most, then `+N more in M files`; a hover is reduced to its code-fenced signature lines and a few lines of prose.
-- Both run in parallel with the other read tools and are auto-approved with them; sub-agents get them too.
-- VS Code does not say whether a language server is registered for a file, so an empty answer is retried once after 1.5 s (a server that has just loaded the file may still be indexing), and a second empty answer ends with a line that sends the model to `search_codebase`. A file extension that answers nothing twice is not waited for again in that session.
+- `code_navigate({ action, path, symbol?, line? })`: a question about a symbol as written in `path`. The tool finds the identifier in the file (the occurrence nearest to `line` when given), so the model never computes a column. `symbol` is required for every action except `diagnostics`; the schema lists only `action` and `path` as required and says so in the description.
+  - `definition` and `references` come back grouped by file as `line:col  preview`, 30 lines at most, then `+N more in M files`.
+  - `hover` is reduced to its code-fenced signature lines and a few lines of prose.
+  - `callers` and `callees` prepare a call hierarchy at the position (`vscode.prepareCallHierarchy`) and ask the first item for one level of incoming or outgoing calls. Each entry is `kind name  path:line:col  preview`, at most 25, then `+N more`. A caller is shown at its first call site, so the preview is the line that makes the call; a callee is shown at its declaration, so the preview is its signature. When no hierarchy can be prepared (the server does not offer one, or the symbol is not a function) the answer suggests `references`.
+  - `diagnostics` lists the errors and warnings the editor reports for the file, errors first, as `line:col  severity  message (source code)`, at most 20, then `+N more`. Information and hints are left out. An empty list is checked once more after the warm-up, since a file the editor has only just opened may not be analysed yet.
+- `rename_preview({ path, symbol, new_name, line? })`: asks the rename provider (`vscode.executeDocumentRenameProvider`) at the symbol's position and summarizes the `WorkspaceEdit` it returns without applying it: ``Renaming `a` to `b` (at path:line:col) would make N edits in M files. Nothing was applied.``, then per file `path: N edits` and its first 3 changed lines as `  - line 12: old text → new text` (the current line with that line's edits applied), then `  +N more lines`; at most 20 files, then `+N more files`. When the server refuses (the position cannot be renamed, or no rename provider answered), the answer is ``Cannot rename `a` at path:line:col: <the server's reason>``. The model makes the edits itself afterwards.
+- All three run in parallel with the other read tools and are auto-approved with them; sub-agents get them too. Their chat rows show the tool's answer.
+- VS Code does not say whether a language server is registered for a file, so an empty answer is retried once after 1.5 s (a server that has just loaded the file may still be indexing), and a second empty answer ends with a line that sends the model to `search_codebase`. A file extension that answers nothing twice is not waited for again in that session. A rename refusal counts as an empty answer here, so it is asked twice too.
 - Language servers only know files they have loaded: a workspace symbol search misses cold files, and a file outside the window's folders (a worktree, another repository) gets file-local answers at best.
 - `plinycode.codeIntel.enabled` (default on) adds the tools to the next conversation; off removes them.
 
@@ -49,11 +54,23 @@ run in a PlinyCode terminal, and the output is read through shell integration
 
 - **Long-running commands.** A command still running after 5 minutes keeps
   running in the terminal. The call returns with the output so far and the
-  path of a log file that receives the rest. The tool description tells the
-  model this, in place of the generic advice to background long jobs itself
+  path of a log file that receives the rest, and the command is registered
+  as a background process (`p1`, `p2`, …; see below), so the model can
+  read its log with `process_output` and stop it with `process_kill`. The
+  same happens when the user clicks "Proceed While Running" or sends a
+  message while the command runs. The tool description tells the model
+  this, in place of the generic advice to background long jobs itself
   (`longRunningNote` on the engine's `createShellTool`). That way it runs a
   benchmark as an ordinary command and follows it with `wait`, instead of
   launching it with `Start-Process` and losing its output and errors.
+- **`background: true`.** An optional argument for a server, watcher or
+  other job the model does not want to wait for. The commands start as child
+  processes of the extension host, in either terminal mode and in
+  sub-agents, and the call returns at once with
+  `Started <command> as process p3 (log: <path>). Use process_output to read it and process_kill to stop it.`
+  Their output goes to the log file, not to a terminal. Without the argument
+  nothing changes. A background process still running after 24 hours is
+  stopped.
 - **Wrapped lines.** On Windows the output passes through ConPTY. When a
   line wider than the terminal scrolls off the bottom row, ConPTY breaks it
   with `\r\n`, moves the cursor back to the end of the row and writes that
@@ -70,9 +87,21 @@ run in a PlinyCode terminal, and the output is read through shell integration
   this happens in a window, the user is warned to widen the terminal panel or
   switch to Background Exec.
 
+## Background processes (`process_list`, `process_output`, `process_kill`)
+
+Commands that outlive their `run_commands` call: one handed over to the terminal while still running, and one started with `background: true`. The registry (`apps/vscode/src/sdk/processes/process-registry.ts`) is owned by `SdkController`, one per window, and gives each process a short id; the tools are in `process-tools.ts`.
+
+- `process_list()`: this conversation's processes, one line each: `id  status  elapsed  command  log`. The status is `running`, `exited(<code>)` (or `exited` when no code was seen), `killed` or `lost` (PlinyCode can no longer observe a terminal command, which may still be running). The command is cut to 80 characters.
+- `process_output({ id, tail_lines = 100 })`: a line on where the process stands (`p3 has been running for 4m02s: npm run dev`, `p3 exited with code 1 after 2m10s: …`), the log path and size, then the last lines of the log, at most 400 lines and 32 KB, with terminal colors removed. It always reads the log file, never the terminal buffer.
+- `process_kill({ id })`: a terminal command gets Ctrl+C, and if it is still running 2 seconds later its terminal is closed; a child process is stopped with its whole process tree. A kill asked for before a handed-over command has its terminal is applied as soon as it starts.
+- A model sees only its own conversation's processes. Sub-agents run under the root's session id, so they share the root's list.
+- `process_list` and `process_output` run in parallel with the other read tools and follow the read-files approval toggle; `process_kill` follows the commands toggle. A CI board run may use all three on its own processes.
+- The webview's background-command flag is set while a process of the displayed conversation is running, and the Cancel button and an interrupting message then call `cancelBackgroundCommand`, which stops every running process of that conversation.
+- The registry lives in memory. After a window reload the list is empty and the terminals are gone (PlinyCode's terminals are transient), but the log files stay in the temp folder until its cleanup removes files older than 50 hours. Child processes are stopped when the window closes.
+
 ## Read-only tools run concurrently
 
-`read_files`, `search_codebase`, `find_files` and `fetch_web_content` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
+`read_files`, `search_codebase`, `find_files`, `process_list`, `process_output` and `fetch_web_content` are marked `executionMode: "parallel"`. When a model asks for several of them in one response they overlap; a tool that changes something (`editor`, `run_commands`, MCP tools) still waits for the group before it and finishes before the next. Approvals are still asked one at a time, before anything runs.
 
 The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts`) keeps every open tool by call id for this, so each one finishes into its own row.
 
@@ -81,7 +110,7 @@ The chat translator (`apps/vscode/src/sdk/message-translator/translator-state.ts
 `spawn_agent` runs a sub-agent in its own context and returns only its final report to the model that called it. The engine's tool (`sdk/packages/core/src/extensions/tools/team/`) takes `task` and optional `instructions` (`systemPrompt` is the older name); configured agents from `.cline/agents/*.md` appear as `subagent_<name>` tools with a fixed prompt, model and tool allowlist. The system prompt carries a short section on when to delegate (`subagent-guidance.ts`, only while the tool is in the request): exploration across many files, reviews, long test runs, and independent subtasks that can run in parallel. The setting `subagentsEnabled` (Settings → Advanced) turns the tool off.
 
 - **Prompt.** A sub-agent gets the same base prompt as a root session, with the conversation's git snapshot and pinned date, the session's mode (plan mode edits nothing), a short account of its role, the parent's instructions as rules, and a read-only excerpt of the repository's important memory entries (`subagent-prompts.ts`, `renderSubAgentMemoryExcerpt`). It knows nothing of the conversation itself: the parent's `task` is all it sees.
-- **Tools.** The engine's built-ins plus the extension's own: `run_commands` (always in the background executor, so it cannot race the user's terminal), `wait`, the task list and MCP tools. Not the advisor, `save_memory` or the conversation search (`SUB_AGENT_DENIED_TOOLS` in `sdk-tool-policies.ts`), and not `spawn_agent` itself: delegation goes one level deep (`MAX_SUB_AGENT_DEPTH`).
+- **Tools.** The engine's built-ins plus the extension's own: `run_commands` (always in the background executor, so it cannot race the user's terminal), `wait`, the task list, the background process tools and MCP tools. Not the advisor, `save_memory` or the conversation search (`SUB_AGENT_DENIED_TOOLS` in `sdk-tool-policies.ts`), and not `spawn_agent` itself: delegation goes one level deep (`MAX_SUB_AGENT_DEPTH`).
 - **Approval.** Delegating follows the **Delegate to sub-agents** auto-approve toggle (on by default). The sub-agent's own calls follow the same toggles and policies as the root's, since they edit the same files; an approval it asks for is preceded by a row saying which sub-agent asks.
 - **Limits.** At most 3 sub-agent runs in flight per parent (the rest wait), 40 iterations per run unless the host sets `subAgentMaxIterations`, 20 minutes per run, and the same context compaction as the root session.
 - **Cost.** The tool reports progress (`emitUpdate`) after each model call and tool: the sub-agents row shows tool calls, tokens and cost live. Its result carries the run's tokens, cache tokens and cost, which the `subagent_usage` row adds to the task header, the budget check and the history record; a task running in the background records them from the tool result. The chat shows nothing else of a sub-agent's work.

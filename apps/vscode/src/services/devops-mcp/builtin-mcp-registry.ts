@@ -8,6 +8,7 @@ import type { McpToolProvider } from "@plinycode/core"
 import type { AgentTool } from "@plinycode/shared"
 import type { CiBoard } from "./ci-board/ci-board"
 import type { CiWatchManager } from "./ci-watch/ci-watch-manager"
+import type { CiWatchRepoOpener } from "./ci-watch/ci-watch-source"
 import type { PipelineManager } from "./pipelines/pipeline-manager"
 
 interface BuiltinMcpSource {
@@ -131,6 +132,41 @@ export function setCiWatchManager(manager: CiWatchManager | undefined): void {
 
 export function getCiWatchManager(): CiWatchManager | undefined {
 	return ciWatchManager
+}
+
+let ciWatchRepoOpener: CiWatchRepoOpener | undefined
+let ciWatchRepoOpenerWaiters: ((opener: CiWatchRepoOpener) => void)[] = []
+
+/** The DevOps service's repository opener, which restored CI watches read CI through. */
+export function setCiWatchRepoOpener(opener: CiWatchRepoOpener | undefined): void {
+	ciWatchRepoOpener = opener
+	if (opener) {
+		const waiters = ciWatchRepoOpenerWaiters
+		ciWatchRepoOpenerWaiters = []
+		for (const resolve of waiters) resolve(opener)
+	}
+}
+
+/**
+ * The repository opener, waiting up to `timeoutMs` for the DevOps service to
+ * start: CI watches are restored when the controller is built, which can be
+ * before the service is.
+ */
+export function waitForCiWatchRepoOpener(timeoutMs: number): Promise<CiWatchRepoOpener> {
+	if (ciWatchRepoOpener) {
+		return Promise.resolve(ciWatchRepoOpener)
+	}
+	return new Promise((resolve, reject) => {
+		const waiter = (opener: CiWatchRepoOpener) => {
+			clearTimeout(timer)
+			resolve(opener)
+		}
+		const timer = setTimeout(() => {
+			ciWatchRepoOpenerWaiters = ciWatchRepoOpenerWaiters.filter((w) => w !== waiter)
+			reject(new Error("The PlinyCode DevOps service has not started, so CI cannot be read."))
+		}, timeoutMs)
+		ciWatchRepoOpenerWaiters.push(waiter)
+	})
 }
 
 let ciBoard: CiBoard | undefined

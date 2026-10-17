@@ -47,6 +47,7 @@ import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import { getBinaryLocation } from "@/utils/fs"
 import type { CodeIntelSource } from "./code-intel/code-intel-source"
+import type { ProcessRegistry } from "./processes/process-registry"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { isSubAgentDeniedTool } from "./sdk-tool-policies"
 import type { SdkSessionHost } from "./session-host"
@@ -91,11 +92,14 @@ interface VscodeSessionHostOptions {
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/**
-	 * The language servers behind `find_symbol` and `code_navigate`, read when a
+	 * The language servers behind `find_symbol`, `code_navigate` and
+	 * `rename_preview`, read when a
 	 * session starts so the `plinycode.codeIntel.enabled` setting applies to the
 	 * next conversation. Undefined turns the tools off.
 	 */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/** The window's background processes, for `run_commands` and the `process_*` tools. */
+	processes?: ProcessRegistry
 }
 
 export class VscodeSessionHost implements SdkSessionHost {
@@ -159,6 +163,7 @@ export class VscodeSessionHost implements SdkSessionHost {
 				vscodeTerminalExecutionMode,
 				foregroundCommands: options.foregroundCommands,
 				codeIntel,
+				processes: options.processes,
 			})
 			// A sub-agent gets the extension's tools too (its shell, `wait`, the
 			// task list, MCP), or it could read and edit but run nothing. The
@@ -170,6 +175,7 @@ export class VscodeSessionHost implements SdkSessionHost {
 					vscodeTerminalExecutionMode,
 					forSubAgents: true,
 					codeIntel,
+					processes: options.processes,
 				})
 			).filter((tool) => !isSubAgentDeniedTool(tool.name))
 			return {

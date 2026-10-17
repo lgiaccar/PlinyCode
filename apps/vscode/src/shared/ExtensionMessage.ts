@@ -293,12 +293,18 @@ export interface ClineSayTool {
 		| "readConversation"
 		| "findSymbol"
 		| "codeNavigate"
+		| "renamePreview"
+		| "processList"
+		| "processOutput"
+		| "processKill"
 	path?: string
 	diff?: string
 	content?: string
 	regex?: string
-	/** code_navigate: `definition`, `references` or `hover`. */
+	/** code_navigate: `definition`, `references`, `hover`, `callers`, `callees` or `diagnostics`. */
 	action?: string
+	/** rename_preview: the name the symbol (in `regex`) would get. */
+	newName?: string
 	filePattern?: string
 	operationIsLocatedInWorkspace?: boolean
 	/** Starting line numbers in the original file where each SEARCH block matched */

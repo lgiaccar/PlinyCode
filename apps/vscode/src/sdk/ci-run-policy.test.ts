@@ -119,6 +119,13 @@ describe("decideCiTool", () => {
 			reason: "The tool other__pr_review is not allowed in an unattended CI run; report it instead.",
 		})
 	})
+
+	it("lets an unattended run follow and stop its own background processes", () => {
+		for (const tool of ["process_list", "process_output", "process_kill"]) {
+			expect(decideCiTool(auto, tool, { id: "p1" })).toEqual({ kind: "approve" })
+			expect(decideCiTool(guard, tool, { id: "p1" })).toEqual({ kind: "ask" })
+		}
+	})
 })
 
 describe("parsing", () => {

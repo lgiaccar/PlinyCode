@@ -8,6 +8,7 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath, retainCheckpointRefs } from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
+import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
@@ -34,8 +35,11 @@ import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
 import { ExtensionRegistryInfo } from "@/registry"
-import { getCiBoard, onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
+import { getCiBoard, onBuiltinMcpToolsChanged, waitForCiWatchRepoOpener } from "@/services/devops-mcp/builtin-mcp-registry"
+import { openCiWatchSource } from "@/services/devops-mcp/ci-watch/ci-watch-source"
+import { CiWatchStore } from "@/services/devops-mcp/ci-watch/ci-watch-store"
 import { McpHub } from "@/services/mcp/McpHub"
 import type { ClineExtensionContext } from "@/shared/cline"
 import { coerceToPlinyProvider } from "@/shared/pliny"
@@ -53,6 +57,7 @@ import { MessageTranslatorState, normalizeUsageEvent } from "./message-translato
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
+import { ProcessRegistry } from "./processes/process-registry"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
@@ -104,12 +109,8 @@ import { VscodeSessionHost } from "./vscode-session-host"
 import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
 import { WebviewGrpcBridge } from "./webview-grpc-bridge"
 
-/**
- * Log a stub warning and return undefined.
- */
-function stubWarn(name: string): void {
-	Logger.warn(`[SdkController] STUB: ${name} not yet implemented`)
-}
+/** How long a CI watch restored after a reload waits for the DevOps service before its poll fails. */
+const DEVOPS_WAIT_MS = 2 * 60_000
 
 function historyItemToTaskResponse(item: HistoryItem): TaskResponse {
 	return TaskResponse.create({
@@ -186,6 +187,15 @@ export class Controller {
 		isForegroundSession: (sessionId) => !this.background?.has(sessionId),
 	})
 
+	// Commands that outlive their run_commands call: handed over to the terminal
+	// while still running, or started with `background: true`. Owned here so it
+	// survives session rebuilds; drives the webview's background-command flag
+	// and cancelBackgroundCommand (docs/agent-tools.md, "Background processes").
+	private readonly processes = new ProcessRegistry()
+	private readonly processesSubscription = this.processes.onDidChange(() => {
+		void this.postStateToWebview()
+	})
+
 	// Tasks that keep running after the user starts a new task or opens another
 	// one. Created in the constructor; its callbacks reach session state lazily.
 	private readonly background: SdkBackgroundSessions
@@ -197,9 +207,6 @@ export class Controller {
 	// reports into conversations — see sdk-ci-watch-coordinator.ts.
 	private readonly ciWatch: SdkCiWatchCoordinator
 
-	// Private state kept for stub compatibility
-	private backgroundCommandRunning = false
-	private backgroundCommandTaskId?: string
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
 	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
 
@@ -390,6 +397,16 @@ export class Controller {
 					.then(() => sendChatButtonClickedEvent())
 					.catch((error) => Logger.warn(`[SdkController] Failed to open watched task ${conversationId}:`, error))
 			},
+			// Watches survive a window reload; each window workspace resumes its own (docs/devops-mcp.md).
+			persistence: {
+				store: new CiWatchStore(
+					path.join(resolveClineDataDir(), "ci-watches.json"),
+					this.workspaceRootResolver.getWindowWorkspace().then((workspace) => workspace?.path ?? ""),
+				),
+				conversationExists: async (id) => (await this.taskHistory.findHistoryItem(id)) !== undefined,
+				openSource: (target, head) =>
+					openCiWatchSource((cwd) => waitForCiWatchRepoOpener(DEVOPS_WAIT_MS).then((open) => open(cwd)), target, head),
+			},
 		})
 		this.sessionConfigBuilder = new SdkSessionConfigBuilder({
 			stateManager: this.stateManager,
@@ -414,6 +431,7 @@ export class Controller {
 				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
 				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
 			},
+			trace: { enabled: isSessionTraceEnabled },
 		})
 		this.memory = new MemoryCoordinator({
 			store: this.memoryServices.store,
@@ -487,6 +505,7 @@ export class Controller {
 			},
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
 			foregroundCommands: this.foregroundCommands,
+			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
@@ -959,6 +978,9 @@ export class Controller {
 		await this.background.stopAll("SdkController.dispose")
 		await this.sessions.dispose("SdkController.dispose")
 		this.diffEdits.dispose()
+		// Child processes would outlive the window; terminals close with it.
+		this.processesSubscription.dispose()
+		await this.processes.killAll(undefined, (process) => process.source === "child")
 		this._terminalManager?.disposeAll()
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()
@@ -1174,8 +1196,17 @@ export class Controller {
 		await this.taskControl.cancelTask()
 	}
 
+	/**
+	 * Stop every running background process of the displayed conversation
+	 * (the webview calls this on cancel and interrupt while its flag is set).
+	 */
 	async cancelBackgroundCommand(): Promise<void> {
-		stubWarn("cancelBackgroundCommand")
+		const taskId = this.activeTaskId
+		if (!taskId) {
+			return
+		}
+		const stopped = await this.processes.killAll(taskId)
+		Logger.log(`[SdkController] cancelBackgroundCommand: stopped ${stopped} background process(es)`)
 	}
 
 	/**
@@ -1752,10 +1783,15 @@ export class Controller {
 	 *
 	 * @returns the written path, or undefined when the save dialog was cancelled.
 	 */
-	async exportTaskToMarkdown(
+	/**
+	 * The conversation as the Markdown export renders it, without saving it:
+	 * the export command writes it where the user chooses, the diagnostics
+	 * bundle puts it in its folder.
+	 */
+	async renderTaskMarkdown(
 		taskId: string,
 		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
-	): Promise<string | undefined> {
+	): Promise<{ markdown: string; historyItem: HistoryItem }> {
 		const id = taskId?.trim() || this.task?.taskId
 		if (!id) {
 			throw new Error("No task to export")
@@ -1791,7 +1827,14 @@ export class Controller {
 			includeReasoning: options.includeReasoning ?? false,
 			plinyCodeVersion: ExtensionRegistryInfo.version,
 		})
+		return { markdown, historyItem }
+	}
 
+	async exportTaskToMarkdown(
+		taskId: string,
+		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
+	): Promise<string | undefined> {
+		const { markdown, historyItem } = await this.renderTaskMarkdown(taskId, options)
 		return saveMarkdownExport(markdown, {
 			defaultDirectory: historyItem.cwdOnTaskInitialization || (await this.getWorkspaceRoot()),
 			defaultFilename: defaultMarkdownExportFilename(historyItem.ts),
@@ -1904,13 +1947,6 @@ export class Controller {
 		await this.postStateToWebview()
 	}
 
-	// ---- Background command state ----
-
-	updateBackgroundCommandState(running: boolean, taskId?: string): void {
-		this.backgroundCommandRunning = running
-		this.backgroundCommandTaskId = taskId
-	}
-
 	// ---- State management ----
 
 	/**
@@ -1966,13 +2002,14 @@ export class Controller {
 			const minter = this.messageTranslatorState.getMinter()
 			const activeTaskMessages = this.getActiveTaskMessages()
 			const epoch = minter.epoch
+			const backgroundCommandRunning = this.activeTaskId !== undefined && this.processes.hasRunning(this.activeTaskId)
 			const baseState = await buildBaseState({
 				activeTaskId: this.activeTaskId,
 				activeTaskMessages,
 				stateManager: this.stateManager,
 				mcpHub: this.mcpHub,
-				backgroundCommandRunning: this.backgroundCommandRunning,
-				backgroundCommandTaskId: this.backgroundCommandTaskId,
+				backgroundCommandRunning,
+				backgroundCommandTaskId: backgroundCommandRunning ? this.activeTaskId : undefined,
 				foregroundCommandRunning: this.foregroundCommands.isRunning,
 				// Without this the webview always receives workspaceRoots: [] on the
 				// SDK path (classic Controller exposes a public workspaceManager;

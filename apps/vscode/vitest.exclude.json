@@ -59,6 +59,7 @@
 	"src/services/devops-mcp/ci-board/__tests__/worktrees.test.ts",
 	"src/services/devops-mcp/ci-watch/__tests__/ci-watch-manager.test.ts",
 	"src/services/devops-mcp/ci-watch/__tests__/ci-watch-report.test.ts",
+	"src/services/devops-mcp/ci-watch/__tests__/ci-watch-store.test.ts",
 	"src/services/devops-mcp/ci-watch/__tests__/ci-watcher.test.ts",
 	"src/services/devops-mcp/ci-watch/__tests__/watch-ci-tool.test.ts",
 	"src/services/devops-mcp/pipelines/pipeline-inputs.test.ts",

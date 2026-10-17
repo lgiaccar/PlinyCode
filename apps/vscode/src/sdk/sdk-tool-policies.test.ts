@@ -61,6 +61,21 @@ describe("isToolAutoApproved", () => {
 		expect(policies.search_conversations).toEqual({ autoApprove: false })
 	})
 
+	it("approves listing and reading background processes like file reads, and stopping one like a command", () => {
+		const settings = {
+			...DEFAULT_AUTO_APPROVAL_SETTINGS,
+			actions: { ...DEFAULT_AUTO_APPROVAL_SETTINGS.actions, readFiles: true, executeSafeCommands: false },
+		}
+		expect(isToolAutoApproved("process_list", settings)).toBe(true)
+		expect(isToolAutoApproved("process_output", settings)).toBe(true)
+		expect(isToolAutoApproved("process_kill", settings)).toBe(false)
+		const commands = { ...settings, actions: { ...settings.actions, executeSafeCommands: true } }
+		expect(isToolAutoApproved("process_kill", commands)).toBe(true)
+		const policies = buildToolPolicies(settings)
+		expect(policies.process_output).toEqual({ autoApprove: false })
+		expect(policies.process_kill).toEqual({ autoApprove: false })
+	})
+
 	it("auto-approves all MCP tools when the Use MCP servers toggle is on", () => {
 		const settings = {
 			...DEFAULT_AUTO_APPROVAL_SETTINGS,

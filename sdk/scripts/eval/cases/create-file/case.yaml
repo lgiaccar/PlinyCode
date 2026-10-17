@@ -1,0 +1,21 @@
+# Smallest act-mode case: one editor call creates a file, then the model reports.
+id: create-file
+tags: [act, editor, smoke]
+fixture: empty-project
+mode: act
+model: snps-provider/GLM-5.2
+maxIterations: 4
+prompt: >-
+  Create a file named hello.txt in the workspace root containing exactly one
+  line: Hello from PlinyCode
+assertions:
+  - type: file_exists
+    path: hello.txt
+  - type: file_contains
+    path: hello.txt
+    text: Hello from PlinyCode
+  - type: no_tool_errors
+  - type: iterations_lte
+    n: 3
+  - type: final_text_contains
+    text: hello.txt

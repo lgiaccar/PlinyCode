@@ -31,10 +31,11 @@ Design and operations notes are in `docs/`:
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.
 - [docs/side-questions.md](docs/side-questions.md): side questions, messages asked off the record: answered read-only and left out of later requests.
+- [docs/diagnostics-bundle.md](docs/diagnostics-bundle.md): the diagnostics bundle (PlinyCode: Export Diagnostics Bundle): the folder it writes under `<dataDir>/diagnostics/`, what each file holds, what is redacted and how to share it.
 - [docs/restart-from-here.md](docs/restart-from-here.md): editing an earlier message and restarting from it, how the chat row is mapped to the history the model sees, which checkpoint "Restart and revert files" uses, and the Show Last Model Request debug command.
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
-- [docs/agent-tools.md](docs/agent-tools.md): how the editing, search and file-finding tools behave, how `run_commands` handles long-running commands and narrow terminals, which tools run concurrently, and the `update_todo_list` task list.
+- [docs/agent-tools.md](docs/agent-tools.md): how the editing, search and file-finding tools behave, how `run_commands` handles long-running commands and narrow terminals, the background processes it leaves running (`process_list`, `process_output`, `process_kill`), which tools run concurrently, and the `update_todo_list` task list.
 - [docs/edit-problems.md](docs/edit-problems.md): how edit results list the new errors VS Code reports for the edited files, and the `plinycode.edits.reportNewProblems` setting.
 - [docs/environment-context.md](docs/environment-context.md): the git snapshot in the system prompt (taken once per conversation) and the editor state sent with each user message, and how both stay out of the chat.
 - [docs/memory.md](docs/memory.md): repo memory: the per-repository and per-user `MEMORY.md` files loaded into the system prompt within `plinycode.memory.maxTokens`, `save_memory` and `/remember`, distillation proposals, and the past-conversation search tools.
@@ -47,6 +48,9 @@ Design and operations notes are in `docs/`:
 - [docs/rules.md](docs/rules.md): which rules files reach the model (including `AGENTS.md` and `CLAUDE.md` files below the root, listed by path and scope), the rules budget and the order rules are inlined in.
 - [docs/context-compaction.md](docs/context-compaction.md): when the conversation is compacted, the agentic and basic strategies and the fallback between them, overflow recovery, what the summarizer costs, and the context bar's threshold marker.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
+- [docs/eval-harness.md](docs/eval-harness.md): the eval harness in `sdk/scripts/eval`: cases (a fixture, a prompt, a model and assertions) run as headless engine sessions, replayed offline from VCR cassettes in CI (`eval-offline`) or recorded against the live gateway with `--record`, and how to add a case.
+- [docs/roadmap.md](docs/roadmap.md): the Q4 2026 improvement roadmap: six two-week waves (code intelligence, worktrees, background processes, sub-agent visibility, web search and images, eval harness, trace and diagnostics, hook unification, release automation), each with PR-sized items, file anchors and verification.
+- [docs/trace-and-logs.md](docs/trace-and-logs.md): the per-conversation trace files (`traces/<session id>.jsonl`: requests, replies, tool calls, routing decisions, run failures), their record types, redaction and size caps, the `plinycode.trace.enabled` setting, and the rotating `logs/plinycode.log` file with its Open Log File command.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.
 
@@ -73,7 +77,7 @@ PRs target the `stage` branch, not `master`. Every workflow in `.github/workflow
 | Workflow          | Runs when the PR changes                                  | On a push to `stage`/`master`                       | What it checks                                                                   |
 | ----------------- | --------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `docs-check`      | anything                                                  | always                                              | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
-| `engine-test`     | `sdk/**`, `bun.lock`, its own workflow file, `.github/actions/**` | same path filter (no run at all otherwise)  | engine build, `bun run types`, lint and format, engine tests on Ubuntu (Node 22 and 24) and Windows (Node 22) |
+| `engine-test`     | `sdk/**`, `bun.lock`, its own workflow file, `.github/actions/**` | same path filter (no run at all otherwise)  | engine build, `bun run types`, lint and format, engine tests on Ubuntu (Node 22 and 24) and Windows (Node 22), offline eval cases (`eval-offline`) |
 | `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock`, `.github/actions/**` | all jobs                | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
 | `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | all jobs                                            | Playwright e2e on Ubuntu, Windows and macOS                                      |
 

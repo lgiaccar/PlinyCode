@@ -275,6 +275,9 @@ service UiService {
   // Starts "PlinyCode: Check for Updates"; the result is shown as VS Code notifications
   rpc checkForUpdates(EmptyRequest) returns (Empty);
 
+  // Starts "PlinyCode: Export Diagnostics Bundle"; the folder is revealed once it is written
+  rpc exportDiagnostics(EmptyRequest) returns (Empty);
+
   // Tracks intent signals before task creation or first model activity
   rpc trackIntent(IntentEvent) returns (Empty);
 }
