@@ -1,10 +1,12 @@
-import { CommandAbortedError, CommandExitError } from "@plinycode/core"
+import { CommandAbortedError, CommandExitError, type ShellExecutor } from "@plinycode/core"
+import type { AgentToolContext } from "@plinycode/shared"
 import { EventEmitter } from "events"
 import * as fs from "fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as vscode from "vscode"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import type { TerminalCompletionDetails } from "@/integrations/terminal/types"
+import { ProcessRegistry } from "./processes/process-registry"
 import { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import {
 	createVscodeRunCommandsTool,
@@ -18,7 +20,18 @@ const mocks = vi.hoisted(() => ({
 	existsSync: vi.fn<(path: fs.PathLike) => boolean>(),
 	getGlobalSettingsKey: vi.fn(() => "default"),
 	showMessage: vi.fn(async () => ({})),
+	/** Replaces the engine's spawning executor when set (background processes). */
+	fakeShellExecutor: undefined as ShellExecutor | undefined,
 }))
+
+vi.mock("@plinycode/core", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@plinycode/core")>()
+	return {
+		...actual,
+		createShellExecutor: (...args: Parameters<typeof actual.createShellExecutor>) =>
+			mocks.fakeShellExecutor ?? actual.createShellExecutor(...args),
+	}
+})
 
 vi.mock("@/hosts/host-provider", () => ({
 	HostProvider: { window: { showMessage: mocks.showMessage } },
@@ -47,6 +60,7 @@ afterEach(() => {
 	mocks.existsSync.mockReset()
 	mocks.getGlobalSettingsKey.mockReset()
 	mocks.getGlobalSettingsKey.mockReturnValue("default")
+	mocks.fakeShellExecutor = undefined
 })
 
 describe("createVscodeRunCommandsTool", () => {
@@ -1305,5 +1319,260 @@ describe("executeForeground — Proceed While Running", () => {
 		expect(log).toContain("before detach")
 		expect(log).toContain("after detach")
 		fs.rmSync(logFilePath!, { force: true })
+	})
+})
+
+describe("background processes", () => {
+	const toolContext: AgentToolContext = { agentId: "agent-1", sessionId: "session-1", iteration: 1 }
+
+	/** A terminal manager whose terminal can be interrupted and closed. */
+	function createKillableTerminalManager(
+		process: ReturnType<VscodeTerminalManager["runCommand"]>,
+		terminalInfo: { busy: boolean },
+	) {
+		const sendInterrupt = vi.fn()
+		const disposeTerminal = vi.fn()
+		const manager = {
+			getOrCreateTerminal: async () => terminalInfo,
+			runCommand: () => process,
+			sendInterrupt,
+			disposeTerminal,
+		} as unknown as VscodeTerminalManager
+		return { manager, sendInterrupt, disposeTerminal }
+	}
+
+	/**
+	 * A spawning executor that runs until aborted or finished by the test,
+	 * streaming output the way the engine's does (emitUpdate chunks).
+	 */
+	function createFakeShellExecutor() {
+		const calls: Array<{ context: AgentToolContext; finish: (exitCode: number) => void }> = []
+		const executor: ShellExecutor = (_command, _cwd, context) =>
+			new Promise<string>((resolve, reject) => {
+				context.signal?.addEventListener("abort", () => reject(new Error("Command was aborted")), { once: true })
+				calls.push({
+					context,
+					finish: (exitCode) => (exitCode === 0 ? resolve("") : reject(new CommandExitError(exitCode, ""))),
+				})
+			})
+		return { executor, calls }
+	}
+
+	async function readLogWhen(logPath: string, text: string): Promise<string> {
+		await waitFor(() => {
+			try {
+				return fs.readFileSync(logPath, "utf8").includes(text)
+			} catch {
+				return false
+			}
+		})
+		return fs.readFileSync(logPath, "utf8")
+	}
+
+	it("registers a handed-over terminal command with its log file", async () => {
+		const registry = new ProcessRegistry()
+		const coordinator = new SdkForegroundCommandCoordinator()
+		const { process, emitLine, complete } = createControllableTerminalProcess()
+
+		const resultPromise = executeForeground(
+			"npm run dev",
+			"/workspace",
+			createFakeTerminalManager(process),
+			100_000,
+			undefined,
+			coordinator,
+			undefined,
+			"session-1",
+			undefined,
+			{ registry, conversationId: "session-1" },
+		)
+		await waitFor(() => process.listenerCount("line") > 0)
+		emitLine("listening on :3000")
+		coordinator.proceedWhileRunning()
+		const result = await resultPromise
+
+		const logFilePath = /redirected to this file[^:]*: (.+)$/m.exec(result)?.[1]?.trim()
+		expect(result).toContain("It is tracked as process p1: process_output reads its log and process_kill stops it.")
+		expect(registry.list("session-1")).toEqual([
+			expect.objectContaining({
+				id: "p1",
+				command: "npm run dev",
+				cwd: "/workspace",
+				source: "terminal",
+				status: "running",
+				logPath: logFilePath,
+			}),
+		])
+
+		complete({ exitCode: 0 })
+		await readLogWhen(logFilePath!, "[Command completed with exit code 0]")
+		expect(registry.get("p1")).toMatchObject({ status: "exited", exitCode: 0 })
+		fs.rmSync(logFilePath!, { force: true })
+	})
+
+	it("registers a command handed over before it had a terminal, and kills it once it starts", async () => {
+		vi.useFakeTimers()
+		const registry = new ProcessRegistry()
+		const coordinator = new SdkForegroundCommandCoordinator()
+		const { process, complete } = createControllableTerminalProcess()
+		let provideTerminal!: (info: { busy: boolean }) => void
+		const terminalInfo = { busy: true }
+		const sendInterrupt = vi.fn(() => complete({ exitCode: 130 }))
+		const manager = {
+			getOrCreateTerminal: () =>
+				new Promise((resolve) => {
+					provideTerminal = resolve
+				}),
+			runCommand: () => process,
+			sendInterrupt,
+			disposeTerminal: vi.fn(),
+		} as unknown as VscodeTerminalManager
+
+		const resultPromise = executeForeground(
+			"npm run dev",
+			"/workspace",
+			manager,
+			100_000,
+			undefined,
+			coordinator,
+			undefined,
+			"session-1",
+			undefined,
+			{ registry, conversationId: "session-1" },
+		)
+		coordinator.proceedWhileRunning()
+		const result = await resultPromise
+		expect(result).toContain("tracked as process p1")
+
+		const killing = registry.kill("p1")
+		expect(sendInterrupt).not.toHaveBeenCalled()
+		provideTerminal(terminalInfo)
+		await vi.advanceTimersByTimeAsync(2000)
+		await killing
+
+		expect(sendInterrupt).toHaveBeenCalledOnce()
+		expect(registry.get("p1")).toMatchObject({ status: "killed", exitCode: 130 })
+		const logFilePath = /redirected to this file[^:]*: (.+)$/m.exec(result)?.[1]?.trim()
+		vi.useRealTimers()
+		fs.rmSync(logFilePath!, { force: true })
+	})
+
+	it("kills a handed-over command with Ctrl+C, and closes its terminal when that does not stop it", async () => {
+		vi.useFakeTimers()
+		const registry = new ProcessRegistry()
+		const coordinator = new SdkForegroundCommandCoordinator()
+		const { process } = createControllableTerminalProcess()
+		const terminalInfo = { busy: true }
+		const { manager, sendInterrupt, disposeTerminal } = createKillableTerminalManager(process, terminalInfo)
+
+		const resultPromise = executeForeground(
+			"tail -f server.log",
+			"/workspace",
+			manager,
+			100_000,
+			undefined,
+			coordinator,
+			undefined,
+			"session-1",
+			undefined,
+			{ registry, conversationId: "session-1" },
+		)
+		await vi.waitFor(() => expect(process.listenerCount("line")).toBeGreaterThan(0))
+		coordinator.proceedWhileRunning()
+		const result = await resultPromise
+
+		const killing = registry.kill("p1")
+		expect(sendInterrupt).toHaveBeenCalledWith(terminalInfo)
+		expect(disposeTerminal).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(2000)
+		await killing
+
+		expect(disposeTerminal).toHaveBeenCalledWith(terminalInfo)
+		expect(registry.get("p1")?.status).toBe("killed")
+		const logFilePath = /redirected to this file[^:]*: (.+)$/m.exec(result)?.[1]?.trim()
+		vi.useRealTimers()
+		fs.rmSync(logFilePath!, { force: true })
+	})
+
+	it("does not register a command that completes while the call waits", async () => {
+		const registry = new ProcessRegistry()
+		const process = createFakeTerminalProcess({ lines: ["ok"], completionDetails: { exitCode: 0 } })
+		const tool = createVscodeRunCommandsTool({
+			cwd: "/workspace",
+			getTerminalManager: () => createFakeTerminalManager(process),
+			processes: registry,
+		})
+
+		await tool.execute({ commands: ["echo ok"] }, toolContext)
+
+		expect(registry.list()).toEqual([])
+	})
+
+	it("starts `background: true` commands as processes and returns at once", async () => {
+		const registry = new ProcessRegistry()
+		const fake = createFakeShellExecutor()
+		mocks.fakeShellExecutor = fake.executor
+		const getTerminalManager = vi.fn(() => createFakeTerminalManager(createFakeTerminalProcess({})))
+		const tool = createVscodeRunCommandsTool({ cwd: "/workspace", getTerminalManager, processes: registry })
+
+		const results = (await tool.execute(
+			{ commands: ["npm run dev", "bun test --watch"], background: true },
+			toolContext,
+		)) as Array<{ result: string; success: boolean }>
+
+		expect(getTerminalManager).not.toHaveBeenCalled()
+		expect(results).toHaveLength(2)
+		expect(results[0].success).toBe(true)
+		expect(results[0].result).toMatch(
+			/^Started npm run dev as process p1 \(log: .+\)\. Use process_output to read it and process_kill to stop it\.$/,
+		)
+		expect(results[1].result).toContain("as process p2")
+		expect(registry.list("session-1").map((process) => [process.id, process.source, process.status])).toEqual([
+			["p1", "child", "running"],
+			["p2", "child", "running"],
+		])
+
+		// Output streams into the log while the command runs.
+		const [first, second] = fake.calls
+		first.context.emitUpdate?.({ stream: "stdout", chunk: "compiled in 2s\n" })
+		const logPath = registry.get("p1")!.logPath
+		expect(await readLogWhen(logPath, "compiled in 2s")).toContain("[Running command: npm run dev]")
+
+		// process_kill aborts it.
+		await registry.kill("p1")
+		expect(first.context.signal?.aborted).toBe(true)
+		expect(registry.get("p1")?.status).toBe("killed")
+		await readLogWhen(logPath, "[Command stopped]")
+
+		// One that ends by itself keeps its exit code.
+		second.finish(2)
+		await waitFor(() => registry.get("p2")?.status === "exited")
+		expect(registry.get("p2")?.exitCode).toBe(2)
+		await readLogWhen(registry.get("p2")!.logPath, "[Command exited with code 2]")
+
+		fs.rmSync(logPath, { force: true })
+		fs.rmSync(registry.get("p2")!.logPath, { force: true })
+	})
+
+	it("offers `background` only with a registry, and leaves calls without it unchanged", async () => {
+		const options = {
+			cwd: "/workspace",
+			getTerminalManager: () => createFakeTerminalManager(createFakeTerminalProcess({ lines: ["plain"] })),
+		}
+		const plain = createVscodeRunCommandsTool(options)
+		expect(JSON.stringify(plain.inputSchema)).not.toContain("background")
+		expect(plain.description).not.toContain("background: true")
+
+		const registry = new ProcessRegistry()
+		const withProcesses = createVscodeRunCommandsTool({ ...options, processes: registry })
+		expect((withProcesses.inputSchema as { properties: Record<string, unknown> }).properties.background).toEqual(
+			expect.objectContaining({ type: "boolean" }),
+		)
+		expect(withProcesses.description).toContain("`background: true`")
+		expect(withProcesses.description).toContain("still running after 5 minutes")
+
+		const results = await withProcesses.execute({ commands: ["echo plain"], background: false }, toolContext)
+		expect(results).toEqual([expect.objectContaining({ result: "plain", success: true })])
+		expect(registry.list()).toEqual([])
 	})
 })

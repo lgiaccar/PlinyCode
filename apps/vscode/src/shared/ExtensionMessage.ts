@@ -293,6 +293,9 @@ export interface ClineSayTool {
 		| "readConversation"
 		| "findSymbol"
 		| "codeNavigate"
+		| "processList"
+		| "processOutput"
+		| "processKill"
 	path?: string
 	diff?: string
 	content?: string

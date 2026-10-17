@@ -53,6 +53,7 @@ import { MessageTranslatorState, normalizeUsageEvent } from "./message-translato
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { createProviderConfigStore } from "./model-catalog/store"
+import { ProcessRegistry } from "./processes/process-registry"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
@@ -103,13 +104,6 @@ import { createWorkspaceFileReadExecutor } from "./vscode-file-read-executor"
 import { VscodeSessionHost } from "./vscode-session-host"
 import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
 import { WebviewGrpcBridge } from "./webview-grpc-bridge"
-
-/**
- * Log a stub warning and return undefined.
- */
-function stubWarn(name: string): void {
-	Logger.warn(`[SdkController] STUB: ${name} not yet implemented`)
-}
 
 function historyItemToTaskResponse(item: HistoryItem): TaskResponse {
 	return TaskResponse.create({
@@ -186,6 +180,15 @@ export class Controller {
 		isForegroundSession: (sessionId) => !this.background?.has(sessionId),
 	})
 
+	// Commands that outlive their run_commands call: handed over to the terminal
+	// while still running, or started with `background: true`. Owned here so it
+	// survives session rebuilds; drives the webview's background-command flag
+	// and cancelBackgroundCommand (docs/agent-tools.md, "Background processes").
+	private readonly processes = new ProcessRegistry()
+	private readonly processesSubscription = this.processes.onDidChange(() => {
+		void this.postStateToWebview()
+	})
+
 	// Tasks that keep running after the user starts a new task or opens another
 	// one. Created in the constructor; its callbacks reach session state lazily.
 	private readonly background: SdkBackgroundSessions
@@ -197,9 +200,6 @@ export class Controller {
 	// reports into conversations — see sdk-ci-watch-coordinator.ts.
 	private readonly ciWatch: SdkCiWatchCoordinator
 
-	// Private state kept for stub compatibility
-	private backgroundCommandRunning = false
-	private backgroundCommandTaskId?: string
 	checkpointRestoreInput?: ExtensionState["checkpointRestoreInput"]
 	editMessageRestartFocus?: ExtensionState["editMessageRestartFocus"]
 
@@ -487,6 +487,7 @@ export class Controller {
 			},
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
 			foregroundCommands: this.foregroundCommands,
+			processes: this.processes,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
@@ -959,6 +960,9 @@ export class Controller {
 		await this.background.stopAll("SdkController.dispose")
 		await this.sessions.dispose("SdkController.dispose")
 		this.diffEdits.dispose()
+		// Child processes would outlive the window; terminals close with it.
+		this.processesSubscription.dispose()
+		await this.processes.killAll(undefined, (process) => process.source === "child")
 		this._terminalManager?.disposeAll()
 		await this.taskHistory.dispose()
 		this.mcpHub?.dispose?.()
@@ -1174,8 +1178,17 @@ export class Controller {
 		await this.taskControl.cancelTask()
 	}
 
+	/**
+	 * Stop every running background process of the displayed conversation
+	 * (the webview calls this on cancel and interrupt while its flag is set).
+	 */
 	async cancelBackgroundCommand(): Promise<void> {
-		stubWarn("cancelBackgroundCommand")
+		const taskId = this.activeTaskId
+		if (!taskId) {
+			return
+		}
+		const stopped = await this.processes.killAll(taskId)
+		Logger.log(`[SdkController] cancelBackgroundCommand: stopped ${stopped} background process(es)`)
 	}
 
 	/**
@@ -1904,13 +1917,6 @@ export class Controller {
 		await this.postStateToWebview()
 	}
 
-	// ---- Background command state ----
-
-	updateBackgroundCommandState(running: boolean, taskId?: string): void {
-		this.backgroundCommandRunning = running
-		this.backgroundCommandTaskId = taskId
-	}
-
 	// ---- State management ----
 
 	/**
@@ -1966,13 +1972,14 @@ export class Controller {
 			const minter = this.messageTranslatorState.getMinter()
 			const activeTaskMessages = this.getActiveTaskMessages()
 			const epoch = minter.epoch
+			const backgroundCommandRunning = this.activeTaskId !== undefined && this.processes.hasRunning(this.activeTaskId)
 			const baseState = await buildBaseState({
 				activeTaskId: this.activeTaskId,
 				activeTaskMessages,
 				stateManager: this.stateManager,
 				mcpHub: this.mcpHub,
-				backgroundCommandRunning: this.backgroundCommandRunning,
-				backgroundCommandTaskId: this.backgroundCommandTaskId,
+				backgroundCommandRunning,
+				backgroundCommandTaskId: backgroundCommandRunning ? this.activeTaskId : undefined,
 				foregroundCommandRunning: this.foregroundCommands.isRunning,
 				// Without this the webview always receives workspaceRoots: [] on the
 				// SDK path (classic Controller exposes a public workspaceManager;

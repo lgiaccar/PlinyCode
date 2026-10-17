@@ -45,9 +45,15 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
  * Tools whose row shows the tool's answer: the translator copies the output
  * into `content` when the call completes. The classic read tools get their
  * content elsewhere (the file itself, the search display), so this is only
- * for the extension's code intelligence tools.
+ * for the extension's code intelligence and background process tools.
  */
-const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set(["find_symbol", "code_navigate"])
+const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set([
+	"find_symbol",
+	"code_navigate",
+	"process_list",
+	"process_output",
+	"process_kill",
+])
 
 /** The say-tool row with the tool's output as its content, for tools that show it. */
 export function withToolOutputContent(sayTool: ClineSayTool, toolName: string, output: unknown): ClineSayTool {
@@ -161,6 +167,9 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *   find_files                         → listFilesRecursive
  *   find_symbol                        → findSymbol (regex: the query, path: the file for an outline)
  *   code_navigate                      → codeNavigate (action, regex: the symbol, path: the file)
+ *   process_list                       → processList
+ *   process_output                     → processOutput (path: the process id)
+ *   process_kill                       → processKill (path: the process id)
  *   fetch_web_content/web_fetch        → webFetch
  *   web_search                         → webSearch
  *   skills/use_skill                   → useSkill
@@ -220,6 +229,15 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 				path: getStringField(parsedInput, "path") ?? "",
 			}
 		}
+
+		case "process_list":
+			return { tool: "processList" }
+
+		case "process_output":
+			return { tool: "processOutput", path: getStringField(parsedInput, "id") ?? "" }
+
+		case "process_kill":
+			return { tool: "processKill", path: getStringField(parsedInput, "id") ?? "" }
 
 		case "editor":
 		case "replace_in_file": {
