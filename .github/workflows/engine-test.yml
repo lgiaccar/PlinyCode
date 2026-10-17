@@ -3,7 +3,8 @@ name: engine-test
 # Runs on PRs and on every push to stage (the PR target) and master, so a merge
 # that breaks the engine is caught after it lands too. The path filter applies
 # to pushes as well as PRs: a push that touches none of these paths skips the
-# workflow entirely (no run, no check).
+# workflow entirely (no run, no check). `sdk/**` includes the eval harness in
+# sdk/scripts/eval (cases, fixtures, cassettes), which the eval-offline job runs.
 on:
     push:
         branches:
@@ -95,3 +96,38 @@ jobs:
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               timeout-minutes: 10
               run: bun sdk/scripts/ci-node-smoke.ts
+
+    # Replays every eval case in sdk/scripts/eval from its committed cassette:
+    # a real engine session with the default tools against a fixture copy, no
+    # network. A case fails when an assertion fails or the agent does not
+    # finish. See docs/eval-harness.md.
+    eval-offline:
+        needs: quality-checks
+        runs-on: ubuntu-latest
+        name: Eval (offline)
+        timeout-minutes: 15
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup toolchain
+              uses: ./.github/actions/setup-toolchain
+
+            # Under Bun the harness runs engine source through sdk/tsconfig.json's
+            # paths, but @plinycode/llms still resolves @plinycode/shared to dist/.
+            - name: Build SDK
+              run: bun run build:sdk
+
+            - name: Typecheck eval harness
+              run: bun tsc -p sdk/scripts/eval/tsconfig.json
+
+            - name: Run offline eval cases
+              run: bun sdk/scripts/eval/run.ts --offline
+
+            - name: Upload eval results
+              if: ${{ !cancelled() }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: eval-results
+                  path: ai_output/eval/
+                  if-no-files-found: ignore

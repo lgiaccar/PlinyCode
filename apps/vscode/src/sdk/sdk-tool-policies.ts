@@ -14,6 +14,7 @@ const READ_TOOLS = [
 	"find_files",
 	"find_symbol",
 	"code_navigate",
+	"rename_preview",
 	"search_conversations",
 	"read_conversation",
 ]

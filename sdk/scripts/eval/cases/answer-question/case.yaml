@@ -1,0 +1,17 @@
+# Ask mode: answer from the code, change nothing.
+id: answer-question
+tags: [ask, read-only]
+fixture: greeter
+mode: ask
+model: snps-provider/GLM-5.2
+maxIterations: 4
+prompt: What exactly does greet("Ada") return? Answer from the code.
+assertions:
+  - type: final_text_contains
+    text: Hello, Ada!
+  - type: file_contains
+    path: src/greet.ts
+    text: "return `Hello, ${name}!`;"
+  - type: no_tool_errors
+  - type: iterations_lte
+    n: 3

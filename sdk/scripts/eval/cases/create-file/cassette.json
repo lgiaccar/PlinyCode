@@ -1,0 +1,20 @@
+[
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"The user wants a one-line file. The editor creates it.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_eval_0_0\",\"type\":\"function\",\"function\":{\"name\":\"editor\",\"arguments\":\"{\\\"path\\\":\\\"hello.txt\\\",\\\"new_tex\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"t\\\":\\\"Hello from PlinyCode\\\\n\\\"}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-0\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":4200,\"completion_tokens\":60,\"total_tokens\":4260}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	},
+	{
+		"scope": "https://snps-inference.internal.synopsys.com",
+		"method": "POST",
+		"path": "/api/llm/chat/completions",
+		"status": 200,
+		"response": "data: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Created hello.txt containing the line `Hello from PlinyCode`.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl-eval-1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"GLM-5.2\",\"choices\":[],\"usage\":{\"prompt_tokens\":4300,\"completion_tokens\":20,\"total_tokens\":4320}}\n\ndata: [DONE]\n\n",
+		"responseIsBinary": false,
+		"contentType": "text/event-stream"
+	}
+]

@@ -39,6 +39,7 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
 	"searchFiles",
 	"findSymbol",
 	"codeNavigate",
+	"renamePreview",
 ])
 
 /**
@@ -47,7 +48,7 @@ const FILESYSTEM_PATH_TOOLS: ReadonlySet<ClineSayTool["tool"]> = new Set([
  * content elsewhere (the file itself, the search display), so this is only
  * for the extension's code intelligence tools and its web search.
  */
-const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set(["find_symbol", "code_navigate", "web_search"])
+const OUTPUT_CONTENT_TOOLS: ReadonlySet<string> = new Set(["find_symbol", "code_navigate", "rename_preview", "web_search"])
 
 /** The say-tool row with the tool's output as its content, for tools that show it. */
 export function withToolOutputContent(sayTool: ClineSayTool, toolName: string, output: unknown): ClineSayTool {
@@ -161,6 +162,7 @@ function relativizePatchPaths(patch: string | undefined, cwd: string): string | 
  *   find_files                         → listFilesRecursive
  *   find_symbol                        → findSymbol (regex: the query, path: the file for an outline)
  *   code_navigate                      → codeNavigate (action, regex: the symbol, path: the file)
+ *   rename_preview                     → renamePreview (regex: the symbol, newName, path: the file)
  *   fetch_web_content/web_fetch        → webFetch
  *   web_search                         → webSearch
  *   skills/use_skill                   → useSkill
@@ -217,6 +219,15 @@ export function sdkToolToClineSayTool(toolName: string, input?: unknown): ClineS
 				tool: "codeNavigate",
 				action: getStringField(parsedInput, "action") ?? "",
 				regex: getStringField(parsedInput, "symbol") ?? "",
+				path: getStringField(parsedInput, "path") ?? "",
+			}
+		}
+
+		case "rename_preview": {
+			return {
+				tool: "renamePreview",
+				regex: getStringField(parsedInput, "symbol") ?? "",
+				newName: getStringField(parsedInput, "new_name") ?? "",
 				path: getStringField(parsedInput, "path") ?? "",
 			}
 		}

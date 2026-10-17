@@ -5,10 +5,18 @@
  */
 
 import * as path from "path"
-import type { CodeHover, CodeLocation, CodeSymbol } from "./code-intel-source"
+import type { CodeDiagnostic, CodeHover, CodeLocation, CodeSymbol, CodeTextEdit } from "./code-intel-source"
 
 /** How many result lines a navigation answer shows before summarising the rest. */
 export const MAX_RESULT_LINES = 30
+/** How many callers or callees a call-hierarchy answer shows. */
+export const MAX_CALL_LINES = 25
+/** How many files a rename preview lists. */
+export const MAX_RENAME_FILES = 20
+/** How many changed lines a rename preview shows per file. */
+export const MAX_RENAME_LINES_PER_FILE = 3
+const MAX_DIAGNOSTIC_LINES = 20
+const MAX_DIAGNOSTIC_CHARS = 200
 /** How many symbols a workspace-wide lookup shows. */
 const MAX_WORKSPACE_SYMBOLS = 40
 /** How many outline entries a single file shows. */
@@ -200,6 +208,113 @@ export function formatOutline(symbols: readonly CodeSymbol[], max = MAX_OUTLINE_
 		.map((symbol) => `${"  ".repeat(symbol.depth ?? 0)}${symbol.kind} ${symbol.name}  ${symbol.line}`)
 	if (symbols.length > max) {
 		lines.push(`+${symbols.length - max} more`)
+	}
+	return lines
+}
+
+/** `3 edits`, `1 edit`. */
+export function countOf(count: number, singular: string, plural = `${singular}s`): string {
+	return `${count} ${count === 1 ? singular : plural}`
+}
+
+export interface LocatedCall extends LocatedResult {
+	kind: string
+	name: string
+}
+
+/** `kind name  path:line:col  preview`, capped. */
+export function formatCalls(calls: readonly LocatedCall[], cwd: string, max = MAX_CALL_LINES): string[] {
+	const lines = calls
+		.slice(0, max)
+		.map(
+			(call) =>
+				`${call.kind} ${call.name}  ${displayPath(call.path, cwd)}:${call.line}:${call.column}` +
+				(call.preview ? `  ${call.preview}` : ""),
+		)
+	if (calls.length > max) {
+		lines.push(`+${calls.length - max} more`)
+	}
+	return lines
+}
+
+/**
+ * `line:col  severity  message (source code)`, errors before warnings and each
+ * group in line order, capped. A multi-line message keeps its lines joined.
+ */
+export function formatDiagnostics(diagnostics: readonly CodeDiagnostic[], max = MAX_DIAGNOSTIC_LINES): string[] {
+	const rank = (diagnostic: CodeDiagnostic) => (diagnostic.severity === "error" ? 0 : 1)
+	const sorted = [...diagnostics].sort((a, b) => rank(a) - rank(b) || a.line - b.line || a.column - b.column)
+	const lines = sorted.slice(0, max).map((diagnostic) => {
+		let message = diagnostic.message.trim().replace(/\s+/g, " ")
+		if (message.length > MAX_DIAGNOSTIC_CHARS) {
+			message = `${message.slice(0, MAX_DIAGNOSTIC_CHARS - 1)}…`
+		}
+		const origin = [diagnostic.source, diagnostic.code].filter(Boolean).join(" ")
+		return `${diagnostic.line}:${diagnostic.column}  ${diagnostic.severity}  ${message}${origin ? ` (${origin})` : ""}`
+	})
+	if (sorted.length > max) {
+		lines.push(`+${sorted.length - max} more`)
+	}
+	return lines
+}
+
+/** A file's edits keyed by the line they start on, in line order. */
+export function groupEditsByLine(edits: readonly CodeTextEdit[]): Map<number, CodeTextEdit[]> {
+	const byLine = new Map<number, CodeTextEdit[]>()
+	for (const edit of [...edits].sort((a, b) => a.line - b.line || a.column - b.column)) {
+		const list = byLine.get(edit.line)
+		if (list) {
+			list.push(edit)
+		} else {
+			byLine.set(edit.line, [edit])
+		}
+	}
+	return byLine
+}
+
+/**
+ * The line as it would read after the edits that start on it. An edit that
+ * reaches past the line replaces the rest of it with the first line of its
+ * new text, which is enough for a preview.
+ */
+export function applyLineEdits(lineText: string, edits: readonly CodeTextEdit[]): string {
+	let result = lineText
+	for (const edit of [...edits].sort((a, b) => b.column - a.column)) {
+		const start = Math.max(0, edit.column - 1)
+		const end = edit.endLine === edit.line ? Math.max(start, edit.endColumn - 1) : lineText.length
+		result = result.slice(0, start) + edit.newText.split(/\r?\n/)[0] + result.slice(end)
+	}
+	return result
+}
+
+export interface RenameFilePreview {
+	path: string
+	/** Text edits in the file. */
+	edits: number
+	/** Distinct lines the edits start on. */
+	changedLines: number
+	/** The first changed lines, at most `MAX_RENAME_LINES_PER_FILE`. */
+	lines: { line: number; before: string; after: string }[]
+}
+
+/**
+ * Per file `path: N edits`, then `  - line 12: old text → new text` for its
+ * first changed lines and a count of the rest. `totalFiles` counts the files
+ * left out of `files`.
+ */
+export function formatRenamePreview(files: readonly RenameFilePreview[], totalFiles: number, cwd: string): string[] {
+	const lines: string[] = []
+	for (const file of files) {
+		lines.push(`${displayPath(file.path, cwd)}: ${countOf(file.edits, "edit")}`)
+		for (const line of file.lines) {
+			lines.push(`  - line ${line.line}: ${line.before} → ${line.after}`)
+		}
+		if (file.changedLines > file.lines.length) {
+			lines.push(`  +${countOf(file.changedLines - file.lines.length, "more line")}`)
+		}
+	}
+	if (totalFiles > files.length) {
+		lines.push(`+${countOf(totalFiles - files.length, "more file")}`)
 	}
 	return lines
 }
