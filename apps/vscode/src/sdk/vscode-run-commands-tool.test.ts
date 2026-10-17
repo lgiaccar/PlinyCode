@@ -9,6 +9,7 @@ import type { TerminalCompletionDetails } from "@/integrations/terminal/types"
 import { ProcessRegistry } from "./processes/process-registry"
 import { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import {
+	BACKGROUND_EXEC_TIMEOUT_MS,
 	createVscodeRunCommandsTool,
 	executeForeground,
 	FOREGROUND_COMMAND_AUTO_PROCEED_MS,
@@ -22,14 +23,28 @@ const mocks = vi.hoisted(() => ({
 	showMessage: vi.fn(async () => ({})),
 	/** Replaces the engine's spawning executor when set (background processes). */
 	fakeShellExecutor: undefined as ShellExecutor | undefined,
+	/** The options each spawning executor was created with. */
+	shellExecutorOptions: [] as unknown[],
+	terminalLocation: "panel" as "panel" | "editor",
+	setTerminalLocation: vi.fn(async () => {}),
+	disableNarrowTerminalWarning: vi.fn(async () => {}),
+}))
+
+vi.mock("@/hosts/vscode/terminal/terminal-location", () => ({
+	readTerminalLocation: () => mocks.terminalLocation,
+	setTerminalLocation: mocks.setTerminalLocation,
+	isNarrowTerminalWarningEnabled: () => true,
+	disableNarrowTerminalWarning: mocks.disableNarrowTerminalWarning,
 }))
 
 vi.mock("@plinycode/core", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@plinycode/core")>()
 	return {
 		...actual,
-		createShellExecutor: (...args: Parameters<typeof actual.createShellExecutor>) =>
-			mocks.fakeShellExecutor ?? actual.createShellExecutor(...args),
+		createShellExecutor: (...args: Parameters<typeof actual.createShellExecutor>) => {
+			mocks.shellExecutorOptions.push(args[0])
+			return mocks.fakeShellExecutor ?? actual.createShellExecutor(...args)
+		},
 	}
 })
 
@@ -61,6 +76,8 @@ afterEach(() => {
 	mocks.getGlobalSettingsKey.mockReset()
 	mocks.getGlobalSettingsKey.mockReturnValue("default")
 	mocks.fakeShellExecutor = undefined
+	mocks.shellExecutorOptions = []
+	mocks.terminalLocation = "panel"
 })
 
 describe("createVscodeRunCommandsTool", () => {
@@ -86,15 +103,15 @@ describe("createVscodeRunCommandsTool", () => {
 		).not.toContain("still running after 5 minutes")
 	})
 
-	it("notes a narrow terminal to the model, and warns the user once", async () => {
-		const run = async (columns: number) => {
+	it("notes a narrow terminal to the model, and warns the user once per terminal location with a way out", async () => {
+		const run = async (columns: number, location?: "panel" | "editor") => {
 			const process = createFakeTerminalProcess({
 				lines: ["RUN_DIR=D:/dev0/GPUSurfer/ai_output/surfer_target_cases/20261006_124919"],
 				completionDetails: { exitCode: 0, terminalColumns: columns },
 			})
 			const tool = createVscodeRunCommandsTool({
 				cwd: "/workspace",
-				getTerminalManager: () => createFakeTerminalManager(process),
+				getTerminalManager: () => createFakeTerminalManager(process, location),
 			})
 			const [result] = (await tool.execute(
 				{ commands: ["Get-ChildItem"] },
@@ -104,9 +121,59 @@ describe("createVscodeRunCommandsTool", () => {
 		}
 		expect(await run(120)).not.toContain("columns wide")
 		expect(mocks.showMessage).not.toHaveBeenCalled()
+		mocks.showMessage.mockResolvedValueOnce({ selectedOption: "Open Terminals in Editor Area" } as never)
 		expect(await run(33)).toContain("[The terminal is only 33 columns wide.")
 		expect(await run(33)).toContain("Out-String -Width 300")
 		expect(mocks.showMessage).toHaveBeenCalledOnce()
+		expect(mocks.showMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining("Open PlinyCode's terminals in the editor area"),
+				options: { items: ["Open Terminals in Editor Area", "Don't Show Again"] },
+			}),
+		)
+		await vi.waitFor(() => expect(mocks.setTerminalLocation).toHaveBeenCalledWith("editor"))
+
+		// Still narrow in the editor area: a warning of its own, which cannot suggest the editor area again.
+		mocks.showMessage.mockResolvedValueOnce({ selectedOption: "Don't Show Again" } as never)
+		expect(await run(54, "editor")).toContain("[The terminal is only 54 columns wide.")
+		expect(mocks.showMessage).toHaveBeenCalledTimes(2)
+		expect(mocks.showMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining("Widen the editor group"),
+				options: { items: ["Don't Show Again"] },
+			}),
+		)
+		await vi.waitFor(() => expect(mocks.disableNarrowTerminalWarning).toHaveBeenCalled())
+	})
+
+	it("opens a foreground session's terminal where plinycode.terminal.location says", async () => {
+		mocks.terminalLocation = "editor"
+		const getOrCreateTerminal = vi.fn(async () => ({ terminal: { show: () => {} } }) as never)
+		const tool = createVscodeRunCommandsTool({
+			cwd: "/workspace",
+			getTerminalManager: () =>
+				({ getOrCreateTerminal, runCommand: () => createFakeTerminalProcess({}) }) as unknown as VscodeTerminalManager,
+		})
+		await tool.execute({ commands: ["echo hi"] }, { agentId: "agent-1", conversationId: "conversation-1", iteration: 1 })
+		expect(getOrCreateTerminal).toHaveBeenCalledWith("/workspace", "default", "editor")
+	})
+
+	it("gives Background Exec the tool's limit and the terminal's environment with a wide COLUMNS", async () => {
+		mocks.fakeShellExecutor = async () => "done"
+		const tool = createVscodeRunCommandsTool({
+			cwd: "/workspace",
+			getTerminalManager: () => createFakeTerminalManager(createFakeTerminalProcess({})),
+			vscodeTerminalExecutionMode: "backgroundExec",
+			bashTimeoutMs: BACKGROUND_EXEC_TIMEOUT_MS,
+		})
+		expect(tool.description).toContain("A command still running after 10 minutes is stopped.")
+		await tool.execute({ commands: ["echo hi"] }, { agentId: "agent-1", conversationId: "conversation-1", iteration: 1 })
+		expect(mocks.shellExecutorOptions).toEqual([
+			expect.objectContaining({
+				timeoutMs: BACKGROUND_EXEC_TIMEOUT_MS,
+				env: expect.objectContaining({ COLUMNS: "200", GIT_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" }),
+			}),
+		])
 	})
 
 	it("constructs a cmd tool from the stock array-valued Command Prompt profile", () => {
@@ -185,7 +252,7 @@ describe("createVscodeRunCommandsTool", () => {
 			{ commands: ["Write-Output 'ok'"] },
 			{ agentId: "agent-1", conversationId: "conversation-1", iteration: 1 },
 		)
-		expect(getOrCreateTerminal).toHaveBeenLastCalledWith("C:\\workspace", "powershell-legacy")
+		expect(getOrCreateTerminal).toHaveBeenLastCalledWith("C:\\workspace", "powershell-legacy", "panel")
 
 		const nextDescription = tool.description
 		expect(nextDescription).toContain("PowerShell (pwsh.exe)")
@@ -196,7 +263,7 @@ describe("createVscodeRunCommandsTool", () => {
 			{ commands: ["Write-Output 'ok'"] },
 			{ agentId: "agent-1", conversationId: "conversation-1", iteration: 2 },
 		)
-		expect(getOrCreateTerminal).toHaveBeenLastCalledWith("C:\\workspace", "powershell-7")
+		expect(getOrCreateTerminal).toHaveBeenLastCalledWith("C:\\workspace", "powershell-7", "panel")
 	})
 })
 
@@ -248,9 +315,12 @@ function createRejectedTerminalProcess(error: Error) {
 	return fakeProcess as unknown as ReturnType<VscodeTerminalManager["runCommand"]>
 }
 
-function createFakeTerminalManager(process: ReturnType<VscodeTerminalManager["runCommand"]>): VscodeTerminalManager {
+function createFakeTerminalManager(
+	process: ReturnType<VscodeTerminalManager["runCommand"]>,
+	location?: "panel" | "editor",
+): VscodeTerminalManager {
 	return {
-		getOrCreateTerminal: async () => ({ terminal: { show: () => {} } }) as never,
+		getOrCreateTerminal: async () => ({ terminal: { show: () => {} }, location }) as never,
 		runCommand: () => process,
 	} as unknown as VscodeTerminalManager
 }
@@ -411,7 +481,7 @@ describe("executeForeground", () => {
 
 		await executeForeground("echo ok", "/workspace", terminalManager, 1000, undefined, undefined, "wsl-bash")
 
-		expect(getOrCreateTerminal).toHaveBeenCalledWith("/workspace", "wsl-bash")
+		expect(getOrCreateTerminal).toHaveBeenCalledWith("/workspace", "wsl-bash", "panel")
 	})
 
 	it("throws CommandExitError with the exit code on non-zero exit", async () => {

@@ -574,6 +574,24 @@
 					"default": true,
 					"markdownDescription": "Write a trace of every conversation to `traces/<conversation id>.jsonl` in PlinyCode's data folder (`~/.cline/data`): each model request with its messages (secrets redacted, long text cut), each reply's timing, tokens and finish reason, each tool call and result, and each routing decision on `auto-free` and `auto-paid-balanced`. A file stops at 20 MB and the folder is kept under 200 MB. Turning this off stops the writing at once."
 				},
+				"plinycode.terminal.location": {
+					"type": "string",
+					"enum": [
+						"panel",
+						"editor"
+					],
+					"enumDescriptions": [
+						"Open PlinyCode's terminals in the terminal panel.",
+						"Open PlinyCode's terminals as tabs in the editor area, which is usually as wide as the window."
+					],
+					"default": "panel",
+					"markdownDescription": "Where PlinyCode opens the terminals it runs commands in. Programs lay their output out to the terminal's width before the model reads it, so in a narrow panel (one docked beside the editor, for example) tables lose columns and long lines and error messages are broken up. `editor` opens them as editor tabs instead, without taking focus. Terminals of a background task stay in the panel."
+				},
+				"plinycode.terminal.narrowWarning": {
+					"type": "boolean",
+					"default": true,
+					"description": "Warn, once per window, when PlinyCode's terminal is under 80 columns wide and commands' output reaches the model broken up."
+				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",
 					"default": true,

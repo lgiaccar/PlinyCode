@@ -134,13 +134,38 @@ run in a PlinyCode terminal, and the output is read through shell integration
   instead of as `…_2026100` / `06_124919`.
 - **Narrow terminals.** Programs format to the terminal's width before
   PlinyCode sees their output: PowerShell tables lose columns and error
-  messages break mid-word, and nothing afterwards can undo that. The VS Code
+  messages break mid-word, and nothing afterwards can undo that. A terminal
+  panel docked beside the editor is often only 30–60 columns wide. The VS Code
   API does not report a shell terminal's width, but a wrapped line shows it
   (the column ConPTY moves back to). Below 80 columns the result ends with a
   note telling the model the output was formatted to that width. The note
-  also suggests `Out-String -Width 300` or writing to a file. The first time
-  this happens in a window, the user is warned to widen the terminal panel or
-  switch to Background Exec.
+  also suggests `Out-String -Width 300` or writing to a file.
+  - **The warning.** The first time this happens in a window, the user is
+    warned, with two buttons: **Open Terminals in Editor Area** sets
+    `plinycode.terminal.location` to `editor`, and **Don't Show Again** sets
+    `plinycode.terminal.narrowWarning` to `false`. A terminal that is still
+    narrow in the editor area gets a warning of its own, which suggests
+    widening the editor group or Background Exec.
+  - **`plinycode.terminal.location`.** `panel` (the default) or `editor`.
+    With `editor`, PlinyCode's terminals open as tabs in the active editor
+    group, without taking focus: not beside it, since a split halves the
+    width. Only a terminal in the chosen location is reused. A background
+    task's terminals stay in the panel, so they never open a tab.
+  - **Nothing happens on its own.** A command is never re-run, and never moved
+    out of the terminal, because the terminal is narrow. Running it without a
+    terminal would change its shell profile, its environment (other
+    extensions' additions, such as an activated virtual environment) and
+    whether the user can watch it.
+- **Background Exec.** With Terminal Execution Mode set to Background Exec,
+  commands run as child processes without a terminal, so their output is not
+  laid out to any terminal's width. They get the terminal's environment (no
+  pagers, no prompts) and `COLUMNS=200`, which tools that cannot measure a
+  terminal (Python's `shutil`, `rich`, `pytest`) use as their width. Nothing
+  hands a long command over as the terminal does, so one still running after
+  10 minutes is stopped; the tool description says so, and servers belong in
+  `background: true`. (Before 0.2.3-test.11 the limit was the engine's
+  default, 30 seconds.) Sub-agents always run this way and keep the engine's
+  default.
 
 ## Background processes (`process_list`, `process_output`, `process_kill`)
 
