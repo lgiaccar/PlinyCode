@@ -124,6 +124,8 @@ steps (three stalls in the run), the rest of the turn moves
 to the lead of the `default` route — on BalanceAuto that is Claude Sonnet 5, so
 the escalation hands the stuck step to a paid model that does not stall.
 
+Failing commands escalate too. When six commands have failed in one turn (builds that do not compile, test runs that do not pass; a command that passes in between does not reset the count), the rest of the turn moves to the same `default` lead and the chat says so (`⚠ 6 commands have failed this turn`). It happens once per turn, and only while a free model is answering. The count is `failedCommands` in the run log. It is the case the stall rules miss: a model that keeps acting, and keeps failing, never stalls.
+
 The system-prompt addendum about how a turn ends is added only for free
 candidates, so the paid models see the prompt unchanged. A reply that collapses
 into repetition is cut off and failed over on any model. Every run is logged to

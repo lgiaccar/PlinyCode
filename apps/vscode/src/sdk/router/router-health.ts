@@ -101,6 +101,8 @@ export interface RouterRunState {
 	previousToolFailed?: boolean
 	/** The most recent command was left running (detached) rather than finished. */
 	previousToolDetached?: boolean
+	/** Commands that failed this run (non-zero exit), whether or not a later one passed. */
+	failedCommands?: number
 	/** Guard rules that fired this run, in order. */
 	guardRules: string[]
 	/** Reminders sent this run. */

@@ -153,6 +153,14 @@ export interface RouterImageDeps {
 /** Wait before retrying a reply whose connection dropped: long enough for a gateway blip to pass. */
 const TRANSPORT_RETRY_DELAY_MS = 2_000
 
+/**
+ * Failed commands in one turn (a failed build, a failing test run) after which
+ * the rest of the turn moves to the default route's lead. Edit, build and test
+ * cycles that fail every time are the signal, so the count is not reset by a
+ * command that passes in between.
+ */
+const FAILED_COMMANDS_BEFORE_ESCALATION = 6
+
 /** The timing and shape fields of a finished attempt's trace event. */
 function callEventOutcome(timing: RouterCallTiming, shape: RouterCallShape): Partial<RouterCallEvent> {
 	return {
@@ -891,6 +899,24 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// free model answering?" check are the root turn's — never a sub-agent's.
 	const rootState = () => getSessionState(sessionKey())
 	const MAX_NUDGES = 8
+	// A model that ignores a reminder, keeps stalling between steps, or keeps
+	// failing commands gets swapped for the default route's lead, the one that
+	// keeps acting on long tasks.
+	const escalateToDefaultLead = (): void => {
+		if (!isRouted()) {
+			return
+		}
+		const state = rootState()
+		const current = state.calls[state.calls.length - 1]?.modelId
+		const rules = rulesFor(activeProfile)
+		const preferred = rules.routes.find((route) => route.name === "default")?.use ?? []
+		const next = [...preferred, ...rules.pool].find((id) => id !== current && rules.pool.includes(id))
+		if (next && rules.sticky) {
+			state.stickyModelId = next
+			emitInfo(`\`${formatClock(now())}\` ↪ switching to **${modelLabel(next)}** for the rest of the turn`)
+			Logger.log(`[FreeAuto] escalation: sticky model ${current ?? "(none)"} → ${next}`)
+		}
+	}
 	const stallGuard = createRouterCompletionGuard({
 		isActive: () => freeModelIsAnswering(sessionKey()),
 		getMode: deps.getMode,
@@ -965,21 +991,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			Logger.warn(`[FreeAuto] completion guard gave up (${rule}, ${reason}): ${excerpt}`)
 		},
 		onEscalate: () => {
-			// A model that ignores a reminder, or keeps stalling between steps, gets swapped for the default
-			// route's lead — the one that keeps acting on long tasks.
-			if (!isRouted()) {
-				return
-			}
-			const state = rootState()
-			const current = state.calls[state.calls.length - 1]?.modelId
-			const rules = rulesFor(activeProfile)
-			const preferred = rules.routes.find((route) => route.name === "default")?.use ?? []
-			const next = [...preferred, ...rules.pool].find((id) => id !== current && rules.pool.includes(id))
-			if (next && rules.sticky) {
-				state.stickyModelId = next
-				emitInfo(`\`${formatClock(now())}\` ↪ switching to **${modelLabel(next)}** for the rest of the turn`)
-				Logger.log(`[FreeAuto] escalation: sticky model ${current ?? "(none)"} → ${next}`)
-			}
+			escalateToDefaultLead()
 		},
 	})
 
@@ -1101,6 +1113,16 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				run.previousTool = tool.name
 				run.previousToolFailed = failure?.kind === "failed"
 				run.previousToolDetached = failure?.kind === "detached"
+				if (failure?.kind === "failed") {
+					run.failedCommands = (run.failedCommands ?? 0) + 1
+					if (run.failedCommands >= FAILED_COMMANDS_BEFORE_ESCALATION && !run.escalated) {
+						run.escalated = true
+						emitInfo(
+							`\`${formatClock(now())}\` ⚠ ${run.failedCommands} commands have failed this turn, so the model may be stuck`,
+						)
+						escalateToDefaultLead()
+					}
+				}
 			}
 			if (!failure) {
 				return undefined
