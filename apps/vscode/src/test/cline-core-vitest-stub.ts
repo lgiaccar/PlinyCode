@@ -50,6 +50,13 @@ export function resolveModelsRegistryPath(): string {
 
 export function ensureCustomProvidersLoadedSync(): void {}
 
+// Real agent file loading and tool naming, so the Agents tab's toggles are
+// tested against the tool names the engine gives configured agents.
+export { loadConfiguredAgentConfigs } from "../../../../sdk/packages/core/src/extensions/tools/team/configured-agent-config"
+export {
+	buildConfiguredAgentToolDescriptors,
+	buildConfiguredAgentToolName,
+} from "../../../../sdk/packages/core/src/extensions/tools/team/configured-agent-names"
 export { isPrivateModelCatalogProvider } from "../../../../sdk/packages/core/src/services/llms/provider-defaults"
 // Real implementation re-exported from the sdk source (same pattern as the
 // apply-patch executors below) so store writes are reflected in the live

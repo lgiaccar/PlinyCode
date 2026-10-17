@@ -39,6 +39,7 @@ import {
 	type ToolApprovalResult,
 	type ToolPolicy,
 } from "@plinycode/shared"
+import { withDisabledAgentPolicies } from "@/core/context/instructions/user-instructions/configured-agents"
 import { createRuleFileFilter } from "@/core/context/instructions/user-instructions/rule-file-filter"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
@@ -172,8 +173,21 @@ export class VscodeSessionHost implements SdkSessionHost {
 					codeIntel,
 				})
 			).filter((tool) => !isSubAgentDeniedTool(tool.name))
+			// Agents switched off in the Rules panel's Agents tab: a disabled tool
+			// policy takes their subagent_<name> tool out of the request.
+			let toolPolicies: Record<string, ToolPolicy> | undefined
+			try {
+				toolPolicies = withDisabledAgentPolicies(
+					input.toolPolicies ?? options.toolPolicies,
+					input.config.workspaceRoot ?? input.config.cwd,
+					StateManager.get(),
+				)
+			} catch (error) {
+				Logger.warn("[VscodeSessionHost] Could not apply the Agents tab toggles:", error)
+			}
 			return {
 				...input,
+				...(toolPolicies ? { toolPolicies } : {}),
 				source: input.source ?? "vscode",
 				// The extension runs file hooks through its own hooks adapter
 				// (status chips, hooksEnabled setting, HookFactory discovery).
