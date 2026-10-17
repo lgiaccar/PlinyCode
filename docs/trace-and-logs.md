@@ -25,7 +25,10 @@ session's model factory, so it sees the request the router passes on, and the
 session's `beforeModel`, `beforeTool`, `afterTool` and `afterRun` hooks.
 The router reports its own decisions to it (`RouterInstallDeps.onCallEvent`);
 its `pliny-free-auto-calls.jsonl` and `pliny-free-auto-runs.jsonl` are
-unchanged.
+written separately, and their lines carry the same `runId` (and, on call
+lines, `iteration`) as the trace's records, so a call or run line can be
+matched with the trace. Their fields are described in
+[pliny-free-auto-router.md](pliny-free-auto-router.md#reading-the-call-log).
 
 Sub-agents are traced into the same file as the conversation that spawned
 them, with their own `agentId` and a `parentAgentId`.

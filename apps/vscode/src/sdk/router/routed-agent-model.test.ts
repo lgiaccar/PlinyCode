@@ -127,6 +127,114 @@ describe("createRoutedAgentModel", () => {
 		])
 	})
 
+	describe("usage reported to the observer", () => {
+		function usageObserver() {
+			const seen: Array<{ kind: string; modelId: string; usage: unknown }> = []
+			const observer: RouterObserver = {
+				onCallStart: () => undefined,
+				onFailover: ({ modelId, usage }) => seen.push({ kind: "failover", modelId, usage }),
+				onCallSuccess: ({ modelId, usage }) => seen.push({ kind: "success", modelId, usage }),
+				onCallError: ({ modelId, usage }) => seen.push({ kind: "error", modelId, usage }),
+			}
+			return { observer, seen }
+		}
+
+		it("sums a call's usage events, cost included, and hands them to onCallSuccess", async () => {
+			const { observer, seen } = usageObserver()
+			const { model } = build({
+				observer,
+				delegates: {
+					"snps-provider/first": scripted([
+						TEXT,
+						{
+							type: "usage",
+							usage: {
+								inputTokens: 1000,
+								outputTokens: 50,
+								cacheReadTokens: 600,
+								cacheWriteTokens: 0,
+								totalCost: 0.01,
+							},
+						},
+						{
+							type: "usage",
+							usage: {
+								inputTokens: 200,
+								outputTokens: 30,
+								cacheWriteTokens: 40,
+								reasoningTokenCount: 12,
+								totalCost: 0.005,
+							},
+						},
+						STOP,
+					]),
+				},
+			})
+			await collect(model)
+			expect(seen).toEqual([
+				{
+					kind: "success",
+					modelId: "snps-provider/first",
+					usage: {
+						inputTokens: 1200,
+						outputTokens: 80,
+						cacheReadTokens: 600,
+						cacheWriteTokens: 40,
+						reasoningTokens: 12,
+						costUsd: 0.015,
+					},
+				},
+			])
+		})
+
+		it("leaves usage out when the call reported none, and keeps an estimate flagged", async () => {
+			const { observer, seen } = usageObserver()
+			const { model } = build({
+				observer,
+				delegates: {
+					"snps-provider/first": scripted([TEXT, STOP]),
+				},
+			})
+			await collect(model)
+			expect(seen).toEqual([{ kind: "success", modelId: "snps-provider/first", usage: undefined }])
+
+			const estimated = build({
+				observer,
+				delegates: {
+					"snps-provider/first": scripted([TEXT, { type: "usage", usage: { inputTokens: 5, estimated: true } }, STOP]),
+				},
+			})
+			await collect(estimated.model)
+			expect(seen[1]?.usage).toEqual({
+				inputTokens: 5,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
+				estimated: true,
+			})
+		})
+
+		it("reports what was used when a call fails after output or before it", async () => {
+			const { observer, seen } = usageObserver()
+			const usage: AgentModelEvent = { type: "usage", usage: { inputTokens: 300, outputTokens: 7 } }
+			const { model } = build({
+				observer,
+				delegates: {
+					// Empty reply with usage: fails over before any output.
+					"snps-provider/first": scripted([usage, STOP]),
+					// Output, usage, then a failing finish.
+					"snps-provider/second": scripted([TEXT, usage, { type: "finish", reason: "error", error: "boom" }]),
+				},
+			})
+			await collect(model)
+			const counted = { inputTokens: 300, outputTokens: 7, cacheReadTokens: 0, cacheWriteTokens: 0 }
+			expect(seen).toEqual([
+				{ kind: "failover", modelId: "snps-provider/first", usage: counted },
+				{ kind: "error", modelId: "snps-provider/second", usage: counted },
+			])
+		})
+	})
+
 	it("appends the router addendum to the system prompt for a free candidate only", async () => {
 		const seen: Array<string | undefined> = []
 		const capturing: AgentModel = {

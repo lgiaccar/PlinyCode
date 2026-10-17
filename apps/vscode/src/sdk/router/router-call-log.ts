@@ -43,6 +43,48 @@ export interface RouterCallLogRecord {
 	reasoningChars?: number
 	/** Distinct tool calls in the reply. A `stop` with text and no tool calls is a turn-ending reply. */
 	toolCalls?: number
+	/**
+	 * Tokens the gateway reported for the call, summed over its usage events.
+	 * Absent when the call ended without one (most failovers, and lines written
+	 * before this field existed).
+	 */
+	usage?: RouterCallLogUsage
+	/**
+	 * USD the call cost: the gateway's figure or the catalog price. Zero for a
+	 * free self-hosted model; absent when no usage was reported for a paid one.
+	 */
+	costUsd?: number
+	/** The engine's id of the run the call belongs to, and its iteration, as in the session trace. */
+	runId?: string
+	iteration?: number
+}
+
+/** The token counts of `RouterCallLogRecord.usage`. */
+export interface RouterCallLogUsage {
+	inputTokens: number
+	outputTokens: number
+	cacheReadTokens: number
+	cacheWriteTokens: number
+	reasoningTokens?: number
+	/** The provider reported no counts; these are a character-based estimate. */
+	estimated?: boolean
+}
+
+/** Add one call's tokens to a running total; `estimated` sticks once any part was an estimate. */
+export function addUsageTotals(total: RouterCallLogUsage | undefined, usage: RouterCallLogUsage): RouterCallLogUsage {
+	const reasoningTokens =
+		total?.reasoningTokens === undefined && usage.reasoningTokens === undefined
+			? undefined
+			: (total?.reasoningTokens ?? 0) + (usage.reasoningTokens ?? 0)
+	const estimated = total?.estimated === true || usage.estimated === true
+	return {
+		inputTokens: (total?.inputTokens ?? 0) + usage.inputTokens,
+		outputTokens: (total?.outputTokens ?? 0) + usage.outputTokens,
+		cacheReadTokens: (total?.cacheReadTokens ?? 0) + usage.cacheReadTokens,
+		cacheWriteTokens: (total?.cacheWriteTokens ?? 0) + usage.cacheWriteTokens,
+		...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+		...(estimated ? { estimated } : {}),
+	}
 }
 
 export function callLogPath(dataDir?: string): string {

@@ -19,13 +19,14 @@
  */
 
 import { classifyProviderError, isPlinySelfHostedModelId, type ModelInfo, type PlinyThinkingControls } from "@plinycode/llms"
-import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
+import type { AgentModel, AgentModelEvent, AgentModelRequest, AgentUsage } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
 import { effortOptions, selectCandidates } from "./router-policy"
 import { withRouterAddendum } from "./router-prompt"
 import type {
 	RouterCallShape,
 	RouterCallTiming,
+	RouterCallUsage,
 	RouterClassification,
 	RouterDecision,
 	RouterEffort,
@@ -38,18 +39,46 @@ import { looksDegenerate } from "./unfinished-turn-guard"
 export interface RouterObserver {
 	/** A call is about to start on `modelId`; `effort` is set when the router changed its reasoning. */
 	onCallStart(info: { modelId: string; decision: RouterDecision; features: RouterRequestFeatures; effort?: RouterEffort }): void
-	/** A candidate failed before producing output; `nextModelId` takes over. */
+	/**
+	 * A candidate failed before producing output; `nextModelId` takes over.
+	 * `usage` is set on each of these callbacks when the call reported any.
+	 */
 	onFailover(info: {
 		modelId: string
 		nextModelId: string | undefined
 		error: string
 		benched: boolean
 		timing: RouterCallTiming
+		usage?: RouterCallUsage
 	}): void
 	/** A call produced output and finished without a routing-level error. */
-	onCallSuccess(info: { modelId: string; timing: RouterCallTiming; shape: RouterCallShape }): void
+	onCallSuccess(info: { modelId: string; timing: RouterCallTiming; shape: RouterCallShape; usage?: RouterCallUsage }): void
 	/** A call failed after producing output; the run-level hook decides next. */
-	onCallError(info: { modelId: string; error: string; timing: RouterCallTiming; shape: RouterCallShape }): void
+	onCallError(info: {
+		modelId: string
+		error: string
+		timing: RouterCallTiming
+		shape: RouterCallShape
+		usage?: RouterCallUsage
+	}): void
+}
+
+/** Add one usage event's counts to a call's running total. */
+function addUsage(total: RouterCallUsage | undefined, usage: Partial<AgentUsage>): RouterCallUsage {
+	const sum = (a: number | undefined, b: number | undefined) =>
+		a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0)
+	const reasoningTokens = sum(total?.reasoningTokens, usage.reasoningTokenCount)
+	const costUsd = sum(total?.costUsd, usage.totalCost)
+	const estimated = total?.estimated === true || usage.estimated === true
+	return {
+		inputTokens: (total?.inputTokens ?? 0) + (usage.inputTokens ?? 0),
+		outputTokens: (total?.outputTokens ?? 0) + (usage.outputTokens ?? 0),
+		cacheReadTokens: (total?.cacheReadTokens ?? 0) + (usage.cacheReadTokens ?? 0),
+		cacheWriteTokens: (total?.cacheWriteTokens ?? 0) + (usage.cacheWriteTokens ?? 0),
+		...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+		...(costUsd !== undefined ? { costUsd } : {}),
+		...(estimated ? { estimated } : {}),
+	}
 }
 
 export interface RoutedAgentModelDeps {
@@ -292,6 +321,8 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 				let reasoningChars = 0
 				const toolCallIds = new Set<string>()
 				let anonymousToolCall = false
+				let usage: RouterCallUsage | undefined
+				const reported = (): { usage?: RouterCallUsage } => (usage ? { usage } : {})
 				const shape = (): RouterCallShape => ({
 					...(finishReason !== undefined ? { finishReason } : {}),
 					textChars,
@@ -313,6 +344,8 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 						}
 					} else if (event.type === "finish") {
 						finishReason = event.reason
+					} else if (event.type === "usage") {
+						usage = addUsage(usage, event.usage)
 					}
 				}
 
@@ -386,6 +419,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 								error: "Response stream ended without a finish reason",
 								timing: timing(),
 								shape: shape(),
+								...reported(),
 							})
 							return
 						}
@@ -415,13 +449,19 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 							errorClass: classifyProviderError(error),
 							errorRetryable: true,
 						}
-						deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape() })
+						deps.observer.onCallError({
+							modelId,
+							error: failure.error,
+							timing: timing(),
+							shape: shape(),
+							...reported(),
+						})
 						return
 					}
 				}
 
 				if (!failure) {
-					deps.observer.onCallSuccess({ modelId, timing: timing(), shape: shape() })
+					deps.observer.onCallSuccess({ modelId, timing: timing(), shape: shape(), ...reported() })
 					return
 				}
 
@@ -429,7 +469,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 
 				if (producedContent) {
 					// Already forwarded the failing finish above.
-					deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape() })
+					deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape(), ...reported() })
 					return
 				}
 
@@ -442,7 +482,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 						errorClass: classifyProviderError(failure.raw),
 						errorRetryable: false,
 					}
-					deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape() })
+					deps.observer.onCallError({ modelId, error: failure.error, timing: timing(), shape: shape(), ...reported() })
 					return
 				}
 
@@ -453,6 +493,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 					error: failure.error,
 					benched: false,
 					timing: timing(),
+					...reported(),
 				})
 			}
 

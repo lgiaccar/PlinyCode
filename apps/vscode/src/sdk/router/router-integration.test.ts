@@ -604,3 +604,187 @@ describe("installRouter run recovery", () => {
 		expect(rows[0]).toContain(`→ **${names[modelId].name}**`)
 	})
 })
+
+describe("installRouter tokens and cost in the logs", () => {
+	beforeEach(() => {
+		resetHealth()
+		resetSessions()
+	})
+
+	const KIMI = "snps-provider/kimi-k2.6"
+	const SONNET_THINKING = "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"
+	const usageEvent = (inputTokens: number, outputTokens: number, totalCost?: number): AgentModelEvent => ({
+		type: "usage",
+		usage: {
+			inputTokens,
+			outputTokens,
+			cacheReadTokens: 0,
+			cacheWriteTokens: 0,
+			...(totalCost !== undefined ? { totalCost } : {}),
+		},
+	})
+
+	/** Installs the router with each model's reply scripted, and drives runs the way the engine does. */
+	function install(modelId: string, script: (modelId: string) => AgentModelEvent[]) {
+		const calls: RouterCallLogRecord[] = []
+		const runs: RouterRunLogRecord[] = []
+		const config = installRouter({ providerId: "pliny", modelId, cwd: "/tmp" } as unknown as CoreSessionConfig, {
+			sessionId: "u",
+			getMode: () => "act",
+			emitRow: () => undefined,
+			nextMessageTs: () => 1,
+			logCall: (record) => calls.push(record),
+			logRun: (record) => runs.push(record),
+			now: () => NOW,
+		})
+		const factory = config.agentModelFactory
+		if (!factory) {
+			throw new Error("router did not install a model factory")
+		}
+		const start = (run: { agentId: string; runId: string; parentAgentId?: string }) => {
+			const model = factory({
+				config: { modelId, ...(run.parentAgentId ? { parentAgentId: run.parentAgentId } : {}) } as never,
+				agentId: run.agentId,
+				createDefault: (overrides) => scripted(script(overrides?.modelId ?? "(default)")),
+			})
+			const snapshot = (iteration: number) =>
+				({
+					agentId: run.agentId,
+					runId: run.runId,
+					iteration,
+					...(run.parentAgentId ? { parentAgentId: run.parentAgentId } : {}),
+				}) as never
+			let iteration = 0
+			return {
+				call: async () => {
+					iteration += 1
+					await config.hooks?.beforeModel?.({ snapshot: snapshot(iteration), request: request() })
+					for await (const _event of await model.stream(request())) {
+						// drain
+					}
+				},
+				end: async (status: "completed" | "failed" = "completed") => {
+					await config.hooks?.afterRun?.({
+						snapshot: snapshot(iteration),
+						result: {
+							agentId: run.agentId,
+							runId: run.runId,
+							status,
+							iterations: iteration,
+							outputText: "Done.",
+							messages: [assistant("Done.")],
+							usage: {} as never,
+						},
+					})
+				},
+			}
+		}
+		return { calls, runs, start }
+	}
+
+	it("logs a call's tokens, its cost and its place in the run", async () => {
+		const { calls, start } = install(PLINY_FREE_AUTO_MODEL_ID, () => [TEXT, usageEvent(1200, 80), STOP])
+		const run = start({ agentId: "agent-1", runId: "run-7" })
+		await run.call()
+		await run.call()
+		expect(calls).toEqual([
+			expect.objectContaining({
+				model: KIMI,
+				outcome: "success",
+				usage: { inputTokens: 1200, outputTokens: 80, cacheReadTokens: 0, cacheWriteTokens: 0 },
+				// A free model costs nothing even when the gateway prices nothing.
+				costUsd: 0,
+				runId: "run-7",
+				iteration: 1,
+			}),
+			expect.objectContaining({ runId: "run-7", iteration: 2, costUsd: 0 }),
+		])
+	})
+
+	it("still logs what is known when a call fails after its output", async () => {
+		const { calls, start } = install(PLINY_FREE_AUTO_MODEL_ID, () => [
+			TEXT,
+			usageEvent(900, 40),
+			{ type: "finish", reason: "error", error: "terminated: SocketError: other side closed" },
+		])
+		const run = start({ agentId: "agent-1", runId: "run-8" })
+		await run.call()
+		expect(calls).toEqual([
+			expect.objectContaining({
+				model: KIMI,
+				outcome: "error",
+				error: "terminated: SocketError: other side closed",
+				usage: { inputTokens: 900, outputTokens: 40, cacheReadTokens: 0, cacheWriteTokens: 0 },
+				costUsd: 0,
+				runId: "run-8",
+				iteration: 1,
+			}),
+		])
+	})
+
+	it("writes the turn's totals, paid share and sub-agent spend into the run record", async () => {
+		const { calls, runs, start } = install(PLINY_BALANCE_AUTO_MODEL_ID, (modelId) => {
+			if (modelId === CLASSIFIER) {
+				return [{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]
+			}
+			return modelId === SONNET_THINKING
+				? [TEXT, usageEvent(20_000, 1_000, 0.03), STOP]
+				: [TEXT, usageEvent(5_000, 200), STOP]
+		})
+		const root = start({ agentId: "root-agent", runId: "run-1" })
+		await root.call()
+		// A sub-agent runs inside the turn, on a free model.
+		const sub = start({ agentId: "sub-agent", runId: "run-2", parentAgentId: "root-agent" })
+		await sub.call()
+		await sub.end()
+		await root.call()
+		await root.end()
+
+		expect(calls.map((record) => [record.model, record.subAgent, record.costUsd, record.runId])).toEqual([
+			[SONNET_THINKING, false, 0.03, "run-1"],
+			[KIMI, true, 0, "run-2"],
+			[SONNET_THINKING, false, 0.03, "run-1"],
+		])
+		expect(runs).toHaveLength(2)
+		expect(runs[0]).toMatchObject({ subAgent: true, runId: "run-2", calls: 1, costUsd: 0, paidCalls: 0 })
+		expect(runs[0]?.subAgentCalls).toBeUndefined()
+		expect(runs[1]).toMatchObject({
+			subAgent: false,
+			profile: "balance",
+			runId: "run-1",
+			calls: 2,
+			ending: "text",
+			usage: { inputTokens: 40_000, outputTokens: 2_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
+			models: { [SONNET_THINKING]: 2 },
+			paidCalls: 2,
+			failovers: 0,
+			subAgentCalls: 1,
+			subAgentUsage: { inputTokens: 5_000, outputTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0 },
+			subAgentCostUsd: 0,
+		})
+		expect(runs[1]?.costUsd).toBeCloseTo(0.06)
+		expect(runs[1]?.paidCostUsd).toBeCloseTo(0.06)
+
+		// The next turn starts its totals afresh.
+		const next = start({ agentId: "root-agent", runId: "run-3" })
+		await next.call()
+		await next.end()
+		expect(runs[2]).toMatchObject({ runId: "run-3", calls: 1, paidCalls: 1 })
+		expect(runs[2]?.subAgentCalls).toBeUndefined()
+	})
+
+	it("leaves a paid call's cost out when it reported no usage", async () => {
+		const { calls, runs, start } = install(PLINY_BALANCE_AUTO_MODEL_ID, (modelId) =>
+			modelId === CLASSIFIER ? [{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP] : [TEXT, STOP],
+		)
+		const run = start({ agentId: "root-agent", runId: "run-1" })
+		await run.call()
+		await run.end()
+		expect(calls[0]?.model).toBe(SONNET_THINKING)
+		expect(calls[0]?.usage).toBeUndefined()
+		expect(calls[0]?.costUsd).toBeUndefined()
+		expect(runs[0]).toMatchObject({ paidCalls: 1, models: { [SONNET_THINKING]: 1 } })
+		expect(runs[0]?.costUsd).toBeUndefined()
+		expect(runs[0]?.usage).toBeUndefined()
+	})
+})
