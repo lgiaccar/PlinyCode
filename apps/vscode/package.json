@@ -486,6 +486,11 @@
 					"minimum": 30,
 					"markdownDescription": "How often the **CI Board** checks its pull requests and branches while it is not on screen, in seconds. It keeps checking so it can notify you when CI fails."
 				},
+				"plinycode.pipelines.notify": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show a notification when a run in the **Pipelines** view's run history finishes: one you launched or reran from the view, or one PlinyCode's agent started with `pipeline_run`."
+				},
 				"plinycode.ci.board.notify": {
 					"type": "boolean",
 					"default": true,

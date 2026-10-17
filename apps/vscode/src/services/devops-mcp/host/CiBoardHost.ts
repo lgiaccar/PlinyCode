@@ -31,6 +31,8 @@ const OPEN_CONVERSATION = "Open conversation"
 /** What the board needs from the editor and the controller; the extension wires these. */
 export interface CiBoardUi {
 	openBoard(): Promise<void>
+	/** Shows the Pipelines view; its run notifications offer it. */
+	openPipelines?(): Promise<void>
 	runAction(targetId: string, itemKey: string, actionId: string): Promise<void>
 	/** Starts an auto-watch run in the background. */
 	startAutoRun?(targetId: string, itemKey: string, actionId: string): Promise<CiAutoStartResult>

@@ -1,7 +1,8 @@
 # PlinyCode DevOps (built-in MCP server)
 
-PlinyCode ships an MCP server that lets an agent **create and update pull requests** and **read CI pipeline
-results**, on **GitHub** (Actions) and **Azure DevOps** (Repos + Pipelines). It comes with the extension:
+PlinyCode ships an MCP server that lets an agent **create, update and review pull requests**, **read CI pipeline
+results** and **start, cancel and rerun pipelines**, on **GitHub** (Actions) and **Azure DevOps** (Repos + Pipelines,
+including Azure DevOps Server). It comes with the extension:
 users need no Python, Node, repository checkout or configuration file.
 
 The same server is available to:
@@ -24,9 +25,21 @@ The same server is available to:
 | `pipeline_runs`   | Recent GitHub Actions runs or Azure Pipelines builds, for a branch or a PR.                   |
 | `pipeline_report` | One run: job results, failed steps, error messages and the log lines around the failure.     |
 | `pr_checks`       | GitHub check runs and statuses, or Azure DevOps branch policies and PR statuses.             |
+| `pr_comments`     | Review threads, inline comments, general comments and review verdicts, newest first.          |
+| `pr_comment`      | Posts a general comment, an inline comment on a changed line, or a reply in a thread.         |
+| `pr_review`       | Approves, requests changes or comments (GitHub review; Azure DevOps reviewer vote).           |
+| `pipeline_run`    | Queues a GitHub workflow (`workflow_dispatch`) or an Azure Pipelines YAML pipeline on a branch, with typed inputs. |
+| `pipeline_cancel` | Cancels a run that has not finished.                                                          |
+| `pipeline_rerun`  | Runs a finished run again, all of it or only its failed jobs.                                 |
 
 The repository comes from the workspace's git remote (`origin`). Every tool also takes a `workspace` argument
-with the repository's absolute path.
+with the repository's absolute path. The PR tools take `pr_id`; without it they use the open pull request of the
+current branch, and say so when there is none.
+
+`pr_comment`, `pr_review`, `pipeline_run`, `pipeline_rerun` and `pipeline_cancel` act where other people see it.
+The server's instructions tell the agent to use them only when you asked for it, and in PlinyCode each call asks for
+approval like any MCP tool unless you auto-approve MCP tools. The approval prompt shows the tool's description and
+arguments.
 
 `pr_update(section="ci", body=…)` rewrites only the text between `<!-- devops-mcp:ci -->` and
 `<!-- /devops-mcp:ci -->`, which don't render, so an agent can keep a generated section current without
@@ -39,6 +52,79 @@ which uses the same token.
 
 Azure DevOps limits PR descriptions to 4000 characters (GitHub: 65536). Longer ones are refused with a message
 telling the agent to shorten them; they are never truncated silently.
+
+## Reviewing pull requests
+
+`pr_comments(pr_id?, limit=20)` lists the pull request's threads, the most recently active first (at most 100). Each
+shows whether it is an inline thread (`path:line`), a general comment or a review verdict, whether it is resolved, its
+last five comments (author, time, the first 300 characters) and the id to pass as `reply_to`:
+
+```text
+Comments on PR #7 (GitHub), newest first: 2 of 2 threads, 1 unresolved.
+
+- Inline src/a.ts:12 · unresolved · reply_to: 101
+  - jane, 2026-10-05 10:00: Rename this
+- General comment
+  - bob, 2026-10-01 10:00: LGTM
+```
+
+| Provider     | What is listed                                                                                     |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| GitHub       | Issue comments (general, no `reply_to`: GitHub cannot thread under them), review comments grouped by thread, and reviews with a verdict or a body. The resolved state comes from GraphQL (`reviewThreads`); without GraphQL access the threads are listed without it. |
+| Azure DevOps | The PR's threads, without deleted ones and system comments (votes, pushes, policy updates). `active` and `pending` threads are unresolved; `fixed`, `wontFix`, `closed` and `byDesign` are resolved. |
+
+`pr_comment(pr_id?, body, path?, line?, reply_to?)` posts one of:
+
+- a general comment: `body` only;
+- an inline comment: `path` (relative to the repository root) and `line` (in the PR's new version of the file).
+  GitHub anchors it to the PR's head commit and accepts only lines in the diff. Azure DevOps anchors it to the PR's
+  latest iteration and refuses a file the PR does not change before posting anything;
+- a reply: `reply_to` with a thread id from `pr_comments`.
+
+`pr_review(pr_id?, verdict, body?)` takes `approve`, `request_changes` or `comment`, on an open pull request only:
+
+| Verdict           | GitHub                                     | Azure DevOps                                                        |
+| ----------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| `approve`         | review with `APPROVE`                      | your vote set to **Approved (10)**                                  |
+| `request_changes` | review with `REQUEST_CHANGES` (needs `body`) | your vote set to **Waiting for author (-5)**                      |
+| `comment`         | review with `COMMENT` (needs `body`)       | vote unchanged (needs `body`)                                       |
+
+Azure DevOps has no "request changes" vote. `request_changes` maps to **Waiting for author** (-5), which asks the author
+for changes like GitHub's verdict does, rather than **Rejected** (-10), which blocks the pull request outright and is
+left for a person to cast. On Azure DevOps a `body` is posted as a general comment next to the vote. The vote is cast
+as the signed-in user (from `_apis/connectionData`), the same way on Azure DevOps Server.
+
+## Running pipelines
+
+`pipeline_run(pipeline, branch?, inputs?)` names the pipeline by name, id or (GitHub) workflow file name (`build.yml`).
+`branch` defaults to the current branch, which must be pushed; a branch with unpushed commits runs the pushed commit
+and the result says so. The inputs go through the same discovery and validation as the
+[Pipelines view](pipeline-runs.md): the YAML is read at that branch, unknown names and wrong values are refused with the
+list of inputs, and text the model sends for a boolean, number, choice or object (`"true"`, `"3"`, JSON text) is turned
+into the declared type first.
+
+In PlinyCode, a launch for one of the window's repositories goes through the Pipelines view's queueing code, so it is
+recorded in its run history (marked **Started by the agent**), tracked, and announced when it finishes. Copilot Chat,
+Cursor and other clients queue through the server directly, without a history entry.
+
+`pipeline_cancel(run_id)` asks the provider to stop a run; a finished run is refused. `pipeline_rerun(run_id,
+failed_only=false)` runs a finished run again; a run that is still going is refused, and so is `failed_only` on a run
+that succeeded.
+
+| Call                 | GitHub                                   | Azure DevOps                                                                                   |
+| -------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| cancel               | `POST actions/runs/{id}/cancel`          | `PATCH build/builds/{id}` with `status: cancelling`                                            |
+| rerun, failed only   | `POST actions/runs/{id}/rerun-failed-jobs` (a new attempt of the same run) | `PATCH build/builds/{id}?retry=true` (the same build retries its failed jobs) |
+| rerun, everything    | `POST actions/runs/{id}/rerun` (a new attempt of the same run) | `POST build/builds`: a new build of the same definition, branch, variables and template parameters; the same commit, except for a pull request's merge ref, which is rebuilt from the PR's current merge |
+
+## Unattended CI Board runs
+
+Auto-watch runs of the [CI Board](ci-board.md#approvals) run without anyone to approve a call, so their policy
+(`apps/vscode/src/sdk/ci-run-policy.ts`) allows the read-only tools, `pr_comments` included, and refuses the others
+with a reason the model can act on: `pr_review` (a review is a reviewer's decision), `pr_comment` (such runs do not
+create or update pull requests either, so they do not post on them), `pipeline_run` (it can deploy or use shared
+capacity; the run's push already triggers CI), `pipeline_cancel` (it can stop someone else's build) and
+`pipeline_rerun` (like `gh run rerun`, which the same policy refuses). A board run you started asks you instead.
 
 ## Watching CI (`watch_ci`)
 
@@ -186,8 +272,9 @@ To store a token from the GUI:
   **PlinyCode: Forget Azure DevOps Server Token**.
 
 The prompt links to the server's token page (`<collection URL>/_usersSettings/tokens`). The token needs
-**Code (Read)** and **Build (Read & execute)**; add **Code (Read & write)** to let the agent create or update pull
-requests. Tokens are kept in the editor's secret storage (the OS keychain), one per host, so every window uses a
+**Code (Read)** and **Build (Read & execute)**, which also covers starting, cancelling and rerunning pipelines; add
+**Code (Read & write)** to let the agent create or update pull requests, comment on them and vote. On GitHub, comments
+and reviews need write access to pull requests, and cancelling or rerunning runs needs write access to Actions. Tokens are kept in the editor's secret storage (the OS keychain), one per host, so every window uses a
 token as soon as one window stores it. A token is stored under the host in the git remote or pasted link, so a
 renamed server reached under both names needs a token for each.
 
@@ -219,8 +306,9 @@ The code is in `apps/vscode/src/services/devops-mcp/`:
 | Path                       | Contents                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------- |
 | `server/`                  | The MCP server. No `vscode` import; bundled by `esbuild.mjs` into `dist/devops-mcp.js`.     |
-| `server/providers/`        | GitHub and Azure DevOps REST clients behind one `Provider` interface.                       |
-| `host/DevOpsMcpService.ts` | Starts the server, tracks its status, feeds its tools to the agent, registers it with the editor. |
+| `server/providers/`        | GitHub and Azure DevOps REST clients behind one `Provider` interface (`ToolProvider` adds the review and pipeline control calls). |
+| `pipelines/pipeline-launch.ts` | How `pipeline_run` finds the pipeline and checks its inputs; shared by the server and the extension host. |
+| `host/DevOpsMcpService.ts` | Starts the server, tracks its status, feeds its tools to the agent, registers it with the editor. Runs PlinyCode's `pipeline_run` calls in the extension host so they reach the Pipelines view's history. |
 | `host/token-broker.ts`     | Local pipe that hands the editor's sign-in tokens to the server process.                   |
 | `host/ado-server-tokens.ts` | Azure DevOps Server tokens per host in the editor's secret storage, and the prompt that asks for one. |
 | `builtin-mcp-registry.ts`  | How the agent session and the GUI handlers reach the service without importing `vscode`.   |

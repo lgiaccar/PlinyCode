@@ -251,11 +251,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	// Built-in PR / pipeline MCP server, for PlinyCode and the editor's own AI chat.
-	// The CI board's notifications open the board, or start an action, through these.
+	// The CI board's notifications open the board, or start an action, through these; the Pipelines view's open the view.
 	const ciBoardUi = {
 		openBoard: async () => {
 			;(WebviewProvider.getInstance() as VscodeWebviewProvider).getWebview()?.show(true)
 			await sendCiBoardButtonClickedEvent()
+		},
+		openPipelines: async () => {
+			;(WebviewProvider.getInstance() as VscodeWebviewProvider).getWebview()?.show(true)
+			await sendPipelinesButtonClickedEvent()
 		},
 		runAction: async (targetId: string, itemKey: string, actionId: string) => {
 			try {

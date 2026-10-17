@@ -371,6 +371,8 @@ export interface ClineAskUseMcpServer {
 	toolName?: string
 	arguments?: string
 	uri?: string
+	/** The tool's description, for built-in servers the webview's MCP server list does not include. */
+	description?: string
 }
 
 export interface ClineAskUseSubagents {

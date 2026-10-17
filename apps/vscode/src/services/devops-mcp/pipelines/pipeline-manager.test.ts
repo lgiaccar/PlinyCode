@@ -4,15 +4,21 @@ import { promises as fs } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { DevOpsError } from "../server/errors"
-import type { PipelineDispatch, PipelineProvider } from "../server/providers/types"
+import type { PipelineDispatch, PipelineProvider, PipelineRun } from "../server/providers/types"
 import type { RepoContext } from "../server/repo"
+import type { PreparedLaunch } from "./pipeline-launch"
 import { PipelineManager } from "./pipeline-manager"
-import { PipelineRunStore } from "./pipeline-run-store"
+import { type PipelineLaunch, PipelineRunStore } from "./pipeline-run-store"
 
 const managers: PipelineManager[] = []
 const directories: string[] = []
 afterEach(async () => {
-	for (const manager of managers.splice(0)) manager.dispose()
+	for (const manager of managers.splice(0)) {
+		// Let a poll still in flight release its record lock before its folder goes; a lock that
+		// disappears under proper-lockfile is reported as compromised, in whichever test runs next.
+		await manager.refresh()
+		manager.dispose()
+	}
 	for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true })
 })
 
@@ -236,15 +242,23 @@ describe("pipeline launches", () => {
 	it("recovers interrupted dispatches without redispatching on restart", async () => {
 		const { manager, request, store, options, counts } = await setup()
 		await manager.queue(request)
+		// Let the launch's own status poll finish first, so it cannot overwrite the interrupted record below;
+		// the record is written as a crashed window left it, since the store never un-completes a run.
+		await manager.refresh()
 		const record = await store.get(request.id)
 		if (!record) throw new Error("Missing test record")
-		await store.update({
-			...record,
-			created: Date.now() - 10 * 60_000,
-			state: "dispatching",
-			runId: undefined,
-			run: undefined,
-		})
+		const [folder] = await fs.readdir(directories[0])
+		await fs.writeFile(
+			path.join(directories[0], folder, `${request.id}.json`),
+			JSON.stringify({
+				...record,
+				created: Date.now() - 10 * 60_000,
+				updated: undefined,
+				state: "dispatching",
+				runId: undefined,
+				run: undefined,
+			}),
+		)
 		const restarted = new PipelineManager(options)
 		managers.push(restarted)
 		await restarted.init()
@@ -279,5 +293,154 @@ describe("pipeline launches", () => {
 		await manager.queue(request)
 		expect(JSON.stringify(await store.load(100))).not.toContain("sensitive-token")
 		expect((await store.get(request.id))?.remoteUrl).toBe("https://github.com/o/r")
+	})
+})
+
+describe("agent launches, cancel, rerun and completion", () => {
+	async function control(directory?: string) {
+		const dir = directory ?? (await fs.mkdtemp(path.join(os.tmpdir(), "pipeline-control-")))
+		if (!directory) directories.push(dir)
+		const store = new PipelineRunStore(dir, "/workspace")
+		const calls: string[] = []
+		const state: { run: Partial<PipelineRun>; queue: () => Promise<PipelineDispatch> } = {
+			run: { status: "in_progress" },
+			queue: async () => ({ runId: 42, url: "https://github.com/o/r/actions/runs/42" }),
+		}
+		const provider = {
+			kind: "github",
+			rateLimitRemaining: 1000,
+			repoUrl: "https://github.com/o/r",
+			listPipelines: async () => [{ id: 1, name: "Build", url: "https://github.com/o/r/actions" }],
+			pipelineInputs: async () => ({
+				revision: "sha",
+				inputs: [{ name: "target", label: "target", type: "string", required: true }],
+				limitations: [],
+			}),
+			queuePipeline: async (_id: number, ref: string, inputs: unknown) => {
+				calls.push(`queue ${ref} ${JSON.stringify(inputs)}`)
+				return state.queue()
+			},
+			getRun: async (id: number) => ({
+				id,
+				pipelineId: 1,
+				name: "Build",
+				branch: "main",
+				event: "workflow_dispatch",
+				result: undefined,
+				url: `https://github.com/o/r/actions/runs/${id}`,
+				started: new Date().toISOString(),
+				...state.run,
+			}),
+			cancelRun: async (id: number) => {
+				calls.push(`cancel ${id}`)
+			},
+			rerunRun: async (id: number, failedOnly: boolean) => {
+				calls.push(`rerun ${id} ${failedOnly}`)
+				return { runId: id, url: `https://github.com/o/r/actions/runs/${id}` }
+			},
+		} as unknown as PipelineProvider
+		const manager = new PipelineManager({
+			store,
+			repositories: async () => ["/workspace"],
+			providerFor: () => provider,
+			loadRepo: async () =>
+				({
+					root: "/workspace",
+					remoteUrl: "https://github.com/o/r.git",
+					remote: { kind: "github", host: "github.com", owner: "o", repo: "r" },
+				}) as RepoContext,
+		})
+		managers.push(manager)
+		await manager.init()
+		const completed: PipelineLaunch[] = []
+		manager.onRunCompleted((launch) => completed.push(launch))
+		const prepared: PreparedLaunch = {
+			pipeline: { id: 1, name: "Build", url: "https://github.com/o/r/actions" },
+			ref: "main",
+			schema: { revision: "sha", inputs: [], limitations: [] },
+			inputs: { target: "dev" },
+		}
+		// A launch starts a poll of its own; wait for it, then poll again with the current state.
+		const settle = async () => {
+			await manager.refresh()
+			await manager.refresh()
+		}
+		return { manager, store, calls, state, completed, prepared, settle, dir }
+	}
+
+	it("records an agent launch in the history like one from the form", async () => {
+		const { manager, store, calls, prepared } = await control()
+		const record = await manager.launch("/workspace", prepared)
+		expect(calls).toEqual(['queue main {"target":"dev"}'])
+		expect(record).toMatchObject({ origin: "agent", state: "accepted", runId: 42 })
+		expect((await store.get(record.id))?.origin).toBe("agent")
+		await expect(manager.launch("/elsewhere", prepared)).rejects.toThrow("current workspace")
+		expect(await manager.hasRepository("/elsewhere")).toBe(false)
+	})
+
+	it("tells the agent why the provider refused a launch, without saving the provider's text", async () => {
+		const { manager, store, state, prepared } = await control()
+		state.queue = async () => {
+			throw new DevOpsError("POST /dispatches -> HTTP 403: Resource not accessible by integration", 403)
+		}
+		await expect(manager.launch("/workspace", prepared)).rejects.toThrow(
+			"The provider rejected the launch (HTTP 403). Check queue permissions and the pipeline configuration. (POST /dispatches -> HTTP 403: Resource not accessible by integration)",
+		)
+		expect(JSON.stringify(await store.load(100))).not.toContain("Resource not accessible")
+	})
+
+	it("cancels a running launch and refuses to cancel a finished one", async () => {
+		const { manager, calls, state, prepared, settle } = await control()
+		const record = await manager.launch("/workspace", prepared)
+		await settle()
+		await manager.cancel(record.id)
+		expect(calls).toContain("cancel 42")
+		state.run = { status: "completed", result: "cancelled", finished: "2026-10-17T10:00:00Z" }
+		await settle()
+		await expect(manager.cancel(record.id)).rejects.toThrow("already finished")
+		await expect(manager.rerun(record.id, false)).resolves.toMatchObject({ origin: "rerun", rerunOf: record.id })
+	})
+
+	it("reruns a finished launch as a new entry that waits for the new attempt before reporting", async () => {
+		const { manager, store, calls, state, completed, prepared, settle } = await control()
+		state.run = { status: "in_progress" }
+		const record = await manager.launch("/workspace", prepared)
+		await settle()
+		await expect(manager.rerun(record.id, true)).rejects.toThrow("Only a finished run can be rerun.")
+
+		state.run = { status: "completed", result: "failure", finished: "2026-10-17T10:00:00Z" }
+		await settle()
+		expect(completed.map((launch) => [launch.id, launch.run?.result])).toEqual([[record.id, "failure"]])
+
+		const rerun = await manager.rerun(record.id, true)
+		expect(calls).toContain("rerun 42 true")
+		expect(rerun).toMatchObject({ runId: 42, origin: "rerun", rerunOf: record.id, staleFinished: "2026-10-17T10:00:00Z" })
+		await settle()
+		// GitHub still reports the first attempt: not this launch's result.
+		expect((await store.get(rerun.id))?.run).toBeUndefined()
+		expect(completed).toHaveLength(1)
+
+		state.run = { status: "in_progress", finished: undefined }
+		await settle()
+		expect((await store.get(rerun.id))?.run?.status).toBe("in_progress")
+		expect((await store.get(rerun.id))?.staleFinished).toBeUndefined()
+
+		state.run = { status: "completed", result: "success", finished: "2026-10-17T10:30:00Z" }
+		await settle()
+		expect(completed.map((launch) => [launch.id, launch.origin, launch.run?.result])).toEqual([
+			[record.id, "agent", "failure"],
+			[rerun.id, "rerun", "success"],
+		])
+	})
+
+	it("announces a finished run once across windows that share the history", async () => {
+		const first = await control()
+		const second = await control(first.dir)
+		const record = await first.manager.launch("/workspace", first.prepared)
+		await first.settle()
+		await second.settle()
+		first.state.run = second.state.run = { status: "completed", result: "success", finished: "2026-10-17T10:00:00Z" }
+		await Promise.all([first.settle(), second.settle()])
+		expect([...first.completed, ...second.completed].map((launch) => launch.id)).toEqual([record.id])
 	})
 })

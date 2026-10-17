@@ -29,6 +29,9 @@ export function pipelineHistory(): PipelineHistory {
 				error: record.error ?? "",
 				needsAssociation: !record.runId && ["accepted", "unknown"].includes(record.state),
 				provider: record.provider,
+				origin: record.origin ?? "view",
+				canCancel: record.state === "accepted" && Boolean(record.runId) && record.run?.status !== "completed",
+				canRerun: record.state === "accepted" && Boolean(record.runId) && record.run?.status === "completed",
 			})) ?? [],
 	})
 }

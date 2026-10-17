@@ -98,6 +98,28 @@ describe("decideCiTool", () => {
 		expect(decideCiTool(guard, "web_fetch", {})).toEqual({ kind: "ask" })
 	})
 
+	it("refuses reviews, comments and pipeline control in an unattended run, with a reason, and asks in a run the user started", () => {
+		expect(decideCiTool(auto, "plinycode-devops__pr_comments", {})).toEqual({ kind: "approve" })
+		const reasons: Record<string, RegExp> = {
+			pr_review: /reviewer's decision/,
+			pr_comment: /does not post on pull requests/,
+			pipeline_run: /does not start one; your push already triggers CI/,
+			pipeline_cancel: /stop someone else's build/,
+			pipeline_rerun: /does not rerun pipelines/,
+		}
+		for (const [tool, reason] of Object.entries(reasons)) {
+			const decision = decideCiTool(auto, `plinycode-devops__${tool}`, { pr_id: 7 })
+			expect(decision.kind).toBe("deny")
+			expect(decision.kind === "deny" && decision.reason).toMatch(reason)
+			expect(decideCiTool(guard, `plinycode-devops__${tool}`, { pr_id: 7 })).toEqual({ kind: "ask" })
+		}
+		// The same names on another server are not the DevOps tools.
+		expect(decideCiTool(auto, "other__pr_review", {})).toEqual({
+			kind: "deny",
+			reason: "The tool other__pr_review is not allowed in an unattended CI run; report it instead.",
+		})
+	})
+
 	it("lets an unattended run follow and stop its own background processes", () => {
 		for (const tool of ["process_list", "process_output", "process_kill"]) {
 			expect(decideCiTool(auto, tool, { id: "p1" })).toEqual({ kind: "approve" })

@@ -110,6 +110,72 @@ export interface PipelineProvider extends Provider {
 	pipelineInputs(pipelineId: number, ref: string): Promise<PipelineSchema>
 	queuePipeline(pipelineId: number, ref: string, inputs: Record<string, unknown>): Promise<PipelineDispatch>
 	getRun(runId: number): Promise<PipelineRun>
+	/** Asks the provider to stop a run that has not finished. */
+	cancelRun(runId: number): Promise<void>
+	/**
+	 * Runs a finished run again. GitHub reruns it in place (a new attempt of the same run id); Azure DevOps retries
+	 * the failed jobs of the same build, or queues a new build of the same definition, branch and parameters.
+	 */
+	rerunRun(runId: number, failedOnly: boolean): Promise<PipelineDispatch>
+}
+
+/** One comment of a pull request thread. */
+export interface PrComment {
+	author: string
+	body: string
+	created: string
+}
+
+/** A pull request discussion: an inline thread on a file line, a general comment, or a review verdict. */
+export interface PrThread {
+	kind: "inline" | "general" | "review"
+	/** What `reply_to` takes to answer in this thread; undefined when the provider cannot thread a reply. */
+	replyId?: string
+	path?: string
+	line?: number
+	/** undefined when the provider does not say (GitHub general comments, reviews). */
+	resolved?: boolean
+	/** A review's verdict (GitHub: approved, changes requested, commented). */
+	verdict?: string
+	url?: string
+	comments: PrComment[]
+}
+
+export interface NewPrComment {
+	body: string
+	path?: string
+	line?: number
+	replyTo?: string
+}
+
+export interface PostedComment {
+	/** What was posted: "comment", "inline comment" or "reply". */
+	kind: string
+	url: string
+	replyId?: string
+}
+
+export type ReviewVerdict = "approve" | "request_changes" | "comment"
+
+/** The provider operations behind the review tools. */
+export interface ReviewProvider extends Provider {
+	/** Threads, comments and review verdicts, in no particular order. */
+	listPrThreads(pr: PullRequest): Promise<PrThread[]>
+	addPrComment(pr: PullRequest, comment: NewPrComment): Promise<PostedComment>
+	/** Submits a verdict; returns one line saying what happened. */
+	reviewPr(pr: PullRequest, verdict: ReviewVerdict, body?: string): Promise<string>
+}
+
+/** What the DevOps tools need from a provider. */
+export type ToolProvider = PipelineProvider & ReviewProvider
+
+/** A repository-relative path as the model wrote it, normalised: forward slashes, no leading `./` or `/`. */
+export function repoPath(path: string): string {
+	return path
+		.trim()
+		.replace(/\\/g, "/")
+		.replace(/^(\.\/)+/, "")
+		.replace(/^\/+/, "")
 }
 
 export function checkBody(provider: Provider, body: string): void {

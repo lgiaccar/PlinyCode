@@ -20,6 +20,15 @@ export interface PipelineLaunch {
 	run?: PipelineRun
 	updated?: number
 	error?: string
+	/** Who started it: the view's form (also records saved before this field existed), the agent, or a rerun. */
+	origin?: "view" | "agent" | "rerun"
+	/** The launch this one reruns. */
+	rerunOf?: string
+	/**
+	 * A rerun of the same run id (a new attempt) starts with the previous attempt's finish time: until the run
+	 * reports another one, the provider is still showing the old attempt, not this launch's result.
+	 */
+	staleFinished?: string
 }
 
 const validId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
@@ -112,7 +121,11 @@ export class PipelineRunStore {
 		}
 	}
 
-	async update(record: PipelineLaunch): Promise<void> {
+	/**
+	 * Saves `record` unless the saved one is newer. True when this save is the one that recorded the run as
+	 * completed, so of several windows polling the same history only one reports it.
+	 */
+	async update(record: PipelineLaunch): Promise<boolean> {
 		const file = this.file(record.id)
 		const release = await lock(file, {
 			realpath: false,
@@ -123,10 +136,11 @@ export class PipelineRunStore {
 		const temp = `${file}.${randomUUID()}.tmp`
 		try {
 			const previous = await this.get(record.id)
-			if (previous?.run?.status === "completed" && record.run?.status !== "completed") return
-			if ((previous?.updated ?? 0) > (record.updated ?? 0)) return
+			if (previous?.run?.status === "completed" && record.run?.status !== "completed") return false
+			if ((previous?.updated ?? 0) > (record.updated ?? 0)) return false
 			await fs.writeFile(temp, JSON.stringify(record), "utf8")
 			await fs.rename(temp, file)
+			return previous?.run?.status !== "completed" && record.run?.status === "completed"
 		} finally {
 			await fs.rm(temp, { force: true })
 			await release()

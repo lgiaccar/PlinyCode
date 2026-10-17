@@ -11,14 +11,19 @@ import {
 	Http,
 	type JobResult,
 	type MergeState,
+	type NewPrComment,
 	type PipelineDefinition,
 	type PipelineDispatch,
-	type PipelineProvider,
 	type PipelineRun,
+	type PostedComment,
+	type PrThread,
 	type PullRequest,
 	type Result,
+	type ReviewVerdict,
 	type RunReport,
+	repoPath,
 	type Status,
+	type ToolProvider,
 	tail,
 } from "./types"
 
@@ -69,7 +74,30 @@ const MERGE_STATES: Record<string, MergeState> = {
 	failure: "unknown",
 }
 
-export class AzureDevOpsProvider implements PipelineProvider {
+/** Thread states that close a discussion; `active` and `pending` leave it open. */
+const THREAD_RESOLVED: Record<string, boolean> = {
+	active: false,
+	pending: false,
+	fixed: true,
+	wontFix: true,
+	closed: true,
+	byDesign: true,
+}
+
+/**
+ * Reviewer votes. Azure DevOps has no "request changes": `request_changes` maps to "waiting for author" (-5),
+ * which asks for changes without rejecting the pull request (-10). A `comment` verdict leaves the vote alone.
+ */
+const ADO_VOTES: Record<Exclude<ReviewVerdict, "comment">, { vote: number; label: string }> = {
+	approve: { vote: 10, label: "Approved (10)" },
+	request_changes: { vote: -5, label: "Waiting for author (-5)" },
+}
+
+/** `commentType: 1` is a text comment; `status: 1` an active thread. */
+const TEXT_COMMENT = 1
+const ACTIVE_THREAD = 1
+
+export class AzureDevOpsProvider implements ToolProvider {
 	readonly kind = "Azure DevOps"
 	// Azure DevOps rejects pull request descriptions longer than 4000 characters.
 	readonly maxBodyLength = 4000
@@ -229,6 +257,146 @@ export class AzureDevOpsProvider implements PipelineProvider {
 
 	async getRun(runId: number): Promise<PipelineRun> {
 		return this.run(await this.api("GET", `build/builds/${runId}`))
+	}
+
+	async cancelRun(runId: number): Promise<void> {
+		await this.api("PATCH", `build/builds/${runId}`, {}, { status: "cancelling" })
+	}
+
+	private buildUrl(d: any, id: number): string {
+		return d?._links?.web?.href ?? `${this.projectUrl}/_build/results?buildId=${id}`
+	}
+
+	async rerunRun(runId: number, failedOnly: boolean): Promise<PipelineDispatch> {
+		if (failedOnly) {
+			// "Rerun failed jobs": the same build retries its failed (and cancelled) jobs.
+			const d = await this.api("PATCH", `build/builds/${runId}`, { retry: "true" }, {})
+			return { runId, url: this.buildUrl(d, runId) }
+		}
+		const build = await this.api("GET", `build/builds/${runId}`)
+		if (!build?.definition?.id) throw new DevOpsError(`Azure DevOps did not say which pipeline build ${runId} belongs to.`)
+		const json: Record<string, unknown> = { definition: { id: build.definition.id }, sourceBranch: build.sourceBranch }
+		// A pull request's merge ref is built again from the PR's current merge; any other branch reruns the same commit.
+		if (build.sourceVersion && !String(build.sourceBranch ?? "").startsWith("refs/pull/")) {
+			json.sourceVersion = build.sourceVersion
+		}
+		if (build.parameters) json.parameters = build.parameters
+		if (build.templateParameters && Object.keys(build.templateParameters).length) {
+			json.templateParameters = build.templateParameters
+		}
+		const d = await this.api("POST", "build/builds", {}, json)
+		if (!Number.isSafeInteger(d?.id) || d.id <= 0) {
+			throw new DevOpsError("Azure DevOps accepted the request but did not return a build ID.")
+		}
+		return { runId: d.id, url: this.buildUrl(d, d.id) }
+	}
+
+	private threadUrl(prId: number, threadId: number | string): string {
+		return `${this.repoUrl}/pullrequest/${prId}?discussionId=${threadId}`
+	}
+
+	async listPrThreads(pr: PullRequest): Promise<PrThread[]> {
+		const data = await this.api("GET", await this.prPath(`/${pr.id}/threads`))
+		const threads: PrThread[] = []
+		for (const t of data?.value ?? []) {
+			if (t.isDeleted) continue
+			// Votes, pushes and policy updates are system comments; they are not part of the discussion.
+			const comments = (t.comments ?? []).filter((c: any) => !c.isDeleted && c.commentType !== "system" && c.content)
+			if (!comments.length) continue
+			const context = t.threadContext
+			const path = context?.filePath ? repoPath(context.filePath) : undefined
+			threads.push({
+				kind: path ? "inline" : "general",
+				replyId: String(t.id),
+				path,
+				line: path ? (context.rightFileStart?.line ?? context.leftFileStart?.line) : undefined,
+				resolved: THREAD_RESOLVED[t.status],
+				url: this.threadUrl(pr.id, t.id),
+				comments: comments.map((c: any) => ({
+					author: c.author?.displayName ?? "",
+					body: c.content,
+					created: c.publishedDate ?? c.lastUpdatedDate ?? "",
+				})),
+			})
+		}
+		return threads
+	}
+
+	async addPrComment(pr: PullRequest, request: NewPrComment): Promise<PostedComment> {
+		const threads = await this.prPath(`/${pr.id}/threads`)
+		if (request.replyTo !== undefined) {
+			const id = Number(request.replyTo)
+			if (!Number.isSafeInteger(id) || id <= 0) {
+				throw new DevOpsError(`\`reply_to\` takes a thread id from pr_comments, not '${request.replyTo}'.`)
+			}
+			let thread: any
+			try {
+				thread = await this.api("GET", `${threads}/${id}`)
+			} catch (error) {
+				if (error instanceof DevOpsError && error.status === 404) {
+					throw new DevOpsError(
+						`PR #${pr.id} has no thread ${id}; \`reply_to\` takes a thread id from pr_comments.`,
+						404,
+					)
+				}
+				throw error
+			}
+			const root = (thread?.comments ?? []).find((c: any) => !c.isDeleted && c.commentType !== "system")
+			await this.api(
+				"POST",
+				`${threads}/${id}/comments`,
+				{},
+				{ content: request.body, parentCommentId: root?.id ?? 1, commentType: TEXT_COMMENT },
+			)
+			return { kind: "reply", url: this.threadUrl(pr.id, id), replyId: String(id) }
+		}
+		const json: Record<string, unknown> = {
+			comments: [{ parentCommentId: 0, content: request.body, commentType: TEXT_COMMENT }],
+			status: ACTIVE_THREAD,
+		}
+		const inline = request.path !== undefined && request.line !== undefined
+		if (inline) {
+			const filePath = `/${repoPath(request.path as string)}`
+			const iterations: any[] = (await this.api("GET", await this.prPath(`/${pr.id}/iterations`)))?.value ?? []
+			const latest = Math.max(0, ...iterations.map((i) => Number(i.id) || 0))
+			if (!latest) throw new DevOpsError(`PR #${pr.id} has no iterations yet, so there is no diff to comment on.`)
+			// `$compareTo=0` compares the latest iteration with the target branch: every file the PR changes.
+			const changes = await this.api("GET", await this.prPath(`/${pr.id}/iterations/${latest}/changes`), {
+				$compareTo: 0,
+				$top: 2000,
+			})
+			const change = (changes?.changeEntries ?? []).find((e: any) => e.item?.path === filePath)
+			if (!change) {
+				throw new DevOpsError(
+					`${filePath.slice(1)} is not among the files PR #${pr.id} changes. Inline comments go on changed files: check the path (relative to the repository root), or post a general comment.`,
+				)
+			}
+			json.threadContext = {
+				filePath,
+				rightFileStart: { line: request.line, offset: 1 },
+				rightFileEnd: { line: request.line, offset: 1 },
+			}
+			json.pullRequestThreadContext = {
+				changeTrackingId: change.changeTrackingId,
+				iterationContext: { firstComparingIteration: 1, secondComparingIteration: latest },
+			}
+		}
+		const t = await this.api("POST", threads, {}, json)
+		return { kind: inline ? "inline comment" : "comment", url: this.threadUrl(pr.id, t?.id), replyId: String(t?.id) }
+	}
+
+	async reviewPr(pr: PullRequest, verdict: ReviewVerdict, body?: string): Promise<string> {
+		const lines: string[] = []
+		if (verdict !== "comment") {
+			const { vote, label } = ADO_VOTES[verdict]
+			const me = await this.me()
+			await this.api("PUT", await this.prPath(`/${pr.id}/reviewers/${encodeURIComponent(me)}`), {}, { vote })
+			lines.push(`Set your vote on PR #${pr.id} to ${label}: ${pr.url}`)
+		}
+		if (body?.trim()) {
+			lines.push(`Posted the review comment: ${(await this.addPrComment(pr, { body })).url}`)
+		}
+		return lines.join("\n")
 	}
 
 	async findOpenPr(branch: string): Promise<PullRequest | undefined> {

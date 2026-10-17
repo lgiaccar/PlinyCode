@@ -44,7 +44,24 @@ const READ_TOOLS = new Set([
 const COMMAND_TOOLS = new Set(["run_commands", "execute_command"])
 // A run's own background processes: it sees and stops only those of its conversation.
 const PROCESS_TOOLS = new Set(["process_list", "process_output", "process_kill"])
-const DEVOPS_READ_TOOLS = new Set(["repo_context", "pr_get", "pr_checks", "pipeline_runs", "pipeline_report"])
+const DEVOPS_READ_TOOLS = new Set(["repo_context", "pr_get", "pr_checks", "pr_comments", "pipeline_runs", "pipeline_report"])
+/**
+ * DevOps tools that act where other people see it, with the reason an unattended run is refused each one. An
+ * unattended run may not create or update pull requests either (`pr_create`, `pr_update` fall under "any other
+ * tool"), so posting comments is refused like them: the run reports what it would say instead.
+ */
+const DEVOPS_UNATTENDED_REFUSALS: Record<string, string> = {
+	pr_review:
+		"Approving a pull request or requesting changes is a reviewer's decision, and an unattended CI run does not review; report what you found instead.",
+	pr_comment:
+		"An unattended CI run does not post on pull requests (it does not create or update them either); put what you would say in your report instead.",
+	pipeline_run:
+		"Starting a pipeline can deploy or use shared build capacity, so an unattended CI run does not start one; your push already triggers CI. Report it instead.",
+	pipeline_cancel:
+		"Cancelling a pipeline run can stop someone else's build or deployment, so an unattended CI run does not cancel runs; report it instead.",
+	pipeline_rerun:
+		"An unattended CI run does not rerun pipelines (it does not run `gh run rerun` either); if a failure looks flaky, say so in your report.",
+}
 
 const caseless = process.platform === "win32"
 
@@ -345,8 +362,13 @@ export function decideCiTool(policy: CiRunPolicy, toolName: string, input: unkno
 		decision = APPROVE
 	} else if (toolName.includes("__")) {
 		const tool = toolName.slice(toolName.indexOf("__") + 2)
+		const devops = toolName.startsWith("plinycode-devops__")
 		decision =
-			toolName.startsWith("plinycode-devops__") && DEVOPS_READ_TOOLS.has(tool) ? APPROVE : outside(`The tool ${toolName}`)
+			devops && DEVOPS_READ_TOOLS.has(tool)
+				? APPROVE
+				: devops && unattended && Object.hasOwn(DEVOPS_UNATTENDED_REFUSALS, tool)
+					? deny(DEVOPS_UNATTENDED_REFUSALS[tool])
+					: outside(`The tool ${toolName}`)
 	} else {
 		decision = outside(`The tool ${toolName}`)
 	}

@@ -12,6 +12,7 @@ import {
 	type DevOpsServerStatus,
 	getCiBoard,
 	getCiWatchManager,
+	getPipelineManager,
 	notifyBuiltinMcpToolsChanged,
 	registerBuiltinMcpSource,
 	setCiWatchRepoOpener,
@@ -20,7 +21,10 @@ import {
 } from "../builtin-mcp-registry"
 import { createProviderCache } from "../ci-watch/ci-watch-source"
 import { ciWatchTools } from "../ci-watch/watch-ci-tool"
+import { DevOpsError } from "../server/errors"
+import type { ToolProvider } from "../server/providers/types"
 import { adoCollectionUrl, hasSupportedRemote, loadContext } from "../server/repo"
+import { callTool, createTools, type ToolDefinition } from "../server/tools"
 import { AdoServerTokens } from "./ado-server-tokens"
 import { CiBoardHost, type CiBoardUi } from "./CiBoardHost"
 import {
@@ -105,6 +109,7 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 			provider: service.toolProvider,
 			isRunning: () => service.state === "running",
 			toolNames: () => service.tools.map((t) => t.name),
+			toolDescription: (name) => service.tools.find((t) => t.name === name)?.description,
 			// Its tools only work on a repo with a GitHub or Azure DevOps remote.
 			appliesTo: (cwd) => hasSupportedRemote(cwd),
 			extraTools: (cwd) =>
@@ -115,7 +120,7 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 		setCiWatchRepoOpener(service.openRepo)
 		service.disposables.push(new vscode.Disposable(() => setCiWatchRepoOpener(undefined)))
 		service.disposables.push(CiBoardHost.start(service.providers, ciBoardUi))
-		service.disposables.push(PipelineHost.start(service.providers))
+		service.disposables.push(PipelineHost.start(service.providers, ciBoardUi?.openPipelines))
 		service.disposables.push(
 			new vscode.Disposable(unregister),
 			vscode.workspace.onDidChangeConfiguration((event) => {
@@ -357,12 +362,48 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 		this.setState("off")
 	}
 
+	private pipelineRun?: ToolDefinition
+
+	/**
+	 * `pipeline_run` as it runs in the extension host: the same tool, but the launch goes through the Pipelines
+	 * view's manager, so it is recorded in the run history, tracked, and announced when it finishes.
+	 */
+	private localPipelineRun(): ToolDefinition | undefined {
+		this.pipelineRun ??= createTools(
+			(remote) => this.providers.forRemote(remote) as ToolProvider,
+			async ({ ctx, prepared }) => {
+				const manager = getPipelineManager()
+				if (!manager) throw new DevOpsError("Pipelines are still starting; try again in a moment.")
+				const record = await manager.launch(ctx.root, prepared)
+				return { runId: record.runId, url: record.url, recorded: true }
+			},
+		).find((tool) => tool.name === "pipeline_run")
+		return this.pipelineRun
+	}
+
+	/** Whether a `pipeline_run` call is for a repository the Pipelines view tracks; others go to the server process. */
+	private async launchesHere(args: Record<string, unknown>): Promise<boolean> {
+		const manager = getPipelineManager()
+		const workspace = typeof args.workspace === "string" && args.workspace ? args.workspace : this.workspaceFolder()
+		if (!manager || !workspace) return false
+		try {
+			return await manager.hasRepository((await loadContext(workspace)).root)
+		} catch {
+			return false
+		}
+	}
+
 	/** Tool provider for `createMcpTools`; empty while the server is not running. */
 	readonly toolProvider: McpToolProvider = {
 		listTools: async () => (this.state === "running" ? this.tools : []),
 		callTool: async (request) => {
 			if (!this.client || this.state !== "running") {
 				throw new Error("The PlinyCode DevOps server is not running. Check the MCP Servers view.")
+			}
+			const args = request.arguments ?? {}
+			const pipelineRun = request.toolName === "pipeline_run" ? this.localPipelineRun() : undefined
+			if (pipelineRun && (await this.launchesHere(args))) {
+				return callTool(pipelineRun, args)
 			}
 			const result = await this.client.callTool({ name: request.toolName, arguments: request.arguments ?? {} }, undefined, {
 				timeout: TOOL_TIMEOUT_MS,
