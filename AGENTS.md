@@ -1,4 +1,4 @@
-This is the **PlinyCode** monorepo. Toolchain is **Bun 1.3.13** (package manager + task runner) with **Node >=22** as the runtime. Do not use npm/yarn/pnpm.
+This is the **PlinyCode** monorepo. Toolchain is **Bun 1.3.14** (package manager + task runner) with **Node >=22** as the runtime, both pinned in `.tool-versions` (the file CI reads; `package.json`'s `packageManager` and `engines.bun` mirror the Bun version). Do not use npm/yarn/pnpm.
 
 PlinyCode is a VS Code / Cursor extension that talks only to Synopsys internal models through the Pliny gateway.
 
@@ -68,16 +68,18 @@ Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is
 
 ## Pull requests and CI
 
-PRs target the `stage` branch, not `master`. Each workflow in `.github/workflows/` runs on PRs as follows:
+PRs target the `stage` branch, not `master`. Every workflow in `.github/workflows/` runs on PRs and on each push to `stage` and `master`, so a merge that breaks something is caught after it lands too:
 
-| Workflow          | Runs when the PR changes                                  | What it checks                                                                   |
-| ----------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `docs-check`      | anything                                                  | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
-| `engine-test`     | `sdk/**`                                                  | engine build, `bun run types`, lint and format, engine tests on Ubuntu and Windows |
-| `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock` | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
-| `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | Playwright e2e on Ubuntu, Windows and macOS                                      |
+| Workflow          | Runs when the PR changes                                  | On a push to `stage`/`master`                       | What it checks                                                                   |
+| ----------------- | --------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `docs-check`      | anything                                                  | always                                              | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
+| `engine-test`     | `sdk/**`, `bun.lock`, its own workflow file, `.github/actions/**` | same path filter (no run at all otherwise)  | engine build, `bun run types`, lint and format, engine tests on Ubuntu (Node 22 and 24) and Windows (Node 22) |
+| `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock`, `.github/actions/**` | all jobs                | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
+| `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | all jobs                                            | Playwright e2e on Ubuntu, Windows and macOS                                      |
 
-A path filter can skip a workflow's heavy jobs while it still reports success, so check which jobs actually ran. A docs-only PR, for example, runs only `docs-check`.
+A path filter can skip a workflow's heavy jobs while it still reports success, so check which jobs actually ran. A docs-only PR, for example, runs only `docs-check`. A new push to a PR cancels that PR's running checks; pushes to `stage` and `master` never cancel each other.
+
+Every job installs its tools through the composite action `.github/actions/setup-toolchain`, which reads the Bun and Node pins from `.tool-versions`, caches `~/.bun/install/cache` by `bun.lock` hash and runs `bun install --frozen-lockfile` at the root (`install: "false"` skips the install, `node-version` overrides the Node pin for matrix jobs). Change a toolchain version in `.tool-versions` and mirror the Bun one in `package.json`. Dependabot (`.github/dependabot.yml`) opens security-only PRs for the Bun workspace (root `bun.lock`) and for the GitHub Actions the workflows use.
 
 ## Naming
 
