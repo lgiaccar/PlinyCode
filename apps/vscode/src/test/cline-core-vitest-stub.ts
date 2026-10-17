@@ -7,6 +7,8 @@ export interface StartSessionResult {
 }
 
 export {
+	COMMAND_DIGEST_THRESHOLD_CHARS,
+	digestCommandOutput,
 	MAX_COMMAND_OUTPUT_CHARS,
 	truncateCommandOutput,
 } from "../../../../sdk/packages/core/src/extensions/tools/executors/output-limits"
