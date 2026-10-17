@@ -11,6 +11,7 @@ import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-c
 import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
 import { createTodoTool } from "./vscode-todo-tool"
 import { createWaitTool } from "./vscode-wait-tool"
+import { createWebSearchTools, type WebSearchSetup } from "./web/web-search-tool"
 
 interface McpToolDescriptor {
 	name: string
@@ -74,6 +75,14 @@ interface VscodeExtraToolsOptions {
 	 * Absent when the user turned code intelligence off (`plinycode.codeIntel.enabled`).
 	 */
 	codeIntel?: CodeIntelSource
+	/**
+	 * The search backend behind `web_search`. Absent when the user turned web
+	 * search off (`plinycode.webSearch.enabled`).
+	 */
+	webSearch?: WebSearchSetup
+	/** The session's provider and model: a provider that searches natively keeps its own `web_search`. */
+	providerId?: string
+	modelId?: string
 }
 
 export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExtraToolsOptions): Promise<AgentTool[]> {
@@ -165,6 +174,10 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	if (options?.codeIntel) {
 		tools.push(...createCodeIntelTools({ cwd: options.cwd ?? process.cwd(), source: options.codeIntel }))
 	}
+
+	// A web search the extension runs itself, for providers without a native one
+	// (every Pliny model): docs/agent-tools.md.
+	tools.push(...createWebSearchTools({ setup: options?.webSearch, providerId: options?.providerId, modelId: options?.modelId }))
 
 	Logger.log(`[VscodeRuntimeTools] Prepared ${tools.length} VSCode extra tools`)
 	return tools

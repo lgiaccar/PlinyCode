@@ -13,6 +13,7 @@ import { buildToolPolicies } from "./sdk-tool-policies"
 import { isSyntheticUserPrompt } from "./sdk-user-message-mapping"
 import type { SdkSessionHost } from "./session-host"
 import { VscodeSessionHost } from "./vscode-session-host"
+import type { WebSearchSetup } from "./web/web-search-tool"
 
 type RequestToolApprovalHandler = NonNullable<Parameters<typeof VscodeSessionHost.create>[0]["requestToolApproval"]>
 type AskQuestionHandler = NonNullable<Parameters<typeof VscodeSessionHost.create>[0]["askQuestion"]>
@@ -37,6 +38,8 @@ interface SdkSessionLifecycleOptions {
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/** The language servers behind `find_symbol` and `code_navigate`; undefined leaves the tools out. */
 	getCodeIntel?: () => CodeIntelSource | undefined
+	/** The search backend behind `web_search`; undefined leaves the tool out. */
+	getWebSearch?: () => WebSearchSetup | undefined
 	onSendStart?: (sessionId: string) => void
 	onSendComplete: (sessionId: string) => Promise<void> | void
 	onSendError: (error: unknown, sessionId: string) => Promise<void> | void
@@ -459,6 +462,7 @@ export class SdkSessionLifecycle {
 				getTerminalManager: this.options.getTerminalManager,
 				foregroundCommands: this.options.foregroundCommands,
 				getCodeIntel: this.options.getCodeIntel,
+				getWebSearch: this.options.getWebSearch,
 			})
 				.then((sdkHost) => {
 					this.ensureSharedHostSubscription(sdkHost)

@@ -36,6 +36,7 @@ const ClineCommands = {
 	OpenMemory: prefix + ".openMemory",
 	SignInAzureDevOpsServer: prefix + ".signInAzureDevOpsServer",
 	ForgetAzureDevOpsServerToken: prefix + ".forgetAzureDevOpsServerToken",
+	SetWebSearchApiKey: prefix + ".setWebSearchApiKey",
 	AbortCommit: prefix + ".abortGitCommitMessage",
 	// Jupyter Notebook commands
 	JupyterGenerateCell: prefix + ".jupyterGenerateCell",

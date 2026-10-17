@@ -34,6 +34,7 @@ import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { createVscodeWebSearchSetup } from "@/hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { McpHub } from "@/services/mcp/McpHub"
@@ -488,6 +489,7 @@ export class Controller {
 			onDetachedSendSettled: (sessionId, error) => this.background.handleSendSettled(sessionId, error),
 			foregroundCommands: this.foregroundCommands,
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
+			getWebSearch: () => createVscodeWebSearchSetup(),
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
 				// (vscode-session-host.ts, sdk-terminal-execution-mode-coordinator.ts):
