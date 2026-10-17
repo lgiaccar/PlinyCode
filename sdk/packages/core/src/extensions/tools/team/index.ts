@@ -14,16 +14,25 @@ export {
 	createConfiguredAgentTools,
 } from "./configured-agent-tool";
 export {
-	buildTeamProgressSummary,
-	toTeamProgressLifecycleEvent,
-} from "./projections";
-export * from "./runtime";
+	buildDelegatedAgentConfig,
+	createDelegatedAgent,
+	createDelegatedAgentConfigProvider,
+	type DelegatedAgentConfigProvider,
+	type DelegatedAgentConnectionConfig,
+	type DelegatedAgentRuntimeConfig,
+} from "./delegated-agent";
 export {
+	createSpawnAgentTool,
 	createSubAgentProgressReporter,
 	DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
 	DEFAULT_SUB_AGENT_TIMEOUT_MS,
 	resolveSpawnAgentInstructions,
+	type SpawnAgentInput,
+	type SpawnAgentOutput,
+	type SpawnAgentToolConfig,
+	type SubAgentEndContext,
 	type SubAgentProgress,
+	type SubAgentStartContext,
 	spawnAgentOutputFromResult,
 } from "./spawn-agent-tool";
 export {

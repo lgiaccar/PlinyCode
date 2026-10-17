@@ -46,6 +46,7 @@ import { getDistinctId } from "@/services/logging/distinctId"
 import type { McpHub } from "@/services/mcp/McpHub"
 import { Logger } from "@/shared/services/Logger"
 import { getBinaryLocation } from "@/utils/fs"
+import type { CodeIntelSource } from "./code-intel/code-intel-source"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { isSubAgentDeniedTool } from "./sdk-tool-policies"
 import type { SdkSessionHost } from "./session-host"
@@ -89,6 +90,12 @@ interface VscodeSessionHostOptions {
 	getTerminalManager?: () => VscodeTerminalManager
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
+	/**
+	 * The language servers behind `find_symbol` and `code_navigate`, read when a
+	 * session starts so the `plinycode.codeIntel.enabled` setting applies to the
+	 * next conversation. Undefined turns the tools off.
+	 */
+	getCodeIntel?: () => CodeIntelSource | undefined
 }
 
 export class VscodeSessionHost implements SdkSessionHost {
@@ -145,11 +152,13 @@ export class VscodeSessionHost implements SdkSessionHost {
 		// running the prepare hook.
 		const prepareStartSessionInput = async (input: ClineCoreStartInput): Promise<ClineCoreStartInput> => {
 			const vscodeTerminalExecutionMode = StateManager.get().getGlobalStateKey("vscodeTerminalExecutionMode")
+			const codeIntel = options.getCodeIntel?.()
 			const extraTools = await createVscodeExtraTools(options.mcpHub, {
 				cwd: input.config.cwd,
 				getTerminalManager: options.getTerminalManager,
 				vscodeTerminalExecutionMode,
 				foregroundCommands: options.foregroundCommands,
+				codeIntel,
 			})
 			// A sub-agent gets the extension's tools too (its shell, `wait`, the
 			// task list, MCP), or it could read and edit but run nothing. The
@@ -160,6 +169,7 @@ export class VscodeSessionHost implements SdkSessionHost {
 					getTerminalManager: options.getTerminalManager,
 					vscodeTerminalExecutionMode,
 					forSubAgents: true,
+					codeIntel,
 				})
 			).filter((tool) => !isSubAgentDeniedTool(tool.name))
 			return {

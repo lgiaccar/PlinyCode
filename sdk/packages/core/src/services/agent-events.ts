@@ -26,13 +26,10 @@ export interface AgentEventContext {
 
 /**
  * Which agent an event came from, when the caller knows better than the
- * event's own metadata. Drives per-agent usage accounting and the team
- * fields on the emitted `agent_event`.
+ * event's own metadata. Drives per-agent usage accounting.
  */
 export interface AgentEventContextOverrides {
 	agentId?: string;
-	teamRole?: "lead" | "teammate";
-	teamAgentId?: string;
 	isPrimaryAgentEvent?: boolean;
 }
 
@@ -74,13 +71,8 @@ function resolveUsageAgentKey(input: {
 	eventMetadata: ReturnType<typeof extractAgentEventMetadata>;
 }): string {
 	const candidates = input.isPrimaryAgentEvent
-		? [
-				input.overrides?.agentId,
-				input.eventMetadata.agentId,
-				input.overrides?.teamAgentId,
-			]
+		? [input.overrides?.agentId, input.eventMetadata.agentId]
 		: [
-				input.overrides?.teamAgentId,
 				input.overrides?.agentId,
 				input.eventMetadata.agentId,
 				input.eventMetadata.conversationId,
@@ -154,15 +146,7 @@ export function handleAgentEvent(
 
 	emit({
 		type: "agent_event",
-		payload: {
-			sessionId,
-			event,
-			teamAgentId: overrides?.teamAgentId,
-			teamRole:
-				overrides !== undefined
-					? (overrides.teamRole ?? (isPrimaryAgentEvent ? "lead" : undefined))
-					: undefined,
-		},
+		payload: { sessionId, event },
 	});
 	emit({
 		type: "chunk",

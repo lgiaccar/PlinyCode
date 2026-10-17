@@ -1,6 +1,9 @@
+import * as os from "os"
+import * as path from "path"
 import * as vscode from "vscode"
+import { HostProvider } from "@/hosts/host-provider"
 import type { EditDiagnosticsSource, EditProblem } from "@/sdk/edit-problems"
-import { arePathsEqual } from "@/utils/path"
+import { arePathsEqual, isLocatedInPath } from "@/utils/path"
 
 /** VS Code settings section that holds every `plinycode.edits.*` setting. */
 const EDITS_SETTINGS_SECTION = "plinycode.edits"
@@ -24,11 +27,21 @@ export function isReportNewProblemsEnabled(): boolean {
 /** The diagnostics of the window's language servers, as the edit tools need them. */
 export function createVscodeEditDiagnosticsSource(): EditDiagnosticsSource {
 	return {
-		getErrors: (absolutePath) =>
-			vscode.languages
-				.getDiagnostics(vscode.Uri.file(absolutePath))
-				.filter((diagnostic) => diagnostic.severity === vscode.DiagnosticSeverity.Error)
-				.map(toEditProblem),
+		getErrors: (absolutePath) => errorsOf(vscode.languages.getDiagnostics(vscode.Uri.file(absolutePath))),
+		getAllErrors: () => {
+			const result = new Map<string, EditProblem[]>()
+			const dataDirectories = plinyCodeDataDirectories()
+			for (const [uri, diagnostics] of vscode.languages.getDiagnostics()) {
+				if (uri.scheme !== "file" || isExcludedPath(uri.fsPath, dataDirectories)) {
+					continue
+				}
+				const errors = errorsOf(diagnostics)
+				if (errors.length > 0) {
+					result.set(uri.fsPath, errors)
+				}
+			}
+			return result
+		},
 		onDidChangeDiagnostics: (listener) =>
 			vscode.languages.onDidChangeDiagnostics((event) => {
 				const paths = event.uris.filter((uri) => uri.scheme === "file").map((uri) => uri.fsPath)
@@ -43,6 +56,37 @@ export function createVscodeEditDiagnosticsSource(): EditDiagnosticsSource {
 		isShown: (absolutePath) => findTabs(absolutePath).length > 0,
 		showInBackground,
 	}
+}
+
+function errorsOf(diagnostics: readonly vscode.Diagnostic[]): EditProblem[] {
+	return diagnostics.filter((diagnostic) => diagnostic.severity === vscode.DiagnosticSeverity.Error).map(toEditProblem)
+}
+
+/** Directories whose files are not the model's to fix: dependencies and git's own files. */
+const EXCLUDED_DIRECTORY_NAMES = new Set(["node_modules", ".git"])
+
+/**
+ * PlinyCode's own directories: checkpoints keep copies of workspace files under the
+ * extension's global storage, and ~/.cline holds its settings and logs.
+ */
+function plinyCodeDataDirectories(): string[] {
+	const directories = [path.join(os.homedir(), ".cline")]
+	try {
+		if (HostProvider.isInitialized()) {
+			directories.push(HostProvider.get().globalStorageFsPath)
+		}
+	} catch {
+		// Without a host provider (tests) there is nothing more to leave out.
+	}
+	return directories
+}
+
+function isExcludedPath(fsPath: string, dataDirectories: string[]): boolean {
+	const normalized = path.normalize(fsPath)
+	if (normalized.split(path.sep).some((segment) => EXCLUDED_DIRECTORY_NAMES.has(segment))) {
+		return true
+	}
+	return dataDirectories.some((directory) => isLocatedInPath(directory, normalized))
 }
 
 function toEditProblem(diagnostic: vscode.Diagnostic): EditProblem {

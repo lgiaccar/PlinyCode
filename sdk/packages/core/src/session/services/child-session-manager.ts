@@ -28,7 +28,6 @@ import {
 import {
 	deriveSubsessionStatus,
 	makeSubSessionId,
-	makeTeamTaskSubSessionId,
 } from "../models/session-graph";
 import type { SessionRow, UpsertSubagentInput } from "../models/session-row";
 import type { SessionManifestStore } from "../stores/session-manifest-store";
@@ -38,14 +37,11 @@ const SpawnAgentInputSchema = z.looseObject({
 	systemPrompt: z.string().optional(),
 });
 
-export class TeamChildSessionManager {
-	private readonly teamTaskSessionsByAgent = new Map<string, string[]>();
-	private readonly teamTaskLastHeartbeatBySession = new Map<string, number>();
-	private readonly teamTaskLastProgressLineBySession = new Map<
-		string,
-		string
-	>();
-
+/**
+ * Records sub-agent runs as child session rows under their root session and
+ * keeps their status and message files in step with the run.
+ */
+export class ChildSessionManager {
 	constructor(
 		private readonly adapter: SessionPersistenceAdapter,
 		private readonly manifestStore: SessionManifestStore,
@@ -54,28 +50,12 @@ export class TeamChildSessionManager {
 			result?: AgentResult,
 			previousMessages?: LlmsProviders.MessageWithMetadata[],
 		) => StoredMessageWithMetadata[] | undefined,
-		private readonly heartbeatLogIntervalMs: number,
 	) {}
-
-	private teamTaskQueueKey(rootSessionId: string, agentId: string): string {
-		return `${rootSessionId}::${agentId}`;
-	}
-
-	private activeTeamTaskSessionId(
-		rootSessionId: string,
-		parentAgentId: string,
-	): string | undefined {
-		const queue = this.teamTaskSessionsByAgent.get(
-			this.teamTaskQueueKey(rootSessionId, parentAgentId),
-		);
-		return queue?.at(-1);
-	}
 
 	private buildSubsessionRow(
 		root: SessionRow,
 		opts: {
 			sessionId: string;
-			mode: "subagent" | "team";
 			parentSessionId: string;
 			parentAgentId: string;
 			agentId: string;
@@ -100,10 +80,8 @@ export class TeamChildSessionManager {
 			model: root.model,
 			cwd: root.cwd,
 			workspaceRoot: root.workspaceRoot,
-			teamName: root.teamName ?? null,
 			enableTools: root.enableTools,
 			enableSpawn: root.enableSpawn,
-			enableTeams: root.enableTeams,
 			parentSessionId: opts.parentSessionId,
 			parentAgentId: opts.parentAgentId,
 			agentId: opts.agentId,
@@ -112,7 +90,7 @@ export class TeamChildSessionManager {
 			prompt: opts.prompt,
 			metadata: resolveMetadataWithTitle({
 				metadata: withSessionHistoryOriginMetadata(undefined, {
-					mode: opts.mode,
+					mode: "subagent",
 					version: rootHistoryOrigin?.version,
 				}),
 				prompt: opts.prompt,
@@ -152,11 +130,8 @@ export class TeamChildSessionManager {
 		const sessionId = makeSubSessionId(rootSessionId, input.agentId);
 		const existing = await this.adapter.getSession(sessionId);
 		const startedAt = nowIso();
-		const artifactPaths = this.manifestStore.artifacts.subagentArtifactPaths(
-			sessionId,
-			input.agentId,
-			this.activeTeamTaskSessionId(rootSessionId, input.parentAgentId),
-		);
+		const artifactPaths =
+			this.manifestStore.artifacts.subagentArtifactPaths(sessionId);
 
 		let prompt = input.prompt ?? existing?.prompt ?? undefined;
 		if (!prompt) {
@@ -170,7 +145,6 @@ export class TeamChildSessionManager {
 		if (!existing) {
 			const row = this.buildSubsessionRow(root, {
 				sessionId,
-				mode: "subagent",
 				parentSessionId: rootSessionId,
 				parentAgentId: input.parentAgentId,
 				agentId: input.agentId,
@@ -271,98 +245,6 @@ export class TeamChildSessionManager {
 		for (const row of rows) {
 			await this.applySubagentStatusBySessionId(row.sessionId, status);
 		}
-	}
-
-	async onTeamTaskStart(
-		rootSessionId: string,
-		agentId: string,
-		message: string,
-	): Promise<void> {
-		const root = await this.adapter.getSession(rootSessionId);
-		if (!root) return;
-		const sessionId = makeTeamTaskSubSessionId(rootSessionId, agentId);
-		const startedAt = nowIso();
-		const { messagesPath } = this.manifestStore.artifacts.subagentArtifactPaths(
-			sessionId,
-			agentId,
-		);
-		const row = this.buildSubsessionRow(root, {
-			sessionId,
-			mode: "team",
-			parentSessionId: rootSessionId,
-			parentAgentId: "lead",
-			agentId,
-			prompt: message || `Team task for ${agentId}`,
-			startedAt,
-			messagesPath,
-		});
-		await this.adapter.upsertSession(row);
-		this.manifestStore.initializeMessagesFile(row, messagesPath, startedAt);
-		const key = this.teamTaskQueueKey(rootSessionId, agentId);
-		const queue = this.teamTaskSessionsByAgent.get(key) ?? [];
-		queue.push(sessionId);
-		this.teamTaskSessionsByAgent.set(key, queue);
-	}
-
-	async onTeamTaskEnd(
-		rootSessionId: string,
-		agentId: string,
-		status: SessionStatus,
-		_summary?: string,
-		result?: AgentResult,
-		messages?: LlmsProviders.MessageWithMetadata[],
-	): Promise<void> {
-		const key = this.teamTaskQueueKey(rootSessionId, agentId);
-		const queue = this.teamTaskSessionsByAgent.get(key);
-		if (!queue || queue.length === 0) return;
-		const sessionId = queue.shift();
-		if (queue.length === 0) this.teamTaskSessionsByAgent.delete(key);
-		if (!sessionId) return;
-		const teammateMessages = result?.messages ?? messages;
-		const persistedMessages = this.toPersistedMessages(
-			teammateMessages,
-			result,
-			messages,
-		);
-		if (persistedMessages) {
-			await this.manifestStore.persistSessionMessages(
-				sessionId,
-				persistedMessages,
-			);
-		}
-		await this.applySubagentStatusBySessionId(sessionId, status);
-		this.teamTaskLastHeartbeatBySession.delete(sessionId);
-		this.teamTaskLastProgressLineBySession.delete(sessionId);
-	}
-
-	async onTeamTaskProgress(
-		rootSessionId: string,
-		agentId: string,
-		progress: string,
-		options?: { kind?: "heartbeat" | "progress" | "text" },
-	): Promise<void> {
-		const key = this.teamTaskQueueKey(rootSessionId, agentId);
-		const sessionId = this.teamTaskSessionsByAgent.get(key)?.[0];
-		if (!sessionId) return;
-		const trimmed = progress.trim();
-		if (!trimmed) return;
-		const kind = options?.kind ?? "progress";
-		if (kind === "heartbeat") {
-			const now = Date.now();
-			const last = this.teamTaskLastHeartbeatBySession.get(sessionId) ?? 0;
-			if (now - last < this.heartbeatLogIntervalMs) {
-				return;
-			}
-			this.teamTaskLastHeartbeatBySession.set(sessionId, now);
-		}
-		const line =
-			kind === "heartbeat"
-				? "[progress] heartbeat"
-				: kind === "text"
-					? `[progress] text: ${trimmed}`
-					: `[progress] ${trimmed}`;
-		if (this.teamTaskLastProgressLineBySession.get(sessionId) === line) return;
-		this.teamTaskLastProgressLineBySession.set(sessionId, line);
 	}
 
 	async handleSubAgentStart(

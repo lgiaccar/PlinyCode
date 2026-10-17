@@ -69,10 +69,8 @@ class LocalFileSessionService {
 		model: string;
 		cwd: string;
 		workspaceRoot: string;
-		teamName?: string;
 		enableTools: boolean;
 		enableSpawn: boolean;
-		enableTeams: boolean;
 		prompt?: string;
 		metadata?: Record<string, unknown>;
 		startedAt?: string;
@@ -97,10 +95,8 @@ class LocalFileSessionService {
 			model: input.model,
 			cwd: input.cwd,
 			workspace_root: input.workspaceRoot,
-			team_name: input.teamName,
 			enable_tools: input.enableTools,
 			enable_spawn: input.enableSpawn,
-			enable_teams: input.enableTeams,
 			prompt,
 			metadata: input.metadata,
 			messages_path: messagesPath,
@@ -130,10 +126,8 @@ class LocalFileSessionService {
 			model: input.model,
 			cwd: input.cwd,
 			workspaceRoot: input.workspaceRoot,
-			teamName: input.teamName ?? null,
 			enableTools: input.enableTools,
 			enableSpawn: input.enableSpawn,
-			enableTeams: input.enableTeams,
 			parentSessionId: null,
 			parentAgentId: null,
 			agentId: null,
@@ -387,7 +381,6 @@ describe("LocalRuntimeHost e2e", () => {
 				mode: "act",
 				enableTools: false,
 				enableSpawnAgent: false,
-				enableAgentTeams: false,
 			}),
 		});
 
@@ -557,7 +550,6 @@ describe("LocalRuntimeHost e2e", () => {
 				mode: "act",
 				enableTools: true,
 				enableSpawnAgent: false,
-				enableAgentTeams: false,
 			}),
 		});
 
@@ -656,7 +648,6 @@ describe("LocalRuntimeHost e2e", () => {
 			mode: "act",
 			enableTools: false,
 			enableSpawnAgent: false,
-			enableAgentTeams: false,
 		});
 
 		let messages: LlmsProviders.Message[] = [];

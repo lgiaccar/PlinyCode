@@ -5,6 +5,8 @@ import { getRunningBuiltinMcpSources } from "@/services/devops-mcp/builtin-mcp-r
 import type { McpHub } from "@/services/mcp/McpHub"
 import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
 import { Logger } from "@/shared/services/Logger"
+import type { CodeIntelSource } from "./code-intel/code-intel-source"
+import { createCodeIntelTools } from "./code-intel/code-intel-tools"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
 import { createTodoTool } from "./vscode-todo-tool"
@@ -67,6 +69,11 @@ interface VscodeExtraToolsOptions {
 	 * the user's terminal would race the root's.
 	 */
 	forSubAgents?: boolean
+	/**
+	 * The window's language servers, for `find_symbol` and `code_navigate`.
+	 * Absent when the user turned code intelligence off (`plinycode.codeIntel.enabled`).
+	 */
+	codeIntel?: CodeIntelSource
 }
 
 export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExtraToolsOptions): Promise<AgentTool[]> {
@@ -152,6 +159,12 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	// A task list the model keeps and the user sees, so long runs do not lose
 	// track of what is left.
 	tools.push(createTodoTool())
+
+	// Definitions, references, outlines and types from the language servers,
+	// so the model navigates code instead of grepping for it (docs/agent-tools.md).
+	if (options?.codeIntel) {
+		tools.push(...createCodeIntelTools({ cwd: options.cwd ?? process.cwd(), source: options.codeIntel }))
+	}
 
 	Logger.log(`[VscodeRuntimeTools] Prepared ${tools.length} VSCode extra tools`)
 	return tools

@@ -1,7 +1,9 @@
 import { isAbsolute, resolve } from "node:path";
 import type * as LlmsProviders from "@plinycode/llms";
 import {
+	type AgentMode,
 	type AgentResult,
+	formatUserInputBlock,
 	isLikelyAuthError,
 	normalizeUserInput,
 } from "@plinycode/shared";
@@ -14,13 +16,6 @@ import {
 	sumUsageTotals,
 } from "../../../services/usage";
 import { enrichPromptWithMentions } from "../../../services/workspace";
-import {
-	buildTeamRunContinuationPrompt,
-	formatModePrompt,
-	hasPendingTeamRunWork,
-	shouldAutoContinueTeamRuns,
-	waitForTeamRunUpdates,
-} from "../../../session/team";
 import type { SessionStatus } from "../../../types/common";
 import type { ActiveSession, PreparedTurnInput } from "../../../types/session";
 import type { SessionRunOptions } from "../../orchestration/session-runtime-orchestrator";
@@ -110,7 +105,7 @@ export async function executeTurn(
 	await host.markTurnRunning(session);
 
 	try {
-		let result = await executeAgentTurn(
+		return await executeAgentTurn(
 			host,
 			session,
 			prompt,
@@ -118,18 +113,6 @@ export async function executeTurn(
 			preparedInput.userFiles,
 			input.offTheRecord ? { offTheRecord: true } : undefined,
 		);
-
-		while (shouldAutoContinueTeamRuns(session, result.finishReason)) {
-			const updates = await waitForTeamRunUpdates(session);
-			if (updates.length === 0) break;
-			const continuationPrompt = buildTeamRunContinuationPrompt(
-				session,
-				updates,
-			);
-			result = await executeAgentTurn(host, session, continuationPrompt);
-		}
-
-		return result;
 	} finally {
 		await host.refreshActiveSessionGitMetadata(session);
 	}
@@ -140,7 +123,6 @@ export async function completeInteractiveTurn(
 	session: ActiveSession,
 	finishReason: AgentResult["finishReason"],
 ): Promise<void> {
-	if (hasPendingTeamRunWork(session)) return;
 	session.lastInteractiveTurnFinishReason = finishReason;
 	await host.markTurnIdle(session);
 	session.aborting = false;
@@ -278,13 +260,13 @@ async function executeAgentTurn(
 			baselineMessages,
 		);
 		session.persistedMessages = persistedMessages;
-		const teammateTurnUsage = sumUsageTotals(
+		const subAgentTurnUsage = sumUsageTotals(
 			session.turnUsageByAgent?.values() ?? [],
 		);
 		const accumulatedUsage = accumulateUsageTotals(usageBaseline, result.usage);
 		const aggregateTurnUsage = accumulateUsageTotals(
 			accumulateUsageTotals(createInitialAccumulatedUsage(), result.usage),
-			teammateTurnUsage,
+			subAgentTurnUsage,
 		);
 		const aggregateUsage = accumulateUsageTotals(
 			aggregateUsageBaseline,
@@ -376,6 +358,17 @@ async function prepareTurnInput(
 		userImages: input.userImages,
 		userFiles: mergedUserFiles.length > 0 ? mergedUserFiles : undefined,
 	};
+}
+
+/** Wraps a prompt in the `<user_input>` block that names the session's mode. */
+export function formatModePrompt(
+	prompt: string,
+	mode: AgentMode | undefined,
+): string {
+	return formatUserInputBlock(
+		prompt,
+		mode === "plan" || mode === "ask" || mode === "yolo" ? mode : "act",
+	);
 }
 
 async function runWithAuthRetry(

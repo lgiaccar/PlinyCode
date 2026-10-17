@@ -68,7 +68,6 @@ function makeBaseConfig(
 		cwd: process.cwd(),
 		enableTools: true,
 		enableSpawnAgent: true,
-		enableAgentTeams: false,
 		...overrides,
 	};
 }

@@ -60,7 +60,7 @@ export interface ToolApprovalRequest {
 	 * Agent instance identifier.
 	 *
 	 * This identifies the lead or delegated agent that requested the tool call.
-	 * It is used for attribution in approval prompts, events, and team/sub-agent
+	 * It is used for attribution in approval prompts, events, and sub-agent
 	 * flows. It is not a hub routing key and should not be used
 	 * to find the owning runtime session.
 	 */

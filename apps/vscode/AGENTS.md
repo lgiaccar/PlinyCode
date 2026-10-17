@@ -52,7 +52,7 @@ When you add a value to the `ClineSay` or `ClineAsk` enums, update both the Type
 
 ## Verifying changes
 
-The engine packages must be built before anything here compiles or tests: run `bun run build:sdk` from the repo root after any change under `sdk/`.
+The engine packages must be built before anything here compiles or tests: run `bun run build:sdk` from the repo root after any change under `sdk/`, or keep `bun run watch:sdk` (root) running to rebuild them on change; the default `watch` task in `.vscode/tasks.json` does that.
 
 Cheapest first:
 
@@ -60,18 +60,19 @@ Cheapest first:
 | ---------------------------- | ----------------------------------------------------------------------------------------------------- | -------- |
 | `bun run lint`               | Biome lint and proto lint                                                                             | seconds  |
 | `bun run format`             | Biome format check over the whole extension (`bun run fix:all` applies fixes)                         | seconds  |
+| `bun run test:discovery`     | checks that every `src/**/*.test.ts` is reached by exactly the runner its imports ask for (see below) | seconds  |
 | `bun run check-types`        | `protos`, then `tsc` for the extension, the VS Code API compatibility check, and `tsc -b` for the webview (real build-mode typecheck — no separate `cd webview-ui && tsc -b` needed) | ~1 min   |
 | `bun run test:unit`          | every `*.test.ts` that imports from `bun:test`, one `bun` process per file                            | minutes  |
-| `bun run test:vitest`        | the vitest suites listed in `vitest.config.ts` (`src/sdk/**` and a few in `src/shared/`)              | minutes  |
+| `bun run test:vitest`        | every `*.test.ts` under `src/{sdk,hosts,shared,core,services}` that imports from `vitest`            | minutes  |
 | `bun run test:webview`       | the webview's vitest suites                                                                           | minutes  |
 | `bun run test:integration`   | tests that import from `mocha`; they need a real VS Code extension host                               | slow     |
 | `bun run test:e2e`           | Playwright against a packaged `.vsix` (`src/test/e2e/`)                                               | slowest  |
 
-Which runner picks up a test file depends on how it's written, so check before adding one:
+Which runner picks up a test file depends on what it imports, and `bun run test:discovery` (part of CI's `ci:check-all`) fails when a file is reached by no runner or by the wrong one:
 
-- Importing from `bun:test` is enough for `test:unit` to find the file.
-- A vitest test only runs if its path matches `test.include` in `vitest.config.ts`, which is an explicit list; add the path there. The config sets `passWithNoTests`, so a file that matches nothing is silently skipped.
-- Use `mocha` only when the test needs the real VS Code API.
+- Importing from `bun:test` is enough for `test:unit` to find the file, anywhere under `src/`.
+- A vitest test must import from `vitest` and live under one of the directory globs in `vitest.config.ts` `test.include` (`src/sdk`, `src/hosts`, `src/shared`, `src/core`, `src/services`). Vitest cannot filter by import, so the bun:test and mocha files under those directories are listed in `vitest.exclude.json`, which `scripts/check-test-discovery.ts --write` regenerates; a new bun:test file in one of those directories needs that regeneration, and the check tells you so. `passWithNoTests` is off, so an empty run fails.
+- Use `mocha` only when the test needs the real VS Code API. `.vscode-test.mjs` reaches `src/{core,test,utils,shared,integrations,hosts,services}` but not `__tests__/` directories or `src/test/services/`.
 
 To run one file:
 
@@ -80,6 +81,8 @@ bun test src/shared/combineApiRequests.test.ts                               # b
 bunx vitest run --config vitest.config.ts src/shared/pliny.test.ts           # vitest
 cd webview-ui && bunx vitest run src/components/settings/utils/plinyModelFilter.test.ts
 ```
+
+To debug a vitest file, open it and start the `Debug Current Vitest File` launch configuration.
 
 `bun test` preloads `src/test/bun-test-preload.ts` (see `bunfig.toml`), which stubs `vscode` and `@plinycode/core` for unit tests.
 

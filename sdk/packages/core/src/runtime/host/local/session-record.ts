@@ -20,10 +20,8 @@ export function toActiveSessionRecord(session: ActiveSession): SessionRecord {
 		model: session.config.modelId,
 		cwd: session.config.cwd,
 		workspaceRoot: resolveWorkspacePath(session.config),
-		teamName: session.config.teamName?.trim() || undefined,
 		enableTools: session.config.enableTools,
 		enableSpawn: session.config.enableSpawnAgent,
-		enableTeams: session.config.enableAgentTeams,
 		parentSessionId:
 			typeof session.sessionMetadata?.parentSessionId === "string"
 				? session.sessionMetadata.parentSessionId

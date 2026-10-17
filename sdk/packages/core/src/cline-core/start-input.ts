@@ -86,7 +86,6 @@ function coreConfigFromLocalRuntime(
 		userInstructionService: _userInstructionService,
 		ruleFilter: _ruleFilter,
 		configExtensions: _configExtensions,
-		onTeamRestored: _onTeamRestored,
 		...localConfig
 	} = localRuntime;
 	return localConfig;

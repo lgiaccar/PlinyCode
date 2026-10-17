@@ -31,11 +31,11 @@ describe("withHostCompletionGuard", () => {
 
 	it("asks core's guard first and keeps its other settings", async () => {
 		const merged = withHostCompletionGuard(
-			{ requireCompletionTool: true, completionGuard: () => "team first" },
+			{ requireCompletionTool: true, completionGuard: () => "core first" },
 			() => "host",
 		);
 		expect(merged?.requireCompletionTool).toBe(true);
-		expect(await merged?.completionGuard?.(context)).toBe("team first");
+		expect(await merged?.completionGuard?.(context)).toBe("core first");
 	});
 
 	it("falls back to the host guard when core's has nothing to say", async () => {

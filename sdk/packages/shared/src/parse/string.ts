@@ -1,7 +1,3 @@
-export function sanitizeFileName(value: string): string {
-	return value.toLowerCase().replace(/[^\w.-]+/g, "_");
-}
-
 export function trimNonEmpty(
 	value: string | null | undefined,
 ): string | undefined {

@@ -1,92 +1,98 @@
-name: 🐛 Bug Report
-description: File a bug report
-labels: ['bug']
+name: Bug report
+description: Something in PlinyCode does not work as expected
+labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        **Important:** All bug reports must be reproducible using Claude Sonnet 4.5. Cline uses complex prompts so less capable models may not work as expected.
-  - type: dropdown
-    id: cline-surface
-    attributes:
-      label: Cline Surface
-      description: Which Cline surface are you reporting a bug for?
-      options:
-        - VSCode Extension
-        - JetBrains Plugin
-        - CLI
-        - Desktop App
-        - Cloud Platform
-      default: 0
-    validations:
-      required: true
-  - type: input
-    id: cline-version
-    attributes:
-      label: Cline Version
-      description: What version of Cline are you using? (You can find this at the bottom of the Settings view)
-      placeholder: 'e.g., 1.2.3'
-    validations:
-      required: true
-  - type: checkboxes
-    id: beta
-    attributes:
-      label: Beta version
-      options:
-        - label: I am using a beta version of Cline
-  - type: textarea
-    id: what-happened
-    attributes:
-      label: What happened?
-      description: Also tell us, what did you expect to happen?
-      placeholder: Tell us what you see!
-    validations:
-      required: true
-  - type: textarea
-    id: steps
-    attributes:
-      label: Steps to reproduce
-      description: How do you trigger this bug? Please walk us through it step by step.
-      value: |
-        1.
-        2.
-        3.
-    validations:
-      required: false
-  - type: input
-    id: provider-model
-    attributes:
-      label: Provider/Model
-      description: What provider and model were you using when the issue occurred?
-      placeholder: 'e.g., cline:anthropic/claude-sonnet-4.5, gemini:gemini-2.5-pro-exp-03-25'
-    validations:
-      required: false
-  - type: textarea
-    id: ide-diagnostics
-    attributes:
-      label: Diagnostics
-      description: |
-        Paste the diagnostics for your Cline surface. This captures the build, runtime, and host details we need.
-        - VSCode Extension: open `Help → About` (Windows/Linux) or `Code → About Visual Studio Code` (macOS), then copy the info.
-        - JetBrains Plugin: open `Help → About` (Windows/Linux) or `<IDE name> → About` (macOS), then click `Copy` to grab build, runtime, OS, memory, and cores.
-        - CLI: there is no About dialog. Run `cline --version` and paste the output.
-        - Desktop App: paste the app version from the Settings view.
-        - Cloud Platform: paste your browser name and version, plus the page URL where the issue occurred.
-      placeholder: Paste the copied About info, `cline --version` output, or browser/app details here.
-    validations:
-      required: false
-  - type: textarea
-    id: system-info
-    attributes:
-      label: System Information
-      description: What operating system and hardware are you using?
-      placeholder: |
-        Operating System: Windows 11, macOS Sonoma, Ubuntu 22.04, etc.
-        Hardware: CPU, GPU, RAM specifications if relevant
-        e.g.,
-        OS: Windows 11
-        CPU: Intel Core i7-11700K
-        GPU: NVIDIA GeForce RTX 3070
-        RAM: 32GB DDR4
-    validations:
-      required: false
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for the report. Before filing, check that the bug still happens on the newest
+              [release](https://github.com/lgiaccar/PlinyCode/releases) (PlinyCode → Check for Updates).
+    - type: input
+      id: plinycode-version
+      attributes:
+          label: PlinyCode version
+          description: Shown in PlinyCode's Settings → About ("PlinyCode vX.Y.Z") and in the Extensions view. Include the `-test.N` suffix for a pre-release.
+          placeholder: "e.g. 0.2.3 or 0.2.3-test.2"
+      validations:
+          required: true
+    - type: dropdown
+      id: editor
+      attributes:
+          label: Editor
+          options:
+              - VS Code
+              - Cursor
+              - Other (say which in the description)
+          default: 0
+      validations:
+          required: true
+    - type: input
+      id: model
+      attributes:
+          label: Model id
+          description: The model selected in the chat's model picker when the bug happened, as shown in Settings → Models.
+          placeholder: "e.g. pliny/free-auto, pliny/balance-auto, snps-aws-bedrock/aws-claude-sonnet-4.6, openai/gpt-5.4"
+      validations:
+          required: true
+    - type: dropdown
+      id: router
+      attributes:
+          label: Auto-router
+          description: Were you on one of the auto-routers, which pick the model per request?
+          options:
+              - FreeAuto (pliny/free-auto)
+              - BalanceAuto (pliny/balance-auto)
+              - No, a specific model
+              - Not sure
+          default: 3
+      validations:
+          required: true
+    - type: dropdown
+      id: mode
+      attributes:
+          label: Mode
+          options:
+              - Agent
+              - Plan
+              - Ask
+              - Not relevant
+          default: 0
+      validations:
+          required: false
+    - type: textarea
+      id: what-happened
+      attributes:
+          label: What happened?
+          description: What did you see, and what did you expect instead?
+      validations:
+          required: true
+    - type: textarea
+      id: steps
+      attributes:
+          label: Steps to reproduce
+          value: |
+              1.
+              2.
+              3.
+      validations:
+          required: false
+    - type: textarea
+      id: diagnostics
+      attributes:
+          label: Diagnostics
+          description: |
+              Paste what applies. Remove anything confidential (prompts, file contents, tokens) before posting.
+              - Editor build: `Help → About` (Windows/Linux) or `Code → About Visual Studio Code` (macOS), then **Copy**.
+              - The **PlinyCode** output channel (View → Output, pick PlinyCode) around the time of the bug.
+              - For wrong or stalled model answers: the **PlinyCode: Show Last Model Request (debug)** command's output.
+              - For a tool or terminal problem: the error shown in the chat and the command that ran.
+          render: text
+      validations:
+          required: false
+    - type: input
+      id: os
+      attributes:
+          label: Operating system
+          placeholder: "e.g. Windows 11, macOS 15, Ubuntu 24.04"
+      validations:
+          required: false

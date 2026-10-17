@@ -33,7 +33,7 @@ It talks **only** to Synopsys internal models through the Pliny gateway. No code
 
 - VS Code `^1.101.0` (or a compatible Cursor build)
 - Network access to the Synopsys Pliny gateway
-- Node.js >= 22 and Bun 1.3.13 (for building from source only)
+- Node.js >= 22 and Bun 1.3.14 (for building from source only; both pinned in `.tool-versions`)
 
 ## Install
 

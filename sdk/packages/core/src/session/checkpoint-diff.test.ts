@@ -179,7 +179,6 @@ describe("checkpoint workspace comparison", () => {
 			workspaceRoot: dir,
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: true,
 			isSubagent: false,
 			metadata: {
 				checkpoint: {
@@ -216,7 +215,6 @@ describe("checkpoint workspace comparison", () => {
 			workspaceRoot: dir,
 			enableTools: true,
 			enableSpawn: true,
-			enableTeams: true,
 			isSubagent: false,
 			metadata: {
 				checkpoint: {

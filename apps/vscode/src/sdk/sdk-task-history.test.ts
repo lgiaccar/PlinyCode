@@ -1100,7 +1100,6 @@ function makeSessionRecord(id: string, overrides: Partial<SessionHistoryRecord> 
 		workspaceRoot: "/repo",
 		enableTools: true,
 		enableSpawn: true,
-		enableTeams: false,
 		isSubagent: false,
 		prompt: id,
 		metadata: {},

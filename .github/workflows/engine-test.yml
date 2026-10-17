@@ -1,25 +1,36 @@
 name: engine-test
 
+# Runs on PRs and on every push to stage (the PR target) and master, so a merge
+# that breaks the engine is caught after it lands too. The path filter applies
+# to pushes as well as PRs: a push that touches none of these paths skips the
+# workflow entirely (no run, no check).
 on:
     push:
         branches:
             - master
+            - stage
         paths:
             - "sdk/**"
+            - "bun.lock"
             - ".github/workflows/engine-test.yml"
+            - ".github/actions/**"
     workflow_dispatch:
     pull_request:
         paths:
             - "sdk/**"
+            - "bun.lock"
             - ".github/workflows/engine-test.yml"
+            - ".github/actions/**"
     workflow_call:
+
+# A new push to a PR cancels the PR's running checks; pushes to stage and
+# master each get a full run so every merged commit has a result.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
     contents: read
-
-defaults:
-    run:
-        working-directory: .
 
 jobs:
     quality-checks:
@@ -29,15 +40,8 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v4
 
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: "1.3.13"
-
-            - name: Install dependencies
-              run: bun install
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Setup toolchain
+              uses: ./.github/actions/setup-toolchain
 
             - name: Typecheck
               run: |
@@ -53,11 +57,16 @@ jobs:
         needs: quality-checks
         strategy:
             fail-fast: false
+            # Node 22 is the extension host's runtime and the .tool-versions pin;
+            # the Node 24 entry keeps the SQLite smoke test covered on the next
+            # major (the engine tests themselves run under bun).
             matrix:
                 include:
                     - os: ubuntu-latest
-                      node-version: "24.x"
+                      node-version: "22.x"
                     - os: windows-latest
+                      node-version: "22.x"
+                    - os: ubuntu-latest
                       node-version: "24.x"
         runs-on: ${{ matrix.os }}
         name: Test (${{ matrix.os }}, Node ${{ matrix.node-version }})
@@ -65,27 +74,17 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v4
 
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: "1.3.13"
-
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
+            - name: Setup toolchain
+              uses: ./.github/actions/setup-toolchain
               with:
                   node-version: ${{ matrix.node-version }}
-
-            - name: Install dependencies
-              run: bun install
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Build SDK
               id: build_sdk_step
               run: bun run build:sdk
 
             # This workflow only triggers on sdk/** changes, so it tests the SDK
-            # packages on both runners. The extension (claude-dev) is covered by
+            # packages on both runners. The extension (plinycode-dev) is covered by
             # ext-vscode-test.yml, which provides the xvfb display its
             # vscode-test integration suite needs on Linux.
             - name: Run Tests
