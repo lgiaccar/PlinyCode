@@ -30,6 +30,7 @@ const ClineCommands = {
 	GenerateCommit: prefix + ".generateGitCommitMessage",
 	OpenFreeAutoRules: prefix + ".openFreeAutoRules",
 	OpenFreeAutoCallLog: prefix + ".openFreeAutoCallLog",
+	OpenLogFile: prefix + ".openLogFile",
 	CheckForUpdates: prefix + ".checkForUpdates",
 	ExportTaskToMarkdown: prefix + ".exportTaskToMarkdown",
 	ShowLastModelRequest: prefix + ".showLastModelRequest",

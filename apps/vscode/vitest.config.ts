@@ -8,7 +8,9 @@ export default defineConfig({
 	test: {
 		include: [
 			"src/sdk/**/*.test.ts",
+			"src/sdk/trace/session-trace.test.ts",
 			"src/hosts/vscode/VscodeEditPreview.test.ts",
+			"src/shared/services/file-log-sink.test.ts",
 			"src/hosts/vscode/hostbridge/window/getActiveEditor.test.ts",
 			"src/shared/pliny.test.ts",
 			"src/shared/__tests__/workspacePath.test.ts",

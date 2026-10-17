@@ -47,6 +47,7 @@ Design and operations notes are in `docs/`:
 - [docs/rules.md](docs/rules.md): which rules files reach the model (including `AGENTS.md` and `CLAUDE.md` files below the root, listed by path and scope), the rules budget and the order rules are inlined in.
 - [docs/context-compaction.md](docs/context-compaction.md): when the conversation is compacted, the agentic and basic strategies and the fallback between them, overflow recovery, what the summarizer costs, and the context bar's threshold marker.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
+- [docs/trace-and-logs.md](docs/trace-and-logs.md): the per-conversation trace files (`traces/<session id>.jsonl`: requests, replies, tool calls, routing decisions, run failures), their record types, redaction and size caps, the `plinycode.trace.enabled` setting, and the rotating `logs/plinycode.log` file with its Open Log File command.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.
 

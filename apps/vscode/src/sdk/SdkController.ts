@@ -33,6 +33,7 @@ import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
 import { McpHub } from "@/services/mcp/McpHub"
@@ -413,6 +414,7 @@ export class Controller {
 				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
 				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
 			},
+			trace: { enabled: isSessionTraceEnabled },
 		})
 		this.memory = new MemoryCoordinator({
 			store: this.memoryServices.store,
