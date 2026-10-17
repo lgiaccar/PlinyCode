@@ -15,6 +15,8 @@ service PipelineService {
   rpc subscribeToPipelineRuns(EmptyRequest) returns (stream PipelineHistory);
   rpc refreshPipelineRuns(EmptyRequest) returns (Empty);
   rpc associatePipelineRun(AssociatePipelineRequest) returns (Empty);
+  rpc cancelPipelineRun(PipelineRunAction) returns (Empty);
+  rpc rerunPipelineRun(PipelineRunAction) returns (Empty);
 }
 
 message PipelineDefinitionInfo {
@@ -79,10 +81,21 @@ message PipelineLaunchInfo {
   string error = 11;
   bool needs_association = 12;
   string provider = 13;
+  // Who started it: "view", "agent" or "rerun".
+  string origin = 14;
+  bool can_cancel = 15;
+  bool can_rerun = 16;
 }
 
 message AssociatePipelineRequest {
   Metadata metadata = 1;
   string id = 2;
   int64 run_id = 3;
+}
+
+message PipelineRunAction {
+  Metadata metadata = 1;
+  string id = 2;
+  // Rerun only the jobs that failed.
+  bool failed_only = 3;
 }

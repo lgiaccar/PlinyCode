@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto"
 import { workspacePathsEqual } from "@shared/workspacePath"
 import { Logger } from "@/shared/services/Logger"
 import { DevOpsError } from "../server/errors"
 import type { PipelineDefinition, PipelineProvider } from "../server/providers/types"
 import { loadContext, parseRemote, type Remote, type RepoContext, sameRepository } from "../server/repo"
 import { type PipelineSchema, validatePipelineInputs } from "./pipeline-inputs"
+import type { PreparedLaunch } from "./pipeline-launch"
 import type { PipelineLaunch, PipelineRunStore } from "./pipeline-run-store"
 
 interface PipelineManagerOptions {
@@ -21,11 +23,24 @@ interface QueuePipeline {
 	ref: string
 	revision: string
 	inputs: Record<string, unknown>
+	origin?: PipelineLaunch["origin"]
 }
+
+const rejectedStatus = (error: unknown): number | undefined =>
+	error instanceof DevOpsError &&
+	error.status !== undefined &&
+	error.status >= 400 &&
+	error.status < 500 &&
+	error.status !== 408
+		? error.status
+		: undefined
 
 export class PipelineManager {
 	private readonly listeners = new Set<() => void>()
+	private readonly completedListeners = new Set<(launch: PipelineLaunch) => void>()
 	private readonly pending = new Map<string, Promise<PipelineLaunch>>()
+	/** Why a dispatch failed, for the agent; never persisted, since provider error bodies stay out of the records. */
+	private readonly dispatchErrors = new Map<string, string>()
 	private launches: PipelineLaunch[] = []
 	private timer?: ReturnType<typeof setTimeout>
 	private polling?: Promise<void>
@@ -68,6 +83,12 @@ export class PipelineManager {
 		return () => this.listeners.delete(listener)
 	}
 
+	/** A tracked run finished; called once per run across the windows that share the history. */
+	onRunCompleted(listener: (launch: PipelineLaunch) => void): () => void {
+		this.completedListeners.add(listener)
+		return () => this.completedListeners.delete(listener)
+	}
+
 	openView(): () => void {
 		this.viewers++
 		void this.refresh()
@@ -80,8 +101,13 @@ export class PipelineManager {
 		if (!this.disposed) for (const listener of this.listeners) listener()
 	}
 
+	/** Whether `root` is one of the window's repositories, the only ones the history tracks. */
+	async hasRepository(root: string): Promise<boolean> {
+		return (await this.options.repositories()).some((folder) => workspacePathsEqual(folder, root))
+	}
+
 	private async repository(root: string): Promise<{ ctx: RepoContext; provider: PipelineProvider }> {
-		if (!(await this.options.repositories()).some((folder) => workspacePathsEqual(folder, root))) {
+		if (!(await this.hasRepository(root))) {
 			throw new DevOpsError("Select a repository in the current workspace.")
 		}
 		const ctx = await this.loadRepo(root)
@@ -148,6 +174,7 @@ export class PipelineManager {
 			created: this.now(),
 			state: "dispatching",
 			url: pipeline.url,
+			origin: request.origin ?? "view",
 		}
 		if (!(await this.options.store.create(record))) {
 			const saved = await this.options.store.get(request.id)
@@ -161,21 +188,88 @@ export class PipelineManager {
 			record.runId = response.runId
 			record.url = response.url
 		} catch (error) {
-			const rejected =
-				error instanceof DevOpsError &&
-				error.status !== undefined &&
-				error.status >= 400 &&
-				error.status < 500 &&
-				error.status !== 408
+			const rejected = rejectedStatus(error)
 			record.state = rejected ? "rejected" : "unknown"
 			record.error = rejected
-				? `The provider rejected the launch (HTTP ${(error as DevOpsError).status}). Check queue permissions and the pipeline configuration.`
+				? `The provider rejected the launch (HTTP ${rejected}). Check queue permissions and the pipeline configuration.`
 				: "Dispatch could not be confirmed. Check the provider before launching again."
+			if (request.origin === "agent") {
+				this.dispatchErrors.set(record.id, error instanceof Error ? error.message : String(error))
+			}
 		}
 		await this.options.store.update(record)
 		await this.reload()
 		void this.refresh()
 		return record
+	}
+
+	/**
+	 * Queues a launch the agent prepared (`pipeline_run`), so it is recorded and tracked like one from the form.
+	 * A launch the provider refused or did not confirm comes back as an error the agent can read.
+	 */
+	async launch(repoRoot: string, prepared: PreparedLaunch): Promise<PipelineLaunch> {
+		const id = randomUUID()
+		const record = await this.queue({
+			id,
+			repoRoot,
+			pipelineId: prepared.pipeline.id,
+			ref: prepared.ref,
+			revision: prepared.schema.revision,
+			inputs: prepared.inputs,
+			origin: "agent",
+		})
+		const detail = this.dispatchErrors.get(id)
+		this.dispatchErrors.delete(id)
+		if (record.state === "rejected" || record.state === "unknown") {
+			throw new DevOpsError(`${record.error ?? "The launch failed."}${detail ? ` (${detail})` : ""}`)
+		}
+		return record
+	}
+
+	private async tracked(id: string): Promise<{ record: PipelineLaunch; runId: number; provider: PipelineProvider }> {
+		const record = await this.options.store.get(id)
+		if (!record?.runId || record.state !== "accepted") {
+			throw new DevOpsError("This launch has no provider run yet.")
+		}
+		return { record, runId: record.runId, provider: this.options.providerFor(parseRemote(record.remoteUrl, record.provider)) }
+	}
+
+	/** Asks the provider to stop a run that is still queued or running. */
+	async cancel(id: string): Promise<void> {
+		const { record, runId, provider } = await this.tracked(id)
+		if (record.run?.status === "completed") throw new DevOpsError("This run has already finished.")
+		await provider.cancelRun(runId)
+		await this.refresh()
+	}
+
+	/**
+	 * Runs a finished launch again, as a new launch in the history. On GitHub (and for an Azure DevOps retry of
+	 * failed jobs) that is a new attempt of the same run id; a full Azure DevOps rerun is a new build.
+	 */
+	async rerun(id: string, failedOnly: boolean): Promise<PipelineLaunch> {
+		const { record, runId, provider } = await this.tracked(id)
+		if (record.run?.status !== "completed") throw new DevOpsError("Only a finished run can be rerun.")
+		const dispatch = await provider.rerunRun(runId, failedOnly)
+		const rerun: PipelineLaunch = {
+			id: randomUUID(),
+			repoRoot: record.repoRoot,
+			remoteUrl: record.remoteUrl,
+			provider: record.provider,
+			pipeline: record.pipeline,
+			ref: record.ref,
+			revision: record.revision,
+			created: this.now(),
+			state: "accepted",
+			runId: dispatch.runId ?? runId,
+			url: dispatch.url,
+			origin: "rerun",
+			rerunOf: record.id,
+			staleFinished: (dispatch.runId ?? runId) === runId ? record.run.finished : undefined,
+		}
+		await this.options.store.create(rerun)
+		await this.reload()
+		void this.refresh()
+		return rerun
 	}
 
 	async associate(id: string, runId: number): Promise<void> {
@@ -245,6 +339,7 @@ export class PipelineManager {
 			const active = this.launches.filter(
 				(record) => record.state === "accepted" && record.runId && record.run?.status !== "completed",
 			)
+			const completed: PipelineLaunch[] = []
 			for (let offset = 0; offset < active.length && !this.disposed; offset += 4) {
 				await Promise.all(
 					active.slice(offset, offset + 4).map(async (record) => {
@@ -273,13 +368,20 @@ export class PipelineManager {
 								rateLimitState.lastProbeTime = undefined
 							}
 							const run = await provider.getRun(record.runId as number)
-							await this.options.store.update({
+							if (record.staleFinished && run.status === "completed" && run.finished === record.staleFinished) {
+								// The rerun has not started yet: the provider still shows the previous attempt.
+								await this.options.store.update({ ...record, updated: this.now(), error: undefined })
+								return
+							}
+							const finished = await this.options.store.update({
 								...record,
 								run,
 								url: run.url,
 								updated: this.now(),
 								error: undefined,
+								staleFinished: undefined,
 							})
+							if (finished) completed.push({ ...record, run, url: run.url })
 						} catch {
 							backoff = true
 							await this.options.store
@@ -290,6 +392,15 @@ export class PipelineManager {
 				)
 			}
 			await this.reload()
+			for (const launch of completed) {
+				for (const listener of this.completedListeners) {
+					try {
+						listener(launch)
+					} catch (error) {
+						Logger.warn("[Pipelines] A completion listener failed:", error)
+					}
+				}
+			}
 		} catch (error) {
 			backoff = true
 			Logger.warn("[Pipelines] Failed to refresh run history:", error)
@@ -305,5 +416,6 @@ export class PipelineManager {
 		this.disposed = true
 		clearTimeout(this.timer)
 		this.listeners.clear()
+		this.completedListeners.clear()
 	}
 }

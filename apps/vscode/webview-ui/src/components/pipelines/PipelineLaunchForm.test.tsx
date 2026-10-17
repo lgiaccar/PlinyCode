@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
 	getPipelineInputs: vi.fn(),
 	queuePipelineRun: vi.fn(),
 	associatePipelineRun: vi.fn(),
+	cancelPipelineRun: vi.fn(),
+	rerunPipelineRun: vi.fn(),
 	openUrl: vi.fn(),
 }))
 vi.mock("@/services/grpc-client", () => ({ CiBoardServiceClient: mocks, PipelineServiceClient: mocks, UiServiceClient: mocks }))
@@ -101,5 +103,57 @@ describe("Pipeline launch controls", () => {
 		await waitFor(() =>
 			expect(mocks.associatePipelineRun).toHaveBeenCalledWith(expect.objectContaining({ id: "launch", runId: 42 })),
 		)
+	})
+
+	it("cancels a running launch, and says who started it", async () => {
+		mocks.cancelPipelineRun.mockResolvedValue({})
+		render(
+			<PipelineRunRow
+				launch={PipelineLaunchInfo.create({
+					id: "running",
+					pipelineName: "Deploy",
+					ref: "main",
+					provider: "github",
+					repoRoot: "/workspace",
+					created: Date.now(),
+					status: "in_progress",
+					runId: 42,
+					origin: "agent",
+					canCancel: true,
+				})}
+			/>,
+		)
+		expect(screen.getByText(/Started by the agent/)).toBeInTheDocument()
+		expect(screen.queryByRole("button", { name: "Rerun Deploy" })).not.toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "Cancel Deploy run" }))
+		await waitFor(() => expect(mocks.cancelPipelineRun).toHaveBeenCalledWith(expect.objectContaining({ id: "running" })))
+	})
+
+	it("reruns a finished launch, all of it or only the failed jobs, and shows a refusal", async () => {
+		mocks.rerunPipelineRun.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("Run is still in progress"))
+		render(
+			<PipelineRunRow
+				launch={PipelineLaunchInfo.create({
+					id: "done",
+					pipelineName: "Deploy",
+					ref: "main",
+					provider: "ado",
+					repoRoot: "/workspace",
+					created: Date.now(),
+					status: "completed",
+					result: "failure",
+					runId: 57,
+					canRerun: true,
+				})}
+			/>,
+		)
+		expect(screen.queryByRole("button", { name: "Cancel Deploy run" })).not.toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "Rerun Deploy" }))
+		await waitFor(() =>
+			expect(mocks.rerunPipelineRun).toHaveBeenCalledWith(expect.objectContaining({ id: "done", failedOnly: false })),
+		)
+		fireEvent.click(screen.getByRole("button", { name: "Rerun failed jobs of Deploy" }))
+		expect(await screen.findByRole("alert")).toHaveTextContent("Run is still in progress")
+		expect(mocks.rerunPipelineRun).toHaveBeenLastCalledWith(expect.objectContaining({ id: "done", failedOnly: true }))
 	})
 })

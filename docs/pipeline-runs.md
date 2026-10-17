@@ -26,8 +26,9 @@ repository's default branch. For Azure DevOps tags, enter `refs/tags/<tag>`.
   form. The schema revision is checked again before dispatch. If it changes,
   use **Reload pipeline parameters** and review the new values.
 
-Only an explicit **Run** queues a pipeline. Opening the view or loading inputs
-does not queue anything. Duplicate submissions and transport retries reuse a
+Only an explicit **Run** (or a `pipeline_run` call by the agent, see
+[Agent-Triggered Launches](#agent-triggered-launches)) queues a pipeline.
+Opening the view or loading inputs does not queue anything. Duplicate submissions and transport retries reuse a
 launch ID to avoid dispatching the same request twice.
 
 ## Run History
@@ -58,6 +59,51 @@ Polling requires the extension host to be running. Reopening PlinyCode resumes
 tracking; it does not replay dispatch requests. A dispatch left pending for
 more than five minutes is marked unconfirmed.
 
+## Cancel and Rerun
+
+A launch with a run ID has buttons for its run:
+
+- **Cancel** while it is queued or running. The provider is asked to stop it
+  (GitHub's cancel API, an Azure DevOps build set to `cancelling`); the entry
+  shows the cancelled result at the next refresh.
+- **Rerun** once it has finished, and **Rerun failed jobs** when it failed,
+  partly succeeded or was cancelled.
+
+A rerun is a new entry in the history, marked **Rerun**. On GitHub, and for
+**Rerun failed jobs** on Azure DevOps, it is a new attempt of the same run ID;
+until the provider reports a different finish time it is still showing the
+previous attempt, so the entry stays queued rather than repeating the old
+result. A full **Rerun** on Azure DevOps queues a new build of the same
+definition, branch, variables and template parameters. A refusal (a run that
+is still going, missing permissions) is shown under the entry. The agent has the
+same operations as the `pipeline_cancel` and `pipeline_rerun` tools (see
+[devops-mcp.md](devops-mcp.md#running-pipelines)); those do not add history
+entries.
+
+## Notifications
+
+When a run in the history finishes, PlinyCode shows a notification with its
+result (an information message for success, a warning otherwise) and **Open
+run** and **Open Pipelines** buttons. It covers launches from the form, reruns,
+and runs the agent started. The check is the history's own polling, so it needs
+no extra requests, and when several windows share the history only the one that
+records the result notifies. A run found finished more than a day after its
+launch (the window was closed meanwhile) is not announced. Turn the
+notifications off with `plinycode.pipelines.notify`.
+
+## Agent-Triggered Launches
+
+PlinyCode's agent queues pipelines with the DevOps server's `pipeline_run` tool
+([devops-mcp.md](devops-mcp.md#running-pipelines)). For a repository in the
+window, the call goes through the same queueing code as the form: the
+pipeline's inputs are read at the ref and validated the same way, the launch is
+reserved in the history before dispatch, and it shows as **Started by the
+agent**, is tracked and notifies when it finishes. A launch the provider refuses
+or does not confirm is reported to the agent as an error. Each call asks for
+approval like any MCP tool unless MCP tools are auto-approved, and unattended
+CI Board runs may not launch pipelines at all. Launches by other MCP clients
+(Copilot Chat, Cursor) are queued directly and are not in the history.
+
 ## Unknown Outcomes and Older Hosts
 
 Azure DevOps and current GitHub dispatch APIs return a run ID, which is tracked
@@ -86,9 +132,11 @@ have permission to queue runs: GitHub Actions write/repository permissions,
 or Azure DevOps build execution permissions. Read access alone is insufficient.
 Environment inputs also require permission to list repository environments.
 
-The first version does not support Azure DevOps classic builds/releases,
-unrelated project browsing, queue-time variables, workflow editing, cancellation,
-reruns, notifications or agent-triggered launches.
+Cancelling and rerunning need the same permissions as queueing (GitHub Actions
+write access, Azure DevOps build execution).
+
+The view does not support Azure DevOps classic builds/releases, unrelated
+project browsing, queue-time variables or workflow editing.
 
 Azure DevOps `extends` pipelines and structural parameter types such as
 `stepList`/`jobList` show an explicit limitation and cannot be queued through
@@ -100,10 +148,14 @@ expanded into a schema; use the provider's run page for those definitions.
 - Provider operations: [types.ts](../apps/vscode/src/services/devops-mcp/server/providers/types.ts),
   [github.ts](../apps/vscode/src/services/devops-mcp/server/providers/github.ts),
   [azdo.ts](../apps/vscode/src/services/devops-mcp/server/providers/azdo.ts).
+- Agent launches: [pipeline-launch.ts](../apps/vscode/src/services/devops-mcp/pipelines/pipeline-launch.ts)
+  (pipeline lookup and input checks for `pipeline_run`) and
+  [DevOpsMcpService.ts](../apps/vscode/src/services/devops-mcp/host/DevOpsMcpService.ts)
+  (routes PlinyCode's calls to the manager).
 - Discovery and lifecycle: [pipeline-inputs.ts](../apps/vscode/src/services/devops-mcp/pipelines/pipeline-inputs.ts),
   [pipeline-manager.ts](../apps/vscode/src/services/devops-mcp/pipelines/pipeline-manager.ts),
   [pipeline-run-store.ts](../apps/vscode/src/services/devops-mcp/pipelines/pipeline-run-store.ts).
-- Host lifecycle: [PipelineHost.ts](../apps/vscode/src/services/devops-mcp/host/PipelineHost.ts).
+- Host lifecycle and notifications: [PipelineHost.ts](../apps/vscode/src/services/devops-mcp/host/PipelineHost.ts).
 - RPC: [pipeline.proto](../apps/vscode/proto/cline/pipeline.proto) and
   [controller handlers](../apps/vscode/src/core/controller/pipeline).
 - Webview: [PipelinesView.tsx](../apps/vscode/webview-ui/src/components/pipelines/PipelinesView.tsx).
