@@ -91,6 +91,26 @@ and active-session model switching are exposed through `ClineCore` when the
 selected transport supports them rather than being part of the minimal host
 primitive vocabulary.
 
+### Hook Files
+
+When a session's `localRuntime.configExtensions` includes `"hooks"` (the
+default), the engine runs hook files named after their event (`TaskStart`,
+`TaskResume`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `TaskComplete`,
+`TaskCancel`, `TaskError`, `SessionShutdown`) from the directories
+`resolveHooksConfigSearchPaths(workspace)` returns. `listHookConfigFiles(workspace)`
+lists them. Two `localRuntime` options let a host control and observe them:
+
+- `hookFilter(hookPath)`: return `false` to skip a hook file. It is evaluated
+  each time the file would run, so a host can toggle one hook, or all of them,
+  while a session is live. A filter that throws lets the hook run.
+- `onHookStatus(event)`: receives `running` before each hook file runs, then
+  `completed`, `failed` or `cancelled` (a PreToolUse or PostToolUse hook that
+  returned `{"cancel": true}`), with the hook name and path, the event, the
+  tool name, the exit code, the duration and, on failure, the reason. A
+  listener that throws never affects the hook. With a listener set, the
+  hooks a run does not wait for (all but PreToolUse and PostToolUse) run
+  attached rather than detached, so their exit can be reported.
+
 ### Default Tools
 
 `@plinycode/core` owns the built-in host tools and executors:

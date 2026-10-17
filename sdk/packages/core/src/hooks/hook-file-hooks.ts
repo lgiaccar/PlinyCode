@@ -75,7 +75,53 @@ type HookCommandSessionShutdownContext = HookContextBase & {
 	reason?: string;
 };
 
-type HookRuntimeOptions = {
+/**
+ * Outcome of one hook file run, as reported to {@link HookStatusListener}.
+ *
+ * - `running`: the hook process is about to start.
+ * - `completed`: it exited 0, or printed a valid JSON control object (which
+ *   is honoured whatever the exit code).
+ * - `cancelled`: a blocking hook (PreToolUse, PostToolUse) asked to cancel
+ *   with `{"cancel": true}`.
+ * - `failed`: it could not be started, timed out, or exited non-zero without
+ *   a valid JSON control object.
+ */
+export type HookStatus = "running" | "completed" | "failed" | "cancelled";
+
+export interface HookStatusEvent {
+	/** Hook file name without extension, e.g. `PreToolUse` or `TaskStart`. */
+	hookName: string;
+	/** Absolute path of the hook file. */
+	hookPath: string;
+	/** Engine event the hook ran for, e.g. `tool_call` or `agent_start`. */
+	eventName: HookEventName;
+	/** Tool name, for PreToolUse and PostToolUse hooks. */
+	toolName?: string;
+	status: HookStatus;
+	/** Process exit code, on terminal statuses when the process exited. */
+	exitCode?: number;
+	/** Wall-clock time from spawn to the terminal status, in milliseconds. */
+	durationMs?: number;
+	/** Why the hook failed (spawn error, timeout or stderr), on `failed`. */
+	error?: string;
+}
+
+/**
+ * Receives one `running` event before each hook file runs and one terminal
+ * event (`completed`, `failed` or `cancelled`) after it. Exceptions thrown by
+ * the listener are logged and never affect the hook run.
+ */
+export type HookStatusListener = (event: HookStatusEvent) => void;
+
+/**
+ * Decides whether a discovered hook file runs. It is evaluated each time the
+ * hook would run, so a host can toggle hooks (one file, or all of them) while
+ * a session is live. Return `false` to skip the file; it is then neither run
+ * nor reported to {@link HookStatusListener}.
+ */
+export type HookFileFilter = (hookPath: string) => boolean;
+
+export type HookRuntimeOptions = {
 	cwd: string;
 	workspacePath: string;
 	rootSessionId?: string;
@@ -85,6 +131,15 @@ type HookRuntimeOptions = {
 	detachAsyncHooks?: boolean;
 	/** Structured git + path metadata forwarded into every hook payload. */
 	workspaceInfo?: WorkspaceInfo;
+	/**
+	 * Reports each hook file run (running, then completed/failed/cancelled).
+	 * When set, fire-and-forget hooks (every event except PreToolUse and
+	 * PostToolUse) are still not awaited, but run attached instead of
+	 * detached so their exit can be reported.
+	 */
+	onHookStatus?: HookStatusListener;
+	/** Skips discovered hook files for which it returns `false`. */
+	hookFilter?: HookFileFilter;
 };
 
 function mapParams(input: unknown): Record<string, string> {
@@ -225,7 +280,153 @@ function createPayloadBase(
 	} as Omit<HookEventPayload, "hookName">;
 }
 
-type HookCommandMap = Partial<Record<HookEventName, string[][]>>;
+type HookCommandEntry = {
+	command: string[];
+	hookPath: string;
+	/** Hook file name without extension, e.g. `PreToolUse`. */
+	hookName: string;
+};
+
+type HookCommandMap = Partial<Record<HookEventName, HookCommandEntry[]>>;
+
+/** Per-event context for running and reporting a set of hook files. */
+type HookRunContext = {
+	eventName: HookEventName;
+	toolName?: string;
+	logger?: BasicLogger;
+	onHookStatus?: HookStatusListener;
+	hookFilter?: HookFileFilter;
+};
+
+const MAX_HOOK_STATUS_ERROR_LENGTH = 2000;
+
+function selectEnabledHooks(
+	entries: HookCommandEntry[],
+	run: HookRunContext,
+): HookCommandEntry[] {
+	const filter = run.hookFilter;
+	if (!filter) {
+		return entries;
+	}
+	return entries.filter((entry) => {
+		try {
+			return filter(entry.hookPath) !== false;
+		} catch (error) {
+			// Fail open: a broken filter must not silently disable hooks.
+			logHookError(
+				run.logger,
+				`hook filter failed for ${entry.hookPath}; running the hook`,
+				error,
+			);
+			return true;
+		}
+	});
+}
+
+function emitHookStatus(run: HookRunContext, event: HookStatusEvent): void {
+	const listener = run.onHookStatus;
+	if (!listener) {
+		return;
+	}
+	try {
+		const returned = listener(event) as unknown;
+		if (
+			returned &&
+			typeof (returned as Promise<unknown>).catch === "function"
+		) {
+			(returned as Promise<unknown>).catch((error: unknown) => {
+				logHookError(run.logger, "hook status listener failed", error);
+			});
+		}
+	} catch (error) {
+		logHookError(run.logger, "hook status listener failed", error);
+	}
+}
+
+function reportHookRunning(
+	entry: HookCommandEntry,
+	run: HookRunContext,
+): number {
+	emitHookStatus(run, {
+		hookName: entry.hookName,
+		hookPath: entry.hookPath,
+		eventName: run.eventName,
+		...(run.toolName !== undefined ? { toolName: run.toolName } : {}),
+		status: "running",
+	});
+	return Date.now();
+}
+
+function reportHookFinished(
+	entry: HookCommandEntry,
+	run: HookRunContext,
+	startedAt: number,
+	outcome: Pick<HookStatusEvent, "status" | "exitCode" | "error">,
+): void {
+	emitHookStatus(run, {
+		hookName: entry.hookName,
+		hookPath: entry.hookPath,
+		eventName: run.eventName,
+		...(run.toolName !== undefined ? { toolName: run.toolName } : {}),
+		...outcome,
+		durationMs: Date.now() - startedAt,
+	});
+}
+
+function truncateStatusError(text: string): string {
+	return text.length > MAX_HOOK_STATUS_ERROR_LENGTH
+		? `${text.slice(0, MAX_HOOK_STATUS_ERROR_LENGTH)}…`
+		: text;
+}
+
+function errorText(error: unknown): string {
+	return truncateStatusError(
+		error instanceof Error ? error.message : String(error),
+	);
+}
+
+/**
+ * Maps a finished hook process to a terminal status. Mirrors the legacy
+ * extension runner: a valid JSON control object is honoured whatever the exit
+ * code, otherwise a non-zero exit is a failure.
+ */
+function describeHookOutcome(
+	result: RunSubprocessEventResult | undefined,
+	options: { timeoutMs?: number; cancelled?: boolean },
+): Pick<HookStatusEvent, "status" | "exitCode" | "error"> {
+	if (!result) {
+		return { status: "completed" };
+	}
+	const exitCode =
+		typeof result.exitCode === "number" ? result.exitCode : undefined;
+	const withExitCode = exitCode !== undefined ? { exitCode } : {};
+	if (result.timedOut) {
+		return {
+			status: "failed",
+			...withExitCode,
+			error:
+				options.timeoutMs !== undefined
+					? `timed out after ${options.timeoutMs}ms`
+					: "timed out",
+		};
+	}
+	if (options.cancelled) {
+		return { status: "cancelled", ...withExitCode };
+	}
+	if (result.parsedJson !== undefined || exitCode === 0) {
+		return { status: "completed", ...withExitCode };
+	}
+	const stderr = result.stderr.trim();
+	return {
+		status: "failed",
+		...withExitCode,
+		error: stderr
+			? truncateStatusError(stderr)
+			: exitCode !== undefined
+				? `exited with code ${exitCode}`
+				: "terminated by a signal",
+	};
+}
 
 async function runHookCommand(
 	payload: HookEventPayload,
@@ -377,96 +578,133 @@ function createHookCommandMap(workspacePath: string): HookCommandMap {
 		}
 		const hookEventName = file.hookEventName;
 		const existing = map[hookEventName] ?? [];
-		existing.push(inferHookCommand(file.path));
+		existing.push({
+			command: inferHookCommand(file.path),
+			hookPath: file.path,
+			hookName: file.fileName,
+		});
 		map[hookEventName] = existing;
 	}
 	return map;
 }
 
 async function runBlockingHookCommands(options: {
-	commands: string[][];
+	entries: HookCommandEntry[];
 	payload: HookEventPayload;
 	cwd: string;
-	logger?: BasicLogger;
+	run: HookRunContext;
 	timeoutMs?: number;
 }): Promise<HookCommandControl | undefined> {
+	const { run } = options;
 	let merged: HookCommandControl | undefined;
-	for (const command of options.commands) {
-		const commandLabel = command.join(" ");
+	for (const entry of selectEnabledHooks(options.entries, run)) {
+		const commandLabel = entry.command.join(" ");
+		const startedAt = reportHookRunning(entry, run);
 		try {
 			const result = await runHookCommand(options.payload, {
-				command,
+				command: entry.command,
 				cwd: options.cwd,
 				env: process.env,
 				detached: false,
 				timeoutMs: options.timeoutMs,
 			});
+			const control =
+				result?.timedOut || result?.parseError
+					? undefined
+					: parseHookControl(result?.parsedJson);
+			reportHookFinished(
+				entry,
+				run,
+				startedAt,
+				describeHookOutcome(result, {
+					timeoutMs: options.timeoutMs,
+					cancelled: control?.cancel === true,
+				}),
+			);
 			if (result?.timedOut) {
-				logHookError(options.logger, `hook command timed out: ${commandLabel}`);
+				logHookError(run.logger, `hook command timed out: ${commandLabel}`);
 				continue;
 			}
 			if (result?.parseError) {
 				logHookError(
-					options.logger,
+					run.logger,
 					`hook command returned invalid JSON control output: ${commandLabel} (${result.parseError})`,
 				);
 				continue;
 			}
-			merged = mergeHookControls(merged, parseHookControl(result?.parsedJson));
+			merged = mergeHookControls(merged, control);
 		} catch (error) {
-			logHookError(
-				options.logger,
-				`hook command failed: ${commandLabel}`,
-				error,
-			);
+			reportHookFinished(entry, run, startedAt, {
+				status: "failed",
+				error: errorText(error),
+			});
+			logHookError(run.logger, `hook command failed: ${commandLabel}`, error);
 		}
 	}
 	return merged;
 }
 
+/** Runs one attached, non-blocking hook and reports it. Never throws. */
+async function runReportedAsyncHookCommand(
+	entry: HookCommandEntry,
+	options: { payload: HookEventPayload; cwd: string; run: HookRunContext },
+): Promise<void> {
+	const { run } = options;
+	const startedAt = reportHookRunning(entry, run);
+	try {
+		const result = await runHookCommand(options.payload, {
+			command: entry.command,
+			cwd: options.cwd,
+			env: process.env,
+			detached: false,
+		});
+		reportHookFinished(entry, run, startedAt, describeHookOutcome(result, {}));
+	} catch (error) {
+		reportHookFinished(entry, run, startedAt, {
+			status: "failed",
+			error: errorText(error),
+		});
+		logHookError(
+			run.logger,
+			`hook command failed: ${entry.command.join(" ")}`,
+			error,
+		);
+	}
+}
+
 async function runAsyncHookCommands(options: {
-	commands: string[][];
+	entries: HookCommandEntry[];
 	payload: HookEventPayload;
 	cwd: string;
-	logger?: BasicLogger;
+	run: HookRunContext;
 	detached: boolean;
 }): Promise<void> {
+	const { run } = options;
+	const entries = selectEnabledHooks(options.entries, run);
 	if (options.detached) {
-		for (const command of options.commands) {
-			const commandLabel = command.join(" ");
+		if (run.onHookStatus) {
+			// Reporting needs the exit code, so the process runs attached;
+			// the caller still does not wait for it.
+			for (const entry of entries) {
+				void runReportedAsyncHookCommand(entry, options);
+			}
+			return;
+		}
+		for (const entry of entries) {
+			const commandLabel = entry.command.join(" ");
 			void runHookCommand(options.payload, {
-				command,
+				command: entry.command,
 				cwd: options.cwd,
 				env: process.env,
 				detached: true,
 			}).catch((error) => {
-				logHookError(
-					options.logger,
-					`hook command failed: ${commandLabel}`,
-					error,
-				);
+				logHookError(run.logger, `hook command failed: ${commandLabel}`, error);
 			});
 		}
 		return;
 	}
 	await Promise.all(
-		options.commands.map(async (command) => {
-			const commandLabel = command.join(" ");
-			try {
-				await runHookCommand(options.payload, {
-					command,
-					cwd: options.cwd,
-					env: process.env,
-					detached: options.detached,
-				});
-			} catch (error) {
-				logHookError(
-					options.logger,
-					`hook command failed: ${commandLabel}`,
-					error,
-				);
-			}
-		}),
+		entries.map((entry) => runReportedAsyncHookCommand(entry, options)),
 	);
 }
 
@@ -719,6 +957,17 @@ export function createHookConfigFileHooks(
 		return undefined;
 	}
 
+	const runContext = (
+		eventName: HookEventName,
+		toolName?: string,
+	): HookRunContext => ({
+		eventName,
+		toolName,
+		logger: options.logger,
+		onHookStatus: options.onHookStatus,
+		hookFilter: options.hookFilter,
+	});
+
 	const runAgentStart = async (
 		ctx: HookContextBase,
 		hookName: "agent_start" | "agent_resume",
@@ -728,9 +977,9 @@ export function createHookConfigFileHooks(
 			return;
 		}
 		await runAsyncHookCommands({
-			commands: commandPaths,
+			entries: commandPaths,
 			cwd: options.cwd,
-			logger: options.logger,
+			run: runContext(hookName),
 			detached: options.detachAsyncHooks ?? true,
 			payload:
 				hookName === "agent_resume"
@@ -756,9 +1005,9 @@ export function createHookConfigFileHooks(
 		const promptSubmit = commandMap.prompt_submit ?? [];
 		if (promptSubmit.length > 0) {
 			await runAsyncHookCommands({
-				commands: promptSubmit,
+				entries: promptSubmit,
 				cwd: options.cwd,
-				logger: options.logger,
+				run: runContext("prompt_submit"),
 				detached: options.detachAsyncHooks ?? true,
 				payload: {
 					...createPayloadBase(ctx, options),
@@ -780,9 +1029,9 @@ export function createHookConfigFileHooks(
 			return undefined;
 		}
 		return runBlockingHookCommands({
-			commands: commandPaths,
+			entries: commandPaths,
 			cwd: options.cwd,
-			logger: options.logger,
+			run: runContext("tool_call", ctx.call.name),
 			timeoutMs: options.toolCallTimeoutMs ?? 120000,
 			payload: {
 				...createPayloadBase(ctx, options),
@@ -809,9 +1058,9 @@ export function createHookConfigFileHooks(
 			return undefined;
 		}
 		return runBlockingHookCommands({
-			commands: commandPaths,
+			entries: commandPaths,
 			cwd: options.cwd,
-			logger: options.logger,
+			run: runContext("tool_result", ctx.record.name),
 			timeoutMs: options.toolCallTimeoutMs ?? 120000,
 			payload: {
 				...createPayloadBase(ctx, options),
@@ -838,9 +1087,9 @@ export function createHookConfigFileHooks(
 			return;
 		}
 		await runAsyncHookCommands({
-			commands: commandPaths,
+			entries: commandPaths,
 			cwd: options.cwd,
-			logger: options.logger,
+			run: runContext("agent_end"),
 			detached: options.detachAsyncHooks ?? true,
 			payload: {
 				...createPayloadBase(ctx, options),
@@ -860,9 +1109,9 @@ export function createHookConfigFileHooks(
 			return;
 		}
 		await runAsyncHookCommands({
-			commands: commandPaths,
+			entries: commandPaths,
 			cwd: options.cwd,
-			logger: options.logger,
+			run: runContext("agent_error"),
 			detached: options.detachAsyncHooks ?? true,
 			payload: {
 				...createPayloadBase(ctx, options),
@@ -884,9 +1133,9 @@ export function createHookConfigFileHooks(
 			const abortCommands = commandMap.agent_abort ?? [];
 			if (abortCommands.length > 0) {
 				await runAsyncHookCommands({
-					commands: abortCommands,
+					entries: abortCommands,
 					cwd: options.cwd,
-					logger: options.logger,
+					run: runContext("agent_abort"),
 					detached: options.detachAsyncHooks ?? true,
 					payload: {
 						...createPayloadBase(ctx, options),
@@ -902,9 +1151,9 @@ export function createHookConfigFileHooks(
 			return;
 		}
 		await runAsyncHookCommands({
-			commands: shutdownCommands,
+			entries: shutdownCommands,
 			cwd: options.cwd,
-			logger: options.logger,
+			run: runContext("session_shutdown"),
 			detached: options.detachAsyncHooks ?? true,
 			payload: {
 				...createPayloadBase(ctx, options),
