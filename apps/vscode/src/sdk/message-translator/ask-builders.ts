@@ -105,6 +105,26 @@ function asFiniteNumber(value: unknown): number | undefined {
  * stream reported nothing.
  */
 export function buildCompactionUsageMessage(summarizerUsage: unknown, ts: number): ClineMessage | undefined {
+	const payload = compactionUsageInfo(summarizerUsage)
+	return payload ? { ts, type: "say", say: "subagent_usage", text: JSON.stringify(payload), partial: false } : undefined
+}
+
+/**
+ * The summarizer's usage a compaction notice carries, for a task in the
+ * background, which has no chat rows to add it from.
+ */
+export function compactionUsageFromNotice(event: {
+	noticeType: string
+	metadata?: Record<string, unknown>
+}): ClineSubagentUsageInfo | undefined {
+	if (event.noticeType !== "status" || !parseCompactionNoticeMetadata(event.metadata)) {
+		return undefined
+	}
+	return compactionUsageInfo(event.metadata?.summarizerUsage)
+}
+
+/** The summarizer's usage in the usage row's buckets; see {@link buildCompactionUsageMessage}. */
+function compactionUsageInfo(summarizerUsage: unknown): ClineSubagentUsageInfo | undefined {
 	if (!summarizerUsage || typeof summarizerUsage !== "object") {
 		return undefined
 	}
@@ -117,7 +137,7 @@ export function buildCompactionUsageMessage(summarizerUsage: unknown, ts: number
 	if (inputTokens === 0 && outputTokens === 0 && cost === 0) {
 		return undefined
 	}
-	const payload: ClineSubagentUsageInfo = {
+	return {
 		source: "compaction",
 		tokensIn: Math.max(0, inputTokens - cacheReads - cacheWrites),
 		tokensOut: outputTokens,
@@ -125,7 +145,6 @@ export function buildCompactionUsageMessage(summarizerUsage: unknown, ts: number
 		cacheReads,
 		cost,
 	}
-	return { ts, type: "say", say: "subagent_usage", text: JSON.stringify(payload), partial: false }
 }
 
 /**

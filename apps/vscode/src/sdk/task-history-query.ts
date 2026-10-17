@@ -8,6 +8,7 @@ import {
 	metadataWorktree,
 	sessionRecordWorkspacePath,
 } from "./sdk-task-history"
+import { readTaskUsageTotals } from "./task-usage-metadata"
 
 /** The filters and sort order of the history view (the getTaskHistory RPC). */
 export interface TaskHistoryQuery {
@@ -106,12 +107,8 @@ function rowInWorkspace(row: TaskHistoryRow, workspacePath: string): boolean {
 }
 
 function totalTokens(record: SessionHistoryRecord): number {
-	return (
-		(metadataNumber(record.metadata, "tokensIn") ?? 0) +
-		(metadataNumber(record.metadata, "tokensOut") ?? 0) +
-		(metadataNumber(record.metadata, "cacheWrites") ?? 0) +
-		(metadataNumber(record.metadata, "cacheReads") ?? 0)
-	)
+	const usage = readTaskUsageTotals(record.metadata)
+	return usage.tokensIn + usage.tokensOut + usage.cacheWrites + usage.cacheReads
 }
 
 function compareBySortOption(a: SessionHistoryRecord, b: SessionHistoryRecord, sortBy: string | undefined): number {
@@ -119,7 +116,7 @@ function compareBySortOption(a: SessionHistoryRecord, b: SessionHistoryRecord, s
 		case "oldest":
 			return sessionRecordLastActiveTs(a) - sessionRecordLastActiveTs(b)
 		case "mostExpensive":
-			return (metadataNumber(b.metadata, "totalCost") ?? 0) - (metadataNumber(a.metadata, "totalCost") ?? 0)
+			return readTaskUsageTotals(b.metadata).totalCost - readTaskUsageTotals(a.metadata).totalCost
 		case "mostTokens":
 			return totalTokens(b) - totalTokens(a)
 		default:

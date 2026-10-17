@@ -84,6 +84,20 @@ describe("SdkBackgroundSessions", () => {
 		expect(recordUsage).toHaveBeenCalledWith("a", usage)
 	})
 
+	it("passes compaction notices on and leaves out a sub-agent's own usage events", () => {
+		registry.add(makeSession("a"), "Task A")
+		const notice = {
+			type: "notice",
+			noticeType: "status",
+			message: "compaction",
+			metadata: { phase: "completed", kind: "auto_compaction", summarizerUsage: { inputTokens: 900, totalCost: 0.03 } },
+		}
+		registry.handleEvent(agentEvent("a", notice))
+		// The engine tags a sub-agent's events with its parent; its run's totals come from the tool result.
+		registry.handleEvent(agentEvent("a", { type: "usage", inputTokens: 10, outputTokens: 5, parentAgentId: "root" }))
+		expect(recordUsage.mock.calls).toEqual([["a", notice]])
+	})
+
 	it("stops and notifies once the task finishes its turn", async () => {
 		const session = makeSession("a")
 		registry.add(session, "Fix the build")

@@ -80,6 +80,12 @@ export interface SubAgentEndContext {
 	result?: SpawnAgentOutput;
 	agentResult?: AgentResult;
 	error?: Error;
+	/**
+	 * What the run's model calls used, set whether it finished or failed: the
+	 * output's figures on success, the progress sums on failure (a failed or
+	 * timed-out run was still billed for the calls it made).
+	 */
+	usage?: SpawnAgentOutput["usage"];
 }
 
 /**
@@ -156,11 +162,28 @@ export interface SpawnAgentToolConfig {
 	logger?: BasicLogger;
 }
 
+/** A run's usage as the progress sums report it, for a run that has no result. */
+export function spawnAgentUsageFromProgress(
+	progress: SubAgentProgress,
+): SpawnAgentOutput["usage"] {
+	return {
+		inputTokens: progress.inputTokens,
+		outputTokens: progress.outputTokens,
+		cacheReadTokens: progress.cacheReadTokens,
+		cacheWriteTokens: progress.cacheWriteTokens,
+		totalCost: progress.totalCost,
+	};
+}
+
 /**
  * Forwards a sub-agent's events to the host's observer and, after each model
  * call and each tool, reports the run's progress through the parent tool
  * call's `emitUpdate`, so the host can show tokens, cost and the current
  * tool while the sub-agent runs.
+ *
+ * Once bound, each forwarded event carries the sub-agent's id and its
+ * parent's (`agentId`, `parentAgentId`): the runtime's events name no agent,
+ * and without them the host counted a sub-agent's usage as the root agent's.
  */
 export function createSubAgentProgressReporter(
 	context: AgentToolContext,
@@ -194,7 +217,15 @@ export function createSubAgentProgressReporter(
 		progress: () => ({ ...progress }),
 		onEvent: (event) => {
 			try {
-				onEvent?.(event);
+				onEvent?.(
+					progress.subAgentId && !event.agentId
+						? {
+								...event,
+								agentId: progress.subAgentId,
+								parentAgentId: context.agentId,
+							}
+						: event,
+				);
 			} catch {
 				// The host's observer must not break the run.
 			}
@@ -403,6 +434,7 @@ export function createSpawnAgentTool(
 								input,
 								result: output,
 								agentResult: result,
+								usage: output.usage,
 							});
 						} catch {
 							// Best-effort observer callback.
@@ -419,6 +451,7 @@ export function createSpawnAgentTool(
 								input,
 								error:
 									error instanceof Error ? error : new Error(String(error)),
+								usage: spawnAgentUsageFromProgress(reporter.progress()),
 							});
 						} catch {
 							// Best-effort observer callback.
