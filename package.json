@@ -10,6 +10,7 @@
         "prepare": "husky",
         "build": "bun run clean && bun install && bun run build:sdk && bun -F plinycode-dev build",
         "build:sdk": "bun --production -F './sdk/packages/*' build",
+        "watch:sdk": "bun sdk/scripts/watch-sdk.ts",
         "build:apps": "bun -F plinycode-dev --production build",
         "build:models": "bun -F @plinycode/llms generate:models && bun biome format --write sdk/packages/llms",
         "clean": "bun run sdk/scripts/clean.ts",
