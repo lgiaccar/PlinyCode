@@ -11,6 +11,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
+import type { RouterCallLogUsage } from "./router-call-log"
 import type { RouterRunState } from "./router-health"
 
 const ROUTER_RUN_LOG_FILENAME = "pliny-free-auto-runs.jsonl"
@@ -39,6 +40,27 @@ export interface RouterRunLogRecord extends Omit<RouterRunState, "guardRules"> {
 	ending: RouterRunEnding
 	guardRules: string[]
 	durationMs: number
+	/** The engine's id of the run, as in the session trace. */
+	runId?: string
+	/**
+	 * Tokens of every call this run's turn made so far (the same calls `calls`
+	 * counts, so a recovered turn's later lines include the earlier runs), summed
+	 * over the calls that reported usage.
+	 */
+	usage?: RouterCallLogUsage
+	/** USD of those calls; free models count as zero. */
+	costUsd?: number
+	/** Calls per concrete model, in the order each was first used. */
+	models?: Record<string, number>
+	/** Calls of the turn that ran on a paid (hosted) model, and what they cost. */
+	paidCalls?: number
+	paidCostUsd?: number
+	/** Failovers spent in the turn so far. */
+	failovers?: number
+	/** Main agent only, when sub-agents ran in the turn: their calls, tokens and cost. */
+	subAgentCalls?: number
+	subAgentUsage?: RouterCallLogUsage
+	subAgentCostUsd?: number
 }
 
 function runLogPath(dataDir?: string): string {

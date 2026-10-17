@@ -377,4 +377,41 @@ describe("createSpawnAgentTool", () => {
 			}),
 		);
 	});
+
+	it("reports the sub-agent's id before the run's first model call", async () => {
+		const { createSpawnAgentTool } = await import("./spawn-agent-tool.js");
+		const updates: unknown[] = [];
+		let updatesWhileRunning: unknown[] = [];
+		runMock.mockImplementation(async () => {
+			updatesWhileRunning = [...updates];
+			return {
+				text: "done",
+				iterations: 1,
+				finishReason: "completed",
+				usage: { inputTokens: 1, outputTokens: 1 },
+			};
+		});
+		const tool = createSpawnAgentTool({
+			configProvider: createDelegatedAgentConfigProvider({
+				providerId: "anthropic",
+				modelId: "mock-model",
+			}),
+			subAgentTools: [],
+		});
+
+		await tool.execute(
+			{ task: "Do task" },
+			{
+				agentId: "parent-7",
+				conversationId: "conv-parent",
+				iteration: 1,
+				emitUpdate: (update) => updates.push(update),
+			},
+		);
+
+		// The host knows the id while the run is still working.
+		expect(updatesWhileRunning).toEqual([
+			expect.objectContaining({ subAgentId: "sub-agent-1", toolCalls: 0 }),
+		]);
+	});
 });

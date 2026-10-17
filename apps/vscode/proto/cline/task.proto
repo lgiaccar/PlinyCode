@@ -4,6 +4,7 @@ package cline;
 
 import "cline/common.proto";
 import "cline/state.proto";
+import "cline/ui.proto";
 
 option go_package = "github.com/cline/grpc-go/cline";
 option java_multiple_files = true;
@@ -57,6 +58,25 @@ service TaskService {
   // Applies, opens a pull request for, or removes the git worktree of a "Run in worktree"
   // conversation, after the user confirms in a modal (docs/task-worktrees.md)
   rpc worktreeAction(WorktreeActionRequest) returns (Empty);
+  // Streams one sub-agent's live transcript: the messages kept so far, then each change
+  // (docs/agent-tools.md, "Sub-agents")
+  rpc subscribeToSubagentMessages(SubagentMessagesRequest) returns (stream SubagentMessagesUpdate);
+}
+
+// Which sub-agent's transcript to stream
+message SubagentMessagesRequest {
+  Metadata metadata = 1;
+  // The engine's agent id of the sub-agent, as the sub-agent status row's item carries it
+  string agent_id = 2;
+}
+
+// One change to a sub-agent's transcript
+message SubagentMessagesUpdate {
+  // True when messages is the whole transcript and replaces what the view shows
+  // (the first update, and an empty one when the transcript was dropped)
+  bool reset = 1;
+  // Messages added or changed since the last update, matched by ts; oldest first
+  repeated ClineMessage messages = 2;
 }
 
 // The user's choice on a memory_proposal chat row (docs/memory.md)

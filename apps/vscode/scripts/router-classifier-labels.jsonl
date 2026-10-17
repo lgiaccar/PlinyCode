@@ -1,0 +1,52 @@
+{"prompt":"What does the --frozen-lockfile flag do in bun install?","expectedTier":"quick","expectedThink":false,"note":"short factual question about a tool flag"}
+{"prompt":"Where is the router call log written?","expectedTier":"quick","expectedThink":false,"note":"short factual question about this repo"}
+{"prompt":"Rename the variable `cnt` to `count` on line 42 of utils.ts.","expectedTier":"quick","expectedThink":false,"note":"trivial one-line change"}
+{"prompt":"Which Node version does this repo require?","expectedTier":"quick","expectedThink":false,"note":"short factual question; answer is in package.json"}
+{"prompt":"Is Array.prototype.at supported in Node 22?","expectedTier":"quick","expectedThink":false,"note":"yes/no factual question"}
+{"prompt":"Fix the typo 'recieve' in the README heading.","expectedTier":"quick","expectedThink":false,"note":"trivial one-line change despite the word fix: the classifier prompt puts one-line edits in quick"}
+{"prompt":"show me the git log for the last 5 commits","expectedTier":"quick","expectedThink":false,"note":"one command, no code work"}
+{"prompt":"What's the difference between git merge --squash and git rebase?","expectedTier":"quick","expectedThink":false,"note":"short factual question, general knowledge"}
+{"prompt":"Bump the timeout constant from 8000 to 10000 in router-rules.ts.","expectedTier":"quick","expectedThink":false,"note":"one-line constant change"}
+{"prompt":"How do I run a single vitest file?","expectedTier":"quick","expectedThink":false,"note":"how-to question with a one-line answer"}
+{"prompt":"list the files in apps/vscode/scripts","expectedTier":"quick","expectedThink":false,"note":"single listing, lower-case like many real prompts"}
+{"prompt":"thanks, that worked!","expectedTier":"quick","expectedThink":false,"note":"acknowledgement, nothing to do"}
+{"prompt":"What branch am I on?","expectedTier":"quick","expectedThink":false,"note":"plan mode does not make a factual question a reasoning task","mode":"plan"}
+{"prompt":"What file were we editing a minute ago?","expectedTier":"quick","expectedThink":false,"note":"short question in a long conversation: size alone must not make it huge","contextTokens":90000}
+{"prompt":"Explain what this regex matches: ^(what|how|where|which)\\b","expectedTier":"quick","expectedThink":false,"note":"explaining one short regex is a factual answer"}
+{"prompt":"Add a --since <date> option to scripts/summarize-free-auto-log.ts that drops log lines older than the date.","expectedTier":"code","expectedThink":false,"note":"routine feature in one script"}
+{"prompt":"Write unit tests for parseClassification covering quoted booleans, nested objects and replies with text before the JSON.","expectedTier":"code","expectedThink":false,"note":"writing tests"}
+{"prompt":"The build fails with TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string' in router-integration.ts:512. Fix it.","expectedTier":"code","expectedThink":false,"note":"compile error with a known location"}
+{"prompt":"Refactor the three duplicated fetch helpers in src/services/devops into one function that takes options.","expectedTier":"code","expectedThink":false,"note":"mechanical refactor"}
+{"prompt":"Resolve the merge conflicts in package.json and bun.lock after rebasing on stage.","expectedTier":"code","expectedThink":false,"note":"merging"}
+{"prompt":"Implement an LRU cache class with get, set and delete and a maximum size, plus tests.","expectedTier":"code","expectedThink":false,"note":"well-known data structure, routine"}
+{"prompt":"Convert the callback-based readConfig function in config.ts to async/await.","expectedTier":"code","expectedThink":false,"note":"routine edit"}
+{"prompt":"Add a plinycode.memory.enabled setting to package.json and read it in memory-coordinator.ts.","expectedTier":"code","expectedThink":false,"note":"two-file feature, routine"}
+{"prompt":"Run the linter and fix all the errors it reports.","expectedTier":"code","expectedThink":false,"note":"lint fixes"}
+{"prompt":"Write a bash script that backs up ~/.cline/data to a dated tarball and keeps the last 7.","expectedTier":"code","expectedThink":false,"note":"small script"}
+{"prompt":"Fix the failing test in router-policy.test.ts: the expected candidate order changed after my edit to the rules.","expectedTier":"code","expectedThink":false,"note":"failing test with a known cause"}
+{"prompt":"Fix the null check in sdk-task-history.ts that throws when a conversation has no workspace.","expectedTier":"code","expectedThink":false,"note":"known bug in a long conversation below the huge threshold (180k)","contextTokens":120000}
+{"prompt":"Fix the off-by-one in findInsertionPoint: the binary search loops forever when the target is larger than every element.","expectedTier":"code","expectedThink":true,"note":"location known, but loop-bound logic is subtle"}
+{"prompt":"Implement a token bucket rate limiter for the gateway client: 10 requests per second with bursts of 20, correct when many callers await it concurrently.","expectedTier":"code","expectedThink":true,"note":"concurrency logic that is easy to get subtly wrong"}
+{"prompt":"Make the session file writes atomic so two VS Code windows saving the same conversation can never leave a corrupt file.","expectedTier":"code","expectedThink":true,"note":"race conditions and partial writes: careful reasoning pays off"}
+{"prompt":"Plan how to split router-integration.ts (over 1000 lines) into smaller modules without changing behaviour.","expectedTier":"reason","expectedThink":true,"note":"planning a refactor","mode":"plan"}
+{"prompt":"Design a caching layer for model catalog lookups: what to cache, how to invalidate it, and which module owns it.","expectedTier":"reason","expectedThink":true,"note":"design with trade-offs","mode":"plan"}
+{"prompt":"Compare SQLite and JSON files for storing conversation history: trade-offs in concurrency, migrations and file size.","expectedTier":"reason","expectedThink":true,"note":"comparing options"}
+{"prompt":"Our date parser returns the wrong day for timestamps near midnight, but only on the Windows CI runners. Find out why.","expectedTier":"reason","expectedThink":true,"note":"debugging a cause that is not yet known"}
+{"prompt":"Sometimes the agent loop hangs after a tool call and never sends the next request. I can't reproduce it reliably. Investigate.","expectedTier":"reason","expectedThink":true,"note":"intermittent bug, unknown cause"}
+{"prompt":"Review the diff of the DevOps MCP server PR and point out bugs or risky changes.","expectedTier":"reason","expectedThink":true,"note":"reviewing a change for defects"}
+{"prompt":"Which is better for retrying dropped connections: retrying in the gateway or in the router? List the pros and cons.","expectedTier":"reason","expectedThink":true,"note":"comparing two designs","mode":"plan"}
+{"prompt":"Our p95 latency doubled after Tuesday's deploy. Here are the flame graphs from before and after; what changed?","expectedTier":"reason","expectedThink":true,"note":"performance regression with an unknown cause"}
+{"prompt":"Why does bun run types pass locally while CI reports type errors in files that import src/generated?","expectedTier":"reason","expectedThink":true,"note":"environment-dependent failure, cause unknown"}
+{"prompt":"Architect a plugin system for custom router profiles: how users register them, how they are validated, and how they are versioned.","expectedTier":"reason","expectedThink":true,"note":"architecture","mode":"plan"}
+{"prompt":"Explain how the completion guard decides when to nudge the model.","expectedTier":"reason","expectedThink":false,"note":"explaining existing code: reading and reasoning about it, but routine"}
+{"prompt":"Summarize what the last three commits changed and why.","expectedTier":"reason","expectedThink":false,"note":"reviewing history, no tricky reasoning"}
+{"prompt":"Is it safe to delete the legacy-state-reader module? Check who still uses it and what would break.","expectedTier":"reason","expectedThink":false,"note":"impact review; mostly searching"}
+{"prompt":"Explain the difference between the router's run log and call log, and when each line is written.","expectedTier":"reason","expectedThink":false,"note":"explanation of a design that already exists"}
+{"prompt":"Analyse the whole repository and list every place that reads process.env directly.","expectedTier":"huge","expectedThink":false,"note":"whole-repository analysis in a very large context","contextTokens":220000}
+{"prompt":"Go through all the files I attached and summarise each module's responsibilities.","expectedTier":"huge","expectedThink":false,"note":"many large files at once","contextTokens":260000}
+{"prompt":"Read the entire spec in docs/spec/ and extract every requirement about timeouts.","expectedTier":"huge","expectedThink":false,"note":"very large document set","contextTokens":310000}
+{"prompt":"Compare the two full log dumps above and tell me where they start to diverge.","expectedTier":"huge","expectedThink":false,"note":"the context is the work: two huge logs","contextTokens":200000}
+{"prompt":"Here is the complete output of the failing CI job, all 30k lines. Find the first real error.","expectedTier":"huge","expectedThink":false,"note":"one enormous log","contextTokens":190000}
+{"prompt":"Map every import between packages across the monorepo and draw the dependency graph.","expectedTier":"huge","expectedThink":false,"note":"whole-monorepo scan","contextTokens":240000}
+{"prompt":"Search the whole codebase for uses of the deprecated ApiHandler interface and list the files.","expectedTier":"huge","expectedThink":false,"note":"repository-wide sweep","contextTokens":195000}
+{"prompt":"Audit all 120 test files for tests that never assert anything.","expectedTier":"huge","expectedThink":false,"note":"many files at once; thinking off because the huge route switches it off at this size","contextTokens":280000}
