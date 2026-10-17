@@ -10,6 +10,15 @@ const MIN_REFRESH_MS = 60_000
 // header don't each hit the gateway.
 let cached: { budget: PlinyBudgetResponse; fetchedAt: number } | undefined
 let inflight: Promise<PlinyBudgetResponse> | undefined
+const invalidationListeners = new Set<() => void>()
+
+/** Drops the cached budget and refetches it in every mounted indicator: the active key changed. */
+export function invalidatePlinyBudget(): void {
+	cached = undefined
+	for (const listener of [...invalidationListeners]) {
+		listener()
+	}
+}
 
 function fetchBudget(force: boolean): Promise<PlinyBudgetResponse> {
 	if (!force && cached && Date.now() - cached.fetchedAt < MIN_REFRESH_MS) {
@@ -35,8 +44,17 @@ export function usePlinyBudget(enabled: boolean, refreshKey?: unknown): PlinyBud
 	const [budget, setBudget] = useState<PlinyBudgetResponse | undefined>(() =>
 		enabled && cached?.budget.available ? cached.budget : undefined,
 	)
+	const [generation, setGeneration] = useState(0)
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey only triggers a refetch
+	useEffect(() => {
+		const listener = () => setGeneration((value) => value + 1)
+		invalidationListeners.add(listener)
+		return () => {
+			invalidationListeners.delete(listener)
+		}
+	}, [])
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey and generation only trigger a refetch
 	useEffect(() => {
 		if (!enabled) {
 			setBudget(undefined)
@@ -53,7 +71,7 @@ export function usePlinyBudget(enabled: boolean, refreshKey?: unknown): PlinyBud
 		return () => {
 			cancelled = true
 		}
-	}, [enabled, refreshKey])
+	}, [enabled, refreshKey, generation])
 
 	return budget
 }

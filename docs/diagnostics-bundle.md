@@ -46,6 +46,9 @@ listed in the README with the reason.
 
 Three kinds of file are cleaned, in `apps/vscode/src/sdk/diagnostics/redact.ts`:
 
+- **Pliny API keys** added in Settings live in the editor's SecretStorage
+  (the OS keychain), which the bundle never reads (see
+  [pliny-api-keys.md](pliny-api-keys.md)).
 - **Settings, MCP settings and the CI Board file** are copied key by key:
   - `StateManager`'s secret keys (`SecretKeys` in `state-keys.ts`) and
     `taskHistory` are never written;

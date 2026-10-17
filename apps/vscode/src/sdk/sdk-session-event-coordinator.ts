@@ -4,6 +4,7 @@ import { getConversationApiMetrics } from "@/shared/getApiMetrics"
 import { Logger } from "@/shared/services/Logger"
 import type { MessageTranslatorState, TranslationResult } from "./message-translator"
 import { translateSessionEvent } from "./message-translator"
+import { notifyProviderError } from "./provider-error-events"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import type { SdkTaskHistory, TaskUsage } from "./sdk-task-history"
@@ -73,6 +74,15 @@ export class SdkSessionEventCoordinator {
 
 	async handleSessionEvent(event: CoreSessionEvent): Promise<void> {
 		this.logQueueEvents(event)
+
+		// Before the background hand-off: a background task's or a sub-agent's
+		// rejected key is the same key (pliny-key-failover.ts).
+		if (event.type === "agent_event" && event.payload.event.type === "error" && !event.payload.event.recoverable) {
+			notifyProviderError({
+				errorClass: event.payload.event.errorClass,
+				message: event.payload.event.error?.message ?? String(event.payload.event.error),
+			})
+		}
 
 		if (this.options.background?.handleEvent(event)) {
 			return

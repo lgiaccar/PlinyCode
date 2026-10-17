@@ -882,6 +882,15 @@ export class Controller {
 		this.terminalExecutionMode.handleTerminalExecutionModeChanged(previous, next)
 	}
 
+	/**
+	 * The active Pliny API key changed. The provider reads its key once, when
+	 * the session is built, so the idle session is rebuilt with the new one.
+	 */
+	handlePlinyApiKeyChanged(): void {
+		this.terminalExecutionMode.handleProviderCredentialsChanged()
+		void this.postStateToWebview()
+	}
+
 	private handleSessionBecameIdle(): void {
 		this.sessionRebuilds?.sessionBecameIdle()
 	}

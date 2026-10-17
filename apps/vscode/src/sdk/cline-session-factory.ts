@@ -43,6 +43,7 @@ import { nonNegativeFiniteNumber, positiveFiniteNumber, toSdkApiFormat } from ".
 import { parseProviderId } from "./model-catalog/provider-id"
 import { toSdkProviderId } from "./model-catalog/sdk-provider-id"
 import { createProviderConfigStore, resolveRuntimeModelSelection } from "./model-catalog/store"
+import { getActivePlinyApiKey, waitForPlinyApiKeys } from "./pliny-api-key-source"
 import { getProviderSettingsManager } from "./provider-migration"
 import type { SdkSessionHost } from "./session-host"
 
@@ -377,11 +378,15 @@ export function resolveProviderId(mode: Mode, config: ApiConfiguration | undefin
 }
 
 /**
- * Resolve the API key for a provider. The settings UI saves the Pliny key in
- * providers.json (through `writeProviderConfig`), which
- * ProviderSettingsManager reads.
+ * Resolve the API key for a provider: the active Pliny key from Settings
+ * (SecretStorage), else the key in providers.json. Undefined leaves the
+ * engine to read PLINY_API_KEY (the provider's `apiKeyEnv`).
  */
 export function resolveApiKey(providerId: string): string | undefined {
+	const stored = getActivePlinyApiKey(providerId)
+	if (stored) {
+		return stored
+	}
 	try {
 		const manager = getProviderSettingsManager()
 		return resolveProviderApiKeyFromSettings(manager, providerSettingsProviderId(providerId))?.trim() || undefined
@@ -389,6 +394,17 @@ export function resolveApiKey(providerId: string): string | undefined {
 		Logger.warn(`[SessionFactory] Failed to read ${providerId} API key from providers.json`)
 		return undefined
 	}
+}
+
+/** Where the session's key came from, for the log (never the key itself). */
+function describeKeySource(providerId: string, apiKey: string): string {
+	if (getActivePlinyApiKey(providerId)) {
+		return "settings"
+	}
+	if (apiKey) {
+		return "providers.json"
+	}
+	return process.env.PLINY_API_KEY?.trim() ? "PLINY_API_KEY" : "none"
 }
 
 /**
@@ -494,6 +510,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	}
 
 	const providerId = resolveProviderId(mode, apiConfig)
+	await waitForPlinyApiKeys()
 	const apiKey = resolveApiKey(providerId) ?? ""
 	const baseUrl = resolveBaseUrl(providerId)
 	// Keep the default aligned with the provider catalog so the UI and session
@@ -504,7 +521,9 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			getDefaultModelIdForProvider(providerId) ??
 			getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ??
 			"")
-	Logger.log(`[SessionFactory] Resolved provider=${providerId}, model=${modelId}, hasApiKey=${!!apiKey}`)
+	Logger.log(
+		`[SessionFactory] Resolved provider=${providerId}, model=${modelId}, keySource=${describeKeySource(providerId, apiKey)}`,
+	)
 
 	const committedRuntimeModel = resolveCommittedRuntimeModel(providerId, mode, modelId)
 	const overriddenMaxTokens = committedRuntimeModel?.overrides?.maxTokens

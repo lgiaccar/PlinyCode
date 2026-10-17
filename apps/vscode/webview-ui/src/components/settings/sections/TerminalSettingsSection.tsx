@@ -106,7 +106,9 @@ const TerminalSettingsSection: React.FC<TerminalSettingsSectionProps> = ({ rende
 								<VSCodeOption value="backgroundExec">Background Exec</VSCodeOption>
 							</VSCodeDropdown>
 							<p className="text-xs text-[var(--vscode-descriptionForeground)] mt-1">
-								Choose whether PlinyCode runs commands in the VS Code terminal or a background process.
+								Choose whether PlinyCode runs commands in the VS Code terminal or as background processes without
+								a terminal. Background Exec output is not laid out to a terminal's width, and a command still
+								running after 10 minutes is stopped.
 							</p>
 						</div>
 					)}

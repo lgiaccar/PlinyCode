@@ -5,7 +5,7 @@ import { Logger } from "@/shared/services/Logger"
 import type { SdkMessageCoordinator } from "./sdk-message-coordinator"
 import type { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
-import type { SdkSessionRebuildScheduler } from "./sdk-session-rebuild-scheduler"
+import type { SdkSessionRebuildScheduler, SessionRebuildReason } from "./sdk-session-rebuild-scheduler"
 import type { SdkSessionHost } from "./session-host"
 import type { VscodeSessionHost } from "./vscode-session-host"
 import type { VscodeTerminalExecutionMode } from "./vscode-terminal-execution-mode"
@@ -26,6 +26,35 @@ export interface SdkTerminalExecutionModeCoordinatorOptions {
 	rebuilds: Pick<SdkSessionRebuildScheduler, "request">
 }
 
+/** What a restart is for: the label its log lines use, and what to tell the user when it fails. */
+interface RestartKind {
+	reason: SessionRebuildReason
+	label: string
+	disposeReason: string
+	failureText: (message: string) => string
+}
+
+const TERMINAL_EXECUTION_MODE: RestartKind = {
+	reason: "terminalExecutionMode",
+	label: "terminal execution mode",
+	disposeReason: "terminalExecutionModeChange",
+	failureText: (message) =>
+		`Failed to reload terminal tools: ${message}. Terminal timeout changes may not apply until the next task.`,
+}
+
+const PROVIDER_CREDENTIALS: RestartKind = {
+	reason: "providerCredentials",
+	label: "Pliny API key",
+	disposeReason: "providerCredentialsChange",
+	failureText: (message) => `Failed to switch the Pliny API key: ${message}. The new key applies from the next task.`,
+}
+
+/**
+ * Restarts the idle session, keeping its conversation, when something it
+ * captured at build time changes: the terminal execution mode (its tools and
+ * their timeout) or the Pliny API key (the provider reads it once, when
+ * created).
+ */
 export class SdkTerminalExecutionModeCoordinator {
 	constructor(private readonly options: SdkTerminalExecutionModeCoordinatorOptions) {}
 
@@ -33,35 +62,39 @@ export class SdkTerminalExecutionModeCoordinator {
 		if (previous === next) {
 			return
 		}
-		this.requestRebuild(`Terminal execution mode changed: ${previous} -> ${next}`)
+		this.requestRebuild(TERMINAL_EXECUTION_MODE, `Terminal execution mode changed: ${previous} -> ${next}`)
 	}
 
-	private requestRebuild(reason: string): void {
+	/** The active Pliny API key changed (in Settings, here or in another window). */
+	handleProviderCredentialsChanged(): void {
+		this.requestRebuild(PROVIDER_CREDENTIALS, "Pliny API key changed")
+	}
+
+	private requestRebuild(kind: RestartKind, reason: string): void {
 		Logger.log(`[SdkController] ${reason}`)
 
 		const activeSession = this.options.sessions.getActiveSession()
 		if (!activeSession) {
-			Logger.log("[SdkController] No active session - terminal mode tools will be picked up on next initTask")
+			Logger.log(`[SdkController] No active session - the new ${kind.label} will be picked up on next initTask`)
 			return
 		}
 
-		this.options.rebuilds.request("terminalExecutionMode", () => this.restartSessionForTerminalExecutionMode())
+		this.options.rebuilds.request(kind.reason, () => this.restartSession(kind))
 	}
 
 	async restartSessionForTerminalExecutionMode(): Promise<void> {
-		await this.performRestartSessionForTerminalExecutionMode()
+		await this.restartSession(TERMINAL_EXECUTION_MODE)
 	}
 
-	private async performRestartSessionForTerminalExecutionMode(): Promise<void> {
+	private async restartSession(kind: RestartKind): Promise<void> {
 		const activeSession = this.options.sessions.getActiveSession()
 		if (!activeSession) {
 			return
 		}
 
 		const { sdkHost: oldManager, sessionId: oldSessionId } = activeSession
-		const terminalMode = this.options.stateManager.getGlobalStateKey("vscodeTerminalExecutionMode")
 
-		Logger.log(`[SdkController] Restarting session ${oldSessionId} for terminal execution mode ${terminalMode}`)
+		Logger.log(`[SdkController] Restarting session ${oldSessionId} for ${kind.label}`)
 
 		this.options.messages.emitSessionEvents([], {
 			type: "status",
@@ -81,14 +114,14 @@ export class SdkTerminalExecutionModeCoordinator {
 			// way to detect that another path replaced this session while we awaited.
 			const currentSession = this.options.sessions.getActiveSession()
 			if (!currentSession) {
-				Logger.log(`[SdkController] Active session changed during terminal mode restart (was ${oldSessionId}); aborting`)
+				Logger.log(`[SdkController] Active session changed during ${kind.label} restart (was ${oldSessionId}); aborting`)
 				return
 			}
 			if (currentSession !== activeSession || currentSession.isRunning) {
 				Logger.log(
-					`[SdkController] Active session changed or started running during terminal mode restart (was ${oldSessionId}); deferring`,
+					`[SdkController] Active session changed or started running during ${kind.label} restart (was ${oldSessionId}); deferring`,
 				)
-				this.options.rebuilds.request("terminalExecutionMode", () => this.restartSessionForTerminalExecutionMode())
+				this.options.rebuilds.request(kind.reason, () => this.restartSession(kind))
 				return
 			}
 
@@ -96,7 +129,7 @@ export class SdkTerminalExecutionModeCoordinator {
 				expectedSession: activeSession,
 				startInput,
 				initialMessages: initialMessages as InitialMessages,
-				disposeReason: "terminalExecutionModeChange",
+				disposeReason: kind.disposeReason,
 			})
 			if (!restartResult) {
 				return
@@ -105,7 +138,7 @@ export class SdkTerminalExecutionModeCoordinator {
 			const { startResult } = restartResult
 			if (startResult.sessionId !== oldSessionId) {
 				Logger.warn(
-					`[SdkController] Terminal mode restart returned a new session ID (${startResult.sessionId}); preserving task ID ${oldSessionId} for UI continuity`,
+					`[SdkController] ${kind.label} restart returned a new session ID (${startResult.sessionId}); preserving task ID ${oldSessionId} for UI continuity`,
 				)
 			}
 
@@ -115,17 +148,15 @@ export class SdkTerminalExecutionModeCoordinator {
 			})
 
 			await this.options.postStateToWebview()
-			Logger.log(
-				`[SdkController] Session restarted for terminal execution mode: ${oldSessionId} -> ${startResult.sessionId}`,
-			)
+			Logger.log(`[SdkController] Session restarted for ${kind.label}: ${oldSessionId} -> ${startResult.sessionId}`)
 		} catch (error) {
-			Logger.error("[SdkController] Failed to restart session for terminal execution mode:", error)
+			Logger.error(`[SdkController] Failed to restart session for ${kind.label}:`, error)
 
 			const errorMessage: ClineMessage = {
 				ts: Date.now(),
 				type: "say",
 				say: "error",
-				text: `Failed to reload terminal tools: ${error instanceof Error ? error.message : String(error)}. Terminal timeout changes may not apply until the next task.`,
+				text: kind.failureText(error instanceof Error ? error.message : String(error)),
 				partial: false,
 			}
 			this.options.messages.appendAndEmit([errorMessage], {

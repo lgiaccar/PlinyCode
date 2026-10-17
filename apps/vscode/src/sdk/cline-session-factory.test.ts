@@ -18,6 +18,7 @@ import {
 } from "./cline-session-factory"
 import { parseProviderId } from "./model-catalog/provider-id"
 import { createProviderConfigStore } from "./model-catalog/store"
+import { setPlinyApiKeySource } from "./pliny-api-key-source"
 
 const mocks = vi.hoisted(() => {
 	const providerSettingsManager = {
@@ -342,6 +343,32 @@ describe("buildSessionConfig", () => {
 
 		expect(resolveApiKey("pliny")).toBe("pliny-key")
 		expect(mocks.providerSettingsManager.getProviderSettings).toHaveBeenCalledWith("pliny")
+	})
+
+	it("prefers the active key from Settings over providers.json, in the session and the provider config store", async () => {
+		mockPlinySettings({ apiKey: "file-key" })
+		let resolveReady: () => void = () => {}
+		const ready = new Promise<void>((resolve) => {
+			resolveReady = resolve
+		})
+		let active: string | undefined
+		setPlinyApiKeySource({ activeKey: () => active, ready })
+		try {
+			// The session build waits for the keychain read before it picks a key.
+			const pending = buildSessionConfig({ cwd: "/tmp/workspace" })
+			active = "settings-key"
+			resolveReady()
+			expect((await pending).apiKey).toBe("settings-key")
+			expect(resolveApiKey("pliny")).toBe("settings-key")
+			expect(createProviderConfigStore().read(parseProviderId("pliny")).apiKey).toBe("settings-key")
+
+			// Without a stored key, providers.json applies again (then PLINY_API_KEY, in the engine).
+			active = undefined
+			expect(resolveApiKey("pliny")).toBe("file-key")
+			expect(createProviderConfigStore().read(parseProviderId("pliny")).apiKey).toBe("file-key")
+		} finally {
+			setPlinyApiKeySource(undefined)
+		}
 	})
 
 	it("builds a Pliny session with the key, model and base URL", async () => {

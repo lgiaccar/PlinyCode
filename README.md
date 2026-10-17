@@ -41,6 +41,9 @@ It talks **only** to Synopsys internal models through the Pliny gateway. No code
 2. Install it once: **Extensions → ⋯ → Install from VSIX…** (or `code --install-extension PlinyCode-<version>.vsix`),
    then reload the window. An old PlinyCode 0.1.0 install is removed automatically; reload again when asked.
 3. Open the PlinyCode icon in the Activity Bar.
+4. Add your Pliny API key under **Settings → API Configuration → Pliny API Keys** (you can store several, each
+   with a name), or set the `PLINY_API_KEY` environment variable before starting VS Code. See
+   [docs/pliny-api-keys.md](docs/pliny-api-keys.md).
 
 From 0.1.3 on, new releases install themselves: PlinyCode checks GitHub at startup and every 6 hours, then offers
 **Reload Now**. Run **PlinyCode: Check for Updates**, or click **Check for Updates** in PlinyCode's

@@ -31,6 +31,14 @@ import { ClineTempManager } from "@services/temp"
 import * as fs from "fs"
 import { StateManager } from "@/core/storage/StateManager"
 import { HostProvider } from "@/hosts/host-provider"
+import { AGENT_TERMINAL_ENV } from "@/hosts/vscode/terminal/agent-terminal-env"
+import {
+	disableNarrowTerminalWarning,
+	isNarrowTerminalWarningEnabled,
+	readTerminalLocation,
+	setTerminalLocation,
+	type TerminalLocation,
+} from "@/hosts/vscode/terminal/terminal-location"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { INPUT_PROMPT_IDLE_TIMEOUT, MAX_UNRETRIEVED_LINES } from "@/integrations/terminal/constants"
 import {
@@ -58,6 +66,22 @@ export const VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS = 60 * 60 * 1000
 
 /** Release the agent turn if a foreground command is still running after 300 seconds. */
 export const FOREGROUND_COMMAND_AUTO_PROCEED_MS = 300 * 1000
+
+/**
+ * Background Exec runs commands without a terminal, so nothing hands a
+ * long one over as the terminal does after 5 minutes: it is stopped at this
+ * limit instead. The engine's default, 30 seconds, killed ordinary builds.
+ */
+export const BACKGROUND_EXEC_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * Environment for commands spawned without a terminal: the terminal's (no
+ * pagers, no prompts) plus a wide COLUMNS, which tools without a terminal to
+ * measure (Python's shutil, rich, pytest) lay their output out to instead of 80.
+ */
+function spawnEnv(shell: string): Record<string, string> {
+	return { ...AGENT_TERMINAL_ENV, COLUMNS: "200", SHELL: shell }
+}
 
 /**
  * Told to the model in place of the generic "background it yourself" advice.
@@ -277,7 +301,40 @@ function createDetachedCommandLog(terminalCommand: string, existingLines: string
 
 /** Below this width, programs' own formatting garbles what the model reads. */
 const NARROW_TERMINAL_COLUMNS = 80
-let warnedAboutNarrowTerminal = false
+/** Where the user was warned in this window: a narrow editor terminal is warned about after a narrow panel one. */
+const warnedNarrowTerminalLocations = new Set<TerminalLocation>()
+
+const USE_EDITOR_AREA = "Open Terminals in Editor Area"
+const DONT_SHOW_AGAIN = "Don't Show Again"
+
+/**
+ * Tells the user, once per window and terminal location, that the terminal
+ * is too narrow, with a way out. Commands are not re-run or moved out of the
+ * terminal on their own: that would change their shell profile, environment
+ * and visibility, which is the user's call.
+ */
+async function warnAboutNarrowTerminal(columns: number, location: TerminalLocation): Promise<void> {
+	const effect =
+		`PlinyCode's terminal is only ${columns} columns wide, so commands lay out their output to that width before the ` +
+		"model reads it: tables lose columns, and long lines and error messages are broken up."
+	const { selectedOption } =
+		location === "editor"
+			? await HostProvider.window.showMessage({
+					type: ShowMessageType.WARNING,
+					message: `${effect} Widen the editor group the terminal is in, or set Terminal Execution Mode to Background Exec in PlinyCode's settings to run commands without a terminal.`,
+					options: { items: [DONT_SHOW_AGAIN] },
+				})
+			: await HostProvider.window.showMessage({
+					type: ShowMessageType.WARNING,
+					message: `${effect} Open PlinyCode's terminals in the editor area, where they are as wide as the editor, or widen the terminal panel.`,
+					options: { items: [USE_EDITOR_AREA, DONT_SHOW_AGAIN] },
+				})
+	if (selectedOption === USE_EDITOR_AREA) {
+		await setTerminalLocation("editor")
+	} else if (selectedOption === DONT_SHOW_AGAIN) {
+		await disableNarrowTerminalWarning()
+	}
+}
 
 /**
  * A note for the model when the terminal is too narrow for output to arrive
@@ -288,25 +345,15 @@ let warnedAboutNarrowTerminal = false
  * post-processing can restore them. In a 33-column terminal a model spent
  * several calls decoding run-directory paths split across lines.
  */
-function narrowTerminalNote(columns: number | undefined): string | undefined {
+function narrowTerminalNote(columns: number | undefined, location: TerminalLocation): string | undefined {
 	if (columns === undefined || columns >= NARROW_TERMINAL_COLUMNS) {
 		return undefined
 	}
-	if (!warnedAboutNarrowTerminal) {
-		warnedAboutNarrowTerminal = true
-		try {
-			void HostProvider.window
-				.showMessage({
-					type: ShowMessageType.WARNING,
-					message:
-						`PlinyCode's terminal is only ${columns} columns wide, so commands lay out their output to that width ` +
-						"before the model reads it: tables lose columns, and long lines and error messages are broken up. Widen " +
-						"the terminal panel, or set Terminal Execution Mode to Background Exec in PlinyCode's settings.",
-				})
-				.catch(() => {})
-		} catch (error) {
-			Logger.warn(`[VscodeRunCommands] Could not show the narrow-terminal warning: ${error}`)
-		}
+	if (!warnedNarrowTerminalLocations.has(location) && isNarrowTerminalWarningEnabled()) {
+		warnedNarrowTerminalLocations.add(location)
+		warnAboutNarrowTerminal(columns, location).catch((error) =>
+			Logger.warn(`[VscodeRunCommands] Could not show the narrow-terminal warning: ${error}`),
+		)
 	}
 	return (
 		`[The terminal is only ${columns} columns wide. Programs that format to its width (PowerShell tables and error ` +
@@ -466,8 +513,10 @@ export async function executeForeground(
 		},
 		sessionId,
 	)
-	// A task running in the background must not pop its terminal into view.
+	// A task running in the background must not pop its terminal into view,
+	// nor open one as an editor tab.
 	const reveal = foregroundCommands?.isForegroundSession(sessionId) ?? true
+	const location: TerminalLocation = reveal ? readTerminalLocation() : "panel"
 	const autoProceedTimer = setTimeout(() => requestDetach("timeout"), FOREGROUND_COMMAND_AUTO_PROCEED_MS)
 	// A steering message detaches the command like "Proceed While Running", so
 	// the agent reads the message now instead of when the command ends.
@@ -491,7 +540,7 @@ export async function executeForeground(
 	}
 
 	try {
-		const terminalPromise = terminalManager.getOrCreateTerminal(cwd, terminalProfileId)
+		const terminalPromise = terminalManager.getOrCreateTerminal(cwd, terminalProfileId, location)
 		const startDetached = (terminalInfo: Awaited<typeof terminalPromise>, log: DetachedCommandLog): void => {
 			try {
 				const process = terminalManager.runCommand(terminalInfo, terminalCommand, { reveal })
@@ -637,7 +686,10 @@ export async function executeForeground(
 			const truncated = truncateCommandOutput(bufferedOutput.trim(), {
 				maxChars: maxOutputChars,
 			})
-			const note = truncated.length > 0 ? narrowTerminalNote(process.getCompletionDetails?.()?.terminalColumns) : undefined
+			const note =
+				truncated.length > 0
+					? narrowTerminalNote(process.getCompletionDetails?.()?.terminalColumns, terminalInfo.location ?? "panel")
+					: undefined
 			const output = note ? `${truncated}\n${note}` : truncated
 
 			if (abortSignal?.aborted) {
@@ -760,6 +812,9 @@ export function createVscodeRunCommandsTool(options: VscodeRunCommandsToolOption
 	const terminalMode = (options.vscodeTerminalExecutionMode ?? "vscodeTerminal") === "vscodeTerminal"
 	const notes = [
 		terminalMode ? FOREGROUND_LONG_RUNNING_NOTE : undefined,
+		!terminalMode && options.bashTimeoutMs
+			? `A command still running after ${Math.round(options.bashTimeoutMs / 60_000)} minutes is stopped.`
+			: undefined,
 		options.processes ? BACKGROUND_ARGUMENT_NOTE : undefined,
 	]
 	const longRunningNote = notes.filter((note): note is string => note !== undefined).join(" ") || undefined
@@ -917,7 +972,7 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 			Logger.log("[VscodeRunCommands] Starting a background process")
 			if (!processExecutor || processExecutorShell !== shell) {
 				processExecutorShell = shell
-				processExecutor = createShellExecutor({ shell, env: { SHELL: shell }, timeoutMs: BACKGROUND_PROCESS_MAX_MS })
+				processExecutor = createShellExecutor({ shell, env: spawnEnv(shell), timeoutMs: BACKGROUND_PROCESS_MAX_MS })
 			}
 			return startBackgroundProcess(command, commandCwd || cwd, context, processExecutor, processes)
 		}
@@ -931,9 +986,11 @@ function createVscodeShellExecutor(options: VscodeRunCommandsToolOptions, state:
 				bgExecutorShell = shell
 				bgExecutor = createShellExecutor({
 					shell,
-					// Set SHELL env to match the shell we're spawning so child
-					// processes see the correct value instead of the inherited parent's.
-					env: { SHELL: shell },
+					// SHELL matches the shell we're spawning so child processes see the
+					// correct value instead of the inherited parent's.
+					env: spawnEnv(shell),
+					// The tool's limit; the engine's own default would stop commands at 30 seconds.
+					timeoutMs: options.bashTimeoutMs,
 				})
 				Logger.log(`[VscodeRunCommands] Background executor using shell: ${shell}`)
 			}

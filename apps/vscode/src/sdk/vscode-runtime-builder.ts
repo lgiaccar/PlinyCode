@@ -12,7 +12,11 @@ import type { ProcessRegistry } from "./processes/process-registry"
 import { createProcessTools } from "./processes/process-tools"
 import type { SdkForegroundCommandCoordinator } from "./sdk-foreground-command-coordinator"
 import { createViewImageTool } from "./view-image-tool"
-import { createVscodeRunCommandsTool, VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS } from "./vscode-run-commands-tool"
+import {
+	BACKGROUND_EXEC_TIMEOUT_MS,
+	createVscodeRunCommandsTool,
+	VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS,
+} from "./vscode-run-commands-tool"
 import { createTodoTool } from "./vscode-todo-tool"
 import { createWaitTool } from "./vscode-wait-tool"
 import { createWebSearchTools, type WebSearchSetup } from "./web/web-search-tool"
@@ -165,11 +169,18 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 	// tool executor capabilities in VscodeSessionHost.
 	if (options?.getTerminalManager) {
 		const executionMode = options.forSubAgents ? "backgroundExec" : (options.vscodeTerminalExecutionMode ?? "vscodeTerminal")
+		// Sub-agents keep the engine's default limit.
+		const bashTimeoutMs =
+			executionMode === "vscodeTerminal"
+				? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS
+				: options.forSubAgents
+					? undefined
+					: BACKGROUND_EXEC_TIMEOUT_MS
 		tools.push(
 			createVscodeRunCommandsTool({
 				cwd: options.cwd ?? process.cwd(),
 				getTerminalManager: options.getTerminalManager,
-				bashTimeoutMs: executionMode === "vscodeTerminal" ? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS : undefined,
+				bashTimeoutMs,
 				vscodeTerminalExecutionMode: executionMode,
 				foregroundCommands: options.forSubAgents ? undefined : options.foregroundCommands,
 				processes: options.processes,
@@ -181,7 +192,7 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 			tools.push(...createProcessTools({ registry: options.processes }))
 		}
 		Logger.log(
-			`[VscodeRuntimeTools] Added custom run_commands tool (mode=${executionMode}, timeoutMs=${executionMode === "vscodeTerminal" ? VSCODE_FOREGROUND_RUN_COMMANDS_TIMEOUT_MS : "default"})`,
+			`[VscodeRuntimeTools] Added custom run_commands tool (mode=${executionMode}, timeoutMs=${bashTimeoutMs ?? "default"})`,
 		)
 	}
 

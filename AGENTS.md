@@ -27,6 +27,7 @@ Design and operations notes are in `docs/`:
 
 - [docs/releasing.md](docs/releasing.md): releases, `-test.N` pre-releases and the auto-updater. Read it before any version or release work.
 - [docs/pliny-free-auto-router.md](docs/pliny-free-auto-router.md), [docs/pliny-free-auto-thinking.md](docs/pliny-free-auto-thinking.md) and [docs/pliny-balance-auto.md](docs/pliny-balance-auto.md): how the FreeAuto and BalanceAuto models route, keep runs going, and hand images to models that cannot see them (`plinycode.router.images`).
+- [docs/pliny-api-keys.md](docs/pliny-api-keys.md): Pliny API keys added in Settings (named, stored in the OS keychain, one active), the order keys are taken in (Settings, then `providers.json`, then `PLINY_API_KEY`), and the offer to switch keys when the gateway rejects one or its budget runs out.
 - [docs/devops-mcp.md](docs/devops-mcp.md): the built-in DevOps MCP server for GitHub and Azure DevOps.
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.

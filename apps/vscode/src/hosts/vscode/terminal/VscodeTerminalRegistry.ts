@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
 import { AGENT_TERMINAL_ENV } from "./agent-terminal-env"
+import { type TerminalLocation, terminalLocationOption } from "./terminal-location"
 
 export interface TerminalInfo {
 	terminal: vscode.Terminal
@@ -8,6 +9,8 @@ export interface TerminalInfo {
 	lastCommand: string
 	id: number
 	shellPath?: string
+	/** Where it was opened; undefined (older terminals) is the panel. */
+	location?: TerminalLocation
 	lastActive: number
 	pendingCwdChange?: string
 	cwdResolved?: {
@@ -34,7 +37,11 @@ export class TerminalRegistry {
 	private static orphans = new Map<number, { info: TerminalInfo; reason: OrphanReason }>()
 	private static nextTerminalId = 1
 
-	static createTerminal(cwd?: string | vscode.Uri | undefined, shellPath?: string): TerminalInfo {
+	static createTerminal(
+		cwd?: string | vscode.Uri | undefined,
+		shellPath?: string,
+		location: TerminalLocation = "panel",
+	): TerminalInfo {
 		const terminalOptions: vscode.TerminalOptions = {
 			cwd,
 			name: "PlinyCode",
@@ -55,6 +62,10 @@ export class TerminalRegistry {
 		if (shellPath) {
 			terminalOptions.shellPath = shellPath
 		}
+		const locationOption = terminalLocationOption(location)
+		if (locationOption) {
+			terminalOptions.location = locationOption
+		}
 
 		const terminal = vscode.window.createTerminal(terminalOptions)
 		TerminalRegistry.nextTerminalId++
@@ -64,6 +75,7 @@ export class TerminalRegistry {
 			lastCommand: "",
 			id: TerminalRegistry.nextTerminalId,
 			shellPath,
+			location,
 			lastActive: Date.now(),
 		}
 		TerminalRegistry.terminals.push(newInfo)

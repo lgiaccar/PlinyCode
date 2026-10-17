@@ -138,6 +138,8 @@ export interface TerminalInfo {
 	lastCommand: string
 	/** The shell path used by this terminal (e.g., /bin/bash, /bin/zsh) */
 	shellPath?: string
+	/** Where the terminal was opened (plinycode.terminal.location); undefined is the panel */
+	location?: "panel" | "editor"
 	/** Timestamp of last activity */
 	lastActive: number
 	/** Pending CWD change path (used for tracking directory changes) */
