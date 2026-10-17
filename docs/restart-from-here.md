@@ -90,4 +90,7 @@ last request the active conversation sent to its model as JSON: the system
 prompt, the messages after compaction (reminders and hidden notices included)
 and the tools. It is the request as the agent built it, before provider-specific
 conversion, and it is kept in memory only, for the eight most recent
-conversations since the window opened (`last-model-request.ts`).
+conversations since the window opened (`last-model-request.ts`). For what a
+conversation sent earlier, or after the window closed, read its trace file,
+which records every request with its messages redacted and cut, and every reply,
+tool call and routing decision next to it: see [trace-and-logs.md](trace-and-logs.md).

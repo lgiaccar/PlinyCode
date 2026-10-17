@@ -34,6 +34,7 @@ import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@
 import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { isSessionTraceEnabled } from "@/hosts/vscode/trace-settings"
 import { createVscodeWebSearchSetup } from "@/hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getCiBoard, onBuiltinMcpToolsChanged } from "@/services/devops-mcp/builtin-mcp-registry"
@@ -415,6 +416,7 @@ export class Controller {
 				checkBudget: (sessionId) => this.checkAdvisorBudget(sessionId),
 				onUsage: (sessionId, usage) => this.recordBackgroundAdvisorUsage(sessionId, usage),
 			},
+			trace: { enabled: isSessionTraceEnabled },
 		})
 		this.memory = new MemoryCoordinator({
 			store: this.memoryServices.store,
@@ -1754,10 +1756,15 @@ export class Controller {
 	 *
 	 * @returns the written path, or undefined when the save dialog was cancelled.
 	 */
-	async exportTaskToMarkdown(
+	/**
+	 * The conversation as the Markdown export renders it, without saving it:
+	 * the export command writes it where the user chooses, the diagnostics
+	 * bundle puts it in its folder.
+	 */
+	async renderTaskMarkdown(
 		taskId: string,
 		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
-	): Promise<string | undefined> {
+	): Promise<{ markdown: string; historyItem: HistoryItem }> {
 		const id = taskId?.trim() || this.task?.taskId
 		if (!id) {
 			throw new Error("No task to export")
@@ -1793,7 +1800,14 @@ export class Controller {
 			includeReasoning: options.includeReasoning ?? false,
 			plinyCodeVersion: ExtensionRegistryInfo.version,
 		})
+		return { markdown, historyItem }
+	}
 
+	async exportTaskToMarkdown(
+		taskId: string,
+		options: { includeToolOutput?: boolean; includeReasoning?: boolean } = {},
+	): Promise<string | undefined> {
+		const { markdown, historyItem } = await this.renderTaskMarkdown(taskId, options)
 		return saveMarkdownExport(markdown, {
 			defaultDirectory: historyItem.cwdOnTaskInitialization || (await this.getWorkspaceRoot()),
 			defaultFilename: defaultMarkdownExportFilename(historyItem.ts),
