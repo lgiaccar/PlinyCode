@@ -239,7 +239,7 @@ export class ClineCore {
 	 *
 	 * Returns metrics about the session's resource consumption, including tokens used
 	 * across different API providers and associated costs. The `usage` field is
-	 * root/lead-agent usage; `aggregateUsage` includes teammates and subagents.
+	 * root/lead-agent usage; `aggregateUsage` includes sub-agents.
 	 *
 	 * @example
 	 * ```ts

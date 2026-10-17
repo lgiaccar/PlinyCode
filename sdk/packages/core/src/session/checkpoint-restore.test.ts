@@ -471,7 +471,6 @@ describe("checkpoint message trimming", () => {
 				workspaceRoot: "/tmp/project",
 				enableTools: true,
 				enableSpawn: true,
-				enableTeams: true,
 				isSubagent: false,
 				metadata: {
 					checkpoint: {

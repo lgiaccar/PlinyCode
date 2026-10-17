@@ -16,7 +16,6 @@ export {
 export {
 	deriveSubsessionStatus,
 	makeSubSessionId,
-	makeTeamTaskSubSessionId,
 	sanitizeSessionToken,
 } from "./models/session-graph";
 export type { SessionManifest } from "./models/session-manifest";
@@ -26,7 +25,3 @@ export type {
 	SessionRow,
 } from "./models/session-row";
 export { CoreSessionService } from "./services/session-service";
-export {
-	FileTeamPersistenceStore,
-	type FileTeamPersistenceStoreOptions,
-} from "./stores/team-persistence-store";

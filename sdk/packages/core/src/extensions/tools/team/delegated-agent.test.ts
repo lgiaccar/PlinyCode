@@ -14,7 +14,6 @@ describe("buildDelegatedAgentConfig", () => {
 		});
 
 		const config = buildDelegatedAgentConfig({
-			kind: "subagent",
 			prompt: "review the diff",
 			tools: [],
 			configProvider,
@@ -33,7 +32,6 @@ describe("buildDelegatedAgentConfig", () => {
 		});
 
 		const config = buildDelegatedAgentConfig({
-			kind: "subagent",
 			prompt: "review the diff",
 			tools: [],
 			configProvider,

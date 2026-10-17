@@ -29,7 +29,6 @@ function createRow(
 		workspaceRoot: "/tmp/workspace",
 		enableTools: true,
 		enableSpawn: false,
-		enableTeams: false,
 		isSubagent: false,
 		updatedAt: "2026-04-21T02:17:46.169Z",
 		...overrides,
@@ -52,10 +51,8 @@ function createBackendRow(
 		model: "anthropic/claude-sonnet-4.6",
 		cwd: "/tmp/workspace",
 		workspaceRoot: "/tmp/workspace",
-		teamName: null,
 		enableTools: true,
 		enableSpawn: false,
-		enableTeams: false,
 		parentSessionId: null,
 		parentAgentId: null,
 		agentId: null,
@@ -89,7 +86,6 @@ async function writeManifest(
 		workspace_root: "/tmp/workspace",
 		enable_tools: true,
 		enable_spawn: false,
-		enable_teams: false,
 		...manifest,
 	};
 	await mkdir(sessionDir, { recursive: true });
@@ -357,7 +353,7 @@ describe("session history", () => {
 		const rootMessagesPath = await writeMessagesFile("root.messages.json");
 		const listSessions = vi.fn().mockResolvedValue([
 			createBackendRow({
-				sessionId: "root-session__teamtask__java-haiku-agent__abc123",
+				sessionId: "root-session__java-haiku-agent",
 				parentSessionId: "root-session",
 				parentAgentId: "lead",
 				agentId: "java-haiku-agent",
@@ -419,7 +415,7 @@ describe("session history", () => {
 		const rootMessagesPath = await writeMessagesFile("root.messages.json");
 		const listSessions = vi.fn().mockResolvedValue([
 			createBackendRow({
-				sessionId: "root-session__teamtask__java-haiku-agent__abc123",
+				sessionId: "root-session__java-haiku-agent",
 				parentSessionId: "root-session",
 				parentAgentId: "lead",
 				agentId: "java-haiku-agent",
@@ -439,7 +435,7 @@ describe("session history", () => {
 
 		expect(listSessions).toHaveBeenCalledWith(10, undefined);
 		expect(rows.map((row) => row.sessionId)).toEqual([
-			"root-session__teamtask__java-haiku-agent__abc123",
+			"root-session__java-haiku-agent",
 			"root-session",
 		]);
 	});

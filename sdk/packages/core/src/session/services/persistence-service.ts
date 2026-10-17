@@ -33,7 +33,7 @@ import { withSessionHistoryOriginMetadata } from "../history-origin";
 import type { SessionCompactionState } from "../models/session-compaction";
 import type { SessionRow } from "../models/session-row";
 import { SessionManifestStore } from "../stores/session-manifest-store";
-import { TeamChildSessionManager } from "../team";
+import { ChildSessionManager } from "./child-session-manager";
 
 export type { PersistedSessionUpdateInput, SessionPersistenceAdapter };
 
@@ -41,10 +41,9 @@ const OCC_MAX_RETRIES = 4;
 
 export class UnifiedSessionPersistenceService {
 	private readonly manifestStore: SessionManifestStore;
-	private readonly teamChildren: TeamChildSessionManager;
+	private readonly children: ChildSessionManager;
 	private static readonly STALE_REASON = "failed_external_process_exit";
 	private static readonly STALE_SOURCE = "stale_session_reconciler";
-	private static readonly TEAM_HEARTBEAT_LOG_INTERVAL_MS = 30_000;
 
 	constructor(
 		private readonly adapter: SessionPersistenceAdapter,
@@ -53,12 +52,11 @@ export class UnifiedSessionPersistenceService {
 		} = {},
 	) {
 		this.manifestStore = new SessionManifestStore(adapter, options.logger);
-		this.teamChildren = new TeamChildSessionManager(
+		this.children = new ChildSessionManager(
 			adapter,
 			this.manifestStore,
 			(messages, result, previousMessages) =>
 				this.toPersistedMessages(messages, result, previousMessages),
-			UnifiedSessionPersistenceService.TEAM_HEARTBEAT_LOG_INTERVAL_MS,
 		);
 	}
 
@@ -132,10 +130,8 @@ export class UnifiedSessionPersistenceService {
 			model: input.model,
 			cwd: input.cwd,
 			workspace_root: input.workspaceRoot,
-			team_name: input.teamName,
 			enable_tools: input.enableTools,
 			enable_spawn: input.enableSpawn,
-			enable_teams: input.enableTeams,
 			prompt: input.prompt?.trim() || undefined,
 			metadata,
 			messages_path: messagesPath,
@@ -155,10 +151,8 @@ export class UnifiedSessionPersistenceService {
 			model: input.model,
 			cwd: input.cwd,
 			workspaceRoot: input.workspaceRoot,
-			teamName: input.teamName ?? null,
 			enableTools: input.enableTools,
 			enableSpawn: input.enableSpawn,
-			enableTeams: input.enableTeams,
 			parentSessionId: null,
 			parentAgentId: null,
 			agentId: null,
@@ -203,7 +197,7 @@ export class UnifiedSessionPersistenceService {
 		);
 		if (result.updated) {
 			if (status === "cancelled") {
-				await this.teamChildren.applyStatusToRunningChildSessions(
+				await this.children.applyStatusToRunningChildSessions(
 					sessionId,
 					"cancelled",
 				);
@@ -284,26 +278,26 @@ export class UnifiedSessionPersistenceService {
 	}
 
 	queueSpawnRequest(event: HookEventPayload): Promise<void> {
-		return this.teamChildren.queueSpawnRequest(event);
+		return this.children.queueSpawnRequest(event);
 	}
 
 	upsertSubagentSession(
 		input: import("../models/session-row").UpsertSubagentInput,
 	): Promise<string | undefined> {
-		return this.teamChildren.upsertSubagentSession(input);
+		return this.children.upsertSubagentSession(input);
 	}
 
 	upsertSubagentSessionFromHook(
 		event: HookEventPayload,
 	): Promise<string | undefined> {
-		return this.teamChildren.upsertSubagentSessionFromHook(event);
+		return this.children.upsertSubagentSessionFromHook(event);
 	}
 
 	appendSubagentHookAudit(
 		_subSessionId: string,
 		event: HookEventPayload,
 	): Promise<void> {
-		this.teamChildren.appendSubagentHookAudit(event);
+		this.children.appendSubagentHookAudit(event);
 		return Promise.resolve();
 	}
 
@@ -341,66 +335,23 @@ export class UnifiedSessionPersistenceService {
 		subSessionId: string,
 		event: HookEventPayload,
 	): Promise<void> {
-		return this.teamChildren.applySubagentStatus(subSessionId, event);
+		return this.children.applySubagentStatus(subSessionId, event);
 	}
 
 	applySubagentStatusBySessionId(
 		subSessionId: string,
 		status: SessionStatus,
 	): Promise<void> {
-		return this.teamChildren.applySubagentStatusBySessionId(
-			subSessionId,
-			status,
-		);
+		return this.children.applySubagentStatusBySessionId(subSessionId, status);
 	}
 
 	applyStatusToRunningChildSessions(
 		parentSessionId: string,
 		status: TerminalSessionStatus,
 	): Promise<void> {
-		return this.teamChildren.applyStatusToRunningChildSessions(
+		return this.children.applyStatusToRunningChildSessions(
 			parentSessionId,
 			status,
-		);
-	}
-
-	onTeamTaskStart(
-		rootSessionId: string,
-		agentId: string,
-		message: string,
-	): Promise<void> {
-		return this.teamChildren.onTeamTaskStart(rootSessionId, agentId, message);
-	}
-
-	onTeamTaskEnd(
-		rootSessionId: string,
-		agentId: string,
-		status: SessionStatus,
-		summary?: string,
-		result?: AgentResult,
-		messages?: LlmsProviders.MessageWithMetadata[],
-	): Promise<void> {
-		return this.teamChildren.onTeamTaskEnd(
-			rootSessionId,
-			agentId,
-			status,
-			summary,
-			result,
-			messages,
-		);
-	}
-
-	onTeamTaskProgress(
-		rootSessionId: string,
-		agentId: string,
-		progress: string,
-		options?: { kind?: "heartbeat" | "progress" | "text" },
-	): Promise<void> {
-		return this.teamChildren.onTeamTaskProgress(
-			rootSessionId,
-			agentId,
-			progress,
-			options,
 		);
 	}
 
@@ -408,14 +359,14 @@ export class UnifiedSessionPersistenceService {
 		rootSessionId: string,
 		context: SubAgentStartContext,
 	): Promise<void> {
-		return this.teamChildren.handleSubAgentStart(rootSessionId, context);
+		return this.children.handleSubAgentStart(rootSessionId, context);
 	}
 
 	handleSubAgentEnd(
 		rootSessionId: string,
 		context: SubAgentEndContext,
 	): Promise<void> {
-		return this.teamChildren.handleSubAgentEnd(rootSessionId, context);
+		return this.children.handleSubAgentEnd(rootSessionId, context);
 	}
 
 	private isPidAlive(pid: number): boolean {
@@ -469,7 +420,7 @@ export class UnifiedSessionPersistenceService {
 			});
 			if (!changed.updated) continue;
 
-			await this.teamChildren.applyStatusToRunningChildSessions(
+			await this.children.applyStatusToRunningChildSessions(
 				latest.sessionId,
 				"failed",
 			);

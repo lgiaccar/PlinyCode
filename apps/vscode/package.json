@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.3-test.2",
+	"version": "0.2.3-test.3",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -203,6 +203,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.openLogFile",
+				"title": "Open Log File",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.checkForUpdates",
 				"title": "Check for Updates",
 				"category": "PlinyCode"
@@ -215,6 +220,11 @@
 			{
 				"command": "cline.showLastModelRequest",
 				"title": "Show Last Model Request (debug)",
+				"category": "PlinyCode"
+			},
+			{
+				"command": "cline.exportDiagnostics",
+				"title": "Export Diagnostics Bundle",
 				"category": "PlinyCode"
 			},
 			{
@@ -516,10 +526,20 @@
 					"default": "",
 					"markdownDescription": "Folder for the git worktrees the **CI Board** creates to work on pull requests that are not checked out. Empty puts them next to the repository, in `<repository>.worktrees`."
 				},
+				"plinycode.trace.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Write a trace of every conversation to `traces/<conversation id>.jsonl` in PlinyCode's data folder (`~/.cline/data`): each model request with its messages (secrets redacted, long text cut), each reply's timing, tokens and finish reason, each tool call and result, and each routing decision on `auto-free` and `auto-paid-balanced`. A file stops at 20 MB and the folder is kept under 200 MB. Turning this off stops the writing at once."
+				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",
 					"default": true,
 					"description": "After PlinyCode edits a file, tell the model which new errors the editor reports for that file, so it can fix them right away. An edit waits up to 3 seconds for the language server; when PlinyCode edits a file that is not open in a tab, as with Background Edit, the file is opened in a background tab while it is checked."
+				},
+				"plinycode.codeIntel.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Give the model the find_symbol and code_navigate tools, which answer through the language servers running in this window: a file's outline, the symbols matching a name, and a symbol's definition, references and type. Applies to the next conversation."
 				},
 				"plinycode.memory.maxTokens": {
 					"type": "integer",
@@ -598,7 +618,7 @@
 		"format": "biome format --config-path ./biome.jsonc --no-errors-on-unmatched --files-ignore-unknown=true --diagnostic-level=error --semicolons=as-needed",
 		"format:fix": "biome check --config-path ./biome.jsonc --changed --since main --no-errors-on-unmatched --files-ignore-unknown=true --write --semicolons=as-needed",
 		"fix:all": "biome check --config-path ./biome.jsonc --no-errors-on-unmatched --files-ignore-unknown=true --write --diagnostic-level=error --unsafe --semicolons=as-needed",
-		"ci:check-all": "bun run --parallel check-types lint format",
+		"ci:check-all": "bun run --parallel check-types lint format test:discovery",
 		"ci:build": "bun run protos && bun run build:webview && bun esbuild.mjs && bun run compile-tests",
 		"pretest": "bun run compile && bun run compile-tests && bun run lint",
 		"test": "bun run test:unit && bun run test:integration",
@@ -606,6 +626,7 @@
 		"test:unit": "bun scripts/run-bun-unit-tests.ts",
 		"test:vitest": "vitest run --config vitest.config.ts",
 		"test:vitest:watch": "vitest --config vitest.config.ts",
+		"test:discovery": "bun scripts/check-test-discovery.ts",
 		"test:bun": "bun scripts/run-bun-tests.ts",
 		"test:bun:unit": "bun scripts/run-bun-unit-tests.ts",
 		"test:coverage": "bun run compile-tests && vscode-test --coverage",

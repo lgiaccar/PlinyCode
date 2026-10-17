@@ -116,7 +116,6 @@ export {
 	type WebFetchRequest,
 	WebFetchRequestSchema,
 } from "./schemas";
-export { TEAM_TOOL_NAMES } from "./team/team-tools";
 // Types
 export type {
 	ApplyPatchExecutor,

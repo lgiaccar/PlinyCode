@@ -12,6 +12,8 @@ const READ_TOOLS = [
 	"search_codebase",
 	"search_files",
 	"find_files",
+	"find_symbol",
+	"code_navigate",
 	"search_conversations",
 	"read_conversation",
 ]

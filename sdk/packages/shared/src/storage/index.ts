@@ -60,7 +60,6 @@ export {
 	resolveSkillsConfigSearchPaths,
 	resolveTaskSpecsDir,
 	resolveTasksDbPath,
-	resolveTeamDataDir,
 	resolveWorkflowsConfigSearchPaths,
 	resolveWorkspaceCronSpecsDir,
 	resolveWorkspaceRulesConfigPaths,

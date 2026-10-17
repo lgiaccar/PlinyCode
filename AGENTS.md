@@ -1,4 +1,4 @@
-This is the **PlinyCode** monorepo. Toolchain is **Bun 1.3.13** (package manager + task runner) with **Node >=22** as the runtime. Do not use npm/yarn/pnpm.
+This is the **PlinyCode** monorepo. Toolchain is **Bun 1.3.14** (package manager + task runner) with **Node >=22** as the runtime, both pinned in `.tool-versions` (the file CI reads; `package.json`'s `packageManager` and `engines.bun` mirror the Bun version). Do not use npm/yarn/pnpm.
 
 PlinyCode is a VS Code / Cursor extension that talks only to Synopsys internal models through the Pliny gateway.
 
@@ -31,6 +31,7 @@ Design and operations notes are in `docs/`:
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.
 - [docs/side-questions.md](docs/side-questions.md): side questions, messages asked off the record: answered read-only and left out of later requests.
+- [docs/diagnostics-bundle.md](docs/diagnostics-bundle.md): the diagnostics bundle (PlinyCode: Export Diagnostics Bundle): the folder it writes under `<dataDir>/diagnostics/`, what each file holds, what is redacted and how to share it.
 - [docs/restart-from-here.md](docs/restart-from-here.md): editing an earlier message and restarting from it, how the chat row is mapped to the history the model sees, which checkpoint "Restart and revert files" uses, and the Show Last Model Request debug command.
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
@@ -48,12 +49,13 @@ Design and operations notes are in `docs/`:
 - [docs/context-compaction.md](docs/context-compaction.md): when the conversation is compacted, the agentic and basic strategies and the fallback between them, overflow recovery, what the summarizer costs, and the context bar's threshold marker.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
 - [docs/roadmap.md](docs/roadmap.md): the Q4 2026 improvement roadmap: six two-week waves (code intelligence, worktrees, background processes, sub-agent visibility, web search and images, eval harness, trace and diagnostics, hook unification, release automation), each with PR-sized items, file anchors and verification.
+- [docs/trace-and-logs.md](docs/trace-and-logs.md): the per-conversation trace files (`traces/<session id>.jsonl`: requests, replies, tool calls, routing decisions, run failures), their record types, redaction and size caps, the `plinycode.trace.enabled` setting, and the rotating `logs/plinycode.log` file with its Open Log File command.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.
 
 ## Build / lint / test
 
-- Engine packages (`@plinycode/shared|llms|agents|core`) resolve each other through compiled `dist/` (their `exports` point only at `dist/`, with no `development` source condition). You **must** run `bun run build:sdk` after changing engine source before running the extension or its tests, otherwise imports fail with missing `@plinycode/*` / missing `dist/` errors. Running processes do **not** hot-reload engine source changes — rebuild and restart.
+- Engine packages (`@plinycode/shared|llms|agents|core`) resolve each other through compiled `dist/` (their `exports` point only at `dist/`, with no `development` source condition). You **must** run `bun run build:sdk` after changing engine source before running the extension or its tests, otherwise imports fail with missing `@plinycode/*` / missing `dist/` errors. `bun run watch:sdk` (`sdk/scripts/watch-sdk.ts`) does this for you while you work: it rebuilds a changed package and its dependents in dependency order (`shared` → `llms` → `core`, each with its own `build` script, so `core`'s declaration build takes a while), ignores test files, and is part of the default `watch` task in `.vscode/tasks.json`; pass `--initial` to build everything first when `dist/` is missing. Running processes do **not** hot-reload engine source changes — rebuild and restart.
 - `bun run types` typechecks every package, including the extension (its `typecheck` script runs `check-types`, which regenerates the protobuf code first).
 - `bun run lint` runs Biome's linter, `bun run format` checks formatting and import order, and `bun run fix` applies Biome's fixes. Each covers `sdk/` and the extension, which has its own Biome config. `bun run check` runs lint, format, both builds and `types` in one go, like CI's quality checks. `bun run check:docs` checks that relative links in every tracked markdown file resolve, and that every skill in `.claude/skills/` has a valid `name` and `description`.
 - `bun -F plinycode-dev analyze:unused:prod` runs knip and lists the files, exports and dependencies that the shipped extension and webview don't use; tests don't count as users. CI's Quality Checks job runs it as a blocking check and writes the report to its summary; a genuine false positive (something knip can't see is really used, e.g. a webview `@shared` import or a Storybook-only file) goes in `apps/vscode/knip.json`'s `ignore`/`ignoreDependencies` lists with a comment explaining why, rather than being worked around elsewhere. `bun run metrics` prints source and test lines per package and the files over 800 lines; CI's Quality Checks job writes it to its summary without failing on it.
@@ -69,16 +71,18 @@ Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is
 
 ## Pull requests and CI
 
-PRs target the `stage` branch, not `master`. Each workflow in `.github/workflows/` runs on PRs as follows:
+PRs target the `stage` branch, not `master`. Every workflow in `.github/workflows/` runs on PRs and on each push to `stage` and `master`, so a merge that breaks something is caught after it lands too:
 
-| Workflow          | Runs when the PR changes                                  | What it checks                                                                   |
-| ----------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `docs-check`      | anything                                                  | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
-| `engine-test`     | `sdk/**`                                                  | engine build, `bun run types`, lint and format, engine tests on Ubuntu and Windows |
-| `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock` | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
-| `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | Playwright e2e on Ubuntu, Windows and macOS                                      |
+| Workflow          | Runs when the PR changes                                  | On a push to `stage`/`master`                       | What it checks                                                                   |
+| ----------------- | --------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `docs-check`      | anything                                                  | always                                              | markdown links and skill frontmatter (`bun run check:docs`); takes seconds       |
+| `engine-test`     | `sdk/**`, `bun.lock`, its own workflow file, `.github/actions/**` | same path filter (no run at all otherwise)  | engine build, `bun run types`, lint and format, engine tests on Ubuntu (Node 22 and 24) and Windows (Node 22) |
+| `ext-vscode-test` | extension source, config or tests, `sdk/packages/**`, `bun.lock`, `.github/actions/**` | all jobs                | extension type check, lint and format; unit, vitest, integration and webview tests on Ubuntu and Windows |
+| `ext-vscode-test-e2e` | the same kinds of paths as `ext-vscode-test`          | all jobs                                            | Playwright e2e on Ubuntu, Windows and macOS                                      |
 
-A path filter can skip a workflow's heavy jobs while it still reports success, so check which jobs actually ran. A docs-only PR, for example, runs only `docs-check`.
+A path filter can skip a workflow's heavy jobs while it still reports success, so check which jobs actually ran. A docs-only PR, for example, runs only `docs-check`. A new push to a PR cancels that PR's running checks; pushes to `stage` and `master` never cancel each other.
+
+Every job installs its tools through the composite action `.github/actions/setup-toolchain`, which reads the Bun and Node pins from `.tool-versions`, caches `~/.bun/install/cache` by `bun.lock` hash and runs `bun install --frozen-lockfile` at the root (`install: "false"` skips the install, `node-version` overrides the Node pin for matrix jobs). Change a toolchain version in `.tool-versions` and mirror the Bun one in `package.json`. Dependabot (`.github/dependabot.yml`) opens security-only PRs for the Bun workspace (root `bun.lock`) and for the GitHub Actions the workflows use.
 
 ## Naming
 

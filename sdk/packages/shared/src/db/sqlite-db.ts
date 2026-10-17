@@ -199,10 +199,10 @@ const SCHEMA_STATEMENTS = [
 		model TEXT NOT NULL,
 		cwd TEXT NOT NULL,
 		workspace_root TEXT NOT NULL,
-		team_name TEXT,
+		team_name TEXT, -- legacy agent-teams column, always NULL; kept so existing databases stay writable
 		enable_tools INTEGER NOT NULL,
 		enable_spawn INTEGER NOT NULL,
-		enable_teams INTEGER NOT NULL,
+		enable_teams INTEGER NOT NULL, -- legacy agent-teams column, always 0
 		parent_session_id TEXT,
 		parent_agent_id TEXT,
 		agent_id TEXT,

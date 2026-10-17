@@ -14,11 +14,9 @@ describe("default tool presets", () => {
 		expect(ToolPresets.yolo.enableAskQuestion).toBe(false);
 	});
 
-	it("disables spawn and team tools by default in yolo mode", () => {
+	it("disables the spawn tool by default in yolo mode", () => {
 		expect(ToolPresets.act.enableSpawnAgent).toBe(true);
-		expect(ToolPresets.act.enableAgentTeams).toBe(true);
 		expect(ToolPresets.yolo.enableSpawnAgent).toBe(false);
-		expect(ToolPresets.yolo.enableAgentTeams).toBe(false);
 		expect(ToolPresets.yolo.enableSubmitAndExit).toBe(true);
 	});
 

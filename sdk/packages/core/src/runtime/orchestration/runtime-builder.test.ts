@@ -44,7 +44,6 @@ function makeBaseConfig(
 		cwd: process.cwd(),
 		enableTools: true,
 		enableSpawnAgent: false,
-		enableAgentTeams: false,
 		...overrides,
 	};
 }
@@ -179,7 +178,6 @@ You are a code reviewer.`,
 				cwd: workspaceRoot,
 				workspaceRoot,
 				enableSpawnAgent: true,
-				enableAgentTeams: false,
 			}),
 			createSpawnTool: makeSpawnTool,
 		});
@@ -389,7 +387,7 @@ Use the review guidance.`,
 		expect(names).not.toContain("submit_and_exit");
 	});
 
-	it("uses yolo preset runtime defaults for spawn and teams", async () => {
+	it("uses yolo preset runtime defaults for spawn", async () => {
 		const runtime = await new DefaultRuntimeBuilder().build({
 			config: {
 				...makeBaseConfig({

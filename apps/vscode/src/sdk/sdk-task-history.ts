@@ -232,7 +232,6 @@ function historyItemToSessionHistoryRecord(item: HistoryItem): SessionHistoryRec
 		workspaceRoot: historyItemWorkspaceDisplayPath(item),
 		enableTools: true,
 		enableSpawn: false,
-		enableTeams: false,
 		isSubagent: false,
 		prompt: displayTask,
 		metadata: {

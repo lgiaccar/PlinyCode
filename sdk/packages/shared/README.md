@@ -7,7 +7,7 @@ For how the engine packages fit together, see [`sdk/AGENTS.md`](../../AGENTS.md)
 Node-only filesystem path resolvers live under the storage subpath export:
 
 - `@plinycode/shared/storage`
-- examples: `resolveClineDataDir`, `resolveDbDataDir`, `resolveSessionDataDir`, `resolveTeamDataDir`
+- examples: `resolveClineDataDir`, `resolveDbDataDir`, `resolveSessionDataDir`
 
 It also exports cross-client logging contracts, including `BasicLogger`, so
 runtime, SDK, and host applications can share a single logger type.

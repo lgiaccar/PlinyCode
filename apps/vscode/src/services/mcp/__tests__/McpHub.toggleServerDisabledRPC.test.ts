@@ -1,11 +1,19 @@
-import { afterEach, beforeEach, describe, it } from "mocha"
-import "should"
-import * as diskModule from "@core/storage/disk"
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test"
+import * as actualDiskModule from "@core/storage/disk"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import sinon from "sinon"
 import { HostProvider } from "@/hosts/host-provider"
+
+// bun loads real ESM, so sinon cannot stub the `@core/storage/disk` namespace
+// export. Inject a module-level sinon stub via mock.module on the exact
+// specifiers the SUT imports, matching the sibling McpHub tests.
+const getMcpSettingsFilePathStub: sinon.SinonStub = sinon.stub()
+const diskMock = () => ({ ...actualDiskModule, getMcpSettingsFilePath: getMcpSettingsFilePathStub })
+mock.module("@core/storage/disk", diskMock)
+mock.module("@/core/storage/disk", diskMock)
+
 import { McpHub } from "../McpHub"
 
 // Tests for McpHub.toggleServerDisabledRPC(): toggling a server off then on
@@ -50,7 +58,8 @@ describe("McpHub.toggleServerDisabledRPC", () => {
 		tempDir = path.join(os.tmpdir(), `mcp-toggle-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 		await fs.mkdir(tempDir, { recursive: true })
 		settingsPath = path.join(tempDir, "cline_mcp_settings.json")
-		sandbox.stub(diskModule, "getMcpSettingsFilePath").resolves(settingsPath)
+		getMcpSettingsFilePathStub.reset()
+		getMcpSettingsFilePathStub.resolves(settingsPath)
 
 		connectArgs = []
 		notifyCount = 0
@@ -96,10 +105,10 @@ describe("McpHub.toggleServerDisabledRPC", () => {
 		await hub.toggleServerDisabledRPC("alpha", true)
 
 		const persisted = JSON.parse(await fs.readFile(settingsPath, "utf-8"))
-		persisted.mcpServers.alpha.disabled.should.equal(true)
+		expect(persisted.mcpServers.alpha.disabled).toBe(true)
 		// Rebuilt as a disabled connection.
-		connectArgs.should.deepEqual([{ name: "alpha", disabled: true }])
-		notifyCount.should.be.greaterThan(0)
+		expect(connectArgs).toEqual([{ name: "alpha", disabled: true }])
+		expect(notifyCount).toBeGreaterThan(0)
 	})
 
 	it("reconnects (not stuck connecting) when re-enabling a disabled server", async () => {
@@ -113,28 +122,21 @@ describe("McpHub.toggleServerDisabledRPC", () => {
 
 		// File reflects enabled.
 		const persisted = JSON.parse(await fs.readFile(settingsPath, "utf-8"))
-		persisted.mcpServers.alpha.disabled.should.equal(false)
+		expect(persisted.mcpServers.alpha.disabled).toBe(false)
 		// The connection was actually rebuilt as enabled — this is the fix: a
 		// real connect happens rather than just flipping the flag to "connecting".
-		connectArgs.should.deepEqual([{ name: "alpha", disabled: false }])
+		expect(connectArgs).toEqual([{ name: "alpha", disabled: false }])
 		// The returned (and in-memory) server is enabled and connected, not
 		// stuck on the "connecting" yellow state.
 		const alpha = result.find((s) => s.name === "alpha")
-		alpha!.disabled!.should.equal(false)
-		alpha!.status.should.equal("connected")
+		expect(alpha?.disabled).toBe(false)
+		expect(alpha?.status).toBe("connected")
 	})
 
 	it("throws when the server is not found", async () => {
 		await writeSettings({ beta: { type: "stdio", command: "b" } })
 
-		let threw: Error | undefined
-		try {
-			await hub.toggleServerDisabledRPC("missing", true)
-		} catch (err) {
-			threw = err as Error
-		}
-		;(threw === undefined).should.be.false()
-		threw!.message.should.match(/not found in MCP configuration/)
-		connectArgs.should.have.length(0)
+		await expect(hub.toggleServerDisabledRPC("missing", true)).rejects.toThrow(/not found in MCP configuration/)
+		expect(connectArgs).toHaveLength(0)
 	})
 })

@@ -86,7 +86,6 @@ export {
 	getCoreDefaultEnabledToolIds,
 	getCoreHeadlessToolNames,
 	resolveCoreSelectedToolIds,
-	TEAM_TOOL_NAMES,
 } from "./extensions/tools";
 export type { RuntimeCapabilities } from "./runtime/capabilities";
 export type { SessionBackend } from "./runtime/host/host";
@@ -201,7 +200,6 @@ export type {
 	SessionPendingPrompt,
 	SessionPendingPromptSubmittedEvent,
 	SessionPendingPromptsEvent,
-	SessionTeamProgressEvent,
 	SessionToolEvent,
 } from "./types/events";
 export type {
@@ -210,4 +208,4 @@ export type {
 	SessionRecord,
 	SessionRef,
 } from "./types/sessions";
-export type { ArtifactStore, SessionStore, TeamStore } from "./types/storage";
+export type { ArtifactStore, SessionStore } from "./types/storage";

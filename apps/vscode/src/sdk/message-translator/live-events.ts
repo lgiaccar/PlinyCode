@@ -47,6 +47,7 @@ import {
 	parseMcpToolName,
 	sdkToolToClineSayTool,
 	toDisplaySayTool,
+	withToolOutputContent,
 } from "./tool-mapping"
 import type { MessageTranslatorState, TranslationResult } from "./translator-state"
 import { normalizeUsageEvent } from "./translator-state"
@@ -643,7 +644,11 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 						}
 					}
 
-					const sayTool = toDisplaySayTool(sdkToolToClineSayTool(toolName, storedInput), state.currentCwd())
+					const sayTool = withToolOutputContent(
+						toDisplaySayTool(sdkToolToClineSayTool(toolName, storedInput), state.currentCwd()),
+						toolName,
+						event.output,
+					)
 					// If there's an error, include it in the tool message
 					if (event.error) {
 						messages.push({
@@ -1062,10 +1067,9 @@ export function translateSessionEvent(event: CoreSessionEvent, state: MessageTra
 			break
 		}
 
-		case "team_progress":
 		case "pending_prompts": {
-			// These are handled by the team/subagent system, not translated
-			// to ClineMessages at this layer
+			// Handled by the prompt queue, not translated to ClineMessages at
+			// this layer
 			break
 		}
 

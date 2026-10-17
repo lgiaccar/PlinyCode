@@ -9,7 +9,7 @@ session lifecycle into a host-ready runtime.
 - session lifecycle and orchestration primitives
 - provider settings services
 - default runtime tools and MCP integration
-- storage-backed session and team state helpers
+- storage-backed session state helpers
 - host-facing Node helpers through `@plinycode/core`
 
 ## Installation
@@ -40,7 +40,6 @@ const result = await cline.start({
 		mode: "act",
 		enableTools: true,
 		enableSpawnAgent: false,
-		enableAgentTeams: false,
 		systemPrompt: "You are a concise assistant.",
 	},
 	prompt: "Summarize this project.",
@@ -107,7 +106,6 @@ The package also exports storage and settings helpers such as:
 - `ProviderSettingsManager`
 - `CoreSettingsService` and `createCoreSettingsService`
 - MCP settings helpers such as `setMcpServerDisabled`
-- `SqliteTeamStore`
 - SQLite-backed local session stores and artifacts through `@plinycode/core`
 
 ## Related Packages

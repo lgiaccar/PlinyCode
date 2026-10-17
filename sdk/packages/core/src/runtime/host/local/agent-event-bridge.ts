@@ -4,18 +4,11 @@ import type {
 	BasicLogger,
 	BasicLogMetadata,
 } from "@plinycode/shared";
-import type { TeamEvent } from "../../../extensions/tools/team";
 import {
 	type AgentEventContext,
-	type AgentEventContextOverrides,
 	extractAgentEventMetadata,
 	handleAgentEvent,
 } from "../../../services/agent-events";
-import {
-	dispatchTeamEventToBackend,
-	emitTeamProgress,
-	trackTeamRunState,
-} from "../../../session/team";
 import type { CoreSessionConfig } from "../../../types/config";
 import type { CoreSessionEvent } from "../../../types/events";
 import type { ActiveSession } from "../../../types/session";
@@ -32,25 +25,10 @@ export interface AgentEventBridgeDeps {
 		sessionId: string,
 		entry: { prompt: string; delivery: "queue" | "steer" },
 	): void;
-	invokeBackendOptional(method: string, ...args: unknown[]): Promise<void>;
 }
 
 export class AgentEventBridge {
 	constructor(private readonly deps: AgentEventBridgeDeps) {}
-
-	/**
-	 * Last agent identity stamped on each session's events while the session
-	 * was still registered. A session's agent can keep emitting after the host
-	 * removes it from the sessions map (teardown deletes the entry before the
-	 * run fully drains), and without this snapshot those late events reach
-	 * clients with no agent identity at all. Bounded FIFO so a long-lived
-	 * host doesn't accumulate entries forever.
-	 */
-	private readonly lastKnownIdentityBySession = new Map<
-		string,
-		AgentEventContextOverrides
-	>();
-	private static readonly MAX_IDENTITY_SNAPSHOTS = 512;
 
 	dispatchAgentEvent(
 		sessionId: string,
@@ -73,85 +51,15 @@ export class AgentEventBridge {
 			(!eventMetadata.agentId ||
 				eventMetadata.agentId === readAgentId(liveSession.agent));
 		if (isRootAgentEvent) {
-			const identity: AgentEventContextOverrides = {
-				agentId: readAgentId(liveSession.agent),
-				...(liveSession?.runtime.teamRuntime
-					? { teamRole: "lead" as const }
-					: {}),
-			};
-			this.rememberSessionIdentity(sessionId, identity);
 			handleAgentEvent(ctx, event, {
-				...identity,
+				agentId: readAgentId(liveSession.agent),
 				isPrimaryAgentEvent: true,
 			});
 			return;
 		}
-		handleAgentEvent(ctx, event, {
-			// Session-map miss: the session was already deregistered but its
-			// agent is still emitting. Reuse the identity captured while it was
-			// live so late events keep their agent and team role. When the
-			// session IS live this is a non-root
-			// (sub-agent) event carrying its own metadata, so no fallback is
-			// applied.
-			...(liveSession ? {} : this.lastKnownIdentityBySession.get(sessionId)),
-			isPrimaryAgentEvent: false,
-		});
-	}
-
-	private rememberSessionIdentity(
-		sessionId: string,
-		identity: AgentEventContextOverrides,
-	): void {
-		// Delete-then-set keeps insertion order acting as least-recently-updated
-		// for the FIFO eviction below.
-		this.lastKnownIdentityBySession.delete(sessionId);
-		this.lastKnownIdentityBySession.set(sessionId, identity);
-		if (
-			this.lastKnownIdentityBySession.size >
-			AgentEventBridge.MAX_IDENTITY_SNAPSHOTS
-		) {
-			const oldest = this.lastKnownIdentityBySession.keys().next().value;
-			if (oldest !== undefined) {
-				this.lastKnownIdentityBySession.delete(oldest);
-			}
-		}
-	}
-
-	async handleTeamEvent(
-		rootSessionId: string,
-		event: TeamEvent,
-	): Promise<void> {
-		const session = this.deps.getSession(rootSessionId);
-		if (session) {
-			trackTeamRunState(session, event);
-			if (event.type === "agent_event") {
-				const ctx: AgentEventContext = {
-					sessionId: rootSessionId,
-					config: session.config,
-					liveSession: session,
-					usageBySession: this.deps.usageBySession,
-					aggregateUsageBySession: this.deps.aggregateUsageBySession,
-					persistMessages: this.deps.persistMessages,
-					emit: this.deps.emit,
-				};
-				handleAgentEvent(ctx, event.event, {
-					agentId: event.agentId,
-					teamRole: "teammate",
-					teamAgentId: event.agentId,
-					isPrimaryAgentEvent: false,
-				});
-			}
-		}
-
-		await dispatchTeamEventToBackend(
-			rootSessionId,
-			event,
-			this.deps.invokeBackendOptional,
-		);
-
-		if (session) {
-			emitTeamProgress(session, rootSessionId, event, this.deps.emit);
-		}
+		// A non-root (sub-agent) event carries its own metadata, and a session
+		// that was already deregistered has no live usage baseline to update.
+		handleAgentEvent(ctx, event, { isPrimaryAgentEvent: false });
 	}
 
 	async handlePluginEvent(

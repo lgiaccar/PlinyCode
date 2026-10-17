@@ -17,7 +17,6 @@ import type {
 	SessionWorkspaceConfig,
 } from "@plinycode/shared";
 import type { ToolRoutingRule } from "../extensions/tools/model-tool-routing";
-import type { TeamEvent } from "../extensions/tools/team";
 import type { ProviderConfig } from "./provider-settings";
 
 export type CoreAgentMode = AgentMode;
@@ -71,7 +70,6 @@ export interface CoreModelConfig {
 export interface CoreRuntimeFeatures {
 	enableTools: boolean;
 	enableSpawnAgent: boolean;
-	enableAgentTeams: boolean;
 	disableMcpSettingsTools?: boolean;
 	yolo?: boolean;
 }
@@ -268,14 +266,7 @@ export interface CoreSessionConfig
 		CoreRuntimeFeatures,
 		Omit<SessionWorkspaceConfig, "workspaceRoot">,
 		Omit<SessionPromptConfig, "systemPrompt">,
-		Omit<
-			SessionExecutionConfig,
-			| "enableTools"
-			| "teamName"
-			| "missionLogIntervalSteps"
-			| "missionLogIntervalMs"
-			| "maxConsecutiveMistakes"
-		> {
+		Omit<SessionExecutionConfig, "enableTools" | "maxConsecutiveMistakes"> {
 	/**
 	 * Core/hub runtime session identifier.
 	 *
@@ -288,9 +279,6 @@ export interface CoreSessionConfig
 	sessionId?: string;
 	workspaceRoot?: string;
 	systemPrompt: string;
-	teamName?: string;
-	missionLogIntervalSteps?: number;
-	missionLogIntervalMs?: number;
 	hooks?: AgentHooks;
 	hookErrorMode?: HookErrorMode;
 	logger?: BasicLogger;
@@ -327,7 +315,6 @@ export interface CoreSessionConfig
 	execution?: AgentConfig["execution"];
 	compaction?: CoreCompactionConfig;
 	checkpoint?: CoreCheckpointConfig;
-	onTeamEvent?: (event: TeamEvent) => void;
 	onConsecutiveMistakeLimitReached?: (
 		context: ConsecutiveMistakeLimitContext,
 	) =>

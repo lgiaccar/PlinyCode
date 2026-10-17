@@ -1,16 +1,22 @@
 name: ext-vscode-test-e2e
 
+# Runs on PRs and on every push to stage (the PR target) and master. A push
+# runs every job (detect-changes forces run_all); PRs go through the path
+# filter below.
 on:
     push:
         branches:
             - master
+            - stage
     pull_request:
         types: [opened, reopened, synchronize, ready_for_review]
     workflow_dispatch:
 
+# A new push to a PR cancels the PR's running checks; pushes to stage and
+# master each get a full run so every merged commit has a result.
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-    cancel-in-progress: true
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
     contents: read
@@ -58,10 +64,11 @@ jobs:
                           - 'apps/vscode/.vscodeignore'
                           - 'apps/vscode/playwright*.ts'
                           - '.github/workflows/ext-vscode-test-e2e.yml'
+                          - '.github/actions/**'
 
+    # Always runs, so the e2e matrix always expands (see the e2e job).
     matrix_prep:
         needs: detect-changes
-        if: needs.detect-changes.outputs.e2e == 'true'
         runs-on: ubuntu-latest
         outputs:
             matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -70,14 +77,21 @@ jobs:
               run: |
                   echo 'matrix=[{"runner":"ubuntu"},{"runner":"windows"},{"runner":"macos"}]' >> $GITHUB_OUTPUT
 
+    # "e2e (ubuntu)", "e2e (windows)" and "e2e (macos)" are required checks on
+    # stage. A job-level `if` that skips a matrix job reports one check under the
+    # unexpanded name "e2e", so the required names never arrive and a PR that
+    # changes no extension path stays blocked forever. Instead the matrix always
+    # expands: without relevant changes each leg runs on a cheap Ubuntu runner,
+    # skips every step after the first, and reports success.
     e2e:
         needs: [detect-changes, matrix_prep]
-        if: needs.detect-changes.outputs.e2e == 'true'
+        env:
+            RUN_E2E: ${{ needs.detect-changes.outputs.e2e }}
         strategy:
             fail-fast: false
             matrix:
                 include: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
-        runs-on: ${{ matrix.runner }}-latest
+        runs-on: ${{ needs.detect-changes.outputs.e2e == 'true' && format('{0}-latest', matrix.runner) || 'ubuntu-latest' }}
         timeout-minutes: 20
         # Nothing in this job uses OIDC, so it does not need an id-token
         # permission.
@@ -87,25 +101,26 @@ jobs:
             run:
                 working-directory: apps/vscode
         steps:
+            - name: No extension changes
+              if: env.RUN_E2E != 'true'
+              working-directory: ${{ github.workspace }}
+              run: echo "No extension paths changed; nothing to test."
+
             - uses: actions/checkout@v4
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: 1.3.14
+              if: env.RUN_E2E == 'true'
 
-            # Cache keys below are exact-match only (no restore-keys prefix
+            # Pinned Bun and Node (.tool-versions), Bun install cache and one root
+            # `bun install --frozen-lockfile` for the whole workspace.
+            - name: Setup toolchain
+              if: env.RUN_E2E == 'true'
+              uses: ./.github/actions/setup-toolchain
+
+            # The cache keys below are exact-match only (no restore-keys prefix
             # fallbacks); a miss just means a cold install, which is acceptable.
-
-            # Cache Bun's global install cache - keyed on the authoritative root bun.lock.
-            - name: Cache Bun install cache
-              uses: actions/cache@v4
-              id: bun-cache
-              with:
-                  path: ~/.bun/install/cache
-                  key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
 
             # Cache VS Code installation
             - name: Cache VS Code
+              if: env.RUN_E2E == 'true'
               uses: actions/cache@v4
               id: vscode-cache
               with:
@@ -114,6 +129,7 @@ jobs:
 
             # Cache Playwright browsers
             - name: Cache Playwright browsers
+              if: env.RUN_E2E == 'true'
               uses: actions/cache@v4
               id: playwright-cache
               with:
@@ -123,17 +139,10 @@ jobs:
                       ~/AppData/Local/ms-playwright
                   key: playwright-browsers-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
-            # Single root install resolves the entire bun workspace at once (replaces
-            # the per-package `npm ci` steps for apps/vscode + webview-ui).
-            - name: Install workspace dependencies
-              working-directory: ${{ github.workspace }}
-              run: bun install --frozen-lockfile
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
             # @plinycode/* are local workspace symlinks to source packages; build dist/
             # before building/packaging the extension for E2E.
             - name: Build SDK packages
+              if: env.RUN_E2E == 'true'
               working-directory: ${{ github.workspace }}
               run: bun run build:sdk
 
@@ -143,16 +152,16 @@ jobs:
             # .bin on PATH. No global install needed.
 
             - name: Install xvfb on Linux
-              if: matrix.runner == 'ubuntu'
+              if: env.RUN_E2E == 'true' && matrix.runner == 'ubuntu'
               run: sudo apt-get update && sudo apt-get install -y xvfb
 
             # Run optimized E2E tests (eliminates redundant builds)
             - name: Run E2E tests - Linux
-              if: matrix.runner == 'ubuntu'
+              if: env.RUN_E2E == 'true' && matrix.runner == 'ubuntu'
               run: xvfb-run -a bun run test:e2e:optimal
 
             - name: Run E2E tests - Non-Linux
-              if: matrix.runner != 'ubuntu'
+              if: env.RUN_E2E == 'true' && matrix.runner != 'ubuntu'
               run: bun run test:e2e:optimal
 
             # Repo-root relative: the job's `working-directory` default applies to `run`

@@ -7,10 +7,9 @@ import {
 } from "./runtime";
 
 describe("builtin tool catalog", () => {
-	it("includes spawn and teams entries", () => {
+	it("includes the spawn entry", () => {
 		const catalog = getCoreBuiltinToolCatalog({ mode: "act" });
 		expect(catalog.some((entry) => entry.id === "spawn_agent")).toBe(true);
-		expect(catalog.some((entry) => entry.id === "teams")).toBe(true);
 	});
 
 	it("includes the unified tasks tool outside yolo mode", () => {
@@ -40,33 +39,27 @@ describe("builtin tool catalog", () => {
 		).toBe(false);
 	});
 
-	it("marks teams enabled by default in act mode", () => {
+	it("marks spawn enabled by default in act mode", () => {
 		const catalog = getCoreBuiltinToolCatalog({ mode: "act" });
-		expect(catalog.find((entry) => entry.id === "teams")?.defaultEnabled).toBe(
-			true,
-		);
 		expect(
 			catalog.find((entry) => entry.id === "spawn_agent")?.defaultEnabled,
 		).toBe(true);
 	});
 
-	it("marks teams and spawn disabled by default in yolo mode", () => {
+	it("marks spawn disabled by default in yolo mode", () => {
 		const catalog = getCoreBuiltinToolCatalog({ mode: "yolo" });
-		expect(catalog.find((entry) => entry.id === "teams")?.defaultEnabled).toBe(
-			false,
-		);
 		expect(
 			catalog.find((entry) => entry.id === "spawn_agent")?.defaultEnabled,
 		).toBe(false);
 	});
 
-	it("expands grouped headless tool names for selected entries", () => {
-		const names = getCoreHeadlessToolNames(new Set(["teams", "read_files"]), {
-			mode: "act",
-		});
+	it("expands headless tool names for selected entries", () => {
+		const names = getCoreHeadlessToolNames(
+			new Set(["spawn_agent", "read_files"]),
+			{ mode: "act" },
+		);
 		expect(names).toContain("read_files");
-		expect(names).toContain("team_status");
-		expect(names).toContain("team_run_task");
+		expect(names).toContain("spawn_agent");
 	});
 
 	it("uses a single editor catalog entry and maps to apply_patch when routed", () => {
@@ -94,9 +87,10 @@ describe("builtin tool catalog", () => {
 			enabled: true,
 			availabilityContext: { mode: "act" },
 		});
-		expect(selected.has("teams")).toBe(true);
 		expect(selected.has("spawn_agent")).toBe(true);
-		expect(getCoreDefaultEnabledToolIds({ mode: "act" })).toContain("teams");
+		expect(getCoreDefaultEnabledToolIds({ mode: "act" })).toContain(
+			"spawn_agent",
+		);
 	});
 
 	it("surfaces native web search only for supported model selections", () => {

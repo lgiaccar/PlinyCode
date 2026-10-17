@@ -30,7 +30,6 @@ export interface CoreSessionSnapshot {
 	capabilities: {
 		enableTools: boolean;
 		enableSpawn: boolean;
-		enableTeams: boolean;
 	};
 	lineage: {
 		parentSessionId?: string;
@@ -38,9 +37,6 @@ export interface CoreSessionSnapshot {
 		agentId?: string;
 		conversationId?: string;
 		isSubagent: boolean;
-	};
-	team?: {
-		name: string;
 	};
 	prompt?: string;
 	metadata?: Record<string, unknown>;
@@ -145,7 +141,6 @@ export function createCoreSessionSnapshot(input: {
 		capabilities: {
 			enableTools: session.enableTools,
 			enableSpawn: session.enableSpawn,
-			enableTeams: session.enableTeams,
 		},
 		lineage: {
 			...(session.parentSessionId
@@ -160,7 +155,6 @@ export function createCoreSessionSnapshot(input: {
 				: {}),
 			isSubagent: session.isSubagent,
 		},
-		...(session.teamName ? { team: { name: session.teamName } } : {}),
 		...(session.prompt ? { prompt: session.prompt } : {}),
 		...(metadata ? { metadata } : {}),
 		...(session.messagesPath
@@ -198,10 +192,8 @@ export function coreSessionSnapshotToRecord(
 		model: snapshot.model.modelId,
 		cwd: snapshot.workspace.cwd,
 		workspaceRoot: snapshot.workspace.root,
-		teamName: snapshot.team?.name,
 		enableTools: snapshot.capabilities.enableTools,
 		enableSpawn: snapshot.capabilities.enableSpawn,
-		enableTeams: snapshot.capabilities.enableTeams,
 		prompt: snapshot.prompt,
 		metadata: snapshot.metadata,
 		updatedAt: snapshot.updatedAt,

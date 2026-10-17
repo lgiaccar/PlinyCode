@@ -82,13 +82,16 @@ export class SqliteSessionStore implements SessionStore {
 
 	create(record: SessionRecord): void {
 		const now = nowIso();
+		// team_name and enable_teams are legacy agent-team columns: existing
+		// databases declare enable_teams NOT NULL, so they are written as
+		// constants and never read.
 		this.run(
 			`INSERT OR REPLACE INTO sessions (
 				session_id, source, pid, started_at, ended_at, exit_code, status, status_lock, interactive,
 				provider, model, cwd, workspace_root, team_name, enable_tools, enable_spawn, enable_teams,
 				parent_session_id, parent_agent_id, agent_id, conversation_id, is_subagent, prompt,
 				metadata_json, transcript_path, hook_path, messages_path, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				record.sessionId,
 				record.source,
@@ -103,10 +106,8 @@ export class SqliteSessionStore implements SessionStore {
 				record.model,
 				record.cwd,
 				record.workspaceRoot,
-				record.teamName ?? null,
 				toBoolInt(record.enableTools),
 				toBoolInt(record.enableSpawn),
-				toBoolInt(record.enableTeams),
 				record.parentSessionId ?? null,
 				record.parentAgentId ?? null,
 				record.agentId ?? null,
@@ -191,8 +192,8 @@ export class SqliteSessionStore implements SessionStore {
 	get(sessionId: string): SessionRecord | undefined {
 		const row = this.queryOne<Record<string, unknown>>(
 			`SELECT session_id, source, pid, started_at, ended_at, exit_code, status, interactive,
-				provider, model, cwd, workspace_root, team_name,
-				enable_tools, enable_spawn, enable_teams,
+				provider, model, cwd, workspace_root,
+				enable_tools, enable_spawn,
 				parent_session_id, parent_agent_id, agent_id, conversation_id, is_subagent,
 				prompt, metadata_json, hook_path, messages_path, updated_at
 			 FROM sessions WHERE session_id = ?`,
@@ -214,10 +215,8 @@ export class SqliteSessionStore implements SessionStore {
 			model: asString(row.model),
 			cwd: asString(row.cwd),
 			workspaceRoot: asString(row.workspace_root),
-			teamName: asOptionalString(row.team_name),
 			enableTools: asBool(row.enable_tools),
 			enableSpawn: asBool(row.enable_spawn),
-			enableTeams: asBool(row.enable_teams),
 			parentSessionId: asOptionalString(row.parent_session_id),
 			parentAgentId: asOptionalString(row.parent_agent_id),
 			agentId: asOptionalString(row.agent_id),
@@ -261,8 +260,8 @@ export class SqliteSessionStore implements SessionStore {
 	}
 
 	/**
-	 * Child sessions — subagent runs and team-task runs — recorded under a
-	 * parent, oldest first so a caller can present them in spawn order.
+	 * Child sessions (sub-agent runs) recorded under a parent, oldest first
+	 * so a caller can present them in spawn order.
 	 */
 	listChildren(parentSessionId: string, limit = 200): SessionRecord[] {
 		const rows = this.queryAll<Record<string, unknown>>(

@@ -622,7 +622,6 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			enabled: enableCheckpoints,
 		},
 		enableSpawnAgent: stateManager.getGlobalSettingsKey("subagentsEnabled") !== false,
-		enableAgentTeams: false,
 		// A sub-agent's own prompt shows where it runs, like the root's
 		// (sdk/packages/core: subagent-prompts.ts), with a read-only memory excerpt.
 		subAgentPrompt: {

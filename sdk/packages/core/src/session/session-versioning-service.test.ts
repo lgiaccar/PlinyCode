@@ -22,10 +22,8 @@ function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
 		model: "model-a",
 		cwd: "/workspace/project",
 		workspaceRoot: "/workspace/project",
-		teamName: "team-a",
 		enableTools: true,
 		enableSpawn: true,
-		enableTeams: false,
 		parentSessionId: "parent-session",
 		parentAgentId: "parent-agent",
 		agentId: "agent-a",
@@ -78,7 +76,6 @@ describe("createCoreSessionSnapshot", () => {
 			capabilities: {
 				enableTools: true,
 				enableSpawn: true,
-				enableTeams: false,
 			},
 			lineage: {
 				parentSessionId: "parent-session",
@@ -87,7 +84,6 @@ describe("createCoreSessionSnapshot", () => {
 				conversationId: "conversation-a",
 				isSubagent: false,
 			},
-			team: { name: "team-a" },
 			checkpoint: {
 				enabled: true,
 				latest: { ref: "cccc", createdAt: 3, runCount: 3, kind: "stash" },

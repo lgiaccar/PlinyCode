@@ -1,8 +1,11 @@
 version: 2
 updates:
-    # Main extension dependencies
-    - package-ecosystem: "npm"
-      directory: "/apps/vscode"
+    # The root bun.lock is the only lockfile in the workspace (sdk/packages/*,
+    # apps/vscode and webview-ui resolve through it), so one entry at "/" covers
+    # every package. Security updates only: the ignore rule below drops every
+    # version update, and security updates bypass ignore rules.
+    - package-ecosystem: "bun"
+      directory: "/"
       schedule:
           interval: "weekly"
       # Group all updates into a single PR
@@ -11,24 +14,25 @@ updates:
               patterns:
                   - "*"
       ignore:
-          # Ignore all non-security updates (security vulnerabilities bypass these ignore rules)
           - dependency-name: "*"
             update-types:
                 - "version-update:semver-major"
                 - "version-update:semver-minor"
                 - "version-update:semver-patch"
 
-    # Webview UI dependencies
-    - package-ecosystem: "npm"
-      directory: "/apps/vscode/webview-ui"
+    # Actions used by .github/workflows/* and by the composite action in
+    # .github/actions/*. Security updates only, like the packages above.
+    - package-ecosystem: "github-actions"
+      directories:
+          - "/"
+          - "/.github/actions/*"
       schedule:
           interval: "weekly"
       groups:
-          all-dependencies:
+          all-actions:
               patterns:
                   - "*"
       ignore:
-          - dependency-name: "@testing-library/*"
           - dependency-name: "*"
             update-types:
                 - "version-update:semver-major"

@@ -216,13 +216,6 @@ export function formatDisplayUserInput(input?: string): string {
 	if (!envelope) {
 		return normalized;
 	}
-	if (envelope.slash.toLowerCase() === "team") {
-		const prefix = "spawn a team of agents for the following task:";
-		const stripped = normalized.toLowerCase().startsWith(prefix)
-			? normalized.slice(prefix.length).trim()
-			: normalized;
-		return stripped ? `/team ${stripped}` : "/team";
-	}
 	return normalized ? `/${envelope.slash} ${normalized}` : `/${envelope.slash}`;
 }
 
