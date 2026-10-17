@@ -31,6 +31,7 @@ Design and operations notes are in `docs/`:
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`plans/<slug>/PLAN.md`), the markdown-only write guard, and the Execute plan button.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.
 - [docs/side-questions.md](docs/side-questions.md): side questions, messages asked off the record: answered read-only and left out of later requests.
+- [docs/diagnostics-bundle.md](docs/diagnostics-bundle.md): the diagnostics bundle (PlinyCode: Export Diagnostics Bundle): the folder it writes under `<dataDir>/diagnostics/`, what each file holds, what is redacted and how to share it.
 - [docs/restart-from-here.md](docs/restart-from-here.md): editing an earlier message and restarting from it, how the chat row is mapped to the history the model sees, which checkpoint "Restart and revert files" uses, and the Show Last Model Request debug command.
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.
 - [docs/workspace-conversations.md](docs/workspace-conversations.md): how conversations are bound to workspaces (folders and `.code-workspace` files), filtered by workspace, started in another workspace and shared between windows.
@@ -48,6 +49,8 @@ Design and operations notes are in `docs/`:
 - [docs/context-compaction.md](docs/context-compaction.md): when the conversation is compacted, the agentic and basic strategies and the fallback between them, overflow recovery, what the summarizer costs, and the context bar's threshold marker.
 - [docs/pipeline-runs.md](docs/pipeline-runs.md): the Pipelines view, dynamic GitHub/ADO inputs, queueing, persistent launch history and run-ID tracking.
 - [docs/eval-harness.md](docs/eval-harness.md): the eval harness in `sdk/scripts/eval`: cases (a fixture, a prompt, a model and assertions) run as headless engine sessions, replayed offline from VCR cassettes in CI (`eval-offline`) or recorded against the live gateway with `--record`, and how to add a case.
+- [docs/roadmap.md](docs/roadmap.md): the Q4 2026 improvement roadmap: six two-week waves (code intelligence, worktrees, background processes, sub-agent visibility, web search and images, eval harness, trace and diagnostics, hook unification, release automation), each with PR-sized items, file anchors and verification.
+- [docs/trace-and-logs.md](docs/trace-and-logs.md): the per-conversation trace files (`traces/<session id>.jsonl`: requests, replies, tool calls, routing decisions, run failures), their record types, redaction and size caps, the `plinycode.trace.enabled` setting, and the rotating `logs/plinycode.log` file with its Open Log File command.
 
 Write scratch output (logs, analysis, temporary files) to `ai_output/`, which is gitignored, rather than to the repo tree.
 
