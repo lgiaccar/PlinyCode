@@ -450,7 +450,7 @@ describe("buildSessionConfig", () => {
 		mocks.providerSettingsManager.getProviderSettings.mockReturnValue({
 			provider: "pliny",
 			reasoning: { enabled: true, effort: "high" },
-		})
+		} as any)
 		mocks.stateManager.getGlobalStateKey.mockImplementation((key: string) =>
 			key === "modelTuning" ? { "snps-provider/GLM-5.2": { thinking: false, maxInputTokens: 64_000 } } : undefined,
 		)
