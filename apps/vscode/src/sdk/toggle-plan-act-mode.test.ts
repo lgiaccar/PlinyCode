@@ -48,7 +48,7 @@ describe("togglePlanActModeProto", () => {
 
 		await togglePlanActModeProto(mockController, request)
 
-		expect(toggleSpy).toHaveBeenCalledWith("plan", undefined)
+		expect(toggleSpy).toHaveBeenCalledWith("plan", undefined, { executePlan: false })
 	})
 
 	it("decodes ACT mode and passes it to the controller", async () => {
@@ -57,7 +57,7 @@ describe("togglePlanActModeProto", () => {
 
 		await togglePlanActModeProto(mockController, request)
 
-		expect(toggleSpy).toHaveBeenCalledWith("act", undefined)
+		expect(toggleSpy).toHaveBeenCalledWith("act", undefined, { executePlan: false })
 	})
 
 	it("decodes ASK mode and passes it to the controller", async () => {
@@ -66,7 +66,7 @@ describe("togglePlanActModeProto", () => {
 
 		await togglePlanActModeProto(mockController, request)
 
-		expect(toggleSpy).toHaveBeenCalledWith("ask", undefined)
+		expect(toggleSpy).toHaveBeenCalledWith("ask", undefined, { executePlan: false })
 	})
 
 	it("passes chatContent through to the controller", async () => {
@@ -149,6 +149,7 @@ describe("togglePlanActModeProto", () => {
 			expect(toggleSpy).toHaveBeenCalledWith(
 				"act",
 				expect.objectContaining({ message: "execute the plan in plans/x/PLAN.md" }),
+				{ executePlan: true },
 			)
 			// The act-mode session is built from the model in state, so the model comes first.
 			expect(preparePlanExecution.mock.invocationCallOrder[0]).toBeLessThan(toggleSpy.mock.invocationCallOrder[0])
@@ -162,7 +163,7 @@ describe("togglePlanActModeProto", () => {
 			await togglePlanActModeProto(mockController, request)
 
 			expect(preparePlanExecution).not.toHaveBeenCalled()
-			expect(toggleSpy).toHaveBeenCalledWith("act", undefined)
+			expect(toggleSpy).toHaveBeenCalledWith("act", undefined, { executePlan: false })
 		})
 
 		it("ignores a choice it does not know", async () => {
@@ -189,7 +190,7 @@ describe("togglePlanActModeProto", () => {
 			await togglePlanActModeProto(mockController, executeRequest("freeAuto", PlanActMode.PLAN))
 
 			expect(preparePlanExecution).not.toHaveBeenCalled()
-			expect(toggleSpy).toHaveBeenCalledWith("plan", expect.anything())
+			expect(toggleSpy).toHaveBeenCalledWith("plan", expect.anything(), { executePlan: true })
 		})
 
 		it("does not execute the plan when the model switch fails", async () => {

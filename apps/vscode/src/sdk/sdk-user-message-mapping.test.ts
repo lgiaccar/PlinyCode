@@ -65,6 +65,14 @@ describe("isSyntheticSdkUserMessage", () => {
 			}),
 		).toBe(false)
 	})
+
+	it("flags hook context on its own but not a prompt saved next to it", () => {
+		const hook = { type: "text", text: '<hook_context source="PostToolUse" tool_name="run_commands">\nNOTE\n</hook_context>' }
+		expect(isSyntheticSdkUserMessage({ role: "user", content: [hook] })).toBe(true)
+		expect(
+			isSyntheticSdkUserMessage({ role: "user", content: [hook, { type: "text", text: wrapped("did you push?") }] }),
+		).toBe(false)
+	})
 })
 
 describe("planEditRestart: prompt rows", () => {

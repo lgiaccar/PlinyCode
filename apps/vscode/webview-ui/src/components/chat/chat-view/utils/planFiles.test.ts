@@ -1,6 +1,6 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { describe, expect, it } from "vitest"
-import { executePlanPrompt, findPlanRootFile, isLatestPlanResult } from "./planFiles"
+import { executePlanPrompt, findPlanRootFile, isLatestPlanResult, planFileLabel } from "./planFiles"
 
 let ts = 1000
 
@@ -93,5 +93,27 @@ describe("isLatestPlanResult", () => {
 describe("executePlanPrompt", () => {
 	it("names the root plan file", () => {
 		expect(executePlanPrompt("plans/x/PLAN.md")).toBe("execute the plan in plans/x/PLAN.md")
+	})
+})
+
+describe("planFileLabel", () => {
+	it("shortens a plan in the data folder to its folder and file name", () => {
+		expect(planFileLabel("C:/Users/me/.cline/data/plans/repo-1a2b3c4d/fix-login/PLAN.md")).toBe("fix-login/PLAN.md")
+		expect(planFileLabel("C:\\Users\\me\\.cline\\data\\plans\\repo-1a2b3c4d\\fix-login\\PLAN.md")).toBe("fix-login/PLAN.md")
+		expect(planFileLabel("/home/me/.cline/data/plans/repo-1a2b3c4d/fix-login/PLAN.md")).toBe("fix-login/PLAN.md")
+	})
+
+	it("keeps a workspace-relative path as it is", () => {
+		expect(planFileLabel("plans/x/PLAN.md")).toBe("plans/x/PLAN.md")
+	})
+})
+
+describe("findPlanRootFile with plans outside the workspace", () => {
+	it("finds an absolute PLAN.md path", () => {
+		const root = write("C:\\Users\\me\\.cline\\data\\plans\\repo-1a2b3c4d\\fix-login\\PLAN.md")
+		const plan = say("plan_completion_result")
+		expect(findPlanRootFile([say("task", "plan it"), root, plan], plan.ts)).toBe(
+			"C:/Users/me/.cline/data/plans/repo-1a2b3c4d/fix-login/PLAN.md",
+		)
 	})
 })

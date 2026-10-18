@@ -65,6 +65,17 @@ export const E2E_MOCK_PLAN_TOOL_CALL = {
 	},
 }
 
+/**
+ * The plan tool call, writing to the plans folder the plan-mode system prompt
+ * names (PlinyCode's data folder, outside the workspace), like a model would.
+ */
+export function e2eMockPlanToolCall(systemPrompt: string): typeof E2E_MOCK_PLAN_TOOL_CALL {
+	const folder = /Use absolute paths under (.+?)\/<short-kebab-slug>\/:/.exec(systemPrompt)?.[1]
+	return folder
+		? { ...E2E_MOCK_PLAN_TOOL_CALL, arguments: { ...E2E_MOCK_PLAN_TOOL_CALL.arguments, path: `${folder}/e2e-plan/PLAN.md` } }
+		: E2E_MOCK_PLAN_TOOL_CALL
+}
+
 const edit_request_complete = `I successfully replaced "john" with "cline" in the test.ts file. The change has been completed and the file now contains:
 
 \`\`\`typescript
@@ -82,7 +93,7 @@ export const E2E_MOCK_API_RESPONSES = {
 	POWERSHELL_REQUEST_LEAD_IN: "I'll inspect the PowerShell process used for background execution.",
 	POWERSHELL_REQUEST_COMPLETE: "PowerShell background execution diagnostic completed.",
 	PLAN_REQUEST_LEAD_IN: "I'll write the plan to a markdown file.",
-	PLAN_REQUEST_COMPLETE: "The plan is in plans/e2e-plan/PLAN.md.",
+	PLAN_REQUEST_COMPLETE: "The plan is in e2e-plan/PLAN.md.",
 	/** The act-mode turn that Execute plan starts. */
 	PLAN_EXECUTED: "The mock plan has been executed.",
 }

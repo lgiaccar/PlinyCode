@@ -109,7 +109,12 @@ export function extractPersistedHookContextChips(message: SdkUserMessage): Persi
 	if (message.role !== "user") {
 		return []
 	}
-	const text = extractSdkUserText(message)
+	const text = Array.isArray(message.content)
+		? message.content
+				.filter(isHookContextBlock)
+				.map((block) => (block as { text: string }).text.trim())
+				.join("\n")
+		: extractSdkUserText(message)
 	if (!text.startsWith("<hook_context")) {
 		return []
 	}
@@ -127,6 +132,31 @@ export function extractPersistedHookContextChips(message: SdkUserMessage): Persi
 	return chips
 }
 
+function isHookContextBlock(block: unknown): boolean {
+	if (!block || typeof block !== "object") {
+		return false
+	}
+	const typed = block as { type?: unknown; text?: unknown }
+	return typed.type === "text" && typeof typed.text === "string" && typed.text.trim().startsWith("<hook_context")
+}
+
+/**
+ * The message without its hook-context blocks. A prompt the user sends while a
+ * command runs in the background is saved in the same message as that
+ * command's hook context, so the prompt is whatever is left once those blocks
+ * are removed. A message that is hook context only comes back with no content.
+ */
+export function withoutHookContextBlocks<T extends SdkUserMessage>(message: T): T {
+	const { content } = message
+	if (typeof content === "string") {
+		return content.trim().startsWith("<hook_context") ? { ...message, content: "" } : message
+	}
+	if (!Array.isArray(content) || !content.some(isHookContextBlock)) {
+		return message
+	}
+	return { ...message, content: content.filter((block) => !isHookContextBlock(block)) }
+}
+
 export function isSyntheticSdkUserMessage(message: SdkUserMessage): boolean {
 	// Runtime-generated messages (hook context, compaction summaries) carry a
 	// display role that marks them model-facing only.
@@ -135,8 +165,13 @@ export function isSyntheticSdkUserMessage(message: SdkUserMessage): boolean {
 	if (displayRole === "system" || displayRole === "status") {
 		return true
 	}
-	const text = extractSdkUserText(message)
-	return !!text && isSyntheticUserPrompt(text) && !hasAttachmentBlocks(message)
+	const visible = withoutHookContextBlocks(message)
+	const text = extractSdkUserText(visible)
+	if (!text) {
+		// Hook context with nothing else is runtime-injected, not a prompt.
+		return visible !== message && !hasAttachmentBlocks(visible)
+	}
+	return isSyntheticUserPrompt(text) && !hasAttachmentBlocks(message)
 }
 
 /** Indexes of the persisted user messages that have a visible chat row, in order. */

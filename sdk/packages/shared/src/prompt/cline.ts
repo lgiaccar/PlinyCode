@@ -22,9 +22,11 @@ User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribut
 
 /**
  * Plan-mode behavioral contract, appended when the session mode is "plan".
- * The plan is written as markdown files (a root plans/<slug>/PLAN.md plus
- * optional sub-files) so the user can edit it and act mode can execute it
- * from disk. run_commands intentionally stays available in plan mode -- it
+ * The plan is written as markdown files (a root <plans folder>/<slug>/PLAN.md
+ * plus optional sub-files) so the user can edit it and act mode can execute it
+ * from disk. The plans folder is workspace-relative `plans/` unless the host
+ * passes its own (the extension keeps plans outside the workspace, see
+ * `planDirectory`). run_commands intentionally stays available in plan mode -- it
  * is essential for read-only investigation -- so the contract must spell out
  * that it is inspection-only there. Prompting is the first line of defense;
  * the plan-mode command-guard hook (registered by the core runtime builder
@@ -32,7 +34,14 @@ User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribut
  * run_commands calls and non-markdown editor writes with a tool error before
  * approval or execution.
  */
-const PLAN_MODE_INSTRUCTIONS_BASE = `# Plan Mode
+function planModeInstructionsBase(planDirectory?: string): string {
+	// Forward slashes on Windows too: one separator throughout the paths the model writes.
+	const dir = planDirectory?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+	const where = dir
+		? `Write the plan as markdown files with the editor tool, in this workspace's plans folder ${dir}, which is outside the workspace so a plan is never committed or deleted with it. Use absolute paths under ${dir}/<short-kebab-slug>/:`
+		: "Write the plan as markdown files with the editor tool, using workspace-relative paths under plans/<short-kebab-slug>/:";
+	const root = dir ? `${dir}/<slug>` : "plans/<slug>";
+	return `# Plan Mode
 
 You are in Plan mode. Your role is to explore, analyze, and write a plan -- not to execute it.
 
@@ -44,20 +53,23 @@ You are in Plan mode. Your role is to explore, analyze, and write a plan -- not 
 
 ## Writing the plan
 
-Write the plan as markdown files with the editor tool, using workspace-relative paths under plans/<short-kebab-slug>/:
+${where}
 
-1. Create the root file plans/<slug>/PLAN.md first. It coordinates the whole plan: the goal, the relevant context, the ordered steps or phases, how to verify the result, and links to any sub-files.
-2. When a part of the plan is large or independent, put it in its own file in the same folder (for example plans/<slug>/01-backend.md) and link it from PLAN.md. A small plan needs only PLAN.md.
+1. Create the root file ${root}/PLAN.md first. It coordinates the whole plan: the goal, the relevant context, the ordered steps or phases, how to verify the result, and links to any sub-files.
+2. When a part of the plan is large or independent, put it in its own file in the same folder (for example ${root}/01-backend.md) and link it from PLAN.md. A small plan needs only PLAN.md.
 3. When the user gives feedback on the plan, update the existing plan files instead of starting a new folder.
-4. End your turn with a short summary that names the root file (plans/<slug>/PLAN.md). Do not paste the whole plan into the chat.
+4. End your turn with a short summary that names the root file (${root}/PLAN.md). Do not paste the whole plan into the chat.
 
 In plan mode the editor tool only accepts markdown (.md) paths; writes to any other file are rejected with a tool error. If you are only answering a question or asking for clarification, you do not need to write a plan file.
 
 The run_commands tool remains available in plan mode strictly for read-only inspection -- listing files, searching (grep), reading configs, inspecting git history and diffs, checking tool versions, and the like. Never use it to change anything: no creating, modifying, or deleting files, no writing scripts that make changes, and no state-changing commands (installs, migrations, database or schema changes, container commands that mutate state, etc.). File-editing commands (rm/mv/cp, in-place edits like sed -i, output redirection to files outside /tmp, git commands that change the working tree, package installs) are hard-blocked in plan mode: they are not executed and return a tool error instead, so do not attempt them. If the task requires a mutation, put it in the plan; it happens only after the user switches to act mode.`;
+}
 
-export const PLAN_MODE_INSTRUCTIONS = `${PLAN_MODE_INSTRUCTIONS_BASE}
+function planModeInstructions(planDirectory?: string): string {
+	return `${planModeInstructionsBase(planDirectory)}
 
 Once the user has reviewed your plan and explicitly approved it in a follow-up message, use the switch_to_act_mode tool to switch to act mode and begin implementation. Calling switch_to_act_mode immediately starts execution, so never call it in the same turn you present a plan and never treat the original task request as approval -- end your turn after presenting the plan and wait for the user's response.`;
+}
 
 /**
  * Plan-mode contract for hosts that do NOT expose the switch_to_act_mode tool
@@ -69,11 +81,18 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
  * model than the one that wrote it, so the contract also asks for a plan that
  * stands on its own. Kept to one sentence: it is paid for on every call.
  */
-export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BASE}
+function planModeInstructionsManualSwitch(planDirectory?: string): string {
+	return `${planModeInstructionsBase(planDirectory)}
 
 Write the plan for an executor that has not seen this conversation and may be a weaker model than you: give exact file paths, the steps in order, the command that verifies each step, the decisions already made with their reasons, and anything you discovered while exploring that the executor would otherwise have to rediscover.
 
-Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button or the mode switch once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Agent mode" (use those words).`;
+Once you have written your plan, end your turn and wait for the user's response. The user may edit the plan files before running them. You do NOT have the ability to switch to act mode yourself -- the user starts execution with the Execute plan button, or by switching to Agent mode and asking for it, once they are satisfied with the plan. Switching to Agent mode alone does not approve the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Agent mode" (use those words).`;
+}
+
+export const PLAN_MODE_INSTRUCTIONS = planModeInstructions();
+
+export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH =
+	planModeInstructionsManualSwitch();
 
 /**
  * Ask-mode behavioral contract, appended when the session mode is "ask".
@@ -217,6 +236,11 @@ export interface ClineSystemPromptOptions
 	 */
 	planModeSwitchTool?: boolean;
 	/**
+	 * Absolute folder plan mode writes its plans to. Without it the plans go
+	 * under the workspace-relative `plans/` folder.
+	 */
+	planDirectory?: string;
+	/**
 	 * The date shown in the `<env>` block. The prompt is rebuilt many times in
 	 * a conversation's life, and the date sits near its start, so a host that
 	 * wants the provider's prompt cache to survive a rebuild on a later day
@@ -238,6 +262,7 @@ export function buildClineSystemPrompt(
 		overridePrompt,
 		providerId,
 		planModeSwitchTool = true,
+		planDirectory,
 		currentDate,
 	} = options;
 	const workspaceRoot = options.workspaceRoot ?? options.rootPath ?? "";
@@ -269,8 +294,8 @@ export function buildClineSystemPrompt(
 		MODE_TAG_INSTRUCTIONS,
 		mode === "plan"
 			? planModeSwitchTool
-				? PLAN_MODE_INSTRUCTIONS
-				: PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH
+				? planModeInstructions(planDirectory)
+				: planModeInstructionsManualSwitch(planDirectory)
 			: mode === "ask"
 				? ASK_MODE_INSTRUCTIONS
 				: undefined,

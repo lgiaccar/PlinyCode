@@ -85,7 +85,7 @@ describe("SdkModeCoordinator", () => {
 			}
 		})
 
-		const toggle = coordinator.togglePlanActMode("act")
+		const toggle = coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 		await vi.waitFor(() => expect(options.sessions.replaceActiveSession).toHaveBeenCalledOnce())
 
 		expect(state.mode).toBe("act")
@@ -106,7 +106,7 @@ describe("SdkModeCoordinator", () => {
 		const { coordinator, options, state } = makeCoordinator({ activeSession, task, mode: "plan" })
 		options.sessions.replaceActiveSession.mockResolvedValueOnce(undefined)
 
-		await expect(coordinator.togglePlanActMode("act")).resolves.toBe(false)
+		await expect(coordinator.togglePlanActMode("act", undefined, { executePlan: true })).resolves.toBe(false)
 
 		expect(state.mode).toBe("plan")
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
@@ -126,7 +126,7 @@ describe("SdkModeCoordinator", () => {
 			.mockReturnValueOnce(activeSession) // performRebuild initial read
 			.mockReturnValue({ ...makeActiveSession(), sessionId: "other-session" })
 
-		await expect(coordinator.togglePlanActMode("act")).resolves.toBe(false)
+		await expect(coordinator.togglePlanActMode("act", undefined, { executePlan: true })).resolves.toBe(false)
 
 		expect(state.mode).toBe("act")
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
@@ -143,7 +143,7 @@ describe("SdkModeCoordinator", () => {
 		})
 
 		// No typed input was consumed, so the webview should not clear it.
-		await expect(coordinator.togglePlanActMode("act")).resolves.toBe(false)
+		await expect(coordinator.togglePlanActMode("act", undefined, { executePlan: true })).resolves.toBe(false)
 
 		expect(state.mode).toBe("act")
 		expect(options.sessions.setRunning).toHaveBeenCalledWith(true)
@@ -156,6 +156,26 @@ describe("SdkModeCoordinator", () => {
 			undefined,
 		)
 		// Canned prompt is not echoed as a user message.
+		expect(options.messages.appendAndEmit).not.toHaveBeenCalled()
+	})
+
+	it("does not execute a presented plan when the user only switches to act mode", async () => {
+		const activeSession = makeActiveSession()
+		const task = makeTask("old-session", planMessages())
+		const { coordinator, options, state } = makeCoordinator({
+			activeSession,
+			task,
+			mode: "plan",
+			turnPhase: "awaiting_followup",
+		})
+
+		// A draft in the composer is not an instruction to execute: it stays there.
+		await expect(coordinator.togglePlanActMode("act", { message: "draft", images: [], files: [] })).resolves.toBe(false)
+
+		expect(state.mode).toBe("act")
+		expect(options.sessions.replaceActiveSession).toHaveBeenCalledOnce()
+		expect(options.sessions.setRunning).not.toHaveBeenCalledWith(true)
+		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
 		expect(options.messages.appendAndEmit).not.toHaveBeenCalled()
 	})
 
@@ -181,7 +201,7 @@ describe("SdkModeCoordinator", () => {
 			turnPhase: "awaiting_followup",
 		})
 
-		await coordinator.togglePlanActMode("act")
+		await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
 			expect.anything(),
@@ -206,7 +226,7 @@ describe("SdkModeCoordinator", () => {
 			turnPhase: "completed",
 		})
 
-		await coordinator.togglePlanActMode("act")
+		await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
 			expect.anything(),
@@ -229,11 +249,15 @@ describe("SdkModeCoordinator", () => {
 
 		// Typed input was consumed, so the webview should clear it.
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: "  go ahead and implement step 1  ",
-				images: [],
-				files: [],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: "  go ahead and implement step 1  ",
+					images: [],
+					files: [],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(true)
 
 		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
@@ -260,11 +284,15 @@ describe("SdkModeCoordinator", () => {
 		})
 
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: "use this screenshot",
-				images: ["data:image/png;base64,abc"],
-				files: ["/tmp/notes.md"],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: "use this screenshot",
+					images: ["data:image/png;base64,abc"],
+					files: ["/tmp/notes.md"],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(true)
 
 		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
@@ -299,11 +327,15 @@ describe("SdkModeCoordinator", () => {
 
 		// Attachments alone count as consumed content, so the webview clears them.
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: undefined,
-				images: ["data:image/png;base64,abc"],
-				files: [],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: undefined,
+					images: ["data:image/png;base64,abc"],
+					files: [],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(true)
 
 		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
@@ -338,11 +370,15 @@ describe("SdkModeCoordinator", () => {
 
 		// The send never happened, so the webview must keep the composer content.
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: "see @/broken/path",
-				images: [],
-				files: [],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: "see @/broken/path",
+					images: [],
+					files: [],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(false)
 
 		expect(options.onAutoContinueStarting).toHaveBeenCalledOnce()
@@ -375,11 +411,15 @@ describe("SdkModeCoordinator", () => {
 		})
 
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: "use postgres",
-				images: [],
-				files: [],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: "use postgres",
+					images: [],
+					files: [],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(false)
 
 		expect(state.mode).toBe("act")
@@ -397,7 +437,7 @@ describe("SdkModeCoordinator", () => {
 			turnPhase: "streaming",
 		})
 
-		await expect(coordinator.togglePlanActMode("act")).resolves.toBe(false)
+		await expect(coordinator.togglePlanActMode("act", undefined, { executePlan: true })).resolves.toBe(false)
 
 		expect(state.mode).toBe("act")
 		expect(options.sessions.setRunning).not.toHaveBeenCalledWith(true)
@@ -417,11 +457,15 @@ describe("SdkModeCoordinator", () => {
 		})
 
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: "  go ahead and implement step 1  ",
-				images: [],
-				files: [],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: "  go ahead and implement step 1  ",
+					images: [],
+					files: [],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(false)
 
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
@@ -442,7 +486,7 @@ describe("SdkModeCoordinator", () => {
 			turnPhase: "awaiting_followup",
 		})
 
-		await coordinator.togglePlanActMode("act")
+		await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
 	})
@@ -460,7 +504,7 @@ describe("SdkModeCoordinator", () => {
 			turnPhase: "completed",
 		})
 
-		await coordinator.togglePlanActMode("act")
+		await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
 	})
@@ -480,7 +524,7 @@ describe("SdkModeCoordinator", () => {
 		})
 
 		await coordinator.togglePlanActMode("plan")
-		await coordinator.togglePlanActMode("act")
+		await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
 	})
@@ -498,7 +542,7 @@ describe("SdkModeCoordinator", () => {
 			turnPhase: "awaiting_followup",
 		})
 
-		await coordinator.togglePlanActMode("act")
+		await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
 	})
@@ -537,11 +581,15 @@ describe("SdkModeCoordinator", () => {
 		// The continuation was already handed to the session, so the composer
 		// content counts as consumed and the run must not be flagged as failed.
 		await expect(
-			coordinator.togglePlanActMode("act", {
-				message: "go ahead",
-				images: [],
-				files: [],
-			}),
+			coordinator.togglePlanActMode(
+				"act",
+				{
+					message: "go ahead",
+					images: [],
+					files: [],
+				},
+				{ executePlan: true },
+			),
 		).resolves.toBe(true)
 
 		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledOnce()
@@ -667,7 +715,7 @@ describe("SdkModeCoordinator", () => {
 			expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
 			expect(coordinator.consumeModeSwitchNotice("new-session")).toEqual({ from: "plan", to: "ask" })
 
-			await coordinator.togglePlanActMode("act")
+			await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 			expect(coordinator.consumeModeSwitchNotice("new-session")).toEqual({ from: "ask", to: "act" })
 		})
 
@@ -690,7 +738,7 @@ describe("SdkModeCoordinator", () => {
 				},
 			)
 
-			await coordinator.togglePlanActMode("act", { message: "go ahead", images: [], files: [] })
+			await coordinator.togglePlanActMode("act", { message: "go ahead", images: [], files: [] }, { executePlan: true })
 
 			expect(consumedAtSend).toEqual([{ from: "plan", to: "act" }])
 			expect(coordinator.consumeModeSwitchNotice("new-session")).toBeNull()
@@ -702,7 +750,7 @@ describe("SdkModeCoordinator", () => {
 			const { coordinator } = makeCoordinator({ activeSession, task, mode: "act" })
 
 			await coordinator.togglePlanActMode("plan")
-			await coordinator.togglePlanActMode("act")
+			await coordinator.togglePlanActMode("act", undefined, { executePlan: true })
 
 			expect(coordinator.consumeModeSwitchNotice("new-session")).toBeNull()
 		})

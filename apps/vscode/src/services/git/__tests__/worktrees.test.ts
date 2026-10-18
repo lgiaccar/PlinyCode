@@ -6,8 +6,10 @@ import path from "node:path"
 import {
 	ensureTaskWorktree,
 	ensureWorktree,
+	isTaskBranch,
 	listWorktrees,
 	removeWorktree,
+	taskBranchPrefix,
 	taskBranchSlug,
 	worktreeRoot,
 	worktreeSlug,
@@ -127,6 +129,16 @@ describe("taskBranchSlug", () => {
 	})
 })
 
+describe("taskBranchPrefix", () => {
+	it("names conversation branches after the user, made safe for a ref", () => {
+		expect(taskBranchPrefix("lgiaccar")).toBe("lgiaccar/")
+		expect(taskBranchPrefix("Jane Doe")).toBe("jane-doe/")
+		expect(taskBranchPrefix(".x..y.")).toBe("x.y/")
+		expect(taskBranchPrefix("")).toBe("plinycode/")
+		expect(taskBranchPrefix("???")).toBe("plinycode/")
+	})
+})
+
 describe("ensureTaskWorktree", () => {
 	let dir: string
 	let repo: string
@@ -150,7 +162,13 @@ describe("ensureTaskWorktree", () => {
 		async () => {
 			const result = await ensureTaskWorktree({ repoRoot: path.join(repo, "sub"), title: "Fix the login page" })
 			expect(result.repoRoot).toBe(repo)
-			expect(result.branch).toMatch(/^plinycode\/fix-the-login-page-[0-9a-f]{4}$/)
+			expect(result.branch).toMatch(/^[a-z0-9._-]+\/fix-the-login-page-[0-9a-f]{4}$/)
+			expect(result.branch).toBe(`${taskBranchPrefix()}fix-the-login-page-${result.branch.slice(-4)}`)
+			// Marked, so the cleanup tells it from a branch of the user's own.
+			expect(await isTaskBranch(repo, result.branch)).toBe(true)
+			git(repo, "branch", `${taskBranchPrefix()}mine-ab12`)
+			expect(await isTaskBranch(repo, `${taskBranchPrefix()}mine-ab12`)).toBe(false)
+			expect(await isTaskBranch(repo, "plinycode/old-ab12")).toBe(true)
 			expect(path.dirname(result.path)).toBe(path.join(dir, "repo.worktrees"))
 			expect(path.basename(result.path)).toBe(`fix-the-login-page-${result.branch.slice(-4)}`)
 			expect(git(result.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(result.branch)
@@ -170,7 +188,7 @@ describe("ensureTaskWorktree", () => {
 			const root = path.join(dir, "wt")
 			const result = await ensureTaskWorktree({ repoRoot: repo, title: "x", configuredRoot: root })
 			expect(path.dirname(result.path)).toBe(path.join(root, "repo"))
-			expect(result.branch).toMatch(/^plinycode\/x-[0-9a-f]{4}$/)
+			expect(result.branch).toBe(`${taskBranchPrefix()}x-${result.branch.slice(-4)}`)
 			expect(fs.existsSync(path.join(result.path, "draft.txt"))).toBe(false)
 			expect(result.notes[0]).toContain("uncommitted changes")
 		},

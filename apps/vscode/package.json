@@ -233,6 +233,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.openPlan",
+				"title": "Open Plan…",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.manageWorktrees",
 				"title": "Manage Worktrees",
 				"category": "PlinyCode"
