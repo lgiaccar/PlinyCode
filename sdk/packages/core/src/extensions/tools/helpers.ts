@@ -17,6 +17,17 @@ export function formatError(error: unknown): string {
 	return String(error);
 }
 
+/** Files whose whole content is routinely written in one go: documents, not code. */
+const DOCUMENT_FILE = /\.(md|mdx|markdown|txt|rst)$/i;
+
+/**
+ * The size limit protects edits: a `new_text` of 20k characters spliced into
+ * code by `old_text` is both slow to stream and likely to be truncated. It
+ * does not apply when the call creates a file (no `old_text`, no
+ * `insert_line`) or writes a document: the limit used to reject every plan
+ * and report a model wrote, three times per session, and each rejected call
+ * left its 10-25k characters in the conversation.
+ */
 export function getEditorSizeError(input: EditFileInput): string | null {
 	if (
 		typeof input.old_text === "string" &&
@@ -25,7 +36,12 @@ export function getEditorSizeError(input: EditFileInput): string | null {
 		return `Editor input too large: old_text was ${input.old_text.length} characters, exceeding the recommended limit of ${INPUT_ARG_CHAR_LIMIT}. Split the edit into smaller tool calls so later tool calls are less likely to be truncated or time out.`;
 	}
 
-	if (input.new_text.length > INPUT_ARG_CHAR_LIMIT) {
+	const creating = input.old_text == null && input.insert_line == null;
+	if (
+		input.new_text.length > INPUT_ARG_CHAR_LIMIT &&
+		!creating &&
+		!DOCUMENT_FILE.test(input.path)
+	) {
 		return `Editor input too large: new_text was ${input.new_text.length} characters, exceeding the recommended limit of ${INPUT_ARG_CHAR_LIMIT}. Split the edit into smaller tool calls so later tool calls are less likely to be truncated or time out.`;
 	}
 

@@ -46,6 +46,32 @@ turns go straight to the Sonnet 4.6 thinking preset. The classifier guidance
 in the rules file says the same, so it picks `reason` only where a strong
 model changes the outcome.
 
+**A verdict whose route refuses the request falls back by tier, not to the
+catch-all.** The `quick` route admits requests up to 30k tokens; a `quick`
+verdict on a longer conversation ("please also update the PR message", 41k
+tokens) used to fall through to `default`, Sonnet 5, for the whole turn: 49
+such calls in a week. It now goes to `coding`. A `huge` verdict below the
+huge route's 180k bound (every one of the 164 seen, median 70k) goes to
+`coding` in act mode and `plan-and-reasoning` in plan mode. The classifier
+no longer offers `huge` at all: the router already routes by size, and the
+classifier cannot know the context better than the router does. The call log
+shows a fallback as the tier with another route (`tier: quick, route:
+coding`), and the summary script counts them under "Classifier verdicts that
+left their route".
+
+**What the classifier and the keyword routes read.** Only what the user typed:
+the `<editor_state>` block (active file, open tabs) and `<mode_notice>` are
+stripped first, and runtime reminders, hook context and compaction summaries
+are skipped, both as the "latest request" and in the classifier's digest of
+earlier messages. An open tab named `app.ts` used to match the coding regex,
+the open-tabs list pushed every prompt past the quick route's 300-character
+bound, and a `[SYSTEM]` reminder was handed to the classifier as the request.
+The classifier's instructions also spell out that chores (creating or
+updating a PR, committing and pushing, fixing a CI failure, waiting for a
+build, writing notes to a file, `[CI WATCHER]` messages) are `code`: in the
+same week, `reason` verdicts put 124 calls of a turn that was polling a build
+on the Sonnet thinking preset.
+
 The pool leads with the paid models, so a turn whose free candidates all fail
 still lands on a strong one. Health benching, context-window checks, sticky
 choice and failover all behave as for FreeAuto.
@@ -120,9 +146,27 @@ paid reply look like a free one. The command note follows whichever agent ran
 the command.
 
 When a free model ignores a reminder and stalls again, or keeps stalling between
-steps (three stalls in the run), the rest of the turn moves
-to the lead of the `default` route — on BalanceAuto that is Claude Sonnet 5, so
-the escalation hands the stuck step to a paid model that does not stall.
+steps (three stalls in the run), the rest of the turn moves to another model.
+The first such escalation in a turn goes to the next free model of the turn's
+route (then of the `coding` route, then of the pool): the stall rules fire
+most on Kimi writing its thinking as the reply, and handing the last one or
+two calls of a 100k-token turn to Sonnet 5 wrote the whole prefix into its
+cache for a reply of a hundred tokens. A second escalation in the same turn
+goes to the lead of the `default` route — on BalanceAuto that is Claude Sonnet
+5, so a step two free models could not take is handed to a paid model that
+does not stall. The run log's `escalatedTo` names the model.
+
+**Paid-call cap.** The model chosen at the start of a turn is kept for all of
+it (`sticky`), so one `reason` verdict puts every call of the turn on paid
+Claude: a turn spent 124 calls on the Sonnet thinking preset watching a build.
+`health.maxPaidCallsPerTurn` (default 20, `0` turns it off) caps that: once a
+turn has made that many calls on paid models, the rest of it runs on the
+first free model of the `coding` route, the chat says so (`⚠ 20 paid calls
+this turn (health.maxPaidCallsPerTurn: 20) · ↪ switching to **Kimi K2.6**`),
+and the run log line carries `paidCapHit: true`. It fires once per turn; a
+later failover from the free model to a paid backup is left alone. Only the
+main agent's calls count, and only calls on hosted models, so the classifier,
+the judge and image descriptions do not.
 
 Failing commands escalate too. When six commands have failed in one turn (builds that do not compile, test runs that do not pass; a command that passes in between does not reset the count), the rest of the turn moves to the same `default` lead and the chat says so (`⚠ 6 commands have failed this turn`). It happens once per turn, and only while a free model is answering. The count is `failedCommands` in the run log. It is the case the stall rules miss: a model that keeps acting, and keeps failing, never stalls.
 

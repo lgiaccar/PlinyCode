@@ -201,11 +201,13 @@ const BALANCE_GUIDANCE = `The quick and code tiers lead with free models and cos
 tier runs on paid Claude with thinking on, and anything unclassified goes to
 paid Claude too. Choose quick for short factual questions, one-line or
 mechanical edits, lookups and reformatting. Choose code for implementation
-work: writing, editing, fixing and testing code, even when it is long. Choose
-reason only where a strong model changes the outcome: design and planning,
-reviews, comparing options, a bug whose cause is unknown, or work a free model
-already got wrong in this conversation. Set think only for design trade-offs
-and tricky bugs.`
+work: writing, editing, fixing and testing code, even when it is long, and for
+every chore around it: creating or updating a pull request, committing and
+pushing, fixing a CI failure, waiting for a build, re-running tests, writing
+notes or findings to a file. Choose reason only where a strong model changes
+the outcome: design and planning, reviews, comparing options, a bug whose
+cause is unknown, or work a free model already got wrong in this conversation.
+Set think only for design trade-offs and tricky bugs, never for chores.`
 
 /**
  * The starter rules document. The prose is deliberately substantial: it is both
@@ -290,7 +292,10 @@ understand would fail the call, so every other model keeps its default.
   No verdict within \`guard.judgeTimeoutMs\` means the reply is accepted.
 - \`health\` — how quickly a failing model is benched, how many failovers a
   single turn allows, and how long to wait before treating a silent stream as
-  stalled.
+  stalled. \`maxPaidCallsPerTurn\` caps the calls a turn makes on paid hosted
+  models (the model chosen at the start of a turn is kept for all of it, so a
+  long turn on paid Claude is expensive); past the cap the rest of the turn
+  runs on the first free model of the \`coding\` route. \`0\` turns it off.
 - \`contextMarginRatio\` — safety factor when checking whether a request fits a
   model's context window.
 - \`sticky\` — keep the model chosen at the start of a turn for the rest of it.
@@ -324,6 +329,7 @@ health:
   cooldownMs: ${rules.health.cooldownMs}
   failuresBeforeCooldown: ${rules.health.failuresBeforeCooldown}
   maxFailoversPerTurn: ${rules.health.maxFailoversPerTurn}
+  maxPaidCallsPerTurn: ${rules.health.maxPaidCallsPerTurn}
   firstTokenTimeoutMs: ${rules.health.firstTokenTimeoutMs}
   stallTimeoutMs: ${rules.health.stallTimeoutMs}
 

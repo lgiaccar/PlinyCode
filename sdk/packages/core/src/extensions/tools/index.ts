@@ -60,8 +60,11 @@ export {
 } from "./executors/index";
 export {
 	COMMAND_DIGEST_THRESHOLD_CHARS,
+	capOperationResultsTotal,
 	digestCommandOutput,
 	MAX_COMMAND_OUTPUT_CHARS,
+	MAX_READ_CALL_CHARS,
+	MAX_SEARCH_CALL_CHARS,
 	truncateCommandOutput,
 } from "./executors/output-limits";
 export {

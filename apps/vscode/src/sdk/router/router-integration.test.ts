@@ -275,6 +275,62 @@ describe("installRouter completion guard", () => {
 		})
 	})
 
+	it("escalates a BalanceAuto stall to a free model first and to the default lead only the second time", async () => {
+		const { config, rows } = install(PLINY_BALANCE_AUTO_MODEL_ID)
+		const state = getSessionState("s")
+		state.calls.push({ modelId: "snps-provider/kimi-k2.6", startedAt: NOW, routeName: "coding" })
+		state.stickyModelId = "snps-provider/kimi-k2.6"
+
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 4 })).toContain("Second reminder")
+		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(state.run.escalatedTo).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(state.escalations).toBe(1)
+
+		// The coder acts on the reminder, then stalls again and again: the turn goes to paid Claude.
+		state.calls.push({ modelId: "snps-provider/qwen3-coder-480b-a35b-inst-fp8", startedAt: NOW, routeName: "coding" })
+		state.run.toolCalls += 1
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 6 })).toContain("did not call a tool")
+		state.run.toolCalls += 1
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 8 })).toContain("did not call a tool")
+		state.run.toolCalls += 1
+		expect(await config.completionGuard?.({ ...unfinished, iteration: 10 })).toContain("stopped several times")
+		expect(state.stickyModelId).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
+		expect(state.escalations).toBe(2)
+		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **global.anthropic.claude-sonnet-5**"))).toBe(true)
+	})
+
+	it("sends six failed commands on BalanceAuto straight to the default route's lead", async () => {
+		const { config } = install(PLINY_BALANCE_AUTO_MODEL_ID)
+		const state = getSessionState("s")
+		state.calls.push({ modelId: "snps-provider/kimi-k2.6", startedAt: NOW, routeName: "coding" })
+		state.stickyModelId = "snps-provider/kimi-k2.6"
+		for (let i = 1; i <= 6; i += 1) {
+			await config.hooks?.afterTool?.({
+				snapshot: { agentId: "root", iteration: 2 } as never,
+				tool: { name: "run_commands" } as never,
+				toolCall: { type: "tool-call", toolCallId: `c${i}`, toolName: "run_commands", input: {} },
+				input: {},
+				result: {
+					output: [
+						{
+							query: "build",
+							result: "[Command exited with code 1]",
+							error: "Command exited with code 1",
+							success: false,
+						},
+					],
+				},
+				startedAt: new Date(NOW),
+				endedAt: new Date(NOW),
+				durationMs: 0,
+			})
+		}
+		expect(state.stickyModelId).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
+		expect(state.run.escalatedTo).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
+	})
+
 	it("moves the turn to the default route's lead after six failed commands, once", async () => {
 		const { config, rows } = install()
 		const state = getSessionState("s")
@@ -510,6 +566,102 @@ describe("installRouter profiles, effort and call log", () => {
 			["balance", true, "snps-provider/kimi-k2.6"],
 			["balance", false, "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"],
 		])
+	})
+
+	it("moves a BalanceAuto turn to a free model once it has spent its paid calls", async () => {
+		const { loadRouterRules } = await import("./router-rules-store")
+		const balance = defaultRules("balance")
+		vi.mocked(loadRouterRules).mockImplementation(async (options?: { profile?: string }) =>
+			options?.profile === "balance"
+				? { ...balance, health: { ...balance.health, maxPaidCallsPerTurn: 2 } }
+				: defaultRules(options?.profile),
+		)
+		try {
+			const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+			classifierModel.mockReturnValue(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
+			await run({}, 3)
+			expect(logged.map((record) => record.model)).toEqual([
+				"aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking",
+				"aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking",
+				"snps-provider/kimi-k2.6",
+			])
+			expect(rows.some((row) => row.includes("2 paid calls this turn (health.maxPaidCallsPerTurn: 2)"))).toBe(true)
+			expect(rows.some((row) => row.includes("switching to **kimi-k2.6**"))).toBe(true)
+			expect(getSessionState("root").run.paidCapHit).toBe(true)
+
+			// Once per turn: the next turn starts afresh on the paid model.
+			await run()
+			expect(logged.at(-1)?.model).toBe("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")
+		} finally {
+			vi.mocked(loadRouterRules).mockImplementation(async (options?: { profile?: string }) =>
+				defaultRules(options?.profile),
+			)
+		}
+	})
+
+	it("never caps paid calls when the cap is zero", async () => {
+		const { loadRouterRules } = await import("./router-rules-store")
+		const balance = defaultRules("balance")
+		vi.mocked(loadRouterRules).mockImplementation(async (options?: { profile?: string }) =>
+			options?.profile === "balance"
+				? { ...balance, health: { ...balance.health, maxPaidCallsPerTurn: 0 } }
+				: defaultRules(options?.profile),
+		)
+		try {
+			const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+			classifierModel.mockReturnValue(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
+			await run({}, 3)
+			expect(logged.every((record) => record.model === "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")).toBe(true)
+			expect(rows.some((row) => row.includes("paid calls this turn"))).toBe(false)
+		} finally {
+			vi.mocked(loadRouterRules).mockImplementation(async (options?: { profile?: string }) =>
+				defaultRules(options?.profile),
+			)
+		}
+	})
+
+	it("routes on the user's request, not on a reminder or the editor state appended to it", async () => {
+		const { rows, run, config } = setup(PLINY_FREE_AUTO_MODEL_ID)
+		const factory = config.agentModelFactory
+		if (!factory) {
+			throw new Error("no factory")
+		}
+		const model = factory({
+			config: { modelId: PLINY_FREE_AUTO_MODEL_ID } as never,
+			createDefault: () => scripted([TEXT, STOP]),
+		})
+		const messages: AgentMessage[] = [
+			{
+				id: "u1",
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text: '<user_input mode="act">what is this repo?\n<editor_state>\nActive file: src/app.ts\nOpen tabs:\n- .github/skills/code-sanitization/SKILL.md\n</editor_state></user_input>',
+					},
+				],
+				createdAt: 0,
+			},
+			{ id: "a1", role: "assistant", content: [{ type: "text", text: "Let me look:" }], createdAt: 1 },
+			{
+				id: "u2",
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text: "[SYSTEM] Your last message said what you would do next, but you did not call a tool.",
+					},
+				],
+				createdAt: 2,
+				metadata: { displayRole: "system", userRunSpan: 0 },
+			},
+		]
+		for await (const _event of await model.stream({ messages, tools: [] })) {
+			// drain
+		}
+		// Without the editor state the prompt is a short question: the quick route, not coding.
+		expect(rows[0]).toContain("route: quick")
+		void run
 	})
 
 	it("nudges an unfinished BalanceAuto reply only when a free model wrote it", async () => {

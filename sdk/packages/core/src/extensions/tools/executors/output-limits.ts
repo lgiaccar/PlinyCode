@@ -49,6 +49,58 @@ export const MAX_READ_OUTPUT_CHARS = 48_000;
 /** Max characters returned per search query; beyond this the middle is elided. */
 export const MAX_SEARCH_OUTPUT_CHARS = 48_000;
 
+/**
+ * Max characters one `search_codebase` call returns across all its queries.
+ * The per-query cap alone let a call with seven queries return 224k
+ * characters, a third of a 128k-token budget, in one tool result.
+ */
+export const MAX_SEARCH_CALL_CHARS = 32_000;
+
+/** Max characters one `read_files` call returns across all its files. */
+export const MAX_READ_CALL_CHARS = 64_000;
+
+/**
+ * Caps what a multi-entry tool call returns as a whole. Entries are kept in
+ * order; the one that crosses the budget is middle-cut to what is left (never
+ * below `minEntryChars`), and the ones after it are replaced by a one-line
+ * note so the model knows to ask for them on their own. Entries whose result
+ * is not a string (images) are left alone and not counted.
+ */
+export function capOperationResultsTotal<
+	T extends { query: string; result: unknown },
+>(
+	results: T[],
+	maxTotalChars: number,
+	hint: string,
+	minEntryChars = 2_000,
+): T[] {
+	let used = 0;
+	let spent = false;
+	return results.map((entry) => {
+		if (typeof entry.result !== "string") {
+			return entry;
+		}
+		if (spent) {
+			return {
+				...entry,
+				result: `[result elided: this call's output budget of ${maxTotalChars} chars was spent by the earlier entries. ${hint}]`,
+			};
+		}
+		const remaining = maxTotalChars - used;
+		if (entry.result.length <= remaining) {
+			used += entry.result.length;
+			return entry;
+		}
+		spent = true;
+		const keep = Math.max(minEntryChars, remaining);
+		const result = truncateCommandOutput(entry.result, { maxChars: keep });
+		return {
+			...entry,
+			result: `${result}\n[... cut to ${keep} chars: this call's output budget of ${maxTotalChars} chars is spent. ${hint}]`,
+		};
+	});
+}
+
 /** Command output longer than this is digested instead of returned whole. */
 export const COMMAND_DIGEST_THRESHOLD_CHARS = 16_000;
 

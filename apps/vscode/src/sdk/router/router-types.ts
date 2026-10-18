@@ -59,6 +59,12 @@ export interface RouterHealthSettings {
 	failuresBeforeCooldown: number
 	/** Upper bound on failovers within a single user turn. */
 	maxFailoversPerTurn: number
+	/**
+	 * Calls a turn may make on paid (hosted) models before the rest of it moves
+	 * to a free model; 0 turns the cap off. Only profiles that allow paid
+	 * models (BalanceAuto) ever reach it.
+	 */
+	maxPaidCallsPerTurn: number
 	/** No output at all for this long aborts the call. */
 	firstTokenTimeoutMs: number
 	/** A stream that stops producing for this long aborts the call. */

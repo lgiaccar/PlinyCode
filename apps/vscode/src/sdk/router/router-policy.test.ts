@@ -116,6 +116,60 @@ describe("selectRoute", () => {
 		it("falls back to the heuristics when no route carries the tier", () => {
 			expect(selectRoute(configured, features(), { tier: "quick", think: false })?.name).toBe("code")
 		})
+
+		describe("tier fallbacks", () => {
+			const sized = rules({
+				routes: [
+					{ name: "huge", tier: "huge", when: { minEstimatedTokens: 180_000 }, use: ["snps-provider/a"] },
+					{ name: "plan", tier: "reason", when: { mode: "plan" }, use: ["snps-provider/b"] },
+					{ name: "code", tier: "code", when: { mode: "act" }, use: ["snps-provider/c"] },
+					{ name: "quick", tier: "quick", when: { maxEstimatedTokens: 30_000 }, use: ["snps-provider/q"] },
+					{ name: "fallback", use: ["snps-provider/d"] },
+				],
+			})
+
+			it("keeps a quick verdict on the quick route while the conversation is small", () => {
+				expect(selectRoute(sized, features({ estimatedTokens: 20_000 }), { tier: "quick", think: false })?.name).toBe(
+					"quick",
+				)
+			})
+
+			it("sends a quick verdict on a long conversation to the coding route, not the catch-all", () => {
+				expect(selectRoute(sized, features({ estimatedTokens: 35_000 }), { tier: "quick", think: false })?.name).toBe(
+					"code",
+				)
+			})
+
+			it("treats a huge verdict below the huge route's bound as code in act mode", () => {
+				expect(
+					selectRoute(sized, features({ estimatedTokens: 50_000, mode: "act" }), { tier: "huge", think: true })?.name,
+				).toBe("code")
+			})
+
+			it("treats a huge verdict below the huge route's bound as reasoning in plan mode", () => {
+				expect(
+					selectRoute(sized, features({ estimatedTokens: 50_000, mode: "plan" }), { tier: "huge", think: true })?.name,
+				).toBe("plan")
+			})
+
+			it("still honours a huge verdict when the request really is huge", () => {
+				expect(selectRoute(sized, features({ estimatedTokens: 200_000 }), { tier: "huge", think: false })?.name).toBe(
+					"huge",
+				)
+			})
+
+			it("falls back to the heuristics when neither the tier nor its fallbacks have a route", () => {
+				const noCode = rules({
+					routes: [
+						{ name: "quick", tier: "quick", when: { maxEstimatedTokens: 30_000 }, use: ["snps-provider/q"] },
+						{ name: "fallback", use: ["snps-provider/d"] },
+					],
+				})
+				expect(selectRoute(noCode, features({ estimatedTokens: 35_000 }), { tier: "quick", think: false })?.name).toBe(
+					"fallback",
+				)
+			})
+		})
 	})
 })
 

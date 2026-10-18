@@ -254,7 +254,7 @@ export const EditFileInputSchema = z
 		new_text: z
 			.string()
 			.describe(
-				`The new content to write when creating a missing file, the replacement text for edits, or the inserted text when insert_line is provided. Keep this at or below ${INPUT_ARG_CHAR_LIMIT} characters when possible; for large edits, use multiple calls with small chunks of old_text and new_text to iteratively edit the file.`,
+				`The new content to write when creating a missing file, the replacement text for edits, or the inserted text when insert_line is provided. For edits keep this at or below ${INPUT_ARG_CHAR_LIMIT} characters: use multiple calls with small chunks of old_text and new_text to iteratively edit the file. Creating a file, or writing a markdown or text document, may be larger.`,
 			),
 		// See start_line above: coerced so a stringified line number still applies.
 		insert_line: z.coerce

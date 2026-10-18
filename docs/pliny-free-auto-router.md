@@ -218,7 +218,9 @@ BalanceAuto, only when the turn's last call ran on a free model — see
   it follows. A hit sends the model a `[SYSTEM]` reminder naming the problem
   and the chat shows `↻ … (rule: wait-bail-out, 1/8)`. A model that answers a
   reminder with the same stall gets one firmer reminder and the rest of the turn
-  moves to the default route's lead model (`↪ switching to …`); a third stall in
+  moves to another model (`↪ switching to …`): the first time in a turn, the
+  next free model of the route, then of the `coding` route, then of the pool;
+  the second time, the default route's lead model; a third stall in
   a row is accepted. The same switch happens on the third stall in a run even
   when the model acted in between: some models (Kimi K2.6 is one) act on every
   reminder and then stall again on the next step. A run gets at most eight
@@ -510,6 +512,15 @@ extension code, and the eval harness runs the engine without the router.
 at least five labels, that thinking is both on and off, that there are no
 duplicates, and that only `huge` labels claim a context the huge route admits.
 It never calls the gateway, and neither does CI.
+
+The classifier is no longer offered the `huge` tier (its instructions name
+`quick`, `code` and `reason`, with the chores spelled out as `code`); a `huge`
+reply still parses, and `selectRoute` remaps it by size, so the `huge` labels
+are still scored. The request it sees is the user's text alone: `<editor_state>`
+and `<mode_notice>` are stripped, and runtime reminders, hook context and
+compaction summaries are left out of its digest of earlier messages
+(`isRuntimeInjectedMessage` in `unfinished-turn-guard.ts`), as they are for
+the keyword routes.
 
 The first run, on 2026-10-17 with the default classifier
 (`qwen3-6-35b-a3b-1-28dd3`, 8 s timeout): tier 41/52 (79%), think 42/52

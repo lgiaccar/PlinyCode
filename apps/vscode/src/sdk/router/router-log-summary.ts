@@ -317,6 +317,86 @@ function costPerTurnTable(runs: RunLine[]): string | undefined {
 	)
 }
 
+/** The route a tier is meant to land on; a call elsewhere was remapped by size. */
+const TIER_ROUTE: Record<string, string> = {
+	quick: "quick",
+	code: "coding",
+	reason: "plan-and-reasoning",
+	huge: "huge-context",
+}
+
+/**
+ * How often a verdict did not land on its own route (its route refused the
+ * request's size and the tier fell back), per profile and tier: the fallback
+ * is what keeps a `quick` verdict on a long conversation off the paid
+ * catch-all, so the count says how often it worked.
+ */
+function remappedVerdictsTable(records: CallLine[]): string | undefined {
+	const classified = records.filter((r) => !r.subAgent && r.tier)
+	if (classified.length === 0) {
+		return undefined
+	}
+	const groups = groupBy(classified, (r) => `${r.profile ?? "?"} · ${r.tier}`)
+	const rows = sortedRows(groups, (key, calls) => {
+		const tier = calls[0]?.tier ?? ""
+		const remapped = calls.filter((r) => r.route !== TIER_ROUTE[tier])
+		const landed = groupBy(remapped, (r) => r.route ?? "?")
+		const where = [...landed.entries()]
+			.sort((a, b) => b[1].length - a[1].length)
+			.map(([route, group]) => `${route} (${group.length})`)
+			.join(", ")
+		return `| ${key} | ${calls.length} | ${remapped.length} (${pct(remapped.length, calls.length)}) | ${where || "—"} |`
+	})
+	return table("Classifier verdicts that left their route", ["Profile · tier", "Calls", "Remapped", "Landed on"], rows)
+}
+
+/**
+ * Every main-agent turn that made a paid call, newest last: what the
+ * classifier said, where it went, how long it ran, how much of it was paid
+ * and whether the paid-call cap moved it. The first call's tier, route and
+ * size come from the call log, joined by run id; a turn with no run id in
+ * its calls shows the run line's route only.
+ */
+function paidTurnsTable(calls: CallLine[], runs: RunLine[]): string | undefined {
+	const paidTurns = runs.filter((r) => !r.subAgent && (r.paidCalls ?? 0) > 0)
+	if (paidTurns.length === 0) {
+		return undefined
+	}
+	const firstCallByRun = new Map<string, CallLine>()
+	for (const call of calls) {
+		if (!call.runId || call.subAgent) {
+			continue
+		}
+		const first = firstCallByRun.get(call.runId)
+		if (!first || (call.iteration ?? 0) < (first.iteration ?? 0)) {
+			firstCallByRun.set(call.runId, call)
+		}
+	}
+	const rows = [...paidTurns]
+		.sort((a, b) => a.ts.localeCompare(b.ts))
+		.map((run) => {
+			const first = run.runId ? firstCallByRun.get(run.runId) : undefined
+			const models = Object.entries(run.models ?? {})
+				.map(([id, count]) => `${id.split("/").pop()} ×${count}`)
+				.join(", ")
+			return (
+				`| ${run.ts.slice(0, 16).replace("T", " ")} | ${(run.sessionId ?? "?").slice(-5)} | ` +
+				`${first?.tier ?? "—"}${first?.think ? "+think" : ""} | ${first?.route ?? run.route ?? "?"} | ` +
+				`${tokens(first?.estimatedTokens)} | ${run.calls ?? 0} | ${run.paidCalls} | ${usd(run.paidCostUsd)} | ` +
+				`${models || "—"} | ${run.paidCapHit ? "yes" : ""}${run.escalatedTo ? ` → ${run.escalatedTo.split("/").pop()}` : ""} |`
+			)
+		})
+	return table(
+		"Paid turns (main agent)",
+		["When", "Session", "Tier", "Route", "Tokens at start", "Calls", "Paid", "Paid cost", "Models", "Cap hit / escalated to"],
+		rows,
+	)
+}
+
+function pct(part: number, whole: number): string {
+	return whole > 0 ? `${Math.round((part / whole) * 100)}%` : "0%"
+}
+
 function rulesTable(records: RunLine[]): string {
 	const counts = new Map<string, number>()
 	for (const run of records) {
@@ -416,6 +496,10 @@ export function summarizeRouterLogs(input: {
 			sections.push(split)
 		}
 		sections.push(classifierTable(calls))
+		const remapped = remappedVerdictsTable(calls)
+		if (remapped) {
+			sections.push(remapped)
+		}
 		const subAgents = calls.filter((r) => r.subAgent)
 		if (subAgents.length > 0) {
 			sections.push(
@@ -446,6 +530,10 @@ export function summarizeRouterLogs(input: {
 		const perTurn = costPerTurnTable(runs)
 		if (perTurn) {
 			sections.push(perTurn)
+		}
+		const paidTurns = paidTurnsTable(calls, runs)
+		if (paidTurns) {
+			sections.push(paidTurns)
 		}
 		sections.push(rulesTable(runs))
 		if (input.tails) {
