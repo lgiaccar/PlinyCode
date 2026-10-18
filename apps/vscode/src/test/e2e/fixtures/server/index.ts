@@ -9,6 +9,7 @@ import {
 	E2E_MOCK_PLAN_TOOL_CALL,
 	E2E_MOCK_POWERSHELL_TOOL_CALL,
 	E2E_REGISTERED_MOCK_ENDPOINTS,
+	e2eMockPlanToolCall,
 } from "./api"
 
 const E2E_API_SERVER_PORT = 7777
@@ -406,7 +407,10 @@ export class ClineApiServerMock {
 							responseText = E2E_MOCK_API_RESPONSES.PLAN_REQUEST_COMPLETE
 						} else if (isPlanRequest) {
 							responseText = E2E_MOCK_API_RESPONSES.PLAN_REQUEST_LEAD_IN
-							toolCall = E2E_MOCK_PLAN_TOOL_CALL
+							const system = Array.isArray(messages)
+								? messages.find((m: { role?: string }) => m?.role === "system")?.content
+								: undefined
+							toolCall = e2eMockPlanToolCall(typeof system === "string" ? system : JSON.stringify(system ?? ""))
 						} else if (hasToolResult) {
 							responseText = body.includes("powershell_background_request")
 								? E2E_MOCK_API_RESPONSES.POWERSHELL_REQUEST_COMPLETE

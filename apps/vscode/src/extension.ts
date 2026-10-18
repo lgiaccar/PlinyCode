@@ -2,22 +2,16 @@
 // Import the module and reference it with the alias vscode in your code below
 
 import assert from "node:assert"
-import { disableCurrentDirectoryExecutableSearch } from "@plinycode/shared"
-import * as vscode from "vscode"
-import { Logger } from "@/shared/services/Logger"
-import { sendChatButtonClickedEvent } from "./core/controller/ui/subscribeToChatButtonClicked"
-import { sendHistoryButtonClickedEvent } from "./core/controller/ui/subscribeToHistoryButtonClicked"
-import { sendMcpButtonClickedEvent } from "./core/controller/ui/subscribeToMcpButtonClicked"
-import { sendSettingsButtonClickedEvent } from "./core/controller/ui/subscribeToSettingsButtonClicked"
-import { WebviewProvider } from "./core/webview"
-import { createClineAPI } from "./exports"
-import "./utils/path" // necessary to have access to String.prototype.toPosix
+import { promises as fs } from "node:fs"
 import path from "node:path"
 import { persistTokenCalibration, TOKEN_CALIBRATION_FILE_NAME } from "@plinycode/core"
 import { PLINY_ROUTER_PROFILES } from "@plinycode/llms"
+import { disableCurrentDirectoryExecutableSearch } from "@plinycode/shared"
 import type { ExtensionContext } from "vscode"
+import * as vscode from "vscode"
 import { HostProvider } from "@/hosts/host-provider"
 import { vscodeHostBridgeClient } from "@/hosts/vscode/hostbridge/client/host-grpc-client"
+import { Logger } from "@/shared/services/Logger"
 import { createStorageContext } from "@/shared/storage/storage-context"
 import { readTextFromClipboard, writeTextToClipboard } from "@/utils/env"
 import { initialize, tearDown } from "./common"
@@ -27,8 +21,12 @@ import { explainWithCline } from "./core/controller/commands/explainWithCline"
 import { fixWithCline } from "./core/controller/commands/fixWithCline"
 import { improveWithCline } from "./core/controller/commands/improveWithCline"
 import { sendAddToInputEvent } from "./core/controller/ui/subscribeToAddToInput"
+import { sendChatButtonClickedEvent } from "./core/controller/ui/subscribeToChatButtonClicked"
 import { sendCiBoardButtonClickedEvent } from "./core/controller/ui/subscribeToCiBoardButtonClicked"
+import { sendHistoryButtonClickedEvent } from "./core/controller/ui/subscribeToHistoryButtonClicked"
+import { sendMcpButtonClickedEvent } from "./core/controller/ui/subscribeToMcpButtonClicked"
 import { sendPipelinesButtonClickedEvent } from "./core/controller/ui/subscribeToPipelinesButtonClicked"
+import { sendSettingsButtonClickedEvent } from "./core/controller/ui/subscribeToSettingsButtonClicked"
 import { sendShowWebviewEvent } from "./core/controller/ui/subscribeToShowWebview"
 import { ensureRulesDirectoryExists } from "./core/storage/disk"
 import { StateManager } from "./core/storage/StateManager"
@@ -40,7 +38,10 @@ import {
 	migrateWelcomeViewCompleted,
 	migrateWorkspaceToGlobalStorage,
 } from "./core/storage/state-migrations"
+import { WebviewProvider } from "./core/webview"
 import { workspaceResolver } from "./core/workspace"
+import { listSavedPlans, workspacePlanFolder } from "./core/workspace/plan-folder"
+import { createClineAPI } from "./exports"
 import { registerAutoUpdater } from "./hosts/vscode/auto-update/AutoUpdater"
 import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extension"
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
@@ -75,6 +76,7 @@ import { SharedUriHandler, TASK_URI_PATH } from "./services/uri/SharedUriHandler
 import { ShowMessageType } from "./shared/proto/host/window"
 import { createFileLogSink, type FileLogSink, logFilePath } from "./shared/services/file-log-sink"
 import { fileExistsAtPath } from "./utils/fs"
+import { getWorkspacePath } from "./utils/path" // also gives access to String.prototype.toPosix
 
 /** The log file every Logger line goes to, flushed when the extension deactivates. */
 let fileLogSink: FileLogSink | undefined
@@ -694,6 +696,39 @@ ${ctx.cellJson || "{}"}
 			} catch (error) {
 				void vscode.window.showErrorMessage(
 					`Could not open the memory file: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+		}),
+		// Plans live in PlinyCode's data folder, not the workspace (docs/plan-mode.md#plan-files).
+		vscode.commands.registerCommand(commands.OpenPlan, async () => {
+			const folder = workspacePlanFolder(await getWorkspacePath(process.cwd()))
+			const plans = await listSavedPlans(folder).catch(() => [])
+			const reveal = { label: "$(folder-opened) Reveal the plans folder", detail: folder, file: undefined }
+			const picked = await vscode.window.showQuickPick(
+				[
+					...plans.map((plan) => ({
+						label: plan.slug,
+						description: new Date(plan.modifiedTs).toLocaleString(),
+						detail: plan.file,
+						file: plan.file as string | undefined,
+					})),
+					reveal,
+				],
+				{ placeHolder: plans.length > 0 ? "Open a plan of this workspace" : "This workspace has no plans yet" },
+			)
+			if (!picked) {
+				return
+			}
+			try {
+				if (picked.file) {
+					await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(picked.file))
+					return
+				}
+				await fs.mkdir(folder, { recursive: true })
+				await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(folder))
+			} catch (error) {
+				void vscode.window.showErrorMessage(
+					`Could not open ${picked.file ?? folder}: ${error instanceof Error ? error.message : String(error)}`,
 				)
 			}
 		}),

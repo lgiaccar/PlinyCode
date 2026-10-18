@@ -589,7 +589,7 @@ export function formatPlanModeBlockedWriteError(
 	const target = path ? `\`${path}\`` : "a file without a path";
 	return (
 		`Write rejected: ${target} is not a markdown file. ` +
-		"You are in PLAN MODE — only markdown plan files (.md) can be written, under plans/<slug>/ with PLAN.md as the root. " +
+		"You are in PLAN MODE — only markdown plan files (.md) can be written, in the plans folder named in the plan-mode instructions, with PLAN.md as the root. " +
 		"Do not change source, config, or other files; put that change in the plan so it can run after the user switches to act mode."
 	);
 }

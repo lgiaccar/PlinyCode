@@ -11,7 +11,7 @@ import {
 	type PlinyWorktree,
 	type WorktreeConversation,
 } from "../worktree-gc"
-import { ensureTaskWorktree } from "../worktrees"
+import { ensureTaskWorktree, taskBranchPrefix } from "../worktrees"
 
 function git(cwd: string, ...args: string[]): string {
 	return execFileSync("git", ["-C", cwd, ...args], { stdio: "pipe" })
@@ -27,7 +27,7 @@ describe("gcVerdict", () => {
 	const base: PlinyWorktree = {
 		repoRoot: "/repo",
 		path: "/repo.worktrees/x",
-		branch: "plinycode/x-ab12",
+		branch: "lgiaccar/x-ab12",
 		kind: "conversation",
 		conversationIds: ["c1"],
 		lastActivityTs: now - 8 * DAY,
@@ -104,9 +104,10 @@ describe("collectWorktreeGarbage", () => {
 			const recent = await taskWorktree("recent")
 			const dirty = await taskWorktree("dirty")
 			fs.writeFileSync(path.join(dirty.path, "a.txt"), "changed\n")
-			// A worktree the user made in the same folder, on a branch of their own.
+			// A worktree the user made in the same folder, on a branch of their own
+			// that looks like a conversation's (same user prefix) but is not marked as one.
 			const foreign = path.join(wtRoot, "mine")
-			git(repo, "worktree", "add", "-q", "-b", "mine", foreign)
+			git(repo, "worktree", "add", "-q", "-b", `${taskBranchPrefix()}mine-ab12`, foreign)
 			const now = Date.now()
 			const conversations: WorktreeConversation[] = [
 				{ id: "idle", ts: now - 10 * DAY, worktree: idle },
@@ -134,7 +135,7 @@ describe("collectWorktreeGarbage", () => {
 	)
 
 	it(
-		"keeps an unmerged plinycode branch after removing its worktree",
+		"keeps an unmerged conversation branch after removing its worktree",
 		async () => {
 			const wt = await taskWorktree("work")
 			fs.writeFileSync(path.join(wt.path, "b.txt"), "b\n")

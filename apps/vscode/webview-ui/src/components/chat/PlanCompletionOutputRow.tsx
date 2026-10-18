@@ -2,6 +2,7 @@ import type { PlanExecutionChoice } from "@shared/planExecution"
 import { StringRequest } from "@shared/proto/cline/common"
 import { FileTextIcon } from "lucide-react"
 import { memo } from "react"
+import { planFileLabel } from "@/components/chat/chat-view/utils/planFiles"
 import { CopyButton } from "@/components/common/CopyButton"
 import MarkdownBlock from "@/components/common/MarkdownBlock"
 import { FileServiceClient } from "@/services/grpc-client"
@@ -9,7 +10,7 @@ import ExecutePlanButton from "./ExecutePlanButton"
 
 interface PlanCompletionOutputProps {
 	text: string
-	/** Workspace-relative root plan file (plans/<slug>/PLAN.md) written this plan. */
+	/** Root plan file (<plans folder>/<slug>/PLAN.md) this plan wrote, usually an absolute path. */
 	rootPlanFile?: string
 	/**
 	 * Runs the plan on the model the choice names. Shown only together with
@@ -57,7 +58,7 @@ const PlanCompletionOutputRow = memo(({ text, rootPlanFile, onExecutePlan }: Pla
 						title={`Open ${rootPlanFile} to review or edit the plan`}
 						type="button">
 						<FileTextIcon className="size-3 shrink-0" />
-						<span className="truncate">{rootPlanFile}</span>
+						<span className="truncate">{planFileLabel(rootPlanFile)}</span>
 					</button>
 					<ExecutePlanButton onExecute={onExecutePlan} />
 				</div>

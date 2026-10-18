@@ -1,11 +1,11 @@
 /**
  * Worktree cleanup (docs/task-worktrees.md#cleanup): finds the git worktrees
- * PlinyCode made, for conversations ("Run in worktree", branch `plinycode/*`)
+ * PlinyCode made, for conversations ("Run in worktree", branch `<user>/*`)
  * and for CI Board runs, and removes the clean ones whose conversation was
  * deleted or has been idle for `plinycode.worktrees.keepDays` days. A worktree
  * with uncommitted changes, the main checkout, a folder open in this window
  * and a worktree whose conversation is running are never removed. Branches
- * stay, except a `plinycode/*` branch that is merged (`git branch -d`).
+ * stay, except a conversation branch that is merged (`git branch -d`).
  */
 import { existsSync, promises as fs } from "node:fs"
 import path from "node:path"
@@ -103,7 +103,7 @@ export async function findPlinyWorktrees(input: WorktreeScanInput): Promise<Plin
 				continue
 			}
 			const links = input.ciLinks.filter((link) => samePath(link.worktree, entry.path))
-			const kind = isTaskBranch(entry.branch) ? "conversation" : links.length > 0 ? "ci" : undefined
+			const kind = (await isTaskBranch(main.path, entry.branch)) ? "conversation" : links.length > 0 ? "ci" : undefined
 			if (!kind || !existsSync(entry.path)) {
 				continue
 			}
@@ -177,7 +177,7 @@ export function gcVerdict(worktree: PlinyWorktree, context: VerdictContext): GcV
 
 /**
  * Removes a PlinyCode worktree with `git worktree remove` (never forced, so
- * git itself refuses one that became dirty), and its `plinycode/*` branch
+ * git itself refuses one that became dirty), and its conversation branch
  * with `git branch -d` when the branch is merged. Returns git's error, if any.
  */
 async function removePlinyWorktree(
@@ -188,7 +188,8 @@ async function removePlinyWorktree(
 		return { error: removed.stderr || "git worktree remove failed", branchDeleted: false }
 	}
 	const branchDeleted =
-		isTaskBranch(worktree.branch) && (await git(worktree.repoRoot, ["branch", "-d", worktree.branch as string])).ok
+		(await isTaskBranch(worktree.repoRoot, worktree.branch)) &&
+		(await git(worktree.repoRoot, ["branch", "-d", worktree.branch as string])).ok
 	return { branchDeleted }
 }
 

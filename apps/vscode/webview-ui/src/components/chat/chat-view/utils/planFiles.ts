@@ -1,5 +1,6 @@
 /**
- * Plan mode writes its plan as markdown files under plans/<slug>/, with
+ * Plan mode writes its plan as markdown files in a <plans folder>/<slug>/
+ * folder (outside the workspace, in PlinyCode's data folder), with
  * PLAN.md as the root file that coordinates the rest. These helpers find that
  * root file from the chat transcript so the plan row can offer "Execute plan".
  */
@@ -90,4 +91,17 @@ export function isLatestPlanResult(messages: ClineMessage[], planTs: number): bo
 /** The prompt the Execute plan button sends when it switches to act mode. */
 export function executePlanPrompt(rootPlanFile: string): string {
 	return `execute the plan in ${rootPlanFile}`
+}
+
+/**
+ * How the plan link names `planFile`: an absolute path (plans live in
+ * PlinyCode's data folder, outside the workspace) is shortened to its plan
+ * folder and file name, `<slug>/PLAN.md`; a workspace-relative path is kept.
+ */
+export function planFileLabel(planFile: string): string {
+	const normalized = planFile.replace(/\\/g, "/")
+	if (!/^(?:[a-z]:)?\//i.test(normalized)) {
+		return planFile
+	}
+	return normalized.split("/").filter(Boolean).slice(-2).join("/")
 }

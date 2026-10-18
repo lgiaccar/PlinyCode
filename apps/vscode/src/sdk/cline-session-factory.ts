@@ -28,6 +28,7 @@ import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import { reasoningEffortFromThinkingBudget } from "@shared/utils/reasoning-support"
 import { StateManager } from "@/core/storage/StateManager"
+import { workspacePlanFolder } from "@/core/workspace/plan-folder"
 import { HostProvider } from "@/hosts/host-provider"
 import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { getSubAgentLimits } from "@/hosts/vscode/subagent-settings"
@@ -548,6 +549,9 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 			// toggle themselves, so the plan contract must not tell the model to
 			// call a tool it does not have.
 			planModeSwitchTool: false,
+			// Plans go to PlinyCode's data folder, not the workspace, where they
+			// could be committed or deleted by accident.
+			planDirectory: workspacePlanFolder(workspaceRoot),
 		})
 		Logger.log(`[SessionFactory] Built system prompt: ${systemPrompt.length} chars`)
 	} catch (error) {

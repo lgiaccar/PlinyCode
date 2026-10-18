@@ -1,18 +1,28 @@
 # Plan mode
 
-In plan mode the agent explores the code and writes its plan as markdown files, which the user can edit before running them. When the plan is ready, an **Execute plan** button switches to act mode (labelled Agent in the mode switch) and asks the agent to carry it out.
+In plan mode the agent explores the code and writes its plan as markdown files, which the user can edit before running them. When the plan is ready, an **Execute plan** button switches to act mode (labelled Agent in the mode switch) and asks the agent to carry it out. Switching to Agent mode with the mode switch does not run the plan (see [Switching to Agent mode](#switching-to-agent-mode)).
 
 Ask mode, which answers questions and writes nothing at all, is described in [ask-mode.md](ask-mode.md).
 
 ## Plan files
 
-The agent writes plans under `plans/<slug>/`, relative to the workspace root:
+Plans are kept in PlinyCode's data folder, not in the workspace, where they could be committed or deleted by accident. Each workspace has a plans folder of its own:
 
-- `plans/<slug>/PLAN.md` is the root file and is written first. It holds the goal, the relevant context, the ordered steps, how to verify the result, and links to any sub-files.
-- A large or independent part of the plan can go in its own file next to the root, such as `plans/<slug>/01-backend.md`, linked from `PLAN.md`. A small plan needs only `PLAN.md`.
+```
+<dataDir>/plans/<workspace name>-<hash>/<slug>/PLAN.md
+```
+
+`<dataDir>` is `~/.cline/data` (`CLINE_DATA_DIR` overrides it, and `CLINE_PLANS_DATA_DIR` overrides the plans folder alone). `<workspace name>` is the workspace folder's name, lowercase, and `<hash>` is the first 8 hex digits of the SHA-256 of its full path (lowercased on Windows), so two workspaces with the same name do not share plans and the same workspace always gets its folder back. A conversation in a worktree (see [task-worktrees.md](task-worktrees.md)) has the worktree's folder.
+
+In that folder:
+
+- `<slug>/PLAN.md` is the root file and is written first. It holds the goal, the relevant context, the ordered steps, how to verify the result, and links to any sub-files.
+- A large or independent part of the plan can go in its own file next to the root, such as `<slug>/01-backend.md`, linked from `PLAN.md`. A small plan needs only `PLAN.md`.
 - When the user gives feedback, the agent updates the existing files instead of starting a new folder.
 
-These rules live in `PLAN_MODE_INSTRUCTIONS_BASE` in [sdk/packages/shared/src/prompt/cline.ts](../sdk/packages/shared/src/prompt/cline.ts).
+The extension passes the absolute folder to the system prompt as `planDirectory` ([cline-session-factory.ts](../apps/vscode/src/sdk/cline-session-factory.ts), folder from [plan-folder.ts](../apps/vscode/src/core/workspace/plan-folder.ts)), and the prompt names it with forward slashes, on Windows too. The rules live in `planModeInstructionsBase` in [sdk/packages/shared/src/prompt/cline.ts](../sdk/packages/shared/src/prompt/cline.ts); without a `planDirectory` (the CLI) they keep the workspace-relative `plans/<slug>/`. Writing and reading the folder needs no extra approval: the "Edit files" and "Read files" auto-approve toggles cover files outside the workspace the same as inside.
+
+**PlinyCode: Open Plan…** lists the plans of the current workspace, newest first, and opens the one picked; its last entry reveals the plans folder in the file explorer. Plans that older versions wrote to the workspace's `plans/` folder stay where they are.
 
 The model that executes a plan may not be the one that wrote it (see [Choosing the model that executes](#choosing-the-model-that-executes)). `PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH`, the variant the extension uses, therefore also asks for a plan that stands on its own: written for an executor that has not seen the conversation and may be a weaker model, with exact file paths, the steps in order, the command that verifies each step, the decisions already made with their reasons, and what the planner found while exploring. It is one sentence, because the plan-mode prompt is sent with every call.
 
@@ -39,14 +49,20 @@ To find the root file, [planFiles.ts](../apps/vscode/webview-ui/src/components/c
 - if there is none, the first markdown file written is the root;
 - if no markdown file was written, there is no root, because the reply was a question and not a plan.
 
-The row shows a footer with a link that opens the root file and an **Execute plan** button. The footer only appears when all of these are true:
+The row shows a footer with a link that opens the root file and an **Execute plan** button. The link names a plan in the data folder by its last two parts, `<slug>/PLAN.md`, and shows the full path on hover. The footer only appears when all of these are true:
 
 - a root file was found;
 - the extension is still in plan mode;
 - the row is complete;
 - no newer result or user message follows the row.
 
-Clicking the button calls `togglePlanActModeProto` with `mode: ACT`, `chatContent.message` set to `execute the plan in <root file>`, and `executePlanWith` set to the model choice described below. Because a plan was just presented, `SdkModeCoordinator.togglePlanActMode` ([sdk-mode-coordinator.ts](../apps/vscode/src/sdk/sdk-mode-coordinator.ts)) rebuilds the session in act mode, shows the message as the user's, and sends it as the first act-mode prompt. Act mode reads the files from disk, so edits the user made after the plan finished are included.
+Clicking the button calls `togglePlanActModeProto` with `mode: ACT`, `chatContent.message` set to `execute the plan in <root file>`, and `executePlanWith` set to the model choice described below. A request that carries `executePlanWith` is an Execute plan request (`executePlan: true` to the controller). Because a plan was just presented, `SdkModeCoordinator.togglePlanActMode` ([sdk-mode-coordinator.ts](../apps/vscode/src/sdk/sdk-mode-coordinator.ts)) rebuilds the session in act mode, shows the message as the user's, and sends it as the first act-mode prompt. Act mode reads the files from disk, so edits the user made after the plan finished are included.
+
+## Switching to Agent mode
+
+Switching from Plan to Agent mode with the mode switch (or the keyboard shortcut, or the "Agent Mode" link in a reply) only changes the mode: the session is rebuilt with act mode's tools and nothing is sent. A draft in the prompt box stays there. The plan runs when the user presses **Execute plan**, or sends a message in Agent mode that asks for it. Up to 0.2.3-test.12 a switch right after a presented plan sent "Continue with the approved plan now." by itself, which approved the plan without the user asking.
+
+The next message the user sends carries a `<mode_notice>` that says the user switched from plan to act mode, so the model knows that edits are allowed again; the plan-mode prompt tells the model that the switch alone does not approve the plan.
 
 ## Choosing the model that executes
 

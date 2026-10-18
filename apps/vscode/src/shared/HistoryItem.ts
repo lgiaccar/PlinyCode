@@ -7,7 +7,7 @@ import type { WorkspaceKind } from "./workspaceRef"
 export interface TaskWorktree {
 	/** Top level of the checkout the worktree was branched from. */
 	repoRoot: string
-	/** The branch created for the conversation, e.g. `plinycode/fix-login-3f2a`. */
+	/** The branch created for the conversation, e.g. `lgiaccar/fix-login-3f2a`. */
 	branch: string
 	/** The worktree's folder. */
 	path: string

@@ -99,6 +99,28 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		);
 	});
 
+	it("points plan mode at the host's plans folder when it passes one", () => {
+		const prompt = buildClineSystemPrompt({
+			...BASE_OPTIONS,
+			mode: "plan",
+			planModeSwitchTool: false,
+			planDirectory: "C:\\Users\\me\\.cline\\data\\plans\\repo-1a2b3c4d\\",
+		});
+		const dir = "C:/Users/me/.cline/data/plans/repo-1a2b3c4d";
+		expect(prompt).toContain(
+			`Use absolute paths under ${dir}/<short-kebab-slug>/:`,
+		);
+		expect(prompt).toContain(
+			`Create the root file ${dir}/<slug>/PLAN.md first.`,
+		);
+		expect(prompt).toContain(`names the root file (${dir}/<slug>/PLAN.md)`);
+		expect(prompt).not.toContain("plans/<slug>/PLAN.md");
+		// Without one, plans stay under the workspace-relative plans/ folder.
+		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain(
+			"Create the root file plans/<slug>/PLAN.md first.",
+		);
+	});
+
 	it("asks the manual-switch host for a plan another model can execute", () => {
 		// The Execute plan button can hand the plan files to a cheaper model
 		// than the one that wrote them, so the plan has to stand on its own.
