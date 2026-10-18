@@ -26,7 +26,7 @@ const TASK_BOUND = /\b(this (task|pr|pull request|conversation|session)|the curr
 const CODE_FACT =
 	/\b(takes|accepts|returns|requires|expects|has no|lacks)\b.*\b(argument|parameter|constructor|overload|signature|return type)s?\b/i
 
-export function looksLikeChangeLog(text: string): boolean {
+function looksLikeChangeLog(text: string): boolean {
 	return CHANGE_LOG.test(text) || TASK_BOUND.test(text) || CODE_FACT.test(text)
 }
 
