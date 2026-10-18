@@ -115,10 +115,11 @@ After a run, a free model reads the conversation and proposes memories, and the 
 - The model is the router rules' free utility summarizer (`utility.summarizer`), called through `buildApiHandler` with a model override ([memory-model.ts](../apps/vscode/src/sdk/memory/memory-model.ts)). It costs nothing and needs no budget check.
 - The input is a compact transcript of the messages since the last offer: text, tool calls on one line, and the start of each tool result. Side questions are left out. The transcript is capped at 24k characters, keeping the end.
 - The current memory goes with it, so known facts are skipped. A proposal that is a near duplicate of an entry, as in `save_memory`, is not proposed; the entry it matched is marked as used instead.
-- The reply is JSON, at most 8 memories. A timeout (90 s) or an unusable reply ends silently, unless the user typed `/distill`.
+- The reply is JSON, at most 4 memories. A timeout (90 s) or an unusable reply ends silently, unless the user typed `/distill`.
+- **What is not proposed.** The prompt rules out what the code or a search of it would show (signatures, argument orders, which class has which constructor) and what the conversation changed, with an example of each; and `looksLikeChangeLog` drops any reply item that still reads as a change-log ("Added …", "Updated …"), is bound to this task ("in this PR"), or restates a signature. A repository's memory had gained twenty such entries in a day, each then sent with every request for that repository.
 - **Kept between windows.** How far each conversation was distilled, and the memories the user dismissed or left unchecked, are stored in `memory/distill/<conversation>.json`. A reload does not re-read the whole conversation, and a memory the user turned down is not proposed for that conversation again, `/distill` included.
 
-**The approval row.** The proposals appear as a `memory_proposal` chat row (`MemoryProposalRow` in the webview), one checkbox per memory, all checked, with **Save** and **Dismiss**.
+**The approval row.** The proposals appear as a `memory_proposal` chat row (`MemoryProposalRow` in the webview), one checkbox per memory, with **Save** and **Dismiss**. Memories proposed as important start checked; ordinary ones start unchecked, so pressing **Save** without reading keeps the memory small.
 
 - Nothing is written until **Save**.
 - `TaskService.resolveMemoryProposal` saves the checked items through the same store as `save_memory`, then updates the row in place (same `ts`).

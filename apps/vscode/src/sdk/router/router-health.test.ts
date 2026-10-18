@@ -89,11 +89,15 @@ describe("session state", () => {
 		const state = getSessionState("s1")
 		state.calls.push({ modelId: MODEL, startedAt: NOW, routeName: "coding" })
 		state.failovers = 3
+		state.escalations = 2
 		state.stickyModelId = MODEL
+		state.run.paidCapHit = true
 
 		const next = beginTurn("s1", NOW + 5)
 		expect(next.calls).toEqual([])
 		expect(next.failovers).toBe(0)
+		expect(next.escalations).toBe(0)
+		expect(next.run.paidCapHit).toBeUndefined()
 		expect(next.stickyModelId).toBeUndefined()
 		expect(next.turnStartedAt).toBe(NOW + 5)
 	})

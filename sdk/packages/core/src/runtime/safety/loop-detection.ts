@@ -122,9 +122,29 @@ const DEFAULT_CONFIG: LoopDetectionConfig = {
  * (see `AgentRuntimeHooks.beforeTool`) that calls `inspect()` to decide
  * whether to return `{ skip, stop, reason }`.
  */
+/**
+ * Identical calls that are not back to back: the same file read for the
+ * third time in a run, with other steps in between, gets one notice naming
+ * the step it was first made at. Never a hard stop: after a compaction or a
+ * pruning the earlier result may really be gone, so a repeat can be right.
+ */
+const REPEAT_NOTICE_COUNT = 3;
+
+/**
+ * Per-session repeated-tool-call detector.
+ *
+ * `SessionRuntime` owns the instance and installs a `beforeTool` hook
+ * (see `AgentRuntimeHooks.beforeTool`) that calls `inspect()` to decide
+ * whether to return `{ skip, stop, reason }`.
+ */
 export class LoopDetectionTracker {
 	private readonly config: LoopDetectionConfig;
 	private readonly state: LoopDetectionState = createLoopDetectionState();
+	/** Identical calls seen this run, consecutive or not, by signature. */
+	private readonly repeats = new Map<
+		string,
+		{ count: number; firstIteration: number | undefined; noticed: boolean }
+	>();
 
 	constructor(config?: Partial<LoopDetectionConfig>) {
 		this.config = {
@@ -133,7 +153,7 @@ export class LoopDetectionTracker {
 		};
 	}
 
-	inspect(call: LoopDetectionCall): LoopDetectionVerdict {
+	inspect(call: LoopDetectionCall, iteration?: number): LoopDetectionVerdict {
 		const signature = toolCallSignature(call.input);
 		const result = checkRepeatedToolCall(
 			this.state,
@@ -141,6 +161,15 @@ export class LoopDetectionTracker {
 			signature,
 			this.config,
 		);
+		const key = `${call.name}\u0000${signature}`;
+		const repeat = this.repeats.get(key) ?? {
+			count: 0,
+			firstIteration: iteration,
+			noticed: false,
+		};
+		repeat.count += 1;
+		this.repeats.set(key, repeat);
+
 		if (result.hardEscalation) {
 			return {
 				kind: "hard",
@@ -148,15 +177,52 @@ export class LoopDetectionTracker {
 			};
 		}
 		if (result.softWarning) {
+			repeat.noticed = true;
 			return {
 				kind: "soft",
 				message: `Detected ${this.state.consecutiveIdenticalCount} consecutive identical calls to \`${call.name}\`; consider trying a different approach.`,
 			};
 		}
+		if (
+			repeat.count >= REPEAT_NOTICE_COUNT &&
+			!repeat.noticed &&
+			this.state.consecutiveIdenticalCount === 1
+		) {
+			repeat.noticed = true;
+			const since =
+				repeat.firstIteration !== undefined
+					? `, first at step ${repeat.firstIteration}`
+					: "";
+			return {
+				kind: "soft",
+				message:
+					`This is the ${ordinal(repeat.count)} call to \`${call.name}\` with the same arguments this run${since}. ` +
+					"Its earlier result is still in your context unless it was elided or the file changed; use what you have, or change the arguments.",
+			};
+		}
 		return { kind: "ok" };
 	}
 
+	/** Forget the run's repeats as well as the consecutive streak. */
 	reset(): void {
 		resetLoopDetectionState(this.state);
+		this.repeats.clear();
+	}
+}
+
+function ordinal(count: number): string {
+	const rest = count % 100;
+	if (rest >= 11 && rest <= 13) {
+		return `${count}th`;
+	}
+	switch (count % 10) {
+		case 1:
+			return `${count}st`;
+		case 2:
+			return `${count}nd`;
+		case 3:
+			return `${count}rd`;
+		default:
+			return `${count}th`;
 	}
 }

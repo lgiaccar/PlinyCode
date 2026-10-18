@@ -16,6 +16,7 @@ import type {
 	RouterRequestFeatures,
 	RouterRoute,
 	RouterRules,
+	RouterTier,
 } from "./router-types"
 
 /** A route matches when every condition it declares holds. */
@@ -73,8 +74,24 @@ function routeAdmits(route: RouterRoute, features: RouterRequestFeatures): boole
 }
 
 /**
+ * Where a verdict goes when no route tagged with it admits the request. A
+ * `quick` verdict on a conversation past the quick route's size bound is still
+ * light work, so it goes to the coding route rather than to the catch-all
+ * (which on BalanceAuto leads with paid Claude). A `huge` verdict below the
+ * huge route's bound says nothing about the context size the router did not
+ * already know: it is treated as code in act mode and reasoning in plan mode.
+ */
+const TIER_FALLBACK: Record<RouterTier, (mode: RouterRequestFeatures["mode"]) => RouterTier[]> = {
+	quick: () => ["code"],
+	huge: (mode) => (mode === "plan" ? ["reason", "code"] : ["code", "reason"]),
+	code: () => [],
+	reason: () => [],
+}
+
+/**
  * The route for a call: the first route tagged with the classifier's tier when
- * there is a verdict and that route admits the request, otherwise the first
+ * there is a verdict and that route admits the request; else the first route
+ * tagged with one of the tier's fallbacks that admits it; otherwise the first
  * route whose conditions all match.
  */
 export function selectRoute(
@@ -83,9 +100,16 @@ export function selectRoute(
 	classification?: RouterClassification,
 ): RouterRoute | undefined {
 	if (classification) {
-		const tiered = rules.routes.find((route) => route.tier === classification.tier && routeAdmits(route, features))
+		const admitted = (tier: RouterTier) => rules.routes.find((route) => route.tier === tier && routeAdmits(route, features))
+		const tiered = admitted(classification.tier)
 		if (tiered) {
 			return tiered
+		}
+		for (const tier of TIER_FALLBACK[classification.tier](features.mode)) {
+			const route = admitted(tier)
+			if (route) {
+				return route
+			}
 		}
 	}
 	return rules.routes.find((route) => routeMatches(route, features))

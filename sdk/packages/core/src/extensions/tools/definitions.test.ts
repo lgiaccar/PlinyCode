@@ -2215,9 +2215,31 @@ describe("default editor tool", () => {
 		}
 
 		const oversizedText = "x".repeat(INPUT_ARG_CHAR_LIMIT + 1);
+		const context = {
+			agentId: "agent-1",
+			conversationId: "conv-1",
+			iteration: 1,
+		};
+		// Creating a file, or writing a document, may be large: no error.
+		expect(
+			await editorTool.execute(
+				{ path: "/tmp/example.ts", new_text: oversizedText },
+				context,
+			),
+		).toMatchObject({ result: "patched", success: true });
+		expect(
+			await editorTool.execute(
+				{ path: "/tmp/PLAN.md", old_text: "a", new_text: oversizedText },
+				context,
+			),
+		).toMatchObject({ result: "patched", success: true });
+		expect(execute).toHaveBeenCalledTimes(2);
+		execute.mockClear();
+
 		const result = await editorTool.execute(
 			{
 				path: "/tmp/example.ts",
+				old_text: "a",
 				new_text: oversizedText,
 			},
 			{

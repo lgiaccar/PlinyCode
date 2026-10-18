@@ -42,7 +42,9 @@ export function dropPriorTurnReasoning(
 	return out;
 }
 
-function findCurrentTurnStart(messages: readonly AgentMessage[]): number {
+export function findCurrentTurnStart(
+	messages: readonly AgentMessage[],
+): number {
 	for (let index = messages.length - 1; index >= 0; index--) {
 		if (isUserRunMessage(messages[index])) {
 			return index;

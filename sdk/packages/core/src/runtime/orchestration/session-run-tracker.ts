@@ -123,6 +123,12 @@ export class SessionRunTracker {
 				break;
 			}
 			case "turn-started": {
+				// A run's first model turn: forget the previous run's repeated
+				// calls, so a user who asks for the same command in five turns
+				// does not trip the hard stop meant for a model in a loop.
+				if (event.iteration === 1) {
+					this.loopTracker.reset();
+				}
 				// Reset per-turn tool-outcome counters used by the
 				// MistakeTracker wiring. Parity with pre-Step-9
 				// agent.ts which accumulates per-iteration success/fail
@@ -292,7 +298,10 @@ export class SessionRunTracker {
 		if (this.trackerAbortInFlight || this.loopDetectionDisabled) {
 			return;
 		}
-		const verdict = this.loopTracker.inspect({ name: toolName, input });
+		const verdict = this.loopTracker.inspect(
+			{ name: toolName, input },
+			iteration,
+		);
 		if (verdict.kind === "ok") {
 			return;
 		}

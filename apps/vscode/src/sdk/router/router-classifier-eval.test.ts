@@ -22,7 +22,7 @@ describe("router-classifier-labels.jsonl", () => {
 	it("has only valid lines", () => {
 		expect(errors).toEqual([])
 		expect(labels.length).toBeGreaterThanOrEqual(30)
-		expect(labels.length).toBeLessThanOrEqual(60)
+		expect(labels.length).toBeLessThanOrEqual(80)
 	})
 
 	it("covers every tier, with think both on and off", () => {

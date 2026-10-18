@@ -64,6 +64,10 @@ const DEFAULT_HEALTH = {
 	cooldownMs: 600_000,
 	failuresBeforeCooldown: 2,
 	maxFailoversPerTurn: 3,
+	// A turn that starts on paid Claude stays there (sticky): one turn spent
+	// 124 calls on the Sonnet thinking preset polling a build log. Past the cap
+	// the rest of the turn runs on the coding route's free lead.
+	maxPaidCallsPerTurn: 20,
 	firstTokenTimeoutMs: 120_000,
 	stallTimeoutMs: 90_000,
 } as const
@@ -409,6 +413,10 @@ function asPositive(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
 }
 
+function asNonNegative(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
 /**
  * Whether a rules file may route to this id. Free, self-hosted ids always
  * qualify. Paid ids qualify only for a profile that allows them (BalanceAuto):
@@ -555,6 +563,7 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 			cooldownMs: asPositive(health.cooldownMs) ?? defaults.health.cooldownMs,
 			failuresBeforeCooldown: asPositive(health.failuresBeforeCooldown) ?? defaults.health.failuresBeforeCooldown,
 			maxFailoversPerTurn: asPositive(health.maxFailoversPerTurn) ?? defaults.health.maxFailoversPerTurn,
+			maxPaidCallsPerTurn: asNonNegative(health.maxPaidCallsPerTurn) ?? defaults.health.maxPaidCallsPerTurn,
 			firstTokenTimeoutMs: asPositive(health.firstTokenTimeoutMs) ?? defaults.health.firstTokenTimeoutMs,
 			stallTimeoutMs: asPositive(health.stallTimeoutMs) ?? defaults.health.stallTimeoutMs,
 		},

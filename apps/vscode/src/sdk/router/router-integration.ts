@@ -21,6 +21,7 @@ import {
 	isPlinySelfHostedModelId,
 	type ModelInfo,
 	plinyRouterProfile,
+	plinyRouterProfileAllowsPaid,
 	plinyRouterProfileSpec,
 	plinyThinkingControls,
 } from "@plinycode/llms"
@@ -64,7 +65,7 @@ import type {
 	RouterRequestFeatures,
 	RouterRules,
 } from "./router-types"
-import { type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
+import { latestUserRequest, type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
 
 /**
  * What the router did on one call attempt, reported to the session trace
@@ -344,23 +345,15 @@ function approxTokens(tokens: number): string {
 	return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens)
 }
 
-/** Latest user text in the request, used for keyword routing. */
+/**
+ * The latest thing the user typed, used for keyword routing and handed to the
+ * classifier as the request. Runtime reminders, hook context and compaction
+ * summaries are skipped, and the `<editor_state>` and `<mode_notice>` blocks
+ * are stripped: an open tab named `app.ts` used to match the coding regex,
+ * and the open-tabs list pushed every prompt past the quick route's length.
+ */
 function latestUserPrompt(request: AgentModelRequest): string {
-	for (let index = request.messages.length - 1; index >= 0; index -= 1) {
-		const message = request.messages[index]
-		if (message?.role !== "user") {
-			continue
-		}
-		const text = message.content
-			.filter((part): part is { type: "text"; text: string } => part.type === "text")
-			.map((part) => part.text)
-			.join("\n")
-			.trim()
-		if (text) {
-			return text
-		}
-	}
-	return ""
+	return latestUserRequest(request.messages)
 }
 
 /**
@@ -613,6 +606,51 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			...(deps.images?.timeoutMs !== undefined ? { timeoutMs: deps.images.timeoutMs } : {}),
 		})
 
+		/**
+		 * The first healthy free model of the coding route, then the pool, other
+		 * than `exclude`: where a turn goes when it has spent its paid-call budget.
+		 */
+		const firstFreeModel = (rules: RouterRules, exclude: string | undefined): string | undefined => {
+			const coding = rules.routes.find((route) => route.name === "coding")?.use ?? []
+			return [...coding, ...rules.pool].find(
+				(id) => id !== exclude && rules.pool.includes(id) && isPlinySelfHostedModelId(id) && isModelHealthy(id, now()),
+			)
+		}
+
+		/**
+		 * `health.maxPaidCallsPerTurn`: a turn that starts on paid Claude keeps it
+		 * (sticky) for every call, and a turn can run to a hundred calls when the
+		 * model is polling a build. Past the cap the rest of the turn runs on a
+		 * free model, once per turn; a later failover back to a paid backup is
+		 * left alone, and the run log says the cap fired.
+		 */
+		const applyPaidCap = (): void => {
+			const rules = rulesFor(profile)
+			const cap = rules.health.maxPaidCallsPerTurn
+			if (!plinyRouterProfileAllowsPaid(profile) || cap <= 0 || !rules.sticky) {
+				return
+			}
+			const state = getSessionState(turnKey)
+			if (state.run.paidCapHit) {
+				return
+			}
+			const paid = state.calls.filter((call) => !isPlinySelfHostedModelId(call.modelId)).length
+			if (paid < cap) {
+				return
+			}
+			const next = firstFreeModel(rules, state.stickyModelId)
+			if (!next) {
+				return
+			}
+			state.run.paidCapHit = true
+			state.stickyModelId = next
+			emitInfo(
+				`\`${formatClock(now())}\` ${rowPrefix}⚠ ${paid} paid calls this turn (health.maxPaidCallsPerTurn: ${cap}) · ` +
+					`↪ switching to **${modelLabel(next)}** for the rest of the turn`,
+			)
+			Logger.log(`[FreeAuto] paid-call cap: ${paid} paid calls this turn, sticky model → ${next}`)
+		}
+
 		const logAttempt = (
 			modelId: string,
 			timing: RouterCallTiming,
@@ -676,7 +714,10 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			knownModels: () => agentConfig.knownModels as Record<string, ModelInfo> | undefined,
 			isHealthy: (modelId) => isModelHealthy(modelId, now()),
 			createDelegate: (modelId) => createDefault({ modelId }),
-			features: (request) => buildFeatures(request, { turnKey, isSubAgent, mode: deps.getMode() }),
+			features: (request) => {
+				applyPaidCap()
+				return buildFeatures(request, { turnKey, isSubAgent, mode: deps.getMode() })
+			},
 			thinkingControls: plinyThinkingControls,
 			planImages: (request) => imageHandler.plan(request),
 			classify: async (request, features, rules) => {
@@ -900,21 +941,40 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	const rootState = () => getSessionState(sessionKey())
 	const MAX_NUDGES = 8
 	// A model that ignores a reminder, keeps stalling between steps, or keeps
-	// failing commands gets swapped for the default route's lead, the one that
-	// keeps acting on long tasks.
-	const escalateToDefaultLead = (): void => {
+	// failing commands gets swapped. The first stall escalation of a turn goes
+	// to the next free model of the route (then the coding route, then the
+	// pool): on BalanceAuto the default route's lead is Sonnet 5, and sending
+	// the last one or two calls of a 100k-token turn there wrote the whole
+	// prefix into its cache for a reply of a hundred tokens. A second stall
+	// escalation in the same turn, or six failed commands, go to the default
+	// route's lead, the one that keeps acting on long tasks.
+	const escalateStuckModel = (reason: "stall" | "failed-commands"): void => {
 		if (!isRouted()) {
 			return
 		}
 		const state = rootState()
-		const current = state.calls[state.calls.length - 1]?.modelId
+		const last = state.calls[state.calls.length - 1]
+		const current = last?.modelId
 		const rules = rulesFor(activeProfile)
-		const preferred = rules.routes.find((route) => route.name === "default")?.use ?? []
-		const next = [...preferred, ...rules.pool].find((id) => id !== current && rules.pool.includes(id))
+		state.escalations += 1
+		const inPool = (id: string) => id !== current && rules.pool.includes(id)
+		let next: string | undefined
+		if (reason === "stall" && state.escalations === 1) {
+			const route = rules.routes.find((candidate) => candidate.name === last?.routeName)?.use ?? []
+			const coding = rules.routes.find((candidate) => candidate.name === "coding")?.use ?? []
+			next = [...route, ...coding, ...rules.pool].find(
+				(id) => inPool(id) && isPlinySelfHostedModelId(id) && isModelHealthy(id, now()),
+			)
+		}
+		if (!next) {
+			const preferred = rules.routes.find((route) => route.name === "default")?.use ?? []
+			next = [...preferred, ...rules.pool].find(inPool)
+		}
 		if (next && rules.sticky) {
 			state.stickyModelId = next
+			state.run.escalatedTo = next
 			emitInfo(`\`${formatClock(now())}\` ↪ switching to **${modelLabel(next)}** for the rest of the turn`)
-			Logger.log(`[FreeAuto] escalation: sticky model ${current ?? "(none)"} → ${next}`)
+			Logger.log(`[FreeAuto] escalation ${state.escalations} (${reason}): sticky model ${current ?? "(none)"} → ${next}`)
 		}
 	}
 	const stallGuard = createRouterCompletionGuard({
@@ -991,7 +1051,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			Logger.warn(`[FreeAuto] completion guard gave up (${rule}, ${reason}): ${excerpt}`)
 		},
 		onEscalate: () => {
-			escalateToDefaultLead()
+			escalateStuckModel("stall")
 		},
 	})
 
@@ -1120,7 +1180,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 						emitInfo(
 							`\`${formatClock(now())}\` ⚠ ${run.failedCommands} commands have failed this turn, so the model may be stuck`,
 						)
-						escalateToDefaultLead()
+						escalateStuckModel("failed-commands")
 					}
 				}
 			}

@@ -22,9 +22,12 @@ import {
 	describeAbortReason,
 } from "./executors/bash";
 import {
+	capOperationResultsTotal,
 	MAX_COMMAND_OUTPUT_CHARS,
+	MAX_READ_CALL_CHARS,
 	MAX_READ_LINES,
 	MAX_READ_OUTPUT_CHARS,
+	MAX_SEARCH_CALL_CHARS,
 	MAX_SEARCH_OUTPUT_CHARS,
 } from "./executors/output-limits";
 import {
@@ -262,6 +265,7 @@ export function createReadFilesTool(
 			"Read the content of text or image files at the provided absolute paths, or return only an inclusive one-based line range when start_line/end_line are provided on the same file entry as its path. " +
 			"When you already know multiple files you need, read them together in one call, and call this tool in the same response as other independent tool calls. " +
 			`Each read returns at most ${MAX_READ_LINES} lines / ~${Math.round(MAX_READ_OUTPUT_CHARS / 1024)}k characters; longer files report their total line count, page through them with start_line/end_line on that file's entry. ` +
+			`One call returns at most ~${Math.round(MAX_READ_CALL_CHARS / 1024)}k characters across its files; read large files in separate calls. ` +
 			"Binary files that are not image and large files are not supported. " +
 			"Returns file contents or error messages for each path. ",
 		inputSchema: zodToJsonSchema(ReadFilesInputSchema),
@@ -304,7 +308,7 @@ export function createReadFilesTool(
 				requests = [validate];
 			}
 
-			return Promise.all(
+			const results = await Promise.all(
 				requests.map(async (request): Promise<ToolOperationResult> => {
 					const rangeError = getReadFileRangeError(request);
 					if (rangeError) {
@@ -338,6 +342,11 @@ export function createReadFilesTool(
 					}
 				}),
 			);
+			return capOperationResultsTotal(
+				results,
+				MAX_READ_CALL_CHARS,
+				"Read the remaining files in a separate call, or ask for a line range.",
+			);
 		},
 	});
 }
@@ -362,7 +371,7 @@ export function createSearchTool(
 			"Use for finding code patterns, function definitions, class names, imports, etc. " +
 			"Matching is case-insensitive. Each result shows the matching line, marked `>`, with the lines around it. " +
 			"Set `path` to search one directory or file, and `glob` to limit the file names; a whole-workspace search shows only the first matches in each file, and a search of a single file shows them all. " +
-			`Output beyond ~${Math.round(MAX_SEARCH_OUTPUT_CHARS / 1000)}k characters per query is middle-truncated; narrow patterns beat broad ones.`,
+			`Output beyond ~${Math.round(MAX_SEARCH_OUTPUT_CHARS / 1000)}k characters per query is middle-truncated, and one call returns at most ~${Math.round(MAX_SEARCH_CALL_CHARS / 1000)}k characters across its queries; narrow patterns beat broad ones.`,
 		inputSchema: zodToJsonSchema(SearchCodebaseInputSchema),
 		timeoutMs: timeoutMs * 2,
 		retryable: true,
@@ -383,7 +392,7 @@ export function createSearchTool(
 					? { path: validate.path, glob: validate.glob }
 					: undefined;
 
-			return Promise.all(
+			const results = await Promise.all(
 				queries.map(async (query): Promise<ToolOperationResult> => {
 					try {
 						const results = await withTimeout(
@@ -406,6 +415,11 @@ export function createSearchTool(
 						};
 					}
 				}),
+			);
+			return capOperationResultsTotal(
+				results,
+				MAX_SEARCH_CALL_CHARS,
+				"Narrow the pattern, path or glob, or send the remaining queries in a separate call.",
 			);
 		},
 	});
@@ -872,7 +886,10 @@ export function createSkillsTool(
 		"When the user asks you to carry out the task a skill describes, invoke it before you start, and follow what it returns. " +
 		"When users reference a slash command, invoke it with this tool. " +
 		"Do not invoke a skill only because the request shares a topic or a word with it: answering a question, explaining, or reformatting information the user already gave you rarely needs one. " +
-		'Input: `skill` (required) and optional `args`. Example: `skill: "pdf"`, `skill: "commit", args: "-m \\"Fix bug\\""`, `skill: "review-pr", args: "123"`, `skill: "ms-office-suite:pdf"`. ' +
+		// The example used to be `skill: "commit", args: "-m ..."`, and models
+		// called the tool as if it were git, with a commit message as args.
+		'Input: `skill` (required) and optional `args`, free text the skill reads, not command-line flags. Example: `skill: "pdf"`, `skill: "review-pr", args: "123"`, `skill: "ms-office-suite:pdf"`. ' +
+		"This tool runs no command: to commit, build or test, use the shell tool, or the skill that documents how this project does it. " +
 		"Never claim to have used a skill without invoking this tool.";
 
 	const tool = createTool<SkillsInput, string>({

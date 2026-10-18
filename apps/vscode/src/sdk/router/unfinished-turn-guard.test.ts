@@ -334,4 +334,16 @@ describe("latestUserRequest", () => {
 		expect(latestUserRequest(messages)).toBe("build and run the benchmark")
 		expect(latestUserRequest(undefined)).toBe("")
 	})
+
+	it("skips compaction summaries and strips the editor state and mode notice", () => {
+		const messages = [
+			user(
+				'<user_input mode="act"><mode_notice>The user switched from plan mode to act mode.</mode_notice>execute the plan\n<editor_state>\nActive file: src/app.ts\n</editor_state></user_input>',
+			),
+			reply,
+			user("Context summary:\n\nthe goal", { kind: "compaction_summary", displayRole: "system", userRunSpan: 1 }),
+			user("<SYSTEM_NOTICE>\nEarlier context was compacted.</SYSTEM_NOTICE>", { kind: "compaction" }),
+		]
+		expect(latestUserRequest(messages)).toBe("execute the plan")
+	})
 })

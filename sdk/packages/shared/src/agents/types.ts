@@ -263,6 +263,32 @@ export interface LoopDetectionConfig {
 	hardThreshold: number;
 }
 
+/**
+ * How much of a long conversation is pruned from each request before it is
+ * sent (the stored transcript is never changed). Character counts throughout.
+ */
+export interface StaleContextPruningOptions {
+	/** Tool results from earlier user turns above this size become a stub. */
+	priorTurnToolResultChars: number;
+	/** Assistant iterations of the current turn kept verbatim. */
+	keepRecentIterations: number;
+	/** The in-turn boundary advances in blocks of this many iterations, so a cached prompt prefix is rewritten once per block. */
+	iterationBlockSize: number;
+	/** Aged tool results of the current turn above this size are middle-cut. */
+	currentTurnToolResultChars: number;
+	/** Head and tail kept by that middle cut. */
+	middleCutHeadChars: number;
+	middleCutTailChars: number;
+	/** Tail kept of earlier-turn assistant text that preceded a tool call. */
+	priorTurnDeliberationTailChars: number;
+	/** Aged assistant text of the current turn above this size is tail-cut. */
+	currentTurnAssistantTextChars: number;
+	/** Failed tool calls whose input JSON exceeds this have their long strings elided. */
+	failedToolInputChars: number;
+	/** Strings longer than this inside such an input are replaced. */
+	failedToolInputStringChars: number;
+}
+
 export interface AgentExecutionConfig {
 	/**
 	 * Maximum consecutive internal mistakes before escalation.
@@ -293,6 +319,12 @@ export interface AgentExecutionConfig {
 	 * The CLI enables this by default with `{ softThreshold: 3, hardThreshold: 5 }`.
 	 */
 	loopDetection?: false | Partial<LoopDetectionConfig>;
+	/**
+	 * Pruning of stale context from each request: old tool results, the
+	 * deliberation that preceded earlier tool calls, the inputs of failed
+	 * oversized tool calls. On by default; `false` disables it.
+	 */
+	staleContextPruning?: false | Partial<StaleContextPruningOptions>;
 }
 
 // =============================================================================

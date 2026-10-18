@@ -30,21 +30,29 @@ function row(proposal: MemoryProposal): ClineMessage {
 describe("MemoryProposalRow", () => {
 	beforeEach(() => resolveMemoryProposal.mockClear())
 
-	it("lists each proposal checked, with where it would be saved", () => {
+	it("lists each proposal with where it would be saved, important ones checked", () => {
 		render(<MemoryProposalRow message={row(PROPOSAL)} />)
 		const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[]
-		expect(boxes.map((box) => box.checked)).toEqual([true, true])
+		expect(boxes.map((box) => box.checked)).toEqual([true, false])
 		expect(screen.getByText(/repository memory · important/)).toBeTruthy()
 		expect(screen.getByText(/your memory/)).toBeTruthy()
-		expect(screen.getByRole("button", { name: "Save all" })).toBeTruthy()
+		expect(screen.getByRole("button", { name: "Save 1" })).toBeTruthy()
 	})
 
 	it("saves only the checked items", () => {
 		render(<MemoryProposalRow message={row(PROPOSAL)} />)
-		fireEvent.click(screen.getAllByRole("checkbox")[1])
 		fireEvent.click(screen.getByRole("button", { name: "Save 1" }))
 		expect(resolveMemoryProposal).toHaveBeenCalledWith(
 			expect.objectContaining({ proposalId: "p1", save: true, itemIds: ["0"] }),
+		)
+	})
+
+	it("saves an ordinary proposal once it is checked", () => {
+		render(<MemoryProposalRow message={row(PROPOSAL)} />)
+		fireEvent.click(screen.getAllByRole("checkbox")[1])
+		fireEvent.click(screen.getByRole("button", { name: "Save all" }))
+		expect(resolveMemoryProposal).toHaveBeenCalledWith(
+			expect.objectContaining({ proposalId: "p1", save: true, itemIds: ["0", "1"] }),
 		)
 	})
 

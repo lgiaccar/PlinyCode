@@ -21,13 +21,17 @@ function rules(overrides: Partial<RouterRules["classifier"]> = {}): RouterRules 
 	return { ...base, classifier: { ...base.classifier, ...overrides } }
 }
 
-function request(texts: Array<[role: "user" | "assistant", text: string]>, signal?: AbortSignal): AgentModelRequest {
+function request(
+	texts: Array<[role: "user" | "assistant", text: string, metadata?: Record<string, unknown>]>,
+	signal?: AbortSignal,
+): AgentModelRequest {
 	return {
-		messages: texts.map(([role, text], index) => ({
+		messages: texts.map(([role, text, metadata], index) => ({
 			id: `m${index}`,
 			role,
 			content: [{ type: "text", text }],
 			createdAt: index,
+			...(metadata ? { metadata } : {}),
 		})),
 		tools: [],
 		...(signal ? { signal } : {}),
@@ -113,6 +117,70 @@ describe("buildClassifierRequest", () => {
 		expect(prompt).toContain("[assistant] I read the middleware")
 		expect(prompt).toContain("Latest request:\nfix the failing test in router.ts")
 		expect(built.systemPrompt).toContain("Prefer the coder for tests.")
+	})
+
+	it("leaves reminders, hook context and compaction notices out of the digest", () => {
+		const built = buildClassifierRequest(
+			request([
+				["user", '<user_input mode="act">add the missing test</user_input>'],
+				["assistant", "I'll add it now."],
+				[
+					"user",
+					"[SYSTEM] Your last message said what you would do next, but you did not call a tool.",
+					{ displayRole: "system", userRunSpan: 0 },
+				],
+				[
+					"user",
+					'<hook_context source="PostToolUse">the command failed</hook_context>',
+					{ displayRole: "system", userRunSpan: 0 },
+				],
+				[
+					"user",
+					"Context summary:\n\nthe goal was to fix the build",
+					{ kind: "compaction_summary", displayRole: "system" },
+				],
+				["user", "now run it"],
+			]),
+			features(),
+			rules(),
+			new AbortController().signal,
+		)
+		const prompt = (built.messages[0].content[0] as { text: string }).text
+		expect(prompt).toContain("[user] add the missing test")
+		expect(prompt).toContain("[assistant] I'll add it now.")
+		expect(prompt).not.toContain("[SYSTEM]")
+		expect(prompt).not.toContain("hook_context")
+		expect(prompt).not.toContain("Context summary")
+		expect(prompt).not.toContain("<user_input")
+	})
+
+	it("strips the editor state and mode notice from the digest lines", () => {
+		const built = buildClassifierRequest(
+			request([
+				[
+					"user",
+					'<user_input mode="act"><mode_notice>The user switched from plan mode to act mode.</mode_notice>execute the plan\n<editor_state>\nOpen tabs:\n- .github/skills/code-sanitization/SKILL.md\n</editor_state></user_input>',
+				],
+				["user", "go on"],
+			]),
+			features(),
+			rules(),
+			new AbortController().signal,
+		)
+		const prompt = (built.messages[0].content[0] as { text: string }).text
+		expect(prompt).toContain("[user] execute the plan")
+		expect(prompt).not.toContain("code-sanitization")
+		expect(prompt).not.toContain("mode_notice")
+	})
+
+	it("offers quick, code and reason, spells out the chores, and still parses a huge reply", () => {
+		const built = buildClassifierRequest(request([["user", "x"]]), features(), rules(), new AbortController().signal)
+		expect(built.systemPrompt).toContain('{"tier": "quick" | "code" | "reason", "think": true | false}')
+		expect(built.systemPrompt).not.toContain('"huge"')
+		expect(built.systemPrompt).toContain("pull request")
+		expect(built.systemPrompt).toContain("[CI WATCHER]")
+		expect(built.systemPrompt).toContain("never pick a tier because the context is large")
+		expect(parseClassification('{"tier":"huge","think":false}')).toEqual({ tier: "huge", think: false })
 	})
 
 	it("truncates the latest prompt to the configured length", () => {

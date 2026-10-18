@@ -54,6 +54,11 @@ import {
 	MessageBuilder,
 } from "../../session/services/message-builder";
 import { dropPriorTurnReasoning } from "../../session/services/messages/prior-turn-reasoning";
+import {
+	pruneStaleContext,
+	resolveStaleContextOptions,
+	type StaleContextOptions,
+} from "../../session/services/messages/stale-context";
 import { ConversationStore } from "../../session/stores/conversation-store";
 import type { AgentRuntime } from "../agent";
 import { createAgentRuntime } from "../agent";
@@ -167,6 +172,11 @@ export class SessionRuntime {
 	 * exists for API compatibility but is never fed.
 	 */
 	private readonly loopDetectionDisabled: boolean;
+	/**
+	 * Pruning applied to every request copy (never to the stored transcript):
+	 * undefined when `execution.staleContextPruning === false`.
+	 */
+	private readonly staleContext: StaleContextOptions | undefined;
 	// Host-owned provider request preparation. This runs immediately
 	// before the model call so every loop iteration sees extension
 	// message builders and API-safe normalization.
@@ -278,6 +288,11 @@ export class SessionRuntime {
 				? undefined
 				: loopDetectionInput;
 		this.loopTracker = new LoopDetectionTracker(loopConfig);
+		const pruningInput = config.execution?.staleContextPruning;
+		this.staleContext =
+			pruningInput === false
+				? undefined
+				: resolveStaleContextOptions(pruningInput ?? undefined);
 		this.runTracker = new SessionRunTracker({
 			conversation: this.conversation,
 			mistakeTracker: this.mistakeTracker,
@@ -932,7 +947,7 @@ export class SessionRuntime {
 			// not count towards compaction.
 			const apiMessages = await this.prepareProviderMessagesForApi(
 				agentMessagesToMessagesWithMetadata(
-					dropPriorTurnReasoning(contextMessages),
+					this.pruneForRequest(dropPriorTurnReasoning(contextMessages)),
 				),
 			);
 			const result = await prepareTurn({
@@ -976,12 +991,25 @@ export class SessionRuntime {
 		// drops the metadata that marks them.
 		const providerMessages = await this.prepareProviderMessagesForApi(
 			agentMessagesToMessages(
-				dropPriorTurnReasoning(
-					dropOffTheRecordTurns(messages, { keepCurrentTurn: true }),
+				this.pruneForRequest(
+					dropPriorTurnReasoning(
+						dropOffTheRecordTurns(messages, { keepCurrentTurn: true }),
+					),
 				),
 			),
 		);
 		return messagesToAgentMessages(providerMessages);
+	}
+
+	/**
+	 * Stale-context pruning (session/services/messages/stale-context.ts) on
+	 * the request copy, after earlier turns' reasoning is dropped. It runs on
+	 * the same copy compaction sizes, so pruned requests compact later.
+	 */
+	private pruneForRequest(messages: readonly AgentMessage[]): AgentMessage[] {
+		return this.staleContext
+			? pruneStaleContext(messages, this.staleContext)
+			: [...messages];
 	}
 
 	private async prepareProviderMessagesForApi(

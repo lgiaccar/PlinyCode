@@ -28,6 +28,21 @@ Three characters per token over-counts English and code on most tokenizers, whic
 - **Agentic, then basic.** The agentic strategy folds nothing twice: once everything before the latest typed prompt is in a summary, it returns nothing. Before, the request then went out as it was until the provider rejected it. Basic compaction now runs in that case, so the latest turn is trimmed inside. A summary that leaves the request over the trigger is not retried at once: the next model call compacts again, finds nothing new to fold, and basic runs then. The same happens when the summarizer answers with no text.
 - **Still too large.** If one typed message is by itself over the limit, basic compaction, which keeps every typed message whole, cannot help either. The chat says so (`⚠ The context is still over the model's input limit after compaction …`) instead of leaving the provider's rejection to explain it.
 
+## Pruning before compaction
+
+Before a request is sent, and before compaction sizes it, `pruneStaleContext` ([stale-context.ts](../sdk/packages/core/src/session/services/messages/stale-context.ts)) prunes what no longer earns its place. It runs on the request copy after `dropPriorTurnReasoning`, in `prepareMessagesForModelRequest` and in the sizing path of the orchestrator; the stored transcript is never changed. `execution.staleContextPruning` on the agent config overrides its numbers or, set to `false`, turns it off.
+
+What it prunes, measured on a session whose request went from 260k to 65k characters ten times in seven turns:
+
+- **Tool results from earlier user turns** over 2,000 characters become a stub naming the tool, what was asked and the size (`[read_files output elided (48212 chars) — earlier turn; it was: "…"; call the tool again if you need it]`). A structured entry keeps its `query`, `success` and `error`. Error results, and results carrying an image, are kept.
+- **Aged tool results of the current turn** over 8,000 characters are middle-cut to a 1,500-character head and tail.
+- **The deliberation before a tool call** in an earlier turn is cut to its last 600 characters, where the step taken is stated. Models that reason in their content (Kimi K2.6 on the gateway has no reasoning channel) write tens of thousands of characters of "Wait… Actually…" before each call, as ordinary text that `dropPriorTurnReasoning` cannot see. Final answers, messages with no tool call, are kept whole. Aged in-turn text over 6,000 characters gets the same cut.
+- **The input of a failed tool call** whose JSON exceeds 6,000 characters has its long strings replaced by `<elided N chars>`: an `editor` call rejected for its size used to leave the whole `new_text` in the history.
+
+The latest user message, reminders, compaction summaries and the last iterations of the current turn are never touched.
+
+**Prompt caching.** The earlier-turn rules depend only on where the current turn starts, so a message changes once, on the first call of the next turn, when the request ends in a new user message anyway. The in-turn rules would move one message per call on a rolling window and invalidate a cached prefix on every call; instead the aged boundary advances in blocks of eight iterations: the first sixteen calls of a turn send an unchanged prefix, the seventeenth cuts iterations 1-8, the twenty-fifth cuts 9-16. A block that was cut stays cut, so the pass is deterministic for a given history.
+
 ## Overflow recovery
 
 A provider that rejects the request as too large gets one basic compaction and a retry per run, and only when the retried request is smaller. A second rejection in the same run ends it.

@@ -21,6 +21,7 @@
 
 import type { AgentMessage, AgentModel, AgentModelRequest } from "@plinycode/shared"
 import { ROUTER_TIERS, type RouterClassification, type RouterRequestFeatures, type RouterRules } from "./router-types"
+import { isRuntimeInjectedMessage, unwrapUserInput } from "./unfinished-turn-guard"
 
 const DIGEST_MESSAGES = 6
 const DIGEST_CHARS_PER_MESSAGE = 200
@@ -30,23 +31,35 @@ const DIGEST_CHARS_PER_MESSAGE = 200
  */
 const CLASSIFIER_MAX_TOKENS = 512
 
+/**
+ * The tiers offered are quick, code and reason. `huge` is still accepted in a
+ * reply (older rules files and the eval labels use it) and the router remaps
+ * it by size: every `huge` verdict seen in two weeks of real use was on a
+ * conversation far below the huge route's bound, and each one fell through
+ * to the paid catch-all. Chores are spelled out because the classifier model
+ * sent "please create a PR" and "wait for the build" to the reasoning tier,
+ * which on BalanceAuto is paid Claude with thinking on, for whole turns.
+ */
 const INSTRUCTIONS = `You route requests for a coding assistant to a model tier.
-Output one JSON object first, before any other text, and nothing after it: {"tier": "quick" | "code" | "reason" | "huge", "think": true | false}
+Output one JSON object first, before any other text, and nothing after it: {"tier": "quick" | "code" | "reason", "think": true | false}
 
 Tiers:
-- quick: a short factual question, or a trivial one-line change.
-- code: writing, editing, fixing, testing, refactoring or merging code.
-- reason: planning, design, architecture, reviewing, comparing options, or debugging a cause that is not yet known.
-- huge: the work needs a very large context, such as analysing a whole repository or many large files at once.
+- quick: a short factual question, a lookup, or a trivial one-line change.
+- code: doing work in the repository: writing, editing, fixing, testing and refactoring code, and every chore around it: creating or updating a pull request, committing and pushing, fixing a CI failure, waiting for or watching a build, running or re-running tests, merging or rebasing, writing findings or notes to a file. Messages that start with [CI WATCHER] or [CI BOARD] are code.
+- reason: the user wants a plan, a design, an architecture or a review; asks why or how something works; wants options compared; or reports a bug whose cause is not yet known. In plan mode most requests are reason.
+
+The router handles the size of the conversation; never pick a tier because the context is large.
 
 Set "think" to true only when careful step-by-step reasoning will clearly improve the result:
-planning, design trade-offs, tricky bugs, subtle logic. Use false for routine work, where it only adds delay.`
+planning, design trade-offs, tricky bugs, subtle logic. Use false for routine work and chores, where it only adds delay.`
 
 function messageText(message: AgentMessage): string {
-	return message.content
-		.filter((part): part is { type: "text"; text: string } => part.type === "text")
-		.map((part) => part.text)
-		.join(" ")
+	return unwrapUserInput(
+		message.content
+			.filter((part): part is { type: "text"; text: string } => part.type === "text")
+			.map((part) => part.text)
+			.join(" "),
+	)
 		.replace(/\s+/g, " ")
 		.trim()
 }
@@ -58,8 +71,12 @@ export function buildClassifierRequest(
 	rules: RouterRules,
 	signal: AbortSignal,
 ): AgentModelRequest {
+	// Reminders, hook context and compaction notices are the runtime talking,
+	// not the conversation; a digest made of them told the classifier the
+	// task was "unfinished" or "compacted" instead of what the user wanted.
 	const earlier = request.messages
 		.slice(0, -1)
+		.filter((message) => message.role !== "tool" && !isRuntimeInjectedMessage(message))
 		.map((message) => ({ role: message.role, text: messageText(message) }))
 		.filter((entry) => entry.text)
 		.slice(-DIGEST_MESSAGES)

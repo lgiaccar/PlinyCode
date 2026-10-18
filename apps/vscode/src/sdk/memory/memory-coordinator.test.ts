@@ -78,6 +78,27 @@ describe("memory-distiller", () => {
 		])
 	})
 
+	it("drops proposals that record the task's changes or restate the code", () => {
+		const reply = JSON.stringify({
+			memories: [
+				{ text: "Added FieldIsExpected helper to skip validation for missing baseline fields", scope: "repo" },
+				{ text: "ExtractFaceBasedTetMesh takes local_num_surface as the third argument", scope: "repo" },
+				{ text: "The pipeline fix in this PR only applies to manual triggers", scope: "repo" },
+				{ text: "Python is not on PATH on this machine; use py.exe", scope: "user", importance: "high" },
+				{ text: "a", scope: "repo" },
+				{ text: "b", scope: "repo" },
+				{ text: "c", scope: "repo" },
+				{ text: "d", scope: "repo" },
+			],
+		})
+		expect(parseDistillReply(reply, "").map((memory) => memory.text)).toEqual([
+			"Python is not on PATH on this machine; use py.exe",
+			"a",
+			"b",
+			"c",
+		])
+	})
+
 	it("skips near duplicates of an entry and reports them as rediscovered", () => {
 		const rediscovered: string[] = []
 		const parsed = parseDistillReply(

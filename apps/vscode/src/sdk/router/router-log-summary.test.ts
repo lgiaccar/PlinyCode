@@ -142,6 +142,48 @@ describe("summarizeRouterLogs", () => {
 		expect(report).toContain("| balance | 2 | 2 | $0.10 | $0.05 | $0.05 | 16.3k | 2 |")
 	})
 
+	it("lists the paid turns and counts the verdicts that left their route", () => {
+		const calls = [
+			call({ runId: "run-a", iteration: 1, tier: "quick", think: false, route: "coding", estimatedTokens: 41_000 }),
+			call({ runId: "run-a", iteration: 2, tier: "quick", think: false, route: "coding", estimatedTokens: 42_000 }),
+			call({
+				runId: "run-b",
+				iteration: 1,
+				tier: "reason",
+				think: true,
+				route: "plan-and-reasoning",
+				model: SONNET,
+				estimatedTokens: 90_000,
+			}),
+			call({ runId: "run-b", iteration: 2, tier: "reason", think: true, route: "plan-and-reasoning", model: KIMI }),
+		]
+		const runs = [
+			{ ...OLD_RUN, ts: "2026-10-16T09:01:00.000Z", profile: "balance", runId: "run-a", calls: 2, paidCalls: 0 },
+			{
+				...OLD_RUN,
+				ts: "2026-10-16T09:02:00.000Z",
+				sessionId: "1792321247419_jlbzm",
+				profile: "balance",
+				runId: "run-b",
+				calls: 2,
+				paidCalls: 1,
+				paidCostUsd: 0.31,
+				paidCapHit: true,
+				escalatedTo: KIMI,
+				models: { [SONNET]: 1, [KIMI]: 1 },
+			},
+		]
+		const report = summarizeRouterLogs({ ...files, calls: calls as never, runs: runs as never })
+		expect(report).toContain("## Classifier verdicts that left their route")
+		expect(report).toContain("| balance · quick | 2 | 2 (100%) | coding (2) |")
+		expect(report).toContain("| balance · reason | 2 | 0 (0%) | — |")
+		expect(report).toContain("## Paid turns (main agent)")
+		expect(report).toContain(
+			"| 2026-10-16 09:02 | jlbzm | reason+think | plan-and-reasoning | 90.0k | 2 | 1 | $0.31 | claude-4-6-sonnet-high-thinking ×1, kimi-k2.6 ×1 | yes → kimi-k2.6 |",
+		)
+		expect(report).not.toContain("| 2026-10-16 09:01 |")
+	})
+
 	it("says so when there is nothing to summarise", () => {
 		expect(summarizeRouterLogs({ ...files, calls: [], runs: [], since: "2026-10-01" })).toBe(
 			"No FreeAuto calls logged in calls.jsonl and no runs in runs.jsonl since 2026-10-01.",

@@ -16,12 +16,15 @@ How the tools the model works with behave, where that differs from what a model 
 
 Small models often reproduce a block with the wrong indentation, or from a stale read. Before this the only feedback was "text not found", and the usual next move was the same call again.
 
+`new_text` over 6,000 characters (`INPUT_ARG_CHAR_LIMIT`) is refused for an edit, where a large splice is slow to stream and likely to be truncated, and accepted when the call creates a file (no `old_text`, no `insert_line`) or writes a markdown or text document. The limit used to reject every plan or report a model wrote in one go, three times per session, and each rejected call left its 10-25k characters in the conversation as the call's input.
+
 ## Searching file contents (`search_codebase`)
 
 - Regex, case-insensitive. Each result shows the matching line, marked `>`, with two lines of context.
 - `path` limits the search to a directory or a file; `glob` limits the file names (`*.ts`, `src/**/*.test.ts`, `!*.md`).
 - A workspace search shows at most 10 matches per file and names the files that have more. A search with `path` set to a single file shows every match.
 - The extension runs it with the ripgrep that VS Code ships. Without a ripgrep, a JavaScript scan reads every non-binary file under 2 MB.
+- Each query's output is capped at 48,000 characters, and the call as a whole at 32,000 (`MAX_SEARCH_CALL_CHARS`, `capOperationResultsTotal` in `output-limits.ts`): the query that crosses the budget is middle-cut to what is left, and the ones after it come back as a one-line note. A call with seven queries used to return 224,000 characters in one tool result. `read_files` has the same cap at 64,000 characters across the files of one call (`MAX_READ_CALL_CHARS`).
 
 ## Finding files by name (`find_files`)
 

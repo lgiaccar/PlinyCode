@@ -109,6 +109,10 @@ export interface RouterRunState {
 	nudges: number
 	/** A second consecutive stall, or one stall too many, made the guard escalate (and switch model). */
 	escalated?: boolean
+	/** The model the last escalation switched to. */
+	escalatedTo?: string
+	/** `health.maxPaidCallsPerTurn` was reached and the turn moved to a free model. */
+	paidCapHit?: boolean
 	/** The guard let a stalled reply end the run, and why. */
 	guardGaveUp?: GuardGiveUpReason
 	/** Outcome of the completion judge, when it was consulted. */
@@ -127,6 +131,8 @@ interface RouterSessionState {
 	stickyModelId?: string
 	/** Failovers already spent this turn. */
 	failovers: number
+	/** Model switches the completion guard forced this turn (stalls, failed commands). */
+	escalations: number
 	/** Epoch ms the current turn started, for the elapsed time in the summary. */
 	turnStartedAt: number
 	/** Set once the classifier has run this turn, whatever its outcome. */
@@ -148,7 +154,7 @@ function freshRunState(): RouterRunState {
 export function getSessionState(sessionId: string): RouterSessionState {
 	let state = sessions.get(sessionId)
 	if (!state) {
-		state = { calls: [], failovers: 0, turnStartedAt: Date.now(), run: freshRunState() }
+		state = { calls: [], failovers: 0, escalations: 0, turnStartedAt: Date.now(), run: freshRunState() }
 		sessions.set(sessionId, state)
 	}
 	return state
@@ -159,6 +165,7 @@ export function beginTurn(sessionId: string, now: number = Date.now()): RouterSe
 	const state = getSessionState(sessionId)
 	state.calls = []
 	state.failovers = 0
+	state.escalations = 0
 	state.stickyModelId = undefined
 	state.turnStartedAt = now
 	state.classifierRan = false

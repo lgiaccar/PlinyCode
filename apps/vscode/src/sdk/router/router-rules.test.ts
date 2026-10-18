@@ -190,6 +190,14 @@ describe("normalizeRules", () => {
 		expect(normalizeRules({ utility: { judge: "azure-openai/gpt-5.2" } }).utility.judge).toBe(defaultRules().utility.judge)
 	})
 
+	it("reads the paid-call cap, where zero means off", () => {
+		expect(defaultRules("balance").health.maxPaidCallsPerTurn).toBe(20)
+		expect(normalizeRules({ health: { maxPaidCallsPerTurn: 0 } }, undefined, "balance").health.maxPaidCallsPerTurn).toBe(0)
+		expect(normalizeRules({ health: { maxPaidCallsPerTurn: 7 } }, undefined, "balance").health.maxPaidCallsPerTurn).toBe(7)
+		expect(normalizeRules({ health: { maxPaidCallsPerTurn: -3 } }, undefined, "balance").health.maxPaidCallsPerTurn).toBe(20)
+		expect(normalizeRules({ health: { maxPaidCallsPerTurn: "x" } }, undefined, "balance").health.maxPaidCallsPerTurn).toBe(20)
+	})
+
 	it("ignores non-positive health numbers", () => {
 		const rules = normalizeRules({ health: { cooldownMs: -5, maxFailoversPerTurn: 0 } })
 		expect(rules.health.cooldownMs).toBe(defaultRules().health.cooldownMs)

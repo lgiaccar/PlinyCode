@@ -404,8 +404,32 @@ export function followsCiWatchStart(runMessages: readonly AgentMessage[] | undef
 	)
 }
 
-/** Strip the `<user_input mode="…">` wrapper the host puts around prompts. */
-function unwrapUserInput(text: string): string {
+/**
+ * Whether a user message was put there by the runtime or the host rather than
+ * typed: guard reminders, hook context, compaction summaries, loop notices.
+ * Such messages must not be read as the user's request, by the guard, the
+ * router's keyword routes or the classifier's digest.
+ */
+export function isRuntimeInjectedMessage(message: AgentMessage): boolean {
+	if (message.role !== "user") {
+		return false
+	}
+	const metadata = (message.metadata ?? {}) as Record<string, unknown>
+	if (metadata.displayRole === "system" || metadata.userRunSpan === 0) {
+		return true
+	}
+	if (typeof metadata.kind === "string" && metadata.kind.startsWith("compaction")) {
+		return true
+	}
+	const text = replyText(message).trimStart()
+	return text.startsWith("[SYSTEM]") || text.startsWith("<hook_context") || text.startsWith("<SYSTEM_NOTICE>")
+}
+
+/**
+ * Strip the `<user_input mode="…">` wrapper the host puts around prompts, and
+ * the `<mode_notice>` and `<editor_state>` elements it adds for the model.
+ */
+export function unwrapUserInput(text: string): string {
 	return text
 		.replace(/<mode_notice>[\s\S]*?<\/mode_notice>/g, "")
 		.replace(/<editor_state>[\s\S]*?<\/editor_state>/g, "")
@@ -424,18 +448,14 @@ export function latestUserRequest(messages: readonly AgentMessage[] | undefined)
 	}
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
 		const message = messages[index]
-		if (!message || message.role !== "user") {
-			continue
-		}
-		const metadata = message.metadata ?? {}
-		if (metadata.displayRole === "system" || metadata.userRunSpan === 0) {
+		if (!message || message.role !== "user" || isRuntimeInjectedMessage(message)) {
 			continue
 		}
 		if (message.content.some((part) => part.type === "tool-result")) {
 			continue
 		}
 		const text = unwrapUserInput(replyText(message))
-		if (text && !text.startsWith("[SYSTEM]") && !text.startsWith("<hook_context")) {
+		if (text) {
 			return text
 		}
 	}

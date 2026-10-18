@@ -46,7 +46,14 @@ function statusLine(proposal: MemoryProposal): string | undefined {
  */
 const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 	const proposal = parseMemoryProposal(message.text)
-	const [checked, setChecked] = useState<Set<string>>(() => new Set(proposal?.items.map((item) => item.id)))
+	// Important memories and removals start checked; an ordinary proposal
+	// starts unchecked, so "Save" without a look keeps the memory small.
+	const [checked, setChecked] = useState<Set<string>>(
+		() =>
+			new Set(
+				proposal?.items.filter((item) => item.importance === "high" || item.action === "remove").map((item) => item.id),
+			),
+	)
 	const [submitting, setSubmitting] = useState(false)
 	const status = proposal?.status
 

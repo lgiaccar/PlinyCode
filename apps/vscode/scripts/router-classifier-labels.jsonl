@@ -50,3 +50,13 @@
 {"prompt":"Map every import between packages across the monorepo and draw the dependency graph.","expectedTier":"huge","expectedThink":false,"note":"whole-monorepo scan","contextTokens":240000}
 {"prompt":"Search the whole codebase for uses of the deprecated ApiHandler interface and list the files.","expectedTier":"huge","expectedThink":false,"note":"repository-wide sweep","contextTokens":195000}
 {"prompt":"Audit all 120 test files for tests that never assert anything.","expectedTier":"huge","expectedThink":false,"note":"many files at once; thinking off because the huge route switches it off at this size","contextTokens":280000}
+{"prompt":"please create a PR for this branch","expectedTier":"code","expectedThink":false,"note":"chore: creating a pull request is code, not reasoning","contextTokens":40000}
+{"prompt":"Please also update the pull request message","expectedTier":"code","expectedThink":false,"note":"chore on a long conversation (the quick route would refuse the size)","contextTokens":45000}
+{"prompt":"git commit and git push origin","expectedTier":"code","expectedThink":false,"note":"chore: commit and push"}
+{"prompt":"[CI WATCHER] CI failed for PR #736580 (lgiaccar/hexcore_wrap_topo_problems -> stage) at 134faabe: 1 failed, 2 passed. win_cuda_pipeline: HexCoreTest.Torus expected frontier_faces 0, got 600.","expectedTier":"code","expectedThink":false,"note":"a CI watcher message is code work, not a reasoning task","contextTokens":60000}
+{"prompt":"[CI BOARD] PR #733172 \"Pure Delaunay triangulation\" (lgiaccar/pure_delaunay -> stage): build failed on win_cpu_mt. Fix it and push.","expectedTier":"code","expectedThink":false,"note":"a CI board message is code work"}
+{"prompt":"not sure why it is taking so much to build, ./pmake.bat should run in roughly 15 minutes. Wait for it and report the timings.","expectedTier":"code","expectedThink":false,"note":"waiting for a build is a chore, not an unknown-cause bug"}
+{"prompt":"rerun the unit tests after the build finishes and tell me which fail","expectedTier":"code","expectedThink":false,"note":"chore: running tests"}
+{"prompt":"Write what you found about the octree code to ai_output/docs/octree_analysis.md","expectedTier":"code","expectedThink":false,"note":"writing findings to a file is a chore","contextTokens":50000}
+{"prompt":"git pull origin stage, fix conflicts wisely, git commit, git push origin","expectedTier":"code","expectedThink":false,"note":"merge chore"}
+{"prompt":"the pipeline failed with: Starting: Validate Parameters ... ##[error]Parameter 'branches' is required. Please fix the yaml and push.","expectedTier":"code","expectedThink":false,"note":"a pipeline error with its message is a fix, not an unknown-cause investigation","contextTokens":30000}
