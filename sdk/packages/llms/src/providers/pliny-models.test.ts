@@ -293,6 +293,19 @@ describe("FreeAuto profiles", () => {
 		});
 	});
 
+	it("gives the fast profile a smaller compaction budget than the others", () => {
+		const models = buildPlinyModels();
+		const budget = (profile: string) =>
+			models[plinyFreeAutoModelId(profile)]?.maxInputTokens ?? 0;
+		expect(budget("fast")).toBe(64_000);
+		expect(budget("fast")).toBeLessThan(budget("default"));
+		expect(budget("smart")).toBe(budget("default"));
+		// Same window: only when compaction starts differs.
+		expect(models[plinyFreeAutoModelId("fast")]?.contextWindow).toBe(
+			models[PLINY_FREE_AUTO_MODEL_ID]?.contextWindow,
+		);
+	});
+
 	it("does not treat a lookalike id as a profile", () => {
 		expect(isPlinyFreeAutoModelId("pliny/auto-freedom")).toBe(false);
 		expect(isPlinyFreeAutoModelId("pliny/free-autonomous")).toBe(false);
@@ -430,9 +443,29 @@ describe("measured thinking controls", () => {
 		).not.toContain("reasoning");
 	});
 
-	it("never guesses controls for hosted models", () => {
+	it("records hosted controls only where the probe measured a switch", () => {
+		// Off by default, reasoning_effort turns it on and scales it.
 		expect(
 			plinyThinkingControls("snps-aws-bedrock/aws-claude-sonnet-4.6"),
+		).toEqual({ defaultOn: false, on: "reasoning-effort" });
+		expect(plinyThinkingControls("azure-openai/gpt-5.2")).toEqual({
+			defaultOn: false,
+			on: "reasoning-effort",
+		});
+		// The gateway ignores reasoning_effort on these: nothing is recorded,
+		// so nothing is sent.
+		expect(
+			plinyThinkingControls(
+				"snps-aws-bedrock/global.anthropic.claude-sonnet-5",
+			),
 		).toBeUndefined();
+		expect(
+			plinyThinkingControls(
+				"snps-aws-bedrock/global-anthropic-claude-haiku-4-5-20251001-v1-0",
+			),
+		).toBeUndefined();
+		expect(buildPlinyModels()["azure-openai/gpt-5.2"]?.capabilities).toContain(
+			"reasoning",
+		);
 	});
 });

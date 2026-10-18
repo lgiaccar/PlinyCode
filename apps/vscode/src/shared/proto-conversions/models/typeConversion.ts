@@ -1,5 +1,5 @@
 import { ModelInfo } from "@shared/api"
-import { OpenRouterModelInfo, ThinkingConfig } from "@shared/proto/cline/models"
+import { OpenRouterModelInfo, ThinkingConfig, ThinkingControls } from "@shared/proto/cline/models"
 
 /**
  * Convert protobuf ThinkingConfig to application ThinkingConfig
@@ -60,6 +60,14 @@ export function fromProtobufModelInfo(protoInfo: OpenRouterModelInfo): ModelInfo
 				: undefined,
 		pricingUnavailable: protoInfo.pricingUnavailable,
 		pricingNote: protoInfo.pricingNote,
+		maxInputTokens: protoInfo.maxInputTokens,
+		thinkingControls: protoInfo.thinkingControls
+			? {
+					defaultOn: protoInfo.thinkingControls.defaultOn,
+					...(protoInfo.thinkingControls.off ? { off: protoInfo.thinkingControls.off } : {}),
+					...(protoInfo.thinkingControls.on ? { on: protoInfo.thinkingControls.on } : {}),
+				}
+			: undefined,
 	}
 }
 
@@ -88,6 +96,8 @@ export function toProtobufModelInfo(modelInfo: ModelInfo): OpenRouterModelInfo {
 		paramsActiveB: modelInfo.parameters?.activeB,
 		pricingUnavailable: modelInfo.pricingUnavailable,
 		pricingNote: modelInfo.pricingNote,
+		maxInputTokens: modelInfo.maxInputTokens,
+		thinkingControls: modelInfo.thinkingControls ? ThinkingControls.create(modelInfo.thinkingControls) : undefined,
 	})
 }
 

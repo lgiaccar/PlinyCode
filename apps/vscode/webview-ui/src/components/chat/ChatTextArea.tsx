@@ -17,12 +17,14 @@ import { StateServiceClient } from "@/services/grpc-client"
 import { shouldShowContextMenu } from "@/utils/context-mentions"
 import { useMetaKeyDetection, useShortcut } from "@/utils/hooks"
 import { shouldShowSlashCommandsMenu, slashCommandRegexGlobal, validateSlashCommand } from "@/utils/slash-commands"
+import { ImprovePromptButton } from "./chat-textarea/components/ImprovePromptButton"
 import { ModelButton } from "./chat-textarea/components/ModelButton"
 import { ModeSwitch, modeColor, nextMode } from "./chat-textarea/components/ModeSwitch"
 import { SideQuestionToggle } from "./chat-textarea/components/SideQuestionToggle"
 import { useComposerKeyboardHandler } from "./chat-textarea/hooks/useComposerKeyboardHandler"
 import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hooks/useContextMenu"
 import { useDropHandling } from "./chat-textarea/hooks/useDropHandling"
+import { useImprovePrompt } from "./chat-textarea/hooks/useImprovePrompt"
 import {
 	getRowHeightPx,
 	MIN_CHAT_INPUT_MAX_ROWS,
@@ -509,6 +511,15 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			[mode, inputValue, selectedImages, selectedFiles, setInputValue, setSelectedImages, setSelectedFiles],
 		)
 
+		const onPromptReplaced = useCallback(
+			(text: string) => {
+				setIntendedCursorPosition(text.length)
+				textAreaRef.current?.focus()
+			},
+			[setIntendedCursorPosition],
+		)
+		const promptImprover = useImprovePrompt({ inputValue, setInputValue, mode, textAreaRef, onReplaced: onPromptReplaced })
+
 		// The shortcut cycles Plan -> Act -> Ask.
 		const onModeCycle = useCallback(() => onModeSelect(nextMode(mode)), [mode, onModeSelect])
 		useShortcut(usePlatform().togglePlanActKeys, onModeCycle, { disableTextInputs: false }) // important that we don't disable the text input here
@@ -896,6 +907,32 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						</span>
 					</div>
 				)}
+				{(promptImprover.canUndo || promptImprover.error) && (
+					<div
+						className="flex items-center gap-1.5 px-4 pb-1 text-xs"
+						data-testid="improve-prompt-status"
+						role="status"
+						style={{
+							color: promptImprover.error
+								? "var(--vscode-editorWarning-foreground)"
+								: "var(--vscode-descriptionForeground)",
+						}}>
+						{promptImprover.error ? (
+							<span className="min-w-0">{promptImprover.error}</span>
+						) : (
+							<>
+								<span>Prompt improved.</span>
+								<button
+									className="underline cursor-pointer bg-transparent border-0 p-0 m-0 text-[var(--vscode-textLink-foreground)] hover:text-[var(--vscode-textLink-activeForeground)]"
+									data-testid="improve-prompt-undo"
+									onClick={promptImprover.undo}
+									type="button">
+									Undo
+								</button>
+							</>
+						)}
+					</div>
+				)}
 				<div className="flex justify-between items-center -mt-[2px] px-3 pb-2">
 					{/* Always render both components, but control visibility with CSS */}
 					<div className="relative flex-1 min-w-0 h-5">
@@ -906,6 +943,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
 						/>
 					</div>
+					<ImprovePromptButton
+						disabled={!inputValue.trim()}
+						onClick={() => void promptImprover.improve()}
+						pending={promptImprover.pending}
+					/>
 					<SideQuestionToggle
 						available={sideQuestionAvailable}
 						checked={sideQuestionChecked}

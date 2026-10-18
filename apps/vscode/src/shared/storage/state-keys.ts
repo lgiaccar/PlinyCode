@@ -4,6 +4,7 @@ import { ClineRulesToggles } from "@shared/cline-rules"
 import { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_MCP_DISPLAY_MODE, McpDisplayMode } from "@shared/McpDisplayMode"
 import { Mode } from "@shared/storage/types"
+import type { ModelTuningMap } from "../model-tuning"
 import { coerceToPlinyProvider } from "../pliny"
 
 // ============================================================================
@@ -39,6 +40,8 @@ const GLOBAL_STATE_FIELDS = {
 	lastShownAnnouncementId: { default: undefined as string | undefined },
 	taskHistory: { default: [] as HistoryItem[], isAsync: true },
 	favoritedModelIds: { default: [] as string[] },
+	// Per-model reasoning and context tuning set from the chat box (src/shared/model-tuning.ts).
+	modelTuning: { default: {} as ModelTuningMap },
 	mcpResponsesCollapsed: { default: false as boolean },
 	// User-dragged max height for the chat prompt textarea, in rows (react-textarea-autosize's maxRows).
 	chatInputMaxRows: { default: 10 as number },

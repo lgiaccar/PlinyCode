@@ -47,6 +47,11 @@ FreeAuto advertises a 256k window, but the conversation compacts against a 92k
 input budget, at about 83k estimated tokens. That is where the 128k models
 (the coding route among them) stop fitting a request, so compacting there keeps
 the whole pool routable instead of letting a run grow until only GLM-5.2 fits.
+`auto-free-fast` compacts sooner, against a 64k budget (about 58k tokens): a
+shorter history keeps every call quick and on the small Qwen models, which
+degrade first as the context grows. The context setting of the model tuning
+button ([model-tuning.md](model-tuning.md)) can lower a router's budget
+further, never raise it.
 The timestamped rows (below) are shown in the chat only; they never reach the
 model. Whether the conversation compacts at all follows the auto-condense
 setting like any other model: the router only attaches the free summarizer the
@@ -63,7 +68,8 @@ something. The built-in defaults (`router-rules.ts`) are, best first:
 | --- | --- | --- |
 | `huge-context` (≥ 180k tokens) | GLM-5.2 (vmodels replica, then primary) | the same |
 | `subagent` | kimi-k2.6, qwen3-coder, nemotron super | qwen3-coder, qwen3.5-397b, nemotron super |
-| `plan-and-reasoning` | kimi-k2.6, qwen3.5-397b (thinking on), nemotron ultra | qwen3.5-397b, qwen3-coder, nemotron ultra |
+| `plan-and-reasoning` (every plan-mode turn) | kimi-k2.6, qwen3.5-397b (thinking on, high), nemotron ultra | qwen3.5-397b, qwen3-coder, nemotron ultra (thinking off) |
+| `ask-reasoning` (ask mode, a why/explain/review question) | kimi-k2.6, qwen3.5-397b (thinking on, medium), nemotron ultra | none: such a question takes `quick` or `default` |
 | `coding` | kimi-k2.6, qwen3-coder, nemotron ultra | qwen3-coder, qwen3.5-397b, nemotron ultra |
 | `quick` | qwen3-next-80b, nemotron super, kimi-k2.6 | qwen3-next-80b, qwen3-coder, nemotron super |
 | `default` | kimi-k2.6, qwen3-coder, nemotron ultra, nemotron super | qwen3-coder, qwen3.5-397b, nemotron ultra |
@@ -71,6 +77,17 @@ something. The built-in defaults (`router-rules.ts`) are, best first:
 `auto-free-smart` is `auto-free` plus the classifier. `auto-free-fast` is
 Qwen only, reasoning off everywhere: kimi is not on any of its routes and sits
 at the back of its pool as a last resort.
+
+**Plan and ask mode route differently.** Every plan-mode turn takes the
+`plan-and-reasoning` route, whatever its wording: a plan is only as good as
+the thinking behind it, and before this only prompts with a word like "plan",
+"design" or "why" got there. Ask mode, and a side question in any mode, routes
+as `ask` (it used to route as plan): a question about what something is or
+where it lives stays on the quick route, and only one that asks for reasoning
+takes `ask-reasoning`. A rules file can match the three modes with
+`mode: plan`, `mode: act` or `mode: ask`. These are built-in defaults: a
+rules file you edited keeps its own routes until you delete it (or its YAML
+block) and let it be seeded again.
 
 Kimi leads the default and smart profiles again. It was demoted after a run of
 turns in which it announced a tool call and never made it; the transcripts

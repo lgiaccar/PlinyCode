@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import ChatTextArea, { getRowHeightPx, rowsFromDrag } from "./ChatTextArea"
 
@@ -7,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	navigateToSettingsModelPicker: vi.fn(),
 	chatInputMaxRows: 10 as number | undefined,
 	updateSettings: vi.fn(async () => ({})),
+	improvePrompt: vi.fn(async (_request: { text: string; mode: string }) => ({ text: "", error: "" })),
 }))
 
 vi.mock("@/context/ExtensionStateContext", () => ({
@@ -51,6 +53,7 @@ vi.mock("@/services/grpc-client", () => ({
 		togglePlanActModeProto: vi.fn(async () => ({})),
 		updateSettings: mocks.updateSettings,
 	},
+	TaskServiceClient: { improvePrompt: mocks.improvePrompt },
 	// ConversationModelPicker -> useProviderConfig() reads the provider config on
 	// mount; without this the call rejects and vitest reports an unhandled error.
 	ModelsServiceClient: {
@@ -291,6 +294,76 @@ describe("ChatTextArea sticky send mode", () => {
 		localStorage.setItem("plinycode.sendMode", "bogus")
 		const { button } = renderWithSend()
 		expect(button).toHaveClass("codicon-send")
+	})
+})
+
+function StatefulTextArea({ initial }: { initial: string }) {
+	const [inputValue, setInputValue] = useState(initial)
+	return (
+		<ChatTextArea
+			activeQuote={null}
+			inputValue={inputValue}
+			onSelectFilesAndImages={vi.fn()}
+			onSend={vi.fn()}
+			placeholderText="Type a message"
+			selectedFiles={[]}
+			selectedImages={[]}
+			sendingDisabled={false}
+			setInputValue={setInputValue}
+			setSelectedFiles={vi.fn()}
+			setSelectedImages={vi.fn()}
+			shouldDisableFilesAndImages={false}
+		/>
+	)
+}
+
+describe("ChatTextArea improve prompt", () => {
+	beforeEach(() => {
+		mocks.improvePrompt.mockReset()
+	})
+
+	const input = () => screen.getByTestId("chat-input") as HTMLTextAreaElement
+
+	it("does nothing while the draft is empty", () => {
+		render(<StatefulTextArea initial="  " />)
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		expect(mocks.improvePrompt).not.toHaveBeenCalled()
+	})
+
+	it("replaces the draft with the rewrite, sent with the mode, and offers to undo it", async () => {
+		mocks.improvePrompt.mockResolvedValue({ text: "Fix the login redirect.", error: "" })
+		render(<StatefulTextArea initial="fix login pls" />)
+
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+
+		await waitFor(() => expect(input().value).toBe("Fix the login redirect."))
+		expect(mocks.improvePrompt).toHaveBeenCalledWith(expect.objectContaining({ text: "fix login pls", mode: "act" }))
+		fireEvent.click(screen.getByTestId("improve-prompt-undo"))
+		expect(input().value).toBe("fix login pls")
+		expect(screen.queryByTestId("improve-prompt-undo")).toBeNull()
+	})
+
+	it("keeps a draft the user edited while the rewrite was on its way", async () => {
+		let answer: (value: { text: string; error: string }) => void = () => {}
+		mocks.improvePrompt.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+		render(<StatefulTextArea initial="fix login" />)
+
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		fireEvent.change(input(), { target: { value: "fix login and logout", selectionStart: 20 } })
+		await act(async () => answer({ text: "Fix the login.", error: "" }))
+
+		expect(input().value).toBe("fix login and logout")
+		expect(screen.queryByTestId("improve-prompt-undo")).toBeNull()
+	})
+
+	it("shows why the prompt could not be improved and leaves it as it was", async () => {
+		mocks.improvePrompt.mockResolvedValue({ text: "", error: "The model returned no text." })
+		render(<StatefulTextArea initial="fix login" />)
+
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+
+		await waitFor(() => expect(screen.getByTestId("improve-prompt-status").textContent).toContain("no text"))
+		expect(input().value).toBe("fix login")
 	})
 })
 

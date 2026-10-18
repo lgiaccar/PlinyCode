@@ -41,6 +41,9 @@ service TaskService {
   rpc toggleTaskPin(TaskPinRequest) returns (Empty);
   // Renames a task (its history title). A blank title is ignored.
   rpc renameTask(RenameTaskRequest) returns (Empty);
+  // Rewrites a draft prompt for grammar and clarity with a small free model.
+  // Never fails: the reason it could not is returned in `error`.
+  rpc improvePrompt(ImprovePromptRequest) returns (ImprovePromptResult);
   // Sets a conversation's budget in USD (0 = no limit). A negative amount is ignored.
   rpc setTaskSpendingLimit(SetTaskSpendingLimitRequest) returns (Empty);
   // Gets filtered task history
@@ -269,4 +272,18 @@ message EditMessageAndRegenerateRequest {
 // Results returned when deleting all task history
 message DeleteAllTaskHistoryCount {
   int32 tasks_deleted = 1;
+}
+
+message ImprovePromptRequest {
+  Metadata metadata = 1;
+  string text = 2;
+  // "plan", "act" or "ask": the mode the prompt will be sent in.
+  string mode = 3;
+}
+
+message ImprovePromptResult {
+  // The rewritten prompt; empty when it could not be improved.
+  string text = 1;
+  // Why it could not be improved; empty on success.
+  string error = 2;
 }

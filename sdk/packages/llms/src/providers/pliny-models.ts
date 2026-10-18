@@ -75,7 +75,7 @@ export const PLINY_ROUTER_PROFILES = [
 		description:
 			"FreeAuto tuned for latency: fastest models first, reasoning off wherever it can be",
 		summary:
-			"Free and quick: fastest models first, with reasoning off wherever possible. Best for small edits and questions; weaker on problems that need thinking.",
+			"Free and quick: fastest models first, reasoning off wherever possible, and a shorter history (compacted at about 58k tokens). Best for small edits and questions; weaker on problems that need thinking.",
 	},
 	{
 		profile: "smart",
@@ -170,10 +170,12 @@ export type PlinyThinkingOff =
 export type PlinyThinkingOn = "reasoning-effort" | "template-kwargs";
 
 /**
- * Measured reasoning behaviour of a self-hosted model, copied from the
- * thinking probe (`scripts/probe-pliny-free-models.ts --thinking`). A model
- * without an entry has not been measured, and nothing is sent to change its
- * reasoning: an unsupported field is rejected by the gateway, failing the call.
+ * Measured reasoning behaviour of a model, copied from the thinking probes
+ * (`scripts/probe-pliny-free-models.ts --thinking` for the self-hosted pool,
+ * `scripts/probe-pliny-hosted-thinking.ts` for the hosted one; results in
+ * docs/model-tuning.md). A model without an entry has not been measured, and
+ * nothing is sent to change its reasoning: an unsupported field is rejected by
+ * the gateway, failing the call.
  */
 export type PlinyThinkingControls = {
 	defaultOn: boolean;
@@ -277,6 +279,9 @@ function toModelInfo(entry: PlinyCatalogEntry, selfHosted: boolean): ModelInfo {
 					}
 				: {}),
 			...(priceNote ? { pricingNote: priceNote } : {}),
+			// The measured switches, so the host offers only the reasoning
+			// controls that change something on this model.
+			...(entry.thinking ? { thinking: { ...entry.thinking } } : {}),
 		},
 	};
 }
@@ -344,7 +349,10 @@ export function plinyRouterProfile(modelId: string): string {
 }
 
 const THINKING_BY_MODEL_ID = new Map(
-	(catalog.selfHosted as PlinyCatalogEntry[])
+	[
+		...(catalog.selfHosted as PlinyCatalogEntry[]),
+		...(catalog.hosted as PlinyCatalogEntry[]),
+	]
 		.filter((entry) => entry.thinking)
 		.map((entry) => [entry.id, entry.thinking as PlinyThinkingControls]),
 );
@@ -359,7 +367,7 @@ export function plinyCanThink(controls: PlinyThinkingControls): boolean {
 	return controls.defaultOn || controls.on === "reasoning-effort";
 }
 
-/** Measured reasoning controls for a self-hosted model, when it was probed. */
+/** Measured reasoning controls for a model, self-hosted or hosted, when it was probed. */
 export function plinyThinkingControls(
 	modelId: string,
 ): PlinyThinkingControls | undefined {
@@ -425,6 +433,14 @@ export function plinyHostedPoolIds(): string[] {
 const FREE_AUTO_MAX_INPUT_TOKENS = 92_000;
 
 /**
+ * Input budget of the fast FreeAuto profile. Fast trades depth for latency, and
+ * a long history is the largest cost of every call: compacting from about 58k
+ * keeps each request small enough to answer quickly and to stay on the fast
+ * Qwen models, which degrade first as the context grows.
+ */
+const FAST_AUTO_MAX_INPUT_TOKENS = 64_000;
+
+/**
  * Input budget BalanceAuto compacts against: the paid models it prefers take
  * 200k+, but every call is billed on its whole input, so history is
  * summarized at about 115k rather than carried to 180k.
@@ -436,7 +452,8 @@ const BALANCE_AUTO_MAX_INPUT_TOKENS = 128_000;
  * 256k tier rather than GLM-5.2's 512k: it is the window a majority of the pool
  * can honor, while the policy can still route a genuinely huge request to
  * GLM-5.2. `maxInputTokens` is lower on purpose: it only sets when compaction
- * starts (see FREE_AUTO_MAX_INPUT_TOKENS).
+ * starts (see FREE_AUTO_MAX_INPUT_TOKENS, and FAST_AUTO_MAX_INPUT_TOKENS for
+ * the fast profile).
  *
  * It declares image input although no free model has it: the extension's
  * router hands a text-only model each image as a description, or as a note
@@ -449,7 +466,10 @@ function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 		name: profile.name,
 		description: profile.summary,
 		contextWindow: 256_000,
-		maxInputTokens: FREE_AUTO_MAX_INPUT_TOKENS,
+		maxInputTokens:
+			profile.profile === "fast"
+				? FAST_AUTO_MAX_INPUT_TOKENS
+				: FREE_AUTO_MAX_INPUT_TOKENS,
 		maxTokens: 32_768,
 		capabilities: ["streaming", "tools", "images"],
 		family: "pliny-router",
