@@ -1738,8 +1738,12 @@ export class Controller {
 
 	// ---- Mode switching ----
 
-	async togglePlanActMode(modeToSwitchTo: Mode, chatContent?: ChatContent): Promise<boolean> {
-		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent)
+	async togglePlanActMode(
+		modeToSwitchTo: Mode,
+		chatContent?: ChatContent,
+		options?: { executePlan?: boolean },
+	): Promise<boolean> {
+		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent, options)
 	}
 
 	async getTaskHistory(request: GetTaskHistoryRequest): Promise<TaskHistoryArray> {

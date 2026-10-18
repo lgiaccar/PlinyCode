@@ -4455,6 +4455,40 @@ describe("tool display paths are relativized to the cwd", () => {
 		expect(clineMessages.some((m) => m.say === "completion_result" || m.ask === "completion_result")).toBe(true)
 	})
 
+	it("keeps a prompt saved in the same message as hook context as a prompt row", () => {
+		// A prompt sent while a command runs in the background is persisted next to
+		// that command's hook context, in one user message.
+		const messages: SdkMessage[] = [
+			{ role: "user", content: "start the build" } as SdkMessage,
+			{
+				role: "assistant",
+				content: [
+					{ type: "text", text: "Starting it." },
+					{ type: "tool_use", id: "t1", name: "run_commands", input: { commands: ["make"] } },
+				],
+			} as SdkMessage,
+			{ role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "running" }] } as SdkMessage,
+			{
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text: '<hook_context source="PostToolUse" tool_name="run_commands" tool_call_id="t1">\nstill running\n</hook_context>',
+					},
+					{ type: "text", text: "Did you make the pr?" },
+				],
+			} as SdkMessage,
+			{ role: "assistant", content: [{ type: "text", text: "Not yet." }] } as SdkMessage,
+		]
+
+		const clineMessages = sdkMessagesToClineMessages(messages)
+
+		expect(clineMessages.filter((m) => m.say === "hook_status")).toHaveLength(1)
+		const prompts = clineMessages.filter((m) => m.say === "user_feedback")
+		expect(prompts.map((m) => m.text)).toEqual(["Did you make the pr?"])
+		expect(clineMessages.some((m) => m.text?.includes("<hook_context"))).toBe(false)
+	})
+
 	it("keeps the side-question mark on a reloaded user message", () => {
 		const messages = [
 			{ role: "user", content: "build the parser" },

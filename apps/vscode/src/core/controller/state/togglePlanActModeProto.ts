@@ -34,8 +34,12 @@ export async function togglePlanActModeProto(controller: Controller, request: To
 			await preparePlanExecution(controller, executePlanWith)
 		}
 
-		// Call the existing controller implementation
-		const sentMessage = await controller.togglePlanActMode(mode, chatContent)
+		// Only the Execute plan button runs the plan: it is the one caller that sends
+		// executePlanWith. Switching to act mode by any other route leaves the plan
+		// waiting for the user to ask for it.
+		const sentMessage = await controller.togglePlanActMode(mode, chatContent, {
+			executePlan: request.executePlanWith !== undefined,
+		})
 
 		return Boolean.create({
 			value: sentMessage,

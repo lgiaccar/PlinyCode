@@ -52,6 +52,7 @@ export {
 	resolveHooksConfigSearchPaths,
 	resolveMcpSettingsPath,
 	resolveMemoryDataDir,
+	resolvePlansDataDir,
 	resolvePluginConfigSearchPaths,
 	resolvePluginModuleEntries,
 	resolveProviderSettingsPath,

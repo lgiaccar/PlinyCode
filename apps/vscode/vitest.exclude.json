@@ -20,6 +20,7 @@
 	"src/core/workspace/__tests__/parseWorkspaceInlinePath.test.ts",
 	"src/core/workspace/__tests__/WorkspacePathAdapter.test.ts",
 	"src/core/workspace/__tests__/WorkspaceResolver.test.ts",
+	"src/core/workspace/plan-folder.test.ts",
 	"src/core/workspace/recent-workspaces-store.test.ts",
 	"src/core/workspace/workspace-identity.test.ts",
 	"src/hosts/vscode/__tests__/commit-message-generator.test.ts",

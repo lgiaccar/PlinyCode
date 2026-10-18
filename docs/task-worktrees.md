@@ -13,8 +13,12 @@ repository unticks it.
 
 When the conversation starts:
 
-1. PlinyCode creates the branch `plinycode/<title>-<4 hex>` from the repository's current commit (`HEAD`). The
-   title part is the first words of the prompt, lowercase, at most 40 characters. Nothing is fetched.
+1. PlinyCode creates the branch `<user>/<title>-<4 hex>` from the repository's current commit (`HEAD`), for
+   example `lgiaccar/fix-the-login-page-3f2a`. `<user>` is your operating-system user name, lowercase, with
+   characters git does not allow in a branch name replaced by `-` (`plinycode` when there is none). The title
+   part is the first words of the prompt, lowercase, at most 40 characters. Nothing is fetched. The branch is
+   marked as PlinyCode's in the repository's git config (`branch.<name>.plinycodetask = true`), which is how the
+   cleanup tells it from your own branches; git removes the mark with the branch.
 2. It adds a worktree of that branch (see [Where worktrees go](#where-worktrees-go)) and checks out its
    submodules, if the repository has any.
 3. The conversation runs in the worktree. When the workspace is a folder below the repository's top level, it
@@ -120,7 +124,8 @@ minutes after the window opens and then once a day; when another window already 
 **Which worktrees it looks at.** The repositories PlinyCode knows: those of conversations with a worktree record,
 and those of the CI Board's runs (its `ci-board.json`). In each, only worktrees under one of the worktree folders
 (`plinycode.worktrees.root`, `plinycode.ci.worktreeRoot`, and `<repository>.worktrees`) that PlinyCode made:
-branch `plinycode/*` (Run in worktree), or a folder a CI Board run works in. A worktree you made yourself is not
+a branch marked as made by Run in worktree (or named `plinycode/*`, as they were before branches were named
+after the user), or a folder a CI Board run works in. A worktree you made yourself is not
 touched, even in the same folder.
 
 **When it removes one.** All of these must hold:
@@ -133,7 +138,7 @@ touched, even in the same folder.
   worktree counts the latest of its runs' start times and their conversations' activity.
 
 It runs `git worktree remove` without `--force`, so git itself refuses one that changed in the meantime. A
-`plinycode/*` branch is then deleted with `git branch -d`, which git refuses unless the branch is merged; any
+Run in worktree branch is then deleted with `git branch -d`, which git refuses unless the branch is merged; any
 other branch (a CI Board run's pull request branch) is kept. A conversation whose worktree was removed is marked
 (`removedTs`) like after **Remove worktree**. Each removal, and each failure, is written to PlinyCode's log
 (**PlinyCode: Open Log File**).

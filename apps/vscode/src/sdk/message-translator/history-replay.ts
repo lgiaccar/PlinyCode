@@ -7,7 +7,11 @@ import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
 import type { AgentEvent, UserInputMode } from "@plinycode/shared"
 import type { ClineApiReqInfo, ClineAskQuestion, ClineMessage } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
-import { extractPersistedHookContextChips, isSyntheticSdkUserMessage } from "../sdk-user-message-mapping"
+import {
+	extractPersistedHookContextChips,
+	isSyntheticSdkUserMessage,
+	withoutHookContextBlocks,
+} from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
 import { buildCompactionUsageMessage } from "./ask-builders"
 import { translateSessionEvent } from "./live-events"
@@ -431,6 +435,7 @@ export function sdkMessagesToClineMessages(
 		// Runtime-injected hook context is not a user turn: reconstruct the hook
 		// status rows shown live and leave turn/mode state untouched, so the
 		// final turn's completion retag survives the injection.
+		let userMessage = message
 		const hookChips = extractPersistedHookContextChips(message)
 		if (hookChips.length > 0) {
 			for (const chip of hookChips) {
@@ -442,20 +447,25 @@ export function sdkMessagesToClineMessages(
 					partial: false,
 				})
 			}
-			continue
+			// A prompt sent while a command ran in the background is saved in the
+			// same message as the command's hook context; it still gets its prompt row.
+			userMessage = withoutHookContextBlocks(message)
+			if (!textContentBlocksToText(userMessage.content)) {
+				continue
+			}
 		}
 
-		if (typeof message.content === "string") {
-			const text = message.content.trim()
+		if (typeof userMessage.content === "string") {
+			const text = userMessage.content.trim()
 			if (text) {
 				// User text marks a turn boundary: drop the preceding turn's outcome
 				// signals (its text is NOT retagged — see endFinalTurn) and pick up the mode
 				// of the NEW turn from this message's wrapper. Synthetic runtime prompts
 				// (task resumption, plan -> act auto-continue) still advance the turn/mode
 				// state but never had a visible bubble live, so don't emit one here either.
-				endPrecedingTurn(message)
+				endPrecedingTurn(userMessage)
 				currentMode = sourceMessage.uiMode ?? currentMode
-				if (!isSyntheticSdkUserMessage(message)) {
+				if (!isSyntheticSdkUserMessage(userMessage)) {
 					clineMessages.push({
 						ts: state.nextTs(),
 						type: "say",
@@ -469,11 +479,11 @@ export function sdkMessagesToClineMessages(
 			continue
 		}
 
-		const userText = textContentBlocksToText(message.content)
+		const userText = textContentBlocksToText(userMessage.content)
 		if (userText) {
-			endPrecedingTurn(message)
+			endPrecedingTurn(userMessage)
 			currentMode = sourceMessage.uiMode ?? currentMode
-			if (!isSyntheticSdkUserMessage(message)) {
+			if (!isSyntheticSdkUserMessage(userMessage)) {
 				clineMessages.push({
 					ts: state.nextTs(),
 					type: "say",
@@ -485,7 +495,7 @@ export function sdkMessagesToClineMessages(
 			}
 		}
 
-		for (const block of message.content) {
+		for (const block of userMessage.content) {
 			if (block.type !== "tool_result") {
 				continue
 			}

@@ -7,6 +7,7 @@
 import { execFile } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import { existsSync } from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import type { TaskWorktree } from "@shared/HistoryItem"
 
@@ -209,11 +210,49 @@ interface EnsureTaskWorktreeOptions {
 	configuredRoot?: string
 }
 
-const TASK_BRANCH_PREFIX = "plinycode/"
+/** The prefix of branches made before they were named after the user; still recognised. */
+const LEGACY_TASK_BRANCH_PREFIX = "plinycode/"
+/**
+ * `branch.<name>.plinycodetask`: set on each branch "Run in worktree" creates,
+ * since a `<user>/` branch cannot be told apart from the user's own by name.
+ * git drops it with the branch.
+ */
+const TASK_BRANCH_MARKER = "plinycodetask"
 
-/** Whether `branch` is one "Run in worktree" creates (`plinycode/<slug>-<4 hex>`). */
-export function isTaskBranch(branch: string | undefined): boolean {
-	return !!branch?.startsWith(TASK_BRANCH_PREFIX)
+/**
+ * The prefix of the branches "Run in worktree" creates: the OS user name made
+ * safe for a ref (`lgiaccar/`), or `plinycode/` when there is none.
+ */
+export function taskBranchPrefix(username = currentUsername()): string {
+	const safe = username
+		.toLowerCase()
+		.replace(/[^a-z0-9._-]+/g, "-")
+		.replace(/\.{2,}/g, ".")
+		.replace(/^[-.]+|[-.]+$/g, "")
+	return `${safe || "plinycode"}/`
+}
+
+function currentUsername(): string {
+	try {
+		return os.userInfo().username
+	} catch {
+		return process.env.USER || process.env.USERNAME || ""
+	}
+}
+
+/**
+ * Whether `branch` is one "Run in worktree" created: marked in the repository's
+ * config, or named `plinycode/<slug>-<4 hex>` as before the marker.
+ */
+export async function isTaskBranch(repoRoot: string, branch: string | undefined): Promise<boolean> {
+	if (!branch) {
+		return false
+	}
+	if (branch.startsWith(LEGACY_TASK_BRANCH_PREFIX)) {
+		return true
+	}
+	const marker = await git(repoRoot, ["config", "--get", `branch.${branch}.${TASK_BRANCH_MARKER}`])
+	return marker.ok && marker.stdout === "true"
 }
 const MAX_TASK_SLUG = 40
 /** The folder name repeats the start of the slug only, so Windows paths stay short. */
@@ -242,7 +281,7 @@ function trimSlug(slug: string, max: number): string {
 
 /**
  * Creates a worktree for a new conversation: a fresh branch
- * `plinycode/<slug>-<4 hex>` from the checkout's current `HEAD` (nothing is
+ * `<user>/<slug>-<4 hex>` from the checkout's current `HEAD` (nothing is
  * fetched), in a folder under `worktreeRoot`. Throws, with a message for the
  * user, when git is missing, the folder is not in a repository, the
  * repository has no commit yet, or the worktree cannot be set up.
@@ -266,16 +305,19 @@ export async function ensureTaskWorktree(options: EnsureTaskWorktreeOptions): Pr
 	const root = worktreeRoot(mainCheckout, options.configuredRoot)
 	const slug = taskBranchSlug(options.title)
 	const folderSlug = trimSlug(slug, MAX_TASK_FOLDER_SLUG)
+	const prefix = taskBranchPrefix()
 
 	for (let attempt = 0; attempt < 5; attempt++) {
 		const suffix = randomBytes(2).toString("hex")
-		const branch = `${TASK_BRANCH_PREFIX}${slug}-${suffix}`
+		const branch = `${prefix}${slug}-${suffix}`
 		const target = path.join(root, `${folderSlug}-${suffix}`)
 		const taken = existsSync(target) || (await git(repoRoot, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`])).ok
 		if (taken) {
 			continue
 		}
 		await gitOrThrow(repoRoot, ["worktree", "add", "-b", branch, target, head.stdout], `create a worktree in ${target}`)
+		// Lets the cleanup tell this branch from the user's own (see isTaskBranch).
+		await git(repoRoot, ["config", `branch.${branch}.${TASK_BRANCH_MARKER}`, "true"])
 		if (existsSync(path.join(target, ".gitmodules"))) {
 			const submodules = await git(target, ["submodule", "update", "--init", "--recursive"], 600_000)
 			if (!submodules.ok) {

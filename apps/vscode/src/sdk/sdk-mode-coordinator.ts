@@ -122,7 +122,16 @@ export class SdkModeCoordinator {
 		}
 	}
 
-	async togglePlanActMode(modeToSwitchTo: Mode, chatContent?: ChatContent): Promise<boolean> {
+	/**
+	 * Switches mode. A presented plan is executed only when `executePlan` is set
+	 * (the Execute plan button): switching to act mode by itself must not approve
+	 * the plan, so the user can switch and then say what to do.
+	 */
+	async togglePlanActMode(
+		modeToSwitchTo: Mode,
+		chatContent?: ChatContent,
+		options: { executePlan?: boolean } = {},
+	): Promise<boolean> {
 		const currentMode = this.options.stateManager.getGlobalSettingsKey("mode")
 		if (currentMode === modeToSwitchTo) {
 			return false
@@ -152,7 +161,7 @@ export class SdkModeCoordinator {
 				(turnPhase === "awaiting_followup" || turnPhase === "completed") &&
 				latestAssistantResult?.say === "plan_completion_result" &&
 				!latestAssistantResult.partial
-			const autoContinue = modeToSwitchTo === "act" && planPresented
+			const autoContinue = modeToSwitchTo === "act" && planPresented && options.executePlan === true
 			const userPrompt = chatContent?.message?.trim() || undefined
 			const userImages = chatContent?.images?.length ? chatContent.images : undefined
 			const userFiles = chatContent?.files?.length ? chatContent.files : undefined

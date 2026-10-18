@@ -241,6 +241,18 @@ export function resolveMemoryDataDir(): string {
 	return join(resolveClineDataDir(), "memory");
 }
 
+/**
+ * Where plan mode writes its plans: `<workspace key>/<slug>/PLAN.md`. Outside
+ * the workspace, so a plan is never committed or deleted with it.
+ */
+export function resolvePlansDataDir(): string {
+	const explicitDir = process.env.CLINE_PLANS_DATA_DIR?.trim();
+	if (explicitDir) {
+		return explicitDir;
+	}
+	return join(resolveClineDataDir(), "plans");
+}
+
 export function resolveConnectorDataDir(): string {
 	const explicitDir = process.env.CLINE_CONNECTOR_DATA_DIR?.trim();
 	if (explicitDir) {
