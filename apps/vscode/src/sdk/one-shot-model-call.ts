@@ -167,8 +167,13 @@ export function resolveCallUsage(
 		}
 		return {
 			...tokens,
-			// A paid model never costs nothing: a missing or zero figure is priced from the catalog.
-			totalCost: reported.totalCost && reported.totalCost > 0 ? reported.totalCost : costFromPricing(tokens, pricing),
+			// Self-hosted models are always free; paid models are priced from the catalog when the
+			// gateway reports nothing, or from the gateway's own figure when it does.
+			totalCost: isPlinySelfHostedModelId(modelId)
+				? 0
+				: reported.totalCost && reported.totalCost > 0
+					? reported.totalCost
+					: costFromPricing(tokens, pricing),
 			...(reported.estimated ? { estimated: true } : {}),
 		}
 	}

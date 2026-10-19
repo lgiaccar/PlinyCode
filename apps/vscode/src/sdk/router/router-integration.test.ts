@@ -918,6 +918,13 @@ describe("installRouter tokens and cost in the logs", () => {
 		])
 	})
 
+	it("logs a free model's call as costing nothing even when the gateway reports a cost", async () => {
+		const { calls, start } = install(PLINY_FREE_AUTO_MODEL_ID, () => [TEXT, usageEvent(1200, 80, 0.005), STOP])
+		const run = start({ agentId: "agent-1", runId: "run-9" })
+		await run.call()
+		expect(calls).toEqual([expect.objectContaining({ model: KIMI, outcome: "success", costUsd: 0, runId: "run-9" })])
+	})
+
 	it("writes the turn's totals, paid share and sub-agent spend into the run record", async () => {
 		const { calls, runs, start } = install(PLINY_BALANCE_AUTO_MODEL_ID, (modelId) => {
 			if (modelId === CLASSIFIER) {

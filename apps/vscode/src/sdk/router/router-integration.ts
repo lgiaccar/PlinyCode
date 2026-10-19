@@ -193,7 +193,7 @@ function logUsage(usage: RouterCallUsage): RouterCallLogUsage {
  * unknown when they said nothing.
  */
 function callCostUsd(modelId: string, usage: RouterCallUsage | undefined): number | undefined {
-	return isPlinySelfHostedModelId(modelId) ? (usage?.costUsd ?? 0) : usage?.costUsd
+	return isPlinySelfHostedModelId(modelId) ? 0 : usage?.costUsd
 }
 
 /** Tokens, cost and models of a set of calls, for the run log. */
