@@ -36,6 +36,8 @@ service ModelsService {
   rpc writeProviderConfig(WriteProviderConfigRequest) returns (ProviderConfigResponse);
   // Commits a mode-specific model ID with optional user-authored metadata overrides
   rpc commitModelSelection(CommitModelSelectionRequest) returns (Empty);
+  // Stores (or clears) the per-model reasoning and context tuning set from the chat box
+  rpc setModelTuning(SetModelTuningRequest) returns (Empty);
 }
 
 // Price tier for tiered pricing models
@@ -85,6 +87,16 @@ message OpenRouterModelInfo {
   optional bool pricing_unavailable = 19;
   // Where the price comes from, or how a router is billed.
   optional string pricing_note = 20;
+  // Prompt budget, when lower than the context window (it sets when compaction starts).
+  optional int64 max_input_tokens = 21;
+  // Measured reasoning switches of a Pliny model; absent when not measured.
+  optional ThinkingControls thinking_controls = 22;
+}
+
+message ThinkingControls {
+  bool default_on = 1;
+  optional string off = 2;
+  optional string on = 3;
 }
 
 // User-authored per-model metadata stored in models.json.
@@ -332,4 +344,16 @@ message ModelsApiConfiguration {
   optional string act_mode_api_model_id = 201;
   optional int64 act_mode_thinking_budget_tokens = 202;
   optional string act_mode_reasoning_effort = 203;
+}
+
+// Tuning for one model. An absent field clears that setting; all absent clears the entry.
+message SetModelTuningRequest {
+  Metadata metadata = 1;
+  string model_id = 2;
+  // Reasoning forced on (true) or off (false); absent keeps the model's default.
+  optional bool thinking = 3;
+  // "low", "medium" or "high"; absent keeps the default.
+  optional string effort = 4;
+  // Prompt budget in tokens; absent keeps the model's own.
+  optional int64 max_input_tokens = 5;
 }

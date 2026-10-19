@@ -26,7 +26,7 @@
  * the error instead of throwing.
  */
 
-import { type ModelInfo, plinyThinkingControls } from "@plinycode/llms"
+import { isPlinySelfHostedModelId, type ModelInfo, plinyThinkingControls } from "@plinycode/llms"
 import type { AgentMessage, AgentModel, AgentModelRequest, AgentTool, AgentToolContext } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
 import { collectModelReply, hasKnownPrice, type ModelCallUsage, resolveCallUsage } from "../one-shot-model-call"
@@ -134,9 +134,9 @@ function buildAdvisorRequest(input: {
 		options: {
 			maxTokens: ADVISOR_MAX_OUTPUT_TOKENS,
 			// Like the router: a reasoning switch is sent only to a model it was
-			// measured on. The gateway rejects the field elsewhere, so a hosted
-			// model keeps its default.
-			...(plinyThinkingControls(input.modelId) ? { thinking: false } : {}),
+			// measured on, and only to a free one: a hosted advisor is a paid model
+			// asked for its best answer, so it keeps its default.
+			...(isPlinySelfHostedModelId(input.modelId) && plinyThinkingControls(input.modelId) ? { thinking: false } : {}),
 		},
 	}
 }

@@ -72,13 +72,15 @@ const Value = styled.dd`
 interface ModelDetailsCardProps {
 	modelId: string
 	modelInfo: ModelInfo
+	/** The user's tuning of this model, e.g. "effort high, 64k context"; empty when untuned. */
+	tuning?: string
 }
 
 /**
  * Everything a user needs to pick a model: what it is good and bad at, how
  * much it can read and write, how big it is, and what a million tokens cost.
  */
-export const ModelDetailsCard: React.FC<ModelDetailsCardProps> = ({ modelId, modelInfo }) => {
+export const ModelDetailsCard: React.FC<ModelDetailsCardProps> = ({ modelId, modelInfo, tuning }) => {
 	const isRouter = isPlinyRouterModelId(modelId)
 	const [summary, ...rest] = (modelInfo.description ?? "").split("\n\n")
 	const hosting = rest.join(" ")
@@ -129,6 +131,7 @@ export const ModelDetailsCard: React.FC<ModelDetailsCardProps> = ({ modelId, mod
 					</>
 				)}
 			</Facts>
+			{tuning && <Muted>Tuned: {tuning}</Muted>}
 			{modelInfo.pricingNote && <Muted>{modelInfo.pricingNote}</Muted>}
 			{hosting && <Muted>{hosting}</Muted>}
 		</Card>

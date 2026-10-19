@@ -21,8 +21,10 @@ import {
 import * as yaml from "js-yaml"
 import { Logger } from "@/shared/services/Logger"
 import {
+	ROUTER_MODES,
 	ROUTER_TIERS,
 	type RouterEffort,
+	type RouterMode,
 	type RouterReasoningEffort,
 	type RouterRoute,
 	type RouterRules,
@@ -224,12 +226,22 @@ const DEFAULT_ROUTES: RouterRoute[] = [
 	{
 		name: "plan-and-reasoning",
 		tier: "reason",
-		when: { mode: "plan", promptRegex: REASONING_PROMPT },
+		// Every plan-mode turn: a plan is only as good as the thinking behind it.
+		when: { mode: "plan" },
 		// kimi reasons in its content whatever the effort; the 397B is the
 		// backup with a real reasoning switch, turned on here.
 		use: [KIMI, QWEN_397, NEMOTRON_ULTRA],
 		effort: "think",
 		reasoningEffort: "high",
+	},
+	{
+		name: "ask-reasoning",
+		// Ask mode thinks only when the question asks for reasoning; a quick
+		// lookup stays on the quick route.
+		when: { mode: "ask", promptRegex: REASONING_PROMPT },
+		use: [KIMI, QWEN_397, NEMOTRON_ULTRA],
+		effort: "think",
+		reasoningEffort: "medium",
 	},
 	{
 		name: "coding",
@@ -268,7 +280,8 @@ const FAST_ROUTES: RouterRoute[] = [
 	{
 		name: "plan-and-reasoning",
 		tier: "reason",
-		when: { mode: "plan", promptRegex: REASONING_PROMPT },
+		// Every plan-mode turn gets the strongest Qwen, still without reasoning.
+		when: { mode: "plan" },
 		use: [QWEN_397, CODER, NEMOTRON_ULTRA],
 		effort: "quick",
 	},
@@ -315,10 +328,18 @@ const BALANCE_ROUTES: RouterRoute[] = [
 	{
 		name: "plan-and-reasoning",
 		tier: "reason",
-		when: { mode: "plan", promptRegex: REASONING_PROMPT },
+		// Every plan-mode turn: plans are where paid reasoning pays off most.
+		when: { mode: "plan" },
 		use: [SONNET_46_THINKING, SONNET_5, GPT_52],
 		effort: "think",
 		reasoningEffort: "high",
+	},
+	{
+		name: "ask-reasoning",
+		when: { mode: "ask", promptRegex: REASONING_PROMPT },
+		use: [SONNET_5, KIMI, SONNET_46],
+		effort: "think",
+		reasoningEffort: "medium",
 	},
 	{
 		name: "coding",
@@ -469,7 +490,7 @@ function parseCondition(value: unknown): RouterRoute["when"] {
 	const maxPromptChars = asPositive(raw.maxPromptChars)
 	const subAgent = typeof raw.subAgent === "boolean" ? raw.subAgent : undefined
 	return {
-		...(mode === "plan" || mode === "act" ? { mode } : {}),
+		...(ROUTER_MODES.includes(mode as RouterMode) ? { mode: mode as RouterMode } : {}),
 		...(minEstimatedTokens !== undefined ? { minEstimatedTokens } : {}),
 		...(maxEstimatedTokens !== undefined ? { maxEstimatedTokens } : {}),
 		...(maxPromptChars !== undefined ? { maxPromptChars } : {}),

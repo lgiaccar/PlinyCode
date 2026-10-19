@@ -240,6 +240,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		memoryConversationSearchEnabled: true,
 		subagentsEnabled: true,
 		favoritedModelIds: [],
+		modelTuning: {},
 		backgroundCommandRunning: false,
 		backgroundCommandTaskId: undefined,
 		foregroundCommandRunning: false,

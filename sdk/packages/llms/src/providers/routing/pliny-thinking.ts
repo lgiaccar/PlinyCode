@@ -5,9 +5,9 @@ import {
 } from "../pliny-models";
 
 /**
- * Pliny self-hosted reasoning switches.
+ * Pliny reasoning switches.
  *
- * The self-hosted pool is served by different backends that disagree on how
+ * The Pliny models are served by different backends that disagree on how
  * reasoning is switched: some honour `chat_template_kwargs.enable_thinking`,
  * some `reasoning_effort`, some neither, and an unknown value such as
  * `reasoning_effort: "none"` is rejected with a 400 rather than ignored. So the

@@ -49,11 +49,18 @@ const PROVIDER_CREDENTIALS: RestartKind = {
 	failureText: (message) => `Failed to switch the Pliny API key: ${message}. The new key applies from the next task.`,
 }
 
+const MODEL_TUNING: RestartKind = {
+	reason: "modelTuning",
+	label: "model tuning",
+	disposeReason: "modelTuningChange",
+	failureText: (message) => `Failed to apply the model tuning: ${message}. It applies from the next task.`,
+}
+
 /**
  * Restarts the idle session, keeping its conversation, when something it
  * captured at build time changes: the terminal execution mode (its tools and
- * their timeout) or the Pliny API key (the provider reads it once, when
- * created).
+ * their timeout), the Pliny API key (the provider reads it once, when
+ * created) or the model's tuning (reasoning and context budget).
  */
 export class SdkTerminalExecutionModeCoordinator {
 	constructor(private readonly options: SdkTerminalExecutionModeCoordinatorOptions) {}
@@ -68,6 +75,11 @@ export class SdkTerminalExecutionModeCoordinator {
 	/** The active Pliny API key changed (in Settings, here or in another window). */
 	handleProviderCredentialsChanged(): void {
 		this.requestRebuild(PROVIDER_CREDENTIALS, "Pliny API key changed")
+	}
+
+	/** The reasoning or context tuning of the session's model changed. */
+	handleModelTuningChanged(): void {
+		this.requestRebuild(MODEL_TUNING, "Model tuning changed")
 	}
 
 	private requestRebuild(kind: RestartKind, reason: string): void {

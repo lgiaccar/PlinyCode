@@ -24,6 +24,7 @@
  */
 
 import type { AgentMessage, CompletionGuard, CompletionGuardContext } from "@plinycode/shared"
+import type { RouterMode } from "./router-types"
 import {
 	endsWithHandBack,
 	followsCiWatchStart,
@@ -141,7 +142,7 @@ interface RouterCompletionGuardOptions {
 	/** Evaluated per reply, so a mid-task model switch takes effect. */
 	isActive: () => boolean
 	/** Current mode; the judge only runs in act mode. */
-	getMode?: () => "plan" | "act"
+	getMode?: () => RouterMode
 	/** Tool calls the current run has made; the judge only runs after at least one. */
 	toolCallsThisRun?: () => number
 	/** Called whenever a reminder is sent, e.g. to show a chat row. */

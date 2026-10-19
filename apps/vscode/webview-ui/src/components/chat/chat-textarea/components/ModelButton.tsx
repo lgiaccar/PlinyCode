@@ -9,6 +9,7 @@ import ClineRulesToggleModal from "@/components/cline-rules/ClineRulesToggleModa
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
+import { ModelTuningButton } from "./ModelTuningButton"
 
 const ButtonGroup = styled.div`
 	display: flex;
@@ -92,7 +93,8 @@ interface ModelButtonProps {
 
 /**
  * The toolbar row below the textarea: add-context and add-files-and-images
- * buttons, the MCP servers and workspace rules toggles, and the model picker.
+ * buttons, the MCP servers and workspace rules toggles, the model tuning
+ * button and the model picker.
  * Always rendered (visibility is controlled by the parent's CSS), so it has
  * no state of its own beyond what it's given.
  */
@@ -155,6 +157,8 @@ export function ModelButton({
 			<ServersToggleModal />
 
 			<ClineRulesToggleModal />
+
+			<ModelTuningButton mode={mode} />
 
 			<ModelContainer>
 				<ConversationModelPicker mode={mode} />

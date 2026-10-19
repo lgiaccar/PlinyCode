@@ -1,5 +1,6 @@
 import * as yaml from "js-yaml"
 import { describe, expect, it } from "vitest"
+import { selectRoute } from "./router-policy"
 import {
 	defaultPool,
 	defaultRules,
@@ -12,6 +13,7 @@ import {
 	workspaceRulesFilenameForProfile,
 } from "./router-rules"
 import { renderDefaultRulesMarkdown } from "./router-rules-store"
+import type { RouterMode } from "./router-types"
 
 const FENCE = "```"
 
@@ -450,5 +452,41 @@ describe("mergeRules", () => {
 		const global = { ...defaultRules(), sticky: true }
 		const workspace = { ...defaultRules(), sticky: false }
 		expect(mergeRules(global, workspace).sticky).toBe(false)
+	})
+})
+
+describe("mode routing", () => {
+	const features = (mode: RouterMode, prompt: string) => ({
+		estimatedTokens: 5_000,
+		mode,
+		prompt,
+		hasImages: false,
+		isSubAgent: false,
+		callIndex: 1,
+	})
+
+	it.each(["default", "smart", "fast", "balance"])("sends every %s plan-mode turn to the reasoning route", (profile) => {
+		const rules = defaultRules(profile)
+		expect(selectRoute(rules, features("plan", "add a logout button"))?.name).toBe("plan-and-reasoning")
+		expect(selectRoute(rules, features("plan", "what is this?"))?.name).toBe("plan-and-reasoning")
+	})
+
+	it("keeps quick ask-mode questions off the thinking routes", () => {
+		const rules = defaultRules()
+		expect(selectRoute(rules, features("ask", "what does this file do?"))?.name).toBe("quick")
+		expect(selectRoute(rules, features("ask", "explain why the cache misses here"))?.name).toBe("ask-reasoning")
+		expect(defaultRules("fast").routes.some((r) => r.name === "ask-reasoning")).toBe(false)
+	})
+
+	it("parses mode: ask in a rules file and drops unknown modes", () => {
+		const use = ["snps-provider/GLM-5.2"]
+		const [ask, bad] = normalizeRules({
+			routes: [
+				{ name: "ask", when: { mode: "ask" }, use },
+				{ name: "bad", when: { mode: "debug" }, use },
+			],
+		}).routes
+		expect(ask.when?.mode).toBe("ask")
+		expect(bad.when?.mode).toBeUndefined()
 	})
 })

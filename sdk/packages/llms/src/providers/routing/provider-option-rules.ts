@@ -491,7 +491,7 @@ const plinyThinkingRule: ProviderOptionRule = {
 	id: "provider.pliny.thinking",
 	phase: "provider-reasoning",
 	description:
-		"Pliny self-hosted models switch reasoning with the field the thinking probe measured for that model.",
+		"Pliny models switch reasoning with the field the thinking probe measured for that model.",
 	applies: (input) =>
 		hasPlinyThinkingControls(input.request) &&
 		typeof input.request.reasoning?.enabled === "boolean",

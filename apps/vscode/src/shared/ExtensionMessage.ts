@@ -9,6 +9,7 @@ import { ClineRulesToggles } from "./cline-rules"
 import { HistoryItem } from "./HistoryItem"
 import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
+import type { ModelTuningMap } from "./model-tuning"
 import type { PlanExecutionChoice } from "./planExecution"
 import { Mode } from "./storage/types"
 import type { WorkspaceRef } from "./workspaceRef"
@@ -127,6 +128,8 @@ export interface ExtensionState {
 	planExecutionChoice?: PlanExecutionChoice
 	subagentsEnabled?: boolean
 	favoritedModelIds: string[]
+	/** Per-model reasoning and context tuning, keyed by model id (src/shared/model-tuning.ts). */
+	modelTuning?: ModelTuningMap
 	/**
 	 * The workspace this window is open on (folder, or .code-workspace file for
 	 * multi-folder workspaces). New conversations bind to it unless another one

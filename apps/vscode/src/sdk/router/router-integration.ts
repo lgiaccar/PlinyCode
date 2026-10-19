@@ -62,6 +62,7 @@ import type {
 	RouterCallUsage,
 	RouterClassification,
 	RouterEffort,
+	RouterMode,
 	RouterRequestFeatures,
 	RouterRules,
 } from "./router-types"
@@ -105,8 +106,8 @@ export interface RouterInstallDeps {
 	getSessionId?: () => string | undefined
 	/** Workspace root, so a project-local rules file is picked up. */
 	workspaceRoot?: string
-	/** Current plan/act mode at call time. */
-	getMode: () => "plan" | "act"
+	/** Current routing mode (plan, act or ask) at call time. */
+	getMode: () => RouterMode
 	/** Emits a chat row. Rows are persisted and replayed with history. */
 	emitRow: (message: ClineMessage) => void
 	/** Mints a unique, monotonic message id. */
@@ -1335,7 +1336,7 @@ function isToolFailure(error: string): boolean {
 
 function buildFeatures(
 	request: AgentModelRequest,
-	run: { turnKey: string; isSubAgent: boolean; mode: "plan" | "act" },
+	run: { turnKey: string; isSubAgent: boolean; mode: RouterMode },
 ): RouterRequestFeatures {
 	const state = getSessionState(run.turnKey)
 	return {

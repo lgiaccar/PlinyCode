@@ -1,4 +1,5 @@
 import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
+import { applyTunedInputBudget, modelTuningFor } from "@shared/model-tuning"
 import { isPlinyFreeModelId } from "@shared/pliny"
 import { RenameTaskRequest, SetTaskSpendingLimitRequest } from "@shared/proto/cline/task"
 import { historyItemWorkspaceDisplayPath, workspacePathLabel } from "@shared/workspacePath"
@@ -81,6 +82,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		conversationSpendingLimit,
 		useAutoCondense,
 		compactionThreshold,
+		modelTuning,
 	} = useExtensionState()
 	const setCompactionThreshold = useCallback((threshold: number) => updateSetting("compactionThreshold", threshold), [])
 
@@ -124,7 +126,17 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 	)
 
 	// Simplified computed values
-	const { selectedModelId, selectedModelInfo } = useNormalizedApiConfiguration(mode)
+	const { selectedModelId, selectedModelInfo: catalogModelInfo } = useNormalizedApiConfiguration(mode)
+	// The context bar budgets against the tuned prompt budget, as compaction does.
+	const selectedModelInfo = useMemo(
+		() =>
+			applyTunedInputBudget(
+				{ [selectedModelId]: catalogModelInfo },
+				selectedModelId,
+				modelTuningFor(modelTuning, selectedModelId),
+			)?.[selectedModelId] ?? catalogModelInfo,
+		[catalogModelInfo, modelTuning, selectedModelId],
+	)
 	const modeFields = getModeSpecificFields(apiConfiguration, mode)
 
 	// The SDK is the source of truth for whether to render per-task cost:

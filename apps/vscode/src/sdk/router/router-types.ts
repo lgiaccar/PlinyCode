@@ -9,10 +9,19 @@
 
 import type { AgentModelRequest } from "@plinycode/shared"
 
+/**
+ * The mode a call is routed under. Ask mode, and a side question in any mode,
+ * route as `ask`: they read and answer like plan mode, but a quick question
+ * should not take the plan route's thinking models.
+ */
+export type RouterMode = "plan" | "act" | "ask"
+
+export const ROUTER_MODES: readonly RouterMode[] = ["plan", "act", "ask"]
+
 /** A route's matching conditions. All present conditions must hold. */
 export interface RouterRouteCondition {
-	/** Restrict the route to plan or act mode. */
-	mode?: "plan" | "act"
+	/** Restrict the route to plan, act or ask mode. */
+	mode?: RouterMode
 	/** Lower bound on the estimated request size, in tokens. */
 	minEstimatedTokens?: number
 	/** Upper bound on the estimated request size, in tokens. */
@@ -123,7 +132,7 @@ export interface RouterClassification {
 export interface RouterRequestFeatures {
 	/** Estimated size of the whole request, in tokens. */
 	estimatedTokens: number
-	mode: "plan" | "act"
+	mode: RouterMode
 	/** Latest user prompt, used for keyword matching. */
 	prompt: string
 	/** True when the request carries images, as parts or inside tool results (no free model accepts them). */

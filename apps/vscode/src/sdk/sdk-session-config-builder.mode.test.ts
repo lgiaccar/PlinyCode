@@ -42,11 +42,11 @@ describe("SdkSessionConfigBuilder router mode", () => {
 		// The switch says act while this session was built in plan: a background
 		// or CI Board task keeps the mode it was started in.
 		expect((await routerModeFor(makeBuilder("act"), "plan")).mode).toBe("plan")
-		expect((await routerModeFor(makeBuilder("act"), "ask")).mode).toBe("plan")
+		expect((await routerModeFor(makeBuilder("act"), "ask")).mode).toBe("ask")
 		expect((await routerModeFor(makeBuilder("plan"), "act")).mode).toBe("act")
 	})
 
-	it("routes a side question like plan mode, by the session that asks it", async () => {
+	it("routes a side question as ask mode, by the session that asks it", async () => {
 		const asking = new Set<string>()
 		const builder = makeBuilder("act", (sessionId) => sessionId !== undefined && asking.has(sessionId))
 		const first = await routerModeFor(builder, "act")
@@ -54,7 +54,7 @@ describe("SdkSessionConfigBuilder router mode", () => {
 
 		asking.add(first.sessionId ?? "")
 		const deps = mocks.installed[mocks.installed.length - 1]
-		expect(deps.getMode()).toBe("plan")
+		expect(deps.getMode()).toBe("ask")
 
 		// Another session's router is not affected by the first one's side question.
 		const second = await routerModeFor(builder, "act")

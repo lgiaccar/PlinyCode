@@ -46,7 +46,7 @@ Output one JSON object first, before any other text, and nothing after it: {"tie
 Tiers:
 - quick: a short factual question, a lookup, or a trivial one-line change.
 - code: doing work in the repository: writing, editing, fixing, testing and refactoring code, and every chore around it: creating or updating a pull request, committing and pushing, fixing a CI failure, waiting for or watching a build, running or re-running tests, merging or rebasing, writing findings or notes to a file. Messages that start with [CI WATCHER] or [CI BOARD] are code.
-- reason: the user wants a plan, a design, an architecture or a review; asks why or how something works; wants options compared; or reports a bug whose cause is not yet known. In plan mode most requests are reason.
+- reason: the user wants a plan, a design, an architecture or a review; asks why or how something works; wants options compared; or reports a bug whose cause is not yet known. In plan mode most requests are reason; in ask mode a question about what something is or where it lives is quick.
 
 The router handles the size of the conversation; never pick a tier because the context is large.
 
