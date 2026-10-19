@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => {
 				}
 				return undefined
 			}),
+			getGlobalStateKey: vi.fn((_key: string): unknown => undefined),
 			setGlobalStateBatch: vi.fn(),
 			setGlobalState: vi.fn(),
 			setSecret: vi.fn(),
@@ -109,6 +110,7 @@ beforeEach(() => {
 		}
 		return undefined
 	})
+	mocks.stateManager.getGlobalStateKey.mockImplementation(() => undefined)
 	mocks.providerSettingsManager.getFilePath.mockReturnValue(path.join(tempDir, "settings", "providers.json"))
 	mocks.providerSettingsManager.getLastUsedProviderSettings.mockReturnValue(undefined)
 	mocks.providerSettingsManager.getProviderSettings.mockReturnValue(undefined)
@@ -438,6 +440,44 @@ describe("buildSessionConfig", () => {
 			lookupError,
 		)
 		getModelsSpy.mockRestore()
+	})
+
+	it("applies the model's tuning: its reasoning over providers.json, and a lower prompt budget", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({
+			actModeApiProvider: "pliny",
+			actModeApiModelId: "snps-provider/GLM-5.2",
+		} as any)
+		mocks.providerSettingsManager.getProviderSettings.mockReturnValue({
+			provider: "pliny",
+			reasoning: { enabled: true, effort: "high" },
+		} as any)
+		mocks.stateManager.getGlobalStateKey.mockImplementation((key: string) =>
+			key === "modelTuning" ? { "snps-provider/GLM-5.2": { thinking: false, maxInputTokens: 64_000 } } : undefined,
+		)
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect(config.thinking).toBe(false)
+		expect(config.reasoningEffort).toBeUndefined()
+		expect((config.knownModels as any)["snps-provider/GLM-5.2"].maxInputTokens).toBe(64_000)
+		expect((config.knownModels as any)["snps-provider/GLM-5.2"].contextWindow).toBe(512_000)
+		// The shared catalog entry is copied, not changed.
+		expect((await LlmsModels.getModelsForProvider("pliny"))["snps-provider/GLM-5.2"]?.maxInputTokens).not.toBe(64_000)
+	})
+
+	it("gives a router only the tuned prompt budget, never the tuned reasoning", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({
+			actModeApiProvider: "pliny",
+			actModeApiModelId: "pliny/auto-free",
+		} as any)
+		mocks.stateManager.getGlobalStateKey.mockImplementation((key: string) =>
+			key === "modelTuning" ? { "pliny/auto-free": { thinking: false, maxInputTokens: 64_000 } } : undefined,
+		)
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect(config.thinking).toBeUndefined()
+		expect((config.knownModels as any)["pliny/auto-free"].maxInputTokens).toBe(64_000)
 	})
 
 	it("uses model overrides from models.json for runtime request settings", async () => {

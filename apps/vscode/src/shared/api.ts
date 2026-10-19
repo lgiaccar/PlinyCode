@@ -78,6 +78,20 @@ export interface ModelInfo {
 	pricingUnavailable?: boolean
 	/** Where the price comes from, or how a router model is billed. */
 	pricingNote?: string
+	/**
+	 * Measured reasoning switches of a Pliny model (the thinking probe): whether
+	 * it reasons by default and which request field turns that off or on.
+	 * Absent when the model was not measured; nothing is then offered to change.
+	 */
+	thinkingControls?: ThinkingControls
+}
+
+export interface ThinkingControls {
+	defaultOn: boolean
+	/** How reasoning is switched off, when it can be: "template-kwargs", "reasoning-effort-none" or "reasoning-exclude". */
+	off?: string
+	/** How reasoning is switched on, when it can be; only "reasoning-effort" also takes an effort level. */
+	on?: string
 }
 
 interface OpenAiCompatibleModelInfo extends ModelInfo {

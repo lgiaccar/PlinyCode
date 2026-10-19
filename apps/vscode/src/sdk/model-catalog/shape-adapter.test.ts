@@ -231,9 +231,18 @@ describe("adaptSdkModelInfo", () => {
 		})
 
 		it("ignores malformed display metadata instead of failing the catalog", () => {
-			const model = adaptSdkModelInfo({ id: "m", metadata: { paramsTotalB: "big", pricingNote: 7 } })
+			const model = adaptSdkModelInfo({ id: "m", metadata: { paramsTotalB: "big", pricingNote: 7, thinking: "on" } })
 			expect(model.parameters).toBeUndefined()
 			expect(model.pricingNote).toBeUndefined()
+			expect(model.thinkingControls).toBeUndefined()
+		})
+
+		it("carries the measured thinking switches, so the picker offers only working controls", () => {
+			const model = adaptSdkModelInfo({
+				id: "azure-openai/gpt-5.2",
+				metadata: { thinking: { defaultOn: false, on: "reasoning-effort" } },
+			})
+			expect(model.thinkingControls).toEqual({ defaultOn: false, on: "reasoning-effort" })
 		})
 	})
 

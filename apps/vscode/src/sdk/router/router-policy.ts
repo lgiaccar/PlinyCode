@@ -79,11 +79,11 @@ function routeAdmits(route: RouterRoute, features: RouterRequestFeatures): boole
  * light work, so it goes to the coding route rather than to the catch-all
  * (which on BalanceAuto leads with paid Claude). A `huge` verdict below the
  * huge route's bound says nothing about the context size the router did not
- * already know: it is treated as code in act mode and reasoning in plan mode.
+ * already know: it is treated as code in act mode and reasoning otherwise.
  */
 const TIER_FALLBACK: Record<RouterTier, (mode: RouterRequestFeatures["mode"]) => RouterTier[]> = {
 	quick: () => ["code"],
-	huge: (mode) => (mode === "plan" ? ["reason", "code"] : ["code", "reason"]),
+	huge: (mode) => (mode === "act" ? ["code", "reason"] : ["reason", "code"]),
 	code: () => [],
 	reason: () => [],
 }

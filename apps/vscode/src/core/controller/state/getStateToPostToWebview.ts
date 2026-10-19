@@ -88,6 +88,7 @@ export async function getStateToPostToWebview(controller: {
 	const mcpResponsesCollapsed = stateManager.getGlobalStateKey("mcpResponsesCollapsed")
 	const chatInputMaxRows = stateManager.getGlobalStateKey("chatInputMaxRows")
 	const favoritedModelIds = stateManager.getGlobalStateKey("favoritedModelIds")
+	const modelTuning = stateManager.getGlobalStateKey("modelTuning")
 	const showFeatureTips = stateManager.getGlobalSettingsKey("showFeatureTips")
 
 	const localClineRulesToggles = stateManager.getWorkspaceStateKey("localClineRulesToggles")
@@ -161,6 +162,7 @@ export async function getStateToPostToWebview(controller: {
 		chatInputMaxRows,
 		taskHistory: processedTaskHistory,
 		favoritedModelIds,
+		modelTuning,
 		backgroundCommandRunning: controller.backgroundCommandRunning ?? false,
 		backgroundCommandTaskId: controller.backgroundCommandTaskId,
 		foregroundCommandRunning: controller.foregroundCommandRunning ?? false,

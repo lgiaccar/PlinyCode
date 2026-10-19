@@ -34,7 +34,7 @@ import {
 	currentTurnMessages,
 	type ReviewFileChange,
 } from "./router-review-diff"
-import type { RouterRequestFeatures, RouterRules } from "./router-types"
+import type { RouterMode, RouterRequestFeatures, RouterRules } from "./router-types"
 import { latestUserRequest, replyText } from "./unfinished-turn-guard"
 
 /** A review reads a few thousand tokens of diff and writes up to five findings; the judge's 6 s would cut most off. */
@@ -297,8 +297,8 @@ export interface ReviewPassOptions {
 	isActive: () => boolean
 	/** `plinycode.review.beforeFinish`, read per run so a change applies to the next one. */
 	isEnabled: () => boolean
-	/** Ask mode arrives here as "plan": neither edits code. */
-	getMode: () => "plan" | "act"
+	/** The pass only runs in act mode: plan and ask mode edit no code. */
+	getMode: () => RouterMode
 	/**
 	 * Whether the round of checking the findings set off may run: always when
 	 * a free model would do it, and on BalanceAuto, the one profile where a

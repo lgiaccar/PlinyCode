@@ -13,6 +13,7 @@ import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
 import { getConversationApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem, TaskWorktree } from "@shared/HistoryItem"
+import { modelTuningFor } from "@shared/model-tuning"
 import { isPlinyFreeModelId } from "@shared/pliny"
 import { LatestChangesSummary } from "@shared/proto/cline/checkpoints"
 import { DeleteAllTaskHistoryCount, type GetTaskHistoryRequest, TaskHistoryArray, TaskResponse } from "@shared/proto/cline/task"
@@ -66,6 +67,7 @@ import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigS
 import { createProviderConfigStore } from "./model-catalog/store"
 import type { ModelCallUsage } from "./one-shot-model-call"
 import { ProcessRegistry } from "./processes/process-registry"
+import { type ImprovedPrompt, improvePromptText } from "./prompt-improver"
 import { emitTurnSummary } from "./router/router-integration"
 import { MAX_BACKGROUND_SESSIONS, SdkBackgroundSessions } from "./sdk-background-sessions"
 import { SdkCheckpointCoordinator } from "./sdk-checkpoint-coordinator"
@@ -872,8 +874,18 @@ export class Controller {
 				)
 				return
 			}
+			// Reasoning and the context budget come from the model's tuning, read
+			// when the session is built: a switch from or to a tuned model rebuilds it.
+			const previousModelId = this.getTaskModelId() ?? this.getSessionModelId()
+			const tuning = this.stateManager.getGlobalStateKey("modelTuning")
+			const tuned = (id: string | undefined) => modelTuningFor(tuning, id) !== undefined
 			this.sessions
 				?.updateActiveSessionModel(event.selection.modelId)
+				.then(() => {
+					if (tuned(previousModelId) || tuned(event.selection.modelId)) {
+						this.terminalExecutionMode.handleModelTuningChanged()
+					}
+				})
 				.catch((error) => Logger.error("[SdkController] Failed to update active session model:", error))
 		}
 	}
@@ -889,6 +901,18 @@ export class Controller {
 	handlePlinyApiKeyChanged(): void {
 		this.terminalExecutionMode.handleProviderCredentialsChanged()
 		void this.postStateToWebview()
+	}
+
+	/**
+	 * A model's tuning changed (setModelTuning). Reasoning and the context
+	 * budget are read when the session is built, so the idle session is rebuilt
+	 * when the change is for the model it runs on.
+	 */
+	handleModelTuningChanged(modelId: string): void {
+		if (modelId !== (this.getTaskModelId() ?? this.getSessionModelId())) {
+			return
+		}
+		this.terminalExecutionMode.handleModelTuningChanged()
 	}
 
 	private handleSessionBecameIdle(): void {
@@ -2062,6 +2086,11 @@ export class Controller {
 			return
 		}
 		await this.postStateToWebview()
+	}
+
+	/** Rewrites a draft prompt with a small free model (the "Improve prompt" button). */
+	async improvePrompt(text: string, mode: Mode): Promise<ImprovedPrompt> {
+		return improvePromptText(text, mode, await this.getWorkspaceRoot(), completeWithUtilityModel)
 	}
 
 	async renameTask(taskId: string, title: string): Promise<void> {

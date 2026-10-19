@@ -196,16 +196,20 @@ export class SdkSessionConfigBuilder {
 				// state must be found under it when the turn summary is emitted.
 				getSessionId: () => config.sessionId,
 				workspaceRoot: input.workspaceRoot ?? input.cwd,
-				// Ask mode routes like plan mode: both read and reason, neither edits. So does a
-				// side question, which runs under ask mode's rules whatever the mode is: it gets
+				// Ask mode routes as "ask": it reads and answers like plan mode but takes the
+				// thinking route only for questions that ask for reasoning. So does a side
+				// question, which runs under ask mode's rules whatever the mode is: it gets
 				// no completion judge and no review.
 				//
 				// The mode is the session's own, fixed when its config was built: the mode
 				// switch rebuilds the displayed session, and a background or CI Board task
 				// keeps the mode it was started in whatever the switch shows.
 				getMode: () => {
+					if (this.options.isOffTheRecordTurn?.(config.sessionId)) {
+						return "ask"
+					}
 					const sessionMode = input.mode ?? this.options.stateManager.getGlobalSettingsKey("mode")
-					return sessionMode === "act" && !this.options.isOffTheRecordTurn?.(config.sessionId) ? "act" : "plan"
+					return sessionMode === "act" ? "act" : sessionMode === "ask" ? "ask" : "plan"
 				},
 				emitRow,
 				nextMessageTs,

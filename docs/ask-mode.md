@@ -30,4 +30,4 @@ The command blacklist is a list of common file-editing commands, not a shell int
 
 Only plan and act have their own model selection. Ask mode runs on the act-mode model and its reasoning settings (`modelSettingsMode` in [types.ts](../apps/vscode/src/shared/storage/types.ts)); choosing a model while in ask mode changes the act-mode model.
 
-For FreeAuto and BalanceAuto, ask mode routes like plan mode: both read and reason, and neither edits. The completion judge, which checks that an act-mode run finished its work, does not run in ask mode.
+For FreeAuto and BalanceAuto, ask mode routes as its own mode, `ask`. Like plan mode it reads and edits nothing, but where every plan-mode turn takes the thinking `plan-and-reasoning` route, an ask-mode question takes the `ask-reasoning` route (reasoning on, medium effort) only when it asks why, or for an explanation, a review or a comparison; a lookup stays on the quick route ([pliny-free-auto-router.md](pliny-free-auto-router.md)). The completion judge, which checks that an act-mode run finished its work, does not run in ask mode.

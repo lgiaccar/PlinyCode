@@ -23,6 +23,7 @@ import type { ApiConfiguration } from "@shared/api"
 import { ClineClient } from "@shared/cline"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_LANGUAGE_SETTINGS, getLanguageKey, type LanguageDisplay } from "@shared/Languages"
+import { applyTunedInputBudget, modelTuningFor, sessionReasoningFor } from "@shared/model-tuning"
 import { Logger } from "@shared/services/Logger"
 import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
@@ -530,7 +531,9 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	const overriddenMaxTokens = committedRuntimeModel?.overrides?.maxTokens
 	const maxTokensPerTurn = positiveFiniteNumber(overriddenMaxTokens)
 	const temperature = nonNegativeFiniteNumber(committedRuntimeModel?.overrides?.temperature)
-	const reasoningConfig = resolveProviderReasoningConfig(providerId)
+	const modelTuning = modelTuningFor(StateManager.get().getGlobalStateKey("modelTuning"), modelId)
+	// The model's own tuning (set from the chat box) wins over the provider-wide setting.
+	const reasoningConfig = sessionReasoningFor(modelId, modelTuning) ?? resolveProviderReasoningConfig(providerId)
 
 	let systemPrompt = ""
 	try {
@@ -608,6 +611,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 				[modelId]: toSdkModelInfo(committedRuntimeModel),
 			}
 		}
+		knownModels = applyTunedInputBudget(knownModels, modelId, modelTuning)
 	} catch (error) {
 		Logger.warn(`[SessionFactory] Failed to resolve known models for provider=${sdkProviderId}:`, error)
 	}

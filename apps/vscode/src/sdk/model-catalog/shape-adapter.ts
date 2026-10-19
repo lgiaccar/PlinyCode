@@ -333,6 +333,14 @@ export function adaptSdkModelInfo(input: unknown): ModelInfo {
 		if (typeof metadata.pricingNote === "string" && metadata.pricingNote.length > 0) {
 			result.pricingNote = metadata.pricingNote
 		}
+		const thinking = isPlainObject(metadata.thinking) ? metadata.thinking : undefined
+		if (thinking && typeof thinking.defaultOn === "boolean") {
+			result.thinkingControls = {
+				defaultOn: thinking.defaultOn,
+				...(typeof thinking.off === "string" ? { off: thinking.off } : {}),
+				...(typeof thinking.on === "string" ? { on: thinking.on } : {}),
+			}
+		}
 	}
 
 	return result

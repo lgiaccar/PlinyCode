@@ -32,6 +32,8 @@ Design and operations notes are in `docs/`:
 - [docs/plan-mode.md](docs/plan-mode.md): how plan mode writes markdown plan files (`<dataDir>/plans/<workspace>/<slug>/PLAN.md`, outside the workspace), the **Open Plan…** command, the markdown-only write guard, the Execute plan button, and why switching to Agent mode alone does not run the plan.
 - [docs/ask-mode.md](docs/ask-mode.md): ask mode, the third mode next to Plan and Agent (the act mode), which answers questions and blocks every file edit.
 - [docs/side-questions.md](docs/side-questions.md): side questions, messages asked off the record: answered read-only and left out of later requests.
+- [docs/model-tuning.md](docs/model-tuning.md): the model tuning button (thinking, effort and context size per model, stored in `modelTuning`), which controls each model is offered and why, how a tuning reaches the session, and the hosted-model thinking probe.
+- [docs/improve-prompt.md](docs/improve-prompt.md): the Improve prompt button, which has a small free model rewrite the draft for grammar and clarity, with Undo.
 - [docs/diagnostics-bundle.md](docs/diagnostics-bundle.md): the diagnostics bundle (PlinyCode: Export Diagnostics Bundle): the folder it writes under `<dataDir>/diagnostics/`, what each file holds, what is redacted and how to share it.
 - [docs/restart-from-here.md](docs/restart-from-here.md): editing an earlier message and restarting from it, how the chat row is mapped to the history the model sees, which checkpoint "Restart and revert files" uses, and the Show Last Model Request debug command.
 - [docs/conversation-history.md](docs/conversation-history.md): the history view's filters (favorites, search, date), pinned conversations, and how the favorite and pin flags are stored.

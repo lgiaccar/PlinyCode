@@ -29,7 +29,8 @@ decide when the classifier gives no verdict.
 | --- | --- | --- |
 | `huge-context` | request ≥ 180k tokens | free GLM-5.2 (512k), vmodels replica first |
 | `subagent` | any sub-agent call | free kimi-k2.6, free qwen3-coder, then Haiku 4.5 |
-| `plan-and-reasoning` | tier `reason`, or plan mode with a design/review prompt | Claude Sonnet 4.6 high-thinking preset, Claude Sonnet 5, GPT-5.2 |
+| `plan-and-reasoning` | tier `reason`, or any plan-mode turn | Claude Sonnet 4.6 high-thinking preset, Claude Sonnet 5, GPT-5.2 (reasoning on, high) |
+| `ask-reasoning` | ask mode with a why/explain/review question | Claude Sonnet 5, free kimi-k2.6, Claude Sonnet 4.6 (reasoning on, medium) |
 | `coding` | tier `code`, or act mode with a coding prompt | free kimi-k2.6, free qwen3-coder, then Claude Sonnet 5 |
 | `quick` | tier `quick`, or a short question | free kimi-k2.6, free nemotron super, then Haiku 4.5 |
 | `default` | anything else | Claude Sonnet 5, free kimi-k2.6, Claude Sonnet 4.6 |
@@ -52,7 +53,7 @@ verdict on a longer conversation ("please also update the PR message", 41k
 tokens) used to fall through to `default`, Sonnet 5, for the whole turn: 49
 such calls in a week. It now goes to `coding`. A `huge` verdict below the
 huge route's 180k bound (every one of the 164 seen, median 70k) goes to
-`coding` in act mode and `plan-and-reasoning` in plan mode. The classifier
+`coding` in act mode and `plan-and-reasoning` in plan and ask mode. The classifier
 no longer offers `huge` at all: the router already routes by size, and the
 classifier cannot know the context better than the router does. The call log
 shows a fallback as the tier with another route (`tier: quick, route:

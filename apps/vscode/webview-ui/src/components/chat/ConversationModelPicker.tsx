@@ -1,4 +1,5 @@
 import type { ModelInfo } from "@shared/api"
+import { describeModelTuning, modelTuningFor } from "@shared/model-tuning"
 import { isPlinyRouterModelId } from "@shared/pliny"
 import { StringRequest } from "@shared/proto/cline/common"
 import { type Mode, modelSettingsMode } from "@shared/storage/types"
@@ -169,7 +170,7 @@ interface ModelEntry {
 }
 
 export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = ({ mode }) => {
-	const { favoritedModelIds } = useExtensionState()
+	const { favoritedModelIds, modelTuning } = useExtensionState()
 	const { selectedModelId } = useNormalizedApiConfiguration(mode)
 	const { models: plinyModels } = useProviderModels(PLINY_PROVIDER_ID)
 	const { commitSelection } = useProviderConfig(PLINY_PROVIDER_ID)
@@ -272,7 +273,13 @@ export const ConversationModelPicker: React.FC<ConversationModelPickerProps> = (
 			</TriggerButton>
 			{isOpen && (
 				<MenuStack>
-					{hovered && <ModelDetailsCard modelId={hovered.id} modelInfo={hovered.info} />}
+					{hovered && (
+						<ModelDetailsCard
+							modelId={hovered.id}
+							modelInfo={hovered.info}
+							tuning={describeModelTuning(modelTuningFor(modelTuning, hovered.id))}
+						/>
+					)}
 					<DropdownMenu onMouseLeave={() => setHoveredId(undefined)} role="listbox">
 						<SearchInput
 							autoFocus
