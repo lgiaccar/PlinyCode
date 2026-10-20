@@ -56,7 +56,10 @@ describe("rules file seed marker", () => {
 		// An older seed: a different yaml block, with the marker that matched it.
 		const olderBody = current
 			.replace(/^<!--.*-->\n/, "")
-			.replace("snps-provider/kimi-k2.6\n      - snps-provider/qwen3-coder", "snps-provider/qwen3-coder")
+			.replace(
+				"snps-provider/kimi-k2.6\n      - snps-provider-internal-tests/glm-5-2",
+				"snps-provider-internal-tests/glm-5-2",
+			)
 		expect(extractYamlBlock(olderBody)).not.toBe(extractYamlBlock(current))
 		const older = `${seedMarker(olderBody)}\n${olderBody}`
 		expect(isUntouchedSeed(older)).toBe(true)

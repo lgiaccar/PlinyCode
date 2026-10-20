@@ -35,9 +35,11 @@ describe("defaultPool", () => {
 
 	it("leads the balance pool with paid models and keeps every free one behind them", () => {
 		const balance = defaultPool("balance")
-		const free = defaultPool()
-		expect(balance[0]).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
-		expect(balance.slice(balance.length - free.length)).toEqual(free)
+		const free = defaultPool("smart")
+		expect(balance[0]).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
+		const firstFree = balance.findIndex((id) => id.startsWith("snps-provider"))
+		expect(balance.slice(firstFree).every((id) => id.startsWith("snps-provider"))).toBe(true)
+		expect(new Set(balance.slice(firstFree))).toEqual(new Set(free))
 		expect(new Set(balance).size).toBe(balance.length)
 		expect(balance.filter((id) => !id.startsWith("snps-provider")).length).toBeGreaterThanOrEqual(3)
 	})
@@ -214,44 +216,58 @@ describe("normalizeRules", () => {
 
 describe("default routes", () => {
 	const GLM = "snps-provider/GLM-5.2"
+	const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
+	const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
+	const KIMI = "snps-provider/kimi-k2.6"
 	const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
+	const NEMOTRON_ULTRA = "snps-provider/nemotron-3-ultra-550b-a55"
+	const NEMOTRON_SUPER = "snps-provider/nvidia-nemotron-3-super-120b-a12"
+	const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
 	const route = (name: string) => defaultRules().routes.find((r) => r.name === name)
+	const MAIN = ["default", "coding", "ask-reasoning"]
 
-	it("keeps the slow GLM-5.2 out of the everyday routes", () => {
-		expect(route("coding")?.use).not.toContain(GLM)
-		expect(route("default")?.use).not.toContain(GLM)
-		expect(route("huge-context")?.use).toContain(GLM)
-	})
-
-	it("leads the coding, default and sub-agent routes with kimi, the coder as its backup", () => {
-		const KIMI = "snps-provider/kimi-k2.6"
-		expect(route("coding")?.use[0]).toBe(KIMI)
-		expect(route("coding")?.use[1]).toBe(CODER)
-		expect(route("default")?.use[0]).toBe(KIMI)
-		expect(route("default")?.use[1]).toBe(CODER)
+	it("leads the main routes with kimi, then the 512k GLM replicas, then the nemotrons", () => {
+		for (const name of MAIN) {
+			expect(route(name)?.use, name).toEqual([KIMI, GLM_INTERNAL, GLM_VMODELS, NEMOTRON_ULTRA, NEMOTRON_SUPER])
+		}
+		expect(route("plan-and-reasoning")?.use).toEqual([KIMI, GLM_VMODELS, GLM_INTERNAL, NEMOTRON_ULTRA, NEMOTRON_SUPER])
 		expect(route("subagent")?.use[0]).toBe(KIMI)
-		expect(route("plan-and-reasoning")?.use[0]).toBe(KIMI)
 		expect(defaultPool()[0]).toBe(KIMI)
 	})
 
-	it("gives the smart profile the same routes as the default one", () => {
-		expect(defaultRules("smart").routes).toEqual(defaultRules().routes)
+	it("keeps the default profile's pool to its routes' own models", () => {
+		const rules = defaultRules()
+		const routed = new Set(rules.routes.flatMap((r) => r.use))
+		expect(new Set(rules.pool)).toEqual(routed)
+		// The 128k coder stops fitting long before compaction, so it is not routed.
+		expect(rules.pool).not.toContain(CODER)
 	})
 
-	it("routes the fast profile on the Qwen models and never leads a route with kimi", () => {
-		const KIMI = "snps-provider/kimi-k2.6"
+	it("leads the smart profile's main routes with GLM-5.2 and keeps the full pool behind them", () => {
+		const smart = defaultRules("smart")
+		for (const name of [...MAIN, "plan-and-reasoning"]) {
+			expect(smart.routes.find((r) => r.name === name)?.use, name).toEqual([
+				GLM,
+				GLM_INTERNAL,
+				KIMI,
+				NEMOTRON_ULTRA,
+				NEMOTRON_SUPER,
+			])
+		}
+		expect(smart.pool[0]).toBe(GLM)
+		expect(smart.pool).toContain(CODER)
+	})
+
+	it("leads the fast profile with the 397B Qwen and keeps the coder as the last resort", () => {
 		const fast = defaultRules("fast")
-		const lead = (name: string) => fast.routes.find((r) => r.name === name)?.use[0]
-		expect(lead("coding")).toBe(CODER)
-		expect(lead("default")).toBe(CODER)
-		expect(lead("subagent")).toBe(CODER)
-		expect(lead("plan-and-reasoning")).toBe("snps-provider/qwen3.5-397b-fp8")
-		expect(lead("quick")).toBe("snps-provider/qwen3-next-80b-a3b-instruct-d79b4")
-		expect(fast.routes.every((r) => !r.use.includes(KIMI))).toBe(true)
-		// Still a deep fallback, never a preferred model.
-		expect(fast.pool).toContain(KIMI)
-		expect(fast.pool.indexOf(KIMI)).toBeGreaterThan(fast.pool.indexOf(CODER))
-		expect(fast.pool[0]).toBe(CODER)
+		const route = (name: string) => fast.routes.find((r) => r.name === name)
+		for (const name of ["default", "coding", "plan-and-reasoning"]) {
+			expect(route(name)?.use, name).toEqual([QWEN_397, NEMOTRON_ULTRA, KIMI, CODER])
+		}
+		expect(route("ask-reasoning")).toBeUndefined()
+		expect(route("subagent")?.use[0]).toBe(CODER)
+		expect(route("quick")?.use[0]).toBe("snps-provider/qwen3-next-80b-a3b-instruct-d79b4")
+		expect(fast.pool[0]).toBe(QWEN_397)
 	})
 
 	it("sends merge-conflict prompts to the coding route", () => {
@@ -360,13 +376,11 @@ describe("balance profile", () => {
 		expect(rules.routes).toEqual(defaultRules("balance").routes)
 	})
 
-	it("leads difficult work with a paid model and simple work with a free one", () => {
-		// Coding leads free and keeps Sonnet 5 as the failover and escalation
-		// target; reasoning and the catch-all lead with paid Claude.
-		expect(route("coding")?.use[0]).toBe(KIMI)
-		expect(route("coding")?.use).toContain(SONNET_5)
-		expect(route("default")?.use[0]).toBe(SONNET_5)
-		expect(route("plan-and-reasoning")?.use[0]).toBe("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")
+	it("leads the main routes with Sonnet 4.6 and simple work with a free model", () => {
+		// Sonnet 5 is the paid failover and kimi the free one.
+		for (const name of ["default", "coding", "plan-and-reasoning", "ask-reasoning"]) {
+			expect(route(name)?.use, name).toEqual(["snps-aws-bedrock/aws-claude-sonnet-4.6", SONNET_5, KIMI])
+		}
 		expect(route("quick")?.use[0]).toBe(KIMI)
 		expect(route("quick")?.use).toContain(HAIKU)
 	})
@@ -381,8 +395,10 @@ describe("balance profile", () => {
 		expect(names.indexOf("subagent")).toBeLessThan(names.indexOf("coding"))
 	})
 
-	it("sends huge requests to the free 512k models", () => {
-		expect(route("huge-context")?.use.every((id) => id.startsWith("snps-provider"))).toBe(true)
+	it("sends huge requests to the free 512k models first, then to Sonnet 4.6's 1M window", () => {
+		const use = route("huge-context")?.use ?? []
+		expect(use.slice(0, -1).every((id) => id.startsWith("snps-provider"))).toBe(true)
+		expect(use.at(-1)).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
 	})
 
 	it("turns the classifier on and lists every routed id in the pool", () => {

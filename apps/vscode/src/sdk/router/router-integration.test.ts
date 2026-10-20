@@ -213,8 +213,8 @@ describe("installRouter completion guard", () => {
 
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 4 })).toContain("Second reminder")
-		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
-		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
+		expect(state.stickyModelId).toBe("snps-provider-internal-tests/glm-5-2")
+		expect(rows.some((row) => row.includes("switching to **glm-5-2**"))).toBe(true)
 		expect(state.run.escalated).toBe(true)
 		expect(state.run.guardRules).toEqual(["announcement", "announcement"])
 		// A third stall in a row is taken at its word, and the chat says so.
@@ -234,7 +234,7 @@ describe("installRouter completion guard", () => {
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
 		state.run.toolCalls += 1
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 5 })).toContain("stopped several times")
-		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(state.stickyModelId).toBe("snps-provider-internal-tests/glm-5-2")
 		expect(state.run.escalated).toBe(true)
 		expect(state.run.guardGaveUp).toBeUndefined()
 		expect(rows.at(-2)).toContain("(3/8)")
@@ -315,22 +315,22 @@ describe("installRouter completion guard", () => {
 
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 4 })).toContain("Second reminder")
-		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
-		expect(state.run.escalatedTo).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(state.stickyModelId).toBe("snps-provider-vmodels/glm-5.2")
+		expect(state.run.escalatedTo).toBe("snps-provider-vmodels/glm-5.2")
 		expect(state.escalations).toBe(1)
 
-		// The coder acts on the reminder, then stalls again and again: the turn goes to paid Claude.
-		state.calls.push({ modelId: "snps-provider/qwen3-coder-480b-a35b-inst-fp8", startedAt: NOW, routeName: "coding" })
+		// GLM acts on the reminder, then stalls again and again: the turn goes to paid Claude.
+		state.calls.push({ modelId: "snps-provider-vmodels/glm-5.2", startedAt: NOW, routeName: "coding" })
 		state.run.toolCalls += 1
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 6 })).toContain("did not call a tool")
 		state.run.toolCalls += 1
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 8 })).toContain("did not call a tool")
 		state.run.toolCalls += 1
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 10 })).toContain("stopped several times")
-		expect(state.stickyModelId).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
+		expect(state.stickyModelId).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
 		expect(state.escalations).toBe(2)
-		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
-		expect(rows.some((row) => row.includes("switching to **global.anthropic.claude-sonnet-5**"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **glm-5.2**"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **aws-claude-sonnet-4.6**"))).toBe(true)
 	})
 
 	it("sends six failed commands on BalanceAuto straight to the default route's lead", async () => {
@@ -359,8 +359,8 @@ describe("installRouter completion guard", () => {
 				durationMs: 0,
 			})
 		}
-		expect(state.stickyModelId).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
-		expect(state.run.escalatedTo).toBe("snps-aws-bedrock/global.anthropic.claude-sonnet-5")
+		expect(state.stickyModelId).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
+		expect(state.run.escalatedTo).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
 	})
 
 	it("moves the turn to the default route's lead after six failed commands, once", async () => {
@@ -397,9 +397,9 @@ describe("installRouter completion guard", () => {
 		await failCommand("c6")
 		expect(state.run.failedCommands).toBe(6)
 		expect(state.run.escalated).toBe(true)
-		expect(state.stickyModelId).toBe("snps-provider/qwen3-coder-480b-a35b-inst-fp8")
+		expect(state.stickyModelId).toBe("snps-provider-internal-tests/glm-5-2")
 		expect(rows.some((row) => row.includes("6 commands have failed this turn"))).toBe(true)
-		expect(rows.some((row) => row.includes("switching to **qwen3-coder-480b-a35b-inst-fp8**"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **glm-5-2**"))).toBe(true)
 
 		// Later failures do not switch again.
 		const switchRows = rows.filter((row) => row.includes("switching to")).length
@@ -526,8 +526,8 @@ describe("installRouter profiles, effort and call log", () => {
 	it("names a non-default profile and the effort it applied in the routing row", async () => {
 		const { rows, run } = setup("pliny/auto-free-fast")
 		await run()
-		// "fix the failing test" hits the coding route, whose first model never reasons: quick is applied.
-		expect(rows[0]).toContain("auto-free-fast → **qwen3-coder-480b-a35b-inst-fp8**")
+		// "fix the failing test" hits the coding route, whose first model has a reasoning switch: quick is applied.
+		expect(rows[0]).toContain("auto-free-fast → **qwen3.5-397b-fp8**")
 		expect(rows[0]).toContain("route: coding · quick")
 	})
 
@@ -576,11 +576,11 @@ describe("installRouter profiles, effort and call log", () => {
 		expect(logged[1]?.classifierError).toBeUndefined()
 	})
 
-	it("routes BalanceAuto's coding work and sub-agents to free models, and reasoning to paid Claude", async () => {
+	it("routes BalanceAuto's coding work and reasoning to paid Claude, and sub-agents to free models", async () => {
 		const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
 		await run()
 		expect(classifierModel).toHaveBeenCalledTimes(1)
-		expect(rows[0]).toContain("auto-paid-balanced → **kimi-k2.6**")
+		expect(rows[0]).toContain("auto-paid-balanced → **aws-claude-sonnet-4.6**")
 		expect(rows[0]).toContain("route: coding")
 		expect(rows[0]).toContain("classifier: code")
 
@@ -590,13 +590,13 @@ describe("installRouter profiles, effort and call log", () => {
 
 		classifierModel.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
 		await run()
-		expect(rows[2]).toContain("auto-paid-balanced → **claude-4-6-sonnet-high-thinking**")
+		expect(rows[2]).toContain("auto-paid-balanced → **aws-claude-sonnet-4.6**")
 		expect(rows[2]).toContain("route: plan-and-reasoning")
 
 		expect(logged.map((record) => [record.profile, record.subAgent, record.model])).toEqual([
-			["balance", false, "snps-provider/kimi-k2.6"],
+			["balance", false, "snps-aws-bedrock/aws-claude-sonnet-4.6"],
 			["balance", true, "snps-provider/kimi-k2.6"],
-			["balance", false, "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"],
+			["balance", false, "snps-aws-bedrock/aws-claude-sonnet-4.6"],
 		])
 	})
 
@@ -613,8 +613,8 @@ describe("installRouter profiles, effort and call log", () => {
 			classifierModel.mockReturnValue(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
 			await run({}, 3)
 			expect(logged.map((record) => record.model)).toEqual([
-				"aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking",
-				"aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking",
+				"snps-aws-bedrock/aws-claude-sonnet-4.6",
+				"snps-aws-bedrock/aws-claude-sonnet-4.6",
 				"snps-provider/kimi-k2.6",
 			])
 			expect(rows.some((row) => row.includes("2 paid calls this turn (health.maxPaidCallsPerTurn: 2)"))).toBe(true)
@@ -623,7 +623,7 @@ describe("installRouter profiles, effort and call log", () => {
 
 			// Once per turn: the next turn starts afresh on the paid model.
 			await run()
-			expect(logged.at(-1)?.model).toBe("aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")
+			expect(logged.at(-1)?.model).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
 		} finally {
 			vi.mocked(loadRouterRules).mockImplementation(async (options?: { profile?: string }) =>
 				defaultRules(options?.profile),
@@ -643,7 +643,7 @@ describe("installRouter profiles, effort and call log", () => {
 			const { rows, logged, run, classifierModel } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
 			classifierModel.mockReturnValue(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
 			await run({}, 3)
-			expect(logged.every((record) => record.model === "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking")).toBe(true)
+			expect(logged.every((record) => record.model === "snps-aws-bedrock/aws-claude-sonnet-4.6")).toBe(true)
 			expect(rows.some((row) => row.includes("paid calls this turn"))).toBe(false)
 		} finally {
 			vi.mocked(loadRouterRules).mockImplementation(async (options?: { profile?: string }) =>
@@ -840,7 +840,7 @@ describe("installRouter tokens and cost in the logs", () => {
 	})
 
 	const KIMI = "snps-provider/kimi-k2.6"
-	const SONNET_THINKING = "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"
+	const SONNET_46 = "snps-aws-bedrock/aws-claude-sonnet-4.6"
 	const usageEvent = (inputTokens: number, outputTokens: number, totalCost?: number): AgentModelEvent => ({
 		type: "usage",
 		usage: {
@@ -962,9 +962,7 @@ describe("installRouter tokens and cost in the logs", () => {
 			if (modelId === CLASSIFIER) {
 				return [{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]
 			}
-			return modelId === SONNET_THINKING
-				? [TEXT, usageEvent(20_000, 1_000, 0.03), STOP]
-				: [TEXT, usageEvent(5_000, 200), STOP]
+			return modelId === SONNET_46 ? [TEXT, usageEvent(20_000, 1_000, 0.03), STOP] : [TEXT, usageEvent(5_000, 200), STOP]
 		})
 		const root = start({ agentId: "root-agent", runId: "run-1" })
 		await root.call()
@@ -976,9 +974,9 @@ describe("installRouter tokens and cost in the logs", () => {
 		await root.end()
 
 		expect(calls.map((record) => [record.model, record.subAgent, record.costUsd, record.runId])).toEqual([
-			[SONNET_THINKING, false, 0.03, "run-1"],
+			[SONNET_46, false, 0.03, "run-1"],
 			[KIMI, true, 0, "run-2"],
-			[SONNET_THINKING, false, 0.03, "run-1"],
+			[SONNET_46, false, 0.03, "run-1"],
 		])
 		expect(runs).toHaveLength(2)
 		expect(runs[0]).toMatchObject({ subAgent: true, runId: "run-2", calls: 1, costUsd: 0, paidCalls: 0 })
@@ -990,7 +988,7 @@ describe("installRouter tokens and cost in the logs", () => {
 			calls: 2,
 			ending: "text",
 			usage: { inputTokens: 40_000, outputTokens: 2_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
-			models: { [SONNET_THINKING]: 2 },
+			models: { [SONNET_46]: 2 },
 			paidCalls: 2,
 			failovers: 0,
 			subAgentCalls: 1,
@@ -1015,10 +1013,10 @@ describe("installRouter tokens and cost in the logs", () => {
 		const run = start({ agentId: "root-agent", runId: "run-1" })
 		await run.call()
 		await run.end()
-		expect(calls[0]?.model).toBe(SONNET_THINKING)
+		expect(calls[0]?.model).toBe(SONNET_46)
 		expect(calls[0]?.usage).toBeUndefined()
 		expect(calls[0]?.costUsd).toBeUndefined()
-		expect(runs[0]).toMatchObject({ paidCalls: 1, models: { [SONNET_THINKING]: 1 } })
+		expect(runs[0]).toMatchObject({ paidCalls: 1, models: { [SONNET_46]: 1 } })
 		expect(runs[0]?.costUsd).toBeUndefined()
 		expect(runs[0]?.usage).toBeUndefined()
 	})

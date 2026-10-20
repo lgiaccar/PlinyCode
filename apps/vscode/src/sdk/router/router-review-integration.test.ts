@@ -14,9 +14,8 @@ vi.mock("./router-rules-store", async () => {
 
 const NOW = 1_700_000_000_000
 const KIMI = "snps-provider/kimi-k2.6"
-const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
-const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
-const NEMOTRON_ULTRA = "snps-provider/nemotron-3-ultra-550b-a55"
+const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
+const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
 /** The utility model: classifier at the start of a turn, completion judge at its end. */
 const UTILITY = "snps-provider/qwen3-6-35b-a3b-1-28dd3"
 const STOP: AgentModelEvent = { type: "finish", reason: "stop" }
@@ -174,17 +173,17 @@ describe("installRouter reviewer pass", () => {
 		expect(nudge).toContain("1. src/stats.ts:2: sort() compares as strings.")
 		// The judge is satisfied first. kimi wrote the code, so the reviewer is
 		// the next model of the reasoning route.
-		expect(askedAtEnd).toEqual([UTILITY, QWEN_397])
+		expect(askedAtEnd).toEqual([UTILITY, GLM_VMODELS])
 		expect(rows).toHaveLength(2)
-		expect(rows[0]).toContain("🔎 **qwen3.5-397b-fp8** is reviewing this turn's changes (1 file, +4 −0)")
-		expect(rows[1]).toContain("🔎 **qwen3.5-397b-fp8** flagged 1 possible problem (0s) · asked the model to check it")
+		expect(rows[0]).toContain("🔎 **glm-5.2** is reviewing this turn's changes (1 file, +4 −0)")
+		expect(rows[1]).toContain("🔎 **glm-5.2** flagged 1 possible problem (0s) · asked the model to check it")
 
 		await endRun()
 		expect(runs[0]).toMatchObject({
 			sessionId: "s",
 			subAgent: false,
 			judge: "done",
-			review: { outcome: "issues", model: QWEN_397, issues: 1, durationMs: 0, source: "tool-calls", files: 1 },
+			review: { outcome: "issues", model: GLM_VMODELS, issues: 1, durationMs: 0, source: "tool-calls", files: 1 },
 		})
 	})
 
@@ -208,9 +207,9 @@ describe("installRouter reviewer pass", () => {
 		await run()
 		await afterEdit()
 		expect(await finish()).toBeUndefined()
-		expect(rows.at(-1)).toContain("🔎 **qwen3.5-397b-fp8** found no problems (0s)")
+		expect(rows.at(-1)).toContain("🔎 **glm-5.2** found no problems (0s)")
 		await endRun()
-		expect(runs[0]?.review).toMatchObject({ outcome: "clean", issues: 0, model: QWEN_397 })
+		expect(runs[0]?.review).toMatchObject({ outcome: "clean", issues: 0, model: GLM_VMODELS })
 	})
 
 	it("leaves a run that changed nothing alone", async () => {
@@ -327,7 +326,7 @@ describe("installRouter reviewer pass", () => {
 		const nudge = await config.completionGuard?.({ message: reply, iteration: 2, runMessages: [reply], messages: [reply] })
 		expect(nudge).toContain(REVIEW_NUDGE_PREFIX)
 		// Both runs were kimi's, so the reviewer is still someone else.
-		expect(askedAtEnd).toEqual([QWEN_397])
+		expect(askedAtEnd).toEqual([GLM_VMODELS])
 	})
 
 	it("does not apply to a concrete model", async () => {
@@ -340,30 +339,20 @@ describe("installRouter reviewer pass", () => {
 		expect(runs).toEqual([])
 	})
 
-	it("on BalanceAuto, reviews both a free and a paid model's work, always with a free reviewer", async () => {
-		const { askedAtEnd, classifier, reviewer, runs, run, afterEdit, finish, endRun } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
-		// The coding route leads with kimi; the reasoning route is all paid, so the free pool reviews.
+	it("on BalanceAuto, reviews paid Claude's work with a free reviewer", async () => {
+		const { askedAtEnd, runs, run, afterEdit, finish, endRun } = setup(PLINY_BALANCE_AUTO_MODEL_ID)
+		// Every main route leads with Sonnet 4.6; kimi is the reasoning route's first free model.
 		await run()
-		expect(getSessionState("s").calls[0]?.modelId).toBe(KIMI)
-		await afterEdit()
-		expect(await finish()).toContain(REVIEW_NUDGE_PREFIX)
-		expect(askedAtEnd).toEqual([UTILITY, CODER])
-
-		// A turn that paid Claude answers: its fix-up round is billed, which BalanceAuto allows.
-		classifier.mockReturnValueOnce(scripted([{ type: "text-delta", text: '{"tier":"reason","think":true}' }, STOP]))
-		await run()
-		const author = "aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking"
+		const author = "snps-aws-bedrock/aws-claude-sonnet-4.6"
 		expect(getSessionState("s").calls[0]?.modelId).toBe(author)
 		await afterEdit()
-		reviewer.mockClear()
-		askedAtEnd.length = 0
+		// Its fix-up round is billed, which BalanceAuto allows.
 		expect(await finish()).toContain(REVIEW_NUDGE_PREFIX)
-		expect(reviewer).toHaveBeenCalledTimes(1)
-		const reviewedBy = askedAtEnd.at(-1) ?? ""
-		expect(isPlinySelfHostedModelId(reviewedBy)).toBe(true)
-		expect(reviewedBy).not.toBe(author)
+		// The completion judge stays out of a paid model's turn: only the reviewer is asked.
+		expect(askedAtEnd).toEqual([KIMI])
+		expect(isPlinySelfHostedModelId(KIMI)).toBe(true)
 		await endRun()
-		expect(runs[0]?.review).toMatchObject({ outcome: "issues", model: reviewedBy })
+		expect(runs[0]?.review).toMatchObject({ outcome: "issues", model: KIMI })
 	})
 
 	it("counts a reviewer that cannot be reached against its health, and asks the next one afterwards", async () => {
@@ -373,16 +362,16 @@ describe("installRouter reviewer pass", () => {
 			await run()
 			await afterEdit()
 			expect(await finish()).toBeUndefined()
-			expect(askedAtEnd).toEqual([UTILITY, QWEN_397])
+			expect(askedAtEnd).toEqual([UTILITY, GLM_VMODELS])
 		}
-		expect(rows.at(-1)).toContain("The review by **qwen3.5-397b-fp8** gave no result (_503 upstream unavailable_)")
+		expect(rows.at(-1)).toContain("The review by **glm-5.2** gave no result (_503 upstream unavailable_)")
 		await endRun()
-		expect(runs[0]?.review).toMatchObject({ outcome: "no-verdict", reason: "503 upstream unavailable", model: QWEN_397 })
-		expect(isModelHealthy(QWEN_397, NOW)).toBe(false)
+		expect(runs[0]?.review).toMatchObject({ outcome: "no-verdict", reason: "503 upstream unavailable", model: GLM_VMODELS })
+		expect(isModelHealthy(GLM_VMODELS, NOW)).toBe(false)
 
 		await run()
 		await afterEdit()
 		await finish()
-		expect(askedAtEnd).toEqual([UTILITY, NEMOTRON_ULTRA])
+		expect(askedAtEnd).toEqual([UTILITY, GLM_INTERNAL])
 	})
 })

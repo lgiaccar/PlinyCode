@@ -17,7 +17,9 @@ import { defaultRules } from "./router-rules"
 const KIMI = "snps-provider/kimi-k2.6"
 const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
 const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
-const NEMOTRON_ULTRA = "snps-provider/nemotron-3-ultra-550b-a55"
+const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
+const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
+const NEMOTRON_SUPER = "snps-provider/nvidia-nemotron-3-super-120b-a12"
 const SONNET_5 = "snps-aws-bedrock/global.anthropic.claude-sonnet-5"
 
 const ONE_ISSUE =
@@ -97,20 +99,20 @@ describe("pickReviewer", () => {
 	const healthy = () => true
 
 	it("takes the reasoning route's lead model that did not write the code", () => {
-		// The default profile's reasoning route is kimi, the 397B, nemotron ultra.
-		expect(pickReviewer({ rules: defaultRules(), authors: new Set([KIMI]), isHealthy: healthy })).toBe(QWEN_397)
-		expect(pickReviewer({ rules: defaultRules(), authors: new Set([QWEN_397]), isHealthy: healthy })).toBe(KIMI)
+		// The default profile's reasoning route is kimi, then the GLM-5.2 replicas.
+		expect(pickReviewer({ rules: defaultRules(), authors: new Set([KIMI]), isHealthy: healthy })).toBe(GLM_VMODELS)
+		expect(pickReviewer({ rules: defaultRules(), authors: new Set([GLM_VMODELS]), isHealthy: healthy })).toBe(KIMI)
 		expect(pickReviewer({ rules: defaultRules("fast"), authors: new Set([CODER]), isHealthy: healthy })).toBe(QWEN_397)
 	})
 
 	it("never picks a model that worked on the turn, however many did", () => {
-		const authors = new Set([KIMI, QWEN_397])
-		expect(pickReviewer({ rules: defaultRules(), authors, isHealthy: healthy })).toBe(NEMOTRON_ULTRA)
+		const authors = new Set([KIMI, GLM_VMODELS])
+		expect(pickReviewer({ rules: defaultRules(), authors, isHealthy: healthy })).toBe(GLM_INTERNAL)
 	})
 
 	it("moves on to the next candidate when the lead is benched", () => {
-		const isHealthy = (id: string) => id !== QWEN_397
-		expect(pickReviewer({ rules: defaultRules(), authors: new Set([KIMI]), isHealthy })).toBe(NEMOTRON_ULTRA)
+		const isHealthy = (id: string) => id !== GLM_VMODELS
+		expect(pickReviewer({ rules: defaultRules(), authors: new Set([KIMI]), isHealthy })).toBe(GLM_INTERNAL)
 	})
 
 	it("follows a rules file that reorders the reasoning route", () => {
@@ -119,14 +121,14 @@ describe("pickReviewer", () => {
 		if (!route) {
 			throw new Error("default rules have no reasoning route")
 		}
-		route.use = [CODER, KIMI]
-		expect(pickReviewer({ rules, authors: new Set([KIMI]), isHealthy: healthy })).toBe(CODER)
+		route.use = [NEMOTRON_SUPER, KIMI]
+		expect(pickReviewer({ rules, authors: new Set([KIMI]), isHealthy: healthy })).toBe(NEMOTRON_SUPER)
 	})
 
-	it("passes over paid models: BalanceAuto's reasoning route is all paid, so the free pool reviews", () => {
+	it("passes over the paid models in BalanceAuto's reasoning route, so a free model reviews", () => {
 		const rules = defaultRules("balance")
 		expect(rules.routes.find((entry) => entry.tier === "reason")?.use).toContain(SONNET_5)
-		expect(pickReviewer({ rules, authors: new Set([KIMI]), isHealthy: healthy })).toBe(CODER)
+		expect(pickReviewer({ rules, authors: new Set([KIMI]), isHealthy: healthy })).toBe(GLM_VMODELS)
 		expect(pickReviewer({ rules, authors: new Set([SONNET_5]), isHealthy: healthy })).toBe(KIMI)
 	})
 
@@ -320,20 +322,27 @@ describe("createReviewPass", () => {
 		expect(nudge).toContain(REVIEW_NUDGE_PREFIX)
 		expect(nudge).toContain("1. src/stats.ts:12: sort() compares as strings.")
 		// kimi wrote the code, so the next model of the reasoning route reads it.
-		expect(asked).toEqual([QWEN_397])
-		expect(nudge).toContain("another model (qwen3.5-397b-fp8)")
+		expect(asked).toEqual([GLM_VMODELS])
+		expect(nudge).toContain("another model (glm-5.2)")
 		const prompt = (requests[0]?.messages[0]?.content[0] as { text: string }).text
 		expect(prompt).toContain("User's request:\nAdd median() to src/stats.ts")
 		expect(prompt).toContain("+\tconst sorted = values.sort()")
-		expect(started).toEqual([{ modelId: QWEN_397, files: 1, added: 4, removed: 0 }])
+		expect(started).toEqual([{ modelId: GLM_VMODELS, files: 1, added: 4, removed: 0 }])
 		expect(results).toHaveLength(1)
-		expect(record()).toEqual({ outcome: "issues", issues: 1, model: QWEN_397, durationMs: 0, source: "tool-calls", files: 1 })
+		expect(record()).toEqual({
+			outcome: "issues",
+			issues: 1,
+			model: GLM_VMODELS,
+			durationMs: 0,
+			source: "tool-calls",
+			files: 1,
+		})
 	})
 
 	it("lets a clean review end the run", async () => {
 		const { pass, record, results } = harness({}, '{"issues": []}')
 		expect(await pass(turnWithEdit())).toBeUndefined()
-		expect(record()).toMatchObject({ outcome: "clean", issues: 0, model: QWEN_397 })
+		expect(record()).toMatchObject({ outcome: "clean", issues: 0, model: GLM_VMODELS })
 		expect(results).toHaveLength(1)
 	})
 
@@ -475,7 +484,7 @@ describe("createReviewPass", () => {
 	it("counts a reviewer that times out, fails or answers unreadably as no issues", async () => {
 		const timedOut = harness({ createModel: () => hanging(), timeoutMs: 20 })
 		expect(await timedOut.pass(turnWithEdit())).toBeUndefined()
-		expect(timedOut.record()).toMatchObject({ outcome: "no-verdict", reason: "timed out after 20ms", model: QWEN_397 })
+		expect(timedOut.record()).toMatchObject({ outcome: "no-verdict", reason: "timed out after 20ms", model: GLM_VMODELS })
 		expect(timedOut.results).toHaveLength(1)
 		// Slow is not down: only a failed call counts against the model's health.
 		expect(timedOut.reviewerErrors).toEqual([])
