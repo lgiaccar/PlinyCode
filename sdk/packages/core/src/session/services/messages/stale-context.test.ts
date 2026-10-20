@@ -343,7 +343,10 @@ describe("stale-context helpers", () => {
 	});
 
 	it("resolves options from defaults, ignoring bad overrides", () => {
-		expect(resolveStaleContextOptions()).toEqual(DEFAULT_STALE_CONTEXT_OPTIONS);
+		expect(resolveStaleContextOptions()).toEqual({
+			...DEFAULT_STALE_CONTEXT_OPTIONS,
+			mode: "cached",
+		});
 		expect(
 			resolveStaleContextOptions({
 				keepRecentIterations: 4,

@@ -421,7 +421,7 @@ describe("compaction that does not pay for itself", () => {
 
 	function prepare(options: {
 		strategy: "agentic" | "basic";
-		log?: ReturnType<typeof vi.fn>;
+		log?: (message: string, metadata?: unknown) => void;
 	}) {
 		return createContextCompactionPrepareTurn({
 			providerId: "anthropic",
@@ -444,7 +444,7 @@ describe("compaction that does not pay for itself", () => {
 		];
 		// The summarizer answers with as much text as it folded.
 		summarizerReturning(`## State\n${"s".repeat(9_000)}`);
-		const log = vi.fn();
+		const log = vi.fn<(message: string, metadata?: unknown) => void>();
 		const emitStatusNotice = vi.fn();
 		const prepareTurn = prepare({ strategy: "agentic", log });
 		const maxInputTokens = Math.floor(

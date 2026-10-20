@@ -289,10 +289,16 @@ export class SessionRuntime {
 				: loopDetectionInput;
 		this.loopTracker = new LoopDetectionTracker(loopConfig);
 		const pruningInput = config.execution?.staleContextPruning;
+		// A model without a prompt cache (the routers' virtual models, the free
+		// pool) has no cached prefix for the in-turn pruning to protect.
+		const promptCache =
+			tryGetModelInfo(config)?.capabilities?.includes("prompt-cache") ?? false;
 		this.staleContext =
 			pruningInput === false
 				? undefined
-				: resolveStaleContextOptions(pruningInput ?? undefined);
+				: resolveStaleContextOptions(pruningInput ?? undefined, {
+						promptCache,
+					});
 		this.runTracker = new SessionRunTracker({
 			conversation: this.conversation,
 			mistakeTracker: this.mistakeTracker,

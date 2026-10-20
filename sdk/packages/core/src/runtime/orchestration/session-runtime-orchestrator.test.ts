@@ -602,8 +602,11 @@ describe("SessionRuntime message preparation", () => {
 		});
 
 		expect(build).toHaveBeenCalledTimes(1);
+		// The id rides along so hosts (the trace, the router) can tell the
+		// runtime's own messages from the user's.
 		expect(build.mock.calls[0]?.[0]).toEqual([
 			{
+				id: "m1",
 				role: "user",
 				content: [
 					{
