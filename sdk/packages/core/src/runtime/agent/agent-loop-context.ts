@@ -39,8 +39,16 @@ export function createAgentRuntimeState() {
 		usage: cloneUsage(DEFAULT_USAGE),
 		lastError: undefined as string | undefined,
 		lastErrorClass: undefined as ProviderErrorClass | undefined,
-		/** Provider-reported input tokens for the most recent request this run. */
+		/**
+		 * Provider-reported input tokens for the most recent request this run.
+		 * 0 until a provider reports a real count: an estimated usage leaves it
+		 * at 0, so compaction does not scale its budget by a guess.
+		 */
 		lastRequestInputTokens: 0,
+		/** The runtime estimate of the most recent request, in estimate units. */
+		lastRequestEstimatedTokens: 0,
+		/** The iteration the most recent request was sent on. */
+		lastRequestIteration: 0,
 		/** Output-token cap reported on the most recent model finish event. */
 		lastOutputLimit: undefined as AgentModelOutputLimit | undefined,
 		/**

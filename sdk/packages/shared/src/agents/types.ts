@@ -670,6 +670,23 @@ export interface AgentPrepareTurnContext {
 	 * can otherwise let the real context grow past the window without triggering.
 	 */
 	previousRequestInputTokens?: number;
+	/**
+	 * The previous request of this run, as the provider counted it and as the
+	 * runtime estimated it (see AgentRuntimePrepareTurnContext.previousRequest).
+	 */
+	previousRequest?: {
+		inputTokens: number;
+		estimatedTokens: number;
+		iteration: number;
+	};
+	/**
+	 * Turns canonical messages into the messages that would be sent (earlier
+	 * turns' reasoning dropped, stale context pruned, provider builders
+	 * applied), so a compacted projection is sized like the request.
+	 */
+	pruneForApi?: (
+		messages: MessageWithMetadata[],
+	) => Promise<MessageWithMetadata[]>;
 	emitStatusNotice?: (
 		message: string,
 		metadata?: Record<string, unknown>,

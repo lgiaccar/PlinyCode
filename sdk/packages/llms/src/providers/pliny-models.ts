@@ -420,17 +420,22 @@ export function plinyHostedPoolIds(): string[] {
 }
 
 /**
- * Input budget the FreeAuto router compacts against. Compaction reads the
- * virtual router's `ModelInfo`, never the model a call lands on, so this is
- * what decides when history is summarized. It is sized to the 128k tier, the
- * largest group of the pool and home of the coding models: the router only
- * sends a request to a 128k model while it fits with a 32k output reserve and
- * a 1.15 margin (about 83k tokens), and compaction starts at 90% of this
- * budget, just under that line. Keeping history below it keeps the whole pool
- * routable and keeps the small open models out of the range where they
- * degrade, instead of letting a run grow to ~230k where only GLM-5.2 fits.
+ * Input budget FreeAuto compacts against (the virtual ModelInfo's
+ * maxInputTokens): what decides when history is summarized. It is sized to
+ * the lead of the coding route, kimi-k2.6 (256k): compaction starts at 90% of
+ * this budget, and at that size the lead still fits with a 32k output reserve
+ * and the router's 1.15 margin, as do nemotron ultra (200k) and GLM-5.2
+ * (512k). The 128k tier (qwen3-coder) stops fitting past ~83k and is skipped
+ * by the policy's size filter above that, which the pool tolerates.
+ *
+ * It used to be 92k, sized to the 128k tier so the whole pool stayed
+ * routable. On long runs that compacted every ten or so iterations: a 26k-char
+ * system prompt and 39k chars of tool definitions took a quarter of the
+ * budget, the summary kept one tool pair, and the model re-read the same
+ * files after each compaction. Fewer, later compactions keep more of the
+ * working set, at the cost of slower prefill on the largest requests.
  */
-const FREE_AUTO_MAX_INPUT_TOKENS = 92_000;
+const FREE_AUTO_MAX_INPUT_TOKENS = 150_000;
 
 /**
  * Input budget of the fast FreeAuto profile. Fast trades depth for latency, and

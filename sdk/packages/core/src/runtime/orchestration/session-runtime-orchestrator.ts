@@ -968,6 +968,17 @@ export class SessionRuntime {
 				},
 				overflowRecovery: context.overflowRecovery,
 				previousRequestInputTokens: context.previousRequestInputTokens,
+				previousRequest: context.previousRequest,
+				// A compacted projection is sized the same way (see
+				// createCompactionStateAwarePrepareTurn).
+				pruneForApi: async (candidate) =>
+					this.prepareProviderMessagesForApi(
+						agentMessagesToMessagesWithMetadata(
+							this.pruneForRequest(
+								dropPriorTurnReasoning(messagesToAgentMessages(candidate)),
+							),
+						),
+					),
 				emitStatusNotice: context.emitStatusNotice,
 			});
 			if (!result) {

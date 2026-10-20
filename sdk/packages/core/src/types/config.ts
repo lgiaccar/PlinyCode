@@ -158,6 +158,8 @@ export interface CoreCompactionResult {
 		cacheReadTokens?: number;
 		cacheWriteTokens?: number;
 		totalCost?: number;
+		/** How long the summarizer call took, summed over its calls. */
+		durationMs?: number;
 	};
 }
 

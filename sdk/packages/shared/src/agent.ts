@@ -307,10 +307,29 @@ export interface AgentRuntimePrepareTurnContext {
 	 * can otherwise let the real context grow past the window without triggering.
 	 */
 	previousRequestInputTokens?: number;
+	/**
+	 * The previous model request of this run, as the provider counted it and
+	 * as the runtime estimated it before sending. Compaction scales its
+	 * budget by the ratio of the two, so a dense transcript (the provider
+	 * counted more than the estimate said) compacts earlier. Absent on the
+	 * first request of a run and after a request whose usage was itself an
+	 * estimate.
+	 */
+	previousRequest?: AgentPreviousRequestStats;
 	emitStatusNotice?: (
 		message: string,
 		metadata?: Record<string, unknown>,
 	) => void;
+}
+
+/** Sizes of the previous model request of a run, in real and estimated tokens. */
+export interface AgentPreviousRequestStats {
+	/** Input tokens the provider reported for the request. */
+	inputTokens: number;
+	/** The runtime estimate for the same request (estimateRequestInputTokens). */
+	estimatedTokens: number;
+	/** The iteration the request was sent on. */
+	iteration: number;
 }
 
 export interface AgentRuntimePrepareTurnResult {

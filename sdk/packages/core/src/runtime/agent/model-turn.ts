@@ -16,6 +16,7 @@ import type {
 	AgentUsage,
 } from "@plinycode/shared";
 import {
+	estimateRequestInputTokens,
 	mergeModelOptions,
 	omitUndefinedValues,
 	trimNonEmpty,
@@ -162,6 +163,17 @@ async function generateAssistantMessageForRequest(
 	});
 
 	ctx.throwIfAborted();
+	// The request as it goes out, in the runtime estimate units. The
+	// provider count for it arrives with the usage event; the next
+	// prepareTurn gets both, so compaction can scale its estimate by how far
+	// this one was off instead of by a guess.
+	ctx.state.lastRequestEstimatedTokens = estimateRequestInputTokens({
+		systemPrompt: request.systemPrompt,
+		messages: request.messages,
+		tools: request.tools,
+	});
+	ctx.state.lastRequestIteration = ctx.state.iteration;
+	ctx.state.lastRequestInputTokens = 0;
 	// Steering cancels provider generation, while request preparation keeps
 	// the run-level signal so compaction and hooks can finish consistently.
 	request = {
@@ -355,9 +367,12 @@ async function generateAssistantMessageForRequest(
 				// Record the provider's own input-token count for this request so
 				// the prepare-turn pipeline can trigger compaction on real usage
 				// rather than a character-based estimate.
+				// An estimated usage (the provider reported nothing) says nothing
+				// about how far the estimate is off, so it leaves the count at 0.
 				if (
 					typeof event.usage.inputTokens === "number" &&
-					event.usage.inputTokens > 0
+					event.usage.inputTokens > 0 &&
+					event.usage.estimated !== true
 				) {
 					ctx.state.lastRequestInputTokens = event.usage.inputTokens;
 				}
@@ -514,6 +529,15 @@ async function prepareTurnForModelRequest(
 		previousRequestInputTokens:
 			ctx.state.lastRequestInputTokens > 0
 				? ctx.state.lastRequestInputTokens
+				: undefined,
+		previousRequest:
+			ctx.state.lastRequestInputTokens > 0 &&
+			ctx.state.lastRequestEstimatedTokens > 0
+				? {
+						inputTokens: ctx.state.lastRequestInputTokens,
+						estimatedTokens: ctx.state.lastRequestEstimatedTokens,
+						iteration: ctx.state.lastRequestIteration,
+					}
 				: undefined,
 		emitStatusNotice: (message, metadata) => {
 			void ctx.emit({

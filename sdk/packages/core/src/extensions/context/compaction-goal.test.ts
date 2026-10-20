@@ -3,6 +3,7 @@ import {
 	buildSummaryMessage,
 	buildSummaryRequest,
 	extractLatestUserRequest,
+	extractOriginalRequest,
 } from "./compaction-shared";
 
 const noFiles = { readFiles: [], modifiedFiles: [] };
@@ -39,25 +40,65 @@ describe("summary goal anchoring", () => {
 		).toBeUndefined();
 	});
 
-	it("puts the newest request in the summary request and marks the old summary stale", () => {
+	it("puts the original request before the earlier summaries and keeps them for reference only", () => {
 		const request = buildSummaryRequest({
-			previousSummary: "## Goal\nFix compilation error",
+			previousSummary: "### Span 1\nFix compilation error",
 			conversationText: "[User]: fix the bug",
 			fileOps: noFiles,
 			latestUserRequest: "fix the 4 failing tests",
 		});
-		expect(request).toContain("Newest user request:\nfix the 4 failing tests");
-		expect(request).toContain("Previous summary (may be stale");
+		expect(request).toContain(
+			"Original request (the goal; later user messages win):\nfix the 4 failing tests",
+		);
+		expect(request).toContain(
+			"Earlier summaries (for reference; do not restate them)",
+		);
 		expect(request).toContain("Unverified");
-		expect(request.indexOf("Newest user request")).toBeLessThan(
-			request.indexOf("Previous summary"),
+		expect(request).not.toContain("## Goal");
+		expect(request).toContain(
+			"Do not write a Goal, Files or Task list section",
+		);
+		expect(request.indexOf("Original request (the goal")).toBeLessThan(
+			request.indexOf("Earlier summaries (for reference"),
 		);
 	});
 
-	it("omits the newest-request block when there is none", () => {
+	it("omits the request block when there is none", () => {
 		expect(
 			buildSummaryRequest({ conversationText: "x", fileOps: noFiles }),
-		).not.toContain("Newest user request:");
+		).not.toContain("Original request (the goal");
+	});
+
+	it("skips the runtime's own user-role messages when looking for the newest request", () => {
+		const text = extractLatestUserRequest([
+			{
+				role: "user",
+				content: '<user_input mode="act">execute the plan</user_input>',
+			},
+			{ role: "assistant", content: [{ type: "text", text: "ok" }] },
+			{
+				role: "user",
+				content: "[SYSTEM] Your last message reads as unfinished thinking.",
+				metadata: { userRunSpan: 0, displayRole: "system" },
+			},
+		]);
+		expect(text).toBe("execute the plan");
+	});
+
+	it("falls back to the request an earlier summary pinned once the prompt was folded", () => {
+		const summary = buildSummaryMessage({
+			summary: "## State\n- Done: nothing yet",
+			fileOps: noFiles,
+			tokensBefore: 10,
+			userRunSpan: 1,
+			originalRequest: "execute the plan in PLAN.md",
+		});
+		expect(
+			extractOriginalRequest([
+				summary,
+				{ role: "assistant", content: [{ type: "text", text: "working" }] },
+			]),
+		).toBe("execute the plan in PLAN.md");
 	});
 
 	it("tells the model the user's later messages win over the summary goal", () => {

@@ -207,13 +207,17 @@ describe("FreeAuto router model", () => {
 		expect(Math.max(...poolWindows)).toBeGreaterThanOrEqual(routerWindow);
 	});
 
-	it("compacts before the 128k tier of the pool drops out", () => {
+	it("compacts before the 256k lead of the coding route drops out", () => {
 		const router = buildPlinyModels()[PLINY_FREE_AUTO_MODEL_ID];
 		const maxInput = router?.maxInputTokens ?? 0;
 		expect(maxInput).toBeLessThan(router?.contextWindow ?? 0);
-		// Compaction triggers at 90% of maxInputTokens; a 128k model with a 32k
-		// output reserve and the router's 1.15 margin fits up to ~83.5k.
-		expect(maxInput * 0.9).toBeLessThanOrEqual((128_000 - 32_000) / 1.15);
+		// Compaction triggers at 90% of maxInputTokens; a 256k model with a 32k
+		// output reserve and the router's 1.15 margin fits up to ~194k, and the
+		// 200k tier (nemotron ultra) up to ~146k.
+		expect(maxInput * 0.9).toBeLessThanOrEqual((256_000 - 32_000) / 1.15);
+		expect(maxInput * 0.9).toBeLessThanOrEqual((200_000 - 32_000) / 1.15);
+		// The 128k tier no longer fits at the trigger: that is the trade-off.
+		expect(maxInput * 0.9).toBeGreaterThan((128_000 - 32_000) / 1.15);
 	});
 
 	it("is not offered as a paid hosted model", () => {
