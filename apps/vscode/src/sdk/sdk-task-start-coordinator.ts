@@ -263,7 +263,8 @@ export class SdkTaskStartCoordinator {
 	 */
 	private nameConversation(taskId: string, prompt: string, workspaceRoot: string): void {
 		const suggest = this.options.suggestTitle
-		if (!suggest) {
+		// The e2e suite looks conversations up by their first prompt, and its mock gateway answers every request alike.
+		if (!suggest || process.env.E2E_TEST === "true") {
 			return
 		}
 		void (async () => {
