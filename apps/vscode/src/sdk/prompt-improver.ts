@@ -31,15 +31,17 @@ function systemPrompt(mode: Mode): string {
 		"- Fix spelling, grammar and punctuation.",
 		"- Make the request explicit: what to do, where, and what done looks like, when the draft says so.",
 		"- Split a long run-on request into short sentences or a short list.",
+		"- Favour markdown: when the draft has several parts, steps or requirements, give it structure with short headings, bullet or numbered lists, **bold** for key terms and fenced code blocks for code.",
 		"",
 		"Rules:",
 		"- Keep the meaning and the intent. Do not add requirements, steps, files or facts the draft does not contain.",
 		"- Answer in the language the draft is written in.",
+		"- Never remove or flatten markdown the draft already has (headings, lists, tables, bold, links, inline code, fenced code blocks, blockquotes). Keep it and improve around it.",
 		"- Keep @mentions (like @/src/app.ts or @problems), /slash commands, file paths, URLs, identifiers, code and quoted text exactly as written. Never put backticks around an @mention.",
-		"- Keep it about as long as the draft; a short draft stays short.",
+		"- Keep it about as long as the draft; a short draft stays short, and a one-line request gets no headings.",
 		"- Do not answer the prompt or comment on it.",
 		"",
-		"Reply with the rewritten prompt only: no preamble, no quotes, no code fence around it.",
+		"Reply with the rewritten prompt only: no preamble, no quotes, and do not wrap the whole reply in a code fence.",
 	].join("\n")
 }
 
@@ -55,7 +57,8 @@ function cleanReply(reply: string): string {
 		text = tagged[1].trim()
 	}
 	const fenced = text.match(/^```[^\n]*\n([\s\S]*?)\n?```$/)
-	if (fenced) {
+	// Only a fence around the whole reply: one that closes a code block inside the markdown stays.
+	if (fenced && !fenced[1].includes("```")) {
 		text = fenced[1].trim()
 	}
 	text = text.replace(/^(here(?:'s| is) (?:the |your |an )?(?:improved|rewritten|revised|clearer)[^\n:]*:)\s*/i, "")

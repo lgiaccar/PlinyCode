@@ -1,3 +1,4 @@
+import { conversationRef } from "@shared/conversationRef"
 import { StringRequest } from "@shared/proto/cline/common"
 import { ExportTaskRequest, type TaskItem } from "@shared/proto/cline/task"
 import { parseWorkspaceKind, workspaceRefLabel } from "@shared/workspaceRef"
@@ -104,6 +105,12 @@ const HistoryViewItem = ({
 							<span className="ph-no-capture">{item.task}</span>
 						</div>
 					)}
+					<span
+						className="text-xs font-mono text-description opacity-70 flex-shrink-0"
+						data-testid="history-item-ref"
+						title="Conversation reference">
+						#{conversationRef(item.id)}
+					</span>
 					<BackgroundTaskBadge taskId={item.id} />
 					{item.isLegacy && (
 						<span className="text-xs uppercase rounded px-1.5 py-0.5 bg-accent/20 text-description flex-shrink-0">

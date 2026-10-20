@@ -81,6 +81,8 @@ export interface SdkTaskStartCoordinatorOptions {
 	 * that holds `folder` (see `ensureTaskWorktree`). Throws with a message for the user.
 	 */
 	createTaskWorktree?: (input: { folder: string; title: string }) => Promise<TaskWorktree & { notes: string[] }>
+	/** Names a new conversation from its first prompt with a small model; undefined when it cannot. */
+	suggestTitle?: (prompt: string, workspaceRoot: string) => Promise<string | undefined>
 }
 
 export interface TaskStartOptions {
@@ -234,6 +236,9 @@ export class SdkTaskStartCoordinator {
 			if (worktree) newHistoryItem.worktree = worktree
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 			await this.options.postStateToWebview()
+			if (!startOptions?.title && prompt?.trim()) {
+				this.nameConversation(taskSessionId, prompt, cwd)
+			}
 
 			if (prompt?.trim() || images?.length || files?.length) {
 				Logger.log(`[SdkController] Sending prompt to session: ${taskSessionId}`)
@@ -250,6 +255,35 @@ export class SdkTaskStartCoordinator {
 			})
 			return undefined
 		}
+	}
+
+	/**
+	 * Replaces the first-prompt title with one a small model writes, without
+	 * holding the task up. A title the user set in the meantime is kept.
+	 */
+	private nameConversation(taskId: string, prompt: string, workspaceRoot: string): void {
+		const suggest = this.options.suggestTitle
+		// The e2e suite looks conversations up by their first prompt, and its mock gateway answers every request alike.
+		if (!suggest || process.env.E2E_TEST === "true") {
+			return
+		}
+		void (async () => {
+			try {
+				const title = await suggest(prompt, workspaceRoot)
+				if (!title) {
+					return
+				}
+				const item = await this.options.taskHistory.findHistoryItem(taskId)
+				if (!item || item.isRenamed) {
+					return
+				}
+				if (await this.options.taskHistory.renameTask(taskId, title)) {
+					await this.options.postStateToWebview()
+				}
+			} catch (error) {
+				Logger.warn(`[SdkController] Could not title conversation ${taskId}: ${error}`)
+			}
+		})()
 	}
 
 	/**

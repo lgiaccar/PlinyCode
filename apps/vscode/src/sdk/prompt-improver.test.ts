@@ -79,3 +79,21 @@ describe("improvePromptText", () => {
 		expect(result.error).toContain("did not answer in time")
 	})
 })
+
+describe("improvePromptText markdown", () => {
+	it("tells the model to favour markdown and never remove it", async () => {
+		const complete = completer("Fix it.")
+		await improvePromptText(DRAFT, "act", "/ws", complete)
+		const [system] = complete.mock.calls[0] as unknown as [string]
+		expect(system).toContain("Favour markdown")
+		expect(system).toContain("Never remove or flatten markdown")
+	})
+
+	it("keeps code blocks inside a rewrite and still strips a fence around all of it", async () => {
+		const withBlocks = "```ts\nconst a = 1\n```\n\nFix it.\n\n```ts\nconst b = 2\n```"
+		expect((await improvePromptText(DRAFT, "act", "/ws", completer(withBlocks))).text).toBe(withBlocks)
+		expect((await improvePromptText(DRAFT, "act", "/ws", completer("```markdown\n## Goal\n\n- Fix it\n```"))).text).toBe(
+			"## Goal\n\n- Fix it",
+		)
+	})
+})

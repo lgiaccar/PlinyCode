@@ -10,11 +10,12 @@ The rewrite is one request with no tools and no conversation context: the model 
 
 - **Edit the draft, don't carry it out.** The draft comes wrapped in `<draft>` tags as text to edit. A draft that asks for a plan or an answer gets a clearer request back, not the plan or the answer.
 - **Keep the meaning.** Add no requirements, files or facts, keep the draft's language, and stay about as long as the draft.
+- **Favour markdown.** A draft with several parts, steps or requirements gets short headings, lists, **bold** key terms and fenced code blocks; a one-line request gets no headings. Markdown the draft already has is never removed or flattened.
 - **Keep markup exactly as written:** `@mentions`, `/slash` commands, file paths, URLs, identifiers and code.
 
 The reply is cleaned before it is used:
 
-- a code fence, echoed draft tags, wrapping quotes and a "Here is the improved prompt:" preamble are removed;
+- a code fence around the whole reply (code blocks inside it stay), echoed draft tags, wrapping quotes and a "Here is the improved prompt:" preamble are removed;
 - an `@mention` the model put in backticks is freed again, since a mention in backticks is not resolved.
 
 Some replies are rejected and leave the draft unchanged:
