@@ -84,6 +84,8 @@ describe("PlinyApiKeys", () => {
 		expect(keys.nextAfter(a.id, new Set([b.id, c.id]))).toBeUndefined()
 		expect(await keys.findByValue("test-key-000b")).toMatchObject({ id: b.id })
 		expect(await keys.findByValue("test-key-other")).toBeUndefined()
+		expect(await keys.getKey(c.id)).toBe("test-key-000c")
+		expect(await keys.getKey("missing")).toBeUndefined()
 	})
 
 	it("sees another window's change and tells its listeners", async () => {

@@ -112,6 +112,14 @@ export class PlinyApiKeys implements vscode.Disposable {
 		return next ? { ...next } : undefined
 	}
 
+	/** The stored key with this id, for the Settings test; undefined when there is none. */
+	async getKey(id: string): Promise<string | undefined> {
+		if (!this.index.keys.some((k) => k.id === id)) {
+			return undefined
+		}
+		return (await this.secrets.get(SECRET_KEY(id)))?.trim() || undefined
+	}
+
 	/** The stored entry whose key is `key`, if any. */
 	async findByValue(key: string): Promise<PlinyApiKeyEntry | undefined> {
 		for (const entry of this.index.keys) {
