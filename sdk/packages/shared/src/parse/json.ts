@@ -186,17 +186,34 @@ function parseJsonStringForSchema(
 		return value;
 	}
 
+	const parsed = parseJsonOrRepaired(trimmed);
+	if (Array.isArray(parsed)) {
+		return expectsArray ? parsed : value;
+	}
+	if (isRecord(parsed)) {
+		return expectsObject ? parsed : value;
+	}
+	return value;
+}
+
+/**
+ * `JSON.parse`, then a jsonrepair pass for the list-shaped strings weak
+ * models write for array arguments: a Python-style `['git status']`, a
+ * trailing comma. The repaired value is used only when it is an array or an
+ * object (the caller then checks it against the schema); anything else
+ * leaves the string as it was.
+ */
+function parseJsonOrRepaired(text: string): unknown {
 	try {
-		const parsed = JSON.parse(trimmed) as unknown;
-		if (Array.isArray(parsed)) {
-			return expectsArray ? parsed : value;
-		}
-		if (isRecord(parsed)) {
-			return expectsObject ? parsed : value;
-		}
-		return value;
+		return JSON.parse(text) as unknown;
 	} catch {
-		return value;
+		// Fall through to the repair pass.
+	}
+	try {
+		const repaired = JSON.parse(jsonrepair(text)) as unknown;
+		return Array.isArray(repaired) || isRecord(repaired) ? repaired : undefined;
+	} catch {
+		return undefined;
 	}
 }
 

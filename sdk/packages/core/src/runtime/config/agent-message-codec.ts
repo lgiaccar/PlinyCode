@@ -141,10 +141,18 @@ export function agentMessagesToMessagesWithMetadata(
 	return messages.map(agentMessageToMessageWithMetadata);
 }
 
+/**
+ * Provider-shaped messages for a request. The id and metadata ride along as
+ * optional fields: the message builders spread messages, so they reach the
+ * request, where the router and the completion guard need `displayRole` and
+ * `userRunSpan` to tell a typed prompt from an injected notice, and the
+ * session trace needs stable ids to write requests incrementally. Without
+ * them `messagesToAgentMessages` generated fresh ids on every call.
+ */
 export function agentMessagesToMessages(
 	messages: readonly AgentMessage[],
 ): Message[] {
-	const out: Message[] = [];
+	const out: MessageWithMetadata[] = [];
 	for (const message of messages) {
 		const content = message.content
 			.map(agentPartToContentBlock)
@@ -162,7 +170,12 @@ export function agentMessagesToMessages(
 			previous.content.push(...content);
 			continue;
 		}
-		out.push({ role, content });
+		out.push({
+			...(message.id ? { id: message.id } : {}),
+			role,
+			content,
+			...(message.metadata ? { metadata: message.metadata } : {}),
+		});
 	}
 	return out;
 }

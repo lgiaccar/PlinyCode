@@ -128,4 +128,35 @@ describe("normalizeJsonLikeStringsForSchema", () => {
 			steps: [{ args: ["--version"] }, { args: ["test"] }],
 		});
 	});
+
+	const commandsSchema = {
+		type: "object",
+		properties: {
+			commands: { type: "array", items: { type: "string" } },
+		},
+	};
+
+	it("repairs a Python-style list written as a string", () => {
+		expect(
+			normalizeJsonLikeStringsForSchema(
+				{ commands: "['git --version', 'where git']" },
+				commandsSchema,
+			),
+		).toEqual({ commands: ["git --version", "where git"] });
+		expect(
+			normalizeJsonLikeStringsForSchema(
+				{ commands: '["git status",]' },
+				commandsSchema,
+			),
+		).toEqual({ commands: ["git status"] });
+	});
+
+	it("leaves a string alone when the repair does not yield the expected kind", () => {
+		expect(
+			normalizeJsonLikeStringsForSchema(
+				{ commands: "{'a': 1}" },
+				commandsSchema,
+			),
+		).toEqual({ commands: "{'a': 1}" });
+	});
 });

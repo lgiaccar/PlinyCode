@@ -264,7 +264,7 @@ describe("installRouter completion guard", () => {
 			endedAt: new Date(NOW),
 			durationMs: 0,
 		})
-		expect(result?.appendContext).toContain("failed with exit code 1")
+		expect(result?.appendContext).toContain("exited with code 1")
 		expect(result?.appendContext).toContain("`bun test`")
 		const run = getSessionState("s").run
 		expect(run).toMatchObject({
@@ -273,6 +273,37 @@ describe("installRouter completion guard", () => {
 			previousToolFailed: true,
 			previousToolDetached: false,
 		})
+	})
+
+	it("notes at most two shell failures per run and none for a quiet query exit", async () => {
+		const { config } = install()
+		const afterTool = config.hooks?.afterTool
+		if (!afterTool) {
+			throw new Error("router did not install an afterTool hook")
+		}
+		const failed = (query: string, result: string, runId = "run-1") =>
+			afterTool({
+				snapshot: { agentId: "root", runId, iteration: 2 } as never,
+				tool: { name: "run_commands" } as never,
+				toolCall: { type: "tool-call", toolCallId: "c1", toolName: "run_commands", input: {} },
+				input: {},
+				result: { output: [{ query, result, error: "Command exited with code 1", success: false }] },
+				startedAt: new Date(NOW),
+				endedAt: new Date(NOW),
+				durationMs: 0,
+			})
+		// findstr with no match: not a failure, no note, not counted.
+		expect(await failed("findstr ZLIB CMakeLists.txt", "[Command exited with code 1]")).toBeUndefined()
+		expect(getSessionState("s").run.previousToolFailed).toBe(false)
+		expect((await failed("bun test", "[Command exited with code 1]\n1 failed"))?.appendContext).toContain("`bun test`")
+		expect((await failed("bun lint", "[Command exited with code 1]\n2 errors"))?.appendContext).toContain("`bun lint`")
+		// The third failure of the run gets no note; the state still counts it.
+		expect(await failed("bun build", "[Command exited with code 1]\nboom")).toBeUndefined()
+		expect(getSessionState("s").run.failedCommands).toBe(3)
+		// A new run starts over.
+		expect((await failed("bun test", "[Command exited with code 1]\n1 failed", "run-2"))?.appendContext).toContain(
+			"exited with code 1",
+		)
 	})
 
 	it("escalates a BalanceAuto stall to a free model first and to the default lead only the second time", async () => {
@@ -709,7 +740,7 @@ describe("installRouter profiles, effort and call log", () => {
 
 		await run({ parentAgentId: "parent" })
 		// The sub-agent's tool ran under a free model: note added.
-		expect((await failedShell("parent"))?.appendContext).toContain("exit code 2")
+		expect((await failedShell("parent"))?.appendContext).toContain("exited with code 2")
 		// The root agent is still on the paid model.
 		expect(await failedShell()).toBeUndefined()
 	})

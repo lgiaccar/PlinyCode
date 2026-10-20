@@ -931,6 +931,9 @@ export function createSkillsTool(
 	return tool;
 }
 
+export const ASK_QUESTION_OPTIONS_ERROR =
+	"options must be an array of 2 to 5 short strings";
+
 /**
  * Create the ask_question tool
  *
@@ -951,6 +954,17 @@ export function createAskQuestionTool(
 		retryable: false,
 		maxRetries: 0,
 		execute: async (input, context) => {
+			// Checked before zod: zod applies the array's item bounds to a
+			// string's length ("expected string to have <=5 characters"), which
+			// sent one model shortening its options five times instead of
+			// fixing the type.
+			const options =
+				input !== null && typeof input === "object"
+					? (input as { options?: unknown }).options
+					: undefined;
+			if (!Array.isArray(options)) {
+				throw new Error(ASK_QUESTION_OPTIONS_ERROR);
+			}
 			const validatedInput = validateWithZod(AskQuestionInputSchema, input);
 			return executor(validatedInput.question, validatedInput.options, context);
 		},

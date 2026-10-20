@@ -35,17 +35,18 @@ interface PreparedToolExecution {
 }
 
 const HOOK_ATTRIBUTE_ESCAPES: Record<string, string> = {
-	_: "__",
-	'"': "_q_",
-	"<": "_lt_",
-	">": "_gt_",
+	"&": "&amp;",
+	'"': "&quot;",
+	"<": "&lt;",
+	">": "&gt;",
 };
 
 function sanitizeHookAttribute(value: string): string {
-	// The underscore escapes itself, which makes the encoding injective
-	// (uniquely decodable escape code): no two distinct ids can collapse to
-	// the same sanitized stamp.
-	return value.replace(/[_"<>]/g, (char) => HOOK_ATTRIBUTE_ESCAPES[char]);
+	// XML entity escapes: `&` escapes itself, so the encoding is injective
+	// (no two distinct ids collapse to the same stamp), and tool names keep
+	// their underscores. An earlier scheme doubled every `_`, which showed
+	// the model `run__commands` for `run_commands`.
+	return value.replace(/[&"<>]/g, (char) => HOOK_ATTRIBUTE_ESCAPES[char]);
 }
 
 function formatHookContextBlock(

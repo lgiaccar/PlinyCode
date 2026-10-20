@@ -1,7 +1,9 @@
 import type { AgentToolContext } from "@plinycode/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
+	ASK_QUESTION_OPTIONS_ERROR,
 	buildRunCommandsDescription,
+	createAskQuestionTool,
 	createDefaultTools,
 	createEditorTool,
 	createFindFilesTool,
@@ -11,7 +13,10 @@ import {
 	createSkillsTool,
 } from "./definitions";
 import { CommandAbortedError, CommandExitError } from "./executors/bash";
-import { RUN_COMMAND_QUERY_PREVIEW_LIMIT } from "./helpers";
+import {
+	LIST_SHAPED_COMMANDS_ERROR,
+	RUN_COMMAND_QUERY_PREVIEW_LIMIT,
+} from "./helpers";
 import { type EditFileInput, INPUT_ARG_CHAR_LIMIT } from "./schemas";
 import type { SkillsExecutorWithMetadata } from "./types";
 
@@ -2262,5 +2267,45 @@ describe("default editor tool", () => {
 			`recommended limit of ${INPUT_ARG_CHAR_LIMIT}`,
 		);
 		expect(execute).not.toHaveBeenCalled();
+	});
+});
+
+describe("list-shaped tool arguments", () => {
+	const context: AgentToolContext = {
+		agentId: "agent-1",
+		conversationId: "conv-1",
+		iteration: 1,
+	};
+
+	it("refuses a commands string that is a list written as text instead of running it", async () => {
+		const execute = vi.fn(async (command: string | { command: string }) =>
+			typeof command === "string" ? `ran:${command}` : `ran:${command.command}`,
+		);
+		const tool = createShellTool(execute);
+
+		await expect(
+			tool.execute({ commands: "['git --version']" } as never, context),
+		).rejects.toThrow(LIST_SHAPED_COMMANDS_ERROR);
+		await expect(
+			tool.execute('["git status"' as never, context),
+		).rejects.toThrow(LIST_SHAPED_COMMANDS_ERROR);
+		expect(execute).not.toHaveBeenCalled();
+	});
+
+	it("tells the model that ask_question options must be an array", async () => {
+		const executor = vi.fn(async () => "picked");
+		const tool = createAskQuestionTool(executor);
+
+		await expect(
+			tool.execute(
+				{ question: "Which?", options: "['A', 'B']" } as never,
+				context,
+			),
+		).rejects.toThrow(ASK_QUESTION_OPTIONS_ERROR);
+		expect(executor).not.toHaveBeenCalled();
+
+		await expect(
+			tool.execute({ question: "Which?", options: ["A", "B"] }, context),
+		).resolves.toBe("picked");
 	});
 });
