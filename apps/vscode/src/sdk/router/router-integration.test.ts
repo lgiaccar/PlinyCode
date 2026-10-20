@@ -2,6 +2,7 @@ import type { CoreSessionConfig } from "@plinycode/core"
 import { PLINY_BALANCE_AUTO_MODEL_ID, PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms"
 import type { AgentMessage, AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { RouterTuningMap } from "@/shared/router-tuning"
 import type { RouterCallLogRecord } from "./router-call-log"
 import { getSessionState, isModelHealthy, resetHealth, resetSessions } from "./router-health"
 import { installRouter, type RouterInstallDeps } from "./router-integration"
@@ -1140,5 +1141,93 @@ describe("installRouter images", () => {
 		expect(sent).toHaveLength(1)
 		const parts = sent[0].request.messages[0].content
 		expect(parts.some((part) => part.type === "text" && part.text.includes("is not shown to you"))).toBe(true)
+	})
+})
+
+describe("installRouter Settings tuning", () => {
+	beforeEach(() => {
+		resetHealth()
+		resetSessions()
+	})
+
+	const GLM = "snps-provider/GLM-5.2"
+	const KIMI = "snps-provider/kimi-k2.6"
+
+	function install(tuning: () => RouterTuningMap | undefined) {
+		const rows: string[] = []
+		const createdFor: string[] = []
+		const config = installRouter(
+			{ providerId: "pliny", modelId: PLINY_FREE_AUTO_MODEL_ID, cwd: "/tmp" } as unknown as CoreSessionConfig,
+			{
+				sessionId: "s",
+				getMode: () => "act",
+				emitRow: (message) => rows.push(message.text ?? ""),
+				nextMessageTs: () => 1,
+				logCall: () => undefined,
+				logRun: () => undefined,
+				now: () => NOW,
+				tuning,
+			},
+		)
+		const run = async () => {
+			const model = config.agentModelFactory?.({
+				config: { modelId: PLINY_FREE_AUTO_MODEL_ID } as never,
+				createDefault: (overrides) => {
+					createdFor.push(overrides?.modelId ?? "(default)")
+					return scripted([TEXT, STOP])
+				},
+			})
+			for await (const _event of await (model as AgentModel).stream(request())) {
+				// drain
+			}
+		}
+		return { config, rows, createdFor, run }
+	}
+
+	it("routes the next turn by the model order, and back once it is reset, without reinstalling", async () => {
+		let tuning: RouterTuningMap = { default: { models: [GLM, KIMI] } }
+		const { createdFor, run } = install(() => tuning)
+		await run()
+		expect(createdFor.at(-1)).toBe(GLM)
+
+		tuning = {}
+		await run()
+		expect(createdFor.at(-1)).toBe(KIMI)
+	})
+
+	it("sends no reminder when the tuning allows none", async () => {
+		const { config, rows } = install(() => ({ default: { escalation: { maxNudgesPerRun: 0 } } }))
+		expect(await config.completionGuard?.({ message: assistant("Let me check the log:"), iteration: 3 })).toBeUndefined()
+		expect(rows.some((row) => row.includes("reminders for this turn are used up"))).toBe(true)
+	})
+
+	it("escalates after the tuned number of failed commands", async () => {
+		const { config } = install(() => ({ default: { escalation: { afterFailedCommands: 2 } } }))
+		const state = getSessionState("s")
+		state.calls.push({ modelId: KIMI, startedAt: NOW, routeName: "default" })
+		state.stickyModelId = KIMI
+		for (const id of ["c1", "c2"]) {
+			await config.hooks?.afterTool?.({
+				snapshot: { agentId: "root", iteration: 2 } as never,
+				tool: { name: "run_commands" } as never,
+				toolCall: { type: "tool-call", toolCallId: id, toolName: "run_commands", input: {} },
+				input: {},
+				result: {
+					output: [
+						{
+							query: "build",
+							result: "[Command exited with code 1]",
+							error: "Command exited with code 1",
+							success: false,
+						},
+					],
+				},
+				startedAt: new Date(NOW),
+				endedAt: new Date(NOW),
+				durationMs: 0,
+			})
+		}
+		expect(state.run.escalated).toBe(true)
+		expect(state.stickyModelId).not.toBe(KIMI)
 	})
 })

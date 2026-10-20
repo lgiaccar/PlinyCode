@@ -62,6 +62,27 @@ describe("reviewer pass wiring", () => {
 	})
 })
 
+describe("router tuning wiring", () => {
+	it("reads Settings → Router from global state on every call", async () => {
+		mocks.installRouter.mockClear()
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, sessionId: "session-9" })
+		let stored: unknown = { default: { models: ["a"] } }
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {
+				getGlobalSettingsKey: () => "act",
+				getGlobalStateKey: (key: string) => (key === "routerTuning" ? stored : undefined),
+			} as never,
+			emitRow: vi.fn(),
+			nextMessageTs: () => 1,
+		})
+		await builder.build({ cwd: "/workspace", mode: "act" })
+		const deps = mocks.installRouter.mock.calls[0]?.[1] as { tuning: () => unknown }
+		expect(deps.tuning()).toEqual({ default: { models: ["a"] } })
+		stored = {}
+		expect(deps.tuning()).toEqual({})
+	})
+})
+
 describe("SdkCheckpointCoordinator.getRunChanges", () => {
 	function createCoordinator(options: {
 		history: Array<{ ref: string; createdAt: number; runCount: number }>

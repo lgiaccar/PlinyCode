@@ -110,7 +110,10 @@ opened with **PlinyCode: Open Routing Rules (FreeAuto / BalanceAuto)** from the
 command palette. Workspace override: `<workspace>/.cline/pliny-balance-auto.md`.
 The FreeAuto profiles keep their own files, and a project's
 `.cline/pliny-free-auto.md` never applies to BalanceAuto, so free-only
-overrides cannot displace its paid routes.
+overrides cannot displace its paid routes. **Settings → Router → BalanceAuto**
+sets its model order (free and paid models) and the other knobs without
+editing the file; its values override the file's
+([router-settings.md](router-settings.md)).
 
 The file has the same shape as the FreeAuto one. The differences:
 

@@ -214,6 +214,8 @@ export class SdkSessionConfigBuilder {
 				emitRow,
 				nextMessageTs,
 				reviewEnabled: isReviewBeforeFinishEnabled,
+				// Settings → Router, read per call: a change there routes the next call.
+				tuning: () => this.options.stateManager.getGlobalStateKey("routerTuning"),
 				// The id is read when the review runs: a new session's is only final once it has started.
 				...(getRunChanges ? { getRunChanges: () => getRunChanges(config.sessionId ?? "") } : {}),
 				...(this.options.trace ? { onCallEvent: (event) => trace?.recordRouterEvent(event) } : {}),

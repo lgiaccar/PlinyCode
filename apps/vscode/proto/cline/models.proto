@@ -38,6 +38,10 @@ service ModelsService {
   rpc commitModelSelection(CommitModelSelectionRequest) returns (Empty);
   // Stores (or clears) the per-model reasoning and context tuning set from the chat box
   rpc setModelTuning(SetModelTuningRequest) returns (Empty);
+  // Returns Settings → Router: each router profile's rules-file defaults, its tuning and the models it may use
+  rpc getRouterSettings(EmptyRequest) returns (RouterSettingsResponse);
+  // Stores (or clears) one router profile's tuning and returns the updated settings
+  rpc setRouterTuning(SetRouterTuningRequest) returns (RouterSettingsResponse);
 }
 
 // Price tier for tiered pricing models
@@ -356,4 +360,18 @@ message SetModelTuningRequest {
   optional string effort = 4;
   // Prompt budget in tokens; absent keeps the model's own.
   optional int64 max_input_tokens = 5;
+}
+
+// Settings → Router as JSON: a RouterSettingsView (src/shared/router-tuning.ts).
+message RouterSettingsResponse {
+  string settings_json = 1;
+}
+
+// One router profile's tuning. An empty or "{}" tuning_json clears it.
+message SetRouterTuningRequest {
+  Metadata metadata = 1;
+  // "default", "fast", "smart" or "balance"
+  string profile = 2;
+  // A RouterProfileTuning (src/shared/router-tuning.ts) as JSON
+  string tuning_json = 3;
 }

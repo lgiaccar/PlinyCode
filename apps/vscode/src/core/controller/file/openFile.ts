@@ -1,4 +1,5 @@
 import { openFile as openFileIntegration } from "@integrations/misc/open-file"
+import { PLINY_ROUTER_PROFILES } from "@plinycode/llms"
 import { PLINY_FREE_AUTO_RULES_URI, PLINY_REPO_MEMORY_URI, PLINY_USER_MEMORY_URI } from "@shared/pliny"
 import { Empty, StringRequest } from "@shared/proto/cline/common"
 import { globalRulesPath, initialiseDefaultRulesFile } from "@/sdk/router/router-rules-store"
@@ -10,7 +11,7 @@ import { Controller } from ".."
  * @param request The request message containing the file path in the 'value' field.
  *                Supports a special URI for the FreeAuto routing rules, whose path depends on the
  *                data directory the host resolved:
- *                - pliny://free-auto-rules
+ *                - pliny://free-auto-rules, and pliny://free-auto-rules/<profile> for one router profile's file
  *                - pliny://memory/repo and pliny://memory/user: the memory files, created when missing
  * @returns Empty response
  */
@@ -18,6 +19,12 @@ export async function openFile(controller: Controller, request: StringRequest): 
 	if (request.value) {
 		if (request.value === PLINY_FREE_AUTO_RULES_URI) {
 			await openFreeAutoRulesFile()
+		} else if (request.value.startsWith(`${PLINY_FREE_AUTO_RULES_URI}/`)) {
+			const profile = request.value.slice(PLINY_FREE_AUTO_RULES_URI.length + 1)
+			if (!PLINY_ROUTER_PROFILES.some((entry) => entry.profile === profile)) {
+				throw new Error(`Unknown router profile: ${profile}`)
+			}
+			await openFreeAutoRulesFile(profile)
 		} else if (request.value === PLINY_REPO_MEMORY_URI || request.value === PLINY_USER_MEMORY_URI) {
 			const { file } = await controller.ensureMemoryFile(request.value === PLINY_USER_MEMORY_URI ? "user" : "repo")
 			await openFileIntegration(file)
@@ -33,7 +40,7 @@ export async function openFile(controller: Controller, request: StringRequest): 
  * defaults when it does not exist yet. The path lives in the host's data
  * directory, so resolving it here keeps the webview free of that knowledge.
  */
-async function openFreeAutoRulesFile(): Promise<void> {
-	const rulesPath = (await initialiseDefaultRulesFile()) ?? globalRulesPath()
+async function openFreeAutoRulesFile(profile = "default"): Promise<void> {
+	const rulesPath = (await initialiseDefaultRulesFile(undefined, profile)) ?? globalRulesPath(undefined, profile)
 	await openFileIntegration(rulesPath)
 }
