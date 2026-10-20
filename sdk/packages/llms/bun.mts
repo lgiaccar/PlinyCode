@@ -13,11 +13,15 @@ const sourcemap = Bun.env.CLINE_SOURCEMAPS === "1" ? "linked" : "none";
 // minify: true keeps identifier mangling active even when sourcemaps are enabled.
 const minify = Bun.env.CLINE_SOURCEMAPS !== "1";
 
-// Keep published third-party runtime packages external, but bundle internal workspace code.
+// Every declared runtime dependency stays external, @plinycode/shared included:
+// bundling it gave this package its own copy of shared's process-wide state
+// (the token calibration the providers teach and the engine reads), so the
+// engine never saw an observation. scripts/verify-externals.ts checks the
+// output still imports it.
 const external = Object.keys({
 	...(packageJson.dependencies ?? {}),
 	...(packageJson.peerDependencies ?? {}),
-}).filter((name) => !name.startsWith("@plinycode/"));
+});
 
 const builds: Parameters<typeof Bun.build>[0][] = [
 	{

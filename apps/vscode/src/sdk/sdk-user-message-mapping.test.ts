@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	ACT_MODE_CONTINUATION_PROMPT,
+	extractPersistedHookContextChips,
 	extractSdkUserText,
 	isSyntheticSdkUserMessage,
 	isSyntheticUserPrompt,
@@ -341,5 +342,23 @@ describe("extractSdkUserText", () => {
 			}),
 		).toBe("first\nsecond")
 		expect(extractSdkUserText({ role: "user", content: 42 })).toBe("")
+	})
+})
+
+describe("extractPersistedHookContextChips", () => {
+	it("decodes escaped tool names from current and older transcripts", () => {
+		const chip = (toolName: string) =>
+			extractPersistedHookContextChips({
+				role: "user",
+				content: `<hook_context source="PostToolUse" tool_name="${toolName}" tool_call_id="c1">\nnote\n</hook_context>`,
+			})
+		expect(chip("run_commands")).toEqual([{ hookName: "PostToolUse", toolName: "run_commands", status: "completed" }])
+		expect(chip("a&lt;b&quot;c")).toEqual([{ hookName: "PostToolUse", toolName: 'a<b"c', status: "completed" }])
+		// Written before 0.2.4-test.3: `_q_`, `_lt_` and `_gt_` codes are decoded;
+		// the doubled underscore is kept because MCP names carry `__` themselves.
+		expect(chip("a_lt_b_q_c")).toEqual([{ hookName: "PostToolUse", toolName: 'a<b"c', status: "completed" }])
+		expect(chip("plinycode-devops__pr_get")).toEqual([
+			{ hookName: "PostToolUse", toolName: "plinycode-devops__pr_get", status: "completed" },
+		])
 	})
 })

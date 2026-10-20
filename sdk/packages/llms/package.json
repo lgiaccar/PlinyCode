@@ -30,7 +30,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "bun run bun.mts && bun tsc -p tsconfig.build.json",
+		"build": "bun run bun.mts && bun tsc -p tsconfig.build.json && bun run ./scripts/verify-externals.ts",
 		"typecheck": "bun tsc -p tsconfig.dev.json --noEmit",
 		"test": "vitest run",
 		"test:live": "vitest run src/tests/provider-live*.test.ts",

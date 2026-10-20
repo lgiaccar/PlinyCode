@@ -167,18 +167,41 @@ const DANGLING_LAST_WORD =
 
 const THINKING_ALOUD = /(^|[.!?]\s+|\n\s*)(hmm+|wait|actually|okay|ok|so|but|alright|right)\b[,.!:]?\s/gi
 const NARRATING_USER = /\bthe user (wants|asked|said|is asking|keeps|expects|needs)\b/gi
+/** A heading, a table row or a code fence: the reply is a written-up answer. */
+const STRUCTURED_REPLY = /(^|\n)\s*(#{1,6}\s|\|.*\||```)/
+/** The window the thinking-aloud density is measured on, and its unit. */
+const REASONING_WINDOW_CHARS = 3000
+const THINKING_ALOUD_PER_CHARS = 1500
+const THINKING_ALOUD_HITS = 3
+/** A reply this long that ends in a full sentence is an answer, whatever it opens with. */
+const LONG_ANSWER_CHARS = 4000
+const TERMINAL_SENTENCE = /[.!?][)\]"'`*_~]*\s*$/
 
 /**
  * True when a non-thinking model reasoned in prose instead of acting: it
  * argues with itself for several sentences, narrates what "the user wants", or
  * simply trails off mid-sentence.
+ *
+ * A finished answer is never flagged: one with headings, tables or code, one
+ * that ends by asking or offering, or a long one that ends in a full
+ * sentence. The thinking-aloud count is a density on the reply's tail,
+ * because a 20k-character analysis contains three sentence-initial "So" or
+ * "But" without arguing with itself.
  */
 export function looksLikeLeakedReasoning(text: string): boolean {
 	const trimmed = text.trim()
 	if (!trimmed) {
 		return false
 	}
-	if ((trimmed.match(THINKING_ALOUD) ?? []).length >= 3) {
+	if (STRUCTURED_REPLY.test(trimmed) || endsWithHandBack(trimmed)) {
+		return false
+	}
+	if (trimmed.length >= LONG_ANSWER_CHARS && TERMINAL_SENTENCE.test(trimmed)) {
+		return false
+	}
+	const window = trimmed.slice(-REASONING_WINDOW_CHARS)
+	const hits = (window.match(THINKING_ALOUD) ?? []).length
+	if (hits >= THINKING_ALOUD_HITS * Math.max(1, window.length / THINKING_ALOUD_PER_CHARS)) {
 		return true
 	}
 	if ((trimmed.match(NARRATING_USER) ?? []).length >= 2) {
@@ -297,9 +320,33 @@ export interface ShellFailure {
 	exitCode?: number
 	/** Where a detached command keeps writing, when the result said. */
 	logPath?: string
+	/** The result carried nothing but the exit line: no output, no error text. */
+	quiet?: boolean
 }
 
 const SHELL_TOOLS = new Set(["run_commands", "bash", "shell", "execute_command"])
+
+/**
+ * Commands whose exit code 1 means "nothing matched" or "not found", not a
+ * failure: `findstr`, `grep`, `Select-String`, `Get-ChildItem` on a missing
+ * path, `where`, `test`, `git diff --quiet`. The optional `cd …;` prefix the
+ * model likes to add is skipped.
+ */
+const QUERY_COMMAND =
+	/^(?:cd\s+[^;&|]+\s*[;&]+\s*)?(?:(?:findstr|grep|rg|egrep|fgrep|Select-String|sls|Get-ChildItem|gci|where|where\.exe|test|Test-Path|git\s+(?:--no-pager\s+)?diff\s+(?:--[\w-]+\s+)*--quiet)\b)/i
+
+/** True when `command` is a query whose exit code 1 is an answer, not an error. */
+export function isQueryCommand(command: string | undefined): boolean {
+	return Boolean(command) && QUERY_COMMAND.test(command?.trim() ?? "")
+}
+
+/**
+ * A query command that exited 1 without printing anything: no match or no
+ * such file. It is not a failed command and gets no note or reminder.
+ */
+export function isExpectedQueryExit(failure: ShellFailure | undefined): boolean {
+	return failure?.kind === "failed" && failure.exitCode === 1 && failure.quiet === true && isQueryCommand(failure.command)
+}
 
 function resultText(output: unknown): string {
 	if (typeof output === "string") {
@@ -329,11 +376,13 @@ export function shellFailureFromResult(part: AgentToolResultPart): ShellFailure 
 		const command = typeof record?.query === "string" ? record.query : undefined
 		const exit = text.match(/Command exited with code (\d+)/i)
 		if (record?.success === false || part.isError || exit || /\bCommand (failed|timed out)\b/i.test(text)) {
+			const quiet = text.replace(/\[?Command exited with code \d+\]?/gi, "").trim().length === 0
 			return {
 				kind: "failed",
 				tool: part.toolName,
 				...(command ? { command } : {}),
 				...(exit ? { exitCode: Number(exit[1]) } : {}),
+				...(quiet ? { quiet } : {}),
 			}
 		}
 		if (

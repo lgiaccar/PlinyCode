@@ -235,6 +235,7 @@ export function combineUserInstructionConfigServices(
 										filePath: record.filePath,
 									}))
 									.filter((rule) => rule.disabled !== true),
+								{ workspaceRoot: options.workspacePath },
 							),
 					});
 				}

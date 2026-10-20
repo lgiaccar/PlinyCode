@@ -287,6 +287,29 @@ export interface StaleContextPruningOptions {
 	failedToolInputChars: number;
 	/** Strings longer than this inside such an input are replaced. */
 	failedToolInputStringChars: number;
+	/**
+	 * Iterations of the current turn kept verbatim when the model has no
+	 * prompt cache (see `promptCacheAware`): there is no cached prefix to
+	 * protect, so the in-turn rules apply from this close to the newest call.
+	 */
+	uncachedKeepRecentIterations: number;
+	/**
+	 * Without a prompt cache, aged in-turn deliberation before a tool call is
+	 * cut to this head and `currentTurnDeliberationTailChars` of tail (the
+	 * head says what the model set out to do, the tail which step it took).
+	 */
+	currentTurnDeliberationHeadChars: number;
+	currentTurnDeliberationTailChars: number;
+	/**
+	 * Whether the in-turn rules protect a provider's cached prompt prefix by
+	 * advancing in blocks of `iterationBlockSize`. `"auto"` (the default)
+	 * reads the model's `prompt-cache` capability; `false` prunes the current
+	 * turn as soon as a call is `uncachedKeepRecentIterations` old; `true`
+	 * keeps the block scheme whatever the model.
+	 */
+	promptCacheAware?: boolean | "auto";
+	/** Resolved from `promptCacheAware` and the model; set by the resolver. */
+	mode?: "cached" | "uncached";
 }
 
 export interface AgentExecutionConfig {
@@ -670,6 +693,23 @@ export interface AgentPrepareTurnContext {
 	 * can otherwise let the real context grow past the window without triggering.
 	 */
 	previousRequestInputTokens?: number;
+	/**
+	 * The previous request of this run, as the provider counted it and as the
+	 * runtime estimated it (see AgentRuntimePrepareTurnContext.previousRequest).
+	 */
+	previousRequest?: {
+		inputTokens: number;
+		estimatedTokens: number;
+		iteration: number;
+	};
+	/**
+	 * Turns canonical messages into the messages that would be sent (earlier
+	 * turns' reasoning dropped, stale context pruned, provider builders
+	 * applied), so a compacted projection is sized like the request.
+	 */
+	pruneForApi?: (
+		messages: MessageWithMetadata[],
+	) => Promise<MessageWithMetadata[]>;
 	emitStatusNotice?: (
 		message: string,
 		metadata?: Record<string, unknown>,

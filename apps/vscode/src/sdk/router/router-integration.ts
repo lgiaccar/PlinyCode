@@ -66,7 +66,7 @@ import type {
 	RouterRequestFeatures,
 	RouterRules,
 } from "./router-types"
-import { latestUserRequest, type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
+import { isExpectedQueryExit, latestUserRequest, type ShellFailure, shellFailureFromResult } from "./unfinished-turn-guard"
 
 /**
  * What the router did on one call attempt, reported to the session trace
@@ -257,14 +257,20 @@ function continuationPromptFor(error: string): string {
 	)
 }
 
+/**
+ * Shell-result notes per run: the first two failed or detached commands get
+ * one, the rest do not. Each note is a user message that stays in the
+ * transcript, and a run that fails commands in a row (an audit found 159 of
+ * them across 25 sessions) was reading a wall of "fix the problem and rerun
+ * it" instead of the results.
+ */
+const SHELL_NOTES_PER_RUN = 2
+
 /** Model-facing note appended to a failed shell result, so weak models do not stop on it. */
 function failedCommandNote(failure: ShellFailure): string {
 	const what = failure.command ? `The command \`${failure.command.slice(0, 120)}\`` : "The command above"
-	const how = failure.exitCode !== undefined ? ` failed with exit code ${failure.exitCode}` : " failed"
-	return (
-		`[${what}${how}. Do not end your turn now: fix the problem and rerun it. If the failure is expected, ` +
-		"or you are blocked, say so explicitly and ask the user how to proceed.]"
-	)
+	const how = failure.exitCode !== undefined ? ` exited with code ${failure.exitCode}` : " failed"
+	return `[${what}${how}. If that is expected, go on; otherwise fix it before you finish.]`
 }
 
 /** Model-facing note appended to a detached shell result. */
@@ -535,6 +541,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// beforeModel hook, so call log lines can be matched with the session trace.
 	const runPositions = new Map<string, { runId?: string; iteration: number }>()
 	let rootPosition: { runId?: string; iteration: number } | undefined
+	// Shell-result notes sent so far in each agent's current run (SHELL_NOTES_PER_RUN).
+	const shellNotes = new Map<string, { runId?: string; count: number }>()
 	// What the current root turn's sub-agent runs spent, for the root run's log line.
 	let turnSubAgents: { calls: number; usage?: RouterCallLogUsage; costUsd?: number } = { calls: 0 }
 	const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -1160,13 +1168,16 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			if (!freeModelIsAnswering(turnKeyFor(snapshot.agentId, snapshot.parentAgentId))) {
 				return undefined
 			}
-			const failure = shellFailureFromResult({
+			const observed = shellFailureFromResult({
 				type: "tool-result",
 				toolCallId: toolCall.toolCallId,
 				toolName: tool.name,
 				output: result.output,
 				...(result.isError ? { isError: true } : {}),
 			})
+			// `findstr` with no match or `Get-ChildItem` on a missing path exit
+			// 1 and print nothing: an answer, not a failure.
+			const failure = isExpectedQueryExit(observed) ? undefined : observed
 			// Only the root agent's tools feed the completion guard's state.
 			if (!snapshot.parentAgentId) {
 				const run = rootState().run
@@ -1188,6 +1199,13 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			if (!failure) {
 				return undefined
 			}
+			const noteKey = turnKeyFor(snapshot.agentId, snapshot.parentAgentId)
+			const notes = shellNotes.get(noteKey)
+			const count = notes && notes.runId === snapshot.runId ? notes.count : 0
+			if (count >= SHELL_NOTES_PER_RUN) {
+				return undefined
+			}
+			shellNotes.set(noteKey, { runId: snapshot.runId, count: count + 1 })
 			return { appendContext: failure.kind === "failed" ? failedCommandNote(failure) : detachedCommandNote(failure) }
 		},
 		afterRun: ({ snapshot, result }) => {

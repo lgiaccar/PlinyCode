@@ -5,6 +5,7 @@ import {
 	estimateTokens,
 	IMAGE_TOKEN_ESTIMATE,
 	measureRequestForTokenEstimate,
+	type TokenCalibration,
 	tokenCalibration,
 } from "@plinycode/shared";
 import type { AiSdkStreamTotalUsage, AiSdkStreamUsage } from "./vendors/types";
@@ -372,6 +373,14 @@ function calibrationModelIds(request: UsageRequest): string[] {
 		.map((id) => id?.trim())
 		.filter((id): id is string => Boolean(id));
 	return [...new Set(ids)];
+}
+
+/**
+ * The calibration this package teaches: shared's one instance. Exposed so a
+ * host can check it is the same object the engine persists.
+ */
+export function getTokenCalibration(): TokenCalibration {
+	return tokenCalibration;
 }
 
 /** The request's model's learned characters per token, or CHARS_PER_TOKEN. */

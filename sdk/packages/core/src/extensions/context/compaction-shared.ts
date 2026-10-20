@@ -2,12 +2,14 @@ import type { ModelInfo, ToolResultContent } from "@plinycode/llms";
 import {
 	CHARS_PER_TOKEN,
 	estimateTokens,
+	formatDisplayUserInput,
 	type MessageWithMetadata,
 	serializeForTokenEstimate,
 } from "@plinycode/shared";
 
 export { CHARS_PER_TOKEN, estimateTokens };
 
+import { isUserRunMessage } from "../../session/user-run-messages";
 import type { CoreCompactionSummarizerConfig } from "../../types/config";
 import type { ProviderConfig } from "../../types/provider-settings";
 
@@ -24,8 +26,39 @@ export const COMPACTION_TRIGGER_RATIO = 0.9;
  * the budget and compacting every turn.
  */
 export const MAX_INPUT_UNDERESTIMATE_FACTOR = 4;
+/**
+ * Lower bound on the same ratio: a provider that reports only the uncached
+ * part of its input would otherwise loosen the budget below what the
+ * per-model calibration allows.
+ */
+export const MIN_INPUT_UNDERESTIMATE_FACTOR = 0.5;
 export const DEFAULT_TARGET_RATIO = 0.7;
 export const DEFAULT_PRESERVE_RECENT_TOKENS = 20_000;
+/**
+ * Floors on what an automatic compaction leaves for messages. A fixed
+ * overhead (system prompt, tool definitions) of ~20k tokens on a 92k budget
+ * used to leave a target of one token, so one tool pair survived and the
+ * model re-read every file after each compaction.
+ */
+export const MIN_PRESERVE_RECENT_TOKENS = 6_000;
+/** The message target is at least this share of what fits under the trigger. */
+export const MESSAGE_TARGET_FLOOR_RATIO = 0.35;
+/** Longest the original request pinned in a summary can be. */
+export const ORIGINAL_REQUEST_CHAR_LIMIT = 4_000;
+/** The model-written progress section of one compaction. */
+export const SUMMARY_PROGRESS_CHAR_LIMIT = 6_000;
+/** Earlier sections are kept verbatim up to this size, then the oldest are condensed. */
+export const SUMMARY_SECTIONS_CHAR_LIMIT = 12_000;
+/** A condensed block of old sections. */
+export const SUMMARY_CONDENSED_CHAR_LIMIT = 3_000;
+/** Earlier sections never condensed: the newest ones. */
+export const SUMMARY_SECTIONS_KEPT_VERBATIM = 2;
+/** The whole summary message. */
+export const SUMMARY_TEXT_CHAR_LIMIT = 24_000;
+/** File lists in the summary show at most this many paths each. */
+export const SUMMARY_FILES_LIMIT = 60;
+/** Metadata layout written by this version (see CompactionSummaryMetadata). */
+export const SUMMARY_SCHEMA_VERSION = 2;
 // Headroom for the summarizer's output. Raised from 4096: models that reason
 // by default can spend part of a tight budget on thinking and return no
 // summary text at all, which skips compaction entirely. 8192 leaves room for a
@@ -49,18 +82,53 @@ export interface CompactionSummarizerUsage {
 	cacheReadTokens?: number;
 	cacheWriteTokens?: number;
 	totalCost?: number;
+	/** How long the summarizer's call took. */
+	durationMs?: number;
+}
+
+/**
+ * One compaction's model-written progress note, kept verbatim in later
+ * summaries instead of being summarized again (each round of that lost
+ * detail and let the goal drift to the current sub-step).
+ */
+export interface CompactionSummarySection {
+	/** 1-based; a condensed block keeps the number of its oldest section. */
+	span: number;
+	/** The iteration the compaction ran on, when known. */
+	iteration?: number;
+	/** Messages the section stands for. */
+	foldedMessages: number;
+	text: string;
+	generatedAt: number;
+	/** True for a block that condenses several older sections. */
+	condensed?: boolean;
 }
 
 export interface CompactionSummaryMetadata {
 	kind: "compaction_summary";
 	displayRole: "system";
 	userRunSpan: number;
+	/**
+	 * The newest model-written progress note (the "## Progress" section).
+	 * Earlier versions stored the whole summary here; readers of old sidecars
+	 * still get a text.
+	 */
 	summary: string;
 	details: FileOperationSummary;
 	tokensBefore: number;
 	generatedAt: number;
 	/** Kept with the summary so a reopened conversation can show the cost again. */
 	summarizerUsage?: CompactionSummarizerUsage;
+	/** SUMMARY_SCHEMA_VERSION; absent on summaries written before sections existed. */
+	schemaVersion?: number;
+	/** The newest typed prompt, pinned verbatim and reused by later compactions. */
+	originalRequest?: string;
+	/** Earlier progress notes, oldest first; the newest is `summary`. */
+	sections?: CompactionSummarySection[];
+	/** The latest task list the model wrote with update_todo_list, rendered. */
+	todo?: string;
+	/** The newest failed command or edit and the head of its result. */
+	lastFailure?: string;
 }
 
 export type EstimateMessageTokens = (message: MessageWithMetadata) => number;
@@ -274,6 +342,112 @@ export function getCompactionSummaryMetadata(
 		},
 		tokensBefore: Number(metadata.tokensBefore ?? 0),
 		generatedAt: Number(metadata.generatedAt ?? 0),
+		...(typeof metadata.schemaVersion === "number"
+			? { schemaVersion: metadata.schemaVersion }
+			: {}),
+		...(typeof metadata.originalRequest === "string" &&
+		metadata.originalRequest.trim()
+			? { originalRequest: metadata.originalRequest }
+			: {}),
+		...(Array.isArray(metadata.sections)
+			? { sections: parseSummarySections(metadata.sections) }
+			: {}),
+		...(typeof metadata.todo === "string" && metadata.todo.trim()
+			? { todo: metadata.todo }
+			: {}),
+		...(typeof metadata.lastFailure === "string" && metadata.lastFailure.trim()
+			? { lastFailure: metadata.lastFailure }
+			: {}),
+		...(metadata.summarizerUsage && typeof metadata.summarizerUsage === "object"
+			? {
+					summarizerUsage:
+						metadata.summarizerUsage as CompactionSummarizerUsage,
+				}
+			: {}),
+	};
+}
+
+function parseSummarySections(value: unknown[]): CompactionSummarySection[] {
+	const sections: CompactionSummarySection[] = [];
+	for (const entry of value) {
+		if (!entry || typeof entry !== "object") {
+			continue;
+		}
+		const record = entry as Record<string, unknown>;
+		if (typeof record.text !== "string" || !record.text.trim()) {
+			continue;
+		}
+		sections.push({
+			span:
+				typeof record.span === "number" && Number.isFinite(record.span)
+					? record.span
+					: sections.length + 1,
+			...(typeof record.iteration === "number"
+				? { iteration: record.iteration }
+				: {}),
+			foldedMessages:
+				typeof record.foldedMessages === "number" &&
+				Number.isFinite(record.foldedMessages)
+					? record.foldedMessages
+					: 0,
+			text: record.text,
+			generatedAt:
+				typeof record.generatedAt === "number" ? record.generatedAt : 0,
+			...(record.condensed === true ? { condensed: true } : {}),
+		});
+	}
+	return sections;
+}
+
+/**
+ * The sections a new summary carries forward from the previous one: its
+ * earlier sections plus its own progress note as the newest section. An old
+ * summary without sections contributes its whole text as one section.
+ */
+export function carrySummarySections(
+	previous: CompactionSummaryMetadata | undefined,
+): CompactionSummarySection[] {
+	if (!previous) {
+		return [];
+	}
+	const sections = [...(previous.sections ?? [])];
+	const text = previous.summary.trim();
+	if (text) {
+		sections.push({
+			span: (sections.at(-1)?.span ?? 0) + 1,
+			foldedMessages: 0,
+			text,
+			generatedAt: previous.generatedAt,
+		});
+	}
+	return sections;
+}
+
+export function sectionsCharLength(
+	sections: readonly CompactionSummarySection[],
+): number {
+	return sections.reduce((total, section) => total + section.text.length, 0);
+}
+
+/**
+ * The sections to condense into one block when the earlier summaries have
+ * grown past SUMMARY_SECTIONS_CHAR_LIMIT: all but the newest
+ * SUMMARY_SECTIONS_KEPT_VERBATIM, or none when the rest are already within
+ * the limit.
+ */
+export function selectSectionsToCondense(
+	sections: readonly CompactionSummarySection[],
+): { condense: CompactionSummarySection[]; keep: CompactionSummarySection[] } {
+	if (
+		sectionsCharLength(sections) <= SUMMARY_SECTIONS_CHAR_LIMIT ||
+		sections.length <= SUMMARY_SECTIONS_KEPT_VERBATIM + 1
+	) {
+		return { condense: [], keep: [...sections] };
+	}
+	const split = sections.length - SUMMARY_SECTIONS_KEPT_VERBATIM;
+	return {
+		condense: sections.slice(0, split),
+		keep: sections.slice(split),
 	};
 }
 
@@ -289,11 +463,19 @@ export function isToolResultOnlyUserMessage(
 	);
 }
 
+/**
+ * A message the user typed. The runtime's own user-role messages (completion
+ * reminders, loop notices, hook context, continuation prompts) carry
+ * userRunSpan 0 or a synthetic kind and are not turn starts: they used to
+ * move the cut and be taken for the newest request the summary's goal is
+ * written from.
+ */
 export function isTurnStartMessage(message: MessageWithMetadata): boolean {
 	return (
 		message.role === "user" &&
 		!isToolResultOnlyUserMessage(message) &&
-		!isCompactionSummaryMessage(message)
+		!isCompactionSummaryMessage(message) &&
+		isUserRunMessage(message)
 	);
 }
 
@@ -320,7 +502,19 @@ export function findLastTurnStartIndex(
 }
 
 /** Longest part of the newest typed prompt the summarizer is shown. */
-const LATEST_REQUEST_CHAR_LIMIT = 4_000;
+const LATEST_REQUEST_CHAR_LIMIT = ORIGINAL_REQUEST_CHAR_LIMIT;
+
+function typedMessageText(message: MessageWithMetadata): string {
+	const text =
+		typeof message.content === "string"
+			? message.content
+			: message.content
+					.flatMap((block) => (block.type === "text" ? [block.text] : []))
+					.join("\n");
+	// Without the editor-state and mode-notice blocks the host appends, and
+	// without the <user_input mode> wrapper.
+	return formatDisplayUserInput(text).trim();
+}
 
 /**
  * The text of the newest message the user typed, or undefined when there is
@@ -336,14 +530,32 @@ export function extractLatestUserRequest(
 	if (!message || !isTurnStartMessage(message)) {
 		return undefined;
 	}
-	const text =
-		typeof message.content === "string"
-			? message.content
-			: message.content
-					.flatMap((block) => (block.type === "text" ? [block.text] : []))
-					.join("\n");
-	const trimmed = text.trim();
+	const trimmed = typedMessageText(message);
 	return trimmed ? truncateText(trimmed, LATEST_REQUEST_CHAR_LIMIT) : undefined;
+}
+
+/**
+ * The request the summary's goal is written from: the newest typed prompt in
+ * `messages`, or, once that prompt has itself been folded into a summary (a
+ * single task followed by a long tool loop), the request the previous summary
+ * pinned. Without the fallback every later summary had only the "may be
+ * stale" previous goal to go on, and the goal narrowed to the current step.
+ */
+export function extractOriginalRequest(
+	messages: MessageWithMetadata[],
+): string | undefined {
+	const latest = extractLatestUserRequest(messages);
+	if (latest) {
+		return latest;
+	}
+	const summaryIndex = findLatestSummaryIndex(messages);
+	if (summaryIndex < 0) {
+		return undefined;
+	}
+	const pinned = getCompactionSummaryMetadata(
+		messages[summaryIndex],
+	)?.originalRequest?.trim();
+	return pinned ? truncateText(pinned, LATEST_REQUEST_CHAR_LIMIT) : undefined;
 }
 
 export function findLastAssistantIndex(
@@ -451,16 +663,36 @@ export function collectPaths(value: unknown): string[] {
 	return [];
 }
 
+/**
+ * The key two spellings of one file share: Windows paths (a drive letter, or
+ * any path on win32) compare without case and with one separator, so
+ * `D:\\x\\a.h` and `d:/x/a.h` are one entry. Other paths compare as they are.
+ */
+function filePathKey(path: string): string {
+	const windowsLike =
+		/^[a-z]:[\\/]/i.test(path) || process.platform === "win32";
+	return windowsLike ? path.toLowerCase().replace(/\//g, "\\") : path;
+}
+
 export function mergeUnique(base: string[], next: Iterable<string>): string[] {
-	const seen = new Set(base);
+	const byKey = new Map<string, string>();
+	for (const value of base) {
+		const trimmed = value.trim();
+		if (trimmed && !byKey.has(filePathKey(trimmed))) {
+			byKey.set(filePathKey(trimmed), trimmed);
+		}
+	}
 	for (const value of next) {
 		const trimmed = value.trim();
 		if (!trimmed) {
 			continue;
 		}
-		seen.add(trimmed);
+		const key = filePathKey(trimmed);
+		if (!byKey.has(key)) {
+			byKey.set(key, trimmed);
+		}
 	}
-	return [...seen].sort((a, b) => a.localeCompare(b));
+	return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
 
 export function extractFileOps(
@@ -686,16 +918,47 @@ export function formatToolActivitySummary(
 	].join("\n\n");
 }
 
+function renderPathList(paths: string[]): string {
+	if (paths.length === 0) {
+		return "- none";
+	}
+	const shown = paths.slice(0, SUMMARY_FILES_LIMIT).map((path) => `- ${path}`);
+	if (paths.length > SUMMARY_FILES_LIMIT) {
+		shown.push(`- ... and ${paths.length - SUMMARY_FILES_LIMIT} more`);
+	}
+	return shown.join("\n");
+}
+
 export function renderFilesSection(fileOps: FileOperationSummary): string {
-	const readLines =
-		fileOps.readFiles.length > 0
-			? fileOps.readFiles.map((path) => `- ${path}`).join("\n")
-			: "- none";
-	const modifiedLines =
-		fileOps.modifiedFiles.length > 0
-			? fileOps.modifiedFiles.map((path) => `- ${path}`).join("\n")
-			: "- none";
-	return `## Files\nRead:\n${readLines}\nModified:\n${modifiedLines}`;
+	return `## Files\nRead:\n${renderPathList(fileOps.readFiles)}\nModified:\n${renderPathList(fileOps.modifiedFiles)}`;
+}
+
+/**
+ * The model-written part of a summary without the sections the host renders
+ * itself (`## Files`, `## Goal`, `## Original request`): a model that writes
+ * them anyway would duplicate the pinned request and the file lists.
+ */
+export function stripHostRenderedSections(summary: string): string {
+	const lines = summary.split("\n");
+	const kept: string[] = [];
+	let skipping = false;
+	for (const line of lines) {
+		const heading = /^\s*#{1,3}\s+(.+?)\s*$/.exec(line);
+		if (heading) {
+			const title = heading[1].toLowerCase();
+			skipping =
+				/^(files|goal|original request|task list|last failure|earlier (summaries|work))\b/.test(
+					title,
+				);
+			if (skipping) {
+				continue;
+			}
+		}
+		if (!skipping) {
+			kept.push(line);
+		}
+	}
+	return kept.join("\n").trim();
 }
 
 export function ensureFilesSection(
@@ -709,47 +972,78 @@ export function ensureFilesSection(
 }
 
 export function buildSummaryRequest(options: {
+	/** Older progress notes, kept for reference; the model does not rewrite them. */
 	previousSummary?: string;
 	conversationText: string;
 	fileOps: FileOperationSummary;
 	/** The newest message the user typed, even when it is outside the span. */
 	latestUserRequest?: string;
+	/** The model's own task list, as last written with update_todo_list. */
+	todo?: string;
+	/** The newest failed command or edit in the span, with the head of its result. */
+	lastFailure?: string;
 }): string {
 	const parts: string[] = [
-		`Summarize this session for continuation. Be concise and factual.
-
-## Goal
-One sentence: what the user's newest request asks for. Write it from the "Newest user request" below when there is one. A goal in the previous summary that the newest request replaced or narrowed is dropped, not repeated.
+		`Summarize the conversation below for continuation. Be concise and factual. Write only these three sections, about the conversation below (the newest span of work); earlier spans are already summarized under "Earlier summaries" and must not be restated.
 
 ## State
-- Done: only steps whose result you can see in the conversation (a tool result, a passing run, an edited file). Anything the previous summary calls done that this conversation does not show goes under "Unverified" instead.
+- Done: only steps whose result you can see in the conversation (a tool result, a passing run, an edited file). Anything an earlier summary calls done that this conversation does not show goes under "Unverified" instead.
 - In Progress: current work
 - Blocked: blockers or open questions, including failing tests or builds that are still failing
 - Unverified: claims you could not confirm (omit if none)
 
 ## Highlights
-Key technical choices or notable findings (omit if none).
+Key technical choices, findings, and exact error messages still to fix (omit if none).
 
 ## Next
-Immediate next steps.
+Immediate next steps towards the original request, in order.
 
-## Files
-Read: ${options.fileOps.readFiles.join(", ") || "none"}
-Edited: ${options.fileOps.modifiedFiles.join(", ") || "none"}`,
+Do not write a Goal, Files or Task list section, and do not list file paths: the host adds the original request, the task list and the files itself.`,
 	];
 
 	if (options.latestUserRequest?.trim()) {
-		parts.push(`Newest user request:\n${options.latestUserRequest.trim()}`);
+		parts.push(
+			`Original request (the goal; later user messages win):\n${options.latestUserRequest.trim()}`,
+		);
+	}
+
+	if (options.todo?.trim()) {
+		parts.push(
+			`Task list (as the assistant last wrote it):\n${options.todo.trim()}`,
+		);
+	}
+
+	if (options.lastFailure?.trim()) {
+		parts.push(`Newest failed command or edit:\n${options.lastFailure.trim()}`);
 	}
 
 	if (options.previousSummary?.trim()) {
 		parts.push(
-			`Previous summary (may be stale; the newest user request wins):\n${options.previousSummary.trim()}`,
+			`Earlier summaries (for reference; do not restate them):\n${options.previousSummary.trim()}`,
 		);
 	}
 
 	parts.push(`Conversation:\n${options.conversationText || "(empty)"}`);
 
+	return parts.join("\n\n");
+}
+
+/** The request that condenses old summary sections into one block. */
+export function buildCondenseRequest(options: {
+	sections: readonly CompactionSummarySection[];
+	originalRequest?: string;
+}): string {
+	const parts = [
+		`Condense these earlier progress notes of a coding session into one note of at most ${SUMMARY_CONDENSED_CHAR_LIMIT} characters. Keep: what was done and verified, decisions and their reasons, exact error messages that were still unresolved, and anything marked Unverified. Drop repetition and steps that later notes superseded. Write plain markdown bullets, no headings.`,
+	];
+	if (options.originalRequest?.trim()) {
+		parts.push(`Original request:\n${options.originalRequest.trim()}`);
+	}
+	parts.push(
+		`Notes, oldest first:\n${options.sections
+			.map((section) => `### Span ${section.span}\n${section.text.trim()}`)
+			.join("\n\n")}`,
+	);
 	return parts.join("\n\n");
 }
 
@@ -816,32 +1110,167 @@ export function resolveSummarizerConfig(options: {
 	});
 }
 
+function renderSectionHeading(section: CompactionSummarySection): string {
+	const where =
+		section.iteration !== undefined ? `iteration ${section.iteration}` : "";
+	const size =
+		section.foldedMessages > 0 ? `${section.foldedMessages} messages` : "";
+	const detail = [where, size].filter(Boolean).join(", ");
+	const label = section.condensed
+		? `Spans up to ${section.span} (condensed)`
+		: `Span ${section.span}`;
+	return detail ? `### ${label} (${detail})` : `### ${label}`;
+}
+
+/**
+ * The text of a summary message. Everything but `progress` is rendered by
+ * code: the pinned request, the task list, the earlier sections verbatim,
+ * the newest failure and the file lists. The whole text is capped.
+ */
+export function renderSummaryText(options: {
+	/** Rendered only when the prompt itself is no longer in the request. */
+	originalRequest?: string;
+	todo?: string;
+	progress: string;
+	sections: readonly CompactionSummarySection[];
+	lastFailure?: string;
+	fileOps: FileOperationSummary;
+}): string {
+	const parts: string[] = ["Context summary:"];
+	if (options.originalRequest?.trim()) {
+		parts.push(
+			`## Original request\n${truncateText(options.originalRequest.trim(), ORIGINAL_REQUEST_CHAR_LIMIT)}`,
+		);
+	}
+	if (options.todo?.trim()) {
+		parts.push(`## Task list\n${options.todo.trim()}`);
+	}
+	parts.push(
+		`## Progress\n${truncateText(options.progress.trim(), SUMMARY_PROGRESS_CHAR_LIMIT)}`,
+	);
+	if (options.sections.length > 0) {
+		parts.push(
+			`## Earlier summaries\n${options.sections
+				.map(
+					(section) =>
+						`${renderSectionHeading(section)}\n${section.text.trim()}`,
+				)
+				.join("\n\n")}`,
+		);
+	}
+	if (options.lastFailure?.trim()) {
+		parts.push(`## Last failure\n${options.lastFailure.trim()}`);
+	}
+	parts.push(renderFilesSection(options.fileOps));
+	parts.push(
+		"The user's messages after this summary take precedence over the request above.",
+	);
+	const text = parts.join("\n\n");
+	return text.length > SUMMARY_TEXT_CHAR_LIMIT
+		? `${truncateText(text, SUMMARY_TEXT_CHAR_LIMIT - 120)}\n\nThe user's messages after this summary take precedence over the request above.`
+		: text;
+}
+
 export function buildSummaryMessage(options: {
+	/** The newest model-written progress note. */
 	summary: string;
 	fileOps: FileOperationSummary;
 	tokensBefore: number;
 	userRunSpan: number;
 	summarizerUsage?: CompactionSummarizerUsage;
+	originalRequest?: string;
+	/**
+	 * Whether the request is written into the text. While the typed prompt
+	 * is still in the preserved tail it is not repeated; the metadata keeps
+	 * it for the compaction that folds the prompt.
+	 */
+	renderOriginalRequest?: boolean;
+	sections?: CompactionSummarySection[];
+	todo?: string;
+	lastFailure?: string;
 }): MessageWithMetadata {
+	const sections = options.sections ?? [];
+	const progress = truncateText(
+		options.summary.trim(),
+		SUMMARY_PROGRESS_CHAR_LIMIT,
+	);
 	return {
 		role: "user",
 		content: [
 			{
 				type: "text",
-				text: `Context summary:\n\n${options.summary}\n\nThe user's messages after this summary take precedence over the goal above.`,
+				text: renderSummaryText({
+					originalRequest:
+						options.renderOriginalRequest === false
+							? undefined
+							: options.originalRequest,
+					todo: options.todo,
+					progress,
+					sections,
+					lastFailure: options.lastFailure,
+					fileOps: options.fileOps,
+				}),
 			},
 		],
 		metadata: {
 			kind: "compaction_summary",
 			displayRole: "system",
 			userRunSpan: options.userRunSpan,
-			summary: options.summary,
+			summary: progress,
 			details: options.fileOps,
 			tokensBefore: options.tokensBefore,
 			generatedAt: Date.now(),
+			schemaVersion: SUMMARY_SCHEMA_VERSION,
+			...(options.originalRequest?.trim()
+				? { originalRequest: options.originalRequest.trim() }
+				: {}),
+			...(sections.length > 0 ? { sections } : {}),
+			...(options.todo?.trim() ? { todo: options.todo.trim() } : {}),
+			...(options.lastFailure?.trim()
+				? { lastFailure: options.lastFailure.trim() }
+				: {}),
 			...(options.summarizerUsage
 				? { summarizerUsage: options.summarizerUsage }
 				: {}),
 		} satisfies CompactionSummaryMetadata,
 	};
+}
+
+/**
+ * Copies of `messages` with tool results and file blocks cut to what the
+ * summarizer is sent (serializeMessage applies the same limits), so the
+ * summary input budget is sized on that text rather than on the full
+ * results. Messages without such blocks are returned as they are.
+ */
+export function truncateToolResultsForSummary(
+	messages: readonly MessageWithMetadata[],
+): MessageWithMetadata[] {
+	return messages.map((message) => {
+		if (!Array.isArray(message.content)) {
+			return message;
+		}
+		let changed = false;
+		const content = message.content.map((block) => {
+			if (block.type === "tool_result") {
+				const truncated = truncateToolResultContentForCompaction(block.content);
+				if (truncated !== block.content) {
+					changed = true;
+					return { ...block, content: truncated };
+				}
+				return block;
+			}
+			if (
+				block.type === "file" &&
+				block.content.length > FILE_CONTENT_CHAR_LIMIT
+			) {
+				changed = true;
+				return {
+					...block,
+					content: truncateText(block.content, FILE_CONTENT_CHAR_LIMIT),
+				};
+			}
+			return block;
+		});
+		return changed ? { ...message, content } : message;
+	});
 }

@@ -263,7 +263,7 @@ export function createReadFilesTool(
 		name: "read_files",
 		description:
 			"Read the content of text or image files at the provided absolute paths, or return only an inclusive one-based line range when start_line/end_line are provided on the same file entry as its path. " +
-			"When you already know multiple files you need, read them together in one call, and call this tool in the same response as other independent tool calls. " +
+			"Several files can go in one call. " +
 			`Each read returns at most ${MAX_READ_LINES} lines / ~${Math.round(MAX_READ_OUTPUT_CHARS / 1024)}k characters; longer files report their total line count, page through them with start_line/end_line on that file's entry. ` +
 			`One call returns at most ~${Math.round(MAX_READ_CALL_CHARS / 1024)}k characters across its files; read large files in separate calls. ` +
 			"Binary files that are not image and large files are not supported. " +
@@ -367,7 +367,7 @@ export function createSearchTool(
 		name: "search_codebase",
 		description:
 			"Perform regex pattern searches across the codebase. " +
-			"Supports multiple parallel searches. When several search patterns could be useful and do not depend on each other, run them together in one call, and call this tool in the same response as other independent tool calls. " +
+			"Several independent patterns can go in one call. " +
 			"Use for finding code patterns, function definitions, class names, imports, etc. " +
 			"Matching is case-insensitive. Each result shows the matching line, marked `>`, with the lines around it. " +
 			"Set `path` to search one directory or file, and `glob` to limit the file names; a whole-workspace search shows only the first matches in each file, and a search of a single file shows them all. " +
@@ -470,7 +470,7 @@ export function buildRunCommandsDescription(
 			`Write commands directly; do not wrap them in another ${wrapper} invocation. ` +
 			"Only start another shell when you intentionally need a different shell or a separate process. " +
 			longRunning +
-			"Include multiple commands in the same call when they are independent and safe to run concurrently. When independent reads, searches, or edits are also needed, call those tools in the same response."
+			"Independent commands can go in one call."
 		);
 	}
 
@@ -484,7 +484,7 @@ export function buildRunCommandsDescription(
 		"Run non-interactive shell commands from the root of the workspace. " +
 		RUN_COMMANDS_SHARED_INSTRUCTIONS +
 		environmentNote +
-		"Commands should be properly shell-escaped and targeted to avoid error or timeout. Include multiple commands in the same call when they are independent complete shell commands and safe to run concurrently; multiline scripts and heredocs must be a single command string. When independent reads, searches, or edits are also needed, call those tools in the same response. " +
+		"Commands should be properly shell-escaped and targeted to avoid error or timeout. Independent complete shell commands can go in one call; a multiline script or heredoc must be a single command string. " +
 		`Output beyond ~${Math.round(MAX_COMMAND_OUTPUT_CHARS / 1000)}k characters is middle-truncated (start and end preserved); pipe through grep/head/tail when you need specific sections of large output. ` +
 		(longRunningNote ??
 			"For long-running commands, run them in background and redirect output to a tmp file that you can read from later.")
@@ -647,7 +647,7 @@ export function createWebFetchTool(
 		description:
 			"Fetch content from URLs and analyze them using the provided prompts. " +
 			"Use for retrieving documentation, API references, or any web content. " +
-			"Each request includes a URL and a prompt describing what information to extract. Fetch independent URLs together in one call, and call this tool in the same response as other independent tool calls.",
+			"Each request includes a URL and a prompt describing what information to extract; several URLs can go in one call.",
 		inputSchema: zodToJsonSchema(FetchWebContentInputSchema),
 		timeoutMs: timeoutMs * 2,
 		retryable: true,
@@ -793,7 +793,7 @@ export function createEditorTool(
 			"Provide `insert_line` to insert `new_text` at a specific line number. " +
 			"Otherwise, the tool replaces `old_text` with `new_text`, or creates the file with `new_text` if file does not exist. " +
 			"`old_text` must match one place in the file; set `replace_all` to replace every occurrence instead. " +
-			"Use this tool for making small, precise edits to existing files or creating new files over shell commands. If several edits to different files or non-overlapping regions are already known, emit multiple editor tool calls in the same response instead of serializing them across turns.",
+			"Use this tool for small, precise edits to existing files or for creating new files, rather than shell commands.",
 
 		inputSchema: zodToJsonSchema(EditFileInputSchema),
 		timeoutMs,
@@ -839,7 +839,7 @@ export function createEditorTool(
 }
 
 /** Longest skill description carried into the tool description. */
-const SKILL_DESCRIPTION_MAX_CHARS = 160;
+const SKILL_DESCRIPTION_MAX_CHARS = 100;
 
 /**
  * `name (what it does)` for the tool description. A bare name list left the
@@ -931,6 +931,9 @@ export function createSkillsTool(
 	return tool;
 }
 
+export const ASK_QUESTION_OPTIONS_ERROR =
+	"options must be an array of 2 to 5 short strings";
+
 /**
  * Create the ask_question tool
  *
@@ -951,6 +954,17 @@ export function createAskQuestionTool(
 		retryable: false,
 		maxRetries: 0,
 		execute: async (input, context) => {
+			// Checked before zod: zod applies the array's item bounds to a
+			// string's length ("expected string to have <=5 characters"), which
+			// sent one model shortening its options five times instead of
+			// fixing the type.
+			const options =
+				input !== null && typeof input === "object"
+					? (input as { options?: unknown }).options
+					: undefined;
+			if (!Array.isArray(options)) {
+				throw new Error(ASK_QUESTION_OPTIONS_ERROR);
+			}
 			const validatedInput = validateWithZod(AskQuestionInputSchema, input);
 			return executor(validatedInput.question, validatedInput.options, context);
 		},

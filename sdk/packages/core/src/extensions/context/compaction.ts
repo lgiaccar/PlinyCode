@@ -8,6 +8,7 @@ import {
 	projectSessionCompactionState,
 	type SessionCompactionState,
 } from "../../session/models/session-compaction";
+import { isUserRunMessage } from "../../session/user-run-messages";
 import type {
 	CoreCompactionConfig,
 	CoreCompactionContext,
@@ -27,6 +28,9 @@ import {
 	DEFAULT_TARGET_RATIO,
 	findLatestSummaryIndex,
 	MAX_INPUT_UNDERESTIMATE_FACTOR,
+	MESSAGE_TARGET_FLOOR_RATIO,
+	MIN_INPUT_UNDERESTIMATE_FACTOR,
+	MIN_PRESERVE_RECENT_TOKENS,
 	resolveEffectiveMaxInputTokens,
 } from "./compaction-shared";
 
@@ -55,6 +59,26 @@ export interface ContextPipelinePrepareTurnInput {
 	 * compaction. See AgentPrepareTurnContext.previousRequestInputTokens.
 	 */
 	previousRequestInputTokens?: number;
+	/**
+	 * The previous request's provider-reported and estimated sizes. The ratio
+	 * of the two says how far the estimate was off for this conversation's
+	 * content and scales the budget; see AgentPrepareTurnContext.previousRequest.
+	 */
+	previousRequest?: {
+		inputTokens: number;
+		estimatedTokens: number;
+		iteration: number;
+	};
+	/**
+	 * Turns canonical messages into what would be sent: reasoning of earlier
+	 * turns dropped, stale context pruned, provider message builders applied.
+	 * The state-aware wrapper sizes a compacted projection with it, so the
+	 * trigger and the result check see the pruned request, as they do before
+	 * the first compaction (session-runtime-orchestrator.ts).
+	 */
+	pruneForApi?: (
+		messages: CoreCompactionContext["messages"],
+	) => Promise<CoreCompactionContext["messages"]>;
 	emitStatusNotice?: (
 		message: string,
 		metadata?: Record<string, unknown>,
@@ -93,6 +117,46 @@ export interface ContextCompactionPrepareTurnOptions {
 }
 
 const LONG_CONVERSATION_TARGET_RATIO = 0.5;
+
+/** Iterations a session rests after a compaction that did not shrink the request. */
+const INEFFECTIVE_COMPACTION_COOLDOWN_ITERATIONS = 6;
+/** A compaction must save at least this share of the request to be kept. */
+const MIN_COMPACTION_GAIN_RATIO = 0.1;
+/**
+ * The gain check applies from this request size on: below it the summary
+ * message's own headings outweigh what was folded, which says nothing about
+ * whether compacting helps.
+ */
+const MIN_GAIN_CHECK_REQUEST_TOKENS = 2_000;
+
+/**
+ * How much of the recent transcript the agentic strategy keeps verbatim: the
+ * configured amount (20k tokens by default), but never more than the message
+ * target, and never less than a floor that keeps the working set usable when
+ * a large fixed overhead (system prompt, tools) eats most of the budget. A
+ * configured 0 (the imported-history policy) stays 0.
+ */
+export function resolvePreserveRecentTokens(
+	configured: number | undefined,
+	messageTargetTokens: number,
+): number {
+	const requested = configured ?? DEFAULT_PRESERVE_RECENT_TOKENS;
+	return Math.max(
+		0,
+		Math.min(
+			requested,
+			Math.max(
+				MIN_PRESERVE_RECENT_TOKENS,
+				Math.floor(messageTargetTokens * 0.5),
+			),
+			messageTargetTokens,
+		),
+	);
+}
+
+function formatTokens(value: number): string {
+	return `${(value / 1000).toFixed(1)}k`;
+}
 
 function isCompactionCancellation(
 	error: unknown,
@@ -171,8 +235,8 @@ const BUILTIN_COMPACTION_STRATEGIES = {
 			context,
 			providerConfig,
 			summarizer: compaction?.summarizer,
-			preserveRecentTokens: Math.min(
-				compaction?.preserveRecentTokens ?? DEFAULT_PRESERVE_RECENT_TOKENS,
+			preserveRecentTokens: resolvePreserveRecentTokens(
+				compaction?.preserveRecentTokens,
 				context.budget.messages.targetTokens,
 			),
 			estimateMessageTokens,
@@ -206,10 +270,10 @@ function resolveAutoRequestTargetTokens(input: {
 	maxInputTokens: number;
 	modelMaxTokens?: number;
 	triggerTokens: number;
-	messagePairCount: number;
+	typedTurnCount: number;
 }): number {
 	const targetTokens =
-		input.messagePairCount >= 5 &&
+		input.typedTurnCount >= 5 &&
 		typeof input.modelMaxTokens === "number" &&
 		Number.isFinite(input.modelMaxTokens) &&
 		input.modelMaxTokens < input.maxInputTokens
@@ -256,20 +320,37 @@ function translateRequestBudgetToMessages(
 	return Math.max(1, Math.floor(requestTokens - overheadTokens));
 }
 
-function countUserAssistantPairs(
-	messages: CoreCompactionContext["messages"],
-): number {
-	let pairs = 0;
-	let hasPendingUser = false;
+/**
+ * The message target of an automatic compaction: the request target less the
+ * overhead, but never below a floor (a share of what messages may occupy at
+ * the trigger) and never above what fits under the trigger. Without the floor, a 20k-token overhead on a small
+ * budget left a target of one token, and only the last tool pair survived.
+ */
+export function resolveAutoMessageTargetTokens(input: {
+	requestTargetTokens: number;
+	overheadTokens: number;
+	messageTriggerTokens: number;
+}): number {
+	const ceiling = Math.max(1, input.messageTriggerTokens - 1);
+	const floor = Math.min(
+		ceiling,
+		Math.floor(input.messageTriggerTokens * MESSAGE_TARGET_FLOOR_RATIO),
+	);
+	const requested = Math.floor(
+		input.requestTargetTokens - input.overheadTokens,
+	);
+	return Math.max(floor, Math.min(requested, ceiling));
+}
+
+/** Typed prompts in the transcript; tool loops do not make a conversation long. */
+function countTypedTurns(messages: CoreCompactionContext["messages"]): number {
+	let count = 0;
 	for (const message of messages) {
-		if (message.role === "user") {
-			hasPendingUser = true;
-		} else if (message.role === "assistant" && hasPendingUser) {
-			pairs += 1;
-			hasPendingUser = false;
+		if (message.role === "user" && isUserRunMessage(message)) {
+			count += 1;
 		}
 	}
-	return pairs;
+	return count;
 }
 
 /**
@@ -309,6 +390,9 @@ export function createContextCompactionPrepareTurn(
 	const mode = options.mode ?? "auto";
 	const configuredStrategy: "basic" | "agentic" | "custom" =
 		userCompaction?.compact ? "custom" : strategy;
+	// One prepareTurn serves the lead agent and every sub-agent of a session,
+	// so the rest after an ineffective compaction is kept per agent.
+	const cooldowns = new Map<string, { untilIteration: number }>();
 
 	return async (context) => {
 		const effectiveMode: CoreCompactionMode = context.overflowRecovery
@@ -351,20 +435,33 @@ export function createContextCompactionPrepareTurn(
 		//   a model without enough observations. Below 1 it loosens the budget
 		//   for a model whose tokenizer packs more characters per token than 3.
 		// - underestimateFactor: the provider's actual count for the PREVIOUS
-		//   request over our estimate for the (larger) current transcript. Direct
-		//   evidence from this conversation that dense content (disassembly,
-		//   image dumps, minified sources) is under-counted, which the per-model
-		//   average lags behind.
-		// The scale is capped so a tiny estimate cannot collapse the budget.
-		const actualPreviousInputTokens =
-			typeof context.previousRequestInputTokens === "number" &&
-			context.previousRequestInputTokens > 0
-				? context.previousRequestInputTokens
-				: 0;
-		const underestimateFactor =
-			actualPreviousInputTokens > 0 && requestInputTokens > 0
-				? actualPreviousInputTokens / requestInputTokens
-				: 0;
+		//   request over our estimate for THAT request. Direct evidence from
+		//   this conversation that dense content (disassembly, image dumps,
+		//   minified sources) is under-counted, which the per-model average lags
+		//   behind. It used to divide the previous count by the CURRENT
+		//   estimate, which made the trigger "previous count >= limit" whatever
+		//   the current request held: right after a compaction the estimate
+		//   shrank, the old count did not, and compaction fired again on every
+		//   call until only the last tool pair was left.
+		// The scale is capped so a tiny estimate cannot collapse the budget, and
+		// floored so a provider that counts only uncached input cannot loosen it.
+		const previousRequest =
+			context.previousRequest &&
+			context.previousRequest.inputTokens >= 1_000 &&
+			context.previousRequest.estimatedTokens > 0
+				? context.previousRequest
+				: undefined;
+		const actualPreviousInputTokens = previousRequest?.inputTokens ?? 0;
+		const previousEstimatedTokens = previousRequest?.estimatedTokens ?? 0;
+		const underestimateFactor = previousRequest
+			? Math.min(
+					MAX_INPUT_UNDERESTIMATE_FACTOR,
+					Math.max(
+						MIN_INPUT_UNDERESTIMATE_FACTOR,
+						previousRequest.inputTokens / previousRequest.estimatedTokens,
+					),
+				)
+			: 0;
 		const calibrationFactor =
 			CHARS_PER_TOKEN /
 			tokenCalibration.charsPerToken(context.model.id || config.modelId);
@@ -384,33 +481,64 @@ export function createContextCompactionPrepareTurn(
 		// Equivalent to comparing the provider's actual count against the unscaled
 		// trigger, because the budget above already carries the ratio.
 		const shouldCompact = requestInputTokens >= requestTriggerTokens;
-		config.logger?.debug("Context compaction diagnostics", {
-			mode: effectiveMode,
-			strategy,
-			iteration: context.iteration,
-			providerId: config.providerId,
-			modelId: config.modelId,
-			requestInputTokens,
-			apiMessageTokens,
-			messageInputTokens,
-			requestOverheadTokens,
-			maxInputTokens,
-			rawMaxInputTokens,
-			actualPreviousInputTokens,
+		const cooldown = cooldowns.get(context.agentId);
+		// The rest holds past the hard limit too: the last attempt showed that
+		// compacting cannot shrink this request, and a summarizer call per
+		// iteration would change nothing. A rejected request gets overflow
+		// recovery, which bypasses the rest.
+		const inCooldown =
+			effectiveMode === "auto" &&
+			cooldown !== undefined &&
+			context.iteration < cooldown.untilIteration;
+		const calibrationCharsPerToken = tokenCalibration.charsPerToken(
+			context.model.id || config.modelId,
+		);
+		const factors = {
+			previousInputTokens: actualPreviousInputTokens,
+			previousEstimatedTokens,
+			previousIteration: previousRequest?.iteration,
 			underestimateFactor,
+			calibrationCharsPerToken,
 			calibrationFactor,
 			budgetScale,
-			requestTriggerTokens,
-			messageTriggerTokens,
-			thresholdRatio,
-			shouldCompact,
-			messageCount: context.messages.length,
-			apiMessageCount: context.apiMessages.length,
-			apiMessagesJsonChars: safeJsonSize(context.apiMessages),
-			...summarizeToolResults(context.apiMessages),
-		});
-		if (effectiveMode === "auto" && !shouldCompact) {
+		};
+		// The numbers go in the message itself: the host's log file keeps only
+		// the message unless it runs verbose, and these are what a drifting
+		// session needs explained.
+		config.logger?.debug(
+			`Context compaction diagnostics: E=${formatTokens(requestInputTokens)} T=${formatTokens(requestTriggerTokens)} O=${formatTokens(requestOverheadTokens)} P=${formatTokens(actualPreviousInputTokens)}/E_prev=${formatTokens(previousEstimatedTokens)} scale=${budgetScale.toFixed(2)} -> ${inCooldown ? "cooldown" : shouldCompact ? "compact" : "no"}`,
+			{
+				mode: effectiveMode,
+				strategy,
+				iteration: context.iteration,
+				providerId: config.providerId,
+				modelId: config.modelId,
+				requestInputTokens,
+				apiMessageTokens,
+				messageInputTokens,
+				requestOverheadTokens,
+				maxInputTokens,
+				rawMaxInputTokens,
+				...factors,
+				requestTriggerTokens,
+				messageTriggerTokens,
+				thresholdRatio,
+				shouldCompact,
+				inCooldown,
+				messageCount: context.messages.length,
+				apiMessageCount: context.apiMessages.length,
+				apiMessagesJsonChars: safeJsonSize(context.apiMessages),
+				...summarizeToolResults(context.apiMessages),
+			},
+		);
+		if (effectiveMode === "auto" && (!shouldCompact || inCooldown)) {
 			return undefined;
+		}
+		if (
+			cooldown !== undefined &&
+			context.iteration >= cooldown.untilIteration
+		) {
+			cooldowns.delete(context.agentId);
 		}
 		let requestTargetTokens: number;
 		let messageTargetTokens: number;
@@ -419,12 +547,13 @@ export function createContextCompactionPrepareTurn(
 				maxInputTokens,
 				modelMaxTokens: context.model.info?.maxTokens,
 				triggerTokens: requestTriggerTokens,
-				messagePairCount: countUserAssistantPairs(context.messages),
+				typedTurnCount: countTypedTurns(context.messages),
 			});
-			messageTargetTokens = translateRequestBudgetToMessages(
+			messageTargetTokens = resolveAutoMessageTargetTokens({
 				requestTargetTokens,
-				requestOverheadTokens,
-			);
+				overheadTokens: requestOverheadTokens,
+				messageTriggerTokens,
+			});
 		} else {
 			messageTargetTokens = resolveManualMessageTargetTokens({
 				messageInputTokens,
@@ -474,6 +603,30 @@ export function createContextCompactionPrepareTurn(
 				: effectiveMode === "overflow_recovery"
 					? "overflow-recovery-"
 					: "auto-";
+		const budgetDiagnostics = {
+			rawMaxInputTokens,
+			maxInputTokens,
+			triggerTokens: requestTriggerTokens,
+			targetTokens: requestTargetTokens,
+			messageTargetTokens,
+			preserveRecentTokens: resolvePreserveRecentTokens(
+				userCompaction?.preserveRecentTokens,
+				messageTargetTokens,
+			),
+			thresholdRatio,
+		};
+		const beforeDiagnostics = {
+			messages: context.messages.length,
+			estimatedTokens: requestInputTokens,
+			chars: safeJsonSize(context.apiMessages),
+		};
+		const diagnosticsBase = {
+			mode: effectiveMode,
+			overheadTokens: requestOverheadTokens,
+			budget: budgetDiagnostics,
+			factors,
+			before: beforeDiagnostics,
+		};
 		context.emitStatusNotice?.(`${noticePrefix}compacting`, {
 			kind: statusReason,
 			reason: statusReason,
@@ -483,9 +636,11 @@ export function createContextCompactionPrepareTurn(
 			targetTokens: requestTargetTokens,
 			maxInputTokens,
 			messageTargetTokens,
+			diagnostics: { ...diagnosticsBase, phase: "started" },
 		});
 
 		const beforeMessageCount = context.messages.length;
+		const compactionStartedAt = Date.now();
 
 		const builtinOptions = {
 			context: compactionContext,
@@ -610,12 +765,135 @@ export function createContextCompactionPrepareTurn(
 			}
 		}
 
-		if (result?.messages) {
-			const afterMessageTokens = result.messages.reduce(
+		// Sized the way the request will be sent, like the input was.
+		const sizeResult = async (candidate: CoreCompactionResult) => {
+			const apiMessages = context.pruneForApi
+				? await context.pruneForApi(candidate.messages)
+				: candidate.messages;
+			const messageTokens = apiMessages.reduce(
 				(total: number, message) => total + estimateMessageTokens(message),
 				0,
 			);
-			const afterRequestTokens = requestOverheadTokens + afterMessageTokens;
+			return {
+				requestTokens: requestOverheadTokens + messageTokens,
+				chars: safeJsonSize(apiMessages),
+			};
+		};
+		const minimumGain = Math.max(
+			1,
+			Math.floor(requestInputTokens * MIN_COMPACTION_GAIN_RATIO),
+		);
+		// A compaction that leaves the request about as large as it was and
+		// still over the trigger (a summary as long as what it replaced, a tail
+		// that is most of the transcript) would run again on the next call and
+		// trim the transcript to nothing. One that got under the trigger is
+		// kept whatever it saved: the next call will not compact.
+		const isIneffective = (afterTokens: number) =>
+			effectiveMode === "auto" &&
+			requestInputTokens >= MIN_GAIN_CHECK_REQUEST_TOKENS &&
+			afterTokens > requestInputTokens - minimumGain &&
+			afterTokens >= requestTriggerTokens;
+		let afterSize = result?.messages ? await sizeResult(result) : undefined;
+		if (
+			result?.messages &&
+			afterSize &&
+			isIneffective(afterSize.requestTokens) &&
+			executedStrategy === "agentic"
+		) {
+			// The summary folded the old turns but the latest turn is most of
+			// the request. Basic compaction trims inside it, on top of the
+			// summary, now rather than on the next call.
+			config.logger?.log(
+				`Agentic compaction left the request at ${formatTokens(afterSize.requestTokens)} est (from ${formatTokens(requestInputTokens)}); trimming inside the latest turn with basic compaction`,
+				{ severity: "warn", requestTriggerTokens },
+			);
+			const trimmed = await BUILTIN_COMPACTION_STRATEGIES.basic({
+				...builtinOptions,
+				context: { ...compactionContext, messages: result.messages },
+			});
+			if (trimmed?.messages) {
+				const trimmedSize = await sizeResult(trimmed);
+				if (trimmedSize.requestTokens < afterSize.requestTokens) {
+					result = {
+						...trimmed,
+						...(result.summarizerUsage
+							? { summarizerUsage: result.summarizerUsage }
+							: {}),
+					};
+					afterSize = trimmedSize;
+					executedStrategy = "basic";
+				}
+			}
+		}
+
+		if (result?.messages && afterSize) {
+			const afterRequestTokens = afterSize.requestTokens;
+			const summaryDiagnostics = describeSummaryResult(result);
+			const afterDiagnostics = {
+				messages: result.messages.length,
+				estimatedTokens: afterRequestTokens,
+				chars: afterSize.chars,
+			};
+			if (
+				isIneffective(afterRequestTokens) &&
+				// Past the hard limit anything smaller beats a rejected request.
+				!(
+					requestInputTokens >= maxInputTokens &&
+					afterRequestTokens < requestInputTokens
+				)
+			) {
+				const untilIteration =
+					context.iteration + INEFFECTIVE_COMPACTION_COOLDOWN_ITERATIONS;
+				cooldowns.set(context.agentId, { untilIteration });
+				if (requestInputTokens >= maxInputTokens) {
+					// Nothing more can be folded and the request is over the
+					// limit: say so, instead of leaving the rejection to explain it.
+					context.emitStatusNotice?.(`${noticePrefix}compaction-insufficient`, {
+						kind: statusReason,
+						reason: statusReason,
+						phase: "insufficient",
+						iteration: context.iteration,
+						tokensAfter: afterRequestTokens,
+						maxInputTokens,
+						diagnostics: {
+							...diagnosticsBase,
+							phase: "insufficient",
+							strategy: executedStrategy,
+							after: afterDiagnostics,
+						},
+					});
+				}
+				config.logger?.log(
+					`Context compaction ineffective (${executedStrategy}): ${formatTokens(requestInputTokens)} -> ${formatTokens(afterRequestTokens)} est, needs ${formatTokens(minimumGain)} saved; resting until iteration ${untilIteration}`,
+					{
+						severity: "warn",
+						strategy: executedStrategy,
+						requestInputTokens,
+						afterRequestTokens,
+						minimumGain,
+						untilIteration,
+					},
+				);
+				context.emitStatusNotice?.(`${noticePrefix}compaction-skipped`, {
+					kind: statusReason,
+					reason: statusReason,
+					phase: "skipped",
+					skipReason: "not_smaller",
+					iteration: context.iteration,
+					maxInputTokens,
+					diagnostics: {
+						...diagnosticsBase,
+						phase: "skipped",
+						skipReason: "not_smaller",
+						strategy: executedStrategy,
+						cooldownUntilIteration: untilIteration,
+						after: afterDiagnostics,
+						...summaryDiagnostics,
+						durationMs: Date.now() - compactionStartedAt,
+					},
+				});
+				return undefined;
+			}
 			if (
 				effectiveMode === "auto" &&
 				executedStrategy === "basic" &&
@@ -632,26 +910,35 @@ export function createContextCompactionPrepareTurn(
 					iteration: context.iteration,
 					tokensAfter: afterRequestTokens,
 					maxInputTokens,
+					diagnostics: {
+						...diagnosticsBase,
+						phase: "insufficient",
+						strategy: executedStrategy,
+						after: afterDiagnostics,
+					},
 				});
 			}
-			config.logger?.log("Context compaction completed", {
-				severity: "info",
-				strategy: executedStrategy,
-				maxInputTokens,
-				messageInputTokens,
-				apiInputTokens: apiMessageTokens,
-				requestInputTokens,
-				requestOverheadTokens,
-				afterMessageTokens,
-				afterRequestTokens,
-				tokensSaved: requestInputTokens - afterRequestTokens,
-				utilizationBefore: `${((requestInputTokens / maxInputTokens) * 100).toFixed(1)}%`,
-				utilizationAfter: `${((afterRequestTokens / maxInputTokens) * 100).toFixed(1)}%`,
-				thresholdTrigger: `${(thresholdRatio * 100).toFixed(1)}%`,
-				messagesBefore: beforeMessageCount,
-				messagesAfter: result.messages.length,
-				messagesRemoved: beforeMessageCount - result.messages.length,
-			} as Record<string, unknown>);
+			config.logger?.log(
+				`Context compaction completed (${executedStrategy}): ${beforeMessageCount}->${result.messages.length} msgs, ${formatTokens(requestInputTokens)}->${formatTokens(afterRequestTokens)} est${summaryDiagnostics.summary ? `, summary ${summaryDiagnostics.summary.chars} chars` : ""}${summaryDiagnostics.summarizer ? `, ${summaryDiagnostics.summarizer.modelId} ${(summaryDiagnostics.summarizer.durationMs / 1000).toFixed(1)}s` : ""}`,
+				{
+					severity: "info",
+					strategy: executedStrategy,
+					maxInputTokens,
+					messageInputTokens,
+					apiInputTokens: apiMessageTokens,
+					requestInputTokens,
+					requestOverheadTokens,
+					afterMessageTokens: afterRequestTokens - requestOverheadTokens,
+					afterRequestTokens,
+					tokensSaved: requestInputTokens - afterRequestTokens,
+					utilizationBefore: `${((requestInputTokens / maxInputTokens) * 100).toFixed(1)}%`,
+					utilizationAfter: `${((afterRequestTokens / maxInputTokens) * 100).toFixed(1)}%`,
+					thresholdTrigger: `${(thresholdRatio * 100).toFixed(1)}%`,
+					messagesBefore: beforeMessageCount,
+					messagesAfter: result.messages.length,
+					messagesRemoved: beforeMessageCount - result.messages.length,
+				} as Record<string, unknown>,
+			);
 			context.emitStatusNotice?.(`${noticePrefix}compacted`, {
 				kind: statusReason,
 				reason: statusReason,
@@ -666,6 +953,14 @@ export function createContextCompactionPrepareTurn(
 				...(result.summarizerUsage
 					? { summarizerUsage: result.summarizerUsage }
 					: {}),
+				diagnostics: {
+					...diagnosticsBase,
+					phase: "completed",
+					strategy: executedStrategy,
+					after: afterDiagnostics,
+					...summaryDiagnostics,
+					durationMs: Date.now() - compactionStartedAt,
+				},
 			});
 			if (
 				result.budget &&
@@ -685,12 +980,96 @@ export function createContextCompactionPrepareTurn(
 				kind: statusReason,
 				reason: statusReason,
 				phase: "skipped",
+				skipReason: "nothing_to_fold",
 				iteration: context.iteration,
 				maxInputTokens,
+				diagnostics: {
+					...diagnosticsBase,
+					phase: "skipped",
+					skipReason: "nothing_to_fold",
+					strategy: executedStrategy,
+					durationMs: Date.now() - compactionStartedAt,
+				},
 			});
 		}
 
 		return result;
+	};
+}
+
+/**
+ * What a compaction result says about its summary, for the diagnostics the
+ * host traces: the summary message's size and the summarizer's call.
+ */
+function describeSummaryResult(result: CoreCompactionResult): {
+	summary?: {
+		chars: number;
+		sections: number;
+		originalRequestChars: number;
+		filesRead: number;
+		filesEdited: number;
+		hasTodo: boolean;
+		hasLastFailure: boolean;
+	};
+	summarizer?: {
+		providerId: string;
+		modelId: string;
+		durationMs: number;
+		inputTokens: number;
+		outputTokens: number;
+		cost?: number;
+	};
+} {
+	const first = result.messages?.[0];
+	const metadata = first?.metadata as Record<string, unknown> | undefined;
+	const details = metadata?.details as
+		| { readFiles?: unknown; modifiedFiles?: unknown }
+		| undefined;
+	const summary =
+		metadata?.kind === "compaction_summary"
+			? {
+					chars:
+						typeof first?.content === "string"
+							? first.content.length
+							: (first?.content ?? []).reduce(
+									(total, block) =>
+										total + (block.type === "text" ? block.text.length : 0),
+									0,
+								),
+					sections: Array.isArray(metadata.sections)
+						? metadata.sections.length
+						: 0,
+					originalRequestChars:
+						typeof metadata.originalRequest === "string"
+							? metadata.originalRequest.length
+							: 0,
+					filesRead: Array.isArray(details?.readFiles)
+						? details.readFiles.length
+						: 0,
+					filesEdited: Array.isArray(details?.modifiedFiles)
+						? details.modifiedFiles.length
+						: 0,
+					hasTodo:
+						typeof metadata.todo === "string" && metadata.todo.length > 0,
+					hasLastFailure:
+						typeof metadata.lastFailure === "string" &&
+						metadata.lastFailure.length > 0,
+				}
+			: undefined;
+	const usage = result.summarizerUsage;
+	const summarizer = usage
+		? {
+				providerId: usage.providerId,
+				modelId: usage.modelId,
+				durationMs: usage.durationMs ?? 0,
+				inputTokens: usage.inputTokens,
+				outputTokens: usage.outputTokens,
+				...(usage.totalCost !== undefined ? { cost: usage.totalCost } : {}),
+			}
+		: undefined;
+	return {
+		...(summary ? { summary } : {}),
+		...(summarizer ? { summarizer } : {}),
 	};
 }
 
@@ -786,7 +1165,11 @@ export function createCompactionStateAwarePrepareTurn(input: {
 				? await input.compact({
 						...context,
 						messages: projectedMessages,
-						apiMessages: projectedMessages,
+						// Sized as it will be sent: pruned and built for the
+						// provider, like the request before the first compaction.
+						apiMessages: context.pruneForApi
+							? await context.pruneForApi(projectedMessages)
+							: projectedMessages,
 					})
 				: undefined;
 			if (result?.messages) {

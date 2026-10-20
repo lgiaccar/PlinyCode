@@ -28,6 +28,14 @@
  * prefix is rewritten once per block. Both are deterministic for a given
  * history, and a block that was cut stays cut.
  *
+ * A model without a prompt cache (the free pool on the Pliny gateway reads
+ * none: cacheReadTokens was 0 on a thousand calls) has no prefix to protect,
+ * and the block scheme only delayed the pruning: a 72k-character monologue
+ * stayed in the request for sixteen calls and brought on the next
+ * compaction. For such a model (`mode: "uncached"`) the in-turn rules apply
+ * once a call is `uncachedKeepRecentIterations` old, and the deliberation
+ * before a tool call keeps a head as well as a tail.
+ *
  * Known limit: a text-only message in an earlier turn (a stall the guard
  * later nudged, or a long final answer) is kept whole.
  */
@@ -55,17 +63,68 @@ export const DEFAULT_STALE_CONTEXT_OPTIONS: StaleContextOptions = {
 	currentTurnAssistantTextChars: 6_000,
 	failedToolInputChars: 6_000,
 	failedToolInputStringChars: 1_000,
+	uncachedKeepRecentIterations: 2,
+	currentTurnDeliberationHeadChars: 1_500,
+	currentTurnDeliberationTailChars: 600,
 };
 
+const NUMERIC_OPTION_KEYS = [
+	"priorTurnToolResultChars",
+	"keepRecentIterations",
+	"iterationBlockSize",
+	"currentTurnToolResultChars",
+	"middleCutHeadChars",
+	"middleCutTailChars",
+	"priorTurnDeliberationTailChars",
+	"currentTurnAssistantTextChars",
+	"failedToolInputChars",
+	"failedToolInputStringChars",
+	"uncachedKeepRecentIterations",
+	"currentTurnDeliberationHeadChars",
+	"currentTurnDeliberationTailChars",
+] as const;
+
+export interface StaleContextEnvironment {
+	/** Whether the model the session sends to reads a prompt cache. */
+	promptCache?: boolean;
+}
+
+/**
+ * Defaults with the numeric overrides applied, and the mode resolved: the
+ * block scheme for a cached model, immediate aging for one without a prompt
+ * cache. `promptCacheAware` decides; `"auto"` follows the environment, and an
+ * unknown environment counts as cached (the conservative choice). An
+ * already-resolved `mode` in the overrides is kept.
+ */
 export function resolveStaleContextOptions(
 	overrides?: Partial<StaleContextOptions>,
+	environment?: StaleContextEnvironment,
 ): StaleContextOptions {
-	const options = { ...DEFAULT_STALE_CONTEXT_OPTIONS };
-	for (const key of Object.keys(options) as Array<keyof StaleContextOptions>) {
+	const options: StaleContextOptions = { ...DEFAULT_STALE_CONTEXT_OPTIONS };
+	for (const key of NUMERIC_OPTION_KEYS) {
 		const value = overrides?.[key];
 		if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
 			options[key] = value;
 		}
+	}
+	const aware = overrides?.promptCacheAware ?? "auto";
+	const mode: "cached" | "uncached" =
+		overrides?.mode === "cached" || overrides?.mode === "uncached"
+			? overrides.mode
+			: aware === "auto"
+				? environment?.promptCache === false
+					? "uncached"
+					: "cached"
+				: aware
+					? "cached"
+					: "uncached";
+	options.mode = mode;
+	if (mode === "uncached") {
+		options.keepRecentIterations = Math.min(
+			options.keepRecentIterations,
+			options.uncachedKeepRecentIterations,
+		);
+		options.iterationBlockSize = 1;
 	}
 	return options;
 }
@@ -263,6 +322,32 @@ export function middleCutToolResultOutput(
 }
 
 /** The last `tailChars` of a deliberation, moved forward to a line break when one is near. */
+/**
+ * Head and tail of a long deliberation, for a model without a prompt cache:
+ * the head says what the model set out to do, the tail which step it took.
+ */
+export function cutAssistantTextMiddle(
+	text: string,
+	headChars: number,
+	tailChars: number,
+): string {
+	if (text.length <= headChars + tailChars) {
+		return text;
+	}
+	let headEnd = headChars;
+	const headBreak = text.lastIndexOf("\n", headEnd);
+	if (headBreak !== -1 && headEnd - headBreak <= 200) {
+		headEnd = headBreak;
+	}
+	let tailStart = text.length - tailChars;
+	const tailBreak = text.indexOf("\n", tailStart);
+	if (tailBreak !== -1 && tailBreak - tailStart <= 200) {
+		tailStart = tailBreak + 1;
+	}
+	const omitted = tailStart - headEnd;
+	return `${text.slice(0, headEnd)}\n[deliberation middle cut: omitted ${omitted} chars]\n${text.slice(tailStart)}`;
+}
+
 export function cutAssistantTextTail(text: string, tailChars: number): string {
 	if (text.length <= tailChars) {
 		return text;
@@ -402,6 +487,16 @@ export function pruneStaleContext(
 					return part;
 				}
 				changed = true;
+				if (!earlierTurn && options.mode === "uncached" && hasToolCall) {
+					return {
+						...part,
+						text: cutAssistantTextMiddle(
+							part.text,
+							options.currentTurnDeliberationHeadChars,
+							options.currentTurnDeliberationTailChars,
+						),
+					};
+				}
 				return {
 					...part,
 					text: cutAssistantTextTail(

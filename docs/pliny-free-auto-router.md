@@ -43,10 +43,18 @@ that answer reliably, models that really call tools, then latency. A model that
 shows as **down** here is still left in the catalog (it may recover), but the
 router benches it automatically after repeated failures at runtime.
 
-FreeAuto advertises a 256k window, but the conversation compacts against a 92k
-input budget, at about 83k estimated tokens. That is where the 128k models
-(the coding route among them) stop fitting a request, so compacting there keeps
-the whole pool routable instead of letting a run grow until only GLM-5.2 fits.
+FreeAuto advertises a 256k window, but the conversation compacts against a 150k
+input budget, at about 135k estimated tokens. That is sized to the lead of the
+coding route, kimi-k2.6 (256k), which still fits at the trigger with the 32k
+output reserve and the 1.15 margin, as do nemotron ultra (200k) and GLM-5.2
+(512k); the 128k tier (qwen3-coder) stops fitting past about 83k and the
+policy's size filter skips it above that. The budget was 92k, sized to that
+tier so the whole pool stayed routable, but a 26k-character system prompt and
+39k characters of tool definitions took a quarter of it, and long runs
+compacted every ten or so iterations and re-read the same files after each
+compaction ([context-compaction.md](context-compaction.md)). Fewer, later
+compactions keep more of the working set, at the cost of slower prefill on the
+largest requests.
 `auto-free-fast` compacts sooner, against a 64k budget (about 58k tokens): a
 shorter history keeps every call quick and on the small Qwen models, which
 degrade first as the context grows. The context setting of the model tuning

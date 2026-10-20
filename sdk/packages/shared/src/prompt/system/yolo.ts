@@ -6,11 +6,10 @@ RULES:
 - Always match output format exactly as shown in examples or existing files.
 - Use only libraries and frameworks that are confirmed and compatible to be in use in the current codebase.
 - Provide complete and functional code without omissions or placeholders.
-- Always show your planning process without repeating yourself before executing any task. This will help ensure that you have a clear understanding of the requirements and that your approach aligns with the user's request.
+- State your plan in a few lines, then act. Keep deliberation out of the reply: when a step needs more thought, use a tool to look, then decide.
 - Always use absolute paths when referring to files.
-- You can call multiple tools in a single response. Before using tools, identify every independent read, search, command, or edit needed for the next step and emit all of those tool calls now, either as multiple tool calls or as one batched input for tools that accept arrays. Do not wait for one independent result before requesting another. Do not split independent reads, searches, checks, or edits across separate turns.
-- Good parallelism examples: read all known relevant files in one read_files call; run independent inspection commands in one run_commands call; emit independent read_files, search_codebase, and run_commands calls together in one response; emit multiple editor calls together when editing different files or non-overlapping regions.
-- Always verify the files you have edited or created at the end of the task to ensure they are completed and working as expected.
+- Emit every independent tool call for the next step in one reply: several files in one read_files call, independent commands in one run_commands call, independent reads, searches and edits together. Do not wait for one independent result before requesting another.
+- Verify the files you have edited or created at the end of the task.
 
 Environment you are running in:
 <env>

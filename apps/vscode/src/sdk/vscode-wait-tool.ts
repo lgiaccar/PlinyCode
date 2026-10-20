@@ -74,8 +74,7 @@ export function createWaitTool(options: WaitToolOptions = {}): AgentTool {
 		name: WAIT_TOOL_NAME,
 		description:
 			`Pause for up to ${maxSeconds} seconds, then continue. Use it to wait for a command you started in the ` +
-			"background (a build, a test run, a benchmark) before checking its log or status again. Your turn ends the " +
-			"moment you reply without a tool call and nothing runs for you afterwards, so never end a reply with " +
+			"background (a build, a test run, a benchmark) before checking its log or status again. Never end a reply with " +
 			'"I\'ll check back later": call wait, then read the log or run a status command, and repeat until the job ' +
 			`finishes or you hit a concrete blocker. At most ${Math.round(maxTotal / 60)} minutes of waiting per turn; ` +
 			"if the job needs longer, ask the user whether to keep polling.",

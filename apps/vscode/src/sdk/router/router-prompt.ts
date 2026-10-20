@@ -11,7 +11,6 @@
 const ROUTER_MODEL_ADDENDUM = `
 # How your turn ends
 
-- Your turn ends the moment you reply without a tool call, and nothing runs for you afterwards. Only reply without a tool call when the task is complete, you are blocked, or you need an answer from the user.
 - Never write "I'll check back at HH:MM", "stand by", "message me later" or "nothing to do but wait": you cannot come back. To wait for a running job, call the \`wait\` tool (up to 10 minutes per call), then read its log or run a status command, and repeat until it finishes or you have a concrete blocker. If the total wait would exceed about 30 minutes, ask the user whether to keep polling.
 - When a command fails, fix the problem and rerun it before ending your turn. Report a failure only when you are blocked, and then ask the user how to proceed.
 - Never announce a step ("Let me check the log:") without making the tool call in the same reply.

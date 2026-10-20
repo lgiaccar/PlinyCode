@@ -7,6 +7,7 @@ import { offTheRecordMessageIndices } from "@plinycode/core"
 import { extractJsonObjects } from "../router/router-classifier"
 import { messageToText } from "./conversation-search"
 import { hasNearDuplicate, memoryEntryKey, memoryEntryKeys, normalizeEntryText, stripEntryMeta } from "./memory-file"
+import { looksLikeChangeLog } from "./memory-quality"
 
 const MAX_DISTILL_TRANSCRIPT_CHARS = 24_000
 const MAX_MEMORY_CONTEXT_CHARS = 8_000
@@ -14,21 +15,13 @@ const MAX_MEMORY_CONTEXT_CHARS = 8_000
 // them a record of what that day's tasks changed, each then sent with every
 // request for that repository.
 const MAX_PROPOSED_MEMORIES = 4
+/** The prompt asks for at most this; a longer reply is cut so the row shows what will be saved. */
+const MAX_PROPOSED_MEMORY_CHARS = 200
 
-/**
- * A proposal that records what the conversation did, or restates the code,
- * rather than something a later conversation needs. Rejected before the user
- * sees it, so the row holds only candidates worth a look.
- */
-const CHANGE_LOG =
-	/^(added|updated|created|removed|renamed|expanded|implemented|fixed|refactored|replaced|introduced|changed|moved|extended|wrote|rewrote|deleted|migrated|merged|reworked)\b/i
-const TASK_BOUND = /\b(this (task|pr|pull request|conversation|session)|the current (pr|pull request|task))\b/i
-const CODE_FACT =
-	/\b(takes|accepts|returns|requires|expects|has no|lacks)\b.*\b(argument|parameter|constructor|overload|signature|return type)s?\b/i
-
-function looksLikeChangeLog(text: string): boolean {
-	return CHANGE_LOG.test(text) || TASK_BOUND.test(text) || CODE_FACT.test(text)
-}
+// A proposal that records what the conversation did, or restates the code,
+// rather than something a later conversation needs, is rejected
+// (looksLikeChangeLog, memory-quality.ts) before the user sees it, so the row
+// holds only candidates worth a look. The same gate runs again at save.
 
 interface DistilledMemory {
 	scope: "repo" | "user"
@@ -116,6 +109,16 @@ export function buildDistillUserPrompt(transcript: string, repoMemory: string, u
 	].join("\n")
 }
 
+/** Cut at the last word boundary before MAX_PROPOSED_MEMORY_CHARS, with an ellipsis. */
+function capProposal(text: string): string {
+	if (text.length <= MAX_PROPOSED_MEMORY_CHARS) {
+		return text
+	}
+	const head = text.slice(0, MAX_PROPOSED_MEMORY_CHARS - 1)
+	const space = head.lastIndexOf(" ")
+	return `${(space > MAX_PROPOSED_MEMORY_CHARS / 2 ? head.slice(0, space) : head).replace(/[\s,;:]+$/, "")}…`
+}
+
 /**
  * The memories in the model's reply, normalized, minus any already an entry
  * of `existing` (an exact or near duplicate of a whole entry: a memory that
@@ -136,7 +139,7 @@ export function parseDistillReply(
 		if (!Array.isArray(object.memories)) continue
 		for (const raw of object.memories) {
 			const item = asRecord(raw)
-			const text = typeof item?.text === "string" ? normalizeEntryText(item.text) : ""
+			const text = typeof item?.text === "string" ? capProposal(normalizeEntryText(item.text)) : ""
 			const key = memoryEntryKey(text)
 			if (!text || seen.has(key) || dismissed.has(key) || looksLikeChangeLog(text)) continue
 			if (known.has(key) || hasNearDuplicate(existing, text)) {

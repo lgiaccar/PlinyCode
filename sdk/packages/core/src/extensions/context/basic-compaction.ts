@@ -13,6 +13,7 @@ import {
 	type EstimateMessageTokens,
 	formatToolActivitySummary,
 	hasToolActivity,
+	isCompactionSummaryMessage,
 	isTurnStartMessage,
 	summarizeToolActivity,
 	type ToolActivitySummary,
@@ -504,7 +505,13 @@ export function runBasicCompaction(options: {
 		if (sanitizedTypedByIndex.has(index)) {
 			continue;
 		}
-		if (isPreservedByCompaction(originalMessages[index])) {
+		// A compaction summary is kept whole as well: it is what the agentic
+		// strategy folded the older turns into, and trimming inside the
+		// latest turn (which this pass does on top of it) must not drop it.
+		if (
+			isPreservedByCompaction(originalMessages[index]) ||
+			isCompactionSummaryMessage(originalMessages[index])
+		) {
 			frozenIndices.add(index);
 			totalTokens += estimate(originalMessages[index]);
 		}

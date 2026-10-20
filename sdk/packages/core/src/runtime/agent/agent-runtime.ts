@@ -338,6 +338,8 @@ export class AgentRuntime {
 		this.state.usage = cloneUsage(DEFAULT_USAGE);
 		this.overflowRecoveryAttempted = false;
 		this.state.lastRequestInputTokens = 0;
+		this.state.lastRequestEstimatedTokens = 0;
+		this.state.lastRequestIteration = 0;
 
 		try {
 			await this.callBeforeRunHooks();

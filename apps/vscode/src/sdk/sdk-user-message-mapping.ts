@@ -124,12 +124,30 @@ export function extractPersistedHookContextChips(message: SdkUserMessage): Persi
 	while (match !== null) {
 		chips.push({
 			hookName: match[1],
-			...(match[2] ? { toolName: match[2] } : {}),
+			...(match[2] ? { toolName: decodeHookAttribute(match[2]) } : {}),
 			status: "completed",
 		})
 		match = blockPattern.exec(text)
 	}
 	return chips
+}
+
+/**
+ * The runtime escapes hook attribute values as XML entities. Transcripts
+ * written before 0.2.4-test.3 used `_q_`, `_lt_` and `_gt_` instead, and
+ * doubled every underscore (`run__commands`); those codes are decoded too,
+ * except the doubled underscore, which cannot be told apart from the `__` of
+ * an MCP tool name such as `plinycode-devops__pr_get`.
+ */
+function decodeHookAttribute(value: string): string {
+	return value
+		.replace(/&quot;/g, '"')
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&amp;/g, "&")
+		.replace(/_q_/g, '"')
+		.replace(/_lt_/g, "<")
+		.replace(/_gt_/g, ">")
 }
 
 function isHookContextBlock(block: unknown): boolean {

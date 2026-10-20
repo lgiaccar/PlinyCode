@@ -216,8 +216,14 @@ function stampUndated(lines: string[], ranges: readonly EntryRange[], date: stri
 // ---------------------------------------------------------------------------
 // Near duplicates
 
-/** Similarity at or above which a new memory is the same as an existing entry. */
-const NEAR_DUPLICATE_SIMILARITY = 0.8
+/**
+ * Similarity at or above which a new memory is the same as an existing entry.
+ * Was 0.8: three "release workflow: build with X, then run Y" entries that
+ * differed by a trailing clause coexisted in one file.
+ */
+const NEAR_DUPLICATE_SIMILARITY = 0.7
+/** Two entries that open with the same significant words say the same thing, however they go on. */
+const SAME_OPENING_WORDS = 6
 
 // Words too common to tell two memories apart. Negations (not, no, never) are
 // not here: "use npm" and "never use npm" must stay different.
@@ -262,30 +268,39 @@ const STOP_WORDS = new Set([
 // A memory and its negation share almost every word: never duplicates.
 const NEGATIONS = new Set(["not", "no", "never", "don", "dont", "doesn", "isn", "avoid", "without"])
 
-function entryTokens(text: string): Set<string> {
-	return new Set(
-		normalizeEntryText(text.replace(DETAILS_SUFFIX, ""))
-			.toLowerCase()
-			.replace(/[^\p{L}\p{N}]+/gu, " ")
-			.split(" ")
-			.filter((word) => word && !STOP_WORDS.has(word)),
-	)
+/** The significant words of an entry, in order (with repeats). */
+function entryWords(text: string): string[] {
+	return normalizeEntryText(text.replace(DETAILS_SUFFIX, ""))
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}]+/gu, " ")
+		.split(" ")
+		.filter((word) => word && !STOP_WORDS.has(word))
 }
 
 /**
  * Jaccard similarity of two memories' word sets: lower case, punctuation and
- * very common words left out. 1 for the same words in any order, 0 when only
- * one of them is negated.
+ * very common words left out. 1 for the same words in any order, or for the
+ * same first SAME_OPENING_WORDS significant words, 0 when only one of them is
+ * negated.
  */
 function entrySimilarity(a: string, b: string): number {
-	const left = entryTokens(a)
-	const right = entryTokens(b)
+	const leftWords = entryWords(a)
+	const rightWords = entryWords(b)
+	const left = new Set(leftWords)
+	const right = new Set(rightWords)
 	if (left.size === 0 || right.size === 0) {
 		return comparable(a) === comparable(b) ? 1 : 0
 	}
 	const negated = (words: Set<string>) => [...words].some((word) => NEGATIONS.has(word))
 	if (negated(left) !== negated(right)) {
 		return 0
+	}
+	if (
+		leftWords.length >= SAME_OPENING_WORDS &&
+		rightWords.length >= SAME_OPENING_WORDS &&
+		leftWords.slice(0, SAME_OPENING_WORDS).join(" ") === rightWords.slice(0, SAME_OPENING_WORDS).join(" ")
+	) {
+		return 1
 	}
 	let shared = 0
 	for (const word of left) {
@@ -315,6 +330,72 @@ export function hasNearDuplicate(content: string, text: string): boolean {
 /** The number of entries (not headings) in a memory file. */
 export function countMemoryEntries(text: string): number {
 	return parseBlocks(text).filter((block) => block.kind === "entry").length
+}
+
+const IMPORTANT_SECTION = IMPORTANT_HEADING.slice(3).toLowerCase()
+
+/** The number of entries under `## Important`. */
+export function countImportantEntries(text: string): number {
+	const lines = text.replace(/\r\n/g, "\n").split("\n")
+	return entryRanges(lines).filter((range) => range.section === IMPORTANT_SECTION).length
+}
+
+/** An entry a cleanup proposal offers to remove, and why. */
+interface CleanupEntry {
+	/** The entry as one line, without its dates. */
+	text: string
+	reason: "change-log" | "duplicate"
+}
+
+/**
+ * Entries that were kept on purpose lately: pinned, or marked as used (saved
+ * again, or kept when proposed for removal) within `graceDays`. They are not
+ * offered for removal again.
+ */
+function keptRecently(line: string, today: string, graceDays: number): boolean {
+	const dates = parseEntryDates(line)
+	return dates.pinned || (dates.used !== undefined && daysBetween(dates.used, today) < graceDays)
+}
+
+/**
+ * Entries `isChangeLog` matches (a record of what a task changed), in file
+ * order, at most `max`, and the shorter of every pair of near duplicates
+ * (the longest wording is kept). Entries kept on purpose within `graceDays`
+ * are left alone, so a declined proposal is not repeated for another
+ * STALE_AFTER_DAYS.
+ */
+export function selectCleanupEntries(
+	content: string,
+	isChangeLog: (text: string) => boolean,
+	today: string,
+	max: number,
+	graceDays = STALE_AFTER_DAYS,
+): CleanupEntry[] {
+	const lines = content.replace(/\r\n/g, "\n").split("\n")
+	const ranges = entryRanges(lines).filter((range) => !keptRecently(lines[range.start], today, graceDays))
+	const entries = ranges.map((range) => normalizeEntryText(rangeText(lines, range)))
+	const out: CleanupEntry[] = []
+	const taken = new Set<number>()
+	for (const [index, text] of entries.entries()) {
+		if (out.length >= max) break
+		if (isChangeLog(text)) {
+			out.push({ text, reason: "change-log" })
+			taken.add(index)
+		}
+	}
+	for (let left = 0; left < entries.length && out.length < max; left++) {
+		if (taken.has(left)) continue
+		for (let right = left + 1; right < entries.length && out.length < max; right++) {
+			if (taken.has(right)) continue
+			if (entrySimilarity(entries[left], entries[right]) < NEAR_DUPLICATE_SIMILARITY) continue
+			// The longer wording usually carries the detail; the shorter one goes.
+			const loser = entries[left].length >= entries[right].length ? right : left
+			out.push({ text: entries[loser], reason: "duplicate" })
+			taken.add(loser)
+			if (loser === left) break
+		}
+	}
+	return out
 }
 
 /**

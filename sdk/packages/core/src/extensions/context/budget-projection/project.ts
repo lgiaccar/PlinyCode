@@ -3,6 +3,7 @@ import type {
 	MessageWithMetadata,
 	ToolResultContent,
 } from "@plinycode/shared";
+import { isUserRunMessage } from "../../../session/user-run-messages";
 import type {
 	BudgetAction,
 	BudgetMutationAction,
@@ -78,12 +79,26 @@ function isToolResultOnlyUserMessage(message: MessageWithMetadata): boolean {
 	);
 }
 
+/**
+ * A message the user typed: not a tool result, and not one of the runtime's
+ * own user-role messages (completion reminders, loop notices, hook context,
+ * compaction summaries), which carry userRunSpan 0 or a synthetic kind.
+ */
+function isTypedUserMessage(message: MessageWithMetadata): boolean {
+	return (
+		message.role === "user" &&
+		!isToolResultOnlyUserMessage(message) &&
+		isUserRunMessage(message) &&
+		(message.metadata as { kind?: unknown } | undefined)?.kind !==
+			"compaction_summary"
+	);
+}
+
 export function findLatestTypedUserMessageIndex(
 	messages: MessageWithMetadata[],
 ): number {
 	for (let index = messages.length - 1; index >= 0; index -= 1) {
-		const message = messages[index];
-		if (message.role === "user" && !isToolResultOnlyUserMessage(message)) {
+		if (isTypedUserMessage(messages[index])) {
 			return index;
 		}
 	}
@@ -94,8 +109,7 @@ function findFirstTypedUserMessageIndex(
 	messages: MessageWithMetadata[],
 ): number {
 	for (let index = 0; index < messages.length; index += 1) {
-		const message = messages[index];
-		if (message.role === "user" && !isToolResultOnlyUserMessage(message)) {
+		if (isTypedUserMessage(messages[index])) {
 			return index;
 		}
 	}

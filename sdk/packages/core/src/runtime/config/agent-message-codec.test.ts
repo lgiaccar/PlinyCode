@@ -5,6 +5,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { projectSessionMessagesForDisplay } from "../../session/display-messages";
 import {
+	agentMessagesToMessages,
 	agentMessageToMessageWithMetadata,
 	messagesToAgentMessages,
 	messageToAgentMessages,
@@ -379,6 +380,44 @@ describe("agent message codec", () => {
 			"msg_mixed",
 			"msg_mixed_tool_call_a",
 			"msg_mixed_tool_call_b",
+		]);
+	});
+});
+
+describe("agentMessagesToMessages", () => {
+	it("keeps ids and metadata so a rebuilt request has stable ids and injected notices stay marked", () => {
+		const agentMessages = messagesToAgentMessages([
+			{
+				id: "msg_user_1",
+				role: "user",
+				content: "do the thing",
+				metadata: { userRunSpan: 3 },
+			},
+			{
+				id: "msg_reminder_1",
+				role: "user",
+				content: "[SYSTEM] reminder",
+				metadata: { displayRole: "system", userRunSpan: 0 },
+			},
+		]);
+		const provider = agentMessagesToMessages(
+			agentMessages,
+		) as MessageWithMetadata[];
+		expect(provider.map((message) => message.id)).toEqual([
+			"msg_user_1",
+			"msg_reminder_1",
+		]);
+		expect(provider[1]?.metadata).toMatchObject({
+			displayRole: "system",
+			userRunSpan: 0,
+		});
+
+		// The same ids survive the round trip back to agent messages, so the
+		// session trace can tell a continued request from a rebuilt one.
+		const roundTripped = messagesToAgentMessages(provider);
+		expect(roundTripped.map((message) => message.id)).toEqual([
+			"msg_user_1",
+			"msg_reminder_1",
 		]);
 	});
 });

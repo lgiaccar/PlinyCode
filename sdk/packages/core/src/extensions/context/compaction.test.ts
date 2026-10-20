@@ -1142,6 +1142,8 @@ describe("createContextCompactionPrepareTurn", () => {
 		 */
 		const run = async (opts: {
 			maxInputTokensMultiple: number;
+			/** The previous request: the provider's count and the estimate for it. */
+			previousRequest?: { inputTokens: number; estimatedTokens: number };
 			previousRequestInputTokens?: number;
 			thresholdRatio?: CoreCompactionConfig["thresholdRatio"];
 		}) => {
@@ -1173,7 +1175,11 @@ describe("createContextCompactionPrepareTurn", () => {
 				tools: [],
 				messages,
 				apiMessages: messages,
-				previousRequestInputTokens: opts.previousRequestInputTokens,
+				previousRequestInputTokens:
+					opts.previousRequestInputTokens ?? opts.previousRequest?.inputTokens,
+				previousRequest: opts.previousRequest
+					? { ...opts.previousRequest, iteration: 1 }
+					: undefined,
 				model: {
 					id: "test/model",
 					provider: "openrouter",
@@ -1189,15 +1195,16 @@ describe("createContextCompactionPrepareTurn", () => {
 			).resolves.toBeUndefined();
 		});
 
-		it("compacts when the provider's actual count crosses a trigger the estimate does not", async () => {
-			// Same under-the-trigger estimate, but the provider reports that the
-			// PREVIOUS (smaller) request already consumed more than the estimate
-			// claims the current one does — the estimator is under-counting.
-			// 1.5x sits comfortably past the 1.05x trigger; a count right at the
-			// multiple would only cross it by rounding.
+		it("compacts when the provider counted the previous request 1.5x over its estimate", async () => {
+			// Same under-the-trigger estimate, but the provider reported 1.5x the
+			// estimate for the previous request: the estimator under-counts this
+			// conversation's content by half, so the 1.05x budget is really 0.7x.
 			const result = await run({
 				maxInputTokensMultiple: 1.05,
-				previousRequestInputTokens: Math.ceil(estimate() * 1.5),
+				previousRequest: {
+					inputTokens: Math.ceil(estimate() * 1.5),
+					estimatedTokens: estimate(),
+				},
 			});
 			expect(result).toBeDefined();
 			// The retention target must tighten with the trigger, not stay on the
@@ -1214,7 +1221,36 @@ describe("createContextCompactionPrepareTurn", () => {
 			await expect(
 				run({
 					maxInputTokensMultiple: 1.05,
-					previousRequestInputTokens: Math.floor(estimate() * 0.5),
+					previousRequest: {
+						inputTokens: Math.floor(estimate() * 0.5),
+						estimatedTokens: estimate(),
+					},
+				}),
+			).resolves.toBeUndefined();
+		});
+
+		it("does not compact on a large count for a larger previous request", async () => {
+			// The previous request was three times the current one and the
+			// provider counted it at 1.5x the current estimate: the estimator was
+			// not under-counting (it over-counted that request by half). Dividing
+			// the old count by the current estimate, as before, read this as a
+			// 1.5x under-count and compacted on every call after a compaction.
+			await expect(
+				run({
+					maxInputTokensMultiple: 1.05,
+					previousRequest: {
+						inputTokens: Math.ceil(estimate() * 1.5),
+						estimatedTokens: estimate() * 3,
+					},
+				}),
+			).resolves.toBeUndefined();
+		});
+
+		it("ignores the previous count on its own, without the estimate it belongs to", async () => {
+			await expect(
+				run({
+					maxInputTokensMultiple: 1.05,
+					previousRequestInputTokens: Math.ceil(estimate() * 1.5),
 				}),
 			).resolves.toBeUndefined();
 		});
@@ -1227,7 +1263,10 @@ describe("createContextCompactionPrepareTurn", () => {
 			await expect(
 				run({
 					maxInputTokensMultiple: 10,
-					previousRequestInputTokens: estimate() * 100,
+					previousRequest: {
+						inputTokens: estimate() * 100,
+						estimatedTokens: estimate(),
+					},
 				}),
 			).resolves.toBeUndefined();
 		});
@@ -1274,7 +1313,10 @@ describe("createContextCompactionPrepareTurn", () => {
 				await expect(
 					run({
 						maxInputTokensMultiple: 1.05,
-						previousRequestInputTokens: Math.ceil(estimate() * 1.5),
+						previousRequest: {
+							inputTokens: Math.ceil(estimate() * 1.5),
+							estimatedTokens: estimate(),
+						},
 					}),
 				).resolves.toBeDefined();
 			});
@@ -1314,7 +1356,7 @@ describe("createContextCompactionPrepareTurn", () => {
 	});
 
 	it("can truncate an oversized first task prompt when it exceeds the trigger", () => {
-		const oversizedPrompt = "<user_input>".repeat(500);
+		const oversizedPrompt = `<user_input>${"task text ".repeat(600)}</user_input>`;
 		const messages: LlmsProviders.Message[] = [
 			{ role: "user", content: oversizedPrompt },
 			{ role: "assistant", content: "old assistant context ".repeat(500) },
@@ -1876,7 +1918,17 @@ describe("createContextCompactionPrepareTurn", () => {
 			expect.objectContaining({
 				phase: "completed",
 				strategy: "agentic",
-				summarizerUsage: usage,
+				summarizerUsage: expect.objectContaining(usage),
+				diagnostics: expect.objectContaining({
+					phase: "completed",
+					strategy: "agentic",
+					summarizer: expect.objectContaining({
+						modelId: "mock-model",
+						inputTokens: 1_200,
+						outputTokens: 40,
+						cost: 0.0123,
+					}),
+				}),
 			}),
 		);
 	});
@@ -1934,32 +1986,29 @@ describe("createContextCompactionPrepareTurn", () => {
 				emitStatusNotice,
 			});
 
-		// First call: the old turn is summarized; the latest turn stays verbatim
-		// and the request is still over the trigger.
+		// The old turn is summarized, but the latest turn is most of the
+		// request, so the summary alone leaves it over the trigger: basic
+		// compaction trims inside the turn on top of the summary, in the same
+		// call rather than on the next one, and the summary survives it.
 		const first = await call(messages, 1);
+		expect(first?.messages).toBeDefined();
 		expect(first?.messages[0]?.metadata?.kind).toBe("compaction_summary");
-		expect(first?.messages).toHaveLength(6);
-		expect(log).not.toHaveBeenCalledWith(
-			"Agentic compaction found nothing to fold; falling back to basic compaction",
-			expect.anything(),
-		);
-
-		// Next call: nothing new to fold, so basic compaction trims inside the turn.
-		const second = await call(first?.messages ?? [], 2);
-		expect(second?.messages).toBeDefined();
 		expect(log).toHaveBeenCalledWith(
-			"Agentic compaction found nothing to fold; falling back to basic compaction",
+			expect.stringContaining(
+				"trimming inside the latest turn with basic compaction",
+			),
 			expect.objectContaining({ severity: "warn" }),
 		);
 		expect(emitStatusNotice).toHaveBeenLastCalledWith(
 			"auto-compacted",
 			expect.objectContaining({ phase: "completed", strategy: "basic" }),
 		);
-		const secondTokens = (second?.messages ?? []).reduce(
+		const firstTokens = (first?.messages ?? []).reduce(
 			(total, message) => total + estimateJsonTokens(message),
 			0,
 		);
-		expect(secondTokens).toBeLessThan(totalJsonTokens(first?.messages ?? []));
+		expect(firstTokens).toBeLessThan(totalJsonTokens(messages));
+		expect(first?.messages.length).toBeLessThan(messages.length);
 	});
 
 	it("says when one message alone keeps the request over the limit", async () => {
@@ -2010,12 +2059,9 @@ describe("createContextCompactionPrepareTurn", () => {
 				emitStatusNotice,
 			});
 
+		// The paste alone is over the limit: folding the old turn cannot bring
+		// the request under it, so the first call already says so and rests.
 		const first = await call(messages, 1);
-		expect(emitStatusNotice).not.toHaveBeenCalledWith(
-			"auto-compaction-insufficient",
-			expect.anything(),
-		);
-		await call(first?.messages ?? [], 2);
 		expect(emitStatusNotice).toHaveBeenCalledWith(
 			"auto-compaction-insufficient",
 			expect.objectContaining({
@@ -2024,6 +2070,22 @@ describe("createContextCompactionPrepareTurn", () => {
 				tokensAfter: expect.any(Number),
 			}),
 		);
+		expect(emitStatusNotice).toHaveBeenLastCalledWith(
+			"auto-compaction-skipped",
+			expect.objectContaining({
+				phase: "skipped",
+				skipReason: "not_smaller",
+				diagnostics: expect.objectContaining({
+					skipReason: "not_smaller",
+					cooldownUntilIteration: 7,
+				}),
+			}),
+		);
+		expect(first).toBeUndefined();
+		// In the rest, the summarizer is not called again.
+		const calls = createHandlerMock.mock.calls.length;
+		await call(messages, 2);
+		expect(createHandlerMock.mock.calls.length).toBe(calls);
 	});
 
 	it("falls back to basic compaction when the agentic request fails", async () => {

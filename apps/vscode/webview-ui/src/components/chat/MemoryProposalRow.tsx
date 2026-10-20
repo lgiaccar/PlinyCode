@@ -46,13 +46,11 @@ function statusLine(proposal: MemoryProposal): string | undefined {
  */
 const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 	const proposal = parseMemoryProposal(message.text)
-	// Important memories and removals start checked; an ordinary proposal
-	// starts unchecked, so "Save" without a look keeps the memory small.
+	// Removals start checked; every proposal, important or not, starts
+	// unchecked: "Save" without a look used to fill a repository's memory with
+	// change logs the distiller had marked important.
 	const [checked, setChecked] = useState<Set<string>>(
-		() =>
-			new Set(
-				proposal?.items.filter((item) => item.importance === "high" || item.action === "remove").map((item) => item.id),
-			),
+		() => new Set(proposal?.items.filter((item) => item.action === "remove").map((item) => item.id)),
 	)
 	const [submitting, setSubmitting] = useState(false)
 	const status = proposal?.status
@@ -89,6 +87,23 @@ const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 	const additions = proposal.items.filter((item) => item.action !== "remove")
 	const removals = proposal.items.filter((item) => item.action === "remove")
 	const removalsChecked = removals.some((item) => checked.has(item.id))
+	const removalGroups = [
+		{
+			key: "change-log",
+			label: "Reads as a change log: what a task changed belongs in git, not in memory.",
+			items: removals.filter((item) => item.reason === "change-log"),
+		},
+		{
+			key: "duplicate",
+			label: "Says the same as another entry; the longer wording is kept.",
+			items: removals.filter((item) => item.reason === "duplicate"),
+		},
+		{
+			key: "stale",
+			label: "Not used for 90 days.",
+			items: removals.filter((item) => item.reason !== "change-log" && item.reason !== "duplicate"),
+		},
+	].filter((group) => group.items.length > 0)
 
 	const renderItem = (item: MemoryProposalItem) => (
 		<li key={item.id}>
@@ -118,14 +133,14 @@ const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 				<span>{additions.length > 0 ? "Memories worth keeping from this conversation" : "Memory cleanup"}</span>
 			</div>
 			{additions.length > 0 && <ul className="m-0 flex list-none flex-col gap-1 p-0">{additions.map(renderItem)}</ul>}
-			{removals.length > 0 && (
-				<>
-					<div className="text-description text-xs" data-testid="memory-proposal-removals">
-						Not used for 90 days. Checked items are removed; unchecked ones are kept and count as used again.
+			{removalGroups.map((group) => (
+				<div className="flex flex-col gap-1" key={group.key}>
+					<div className="text-description text-xs" data-testid={`memory-proposal-removals-${group.key}`}>
+						{group.label} Checked items are removed; unchecked ones are kept and count as used again.
 					</div>
-					<ul className="m-0 flex list-none flex-col gap-1 p-0">{removals.map(renderItem)}</ul>
-				</>
-			)}
+					<ul className="m-0 flex list-none flex-col gap-1 p-0">{group.items.map(renderItem)}</ul>
+				</div>
+			))}
 			{proposal.error && <div className="text-error text-xs">{proposal.error}</div>}
 			{pending ? (
 				<div className="flex gap-2">

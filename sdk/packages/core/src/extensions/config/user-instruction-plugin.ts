@@ -55,6 +55,8 @@ export interface CreateUserInstructionPluginOptions {
 	watcher: UserInstructionConfigWatcher;
 	watcherReady?: Promise<void>;
 	includeRules?: boolean;
+	/** The workspace root; listed rule files under it are shown relative to it. */
+	workspacePath?: string;
 	includeSkills?: boolean;
 	includeWorkflows?: boolean;
 	registerSkillsTool?: boolean;
@@ -265,6 +267,7 @@ export function createUserInstructionPlugin(
 						loadRulesForSystemPromptFromWatcher(
 							options.watcher,
 							options.ruleFilter,
+							{ workspaceRoot: options.workspacePath },
 						),
 				});
 			}

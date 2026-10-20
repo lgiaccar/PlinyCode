@@ -2,6 +2,8 @@ import type { AgentMessage } from "@plinycode/shared"
 import { describe, expect, it } from "vitest"
 import {
 	endsWithPlanList,
+	isExpectedQueryExit,
+	isQueryCommand,
 	latestUserRequest,
 	looksDegenerate,
 	looksLikeLeakedReasoning,
@@ -345,5 +347,72 @@ describe("latestUserRequest", () => {
 			user("<SYSTEM_NOTICE>\nEarlier context was compacted.</SYSTEM_NOTICE>", { kind: "compaction" }),
 		]
 		expect(latestUserRequest(messages)).toBe("execute the plan")
+	})
+})
+
+/**
+ * Finished answers from real sessions that the earlier heuristic flagged as
+ * leaked reasoning: three sentence-initial "So" or "But" in a long analysis,
+ * a conclusion with a table, a question or an offer at the end.
+ */
+const FINISHED_ANALYSES = [
+	// A long analysis: "So:" and "But" open sentences, a table, a verdict.
+	[
+		"The Pure route deliberately does not use these tools for its star-search. So: it implements a custom, inlined `SiteOctreeView` traversal optimized for the GPU memory model. But the Voronoi route keeps the generic walker. Right, that is the trade-off.",
+		"",
+		"| Route | Speedup | Memory |",
+		"| --- | --- | --- |",
+		"| Pure | 5-6x | 3.8-5.7x less |",
+		"",
+		"This is the architectural trade-off that gives the Pure route its speedup and memory reduction over the Voronoi route.",
+	].join("\n"),
+	// Ends by asking the user.
+	"So the material point sits outside the Y-bounds of the input mesh. But the JSON names `02_after_seal_1_64_live_1.pmdat`, not the closer-surface file. Okay, two fixes are possible. **Would you like me to help you find the actual Y-bounds of the input mesh so you can fix the material point, or would you like to proceed differently?**",
+	// Ends by handing back.
+	"So the build is solid: all three failure categories are fixed and compiling cleanly. But it still needs to finish linking. Okay, once it does I will set up the environment and run the case. Let me know when you're ready, or I can check status if you ask me to in a new message!",
+	// Long prose with no structure, three openers, but it ends in a full sentence.
+	`${"The I/O layer reads and writes volume meshes in the Fluent format, with cell zones and face-to-cell connectivity. ".repeat(40)}So the reader is complete. But the writer only covers boundary faces today. Okay, the algorithm itself produces a watertight surface mesh as its final output, and the library's read and write facilities are not restricted to surfaces.`,
+]
+
+describe("looksLikeLeakedReasoning: finished answers", () => {
+	it.each(FINISHED_ANALYSES.map((text, index) => [index, text] as const))("accepts finished analysis %i", (_index, text) => {
+		expect(looksLikeLeakedReasoning(text)).toBe(false)
+	})
+
+	it("still flags dense thinking aloud with no answer", () => {
+		expect(
+			looksLikeLeakedReasoning(
+				"Wait, the test file is in test/dev. Actually, no, it moved. Hmm, so the include path is wrong then. Okay, so I should check the CMake list first. But the build already ran",
+			),
+		).toBe(true)
+	})
+})
+
+describe("isExpectedQueryExit", () => {
+	const failed = (query: string, result: string, exitCode = 1) =>
+		shellFailureFromResult({
+			type: "tool-result",
+			toolCallId: "c1",
+			toolName: "run_commands",
+			output: [{ query, result, error: `Command exited with code ${exitCode}`, success: false }],
+		})
+
+	it("treats a quiet exit 1 of a query command as an answer", () => {
+		expect(isQueryCommand("findstr ZLIB CMakeLists.txt")).toBe(true)
+		expect(isQueryCommand("cd D:\\dev0\\AlphaWrap; Get-ChildItem build -Recurse -Filter x.h")).toBe(true)
+		expect(isQueryCommand("git --no-pager diff --quiet")).toBe(true)
+		expect(isQueryCommand("git commit -m x")).toBe(false)
+		expect(isExpectedQueryExit(failed("findstr ZLIB CMakeLists.txt", "[Command exited with code 1]"))).toBe(true)
+		expect(isExpectedQueryExit(failed("where git", "[Command exited with code 1]"))).toBe(true)
+	})
+
+	it("keeps a query that printed an error, exited 2, or a non-query command as a failure", () => {
+		expect(
+			isExpectedQueryExit(failed("grep -r foo src", "[Command exited with code 1]\ngrep: src: No such file or directory")),
+		).toBe(false)
+		expect(isExpectedQueryExit(failed("grep -r foo src", "[Command exited with code 2]", 2))).toBe(false)
+		expect(isExpectedQueryExit(failed("bun test", "[Command exited with code 1]"))).toBe(false)
+		expect(failed("findstr ZLIB x", "[Command exited with code 1]")?.quiet).toBe(true)
+		expect(failed("bun test", "[Command exited with code 1]\n1 failed")?.quiet).toBeUndefined()
 	})
 })

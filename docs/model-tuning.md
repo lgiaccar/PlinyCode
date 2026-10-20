@@ -30,7 +30,7 @@ Models with no measured switch (Claude Sonnet 5 and Haiku 4.5 among them) show o
 - quick and coding turns don't;
 - the fast profile never does.
 
-See [pliny-free-auto-router.md](pliny-free-auto-router.md) for the routes. A context tuning lowers a router's own budget (92k, 64k for auto-free-fast, 128k for BalanceAuto).
+See [pliny-free-auto-router.md](pliny-free-auto-router.md) for the routes. A context tuning lowers a router's own budget (150k, 64k for auto-free-fast, 128k for BalanceAuto).
 
 ## How it is applied
 

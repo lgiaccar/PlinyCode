@@ -150,9 +150,33 @@ export function coalesceOrphanReadRanges(input: unknown): unknown {
 	return input;
 }
 
+export const LIST_SHAPED_COMMANDS_ERROR =
+	'commands must be a JSON array of strings, e.g. ["git status"]';
+
+/**
+ * A `commands` value that is a list written as a string (`['git status']`)
+ * and that the JSON repair pass could not turn into an array. Run verbatim,
+ * the shell chokes on the bracket, every such command "fails", and a weak
+ * model concludes that the shell itself is broken.
+ */
+function isListShapedCommandString(value: unknown): value is string {
+	if (typeof value !== "string") {
+		return false;
+	}
+	const trimmed = value.trim();
+	return trimmed.startsWith("[") || trimmed.startsWith("{");
+}
+
 export function normalizeRunCommandsInput(
 	input: unknown,
 ): Array<string | StructuredCommandInput> {
+	const commandsValue =
+		input !== null && typeof input === "object" && "commands" in input
+			? (input as { commands?: unknown }).commands
+			: input;
+	if (isListShapedCommandString(commandsValue)) {
+		throw new Error(LIST_SHAPED_COMMANDS_ERROR);
+	}
 	const validate = validateWithZod(RunCommandsInputUnionSchema, input);
 
 	if (typeof validate === "string") {

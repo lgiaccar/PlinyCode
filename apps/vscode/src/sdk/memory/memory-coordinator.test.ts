@@ -99,6 +99,13 @@ describe("memory-distiller", () => {
 		])
 	})
 
+	it("cuts a proposal at 200 characters, at a word", () => {
+		const long = `Use the ${"very ".repeat(60)}long form of the command`
+		const [memory] = parseDistillReply(JSON.stringify({ memories: [{ text: long, scope: "repo" }] }), "")
+		expect(memory.text.length).toBeLessThanOrEqual(200)
+		expect(memory.text).toMatch(/very…$/)
+	})
+
 	it("skips near duplicates of an entry and reports them as rediscovered", () => {
 		const rediscovered: string[] = []
 		const parsed = parseDistillReply(
@@ -259,6 +266,37 @@ describe("MemoryCoordinator", () => {
 		// The unchecked one is kept and counts as used, so it is not proposed again soon.
 		expect(text).toMatch(/- Stale two <!-- added:2000-01-02 used:\d{4}-\d{2}-\d{2} -->/)
 		expect(await store.pruneCandidates("/work/a")).toEqual([])
+	})
+
+	it("labels cleanup proposals with their reason and refuses a change log at save", async () => {
+		const reply = JSON.stringify({
+			memories: [
+				{ text: "The CLI output now uses PmdatParser instead of WriteMshFile", scope: "repo", importance: "high" },
+			],
+		})
+		const { coordinator, rows, store } = makeCoordinator({ complete: vi.fn(async () => reply) })
+		const location = await store.locate("/work/a")
+		await fs.mkdir(location.repoDir, { recursive: true })
+		await fs.writeFile(
+			location.repoFile,
+			"# M\n\n## Important\n\n- Removed the old flag from the build <!-- added:2026-10-19 -->\n\n## Notes\n\n- Stale one <!-- added:2000-01-01 -->\n",
+		)
+		await coordinator.distillNow()
+		const [offered] = proposals(rows)
+		// The distiller's own filter dropped the change log, so only removals are offered.
+		expect(offered.proposal?.items).toEqual([
+			{
+				id: "remove-0",
+				scope: "repo",
+				text: "Removed the old flag from the build",
+				importance: "normal",
+				action: "remove",
+				reason: "change-log",
+			},
+			{ id: "remove-1", scope: "repo", text: "Stale one", importance: "normal", action: "remove" },
+		])
+		await coordinator.resolveProposal(offered.proposal?.id ?? "", true, ["remove-0"])
+		expect(await fs.readFile(location.repoFile, "utf8")).not.toContain("Removed the old flag")
 	})
 
 	it("keeps every prune item when the proposal is dismissed", async () => {

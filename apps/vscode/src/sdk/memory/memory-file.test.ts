@@ -10,6 +10,7 @@ import {
 	nestHeadings,
 	normalizeEntryText,
 	removeMemoryEntries,
+	selectCleanupEntries,
 	selectStaleEntries,
 	stripEntryMeta,
 	touchMemoryEntries,
@@ -224,14 +225,52 @@ describe("near duplicates", () => {
 		)
 	})
 
-	it("draws the line at 0.8 Jaccard similarity of the significant words", () => {
+	it("draws the line at 0.7 Jaccard similarity of the significant words", () => {
 		// 6 of 7 words shared: 0.86.
 		expect(hasNearDuplicate(BASE, "Run build sdk after the engine changes again")).toBe(true)
-		// 6 of 8: 0.75.
-		expect(hasNearDuplicate(BASE, "Run build sdk after engine changes and restart vscode")).toBe(false)
+		// 6 of 8: 0.75, a trailing clause added to the same memory.
+		expect(hasNearDuplicate(BASE, "Run build sdk after engine changes and restart vscode")).toBe(true)
+		// 5 of 10: 0.5, and a different opening.
+		expect(hasNearDuplicate(BASE, "Run build sdk before engine changes and then restart the vscode window")).toBe(false)
 		// Stop words and punctuation do not count.
 		expect(hasNearDuplicate(BASE, "Run `build:sdk` after the engine changes.")).toBe(true)
 		expect(hasNearDuplicate(BASE, "Run the tests after engine changes")).toBe(false)
+	})
+
+	it("treats entries that open with the same six significant words as one", () => {
+		const content =
+			"## Notes\n\n- Release workflow: build CLI with gpu_surfer_make.bat release cli, then run package_cli.ps1 to create a versioned subfolder under OneDrive\n"
+		// Only 7 of 15 words are shared (0.47), but the opening is the same memory.
+		expect(hasNearDuplicate(content, "Release workflow: build CLI with gpu_surfer_make.bat release cli")).toBe(true)
+		expect(hasNearDuplicate(content, "Release notes: build CLI with gpu_surfer_make.bat release cli")).toBe(false)
+	})
+
+	it("offers change-log and duplicate entries for cleanup, the longest wording kept", () => {
+		const content = [
+			"# M",
+			"",
+			"## Important",
+			"",
+			"- Fixed LineFilterBuf::sync() bug: now flushes the buffer <!-- added:2026-10-19 -->",
+			"- Always use py.exe when python is not on PATH <!-- added:2026-10-19 -->",
+			"- Pinned change: added a helper <!-- added:2026-10-19 pinned -->",
+			"",
+			"## Notes",
+			"",
+			"- Release workflow: build with make.bat release cli, then run package_cli.ps1 -OutDir <path> <!-- added:2026-10-19 -->",
+			"- Release workflow: build with make.bat release cli, then run package_cli.ps1 -OutDir <path> -PackageVersion <ver> to create a versioned subfolder <!-- added:2026-10-19 -->",
+			"- Kept on purpose: removed the old flag <!-- added:2026-01-01 used:2026-10-19 -->",
+			"",
+		].join("\n")
+		const isChangeLog = (text: string) => /^(fixed|added|removed)\b|: (added|removed) /i.test(text)
+		expect(selectCleanupEntries(content, isChangeLog, "2026-10-20", 8)).toEqual([
+			{ text: "Fixed LineFilterBuf::sync() bug: now flushes the buffer", reason: "change-log" },
+			{
+				text: "Release workflow: build with make.bat release cli, then run package_cli.ps1 -OutDir <path>",
+				reason: "duplicate",
+			},
+		])
+		expect(selectCleanupEntries(content, isChangeLog, "2026-10-20", 1)).toHaveLength(1)
 	})
 
 	it("never treats a memory and its negation as duplicates", () => {

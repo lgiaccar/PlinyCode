@@ -30,25 +30,27 @@ function row(proposal: MemoryProposal): ClineMessage {
 describe("MemoryProposalRow", () => {
 	beforeEach(() => resolveMemoryProposal.mockClear())
 
-	it("lists each proposal with where it would be saved, important ones checked", () => {
+	it("lists each proposal with where it would be saved, none checked", () => {
 		render(<MemoryProposalRow message={row(PROPOSAL)} />)
 		const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[]
-		expect(boxes.map((box) => box.checked)).toEqual([true, false])
+		expect(boxes.map((box) => box.checked)).toEqual([false, false])
 		expect(screen.getByText(/repository memory · important/)).toBeTruthy()
 		expect(screen.getByText(/your memory/)).toBeTruthy()
-		expect(screen.getByRole("button", { name: "Save 1" })).toBeTruthy()
+		expect((screen.getByRole("button", { name: "Save 0" }) as HTMLButtonElement).disabled).toBe(true)
 	})
 
 	it("saves only the checked items", () => {
 		render(<MemoryProposalRow message={row(PROPOSAL)} />)
+		fireEvent.click(screen.getAllByRole("checkbox")[0])
 		fireEvent.click(screen.getByRole("button", { name: "Save 1" }))
 		expect(resolveMemoryProposal).toHaveBeenCalledWith(
 			expect.objectContaining({ proposalId: "p1", save: true, itemIds: ["0"] }),
 		)
 	})
 
-	it("saves an ordinary proposal once it is checked", () => {
+	it("saves every proposal once all are checked", () => {
 		render(<MemoryProposalRow message={row(PROPOSAL)} />)
+		fireEvent.click(screen.getAllByRole("checkbox")[0])
 		fireEvent.click(screen.getAllByRole("checkbox")[1])
 		fireEvent.click(screen.getByRole("button", { name: "Save all" }))
 		expect(resolveMemoryProposal).toHaveBeenCalledWith(
@@ -71,12 +73,40 @@ describe("MemoryProposalRow", () => {
 			],
 		}
 		render(<MemoryProposalRow message={row(proposal)} />)
-		expect(screen.getByTestId("memory-proposal-removals").textContent).toMatch(/Not used for 90 days/)
-		fireEvent.click(screen.getAllByRole("checkbox")[0])
+		expect(screen.getByTestId("memory-proposal-removals-stale").textContent).toMatch(/Not used for 90 days/)
+		// The removal starts checked, the proposal does not.
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }))
 		expect(resolveMemoryProposal).toHaveBeenCalledWith(
 			expect.objectContaining({ proposalId: "p1", save: true, itemIds: ["remove-0"] }),
 		)
+	})
+
+	it("groups cleanup proposals by reason", () => {
+		const proposal: MemoryProposal = {
+			...PROPOSAL,
+			items: [
+				{
+					id: "remove-0",
+					scope: "repo",
+					text: "Fixed the sync bug",
+					importance: "normal",
+					action: "remove",
+					reason: "change-log",
+				},
+				{
+					id: "remove-1",
+					scope: "repo",
+					text: "Release workflow",
+					importance: "normal",
+					action: "remove",
+					reason: "duplicate",
+				},
+			],
+		}
+		render(<MemoryProposalRow message={row(proposal)} />)
+		expect(screen.getByTestId("memory-proposal-removals-change-log").textContent).toMatch(/Reads as a change log/)
+		expect(screen.getByTestId("memory-proposal-removals-duplicate").textContent).toMatch(/Says the same as another entry/)
+		expect(screen.queryByTestId("memory-proposal-removals-stale")).toBeNull()
 	})
 
 	it("titles a removal-only proposal as a cleanup and reports what was removed", () => {

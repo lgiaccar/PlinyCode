@@ -12,9 +12,12 @@
 // - How far each conversation was distilled, and the memories the user
 //   dismissed or left unchecked, are kept in `<memory dir>/distill/<conversation>.json`,
 //   so a reload neither re-reads the whole conversation nor proposes them again.
-// - The same row carries prune proposals: entries not used for 90 days and
-//   orphaned topic files (MemoryStore.pruneCandidates). They are removed only
-//   when checked and approved; kept ones are marked as used.
+// - The same row carries prune proposals: entries that read as a change log
+//   or duplicate another, entries not used for 90 days and orphaned topic
+//   files (MemoryStore.pruneCandidates). They are removed only when checked
+//   and approved; kept ones are marked as used.
+// - Saving a proposal goes through MemoryStore.save like save_memory does,
+//   with the same change-log gate and per-conversation cap.
 // - Once per window, the pending and distill files of deleted conversations
 //   are removed (pruneOrphanFiles).
 
@@ -254,6 +257,7 @@ export class MemoryCoordinator {
 							text: candidate.text,
 							importance: "normal",
 							action: "remove",
+							...(candidate.reason ? { reason: candidate.reason } : {}),
 							...(candidate.topicFile ? { topicFile: candidate.topicFile } : {}),
 						}),
 					),
@@ -308,10 +312,13 @@ export class MemoryCoordinator {
 		let saved = 0
 		try {
 			for (const item of chosen) {
+				// The same gate as save_memory: a proposal that slipped past the
+				// distiller's filter is still refused here, and the cap counts both.
 				const result = await this.deps.store.save(record.cwd, {
 					scope: item.scope,
 					text: item.text,
 					importance: item.importance,
+					conversationId,
 				})
 				if (result.inserted) saved++
 			}

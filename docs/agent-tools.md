@@ -110,6 +110,20 @@ With Terminal Execution Mode set to VS Code Terminal (the default), commands
 run in a PlinyCode terminal, and the output is read through shell integration
 (`VscodeTerminalProcess`).
 
+- **The `commands` argument must be an array.** A list written as a string
+  (`"['git status']"`, the Python shape some models fall into) is repaired
+  into an array when it parses as one, and otherwise refused with
+  `commands must be a JSON array of strings, e.g. ["git status"]` rather than
+  run verbatim, which made the shell fail on the bracket and the model
+  conclude that every command was failing. `ask_question` refuses a
+  non-array `options` the same way.
+- **Failed-command notes.** On the free models, a failed or detached command
+  gets a short note appended to its result (`[The command ... exited with
+  code N. If that is expected, go on; otherwise fix it before you finish.]`),
+  at most twice per run. A query command (`findstr`, `grep`, `Select-String`,
+  `Get-ChildItem`, `where`, `test`, `git diff --quiet`) that exits 1 and
+  prints nothing is an answer, not a failure, and gets none.
+
 - **Long-running commands.** A command still running after 5 minutes keeps
   running in the terminal. The call returns with the output so far and the
   path of a log file that receives the rest, and the command is registered
