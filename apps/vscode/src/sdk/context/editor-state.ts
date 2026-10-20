@@ -11,7 +11,7 @@ import path from "node:path"
 import { extractEditorStateBlock, formatEditorStateBlock } from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
 
-export const EDITOR_STATE_MAX_TABS = 20
+export const EDITOR_STATE_MAX_TABS = 8
 const MAX_PATH_LENGTH = 300
 // Reading the editor goes through the host bridge; a message must not wait on it for long.
 const READ_TIMEOUT_MS = 1000
@@ -59,9 +59,14 @@ export async function readEditorState(window: EditorStateWindow): Promise<Editor
 	return state
 }
 
+function isInsideWorkspace(filePath: string, cwd: string): boolean {
+	const relative = cwd ? path.relative(cwd, filePath) : ""
+	return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+}
+
 function displayPath(filePath: string, cwd: string): string {
 	const relative = cwd ? path.relative(cwd, filePath) : ""
-	const insideWorkspace = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+	const insideWorkspace = isInsideWorkspace(filePath, cwd)
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is being removed
 	const shown = (insideWorkspace ? relative : filePath).replace(/\\/g, "/").replace(/[\u0000-\u001f\u007f]/g, "")
 	const bounded = shown.length > MAX_PATH_LENGTH ? `…${shown.slice(shown.length - MAX_PATH_LENGTH + 1)}` : shown
@@ -74,7 +79,10 @@ function displayPath(filePath: string, cwd: string): string {
  * they are inside it. Undefined when no file is open.
  */
 export function formatEditorState(state: EditorState, cwd: string): string | undefined {
-	if (!state.activeFile && state.openTabs.length === 0) {
+	// Tabs outside the conversation's folder (another project, an editor's own
+	// files) say nothing about the work; the active file is shown wherever it is.
+	const openTabs = state.openTabs.filter((tabPath) => isInsideWorkspace(tabPath, cwd))
+	if (!state.activeFile && openTabs.length === 0) {
 		return undefined
 	}
 
@@ -88,13 +96,13 @@ export function formatEditorState(state: EditorState, cwd: string): string | und
 				: ` (lines ${selection.startLine}-${selection.endLine} selected)`
 		lines.push(`Active file: ${displayPath(state.activeFile, cwd)}${position}`)
 	}
-	if (state.openTabs.length > 0) {
+	if (openTabs.length > 0) {
 		lines.push("Open tabs:")
-		for (const tabPath of state.openTabs.slice(0, EDITOR_STATE_MAX_TABS)) {
+		for (const tabPath of openTabs.slice(0, EDITOR_STATE_MAX_TABS)) {
 			lines.push(`- ${displayPath(tabPath, cwd)}`)
 		}
-		if (state.openTabs.length > EDITOR_STATE_MAX_TABS) {
-			lines.push(`... and ${state.openTabs.length - EDITOR_STATE_MAX_TABS} more`)
+		if (openTabs.length > EDITOR_STATE_MAX_TABS) {
+			lines.push(`... and ${openTabs.length - EDITOR_STATE_MAX_TABS} more`)
 		}
 	}
 	return formatEditorStateBlock(lines.join("\n"))

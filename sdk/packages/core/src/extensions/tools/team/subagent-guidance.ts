@@ -8,7 +8,7 @@ export const SUB_AGENT_GUIDANCE_RULE_ID = "subagents:guidance";
  * goes in the system prompt only while the tool is in the request.
  */
 export const SUB_AGENT_GUIDANCE = `## Delegating to sub-agents
-\`spawn_agent\` runs a sub-agent in its own context and gives you back only its final report. Delegate when the work would fill your context with intermediate output you do not need: exploring many files to answer a question, reviewing a change, running and reading a long test suite, or independent subtasks that can run in parallel (make several \`spawn_agent\` calls in one reply). Keep single reads, single commands and small edits for yourself. A sub-agent starts with no memory of this conversation: put everything it needs in \`task\` (paths, what to look for, what to report, what not to change) and ask for a concise report. It has your working directory and tools, but cannot ask the user, save memories or delegate further.`;
+Delegate with \`spawn_agent\` when the work would fill your context with output you do not need: exploring many files to answer a question, reviewing a change, running and reading a long test suite, or independent subtasks that can run in parallel. Keep single reads, single commands and small edits for yourself.`;
 
 /** The extension that registers the guidance, gated on the tool being available. */
 export function createSubAgentGuidanceExtension(): AgentExtension {

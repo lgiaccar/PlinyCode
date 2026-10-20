@@ -559,7 +559,7 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 		Logger.log(`[SessionFactory] Built system prompt: ${systemPrompt.length} chars`)
 	} catch (error) {
 		Logger.warn("[SessionFactory] Failed to build system prompt, using minimal fallback:", error)
-		systemPrompt = "You are Cline, a highly skilled software engineer. Help the user with their request."
+		systemPrompt = "You are a coding agent. Help the user with their request using the tools available to you."
 	}
 
 	// Inject preferred language instructions when a non-default language is selected.

@@ -90,9 +90,28 @@ describe("formatRulesForSystemPrompt budgets", () => {
 		expect(output).toContain("## always\nalways body");
 		expect(output).not.toContain("py body");
 		expect(output).toContain("## Rules to read when they apply");
-		expect(output).toContain(
-			"- **py** (Applies only when working with files matching: `**/*.py`): `/w/py.md`",
+		expect(output).toContain("- **py** (for `**/*.py`): `/w/py.md`");
+	});
+
+	it("lists rule files relative to the workspace root, with forward slashes", () => {
+		const output = formatRulesForSystemPrompt(
+			[
+				{
+					...rule("py", { applyTo: "**/*.py" }),
+					filePath: "/w/.cursor/rules/py.mdc",
+				},
+				{
+					...rule("far", { applyTo: "**/*.go" }),
+					filePath: "/elsewhere/far.md",
+				},
+			],
+			{ workspaceRoot: "/w" },
 		);
+		expect(output).toContain(
+			"- **py** (for `**/*.py`): `.cursor/rules/py.mdc`",
+		);
+		expect(output).toContain("- **far** (for `**/*.go`): `/elsewhere/far.md`");
+		expect(output).toContain("Paths are relative to the working directory.");
 	});
 
 	it("caps a long rule and points at its file", () => {
@@ -202,10 +221,10 @@ describe("Cursor rule types", () => {
 		expect(output).not.toContain("manual.md body");
 		expect(output).not.toContain("requested.mdc body");
 		expect(output).toContain(
-			"- **manual.md** (Manual Cursor rule: read it when the user mentions it or the task is about it): `/w/.cursor/rules/manual.md`",
+			"- **manual.md** (manual: read it when the user mentions it): `/w/.cursor/rules/manual.md`",
 		);
 		expect(output).toContain(
-			"- **requested.mdc** (Apply only when relevant: Profiling): `/w/.cursor/rules/requested.mdc`",
+			"- **requested.mdc** (Profiling): `/w/.cursor/rules/requested.mdc`",
 		);
 	});
 

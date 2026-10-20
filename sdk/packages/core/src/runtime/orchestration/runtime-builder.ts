@@ -465,6 +465,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			userInstructionService && userInstructionsEnabled
 				? userInstructionService.createExtension({
 						includeRules: rulesEnabled,
+						workspacePath: config.cwd,
 						includeSkills: rootSkillsEnabled,
 						includeWorkflows: workflowsEnabled,
 						registerSkillsTool,

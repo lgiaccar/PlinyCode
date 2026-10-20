@@ -76,7 +76,7 @@ Open tabs:
 </editor_state>
 ```
 
-A selection is given as `(lines 10-24 selected)`. Paths inside the conversation's folder are relative to it; other files keep their full path. At most 20 tabs are listed, followed by a count of the rest. File contents are never included.
+A selection is given as `(lines 10-24 selected)`. Paths inside the conversation's folder are relative to it; the active file keeps its full path when it is elsewhere. Only tabs inside the conversation's folder are listed, at most 8 of them (`EDITOR_STATE_MAX_TABS`), followed by a count of the rest: a Cursor window with 40 tabs open, several of them the editor's own files, used to add 1,200 characters to every typed message. File contents are never included.
 
 The state is read through the host bridge's window service: `getOpenTabs`, and `getActiveEditor`, which now also returns the selection's lines and whether the editor shows a file on disk ([getActiveEditor.ts](../apps/vscode/src/hosts/vscode/hostbridge/window/getActiveEditor.ts)). Untitled documents, output channels and diff views are left out.
 

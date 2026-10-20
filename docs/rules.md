@@ -18,7 +18,7 @@ The panel has Rules, Skills, Agents and Hooks tabs ([agent-tools.md](agent-tools
 The section is resent with every request, so it has a budget:
 
 - An always-on rule is inlined, cut at 12,000 characters (`MAX_RULE_CHARS`) with a note pointing at the file; all inlined rules together get 40,000 (`MAX_RULES_TOTAL_CHARS`). What does not fit is listed by path.
-- A scoped rule (file globs, Copilot's `applyTo`, Cursor's description-only rules) is listed by name, scope and path, and the model reads it with `read_files` when its scope applies.
+- A scoped rule (file globs, Copilot's `applyTo`, Cursor's description-only rules) is listed by name, scope and path under "Rules to read when they apply", and the model reads it with `read_files` when its scope applies. The list is sent with every request, so it is kept short: one line per rule, the scope without an "Apply only when relevant" preamble (``for `**/*.py` ``, the rule's own description, or `manual: read it when the user mentions it`), and the path relative to the working directory when the file is under it.
 - **Agent guides below the root are always listed, never inlined.** A nested `AGENTS.md` is scoped to its own folder (`apps/vscode/AGENTS.md` applies to `apps/vscode/**`) unless it sets a scope in its frontmatter; a root `CLAUDE.md` is listed as "read it when AGENTS.md and the rules above do not answer something", since it usually repeats `AGENTS.md`.
 
 The model sees, for this repository:

@@ -83,6 +83,39 @@ describe("token estimate and images", () => {
 		);
 	});
 
+	it("counts only the name, description and schema of a tool, whatever else the object carries", () => {
+		const schema = {
+			type: "object",
+			properties: { path: { type: "string", description: "x".repeat(300) } },
+		};
+		const lean = {
+			name: "read_file",
+			description: "Read a file.",
+			inputSchema: schema,
+		};
+		const runtime = {
+			...lean,
+			executionMode: "parallel",
+			timeoutMs: 120_000,
+			retryable: true,
+			maxRetries: 2,
+			execute: () => "never serialized",
+		};
+		const messages = [{ role: "user", content: "hi" }];
+		expect(estimateRequestInputTokens({ messages, tools: [runtime] })).toBe(
+			estimateRequestInputTokens({ messages, tools: [lean] }),
+		);
+		// Close to the JSON of the lean definition: the cached schema is reused.
+		const expected = Math.ceil(
+			JSON.stringify({ messages, tools: [lean] }).length / CHARS_PER_TOKEN,
+		);
+		const estimate = estimateRequestInputTokens({ messages, tools: [runtime] });
+		expect(Math.abs(estimate - expected)).toBeLessThanOrEqual(2);
+		expect(estimateRequestInputTokens({ messages, tools: [runtime] })).toBe(
+			estimate,
+		);
+	});
+
 	it("scales only the text by a calibrated ratio, never the images", () => {
 		const text = "a".repeat(4_000);
 		const measured = measureRequestForTokenEstimate({

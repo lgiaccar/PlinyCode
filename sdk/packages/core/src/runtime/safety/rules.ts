@@ -167,8 +167,47 @@ export function capInstructionText(
  * - Inlined bodies have their headings nested under the rule's own heading
  *   (nestRuleHeadings).
  */
+export interface FormatRulesOptions {
+	/**
+	 * The workspace root; the files of listed rules under it are shown
+	 * relative to it. The listing is sent with every request, and 20 absolute
+	 * Windows paths cost more than the descriptions beside them.
+	 */
+	workspaceRoot?: string;
+}
+
+/** `filePath` relative to `root` when under it, with forward slashes; else as given. */
+function displayRulePath(filePath: string, root: string | undefined): string {
+	if (!root) {
+		return filePath;
+	}
+	const normalize = (value: string) =>
+		value.replace(/\\/g, "/").replace(/\/+$/, "");
+	const normalizedRoot = normalize(root);
+	const normalizedPath = normalize(filePath);
+	const sameCase =
+		process.platform === "win32"
+			? normalizedPath
+					.toLowerCase()
+					.startsWith(`${normalizedRoot.toLowerCase()}/`)
+			: normalizedPath.startsWith(`${normalizedRoot}/`);
+	return sameCase ? normalizedPath.slice(normalizedRoot.length + 1) : filePath;
+}
+
+/** The scope of a listed rule, without the "Apply only when relevant" preamble: the list heading says that. */
+function listedRuleScope(scope: string): string {
+	return scope
+		.replace(/^Apply only when relevant:\s*/, "")
+		.replace(/^Applies only when working with files matching:\s*/, "for ")
+		.replace(
+			/^Manual Cursor rule: read it when the user mentions it or the task is about it$/,
+			"manual: read it when the user mentions it",
+		);
+}
+
 export function formatRulesForSystemPrompt(
 	rules: ReadonlyArray<RuleForPrompt>,
+	options: FormatRulesOptions = {},
 ): string {
 	if (rules.length === 0) {
 		return "";
@@ -180,12 +219,14 @@ export function formatRulesForSystemPrompt(
 	for (const rule of rules) {
 		const scope = describeRuleScope(rule) ?? describeCursorRuleScope(rule);
 		if (scope && rule.filePath) {
-			onDemand.push(`- **${rule.name}** (${scope}): \`${rule.filePath}\``);
+			onDemand.push(
+				`- **${rule.name}** (${listedRuleScope(scope)}): \`${displayRulePath(rule.filePath, options.workspaceRoot)}\``,
+			);
 			continue;
 		}
 		if (remaining <= 0 && rule.filePath) {
 			onDemand.push(
-				`- **${rule.name}** (not inlined: the rules budget is used up): \`${rule.filePath}\``,
+				`- **${rule.name}** (not inlined: the rules budget is used up): \`${displayRulePath(rule.filePath, options.workspaceRoot)}\``,
 			);
 			continue;
 		}
@@ -205,7 +246,7 @@ export function formatRulesForSystemPrompt(
 		inline.push(
 			[
 				"## Rules to read when they apply",
-				"These rule files are not included above. When one applies to the files or the kind of work in front of you, read it with read_files and follow it.",
+				"Not included above; each applies only when its scope matches the files or the kind of work in front of you. Then read it with read_files and follow it. Paths are relative to the working directory.",
 				...onDemand,
 			].join("\n"),
 		);
@@ -272,8 +313,10 @@ function rulePriority(rule: RuleForPrompt): number {
 export function loadRulesForSystemPromptFromWatcher(
 	watcher: UserInstructionConfigWatcher,
 	ruleFilter?: RuleFileFilter,
+	options: FormatRulesOptions = {},
 ): string {
 	return formatRulesForSystemPrompt(
 		listEnabledRulesFromWatcher(watcher, ruleFilter),
+		options,
 	);
 }

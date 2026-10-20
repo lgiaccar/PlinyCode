@@ -145,6 +145,52 @@ function safeStringify(value: unknown): string {
 	}
 }
 
+/**
+ * JSON of a tool definition's input schema, cached per tool object: the
+ * schemas are static and make up most of a tool list's size, and the list is
+ * measured several times per call (compaction, routing, calibration).
+ */
+const toolSchemaJson = new WeakMap<object, string>();
+
+/**
+ * The characters of the tool definitions as the provider sees them: name,
+ * description and input schema. Runtime fields of a tool object
+ * (executionMode, timeoutMs, retryable, maxRetries, execute) are never sent
+ * and used to be counted.
+ */
+export function measureToolDefinitions(tools: readonly unknown[]): number {
+	let chars = 2; // the array's brackets
+	for (const tool of tools) {
+		if (!tool || typeof tool !== "object") {
+			chars += safeStringify(tool).length + 1;
+			continue;
+		}
+		const record = tool as {
+			name?: unknown;
+			description?: unknown;
+			inputSchema?: unknown;
+			input_schema?: unknown;
+			parameters?: unknown;
+		};
+		const schema =
+			record.inputSchema ?? record.input_schema ?? record.parameters;
+		let schemaJson = toolSchemaJson.get(tool);
+		if (schemaJson === undefined) {
+			schemaJson = schema === undefined ? "" : safeStringify(schema);
+			toolSchemaJson.set(tool, schemaJson);
+		}
+		// `{"name":"...","description":"...","inputSchema":...},`
+		chars +=
+			safeStringify({
+				name: record.name,
+				description: record.description,
+			}).length +
+			(schemaJson ? schemaJson.length + '"inputSchema":,'.length : 0) +
+			1;
+	}
+	return chars;
+}
+
 /** measureForTokenEstimate of the parts of a request the provider counts as input. */
 export function measureRequestForTokenEstimate(
 	request: TokenEstimatedRequest,
@@ -152,11 +198,19 @@ export function measureRequestForTokenEstimate(
 	textChars: number;
 	binaryPayloads: number;
 } {
-	return measureForTokenEstimate({
+	const measured = measureForTokenEstimate({
 		systemPrompt: request.systemPrompt,
 		messages: request.messages,
-		tools: request.tools,
 	});
+	const tools = request.tools;
+	return {
+		textChars:
+			measured.textChars +
+			// A provided list, empty or not, counts its JSON framing
+			// (`,"tools":[...]`) as the whole-object serialization did.
+			(tools ? measureToolDefinitions(tools) + ',"tools":'.length : 0),
+		binaryPayloads: measured.binaryPayloads,
+	};
 }
 
 /**

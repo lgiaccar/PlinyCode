@@ -43,13 +43,19 @@ describe("formatEditorState", () => {
 		expect(formatEditorState(state, CWD)).toBe(block("Active file: src/app.ts (lines 10-24 selected)"))
 	})
 
-	it("lists at most 20 tabs and counts the rest", () => {
-		const openTabs = Array.from({ length: 26 }, (_, index) => inWorkspace("src", `file-${index}.ts`))
+	it("lists at most 8 tabs and counts the rest", () => {
+		const openTabs = Array.from({ length: 14 }, (_, index) => inWorkspace("src", `file-${index}.ts`))
 		const lines = formatEditorState({ openTabs }, CWD)?.split("\n") ?? []
 
-		expect(lines.filter((line) => line.startsWith("- "))).toHaveLength(20)
-		expect(lines.at(-3)).toBe("- src/file-19.ts")
+		expect(lines.filter((line) => line.startsWith("- "))).toHaveLength(8)
+		expect(lines.at(-3)).toBe("- src/file-7.ts")
 		expect(lines.at(-2)).toBe("... and 6 more")
+	})
+
+	it("leaves out tabs outside the workspace, and the block when only those are open", () => {
+		const outside = path.resolve("/somewhere/else/notes.md")
+		expect(formatEditorState({ openTabs: [inWorkspace("a.ts"), outside] }, CWD)).toBe(block("Open tabs:", "- a.ts"))
+		expect(formatEditorState({ openTabs: [outside] }, CWD)).toBeUndefined()
 	})
 
 	it("keeps the full path of a file outside the workspace", () => {

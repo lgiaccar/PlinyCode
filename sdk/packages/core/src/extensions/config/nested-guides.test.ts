@@ -91,10 +91,11 @@ describe("nested agent guides", () => {
 			// Nested guides are listed with their scope, not inlined.
 			expect(prompt).not.toContain("Run check-types.");
 			expect(prompt).toContain(
-				"- **apps/vscode/AGENTS.md** (Applies only when working with files matching: `apps/vscode/**`)",
+				"- **apps/vscode/AGENTS.md** (for `apps/vscode/**`)",
 			);
 			expect(prompt).toContain("- **sdk/AGENTS.md**");
-			expect(prompt).toContain("- **CLAUDE.md** (Apply only when relevant:");
+			expect(prompt).toContain("- **CLAUDE.md** (");
+			expect(prompt).not.toContain("Apply only when relevant:");
 			expect(prompt).not.toContain("vendored");
 		} finally {
 			watcher.stop();

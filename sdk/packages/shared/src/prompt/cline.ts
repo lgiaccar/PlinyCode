@@ -18,7 +18,7 @@ const WORKSPACE_CONFIGURATION_MARKER = "# Workspace Configuration";
  */
 export const MODE_TAG_INSTRUCTIONS = `# Plan / Act Modes
 
-User messages arrive wrapped in a <user_input mode="..."> tag. The mode attribute is the interaction mode the user was in when they sent that message: "plan" means plan-mode constraints applied (explore, analyze, and write the plan -- no edits except markdown plan files, no state-changing commands), "ask" means ask-mode constraints applied (answer the question -- no file edits at all, no state-changing commands), while "act" (or "yolo") means implementation was allowed. If the mode attribute changes between messages, the user switched modes -- the newest message's mode is what governs right now, regardless of what earlier messages allowed. A <mode_notice> block inside a message marks exactly when such a switch happened. The user's mode switch labels act mode "Agent", so call it Agent mode when you talk to the user.`;
+Each user message is wrapped in <user_input mode="..."> with the mode it was sent in: "plan" (explore and write a markdown plan; no other edits, no state-changing commands), "ask" (answer only; no edits, no state-changing commands), "act" or "yolo" (implementation allowed). The newest message's mode governs, whatever earlier messages allowed; a <mode_notice> block marks a switch. The user sees act mode as "Agent".`;
 
 /**
  * Plan-mode behavioral contract, appended when the session mode is "plan".
