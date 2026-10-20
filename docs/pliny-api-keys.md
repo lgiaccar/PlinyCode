@@ -7,22 +7,49 @@ variable as before.
 ## Adding keys in Settings
 
 **Settings → API Configuration → Pliny API Keys** lists the stored keys:
-- Each row shows the key's name and its last four characters (`••••1a2b`).
+- Each row shows a status light, the key's nickname and its last four characters (`••••1a2b`).
 - One key is marked **Active**; every other row has a **Use** button.
-- Each row also has **Rename** and **Remove**.
+- Each row also has **Test**, **Rename** and **Remove**.
 
-**Adding a key:**
-1. Click **Add Key**.
-2. VS Code asks for a name or tag (for example *Personal* or *Team budget*). It must differ from the other keys' names.
-3. VS Code asks for the key itself, in a password box.
+**Adding a key.** Everything happens in the Settings page:
+1. Click **Add Key**. A form opens under the list.
+2. Type a **Nickname** (for example *Personal* or *Team budget*). Every key needs one, and it must differ from the other keys' nicknames (case is ignored). The first key is offered *Default*.
+3. Paste the **API key** into the password field. The eye button shows what you pasted.
+4. Optionally click **Test** to check the key before storing it.
+5. Click **Save** (or press Enter). **Cancel** (or Escape) closes the form.
 
-The key is typed into VS Code's own input box, so it never passes through
-the Settings webview.
+**Renaming** turns the row's nickname into a text field: Enter or ✓ saves, Escape or ✕ cancels.
 
-**The check.** Before storing the key, PlinyCode asks the gateway's budget endpoint about it:
-- If the gateway rejects it (HTTP 401/403), the box says so and asks again.
+**The check on Save.** Before storing the key, PlinyCode asks the gateway's budget endpoint about it:
+- If the gateway rejects it (HTTP 401/403), the form says so and keeps what you typed.
 - If the gateway cannot be reached, the key is stored unchecked.
 - A key that is already stored, under any name, is refused.
+
+**Where the key travels.** A key typed in the form goes from the Settings
+webview to the extension once, over the extension's own message channel,
+when you click Test or Save. Only the extension holds it after that: the list
+the webview receives has only nicknames and last four characters, and
+testing a stored key sends its id, not the key.
+
+## Testing a key
+
+**Test**, on a stored key's row or in the add form, sends one real request
+to the Pliny inference server with that key: a chat completion of at most
+one token (`POST <baseUrl>/chat/completions`) to a free model, the router
+rules' `commit` utility model (the one Improve prompt uses). It costs nothing
+and checks what a conversation needs: the key, the network path and a model
+answering. The request gives up after 30 seconds.
+
+The light next to the key shows the result:
+
+| Light | Meaning |
+| --- | --- |
+| Grey | Not tested since Settings was opened |
+| Spinner | The test is running |
+| Green | The server answered; the tooltip and the line under the form give the time it took |
+| Red | The gateway rejected the key (HTTP 401/403), answered another error (the gateway's message is shown), or could not be reached |
+
+Results are not stored; they last until Settings is closed.
 
 The first key you add becomes the active one. Removing the active key makes
 the next one in the list active.

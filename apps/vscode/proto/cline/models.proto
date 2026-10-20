@@ -14,10 +14,12 @@ service ModelsService {
   rpc getPlinyBudget(EmptyRequest) returns (PlinyBudgetResponse);
   // Streams the Pliny API keys stored in Settings (names and last four characters only)
   rpc subscribeToPlinyApiKeys(EmptyRequest) returns (stream PlinyApiKeys);
-  // Asks for a name and a key in VS Code's input boxes, checks the key and stores it
-  rpc addPlinyApiKey(EmptyRequest) returns (PlinyApiKeys);
-  // Asks for a new name for the stored key with this id
-  rpc renamePlinyApiKey(StringRequest) returns (PlinyApiKeys);
+  // Checks a key typed in Settings and stores it under its name
+  rpc addPlinyApiKey(AddPlinyApiKeyRequest) returns (PlinyApiKeyActionResult);
+  // Renames the stored key with this id
+  rpc renamePlinyApiKey(RenamePlinyApiKeyRequest) returns (PlinyApiKeyActionResult);
+  // Sends a one-token request to the Pliny inference server with a stored key or one not stored yet
+  rpc testPlinyApiKey(TestPlinyApiKeyRequest) returns (PlinyApiKeyTestResult);
   // Forgets the stored key with this id
   rpc removePlinyApiKey(StringRequest) returns (PlinyApiKeys);
   // Makes the stored key with this id the one requests use
@@ -314,6 +316,38 @@ message PlinyApiKeys {
   string source = 2;
   // True when PLINY_API_KEY is set in the extension host's environment
   bool env_key_present = 3;
+}
+
+message AddPlinyApiKeyRequest {
+  // The nickname the key is listed under; it must differ from the other keys' names
+  string name = 1;
+  string key = 2;
+}
+
+message RenamePlinyApiKeyRequest {
+  string id = 1;
+  string name = 2;
+}
+
+// The keys after an add or a rename, and why it was refused (empty when it was not)
+message PlinyApiKeyActionResult {
+  PlinyApiKeys keys = 1;
+  string error = 2;
+}
+
+// Either the id of a stored key or, for a key not stored yet, the key itself
+message TestPlinyApiKeyRequest {
+  string id = 1;
+  string key = 2;
+}
+
+message PlinyApiKeyTestResult {
+  // True when the inference server answered the request
+  bool ok = 1;
+  // The HTTP status, or 0 when the server could not be reached
+  int32 status = 2;
+  string message = 3;
+  int64 latency_ms = 4;
 }
 
 // Request for updating API configuration (legacy - uses combined configuration)

@@ -1,15 +1,22 @@
-import type { StringRequest } from "@shared/proto/cline/common"
-import type { PlinyApiKeys } from "@shared/proto/cline/models"
-import { promptRenamePlinyApiKey } from "@/hosts/vscode/pliny-api-key-prompts"
+import { PlinyApiKeyActionResult, type RenamePlinyApiKeyRequest } from "@shared/proto/cline/models"
+import { plinyKeyNameProblem } from "@/hosts/vscode/pliny-api-key-check"
 import { getPlinyApiKeys } from "@/hosts/vscode/pliny-api-keys"
 import type { Controller } from "../index"
 import { toProtoPlinyApiKeys } from "./pliny-api-keys-proto"
 
-/** Asks for a new name for the stored key whose id is `request.value`. */
-export async function renamePlinyApiKey(_controller: Controller, request: StringRequest): Promise<PlinyApiKeys> {
+/** Gives the stored key `request.id` the nickname `request.name`; a refusal comes back as `error`. */
+export async function renamePlinyApiKey(
+	_controller: Controller,
+	request: RenamePlinyApiKeyRequest,
+): Promise<PlinyApiKeyActionResult> {
 	const keys = getPlinyApiKeys()
-	if (keys && request.value) {
-		await promptRenamePlinyApiKey(keys, request.value)
+	const entry = keys?.list().find((k) => k.id === request.id)
+	if (!keys || !entry) {
+		return PlinyApiKeyActionResult.create({ keys: toProtoPlinyApiKeys(keys), error: "This key is no longer stored." })
 	}
-	return toProtoPlinyApiKeys(keys)
+	const error = plinyKeyNameProblem(keys, request.name, request.id)
+	if (!error && request.name.trim() !== entry.name) {
+		await keys.rename(request.id, request.name)
+	}
+	return PlinyApiKeyActionResult.create({ keys: toProtoPlinyApiKeys(keys), error: error ?? "" })
 }
