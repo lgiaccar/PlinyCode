@@ -56,6 +56,7 @@ import { CiRunPolicies, type CiRunPolicy, decideCiTool } from "./ci-run-policy"
 import { buildStartSessionInput } from "./cline-session-factory"
 import { describeRenameForApproval } from "./code-intel/code-intel-tools"
 import { type ConversationContext, createConversationContext } from "./context"
+import { suggestConversationTitle } from "./conversation-title"
 import { createHookStatusRows } from "./hook-status-rows"
 import { createMemoryServices, type MemoryServices } from "./memory"
 import { MemoryCoordinator } from "./memory/memory-coordinator"
@@ -782,6 +783,7 @@ export class Controller {
 				this.background.sessions().filter((session) => workspacePathsEqual(session.startConfig?.cwd, cwd)).length,
 			createTaskWorktree: ({ folder, title }) =>
 				ensureTaskWorktree({ repoRoot: folder, title, configuredRoot: configuredTaskWorktreeFolder() }),
+			suggestTitle: (prompt, workspaceRoot) => suggestConversationTitle(prompt, workspaceRoot, completeWithUtilityModel),
 		})
 		this.compaction = new SdkCompactionCoordinator({
 			stateManager: this.stateManager,

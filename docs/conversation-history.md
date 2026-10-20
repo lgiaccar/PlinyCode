@@ -53,3 +53,9 @@ Favorite and pin are fields in the session record's metadata: `isFavorited` and 
 Every other write to a history record keeps the stored flags ([sdk-task-history.ts](../apps/vscode/src/sdk/sdk-task-history.ts), `updateSession`). Those writers hold a `HistoryItem` they read earlier, or build one from scratch at task start, and letting its flags through would un-star or unpin the conversation. Two flows start a new session for the same conversation, a checkpoint restore and an edit-and-regenerate; both copy the flags to the new record.
 
 Starring or pinning a conversation writes its record, which updates its last-activity time.
+
+## Titles and references
+
+A new conversation starts with the first line of its prompt as title. A moment later a small free model (the router rules' `commit` utility model, one request with the first 2,000 characters of the prompt) replaces it with a title of 3 to 7 words ([conversation-title.ts](../apps/vscode/src/sdk/conversation-title.ts)). The title is stored like a rename, so restarting from an edited message keeps it. A title you set yourself while the model works is never replaced, and a failed call leaves the first-line title. Conversations started with a title of their own (CI board runs, background starts) are not renamed.
+
+Each conversation also shows a short reference, such as `#ab3dx`, in the history list and the task header. It is the random part of the conversation id ([conversationRef.ts](../apps/vscode/src/shared/conversationRef.ts)), so it names the conversation in a message or a bug report and matches the id in `traces/` and the session folder.

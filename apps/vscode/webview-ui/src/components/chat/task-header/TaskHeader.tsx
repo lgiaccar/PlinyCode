@@ -1,3 +1,4 @@
+import { conversationRef } from "@shared/conversationRef"
 import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
 import { applyTunedInputBudget, modelTuningFor } from "@shared/model-tuning"
 import { isPlinyFreeModelId } from "@shared/pliny"
@@ -217,6 +218,14 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 								className="whitespace-nowrap overflow-hidden text-ellipsis w-full min-w-0 text-xs text-description"
 								title={workspacePath}>
 								{workspaceLabel}
+							</div>
+						)}
+						{currentTaskItem?.id && (
+							<div
+								className="select-text text-xs text-description font-mono"
+								data-testid="task-ref"
+								title="Conversation reference">
+								#{conversationRef(currentTaskItem.id)}
 							</div>
 						)}
 						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
