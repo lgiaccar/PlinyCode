@@ -1,3 +1,4 @@
+import { StringArrayRequest } from "@shared/proto/cline/common"
 import { RelativePathsRequest } from "@shared/proto/cline/file"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -6,6 +7,63 @@ import { FileServiceClient } from "@/services/grpc-client"
 import { insertMentionDirectly } from "@/utils/context-mentions"
 
 const { MAX_IMAGES_AND_FILES_PER_MESSAGE } = CHAT_CONSTANTS
+const SUPPORTED_IMAGE_URI = /\.(png|jpe?g|webp)(?:$|[?#])/i
+const SUPPORTED_IMAGE_FILE = /\.(png|jpe?g|webp)$/i
+
+function isSupportedImageFile(file: File): boolean {
+	// Windows Explorer drops in VS Code webviews can leave File.type blank.
+	// Fall back to the file name rather than treating an otherwise valid image
+	// as plain dropped text or an unsupported file.
+	return /^(image\/(png|jpeg|webp))$/i.test(file.type) || SUPPORTED_IMAGE_FILE.test(file.name)
+}
+
+function parseUriList(data: string): string[] {
+	return data
+		.split(/\r?\n/)
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0 && !value.startsWith("#"))
+}
+
+function decodeUri(value: unknown): string | null {
+	if (typeof value !== "string") {
+		return null
+	}
+	try {
+		return decodeURIComponent(value)
+	} catch {
+		// A URI containing an invalid escape sequence can still be handled by
+		// vscode-uri on the extension side, so retain its original representation.
+		return value
+	}
+}
+
+/** Collects local URI drops from every format currently emitted by VS Code/Cursor. */
+function getDroppedUris(dataTransfer: DataTransfer): string[] {
+	const values: unknown[] = []
+	const resourceUrls = dataTransfer.getData("resourceurls")
+	if (resourceUrls) {
+		try {
+			const parsed: unknown = JSON.parse(resourceUrls)
+			if (Array.isArray(parsed)) {
+				values.push(...parsed)
+			}
+		} catch {
+			// Older Cursor builds expose resource URLs as a newline-separated list.
+			values.push(...parseUriList(resourceUrls))
+		}
+	}
+
+	for (const type of ["application/vnd.code.uri-list", "text/uri-list", "text/x-uri"]) {
+		const value = dataTransfer.getData(type)
+		if (value) {
+			values.push(...parseUriList(value))
+		}
+	}
+
+	return [...new Set(values.map(decodeUri).filter((uri): uri is string => !!uri))].filter((uri) =>
+		/^(?:vscode-file|file|vscode-remote):/i.test(uri),
+	)
+}
 
 const getImageDimensions = (dataUrl: string): Promise<{ width: number; height: number }> => {
 	return new Promise((resolve, reject) => {
@@ -258,6 +316,7 @@ export function useDropHandling(
 	const onDragOver = useCallback(
 		(e: React.DragEvent) => {
 			e.preventDefault()
+			e.dataTransfer.dropEffect = "copy"
 			// Ensure state remains true if dragging continues over the element
 			if (!isDraggingOver) {
 				setIsDraggingOver(true)
@@ -355,83 +414,78 @@ export function useDropHandling(
 			}
 
 			// --- 1. VSCode Explorer Drop Handling ---
-			let uris: string[] = []
-			const resourceUrlsData = e.dataTransfer.getData("resourceurls")
-			const vscodeUriListData = e.dataTransfer.getData("application/vnd.code.uri-list")
-
-			// 1a. Try 'resourceurls' first (used for multi-select)
-			if (resourceUrlsData) {
-				try {
-					uris = JSON.parse(resourceUrlsData)
-					uris = uris.map((uri) => decodeURIComponent(uri))
-				} catch (error) {
-					console.error("Failed to parse resourceurls JSON:", error)
-					uris = [] // Reset if parsing failed
-				}
-			}
-
-			// 1b. Fallback to 'application/vnd.code.uri-list' (newline separated)
-			if (uris.length === 0 && vscodeUriListData) {
-				uris = vscodeUriListData.split("\n").map((uri) => uri.trim())
-			}
-
-			// 1c. Filter for valid schemes (file or vscode-file) and non-empty strings
-			const validUris = uris.filter(
-				(uri) => uri && (uri.startsWith("vscode-file:") || uri.startsWith("file:") || uri.startsWith("vscode-remote:")),
-			)
+			const validUris = getDroppedUris(e.dataTransfer)
 
 			if (validUris.length > 0) {
-				setPendingInsertions([])
-				let initialCursorPos = inputValue.length
-				if (textAreaRef.current) {
-					initialCursorPos = textAreaRef.current.selectionStart
-				}
-				setIntendedCursorPosition(initialCursorPos)
+				const imageUris = validUris.filter((uri) => SUPPORTED_IMAGE_URI.test(uri))
+				const otherUris = validUris.filter((uri) => !imageUris.includes(uri))
 
-				FileServiceClient.getRelativePaths(RelativePathsRequest.create({ uris: validUris }))
-					.then((response) => {
-						if (response.paths.length > 0) {
-							setPendingInsertions((prev) => [...prev, ...response.paths])
+				if (imageUris.length > 0 && !shouldDisableFilesAndImages) {
+					try {
+						const response = await FileServiceClient.readDroppedImages(
+							StringArrayRequest.create({ value: imageUris }),
+						)
+						const availableSlots = MAX_IMAGES_AND_FILES_PER_MESSAGE - selectedImages.length - selectedFiles.length
+						if (availableSlots > 0) {
+							setSelectedImages((previous) => [...previous, ...response.values.slice(0, availableSlots)])
 						}
-					})
-					.catch((error) => {
-						console.error("Error getting relative paths:", error)
-					})
+					} catch (error) {
+						console.error("Error reading dropped images:", error)
+					}
+				}
+
+				if (otherUris.length === 0 && imageUris.length > 0) {
+					return
+				}
+				if (otherUris.length > 0) {
+					setPendingInsertions([])
+					let initialCursorPos = inputValue.length
+					if (textAreaRef.current) {
+						initialCursorPos = textAreaRef.current.selectionStart
+					}
+					setIntendedCursorPosition(initialCursorPos)
+
+					FileServiceClient.getRelativePaths(RelativePathsRequest.create({ uris: otherUris }))
+						.then((response) => {
+							if (response.paths.length > 0) {
+								setPendingInsertions((prev) => [...prev, ...response.paths])
+							}
+						})
+						.catch((error) => {
+							console.error("Error getting relative paths:", error)
+						})
+					return
+				}
+			}
+
+			// --- 3. Native file drop handling ---
+			// Windows Explorer commonly supplies both a FileList and text/plain path
+			// data. Process the FileList first: otherwise the path text short-circuits
+			// the image branch and no thumbnail is attached.
+			const files = Array.from(e.dataTransfer.files)
+			const imageFiles = files.filter(isSupportedImageFile)
+
+			if (!shouldDisableFilesAndImages && imageFiles.length > 0) {
+				const imageDataArray = await readImageFiles(imageFiles)
+				const dataUrls = imageDataArray.filter((dataUrl): dataUrl is string => dataUrl !== null)
+
+				if (dataUrls.length > 0) {
+					const filesAndImagesLength = selectedImages.length + selectedFiles.length
+					const availableSlots = MAX_IMAGES_AND_FILES_PER_MESSAGE - filesAndImagesLength
+
+					if (availableSlots > 0) {
+						const imagesToAdd = Math.min(dataUrls.length, availableSlots)
+						setSelectedImages((prevImages) => [...prevImages, ...dataUrls.slice(0, imagesToAdd)])
+					}
+				} else {
+					console.warn("No valid images were processed")
+				}
 				return
 			}
 
 			const text = e.dataTransfer.getData("text")
 			if (text) {
 				handleTextDrop(text)
-				return
-			}
-
-			// --- 3. Image Drop Handling ---
-			// Only proceed if it wasn't a VSCode resource or plain text drop
-			const files = Array.from(e.dataTransfer.files)
-			const acceptedTypes = ["png", "jpeg", "webp"]
-			const imageFiles = files.filter((file) => {
-				const [type, subtype] = file.type.split("/")
-				return type === "image" && acceptedTypes.includes(subtype)
-			})
-
-			if (shouldDisableFilesAndImages || imageFiles.length === 0) {
-				return
-			}
-
-			const imageDataArray = await readImageFiles(imageFiles)
-			const dataUrls = imageDataArray.filter((dataUrl): dataUrl is string => dataUrl !== null)
-
-			if (dataUrls.length > 0) {
-				const filesAndImagesLength = selectedImages.length + selectedFiles.length
-				const availableSlots = MAX_IMAGES_AND_FILES_PER_MESSAGE - filesAndImagesLength
-
-				if (availableSlots > 0) {
-					const imagesToAdd = Math.min(dataUrls.length, availableSlots)
-					setSelectedImages((prevImages) => [...prevImages, ...dataUrls.slice(0, imagesToAdd)])
-				}
-			} else {
-				console.warn("No valid images were processed")
 			}
 		},
 		[

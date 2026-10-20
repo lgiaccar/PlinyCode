@@ -34,6 +34,9 @@ service FileService {
   // Select images and other files from the file system and returns as data URLs & paths respectively
   rpc selectFiles(BooleanRequest) returns (StringArrays);
 
+  // Converts supported image URIs dropped from the VS Code explorer to data URLs.
+  rpc readDroppedImages(StringArrayRequest) returns (StringArray);
+
   // Convert URIs to workspace-relative paths
   rpc getRelativePaths(RelativePathsRequest) returns (RelativePaths);
 
