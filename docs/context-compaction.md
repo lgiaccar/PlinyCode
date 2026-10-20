@@ -90,3 +90,14 @@ The host-side sources (memory, pasted bodies) are read before every model call t
 Only catalog models flagged for it get cache breakpoints: on the system prompt, the newest message (usually the latest tool result) and the end of the previous step. [prompt-cache.md](prompt-cache.md) explains the placement, why tool-only assistant turns used to defeat it, and how it was measured.
 
 What else changes the cached prefix: a mode switch (the mode instructions are in the system prompt), editing a rules file (rules are re-read on every run), removing an earlier turn's reasoning, rewriting superseded file reads, compaction itself, and a change to the MCP tool list. The git snapshot, the memory section and the date are pinned per conversation so a rebuild does not change them ([environment-context.md](environment-context.md), [memory.md](memory.md)).
+
+## Replaying a stored conversation
+
+`sdk/packages/core/scripts/replay-compaction.ts` runs a stored conversation (`~/.cline/data/sessions/<id>`) through the automatic trigger call by call, with the basic strategy, the pruning of a model without a prompt cache and the provider counts the transcript recorded, and prints every call that would have compacted:
+
+```sh
+cd sdk/packages/core
+bun --conditions=development run scripts/replay-compaction.ts ~/.cline/data/sessions/<id> --budget 150000 --tools-chars 39000
+```
+
+`--budget` is the input limit to replay against, `--tools-chars` the size of the tool definitions to assume (the stored transcript has none), `--cached` keeps the block-based pruning, `--verbose` prints every call. The CI Board run that compacted eleven times replays to ten compactions at the old 92k budget and two at 150k; it is a bound, not a prediction, since the transcript already holds the re-reads the compactions caused.
