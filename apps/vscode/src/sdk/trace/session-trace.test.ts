@@ -1,5 +1,6 @@
 import type { CoreSessionConfig } from "@plinycode/core"
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from "@plinycode/shared"
+import { estimateRequestInputTokens } from "@plinycode/shared"
 import { createHash } from "crypto"
 import fs from "fs/promises"
 import os from "os"
@@ -173,6 +174,34 @@ describe("installSessionTrace", () => {
 		expect(requests[1]).not.toHaveProperty("reset")
 		expect((requests[1].messages as Array<{ id: string }>).map((message) => message.id)).toEqual(["m2", "m3"])
 		expect(requests[1].totalChars).toBe(JSON.stringify(second.messages).length)
+		// The estimate compaction compares with its trigger, next to the
+		// provider's count on the stream record.
+		expect(requests[1].estimatedTokens).toBe(
+			estimateRequestInputTokens({ systemPrompt: second.systemPrompt, messages: second.messages, tools: second.tools }),
+		)
+	})
+
+	it("keeps writing incrementally when the request messages carry the engine's ids", async () => {
+		// The engine rebuilds the request on every call; as long as the ids it
+		// assigns stay on the messages, the second record is incremental and
+		// not a reset. Every record was a reset while the request build dropped
+		// the ids and the engine regenerated them per call.
+		const { trace, send } = setup(scripted([STOP]))
+		const base = request("one")
+		await send(base)
+		await send({
+			...base,
+			messages: [
+				...base.messages.map((message) => ({ ...message })),
+				{ id: "m2", role: "assistant" as const, content: [{ type: "text" as const, text: "ok" }], createdAt: 1 },
+			],
+		})
+		await trace.flush()
+		const requests = (await readTrace("s1")).filter((line) => line.type === "request")
+		expect(requests.map((line) => [line.fromIndex, line.newMessages, line.reset ?? false])).toEqual([
+			[0, 1, false],
+			[1, 1, false],
+		])
 	})
 
 	it("writes the whole list again, marked reset, when the earlier part changed", async () => {
@@ -338,6 +367,63 @@ describe("installSessionTrace", () => {
 			iterations: 1,
 			runId: "run-8",
 			usage: { inputTokens: 5, outputTokens: 1 },
+		})
+	})
+
+	it("records compaction notices with their diagnostics through onEvent, and nothing for other notices", async () => {
+		const baseOnEvent = vi.fn(async () => undefined)
+		const { config, trace } = setup(scripted([STOP]), {}, { onEvent: baseOnEvent })
+		const snapshot = { agentId: "agent-1", runId: "run-7", iteration: 12 }
+		await config.hooks?.onEvent?.({
+			type: "status-notice",
+			snapshot,
+			message: "auto-compacted",
+			metadata: {
+				kind: "auto_compaction",
+				reason: "auto_compaction",
+				phase: "completed",
+				iteration: 12,
+				diagnostics: {
+					mode: "auto",
+					phase: "completed",
+					strategy: "agentic",
+					before: { messages: 41, estimatedTokens: 160_200, chars: 480_000 },
+					after: { messages: 9, estimatedTokens: 46_100, chars: 138_000 },
+					overheadTokens: 22_000,
+					budget: { triggerTokens: 148_400 },
+					factors: { underestimateFactor: 0.85, budgetScale: 0.91 },
+					summary: { chars: 9_800, sections: 2 },
+					summarizer: { modelId: "nemotron-super", durationMs: 6_200 },
+					durationMs: 6_400,
+				},
+			},
+		} as never)
+		await config.hooks?.onEvent?.({
+			type: "status-notice",
+			snapshot,
+			message: "something else",
+			metadata: { kind: "recovery_notice" },
+		} as never)
+		await config.hooks?.onEvent?.({ type: "run-started", snapshot } as never)
+		await trace.flush()
+
+		expect(baseOnEvent).toHaveBeenCalledTimes(3)
+		const lines = await readTrace("s1")
+		expect(lines.map((line) => line.type)).toEqual(["compaction"])
+		expect(lines[0]).toMatchObject({
+			agentId: "agent-1",
+			runId: "run-7",
+			iteration: 12,
+			kind: "auto_compaction",
+			phase: "completed",
+			notice: "auto-compacted",
+			mode: "auto",
+			strategy: "agentic",
+			before: { messages: 41, estimatedTokens: 160_200 },
+			after: { messages: 9, estimatedTokens: 46_100 },
+			budget: { triggerTokens: 148_400 },
+			factors: { underestimateFactor: 0.85, budgetScale: 0.91 },
+			summarizer: { modelId: "nemotron-super", durationMs: 6_200 },
 		})
 	})
 

@@ -12,7 +12,8 @@
  */
 
 import type { CoreSessionConfig } from "@plinycode/core"
-import type { AgentMessage, AgentModelEvent, AgentModelRequest, AgentUsage } from "@plinycode/shared"
+import type { AgentMessage, AgentModelEvent, AgentModelRequest, AgentRuntimeEvent, AgentUsage } from "@plinycode/shared"
+import { estimateRequestInputTokens } from "@plinycode/shared"
 import { createHash } from "crypto"
 import fs from "fs/promises"
 import path from "path"
@@ -34,6 +35,14 @@ type BeforeModelContext = Parameters<NonNullable<Hooks["beforeModel"]>>[0]
 type BeforeToolContext = Parameters<NonNullable<Hooks["beforeTool"]>>[0]
 type AfterToolContext = Parameters<NonNullable<Hooks["afterTool"]>>[0]
 type AfterRunContext = Parameters<NonNullable<Hooks["afterRun"]>>[0]
+
+/** Status notices of these kinds are the engine's compaction events. */
+const COMPACTION_NOTICE_KINDS = new Set([
+	"auto_compaction",
+	"manual_compaction",
+	"overflow_recovery_compaction",
+	"compaction_budget_emergency",
+])
 
 export interface SessionTraceDeps {
 	/** `plinycode.trace.enabled`, read for every record so a change applies at once. */
@@ -87,6 +96,13 @@ type TraceRecord =
 			messageCount: number
 			/** Characters of the whole message list as serialized, before redaction and truncation. */
 			totalChars: number
+			/**
+			 * The engine's estimate of the whole request (system prompt, messages,
+			 * tools; `estimateRequestInputTokens`), the number compaction compares
+			 * with its trigger. The `stream` record that follows has the count the
+			 * provider reported; the two together say how far the estimate is off.
+			 */
+			estimatedTokens: number
 			tools: string[]
 			/** Index in the request of the first message written below; 0 on a full record. */
 			fromIndex: number
@@ -129,6 +145,19 @@ type TraceRecord =
 			output: unknown
 	  })
 	| (TraceRecordBase & { type: "router" } & RouterCallEvent)
+	| (TraceRecordBase & {
+			type: "compaction"
+			/** The notice's kind: auto_compaction, manual_compaction, overflow_recovery_compaction, compaction_budget_emergency. */
+			kind: string
+			/** started, completed, skipped, insufficient or budget_adjusted. */
+			phase: string
+			/**
+			 * The engine's diagnostics for the step (mode, strategy, skipReason,
+			 * before/after sizes, overhead, budget, factors, summary, summarizer,
+			 * staleContextMode, durationMs), spread into the record as they came.
+			 */
+			[key: string]: unknown
+	  })
 	| (TraceRecordBase & { type: "error"; status: string; iterations: number; error: string })
 	| (TraceRecordBase & { type: "run_end"; status: string; iterations: number; usage?: TraceUsage })
 	| (TraceRecordBase & { type: "truncated"; bytes: number; maxBytes: number })
@@ -446,6 +475,11 @@ export function installSessionTrace(config: CoreSessionConfig, deps: SessionTrac
 						systemPromptChars: systemPrompt.length,
 						messageCount: request.messages.length,
 						totalChars: JSON.stringify(request.messages).length,
+						estimatedTokens: estimateRequestInputTokens({
+							systemPrompt: request.systemPrompt,
+							messages: request.messages,
+							tools: request.tools,
+						}),
 						tools: request.tools.map((tool) => tool.name),
 						fromIndex: written.fromIndex,
 						newMessages: written.messages.length,
@@ -532,6 +566,32 @@ export function installSessionTrace(config: CoreSessionConfig, deps: SessionTrac
 	}
 	config.hooks = {
 		...base,
+		onEvent: async (event: AgentRuntimeEvent) => {
+			// Compaction reports what it decided and did through status notices;
+			// the diagnostics it attaches are the numbers a drifting session needs
+			// explained (the log file keeps only the message unless verbose).
+			if (event.type === "status-notice") {
+				safe("run position", () => remember(event.snapshot))
+				const metadata = event.metadata
+				const kind = typeof metadata?.kind === "string" ? metadata.kind : undefined
+				if (kind && COMPACTION_NOTICE_KINDS.has(kind)) {
+					safe("compaction", () => {
+						const diagnostics =
+							metadata?.diagnostics && typeof metadata.diagnostics === "object"
+								? (metadata.diagnostics as Record<string, unknown>)
+								: {}
+						record(event.snapshot.agentId, {
+							type: "compaction",
+							kind,
+							phase: typeof metadata?.phase === "string" ? metadata.phase : "unknown",
+							notice: event.message,
+							...diagnostics,
+						})
+					})
+				}
+			}
+			return base.onEvent?.(event)
+		},
 		beforeModel: async (context: BeforeModelContext) => {
 			safe("run position", () => remember(context.snapshot))
 			return base.beforeModel?.(context)

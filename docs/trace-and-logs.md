@@ -41,11 +41,12 @@ hook snapshot of that agent; the first request of a run may come before any).
 
 | `type`        | Fields                                                                                                                                                                                                                                                                          |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `request`     | `modelId` (the session's model; for a router, the router's id), `systemPromptSha256`, `systemPromptChars`, `messageCount` and `totalChars` (the whole message list, as serialized before redaction), `tools` (names), `fromIndex`, `newMessages`, `reset` and `messages` (redacted, see below): only the messages added since the agent's previous `request` record, see "Incremental requests". The system prompt itself is never written. |
+| `request`     | `modelId` (the session's model; for a router, the router's id), `systemPromptSha256`, `systemPromptChars`, `messageCount` and `totalChars` (the whole message list, as serialized before redaction), `estimatedTokens` (the engine's estimate of the whole request, the number compaction compares with its trigger; the `stream` record that follows carries the provider's count), `tools` (names), `fromIndex`, `newMessages`, `reset` and `messages` (redacted, see below): only the messages added since the agent's previous `request` record, see "Incremental requests". The system prompt itself is never written. |
 | `stream`      | `modelId`, `routedModelId` (the model that served the call, from the usage event the router tags), `ttftMs`, `durationMs`, `finishReason`, `error`, `usage` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `reasoningTokens`, `cost`, `estimated`), `textChars`, `reasoningChars`, `toolCalls`. |
 | `tool_call`   | `tool`, `toolCallId`, `input` (redacted, strings cut at 2 000 characters), `skipped` / `stopped` when a hook skipped the call or stopped the run on it.                                                                                                                      |
 | `tool_result` | `tool`, `toolCallId`, `durationMs`, `ok`, `output` (redacted, cut at 2 000 characters).                                                                                                                                                                                      |
 | `router`      | `kind` (`start`, `failover`, `success`, `error`), `profile`, `subAgent`, `modelId`; on `start` the `route`, `candidates`, `effort`, `classification`, `estimatedTokens` and `callIndex`; on `failover` the `error`, `nextModelId` and `benched`; on `success` and `error` the `durationMs`, `ttftMs`, `finishReason`, `textChars`, `reasoningChars` and `toolCalls`. |
+| `compaction`  | One line per compaction step, from the engine's status notices: `kind` (`auto_compaction`, `manual_compaction`, `overflow_recovery_compaction`, `compaction_budget_emergency`), `phase` (`started`, `completed`, `skipped`, `insufficient`, `budget_adjusted`), `notice`, and the engine's diagnostics spread in: `mode`, `strategy`, `skipReason` (`not_smaller`, `nothing_to_fold`, …) and `cooldownUntilIteration` when it rested, `before` and `after` (`messages`, `estimatedTokens`, `chars`), `overheadTokens` (system prompt and tools), `budget` (`rawMaxInputTokens`, `maxInputTokens`, `triggerTokens`, `targetTokens`, `messageTargetTokens`, `preserveRecentTokens`, `thresholdRatio`), `factors` (`previousInputTokens`, `previousEstimatedTokens`, `underestimateFactor`, `calibrationCharsPerToken`, `calibrationFactor`, `budgetScale`), `summary` (`chars`, `sections`, `originalRequestChars`, `filesRead`, `filesEdited`, `hasTodo`, `hasLastFailure`), `summarizer` (`providerId`, `modelId`, `durationMs`, tokens, `cost`), `staleContextMode` when known, and `durationMs`. See [context-compaction.md](context-compaction.md). |
 | `run_end`     | A run that completed: `status`, `iterations`, `usage`.                                                                                                                                                                                                                       |
 | `error`       | A run that failed or was aborted: `status`, `iterations`, `error`.                                                                                                                                                                                                           |
 | `truncated`   | The last line of a file that reached its cap: `bytes`, `maxBytes`.                                                                                                                                                                                                           |
@@ -101,12 +102,20 @@ To rebuild what the model saw at an iteration, take the latest `request` with
 `request` of the same `agentId`. The other lines are self-contained: the
 `stream` after a `request` tells how the model answered (which model, how long,
 which finish reason), the `tool_call` / `tool_result` pairs what happened next,
-and a `router` line with `kind: "failover"` why a call changed model. A quick
-look from the shell:
+and a `router` line with `kind: "failover"` why a call changed model. A
+`compaction` line says what compaction saw (`before.estimatedTokens` against
+`budget.triggerTokens`, and the `factors` that scaled the budget) and what it
+left (`after`), or why it declined (`skipReason`). A quick look from the shell:
 
 ```sh
 jq -c 'select(.type == "stream") | {ts, iteration, routedModelId, finishReason, durationMs, usage}' ~/.cline/data/traces/<id>.jsonl
+jq -c 'select(.type == "request") | {iteration, messageCount, estimatedTokens}' ~/.cline/data/traces/<id>.jsonl
+jq -c 'select(.type == "compaction") | {iteration, phase, strategy, skipReason, before, after, factors}' ~/.cline/data/traces/<id>.jsonl
 ```
+
+The `request` record's `estimatedTokens` next to the following `stream`
+record's `usage.inputTokens` is the pair compaction scales its budget by on
+the next call (`factors.underestimateFactor`).
 
 ## The log file
 
