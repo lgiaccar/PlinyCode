@@ -286,7 +286,7 @@ understand would fail the call, so every other model keeps its default.
 - \`guard.judge\` — free models often end a run before the task is done. Pattern
   rules always catch the obvious cases (a step announced but not taken, "I'll
   check back later", stopping right after a failed command) and send the model
-  a reminder, at most three per run. With \`judge\` on, a small model is also
+  a reminder (\`escalation.maxNudgesPerRun\` per run). With \`judge\` on, a small model is also
   asked once per agentic run whether the request was actually carried out, so
   "would you like me to run it now?" after you said to run it is caught too.
   No verdict within \`guard.judgeTimeoutMs\` means the reply is accepted.
@@ -296,6 +296,10 @@ understand would fail the call, so every other model keeps its default.
   models (the model chosen at the start of a turn is kept for all of it, so a
   long turn on paid Claude is expensive); past the cap the rest of the turn
   runs on the first free model of the \`coding\` route. \`0\` turns it off.
+- \`escalation\` — when the guard stops reminding a stalling model and moves
+  the turn to a stronger one: after \`afterStalls\` stalls or
+  \`afterFailedCommands\` failed commands in one run. \`maxNudgesPerRun\` caps
+  the reminders a run gets (\`0\` sends none).
 - \`contextMarginRatio\` — safety factor when checking whether a request fits a
   model's context window.
 - \`sticky\` — keep the model chosen at the start of a turn for the rest of it.
@@ -332,6 +336,11 @@ health:
   maxPaidCallsPerTurn: ${rules.health.maxPaidCallsPerTurn}
   firstTokenTimeoutMs: ${rules.health.firstTokenTimeoutMs}
   stallTimeoutMs: ${rules.health.stallTimeoutMs}
+
+escalation:
+  afterStalls: ${rules.escalation.afterStalls}
+  afterFailedCommands: ${rules.escalation.afterFailedCommands}
+  maxNudgesPerRun: ${rules.escalation.maxNudgesPerRun}
 
 contextMarginRatio: ${rules.contextMarginRatio}
 sticky: ${rules.sticky}

@@ -105,6 +105,19 @@ export interface RouterGuardSettings {
 	judgeTimeoutMs: number
 }
 
+/**
+ * When the completion guard gives up on a stalling model and how often it may
+ * remind one: the knobs behind the "asked the model to continue" rows.
+ */
+export interface RouterEscalationSettings {
+	/** Stalls in one run before the turn moves to a stronger model. */
+	afterStalls: number
+	/** Failed commands in one run before the turn moves to a stronger model. */
+	afterFailedCommands: number
+	/** Reminders the guard may send in one run. */
+	maxNudgesPerRun: number
+}
+
 export interface RouterRules {
 	version: number
 	/** Ordered fallback pool; every candidate list is filtered against it. */
@@ -113,6 +126,7 @@ export interface RouterRules {
 	classifier: RouterClassifierSettings
 	guard: RouterGuardSettings
 	health: RouterHealthSettings
+	escalation: RouterEscalationSettings
 	/** Multiplier applied to the estimate when checking a context window. */
 	contextMarginRatio: number
 	/** Keep a turn's first choice for later iterations when still viable. */

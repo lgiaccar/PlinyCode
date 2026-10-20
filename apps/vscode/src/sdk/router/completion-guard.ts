@@ -155,12 +155,12 @@ interface RouterCompletionGuardOptions {
 	judge?: (context: JudgeContext) => Promise<JudgeVerdict | undefined>
 	/** Reports each judge consultation's outcome. */
 	onJudge?: (outcome: "done" | "not-done" | "no-verdict", reason?: string) => void
-	/** Reminders per run in all, obeyed or not. Default 8. */
-	maxNudgesPerRun?: number
+	/** Reminders per run in all, obeyed or not; a getter is read per reply. Default 8. */
+	maxNudgesPerRun?: number | (() => number)
 	/** Reminders per run the model did not act on. Default 3. */
 	maxUnansweredNudges?: number
-	/** Stalls, in a row or not, after which the guard escalates. Default 3. */
-	escalateAfterStalls?: number
+	/** Stalls, in a row or not, after which the guard escalates; a getter is read per reply. Default 3. */
+	escalateAfterStalls?: number | (() => number)
 }
 
 /**
@@ -220,9 +220,9 @@ export function evaluateReply(
 }
 
 export function createRouterCompletionGuard(options: RouterCompletionGuardOptions): CompletionGuard {
-	const maxNudges = options.maxNudgesPerRun ?? 8
+	const limit = (value: number | (() => number) | undefined, fallback: number) =>
+		typeof value === "function" ? value() : (value ?? fallback)
 	const maxUnanswered = options.maxUnansweredNudges ?? 3
-	const escalateAfter = options.escalateAfterStalls ?? 3
 	let lastIteration = 0
 	let lastNudgeIteration: number | undefined
 	let toolCallsAtNudge = 0
@@ -294,7 +294,7 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 		}
 		const userRequest = latestUserRequest(messages)
 		const rightAfterNudge = lastNudgeIteration !== undefined && iteration === lastNudgeIteration + 1
-		const budgetLeft = nudgesThisRun < maxNudges && unansweredNudges < maxUnanswered
+		const budgetLeft = nudgesThisRun < limit(options.maxNudgesPerRun, 8) && unansweredNudges < maxUnanswered
 
 		const hit = active
 			? evaluateReply(text, { message, runMessages, userRequest, firedRules })
@@ -315,7 +315,7 @@ export function createRouterCompletionGuard(options: RouterCompletionGuardOption
 				return undefined
 			}
 			stallsSinceEscalation += 1
-			const repeatedStall = stallsSinceEscalation >= escalateAfter
+			const repeatedStall = stallsSinceEscalation >= limit(options.escalateAfterStalls, 3)
 			const escalated = consecutiveStalls === 2 || repeatedStall
 			if (escalated) {
 				stallsSinceEscalation = 0

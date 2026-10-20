@@ -27,6 +27,7 @@ import {
 } from "@plinycode/llms"
 import { type AgentModel, type AgentModelRequest, estimateRequestInputTokens } from "@plinycode/shared"
 import type { ClineMessage, ClineSubagentUsageInfo } from "@shared/ExtensionMessage"
+import type { RouterTuningMap, RouterTuningProfile } from "@/shared/router-tuning"
 import { Logger } from "@/shared/services/Logger"
 import type { ModelCallUsage } from "../one-shot-model-call"
 import { createRouterCompletionGuard } from "./completion-guard"
@@ -55,6 +56,7 @@ import { isSuccessfulEdit } from "./router-review-diff"
 import { defaultRules } from "./router-rules"
 import { loadRouterRules } from "./router-rules-store"
 import { appendRunLog, type RouterRunEnding, type RouterRunLogRecord } from "./router-run-log"
+import { createTunedRules } from "./router-tuning"
 import type {
 	RouterCallRecord,
 	RouterCallShape,
@@ -128,6 +130,8 @@ export interface RouterInstallDeps {
 	onCallEvent?: (event: RouterCallEvent) => void
 	/** How routed calls with images are handled (`router-images.ts`); see {@link RouterImageDeps}. */
 	images?: RouterImageDeps
+	/** Settings → Router (`routerTuning`), read per call and laid over the rules files. */
+	tuning?: () => RouterTuningMap | undefined
 	/** Injectable for tests. */
 	now?: () => number
 	/** Injectable for tests: the wait before retrying after a dropped connection. */
@@ -154,14 +158,6 @@ export interface RouterImageDeps {
 
 /** Wait before retrying a reply whose connection dropped: long enough for a gateway blip to pass. */
 const TRANSPORT_RETRY_DELAY_MS = 2_000
-
-/**
- * Failed commands in one turn (a failed build, a failing test run) after which
- * the rest of the turn moves to the default route's lead. Edit, build and test
- * cycles that fail every time are the signal, so the count is not reset by a
- * command that passes in between.
- */
-const FAILED_COMMANDS_BEFORE_ESCALATION = 6
 
 /** The timing and shape fields of a finished attempt's trace event. */
 function callEventOutcome(timing: RouterCallTiming, shape: RouterCallShape): Partial<RouterCallEvent> {
@@ -400,7 +396,21 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// call of a session uses built-in defaults if the file has not been read
 	// yet, which is the correct conservative behavior.
 	const cachedRules = new Map<string, RouterRules>()
-	const rulesFor = (profile: string) => cachedRules.get(profile) ?? defaultRules(profile)
+	const builtInRules = new Map<string, RouterRules>()
+	const baseRules = (profile: string): RouterRules => {
+		const loaded = cachedRules.get(profile)
+		if (loaded) {
+			return loaded
+		}
+		const defaults = builtInRules.get(profile) ?? defaultRules(profile)
+		builtInRules.set(profile, defaults)
+		return defaults
+	}
+	// Settings → Router is laid over whatever the files say, read per call so a
+	// change there routes the next call without a rebuild.
+	const tunedRules = createTunedRules()
+	const rulesFor = (profile: string) =>
+		tunedRules(baseRules(profile), deps.tuning?.()?.[profile as RouterTuningProfile], profile)
 	let onRulesLoaded: ((rules: RouterRules) => void) | undefined
 	// The first load per profile is awaited by the routed model before its
 	// first call, so the user's file, not the built-in defaults, routes it.
@@ -413,7 +423,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			.then((rules) => {
 				cachedRules.set(profile, rules)
 				if (profile === installProfile) {
-					onRulesLoaded?.(rules)
+					onRulesLoaded?.(rulesFor(profile))
 				}
 			})
 			.catch((error) => Logger.warn(`[FreeAuto] Failed to load ${profile} rules: ${error}`))
@@ -948,7 +958,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// get no completion policy), so both its state and the BalanceAuto "is a
 	// free model answering?" check are the root turn's — never a sub-agent's.
 	const rootState = () => getSessionState(sessionKey())
-	const MAX_NUDGES = 8
+	const maxNudges = () => rulesFor(activeProfile).escalation.maxNudgesPerRun
 	// A model that ignores a reminder, keeps stalling between steps, or keeps
 	// failing commands gets swapped. The first stall escalation of a turn goes
 	// to the next free model of the route (then the coding route, then the
@@ -990,7 +1000,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 		isActive: () => freeModelIsAnswering(sessionKey()),
 		getMode: deps.getMode,
 		toolCallsThisRun: () => rootState().run.toolCalls,
-		maxNudgesPerRun: MAX_NUDGES,
+		maxNudgesPerRun: maxNudges,
+		escalateAfterStalls: () => rulesFor(activeProfile).escalation.afterStalls,
 		judge: async (context) => {
 			const rules = rulesFor(activeProfile)
 			if (!rules.guard.judge || !createUtilityModel) {
@@ -1028,19 +1039,19 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 			const clock = `\`${formatClock(now())}\``
 			if (rule === "judge") {
 				emitInfo(
-					`${clock} ⚖ The task looks unfinished${reason ? ` — _${reason}_` : ""} · asked the model to continue (${nudgesThisRun}/${MAX_NUDGES})`,
+					`${clock} ⚖ The task looks unfinished${reason ? ` — _${reason}_` : ""} · asked the model to continue (${nudgesThisRun}/${maxNudges()})`,
 				)
 			} else if (rule === "text-tool-call" && !escalated) {
 				emitInfo(
-					`${clock} ↻ The model wrote a tool call as text, so nothing ran · asked it to make the call (${nudgesThisRun}/${MAX_NUDGES})`,
+					`${clock} ↻ The model wrote a tool call as text, so nothing ran · asked it to make the call (${nudgesThisRun}/${maxNudges()})`,
 				)
 			} else if (escalated) {
 				emitInfo(
-					`${clock} ↻ The model stalled again after _"${excerpt}"_ · sent a firmer reminder (${nudgesThisRun}/${MAX_NUDGES})`,
+					`${clock} ↻ The model stalled again after _"${excerpt}"_ · sent a firmer reminder (${nudgesThisRun}/${maxNudges()})`,
 				)
 			} else {
 				emitInfo(
-					`${clock} ↻ The model stopped after _"${excerpt}"_ without acting · asked it to continue (rule: ${rule}, ${nudgesThisRun}/${MAX_NUDGES})`,
+					`${clock} ↻ The model stopped after _"${excerpt}"_ without acting · asked it to continue (rule: ${rule}, ${nudgesThisRun}/${maxNudges()})`,
 				)
 			}
 			Logger.log(`[FreeAuto] completion guard fired (${rule}${escalated ? ", escalated" : ""}): ${excerpt}`)
@@ -1052,7 +1063,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 					? "it stalled three times in a row"
 					: reason === "unanswered-budget"
 						? "it ignored too many reminders this turn"
-						: `all ${MAX_NUDGES} reminders for this turn are used up`
+						: `all ${maxNudges()} reminders for this turn are used up`
 			emitInfo(
 				`\`${formatClock(now())}\` ⏹ The model stopped again after _"${excerpt}"_ · not asking again: ${why}. ` +
 					"The task may be unfinished; send a message to continue.",
@@ -1187,7 +1198,11 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 				run.previousToolDetached = failure?.kind === "detached"
 				if (failure?.kind === "failed") {
 					run.failedCommands = (run.failedCommands ?? 0) + 1
-					if (run.failedCommands >= FAILED_COMMANDS_BEFORE_ESCALATION && !run.escalated) {
+					// `escalation.afterFailedCommands` failed commands (a failed build, a
+					// failing test run) move the rest of the turn to the default route's
+					// lead. Edit, build and test cycles that fail every time are the
+					// signal, so a command that passes in between does not reset the count.
+					if (run.failedCommands >= rulesFor(activeProfile).escalation.afterFailedCommands && !run.escalated) {
 						run.escalated = true
 						emitInfo(
 							`\`${formatClock(now())}\` ⚠ ${run.failedCommands} commands have failed this turn, so the model may be stuck`,
@@ -1281,7 +1296,7 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	// must stay off on a router too. The summarizer is still attached, so a
 	// later rebuild that turns compaction on finds it.
 	if (isRouted()) {
-		const summarizerModelId = defaultRules(installProfile).utility.summarizer
+		const summarizerModelId = rulesFor(installProfile).utility.summarizer
 		const summarizer = {
 			providerId: config.providerId,
 			modelId: summarizerModelId,

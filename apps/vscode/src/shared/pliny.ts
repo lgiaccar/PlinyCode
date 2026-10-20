@@ -50,6 +50,11 @@ export const PLINY_DEFAULT_MODEL_ID = PLINY_FREE_AUTO_MODEL_ID
  */
 export const PLINY_FREE_AUTO_RULES_URI = "pliny://free-auto-rules"
 
+/** The rules file of one router profile: `pliny://free-auto-rules/<profile>`. */
+export function plinyRouterRulesUri(profile: string): string {
+	return `${PLINY_FREE_AUTO_RULES_URI}/${profile}`
+}
+
 /**
  * The repository's and the user's MEMORY.md (docs/memory.md). Where they live
  * depends on the repository's remote, which only the host can resolve.

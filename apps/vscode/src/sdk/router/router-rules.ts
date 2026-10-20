@@ -74,6 +74,17 @@ const DEFAULT_HEALTH = {
 	stallTimeoutMs: 90_000,
 } as const
 
+/**
+ * The completion guard's escalation: three stalls or six failed commands in a
+ * run move the turn to a stronger model, and a run gets at most eight
+ * reminders in all (three of them may go unanswered).
+ */
+const DEFAULT_ESCALATION = {
+	afterStalls: 3,
+	afterFailedCommands: 6,
+	maxNudgesPerRun: 8,
+} as const
+
 const DEFAULT_CLASSIFIER = {
 	enabled: false,
 	timeoutMs: 8_000,
@@ -184,6 +195,19 @@ export function defaultPool(profile = "default"): string[] {
 	}
 	const hosted = new Set(plinyHostedPoolIds())
 	return [...BALANCE_PAID_HEAD.filter((id) => hosted.has(id)), ...free]
+}
+
+/**
+ * Every model a profile may route to: its default pool, then for BalanceAuto
+ * the paid models the catalog lists that the pool leaves out. What Settings →
+ * Router offers when the user picks models.
+ */
+export function routableModelIds(profile = "default"): string[] {
+	const pool = defaultPool(profile)
+	if (!plinyRouterProfileAllowsPaid(profile)) {
+		return pool
+	}
+	return [...pool, ...plinyHostedPoolIds().filter((id) => !pool.includes(id))]
 }
 
 /**
@@ -400,6 +424,7 @@ export function defaultRules(profile = "default"): RouterRules {
 		classifier: { ...DEFAULT_CLASSIFIER, enabled: profile === "smart" || balance },
 		guard: { ...DEFAULT_GUARD },
 		health: { ...DEFAULT_HEALTH },
+		escalation: { ...DEFAULT_ESCALATION },
 		contextMarginRatio: 1.15,
 		sticky: true,
 		routes,
@@ -451,7 +476,7 @@ function isRoutableModelId(id: string, allowPaid: boolean): boolean {
 	return allowPaid && !isPlinyRouterModelId(id)
 }
 
-function sanitizeModelIds(value: unknown, allowPaid: boolean): string[] {
+export function sanitizeModelIds(value: unknown, allowPaid: boolean): string[] {
 	if (!Array.isArray(value)) {
 		return []
 	}
@@ -554,6 +579,7 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 	const classifier = (raw.classifier ?? {}) as Record<string, unknown>
 	const guard = (raw.guard ?? {}) as Record<string, unknown>
 	const health = (raw.health ?? {}) as Record<string, unknown>
+	const escalation = (raw.escalation ?? {}) as Record<string, unknown>
 
 	const utilityOrDefault = (value: unknown, fallback: string): string => {
 		const id = asString(value)
@@ -587,6 +613,11 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 			maxPaidCallsPerTurn: asNonNegative(health.maxPaidCallsPerTurn) ?? defaults.health.maxPaidCallsPerTurn,
 			firstTokenTimeoutMs: asPositive(health.firstTokenTimeoutMs) ?? defaults.health.firstTokenTimeoutMs,
 			stallTimeoutMs: asPositive(health.stallTimeoutMs) ?? defaults.health.stallTimeoutMs,
+		},
+		escalation: {
+			afterStalls: asPositive(escalation.afterStalls) ?? defaults.escalation.afterStalls,
+			afterFailedCommands: asPositive(escalation.afterFailedCommands) ?? defaults.escalation.afterFailedCommands,
+			maxNudgesPerRun: asNonNegative(escalation.maxNudgesPerRun) ?? defaults.escalation.maxNudgesPerRun,
 		},
 		contextMarginRatio: asPositive(raw.contextMarginRatio) ?? defaults.contextMarginRatio,
 		sticky: raw.sticky === undefined ? defaults.sticky : raw.sticky === true,

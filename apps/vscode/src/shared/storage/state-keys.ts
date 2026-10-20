@@ -6,6 +6,7 @@ import { DEFAULT_MCP_DISPLAY_MODE, McpDisplayMode } from "@shared/McpDisplayMode
 import { Mode } from "@shared/storage/types"
 import type { ModelTuningMap } from "../model-tuning"
 import { coerceToPlinyProvider } from "../pliny"
+import type { RouterTuningMap } from "../router-tuning"
 
 // ============================================================================
 // SINGLE SOURCE OF TRUTH FOR STORAGE KEYS
@@ -42,6 +43,8 @@ const GLOBAL_STATE_FIELDS = {
 	favoritedModelIds: { default: [] as string[] },
 	// Per-model reasoning and context tuning set from the chat box (src/shared/model-tuning.ts).
 	modelTuning: { default: {} as ModelTuningMap },
+	// Settings → Router: model order and rule overrides per router profile (src/shared/router-tuning.ts).
+	routerTuning: { default: {} as RouterTuningMap },
 	mcpResponsesCollapsed: { default: false as boolean },
 	// User-dragged max height for the chat prompt textarea, in rows (react-textarea-autosize's maxRows).
 	chatInputMaxRows: { default: 10 as number },

@@ -201,7 +201,9 @@ pwsh apps/vscode/scripts/run-extension-host.ps1 -Editor cursor
 
 Open the rules file from the command palette with **PlinyCode: Open FreeAuto
 Routing Rules**. It is created on first activation, and saving it takes effect
-on the next call without a restart.
+on the next call without a restart. **Settings → Router** changes the model
+order and the other knobs without editing the file, and its values override
+the file's ([router-settings.md](router-settings.md)).
 
 Each call adds a timestamped row to the chat naming the model and the route that
 chose it, and the end of every turn adds a summary. The same lines go to the
@@ -249,7 +251,9 @@ BalanceAuto, only when the turn's last call ran on a free model — see
   a row is accepted. The same switch happens on the third stall in a run even
   when the model acted in between: some models (Kimi K2.6 is one) act on every
   reminder and then stall again on the next step. A run gets at most eight
-  reminders, and at most three the model did not act on; a reminder followed by
+  reminders, and at most three the model did not act on (the rules file's
+  `escalation` block sets the eight, the three stalls and the six failed
+  commands that also switch a turn); a reminder followed by
   a tool call does not count against the three. When the guard lets a stalled
   reply end the run, the chat says why (`⏹ … not asking again: …`) instead of
   ending on a plain "Completed", and the run log records it as `guardGaveUp`.

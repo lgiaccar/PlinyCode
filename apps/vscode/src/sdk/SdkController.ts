@@ -1107,7 +1107,7 @@ export class Controller {
 	 * the synchronous snapshot the message translator reads for display-path
 	 * relativization.
 	 */
-	private async getWorkspaceRoot(): Promise<string> {
+	async getWorkspaceRoot(): Promise<string> {
 		return this.workspaceRootResolver.getWorkspaceRoot()
 	}
 

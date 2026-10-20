@@ -490,3 +490,16 @@ describe("mode routing", () => {
 		expect(bad.when?.mode).toBeUndefined()
 	})
 })
+
+describe("escalation rules", () => {
+	it("defaults to three stalls, six failed commands and eight reminders per run", () => {
+		expect(defaultRules().escalation).toEqual({ afterStalls: 3, afterFailedCommands: 6, maxNudgesPerRun: 8 })
+	})
+
+	it("reads the escalation block, allowing zero reminders and ignoring invalid values", () => {
+		const rules = parseRulesMarkdown(
+			markdown("escalation:\n  afterStalls: 2\n  afterFailedCommands: -1\n  maxNudgesPerRun: 0"),
+		)
+		expect(rules.escalation).toEqual({ afterStalls: 2, afterFailedCommands: 6, maxNudgesPerRun: 0 })
+	})
+})
