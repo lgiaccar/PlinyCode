@@ -430,8 +430,9 @@
 			"id": "azure-openai/gpt-5.6-terra",
 			"thinking": { "defaultOn": true, "off": "reasoning-effort-none" },
 			"tool_call": true,
+			"attachment": true,
 			"name": "GPT-5.6 Terra",
-			"summary": "An Azure OpenAI GPT-5.6 deployment. Not yet characterised in PlinyCode; its price and limits are not on the Pliny catalog page."
+			"summary": "An Azure OpenAI GPT-5.6 deployment with image input. Its price and limits are not on the Pliny catalog page."
 		},
 		{
 			"id": "azure-openai/gpt-5.6-luna",
