@@ -16,6 +16,11 @@ export interface MemoryProposalItem {
 	 * orphaned topic file (`topicFile`). Absent for a memory to save.
 	 */
 	action?: "remove"
+	/**
+	 * Why a removal is proposed: not used for 90 days (absent or "stale"), a
+	 * record of what a task changed, or a near duplicate of another entry.
+	 */
+	reason?: "stale" | "change-log" | "duplicate"
 	/** For a topic file removal: the file's name in the scope's memory folder. */
 	topicFile?: string
 }

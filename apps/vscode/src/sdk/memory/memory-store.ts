@@ -15,16 +15,27 @@ import * as path from "node:path"
 import { resolveMemoryDataDir } from "@plinycode/shared/storage"
 import type { GitRunner } from "../context/git-snapshot"
 import {
+	countImportantEntries,
 	insertMemoryEntry,
 	MEMORY_FILE_NAME,
 	memoryDate,
 	memoryFileTemplate,
+	normalizeEntryText,
 	referencedTopicFiles,
 	removeMemoryEntries,
 	STALE_AFTER_DAYS,
+	selectCleanupEntries,
 	selectStaleEntries,
 	touchMemoryEntries,
 } from "./memory-file"
+import {
+	looksLikeChangeLog,
+	MAX_IMPORTANT_ENTRIES,
+	MAX_SAVES_PER_CONVERSATION,
+	type MemoryImportanceDemotion,
+	type MemorySaveRejection,
+	readsAsRule,
+} from "./memory-quality"
 import { type RepoIdentity, resolveRepoIdentity } from "./repo-key"
 
 export type MemoryScope = "repo" | "user"
@@ -63,6 +74,16 @@ export interface MemorySaveInput {
 	topic?: string
 	/** Longer markdown appended to the topic file; the index entry points to it. */
 	details?: string
+	/**
+	 * The conversation saving it, for the per-conversation cap
+	 * (MAX_SAVES_PER_CONVERSATION). Without it nothing is counted.
+	 */
+	conversationId?: string
+	/**
+	 * The user asked for this exact wording (`/remember`): the change-log gate
+	 * and the per-conversation cap do not apply.
+	 */
+	force?: boolean
 }
 
 interface MemorySaveResult {
@@ -71,6 +92,12 @@ interface MemorySaveResult {
 	topicFile?: string
 	/** The existing entry this memory duplicates; its `used` date was bumped instead. */
 	duplicateOf?: string
+	/** Why nothing was written: the text reads as a change log, or the conversation saved enough. */
+	rejected?: MemorySaveRejection
+	/** The entry asked for Important but went under Notes, and why. */
+	demoted?: MemoryImportanceDemotion
+	/** The importance the entry was saved with. */
+	importance: "high" | "normal"
 }
 
 /** Something prune proposals offer to remove (docs/memory.md). */
@@ -80,11 +107,15 @@ export interface PruneCandidate {
 	text: string
 	/** Set for an orphaned topic file: its name in the scope's folder. */
 	topicFile?: string
+	/** Why it is offered: not used for 90 days (the default), a change log, or a near duplicate of another entry. */
+	reason?: "stale" | "change-log" | "duplicate"
 }
 
 /** Entries and topic files proposed for removal per scope, at most. */
 const MAX_PRUNE_ENTRIES = 5
 const MAX_PRUNE_TOPICS = 3
+/** Change-log and duplicate entries proposed for removal per memory and distillation, at most. */
+const MAX_CLEANUP_ENTRIES = 8
 
 interface MemoryStoreOptions {
 	rootDir?: string
@@ -193,6 +224,8 @@ export class MemoryStore {
 	private readonly now: () => Date
 	private readonly locations = new Map<string, Promise<MemoryLocation>>()
 	private readonly writeQueues = new Map<string, Promise<unknown>>()
+	/** Entries written per conversation in this window, for the cap. */
+	private readonly savesByConversation = new Map<string, number>()
 
 	constructor(options: MemoryStoreOptions = {}) {
 		this.rootDir = options.rootDir ?? resolveMemoryDataDir()
@@ -259,11 +292,38 @@ export class MemoryStore {
 		)
 	}
 
-	/** Adds one memory, creating the files and folders it needs. */
+	/**
+	 * Adds one memory, creating the files and folders it needs. Every write
+	 * path goes through here (the tool, `/remember`, saved proposals), and so
+	 * does the gate: a change log is refused, a conversation that has saved
+	 * MAX_SAVES_PER_CONVERSATION entries saves no more, and an entry that asks
+	 * for Important without reading as a rule, or when Important is full, goes
+	 * under Notes. `force` (the user's own wording) skips the refusals.
+	 */
 	async save(cwd: string, input: MemorySaveInput): Promise<MemorySaveResult> {
 		const location = await this.locate(cwd)
 		const dir = input.scope === "user" ? location.userDir : location.repoDir
 		const file = input.scope === "user" ? location.userFile : location.repoFile
+		const text = normalizeEntryText(input.text)
+		if (!input.force) {
+			if (looksLikeChangeLog(text)) {
+				return { file, inserted: false, rejected: "change-log", importance: input.importance }
+			}
+			const saved = input.conversationId ? (this.savesByConversation.get(input.conversationId) ?? 0) : 0
+			if (saved >= MAX_SAVES_PER_CONVERSATION) {
+				return { file, inserted: false, rejected: "conversation-cap", importance: input.importance }
+			}
+		}
+		let importance = input.importance
+		let demoted: MemoryImportanceDemotion | undefined
+		if (importance === "high") {
+			if (!readsAsRule(text)) {
+				demoted = "not-a-rule"
+			} else if (countImportantEntries(await readText(file)) >= MAX_IMPORTANT_ENTRIES) {
+				demoted = "important-full"
+			}
+			if (demoted) importance = "normal"
+		}
 		const details = input.details?.trim()
 		const topicName = details ? topicFileName(input.topic || input.text.split(/\s+/).slice(0, 4).join(" ")) : undefined
 		const topicPath = topicName ? path.join(dir, topicName) : undefined
@@ -285,7 +345,7 @@ export class MemoryStore {
 				existing,
 				{
 					text: input.text,
-					importance: input.importance,
+					importance,
 					topicFile: topicName,
 					date: this.today(),
 				},
@@ -301,7 +361,17 @@ export class MemoryStore {
 		if (input.scope === "repo") {
 			await this.writeRepoNote(location).catch(() => {})
 		}
-		return { file, inserted: result.inserted, topicFile: topicPath, duplicateOf: result.duplicateOf }
+		if (result.inserted && input.conversationId && !input.force) {
+			this.savesByConversation.set(input.conversationId, (this.savesByConversation.get(input.conversationId) ?? 0) + 1)
+		}
+		return {
+			file,
+			inserted: result.inserted,
+			topicFile: topicPath,
+			duplicateOf: result.duplicateOf,
+			importance,
+			...(demoted && result.inserted ? { demoted } : {}),
+		}
 	}
 
 	/**
@@ -377,9 +447,11 @@ export class MemoryStore {
 	}
 
 	/**
-	 * What a prune proposal offers to remove: entries not used for
-	 * STALE_AFTER_DAYS (not under Important, not pinned, dated), and topic
-	 * files no entry points to that were not changed for as long.
+	 * What a prune proposal offers to remove: entries that read as a change
+	 * log or duplicate another entry (any section, unless pinned or kept
+	 * lately), entries not used for STALE_AFTER_DAYS (not under Important,
+	 * not pinned, dated), and topic files no entry points to that were not
+	 * changed for as long.
 	 */
 	async pruneCandidates(cwd: string): Promise<PruneCandidate[]> {
 		const location = await this.locate(cwd)
@@ -390,8 +462,13 @@ export class MemoryStore {
 			const file = scope === "user" ? location.userFile : location.repoFile
 			const dir = scope === "user" ? location.userDir : location.repoDir
 			const text = await readText(file)
+			const cleanup = selectCleanupEntries(text, looksLikeChangeLog, today, MAX_CLEANUP_ENTRIES)
+			for (const entry of cleanup) {
+				candidates.push({ scope, text: entry.text, reason: entry.reason })
+			}
+			const offered = new Set(cleanup.map((entry) => entry.text))
 			for (const entry of selectStaleEntries(text, today, STALE_AFTER_DAYS, MAX_PRUNE_ENTRIES)) {
-				candidates.push({ scope, text: entry.text })
+				if (!offered.has(entry.text)) candidates.push({ scope, text: entry.text })
 			}
 			const referenced = referencedTopicFiles(text)
 			let topics = 0

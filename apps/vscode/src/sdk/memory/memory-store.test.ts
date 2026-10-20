@@ -28,12 +28,12 @@ describe("MemoryStore", () => {
 	it("keeps repository memory under the repo key and personal memory apart", async () => {
 		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
 		const repo = await store.save("/work/a", { scope: "repo", text: "Use bun", importance: "normal" })
-		const user = await store.save("/work/a", { scope: "user", text: "Answer briefly", importance: "high" })
+		const user = await store.save("/work/a", { scope: "user", text: "Always answer briefly", importance: "high" })
 
 		expect(path.dirname(repo.file)).toMatch(/repos[\\/]org-repo-[0-9a-f]{8}$/)
 		expect(user.file).toBe(path.join(root, "user", "MEMORY.md"))
 		expect(await fs.readFile(repo.file, "utf8")).toContain("- Use bun")
-		expect(await fs.readFile(user.file, "utf8")).toContain("## Important\n\n- Answer briefly")
+		expect(await fs.readFile(user.file, "utf8")).toContain("## Important\n\n- Always answer briefly")
 		const note = JSON.parse(await fs.readFile(path.join(path.dirname(repo.file), "repo.json"), "utf8"))
 		expect(note).toEqual({ identity: "github.com/org/repo", kind: "remote", remote: "git@github.com:org/repo.git" })
 	})
@@ -104,6 +104,119 @@ describe("MemoryStore", () => {
 		await store.save("/work/a", { scope: "repo", text: "Use bun", importance: "normal" })
 		const again = await store.save("/work/a", { scope: "repo", text: "use bun", importance: "high" })
 		expect(again.inserted).toBe(false)
+	})
+
+	it("refuses a change log unless the user asked for that wording", async () => {
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		const refused = await store.save("/work/a", {
+			scope: "repo",
+			text: "Fixed the sync bug: now flushes the buffer",
+			importance: "high",
+		})
+		expect(refused).toMatchObject({ inserted: false, rejected: "change-log" })
+		expect((await store.read("/work/a")).repoText).toBe("")
+		const forced = await store.save("/work/a", {
+			scope: "repo",
+			text: "Fixed the sync bug: now flushes the buffer",
+			importance: "normal",
+			force: true,
+		})
+		expect(forced.inserted).toBe(true)
+	})
+
+	it("keeps Important for rules and gotchas, and for at most 15 entries", async () => {
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		const statement = await store.save("/work/a", {
+			scope: "repo",
+			text: "The benchmark pipeline aggregates results into a markdown artifact",
+			importance: "high",
+		})
+		expect(statement).toMatchObject({ inserted: true, importance: "normal", demoted: "not-a-rule" })
+		for (let index = 0; index < 15; index++) {
+			const rule = await store.save("/work/a", {
+				scope: "repo",
+				text: `Never touch file number ${index}`,
+				importance: "high",
+			})
+			expect(rule.importance).toBe("high")
+		}
+		const full = await store.save("/work/a", { scope: "repo", text: "Always run the linter first", importance: "high" })
+		expect(full).toMatchObject({ inserted: true, importance: "normal", demoted: "important-full" })
+		const text = (await store.read("/work/a")).repoText
+		expect(text.indexOf("## Notes")).toBeLessThan(text.indexOf("- Always run the linter first"))
+		expect(text.indexOf("## Notes")).toBeLessThan(text.indexOf("- The benchmark pipeline"))
+	})
+
+	it("stops a conversation after 8 memories, except for the user's own", async () => {
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		for (let index = 0; index < 8; index++) {
+			const result = await store.save("/work/a", {
+				scope: "repo",
+				text: `Use setting number ${index}`,
+				importance: "normal",
+				conversationId: "conv",
+			})
+			expect(result.inserted).toBe(true)
+		}
+		const capped = await store.save("/work/a", {
+			scope: "repo",
+			text: "Use setting number nine",
+			importance: "normal",
+			conversationId: "conv",
+		})
+		expect(capped).toMatchObject({ inserted: false, rejected: "conversation-cap" })
+		const other = await store.save("/work/a", {
+			scope: "repo",
+			text: "Use setting number ten",
+			importance: "normal",
+			conversationId: "other",
+		})
+		expect(other.inserted).toBe(true)
+		const forced = await store.save("/work/a", {
+			scope: "repo",
+			text: "Use setting number eleven",
+			importance: "normal",
+			conversationId: "conv",
+			force: true,
+		})
+		expect(forced.inserted).toBe(true)
+	})
+
+	it("offers change logs and duplicates for cleanup, in any section", async () => {
+		const now = new Date(2026, 9, 20)
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE, now: () => now })
+		const location = await store.locate("/work/a")
+		await fs.mkdir(location.repoDir, { recursive: true })
+		await fs.writeFile(
+			location.repoFile,
+			[
+				"# M",
+				"",
+				"## Important",
+				"",
+				"- Fixed LineFilterBuf::sync() bug: now flushes the buffer <!-- added:2026-10-19 -->",
+				"- Always use py.exe when python is not on PATH <!-- added:2026-10-19 -->",
+				"",
+				"## Notes",
+				"",
+				"- Release workflow: build with make.bat release cli, then run package_cli.ps1 <!-- added:2026-10-19 -->",
+				"- Release workflow: build with make.bat release cli, then run package_cli.ps1 -OutDir <path> -PackageVersion <ver> <!-- added:2026-10-19 -->",
+				"- Stale note <!-- added:2026-01-02 -->",
+				"",
+			].join("\n"),
+		)
+		expect(await store.pruneCandidates("/work/a")).toEqual([
+			{ scope: "repo", text: "Fixed LineFilterBuf::sync() bug: now flushes the buffer", reason: "change-log" },
+			{
+				scope: "repo",
+				text: "Release workflow: build with make.bat release cli, then run package_cli.ps1",
+				reason: "duplicate",
+			},
+			{ scope: "repo", text: "Stale note" },
+		])
+		// Kept by the user: not offered again for 90 days.
+		await store.touch("/work/a", ["Fixed LineFilterBuf::sync() bug: now flushes the buffer"])
+		expect((await store.pruneCandidates("/work/a")).map((candidate) => candidate.reason)).toEqual(["duplicate", undefined])
 	})
 
 	it("creates an empty memory file from the template", async () => {
@@ -304,11 +417,36 @@ describe("save_memory", () => {
 		expect(await tool.execute({ text: "prefer Vitest!" }, context)).toMatch(/marked as used today/)
 	})
 
+	it("explains a refused change log, a demotion and the conversation cap", async () => {
+		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
+		const tool = createSaveMemoryTool({ store, getCwd: () => "/work/a" })
+		const context = { agentId: "a", iteration: 1, sessionId: "conv" }
+		expect(await tool.execute({ text: "Added a helper to skip validation", importance: "high" }, context)).toMatch(
+			/^Not saved: this reads as a change log .* force: true\.$/,
+		)
+		expect(await tool.execute({ text: "Added a helper to skip validation", force: true }, context)).toMatch(/^Saved to/)
+		expect(await tool.execute({ text: "The pipeline aggregates results", importance: "high" }, context)).toMatch(
+			/at the top of Notes\. It asked for Important, but Important is for rules and gotchas/,
+		)
+		for (let index = 0; index < 7; index++) {
+			expect(await tool.execute({ text: `Use setting number ${index}` }, context)).toMatch(/^Saved to/)
+		}
+		expect(await tool.execute({ text: "Use setting number nine" }, context)).toMatch(
+			/^Not saved: this conversation already saved 8 memories/,
+		)
+		expect(parseSaveMemoryInput({ text: "x", force: "true" }).force).toBe(true)
+		expect(parseSaveMemoryInput({ text: "x" }).force).toBeUndefined()
+	})
+
 	it("says when the saved entry falls outside the memory budget", async () => {
 		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
 		// Fill Important past a tiny budget; the new note under Notes cannot be shown.
-		for (let index = 0; index < 20; index++) {
-			await store.save("/work/a", { scope: "repo", text: `important fact number ${index}`, importance: "high" })
+		for (let index = 0; index < 14; index++) {
+			await store.save("/work/a", {
+				scope: "repo",
+				text: `Never forget important rule number ${index}`,
+				importance: "high",
+			})
 		}
 		const tool = createSaveMemoryTool({ store, getCwd: () => "/work/a", getMaxTokens: () => 60 })
 		const context = { agentId: "a", iteration: 1 }
