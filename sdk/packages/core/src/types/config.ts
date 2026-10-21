@@ -193,6 +193,20 @@ export interface CoreCompactionConfig {
 	 * running session.
 	 */
 	thresholdRatio?: number | (() => number | undefined);
+	/**
+	 * Input budget to compact against, in the provider's tokens, in place of
+	 * the model's own `maxInputTokens` (a router's tuned budget). Read before
+	 * every model call when it is a function; undefined or below 1,000 keeps
+	 * the model's budget.
+	 */
+	maxInputTokensOverride?: number | (() => number | undefined);
+	/**
+	 * Size an automatic compaction shrinks the request to, in the provider's
+	 * tokens, in place of the adaptive target (70% of the trigger, or half the
+	 * budget in a long conversation). Always kept below the trigger. Read like
+	 * `maxInputTokensOverride`.
+	 */
+	targetTokensOverride?: number | (() => number | undefined);
 	preserveRecentTokens?: number;
 	summarizer?: CoreCompactionSummarizerConfig;
 	compact?: (

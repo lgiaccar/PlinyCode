@@ -11,6 +11,7 @@ import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
 import type { ModelTuningMap } from "./model-tuning"
 import type { PlanExecutionChoice } from "./planExecution"
+import type { RouterTuningMap } from "./router-tuning"
 import { Mode } from "./storage/types"
 import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
@@ -130,6 +131,8 @@ export interface ExtensionState {
 	favoritedModelIds: string[]
 	/** Per-model reasoning and context tuning, keyed by model id (src/shared/model-tuning.ts). */
 	modelTuning?: ModelTuningMap
+	/** Settings → Router, per router profile (src/shared/router-tuning.ts): the context bar reads its compaction budget. */
+	routerTuning?: RouterTuningMap
 	/**
 	 * The workspace this window is open on (folder, or .code-workspace file for
 	 * multi-folder workspaces). New conversations bind to it unless another one

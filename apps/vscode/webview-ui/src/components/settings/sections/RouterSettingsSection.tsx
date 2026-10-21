@@ -2,6 +2,7 @@ import { plinyRouterRulesUri } from "@shared/pliny"
 import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import { SetRouterTuningRequest } from "@shared/proto/cline/models"
 import {
+	compactionSizeTokens,
 	ROUTER_MAIN_ROUTES,
 	type RouterProfileTuning,
 	type RouterProfileView,
@@ -9,12 +10,15 @@ import {
 	type RouterRouteView,
 	type RouterSettingsView,
 	type RouterTuningProfile,
+	routerCompactionNotes,
 } from "@shared/router-tuning"
 import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import { type ReactNode, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
 import { FileServiceClient, ModelsServiceClient } from "@/services/grpc-client"
+import { CompactionSizeField } from "../router/CompactionSizeField"
 import { NumberField, SelectField, ToggleField } from "../router/RouterFields"
 import { RouterModelList } from "../router/RouterModelList"
 import Section from "../Section"
@@ -160,7 +164,16 @@ function RouteEditor({
 	)
 }
 
-function ProfileEditor({ view, onChange }: { view: RouterProfileView; onChange: (tuning: RouterProfileTuning) => void }) {
+function ProfileEditor({
+	view,
+	threshold,
+	onChange,
+}: {
+	view: RouterProfileView
+	/** plinycode.compaction.threshold: the share of the budget at which compaction starts. */
+	threshold: number
+	onChange: (tuning: RouterProfileTuning) => void
+}) {
 	const { base, tuning } = view
 	const [advanced, setAdvanced] = useState(false)
 	const customized = Object.keys(tuning).length > 0
@@ -179,6 +192,7 @@ function ProfileEditor({ view, onChange }: { view: RouterProfileView; onChange: 
 	const utility = section("utility")
 	const modelOptions = view.candidates.map((candidate) => ({ value: candidate.id, label: candidate.name }))
 	const modelName = (id: string) => view.candidates.find((candidate) => candidate.id === id)?.name ?? id
+	const budgetTokens = compactionSizeTokens(tuning.compaction?.budget, view.compactionBudget) ?? view.compactionBudget
 
 	return (
 		<div className="flex flex-col" data-testid={`router-profile-${view.profile}`}>
@@ -217,6 +231,45 @@ function ProfileEditor({ view, onChange }: { view: RouterProfileView; onChange: 
 				}}
 				value={tuning.exclusive}
 			/>
+
+			<Group title="Compaction">
+				<CompactionSizeField
+					base={view.compactionBudget}
+					description={`The conversation is summarized when a request reaches ${Math.round(threshold * 100)}% of this budget (the auto-compact threshold). In % it is a share of ${view.label}'s default, ${view.compactionBudget.toLocaleString("en-US")} tokens.`}
+					fallbackTokens={view.compactionBudget}
+					label="Compaction budget"
+					notes={(tokens) =>
+						routerCompactionNotes({
+							budgetTokens: tokens ?? view.compactionBudget,
+							threshold,
+							margin: tuning.contextMarginRatio ?? base.contextMarginRatio,
+							models: models.map(
+								(id) => view.candidates.find((candidate) => candidate.id === id) ?? { name: modelName(id) },
+							),
+						})
+					}
+					onCommit={(value) => update("compaction", withField(tuning.compaction, "budget", value))}
+					value={tuning.compaction?.budget}
+				/>
+				<CompactionSizeField
+					base={budgetTokens}
+					description="The size a compaction shrinks the conversation to. In % it is a share of the budget. Empty: about 70% of the trigger, or half the budget in a long conversation."
+					label="Size after compaction"
+					notes={(tokens) =>
+						tokens === undefined
+							? []
+							: routerCompactionNotes({
+									budgetTokens,
+									targetTokens: tokens,
+									threshold,
+									margin: tuning.contextMarginRatio ?? base.contextMarginRatio,
+									models: [],
+								})
+					}
+					onCommit={(value) => update("compaction", withField(tuning.compaction, "target", value))}
+					value={tuning.compaction?.target}
+				/>
+			</Group>
 
 			<button
 				aria-expanded={advanced}
@@ -394,6 +447,7 @@ function ProfileEditor({ view, onChange }: { view: RouterProfileView; onChange: 
  * knob, laid over the profile's rules file (docs/router-settings.md).
  */
 const RouterSettingsSection = ({ renderSectionHeader }: { renderSectionHeader: (tabId: string) => ReactNode }) => {
+	const { compactionThreshold } = useExtensionState()
 	const [view, setView] = useState<RouterSettingsView>()
 	const [selected, setSelected] = useState<RouterTuningProfile>("default")
 	const [error, setError] = useState<string>()
@@ -448,7 +502,12 @@ const RouterSettingsSection = ({ renderSectionHeader }: { renderSectionHeader: (
 				{error && <div className="text-error text-xs">{error}</div>}
 				{!view && !error && <div className="text-xs text-description">Loading…</div>}
 				{profile && (
-					<ProfileEditor key={profile.profile} onChange={(tuning) => save(profile.profile, tuning)} view={profile} />
+					<ProfileEditor
+						key={profile.profile}
+						onChange={(tuning) => save(profile.profile, tuning)}
+						threshold={compactionThreshold ?? 0.9}
+						view={profile}
+					/>
 				)}
 			</Section>
 		</div>

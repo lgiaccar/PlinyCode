@@ -1,4 +1,10 @@
-import { buildPlinyModels, isPlinySelfHostedModelId, type ModelInfo, PLINY_ROUTER_PROFILES } from "@plinycode/llms"
+import {
+	buildPlinyModels,
+	isPlinySelfHostedModelId,
+	type ModelInfo,
+	PLINY_ROUTER_PROFILES,
+	plinyRouterBudget,
+} from "@plinycode/llms"
 import { RouterSettingsResponse } from "@shared/proto/cline/models"
 import {
 	isRouterTuningProfile,
@@ -16,6 +22,8 @@ import { routerBaseView } from "@/sdk/router/router-tuning"
 export interface RouterSettingsController {
 	stateManager: Pick<StateManager, "getGlobalStateKey" | "reloadGlobalStateKey" | "setGlobalState">
 	getWorkspaceRoot(): Promise<string>
+	/** Sends the new tuning to the chat, whose context bar marks the tuned compaction budget. */
+	postStateToWebview?(): Promise<void>
 }
 
 function modelOption(id: string, models: Record<string, ModelInfo>): RouterModelOption {
@@ -25,6 +33,7 @@ function modelOption(id: string, models: Record<string, ModelInfo>): RouterModel
 		name: info?.name ?? id,
 		free: isPlinySelfHostedModelId(id),
 		...(info?.contextWindow ? { contextWindow: info.contextWindow } : {}),
+		...(info?.maxTokens ? { outputReserve: info.maxTokens } : {}),
 		...(info?.capabilities?.includes("images") ? { images: true } : {}),
 	}
 }
@@ -59,6 +68,7 @@ async function buildRouterSettingsView(controller: RouterSettingsController): Pr
 			profile,
 			label: spec.label,
 			modelId: spec.id,
+			compactionBudget: plinyRouterBudget(profile)?.maxInputTokens ?? models[spec.id]?.maxInputTokens ?? 0,
 			base,
 			tuning: own,
 			candidates: ids.map((id) => modelOption(id, models)),

@@ -3,6 +3,7 @@ import { ClineContextBreakdown, ClineMessage } from "@shared/ExtensionMessage"
 import { applyTunedInputBudget, modelTuningFor } from "@shared/model-tuning"
 import { isPlinyFreeModelId } from "@shared/pliny"
 import { RenameTaskRequest, SetTaskSpendingLimitRequest } from "@shared/proto/cline/task"
+import { withRouterCompactionBudget } from "@shared/router-tuning"
 import { historyItemWorkspaceDisplayPath, workspacePathLabel } from "@shared/workspacePath"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { useCallback, useMemo, useState } from "react"
@@ -84,6 +85,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		useAutoCondense,
 		compactionThreshold,
 		modelTuning,
+		routerTuning,
 	} = useExtensionState()
 	const setCompactionThreshold = useCallback((threshold: number) => updateSetting("compactionThreshold", threshold), [])
 
@@ -128,16 +130,18 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 
 	// Simplified computed values
 	const { selectedModelId, selectedModelInfo: catalogModelInfo } = useNormalizedApiConfiguration(mode)
-	// The context bar budgets against the tuned prompt budget, as compaction does.
-	const selectedModelInfo = useMemo(
-		() =>
+	// The context bar budgets against the tuned prompt budget, as compaction does:
+	// a router's Settings → Router budget, then the model tuning's smaller context.
+	const selectedModelInfo = useMemo(() => {
+		const routerInfo = withRouterCompactionBudget(catalogModelInfo, selectedModelId, routerTuning) ?? catalogModelInfo
+		return (
 			applyTunedInputBudget(
-				{ [selectedModelId]: catalogModelInfo },
+				{ [selectedModelId]: routerInfo },
 				selectedModelId,
 				modelTuningFor(modelTuning, selectedModelId),
-			)?.[selectedModelId] ?? catalogModelInfo,
-		[catalogModelInfo, modelTuning, selectedModelId],
-	)
+			)?.[selectedModelId] ?? routerInfo
+		)
+	}, [catalogModelInfo, modelTuning, routerTuning, selectedModelId])
 	const modeFields = getModeSpecificFields(apiConfiguration, mode)
 
 	// The SDK is the source of truth for whether to render per-task cost:

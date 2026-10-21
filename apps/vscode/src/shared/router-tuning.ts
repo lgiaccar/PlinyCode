@@ -7,6 +7,8 @@
  * profile drops paid ids however they got in.
  */
 
+import { canonicalPlinyModelId, isPlinyBalanceAutoModelId, isPlinyFreeAutoModelId, PLINY_FREE_AUTO_MODEL_ID } from "./pliny"
+
 /** The router profiles Settings can tune, in the order the picker shows them. */
 export const ROUTER_TUNING_PROFILES = ["fast", "default", "smart", "balance"] as const
 export type RouterTuningProfile = (typeof ROUTER_TUNING_PROFILES)[number]
@@ -34,6 +36,26 @@ export interface RouterRouteTuning {
 	maxPromptChars?: number
 }
 
+/** How a compaction size is expressed: a share in percent, or a token count. */
+export const ROUTER_COMPACTION_UNITS = ["percent", "tokens"] as const
+export type RouterCompactionUnit = (typeof ROUTER_COMPACTION_UNITS)[number]
+
+export interface RouterCompactionSize {
+	unit: RouterCompactionUnit
+	value: number
+}
+
+export interface RouterCompactionTuning {
+	/**
+	 * The input budget compaction runs against (it starts at the
+	 * `plinycode.compaction.threshold` share of it): a percentage of the
+	 * router's compiled budget, or tokens.
+	 */
+	budget?: RouterCompactionSize
+	/** The size a compaction shrinks the request to: a percentage of the budget, or tokens. */
+	target?: RouterCompactionSize
+}
+
 export interface RouterProfileTuning {
 	/** The model order: the main routes' list and the head of the pool. */
 	models?: string[]
@@ -54,6 +76,8 @@ export interface RouterProfileTuning {
 	utility?: { classifier?: string; judge?: string; summarizer?: string; commit?: string }
 	sticky?: boolean
 	contextMarginRatio?: number
+	/** When the conversation is compacted, and to what size, in place of the router's compiled budget. */
+	compaction?: RouterCompactionTuning
 }
 
 export type RouterTuningMap = Partial<Record<RouterTuningProfile, RouterProfileTuning>>
@@ -64,6 +88,8 @@ export interface RouterModelOption {
 	name: string
 	free: boolean
 	contextWindow?: number
+	/** Output tokens the size filter keeps free in the window: the model's maxTokens. */
+	outputReserve?: number
 	images?: boolean
 }
 
@@ -101,6 +127,8 @@ export interface RouterProfileView {
 	profile: RouterTuningProfile
 	label: string
 	modelId: string
+	/** The compiled compaction budget in tokens (plinyRouterBudget): what a percentage budget is of. */
+	compactionBudget: number
 	base: RouterBaseView
 	tuning: RouterProfileTuning
 	candidates: RouterModelOption[]
@@ -184,6 +212,157 @@ function normalizeRoutes(value: unknown): Record<string, RouterRouteTuning> | un
 	return Object.keys(routes).length > 0 ? routes : undefined
 }
 
+function normalizeCompactionSize(value: unknown): RouterCompactionSize | undefined {
+	const raw = record(value)
+	const unit = oneOf(raw?.unit, ROUTER_COMPACTION_UNITS)
+	const size = positive(raw?.value)
+	if (!unit || size === undefined) {
+		return undefined
+	}
+	// Percentages keep one decimal; token counts are whole.
+	return { unit, value: unit === "percent" ? Math.round(size * 10) / 10 : Math.max(1, Math.round(size)) }
+}
+
+function normalizeCompaction(value: unknown): RouterCompactionTuning | undefined {
+	const raw = record(value)
+	if (!raw) {
+		return undefined
+	}
+	return compact<RouterCompactionTuning>({
+		budget: normalizeCompactionSize(raw.budget),
+		target: normalizeCompactionSize(raw.target),
+	})
+}
+
+/**
+ * A size in tokens: a percentage of `base`, or the token count itself.
+ * Undefined when the size is unset.
+ */
+export function compactionSizeTokens(size: RouterCompactionSize | undefined, base: number): number | undefined {
+	if (!size) {
+		return undefined
+	}
+	return Math.round(size.unit === "percent" ? (size.value / 100) * base : size.value)
+}
+
+/**
+ * A profile's compaction tuning in tokens. `defaultBudget` is the router's
+ * compiled budget (`plinyRouterBudget`): the budget's percentage is of it, and
+ * the target's of the budget as tuned. Undefined fields keep the compiled
+ * budget and the engine's adaptive target. Out-of-range values are kept: the
+ * Settings page warns about them, and the engine never lets the target reach
+ * the trigger.
+ */
+export function resolveRouterCompaction(
+	tuning: RouterCompactionTuning | undefined,
+	defaultBudget: number,
+): { budgetTokens?: number; targetTokens?: number } {
+	const budgetTokens = compactionSizeTokens(tuning?.budget, defaultBudget)
+	const targetTokens = compactionSizeTokens(tuning?.target, budgetTokens ?? defaultBudget)
+	return {
+		...(budgetTokens !== undefined ? { budgetTokens } : {}),
+		...(targetTokens !== undefined ? { targetTokens } : {}),
+	}
+}
+
+/** Smallest size compaction can reliably reach: it always keeps the recent messages. */
+export const MIN_COMPACTION_TOKENS = 8_000
+
+export interface RouterCompactionNote {
+	level: "info" | "warning"
+	text: string
+}
+
+function kTokens(tokens: number): string {
+	return tokens >= 10_000 ? `${Math.round(tokens / 1000)}k` : tokens.toLocaleString("en-US")
+}
+
+/**
+ * What Settings → Router says about a compaction budget and target: which
+ * models of the order hand a request on before compaction starts, and sizes
+ * that cannot work as meant. Notes only: every value still saves. A model's
+ * limit is what the size filter lets through, in its own tokens: its window
+ * less its output reserve, over the context margin.
+ */
+export function routerCompactionNotes(input: {
+	budgetTokens: number
+	targetTokens?: number
+	threshold: number
+	margin: number
+	models: Pick<RouterModelOption, "name" | "contextWindow" | "outputReserve">[]
+}): RouterCompactionNote[] {
+	const notes: RouterCompactionNote[] = []
+	const trigger = Math.round(input.budgetTokens * input.threshold)
+	const limits = input.models
+		.filter((model) => model.contextWindow && model.contextWindow > 0)
+		.map((model) => ({
+			name: model.name,
+			limit: Math.floor(((model.contextWindow ?? 0) - (model.outputReserve ?? 0)) / input.margin),
+		}))
+	const dropped = limits.filter((model) => model.limit < trigger)
+	const fits = limits.filter((model) => model.limit >= trigger)
+	if (input.budgetTokens < MIN_COMPACTION_TOKENS) {
+		notes.push({ level: "warning", text: "So small a budget compacts on almost every call." })
+	}
+	if (limits.length > 0 && fits.length === 0) {
+		const largest = Math.max(...limits.map((model) => model.limit))
+		notes.push({
+			level: "warning",
+			text: `No model in this order fits a ${kTokens(trigger)} request (the largest takes about ${kTokens(largest)}): past that, requests go to them anyway and may be rejected.`,
+		})
+	} else if (dropped.length > 0) {
+		const handedOff = dropped.map((model) => `${model.name} (~${kTokens(model.limit)})`).join(", ")
+		notes.push({
+			level: "info",
+			text: `Compaction starts at about ${kTokens(trigger)}. Before that, ${handedOff} hand larger requests on to ${fits[0]?.name}.`,
+		})
+	}
+	if (input.targetTokens !== undefined) {
+		if (input.targetTokens >= trigger) {
+			notes.push({
+				level: "warning",
+				text: `At or above the ${kTokens(trigger)} trigger: compaction shrinks to just under the trigger instead.`,
+			})
+		} else if (input.targetTokens < MIN_COMPACTION_TOKENS) {
+			notes.push({
+				level: "warning",
+				text: `Below ${kTokens(MIN_COMPACTION_TOKENS)}: compaction keeps the recent messages, so it may not get this small.`,
+			})
+		}
+	}
+	return notes
+}
+
+/** The Settings → Router profile of a router model id, or undefined for any other model. */
+export function routerTuningProfileFor(modelId: string | undefined): RouterTuningProfile | undefined {
+	if (isPlinyBalanceAutoModelId(modelId)) {
+		return "balance"
+	}
+	if (!modelId || !isPlinyFreeAutoModelId(modelId)) {
+		return undefined
+	}
+	const suffix = canonicalPlinyModelId(modelId).slice(PLINY_FREE_AUTO_MODEL_ID.length + 1)
+	return suffix ? (isRouterTuningProfile(suffix) ? suffix : undefined) : "default"
+}
+
+/**
+ * A router model's info with its tuned compaction budget as `maxInputTokens`,
+ * so what the context bar marks agrees with when the engine compacts. Any
+ * other model, or a router without a tuned budget, is returned unchanged.
+ */
+export function withRouterCompactionBudget<T extends { maxInputTokens?: number }>(
+	info: T | undefined,
+	modelId: string | undefined,
+	tuningMap: unknown,
+): T | undefined {
+	const profile = routerTuningProfileFor(modelId)
+	if (!info || !profile || info.maxInputTokens === undefined) {
+		return info
+	}
+	const { budgetTokens } = resolveRouterCompaction(normalizeRouterTuning(tuningMap)[profile]?.compaction, info.maxInputTokens)
+	return budgetTokens === undefined ? info : { ...info, maxInputTokens: budgetTokens }
+}
+
 /** A stored profile tuning with every invalid field dropped; undefined when nothing is left. */
 export function normalizeRouterProfileTuning(value: unknown): RouterProfileTuning | undefined {
 	const raw = record(value)
@@ -231,6 +410,7 @@ export function normalizeRouterProfileTuning(value: unknown): RouterProfileTunin
 		}),
 		sticky: typeof raw.sticky === "boolean" ? raw.sticky : undefined,
 		contextMarginRatio: margin !== undefined && margin >= 1 ? margin : undefined,
+		compaction: normalizeCompaction(raw.compaction),
 	})
 }
 

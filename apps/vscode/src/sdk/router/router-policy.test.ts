@@ -235,6 +235,22 @@ describe("fitsContext", () => {
 		expect(fitsContext("snps-provider/unlisted", features(), rules(), known)).toBe(true)
 		expect(fitsContext("snps-provider/unlisted", features(), rules(), undefined)).toBe(true)
 	})
+
+	it("measures the request in the model's own tokens when its ratio is known", () => {
+		// kimi: 256k window, 64k output. A 200k estimate (600k characters) is
+		// about 155k kimi tokens at 3.88 characters per token: it fits.
+		const kimi = {
+			"snps-provider/kimi": { id: "snps-provider/kimi", name: "kimi", contextWindow: 256_000, maxTokens: 64_000 },
+		} as never
+		const configured = rules({ contextMarginRatio: 1.15 })
+		const request = features({ estimatedTokens: 200_000 })
+		expect(fitsContext("snps-provider/kimi", request, configured, kimi)).toBe(false)
+		expect(fitsContext("snps-provider/kimi", request, configured, kimi, () => 3 / 3.88)).toBe(true)
+		// A tokenizer that packs fewer characters per token drops out earlier.
+		const small = features({ estimatedTokens: 150_000 })
+		expect(fitsContext("snps-provider/kimi", small, configured, kimi)).toBe(true)
+		expect(fitsContext("snps-provider/kimi", small, configured, kimi, () => 3 / 2.4)).toBe(false)
+	})
 })
 
 describe("selectCandidates", () => {

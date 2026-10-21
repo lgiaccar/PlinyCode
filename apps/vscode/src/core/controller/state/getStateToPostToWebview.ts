@@ -89,6 +89,7 @@ export async function getStateToPostToWebview(controller: {
 	const chatInputMaxRows = stateManager.getGlobalStateKey("chatInputMaxRows")
 	const favoritedModelIds = stateManager.getGlobalStateKey("favoritedModelIds")
 	const modelTuning = stateManager.getGlobalStateKey("modelTuning")
+	const routerTuning = stateManager.getGlobalStateKey("routerTuning")
 	const showFeatureTips = stateManager.getGlobalSettingsKey("showFeatureTips")
 
 	const localClineRulesToggles = stateManager.getWorkspaceStateKey("localClineRulesToggles")
@@ -163,6 +164,7 @@ export async function getStateToPostToWebview(controller: {
 		taskHistory: processedTaskHistory,
 		favoritedModelIds,
 		modelTuning,
+		routerTuning,
 		backgroundCommandRunning: controller.backgroundCommandRunning ?? false,
 		backgroundCommandTaskId: controller.backgroundCommandTaskId,
 		foregroundCommandRunning: controller.foregroundCommandRunning ?? false,

@@ -147,6 +147,15 @@ export function effortOptions(
 }
 
 /**
+ * A model's real tokens per estimated token (the estimate counts three
+ * characters per token): its tokenizer's learned ratio, so a window is
+ * compared with what the model will really count. 1 when nothing was learned.
+ */
+export type RouterTokenScale = (modelId: string) => number
+
+const unscaled: RouterTokenScale = () => 1
+
+/**
  * Whether a model's context window can hold the request, with the configured
  * safety margin on the input plus room for the model's full output. The
  * gateway asks for the full output whenever the (under-counting) estimate
@@ -160,6 +169,7 @@ export function fitsContext(
 	features: RouterRequestFeatures,
 	rules: RouterRules,
 	knownModels: Record<string, ModelInfo> | undefined,
+	tokenScale: RouterTokenScale = unscaled,
 ): boolean {
 	const model = knownModels?.[modelId]
 	const contextWindow = model?.contextWindow
@@ -167,7 +177,7 @@ export function fitsContext(
 		return true
 	}
 	const outputReserve = model?.maxTokens && model.maxTokens > 0 ? model.maxTokens : 0
-	return contextWindow >= features.estimatedTokens * rules.contextMarginRatio + outputReserve
+	return contextWindow >= features.estimatedTokens * tokenScale(modelId) * rules.contextMarginRatio + outputReserve
 }
 
 /**
@@ -202,8 +212,10 @@ export function selectCandidates(context: {
 	knownModels?: Record<string, ModelInfo>
 	isHealthy: (modelId: string) => boolean
 	classification?: RouterClassification
+	/** Per-model real tokens per estimated token, for the size filter. */
+	tokenScale?: RouterTokenScale
 }): RouterDecision {
-	const { rules, features, knownModels, isHealthy, classification } = context
+	const { rules, features, knownModels, isHealthy, classification, tokenScale } = context
 	const route = selectRoute(rules, features, classification)
 	const routeName = route?.name ?? "default"
 	// The classifier's think/quick verdict is more specific than a route default.
@@ -247,7 +259,7 @@ export function selectCandidates(context: {
 			excludedUnhealthy.push(id)
 			continue
 		}
-		if (!fitsContext(id, features, rules, knownModels)) {
+		if (!fitsContext(id, features, rules, knownModels, tokenScale)) {
 			excludedTooSmall.push(id)
 			continue
 		}

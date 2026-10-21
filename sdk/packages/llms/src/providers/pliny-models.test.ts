@@ -18,6 +18,7 @@ import {
 	plinyFreeAutoProfile,
 	plinyFreePoolIds,
 	plinyHostedPoolIds,
+	plinyRouterBudget,
 	plinyRouterModelId,
 	plinyRouterProfile,
 	plinyRouterProfileAllowsPaid,
@@ -207,17 +208,35 @@ describe("FreeAuto router model", () => {
 		expect(Math.max(...poolWindows)).toBeGreaterThanOrEqual(routerWindow);
 	});
 
-	it("compacts before the 256k lead of the coding route drops out", () => {
-		const router = buildPlinyModels()[PLINY_FREE_AUTO_MODEL_ID];
-		const maxInput = router?.maxInputTokens ?? 0;
-		expect(maxInput).toBeLessThan(router?.contextWindow ?? 0);
-		// Compaction triggers at 90% of maxInputTokens; a 256k model with a 32k
-		// output reserve and the router's 1.15 margin fits up to ~194k, and the
-		// 200k tier (nemotron ultra) up to ~146k.
-		expect(maxInput * 0.9).toBeLessThanOrEqual((256_000 - 32_000) / 1.15);
-		expect(maxInput * 0.9).toBeLessThanOrEqual((200_000 - 32_000) / 1.15);
-		// The 128k tier no longer fits at the trigger: that is the trade-off.
-		expect(maxInput * 0.9).toBeGreaterThan((128_000 - 32_000) / 1.15);
+	it("compacts while the 512k GLM-5.2 replicas behind kimi still fit", () => {
+		const models = buildPlinyModels();
+		for (const profile of ["default", "smart"]) {
+			const router = models[plinyFreeAutoModelId(profile)];
+			const maxInput = router?.maxInputTokens ?? 0;
+			expect(maxInput, profile).toBeLessThan(router?.contextWindow ?? 0);
+			// Compaction triggers at 90% of maxInputTokens; a 512k model with its
+			// 64k output reserve and the router's 1.15 margin fits up to ~388k.
+			expect(maxInput * 0.95, profile).toBeLessThanOrEqual(
+				(512_000 - 65_536) / 1.15,
+			);
+		}
+		// FreeAuto's kimi lead (256k, 64k reserve) fits up to ~167k: past that the
+		// size filter hands a request to GLM, which is the trade-off.
+		const freeAuto = models[PLINY_FREE_AUTO_MODEL_ID]?.maxInputTokens ?? 0;
+		expect(freeAuto).toBe(200_000);
+		expect(freeAuto * 0.9).toBeGreaterThan((256_000 - 64_000) / 1.15);
+	});
+
+	it("matches the virtual models to plinyRouterBudget", () => {
+		const models = buildPlinyModels();
+		for (const profile of ["default", "smart", "fast", "balance"]) {
+			const router = models[plinyRouterModelId(profile)];
+			expect(plinyRouterBudget(profile), profile).toEqual({
+				maxInputTokens: router?.maxInputTokens,
+				contextWindow: router?.contextWindow,
+			});
+		}
+		expect(plinyRouterBudget("nope")).toBeUndefined();
 	});
 
 	it("is not offered as a paid hosted model", () => {
@@ -303,11 +322,14 @@ describe("FreeAuto profiles", () => {
 			models[plinyFreeAutoModelId(profile)]?.maxInputTokens ?? 0;
 		expect(budget("fast")).toBe(64_000);
 		expect(budget("fast")).toBeLessThan(budget("default"));
-		expect(budget("smart")).toBe(budget("default"));
-		// Same window: only when compaction starts differs.
-		expect(models[plinyFreeAutoModelId("fast")]?.contextWindow).toBe(
-			models[PLINY_FREE_AUTO_MODEL_ID]?.contextWindow,
-		);
+		// Smart leads with the 512k GLM-5.2, so it compacts later still.
+		expect(budget("smart")).toBe(300_000);
+		expect(models[plinyFreeAutoModelId("fast")]?.contextWindow).toBe(256_000);
+		expect(models[PLINY_FREE_AUTO_MODEL_ID]?.contextWindow).toBe(512_000);
+		expect(models[PLINY_BALANCE_AUTO_MODEL_ID]).toMatchObject({
+			maxInputTokens: 300_000,
+			contextWindow: 1_000_000,
+		});
 	});
 
 	it("does not treat a lookalike id as a profile", () => {

@@ -1146,6 +1146,8 @@ describe("createContextCompactionPrepareTurn", () => {
 			previousRequest?: { inputTokens: number; estimatedTokens: number };
 			previousRequestInputTokens?: number;
 			thresholdRatio?: CoreCompactionConfig["thresholdRatio"];
+			maxInputTokensOverride?: CoreCompactionConfig["maxInputTokensOverride"];
+			targetTokensOverride?: CoreCompactionConfig["targetTokensOverride"];
 		}) => {
 			const messages = transcript();
 			const maxInputTokens = Math.ceil(
@@ -1162,6 +1164,8 @@ describe("createContextCompactionPrepareTurn", () => {
 					enabled: true,
 					strategy: "basic",
 					thresholdRatio: opts.thresholdRatio,
+					maxInputTokensOverride: opts.maxInputTokensOverride,
+					targetTokensOverride: opts.targetTokensOverride,
 				},
 				logger: undefined,
 			});
@@ -1269,6 +1273,50 @@ describe("createContextCompactionPrepareTurn", () => {
 					},
 				}),
 			).resolves.toBeUndefined();
+		});
+
+		describe("budget and target overrides", () => {
+			it("compacts against the budget override instead of the model's own budget", async () => {
+				// The model's budget leaves room; a budget of half the estimate does not.
+				await expect(
+					run({
+						maxInputTokensMultiple: 1.05,
+						maxInputTokensOverride: () => Math.max(1_000, estimate() / 2),
+					}),
+				).resolves.toBeDefined();
+				// And the other way round: a tight model budget raised by the override.
+				await expect(
+					run({
+						maxInputTokensMultiple: 0.5,
+						maxInputTokensOverride: estimate() * 10,
+					}),
+				).resolves.toBeUndefined();
+			});
+
+			it("reads the budget override on every call and ignores one below 1,000", async () => {
+				let budget: number | undefined = Math.max(1_000, estimate() / 2);
+				const options = {
+					maxInputTokensMultiple: 1.05,
+					maxInputTokensOverride: () => budget,
+				};
+				await expect(run(options)).resolves.toBeDefined();
+				// Ignored: the model's roomy budget applies again.
+				budget = 999;
+				await expect(run(options)).resolves.toBeUndefined();
+				budget = undefined;
+				await expect(run(options)).resolves.toBeUndefined();
+			});
+
+			it("keeps a target override below the trigger, so a compaction still shrinks the request", async () => {
+				const result = await run({
+					maxInputTokensMultiple: 0.5,
+					targetTokensOverride: estimate() * 100,
+				});
+				expect(result).toBeDefined();
+				expect(JSON.stringify(result?.messages).length).toBeLessThan(
+					JSON.stringify(transcript()).length,
+				);
+			});
 		});
 
 		describe("calibrated ratio and threshold", () => {
