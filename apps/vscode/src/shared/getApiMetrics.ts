@@ -107,8 +107,13 @@ export function getConversationApiMetrics(messages: ClineMessage[]): ApiMetrics 
  * messages), and the header must move in the same direction as the divider row
  * (e.g. "1k → 1.3k tokens") rather than silently show the stale value.
  *
+ * The count is the request's input only: `contextTokens`, or tokensIn +
+ * cacheWrites + cacheReads on rows written before it existed. The reply's
+ * output used to be added too, which made the bar drop on the next call
+ * whenever that output (reasoning above all) was not sent back.
+ *
  * @param messages - An array of ClineMessage objects to process.
- * @returns The total tokens (tokensIn + tokensOut + cacheWrites + cacheReads) from the last api_req_started message, rescaled by any completed compactions that happened after it, or 0 if none found.
+ * @returns The last api_req_started message's input tokens, rescaled by any completed compactions that happened after it, or 0 if none found.
  */
 export function getLastApiReqTotalTokens(messages: ClineMessage[]): number {
 	let shrinkFraction: number | undefined
@@ -135,8 +140,11 @@ export function getLastApiReqTotalTokens(messages: ClineMessage[]): number {
 		}
 		if (msg.say === "api_req_started") {
 			try {
-				const { tokensIn, tokensOut, cacheWrites, cacheReads } = JSON.parse(msg.text)
-				const total = (tokensIn || 0) + (tokensOut || 0) + (cacheWrites || 0) + (cacheReads || 0)
+				const { tokensIn, cacheWrites, cacheReads, contextTokens } = JSON.parse(msg.text)
+				const total =
+					typeof contextTokens === "number" && contextTokens > 0
+						? contextTokens
+						: (tokensIn || 0) + (cacheWrites || 0) + (cacheReads || 0)
 				if (total > 0) {
 					return shrinkFraction === undefined ? total : Math.ceil(total * shrinkFraction)
 				}
@@ -173,4 +181,30 @@ export function getLastContextBreakdown(messages: ClineMessage[]): ClineContextB
 		}
 	}
 	return undefined
+}
+
+/**
+ * Tokens the engine left out of the most recent request before sending it
+ * (old tool output, earlier reasoning, superseded reads): what the context
+ * bar's breakdown names when the size dropped without a compaction. 0 when
+ * the last request trimmed nothing or predates the field.
+ */
+export function getLastPrunedTokens(messages: ClineMessage[]): number {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]
+		if (msg.type !== "say" || msg.say !== "api_req_started" || !msg.text) {
+			continue
+		}
+		try {
+			const { prunedTokens, tokensIn, cacheReads, contextTokens } = JSON.parse(msg.text)
+			if (!(tokensIn || cacheReads || contextTokens)) {
+				// The row written when the request started carries no usage yet.
+				continue
+			}
+			return typeof prunedTokens === "number" && prunedTokens > 0 ? prunedTokens : 0
+		} catch {
+			// Ignore JSON parse errors, continue searching
+		}
+	}
+	return 0
 }

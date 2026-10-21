@@ -18,10 +18,22 @@
  * it from the transcript and guaranteeing duplication on the retry.
  */
 
-import { classifyProviderError, isPlinySelfHostedModelId, type ModelInfo, type PlinyThinkingControls } from "@plinycode/llms"
-import type { AgentModel, AgentModelEvent, AgentModelRequest, AgentUsage } from "@plinycode/shared"
+import {
+	classifyProviderError,
+	getTokenCalibration,
+	isPlinySelfHostedModelId,
+	type ModelInfo,
+	type PlinyThinkingControls,
+} from "@plinycode/llms"
+import {
+	type AgentModel,
+	type AgentModelEvent,
+	type AgentModelRequest,
+	type AgentUsage,
+	CHARS_PER_TOKEN,
+} from "@plinycode/shared"
 import { Logger } from "@/shared/services/Logger"
-import { effortOptions, selectCandidates, supportsImages } from "./router-policy"
+import { effortOptions, type RouterTokenScale, selectCandidates, supportsImages } from "./router-policy"
 import { withRouterAddendum } from "./router-prompt"
 import type {
 	RouterCallShape,
@@ -35,6 +47,16 @@ import type {
 	RouterRules,
 } from "./router-types"
 import { looksDegenerate } from "./unfinished-turn-guard"
+
+/**
+ * The size filter's view of each candidate: the request estimate in that
+ * model's own tokens, from the ratio providers reported on earlier calls
+ * (tokenCalibration, shared with the engine). Kimi packs about 3.9 characters
+ * into a token, so the flat three-character estimate had it drop out at about
+ * three quarters of its real limit; nemotron super packs about 2.4, so it now
+ * drops out earlier, before the gateway would reject the call.
+ */
+const calibratedTokenScale: RouterTokenScale = (modelId) => CHARS_PER_TOKEN / getTokenCalibration().charsPerToken(modelId)
 
 /** What the router reports back to the host so it can show rows and keep state. */
 export interface RouterObserver {
@@ -277,6 +299,7 @@ export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
 				knownModels,
 				isHealthy: deps.isHealthy,
 				classification,
+				tokenScale: calibratedTokenScale,
 			})
 			const lead = imagePlan?.leadCandidates ?? []
 			const decision: RouterDecision =

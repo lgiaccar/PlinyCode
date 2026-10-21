@@ -120,6 +120,19 @@ export interface AgentTokenUsage {
 	 */
 	contextBreakdown?: ContextBreakdownTokens;
 	/**
+	 * The provider's input count (cache included) for the request as it was
+	 * last sent, when `inputTokens` also bills attempts that were retried
+	 * because they came back empty. What the context bar shows and the
+	 * compaction trigger compares against; not summed across requests.
+	 */
+	requestInputTokens?: number;
+	/**
+	 * Tokens the engine left out of this request before sending it (old tool
+	 * output, earlier reasoning, superseded file reads): why the context can
+	 * shrink without a compaction. Not summed across requests.
+	 */
+	prunedTokens?: number;
+	/**
 	 * The concrete model that served the most recent request, when it differs
 	 * from the configured one: router models (FreeAuto, BalanceAuto) pick a
 	 * model per call and report it here. Not summed — reflects only the most

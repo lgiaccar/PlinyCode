@@ -152,6 +152,7 @@ export {
 	plinyFreeAutoProfile,
 	plinyFreePoolIds,
 	plinyHostedPoolIds,
+	plinyRouterBudget,
 	plinyRouterModelId,
 	plinyRouterProfile,
 	plinyRouterProfileAllowsPaid,

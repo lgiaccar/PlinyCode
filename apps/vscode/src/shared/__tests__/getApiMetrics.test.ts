@@ -1,7 +1,7 @@
 import { describe, it } from "bun:test"
 import { strict as assert } from "node:assert"
 import type { ClineMessage } from "../ExtensionMessage"
-import { getApiMetrics, getLastApiReqTotalTokens } from "../getApiMetrics"
+import { getApiMetrics, getLastApiReqTotalTokens, getLastPrunedTokens } from "../getApiMetrics"
 
 describe("getApiMetrics", () => {
 	it("includes subagent_usage in aggregate totals", () => {
@@ -135,7 +135,7 @@ describe("getLastApiReqTotalTokens", () => {
 		]
 
 		const total = getLastApiReqTotalTokens(messages)
-		assert.equal(total, 23)
+		assert.equal(total, 16)
 	})
 
 	it("scales the last request by the shrink ratio of a compaction completed after it", () => {
@@ -157,7 +157,7 @@ describe("getLastApiReqTotalTokens", () => {
 		]
 
 		const total = getLastApiReqTotalTokens(messages)
-		assert.equal(total, 25_000)
+		assert.equal(total, 23_750)
 	})
 
 	it("compounds multiple compactions completed since the last request", () => {
@@ -206,7 +206,7 @@ describe("getLastApiReqTotalTokens", () => {
 		]
 
 		const total = getLastApiReqTotalTokens(messages)
-		assert.equal(total, 6_500)
+		assert.equal(total, 5_200)
 	})
 
 	it("leaves the request total unscaled when a completed compaction lacks token counters", () => {
@@ -227,7 +227,7 @@ describe("getLastApiReqTotalTokens", () => {
 		]
 
 		const total = getLastApiReqTotalTokens(messages)
-		assert.equal(total, 42_000)
+		assert.equal(total, 40_000)
 	})
 
 	it("returns 0 when a compaction completed but no request preceded it", () => {
@@ -267,7 +267,7 @@ describe("getLastApiReqTotalTokens", () => {
 		]
 
 		const total = getLastApiReqTotalTokens(messages)
-		assert.equal(total, 23)
+		assert.equal(total, 16)
 	})
 
 	it("prefers a request newer than the last compaction", () => {
@@ -287,6 +287,50 @@ describe("getLastApiReqTotalTokens", () => {
 		]
 
 		const total = getLastApiReqTotalTokens(messages)
-		assert.equal(total, 32_000)
+		assert.equal(total, 31_000)
+	})
+})
+
+describe("getLastApiReqTotalTokens input-only count", () => {
+	it("counts the request's input, not the reply's output", () => {
+		const messages: ClineMessage[] = [
+			{
+				ts: 1,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 50_000, tokensOut: 20_000, cacheReads: 30_000 }),
+			},
+		]
+		assert.equal(getLastApiReqTotalTokens(messages), 80_000)
+	})
+
+	it("prefers the request's own input over counts that billed a retried empty reply", () => {
+		const messages: ClineMessage[] = [
+			{
+				ts: 1,
+				type: "say",
+				say: "api_req_started",
+				// Two attempts of a 60k request were billed; the request is 60k.
+				text: JSON.stringify({ tokensIn: 120_000, tokensOut: 900, contextTokens: 60_000 }),
+			},
+		]
+		assert.equal(getLastApiReqTotalTokens(messages), 60_000)
+	})
+})
+
+describe("getLastPrunedTokens", () => {
+	it("reads what the last request with usage left out, skipping the row that only marks a start", () => {
+		const messages: ClineMessage[] = [
+			{
+				ts: 1,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ tokensIn: 40_000, prunedTokens: 12_000 }),
+			},
+			{ ts: 2, type: "say", say: "api_req_started", text: JSON.stringify({ request: "..." }) },
+		]
+		assert.equal(getLastPrunedTokens(messages), 12_000)
+		messages.push({ ts: 3, type: "say", say: "api_req_started", text: JSON.stringify({ tokensIn: 30_000 }) })
+		assert.equal(getLastPrunedTokens(messages), 0)
 	})
 })

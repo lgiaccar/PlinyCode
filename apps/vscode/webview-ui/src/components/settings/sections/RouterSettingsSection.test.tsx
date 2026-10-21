@@ -13,6 +13,7 @@ function profileView(profile: RouterProfileView["profile"], overrides: Partial<R
 		profile,
 		label: `label-${profile}`,
 		modelId: `pliny/${profile}`,
+		compactionBudget: 200_000,
 		base: {
 			models: [KIMI, CODER],
 			routes: [
@@ -35,9 +36,9 @@ function profileView(profile: RouterProfileView["profile"], overrides: Partial<R
 		},
 		tuning: {},
 		candidates: [
-			{ id: KIMI, name: "Kimi K2.6", free: true, contextWindow: 256_000 },
-			{ id: CODER, name: "Qwen3 Coder", free: true, contextWindow: 128_000 },
-			{ id: GLM, name: "GLM-5.2", free: true, contextWindow: 512_000 },
+			{ id: KIMI, name: "Kimi K2.6", free: true, contextWindow: 256_000, outputReserve: 64_000 },
+			{ id: CODER, name: "Qwen3 Coder", free: true, contextWindow: 128_000, outputReserve: 32_000 },
+			{ id: GLM, name: "GLM-5.2", free: true, contextWindow: 512_000, outputReserve: 65_536 },
 			...(paid ? [{ id: SONNET, name: "Claude Sonnet 5", free: false }] : []),
 		],
 		...overrides,
@@ -56,6 +57,10 @@ vi.mock("@/services/grpc-client", () => ({
 		setRouterTuning: state.setRouterTuning,
 	},
 	FileServiceClient: { openFile: state.openFile },
+}))
+
+vi.mock("@/context/ExtensionStateContext", () => ({
+	useExtensionState: () => ({ compactionThreshold: 0.9 }),
 }))
 
 vi.mock("@vscode/webview-ui-toolkit/react", () => ({
@@ -151,5 +156,60 @@ describe("RouterSettingsSection", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "FreeAuto Fast" }))
 		fireEvent.click(screen.getByText("Open rules file"))
 		expect(state.openFile).toHaveBeenCalledWith(expect.objectContaining({ value: "pliny://free-auto-rules/fast" }))
+	})
+})
+
+describe("RouterSettingsSection compaction", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		state.view = { profiles: [profileView("default", { tuning: { models: [KIMI, GLM] } })] }
+		state.setRouterTuning.mockImplementation(async (request: { profile: string; tuningJson: string }) => {
+			state.view = {
+				profiles: [{ ...(state.view?.profiles[0] as RouterProfileView), tuning: JSON.parse(request.tuningJson) }],
+			}
+			return { settingsJson: JSON.stringify(state.view) }
+		})
+	})
+
+	it("saves a budget in tokens and says which models pass larger requests on", async () => {
+		await renderSection()
+		const budget = screen.getByLabelText(/^Compaction budget(?! unit)/)
+		fireEvent.change(budget, { target: { value: "250000" } })
+		// Kimi takes (256k - 64k) / 1.15 ≈ 167k: below the 225k trigger.
+		expect(screen.getByText(/larger requests move from Kimi K2\.6 \(~167k\) to GLM-5\.2/)).toBeTruthy()
+		fireEvent.blur(budget)
+		expect(lastSaved()).toEqual({
+			profile: "default",
+			tuning: { models: [KIMI, GLM], compaction: { budget: { unit: "tokens", value: 250_000 } } },
+		})
+	})
+
+	it("saves an out-of-range budget too, with a warning, and converts it when the unit changes", async () => {
+		await renderSection()
+		const budget = screen.getByLabelText(/^Compaction budget(?! unit)/)
+		fireEvent.change(budget, { target: { value: "600k" } })
+		expect(screen.getByRole("alert").textContent).toContain("No model in this order fits a 540k request")
+		fireEvent.blur(budget)
+		expect(lastSaved().tuning).toMatchObject({ compaction: { budget: { unit: "tokens", value: 600_000 } } })
+		await act(async () => {})
+
+		fireEvent.change(screen.getByLabelText("Compaction budget unit"), { target: { value: "percent" } })
+		expect(lastSaved().tuning).toMatchObject({ compaction: { budget: { unit: "percent", value: 300 } } })
+	})
+
+	it("warns about a target at the trigger and clears a field left empty", async () => {
+		state.view = {
+			profiles: [profileView("default", { tuning: { compaction: { target: { unit: "percent", value: 50 } } } })],
+		}
+		await renderSection()
+		const target = screen.getByLabelText(/^Size after compaction(?! unit)/)
+		expect((target as HTMLInputElement).value).toBe("50")
+		fireEvent.change(target, { target: { value: "95" } })
+		expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("At or above the 180k trigger"))).toBe(
+			true,
+		)
+		fireEvent.change(target, { target: { value: "" } })
+		fireEvent.blur(target)
+		expect(lastSaved().tuning).toEqual({})
 	})
 })

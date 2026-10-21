@@ -25,7 +25,14 @@ GLM-5.2 and move it to the top.
 
 Until you change it, the list shows the catch-all route's models from the
 rules file. The **Customized** badge marks a router with any setting changed,
-and **Reset to rules file** clears every setting of that router.
+and **Reset to rules file** clears every setting of that router. Since 0.2.5
+the built-in orders are the ones the routers were tuned to here during the
+0.2.4 field runs: FreeAuto kimi-k2.6 then the GLM-5.2 replicas and the
+nemotrons, with its pool limited to them; FreeAuto Smart GLM-5.2 first;
+FreeAuto Fast the 397B Qwen first; BalanceAuto Claude Sonnet 4.6, Sonnet 5,
+then kimi-k2.6 ([pliny-free-auto-router.md](pliny-free-auto-router.md),
+[pliny-balance-auto.md](pliny-balance-auto.md)). A rules file nobody edited is
+refreshed to them on the next start; an edited one keeps its own.
 
 **Use only these models** limits the pool to the list plus the models of any
 route override. When all of them fail, the router does not fall back to the
@@ -37,6 +44,41 @@ FreeAuto profiles offer only free, self-hosted models. A paid id that reaches
 one (from an older setting, or edited into global state by hand) is dropped
 when the rules are built, as it is in a rules file. BalanceAuto offers the
 free models and the paid hosted ones, tagged **paid**.
+
+## Compaction
+
+Two sizes per router, below the model order. Each takes a number and a unit,
+**tokens** or **%**; switching the unit converts the number, and a percentage
+shows the tokens it comes to.
+
+- **Compaction budget**: the input budget the conversation compacts against.
+  It is summarized when a request reaches the auto-compact threshold's share
+  of it (`plinycode.compaction.threshold`, 90% by default). In percent it is a
+  share of the router's built-in budget: FreeAuto 200k, FreeAuto Smart 300k,
+  FreeAuto Fast 64k, BalanceAuto 300k. Empty keeps the built-in budget.
+- **Size after compaction**: the size a compaction shrinks the request to. In
+  percent it is a share of the budget. Empty keeps the engine's adaptive
+  target, about 70% of the trigger, or half the budget once a conversation has
+  five typed prompts. It always stays below the trigger.
+
+Notes under each field explain the value as you type, and never stop it from
+being saved:
+
+- which models of the order hand larger requests on before compaction starts,
+  and to whom ("Before that, larger requests move from Kimi K2.6 (~167k) to
+  GLM-5.2"). A model's limit is its window less its output reserve, over the
+  context margin, in its own tokens;
+- a warning when no model of the order fits the trigger, so requests past the
+  largest limit go out anyway and may be rejected;
+- a warning for a target at or above the trigger, or below 8,000 tokens, which
+  compaction cannot reach because it keeps the recent messages.
+
+A lower threshold or a smaller context margin moves the hand-off point; the
+notes follow both. The values are resolved to tokens by
+`routerCompactionOverrides` (`src/sdk/router/router-compaction.ts`) before
+every model call, so a change applies to running conversations, and the
+context bar's compaction marker moves with it. A model tuning's smaller
+context ([model-tuning.md](model-tuning.md)) still wins over a larger budget.
 
 ## Advanced
 

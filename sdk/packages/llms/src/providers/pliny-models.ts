@@ -420,45 +420,56 @@ export function plinyHostedPoolIds(): string[] {
 }
 
 /**
- * Input budget FreeAuto compacts against (the virtual ModelInfo's
- * maxInputTokens): what decides when history is summarized. It is sized to
- * the lead of the coding route, kimi-k2.6 (256k): compaction starts at 90% of
- * this budget, and at that size the lead still fits with a 32k output reserve
- * and the router's 1.15 margin, as do nemotron ultra (200k) and GLM-5.2
- * (512k). The 128k tier (qwen3-coder) stops fitting past ~83k and is skipped
- * by the policy's size filter above that, which the pool tolerates.
+ * Each router profile's compaction budget (the virtual ModelInfo's
+ * `maxInputTokens`, what decides when history is summarized) and context
+ * window (the bar's denominator, the largest window its model order holds).
+ * Compaction starts at the `plinycode.compaction.threshold` share of the
+ * budget, 90% by default. Settings → Router can raise or lower the budget per
+ * router (`routerTuning`, docs/router-settings.md).
  *
- * It used to be 92k, sized to the 128k tier so the whole pool stayed
- * routable. On long runs that compacted every ten or so iterations: a 26k-char
- * system prompt and 39k chars of tool definitions took a quarter of the
- * budget, the summary kept one tool pair, and the model re-read the same
- * files after each compaction. Fewer, later compactions keep more of the
- * working set, at the cost of slower prefill on the largest requests.
+ * - default (FreeAuto): 200k, so compaction starts at about 180k. kimi-k2.6
+ *   (256k) leads; past about 167k it no longer fits with its 64k output
+ *   reserve and the router's 1.15 margin, and the size filter hands the
+ *   request to the GLM-5.2 replicas (512k) that follow it in the order.
+ * - smart: 300k, about 270k: GLM-5.2 leads, so the whole run stays on it.
+ * - fast: 64k, about 58k. Fast trades depth for latency, and a long history is
+ *   the largest cost of every call: a small request answers quickly and stays
+ *   on the fast Qwen models, which degrade first as the context grows.
+ * - balance (BalanceAuto): 300k, about 270k, on Claude Sonnet 4.6's 1M window.
+ *   Every call is billed on its whole input, but the prompt cache bills a
+ *   repeated prefix at a tenth, and each compaction costs a summary and the
+ *   re-reads that follow it.
+ *
+ * History: the free budget was 92k (sized to the 128k tier, compacting every
+ * ten or so iterations on long runs, after which the model re-read the same
+ * files), then 150k. Fewer, later compactions keep more of the working set, at
+ * the cost of slower prefill on the largest requests.
  */
-const FREE_AUTO_MAX_INPUT_TOKENS = 150_000;
+const ROUTER_BUDGETS: Record<
+	string,
+	{ maxInputTokens: number; contextWindow: number }
+> = {
+	default: { maxInputTokens: 200_000, contextWindow: 512_000 },
+	smart: { maxInputTokens: 300_000, contextWindow: 512_000 },
+	fast: { maxInputTokens: 64_000, contextWindow: 256_000 },
+	balance: { maxInputTokens: 300_000, contextWindow: 1_000_000 },
+};
 
 /**
- * Input budget of the fast FreeAuto profile. Fast trades depth for latency, and
- * a long history is the largest cost of every call: compacting from about 58k
- * keeps each request small enough to answer quickly and to stay on the fast
- * Qwen models, which degrade first as the context grows.
+ * A router profile's compiled compaction budget and context window, before any
+ * Settings → Router override. Undefined for an unknown profile.
  */
-const FAST_AUTO_MAX_INPUT_TOKENS = 64_000;
+export function plinyRouterBudget(
+	profile: string,
+): { maxInputTokens: number; contextWindow: number } | undefined {
+	const budget = ROUTER_BUDGETS[profile];
+	return budget ? { ...budget } : undefined;
+}
 
 /**
- * Input budget BalanceAuto compacts against: the paid models it prefers take
- * 200k+, but every call is billed on its whole input, so history is
- * summarized at about 115k rather than carried to 180k.
- */
-const BALANCE_AUTO_MAX_INPUT_TOKENS = 128_000;
-
-/**
- * `ModelInfo` for the virtual router. The context window is deliberately the
- * 256k tier rather than GLM-5.2's 512k: it is the window a majority of the pool
- * can honor, while the policy can still route a genuinely huge request to
- * GLM-5.2. `maxInputTokens` is lower on purpose: it only sets when compaction
- * starts (see FREE_AUTO_MAX_INPUT_TOKENS, and FAST_AUTO_MAX_INPUT_TOKENS for
- * the fast profile).
+ * `ModelInfo` for the virtual router. `maxInputTokens` only sets when
+ * compaction starts (ROUTER_BUDGETS); the policy's size filter decides which
+ * concrete model can take a request of a given size.
  *
  * It declares image input although no free model has it: the extension's
  * router hands a text-only model each image as a description, or as a note
@@ -466,15 +477,13 @@ const BALANCE_AUTO_MAX_INPUT_TOKENS = 128_000;
  * FreeAuto conversation is never refused outright.
  */
 function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
+	const budget = ROUTER_BUDGETS[profile.profile] ?? ROUTER_BUDGETS.default;
 	return {
 		id: profile.id,
 		name: profile.name,
 		description: profile.summary,
-		contextWindow: 256_000,
-		maxInputTokens:
-			profile.profile === "fast"
-				? FAST_AUTO_MAX_INPUT_TOKENS
-				: FREE_AUTO_MAX_INPUT_TOKENS,
+		contextWindow: budget.contextWindow,
+		maxInputTokens: budget.maxInputTokens,
 		maxTokens: 32_768,
 		capabilities: ["streaming", "tools", "images"],
 		family: "pliny-router",
@@ -492,20 +501,21 @@ function buildFreeAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
 }
 
 /**
- * `ModelInfo` for BalanceAuto. The window is the hosted default: the paid
- * models it prefers are budgeted at 200k, and a request beyond that is routed
- * to a large-context free model by the rules. It declares image input because
- * the hosted Claude models it routes to accept images; a request with images
+ * `ModelInfo` for BalanceAuto. The window is Claude Sonnet 4.6's, the lead of
+ * its model order; a request too large for the model a route picks is handed
+ * to a larger one by the size filter. It declares image input because the
+ * hosted Claude models it routes to accept images; a request with images
  * only ever goes to a model that declares them. No pricing is stamped on the
  * virtual id: every call is billed at the concrete model it lands on.
  */
 function buildBalanceAutoModelInfo(profile: PlinyRouterProfileSpec): ModelInfo {
+	const budget = ROUTER_BUDGETS.balance;
 	return {
 		id: profile.id,
 		name: profile.name,
 		description: profile.summary,
-		contextWindow: HOSTED_DEFAULT_CONTEXT,
-		maxInputTokens: BALANCE_AUTO_MAX_INPUT_TOKENS,
+		contextWindow: budget.contextWindow,
+		maxInputTokens: budget.maxInputTokens,
 		maxTokens: 32_768,
 		capabilities: ["streaming", "tools", "images"],
 		family: "pliny-router",

@@ -11,6 +11,7 @@ import { McpDisplayMode } from "./McpDisplayMode"
 import { ClineMessageModelInfo } from "./messages"
 import type { ModelTuningMap } from "./model-tuning"
 import type { PlanExecutionChoice } from "./planExecution"
+import type { RouterTuningMap } from "./router-tuning"
 import { Mode } from "./storage/types"
 import type { WorkspaceRef } from "./workspaceRef"
 // webview will hold state
@@ -130,6 +131,8 @@ export interface ExtensionState {
 	favoritedModelIds: string[]
 	/** Per-model reasoning and context tuning, keyed by model id (src/shared/model-tuning.ts). */
 	modelTuning?: ModelTuningMap
+	/** Settings → Router, per router profile (src/shared/router-tuning.ts): the context bar reads its compaction budget. */
+	routerTuning?: RouterTuningMap
 	/**
 	 * The workspace this window is open on (folder, or .code-workspace file for
 	 * multi-folder workspaces). New conversations bind to it unless another one
@@ -435,6 +438,18 @@ export interface ClineApiReqInfo {
 	reasoningTokens?: number
 	/** The model that served this request: the routed model for FreeAuto/BalanceAuto, else the selected one. */
 	modelId?: string
+	/**
+	 * The request's whole input as last sent, cache included: what the context
+	 * bar shows. Differs from tokensIn + cache when a retried empty reply billed
+	 * the same request twice. Absent on rows written before 0.2.5.
+	 */
+	contextTokens?: number
+	/**
+	 * Tokens the engine left out of this request before sending it: old tool
+	 * output, earlier reasoning, superseded file reads, side questions. Why the
+	 * context can shrink between calls without a compaction.
+	 */
+	prunedTokens?: number
 }
 
 /**
@@ -444,11 +459,19 @@ export interface ClineApiReqInfo {
  */
 export interface ClineCompactionInfo {
 	status: "started" | "completed" | "skipped" | "failed" | "cancelled"
-	mode: "auto" | "manual"
+	/** overflow: the provider rejected the request as too large, and the history was compacted to retry it. */
+	mode: "auto" | "manual" | "overflow"
 	tokensBefore?: number
 	tokensAfter?: number
 	messagesBefore?: number
 	messagesAfter?: number
+	/** agentic, basic or custom. */
+	strategy?: string
+	/**
+	 * The summary the model continues from, for the row to show (capped). The row
+	 * itself never reaches the model: only the summary message in its history does.
+	 */
+	summary?: string
 }
 
 export interface ClineSubagentUsageInfo {

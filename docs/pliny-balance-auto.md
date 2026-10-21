@@ -27,25 +27,25 @@ decide when the classifier gives no verdict.
 
 | Route | When | Models, best first |
 | --- | --- | --- |
-| `huge-context` | request ≥ 180k tokens | free GLM-5.2 (512k), vmodels replica first |
+| `huge-context` | request ≥ 180k tokens | free GLM-5.2 (512k: vmodels, internal-tests, primary), then Claude Sonnet 4.6 (1M) |
 | `subagent` | any sub-agent call | free kimi-k2.6, free qwen3-coder, then Haiku 4.5 |
-| `plan-and-reasoning` | tier `reason`, or any plan-mode turn | Claude Sonnet 4.6 high-thinking preset, Claude Sonnet 5, GPT-5.2 (reasoning on, high) |
-| `ask-reasoning` | ask mode with a why/explain/review question | Claude Sonnet 5, free kimi-k2.6, Claude Sonnet 4.6 (reasoning on, medium) |
-| `coding` | tier `code`, or act mode with a coding prompt | free kimi-k2.6, free qwen3-coder, then Claude Sonnet 5 |
+| `plan-and-reasoning` | tier `reason`, or any plan-mode turn | Claude Sonnet 4.6, Claude Sonnet 5, free kimi-k2.6 (reasoning on, high) |
+| `ask-reasoning` | ask mode with a why/explain/review question | Claude Sonnet 4.6, Claude Sonnet 5, free kimi-k2.6 (reasoning on, medium) |
+| `coding` | tier `code`, or act mode with a coding prompt | Claude Sonnet 4.6, Claude Sonnet 5, free kimi-k2.6 |
 | `quick` | tier `quick`, or a short question | free kimi-k2.6, free nemotron super, then Haiku 4.5 |
-| `default` | anything else | Claude Sonnet 5, free kimi-k2.6, Claude Sonnet 4.6 |
+| `default` | anything else | Claude Sonnet 4.6, Claude Sonnet 5, free kimi-k2.6 |
 
-Sonnet is where it earns its price and nowhere else. In the first week of use
-the coding route alone put about seventy percent of BalanceAuto's calls on
-Sonnet, and most of them were routine edits the free coder does as well. The
-coding route now leads with the free models and reaches Sonnet 5 three ways:
-as the failover when both free candidates are down, as the catch-all
-`default` route for turns the classifier could not place, and through the
-completion guard's escalation, which moves a free model that stalled twice in
-a row, or three times in the run, to the `default` route's lead, Sonnet 5, for the rest of the turn. Reasoning
-turns go straight to the Sonnet 4.6 thinking preset. The classifier guidance
-in the rules file says the same, so it picks `reason` only where a strong
-model changes the outcome.
+The main routes share one model order, the one BalanceAuto was tuned to in
+Settings → Router during the 0.2.4 field runs: Claude Sonnet 4.6 (1M window)
+leads, Sonnet 5 is the paid failover and kimi-k2.6 the free one. Short
+questions and sub-agent runs stay free. Until 0.2.5 the coding route led with
+the free models, after a first week in which it put about seventy percent of
+BalanceAuto's calls on Sonnet; Settings → Router → Model order puts it back
+for anyone who wants that. The completion guard's escalation moves a free
+model that stalled twice in a row, or three times in the run, to the
+`default` route's lead, Sonnet 4.6, for the rest of the turn. The classifier
+guidance in the rules file says which tiers are paid, so it picks `quick` for
+what a free model handles.
 
 **A verdict whose route refuses the request falls back by tier, not to the
 catch-all.** The `quick` route admits requests up to 30k tokens; a `quick`
@@ -81,17 +81,19 @@ Two things the router cannot do for hosted models:
 
 - **Thinking.** Only self-hosted models have a measured reasoning switch, so
   `effort` leaves hosted models at their default. Where thinking is wanted,
-  route to a preset such as `aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking`,
-  as the reasoning route does.
+  route to a preset such as `aws-bedrock-vmodels/claude-4-6-sonnet-high-thinking`
+  (the reasoning route led with it until 0.2.5).
 - **Context beyond 200k.** Hosted entries take their window from the Pliny
   Model Catalog page: Claude Sonnet 4.6 1M, GPT-5.2 272k (the input share of
   its 400k), Gemini 3.5 / 2.5 Flash 1M. Entries the page does not list (Claude
   Sonnet 5, the Sonnet 4.6 thinking presets) keep the 200k hosted default, and a
-  request beyond roughly 118k estimated tokens (window minus the output reserve)
-  skips them for a model with room. The conversation itself compacts against
-  BalanceAuto's own 128k input budget (at about 115k estimated tokens), so a
-  run stays within reach of those 200k-default models and each paid call is
-  billed on a smaller input.
+  request beyond roughly 118k tokens (window minus the output reserve, over
+  the 1.15 margin) skips them for a model with room. The conversation itself
+  compacts against BalanceAuto's own 300k input budget (at about 270k tokens),
+  on Sonnet 4.6's 1M window: past about 118k Sonnet 5 hands the request to
+  Sonnet 4.6. The budget was 128k; a later compaction keeps more of the
+  working set, and the prompt cache bills a repeated prefix at a tenth.
+  Settings → Router → Compaction changes it ([router-settings.md](router-settings.md#compaction)).
 
 Utility jobs (classifier, compaction summaries, commit messages) stay on free
 models by default. The rules file may point any of them at a paid model.

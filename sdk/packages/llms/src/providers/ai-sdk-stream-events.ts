@@ -36,6 +36,7 @@ import {
 } from "./error-classification";
 import { extractErrorMessage } from "./format";
 import { displayToolName } from "./kimi-tool-calls";
+import { retriedRequestInputTokens } from "./middleware/retry-empty-response";
 import { createTextToolCallFilter } from "./text-tool-calls";
 import type {
 	AiSdkStreamPart,
@@ -297,6 +298,7 @@ export async function* emitAiSdkEvents(
 	// aggregated `stream.usage` / `finish.totalUsage` drop it, and with it
 	// fields it does not map, such as Anthropic `cache_creation_input_tokens`.
 	let finishStepRawUsage: unknown;
+	let finishStepProviderMetadata: unknown;
 	let streamAborted = false;
 	/**
 	 * A tool call whose arguments are still streaming. The AI SDK only reports
@@ -664,6 +666,9 @@ export async function* emitAiSdkEvents(
 					finishStepRawUsage =
 						(part.usage as { raw?: unknown } | undefined)?.raw ??
 						finishStepRawUsage;
+					finishStepProviderMetadata =
+						(part as { providerMetadata?: unknown }).providerMetadata ??
+						finishStepProviderMetadata;
 				}
 
 				if (part.type === "finish") {
@@ -890,14 +895,33 @@ export async function* emitAiSdkEvents(
 			request,
 			outputTextForEstimate,
 		);
-		observeTokenCalibration(estimatedUsage, request);
+		// After a retried empty reply the counts bill every attempt; the request
+		// itself is the last attempt's (retry-empty-response.ts).
+		const requestInputTokens = estimatedUsage.estimated
+			? undefined
+			: (retriedRequestInputTokens(finishProviderMetadata) ??
+				retriedRequestInputTokens(finishStepProviderMetadata));
+		const requestUsage =
+			requestInputTokens !== undefined
+				? { ...estimatedUsage, inputTokens: requestInputTokens }
+				: estimatedUsage;
+		observeTokenCalibration(requestUsage, request);
 		const contextSources = request.metadata?.contextSources as
 			| ContextSourceTexts
 			| undefined;
+		// What the engine trimmed from this request before sending it, in this
+		// model's tokens (session-runtime-orchestrator.ts, beforeModel).
+		const prunedChars = request.metadata?.prunedChars;
+		const prunedTokens =
+			typeof prunedChars === "number" && prunedChars > 0
+				? Math.round(prunedChars / calibratedCharsPerToken(request))
+				: 0;
 		yield {
 			type: "usage",
 			usage: {
 				...estimatedUsage,
+				...(requestInputTokens !== undefined ? { requestInputTokens } : {}),
+				...(prunedTokens > 0 ? { prunedTokens } : {}),
 				contextBreakdown: estimateContextBreakdown(
 					{
 						systemPrompt: request.systemPrompt,
@@ -909,9 +933,7 @@ export async function* emitAiSdkEvents(
 						messages: request.messages,
 						charsPerToken: calibratedCharsPerToken(request),
 					},
-					estimatedUsage.inputTokens > 0
-						? estimatedUsage.inputTokens
-						: undefined,
+					requestUsage.inputTokens > 0 ? requestUsage.inputTokens : undefined,
 				),
 			},
 		};

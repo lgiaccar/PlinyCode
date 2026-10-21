@@ -47,6 +47,7 @@ import { toSdkProviderId } from "./model-catalog/sdk-provider-id"
 import { createProviderConfigStore, resolveRuntimeModelSelection } from "./model-catalog/store"
 import { getActivePlinyApiKey, waitForPlinyApiKeys } from "./pliny-api-key-source"
 import { getProviderSettingsManager } from "./provider-migration"
+import { routerCompactionOverrides } from "./router/router-compaction"
 import type { SdkSessionHost } from "./session-host"
 
 // ---------------------------------------------------------------------------
@@ -668,6 +669,8 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 						strategy: compactionStrategy,
 						// plinycode.compaction.threshold, read before every model call.
 						thresholdRatio: getCompactionThreshold,
+						// Settings → Router's budget and target for a router model.
+						...routerCompactionOverrides(modelId, () => stateManager.getGlobalStateKey("routerTuning"), modelTuning),
 					},
 				}
 			: {}),

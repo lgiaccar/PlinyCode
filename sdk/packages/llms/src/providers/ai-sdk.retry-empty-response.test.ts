@@ -170,6 +170,29 @@ describe("openai-compatible wire format (openrouter / cline / custom endpoints)"
 		expect(finishes[0]).not.toMatchObject({ reason: "error" });
 	});
 
+	it("bills every attempt but reports the request as the last attempt's input", async () => {
+		const withUsage = (sse: string, prompt: number, completion: number) =>
+			sse.replace(
+				"data: [DONE]",
+				`data: ${JSON.stringify({
+					id: "cmpl-1",
+					object: "chat.completion.chunk",
+					created: 1,
+					model: "test-model",
+					choices: [],
+					usage: { prompt_tokens: prompt, completion_tokens: completion },
+				})}\n\ndata: [DONE]`,
+			);
+		const { events } = await run([
+			withUsage(emptySse, 5_000, 0),
+			withUsage(textSse, 5_000, 3),
+		]);
+		const usage = events.find((event) => event.type === "usage");
+		expect(usage).toMatchObject({
+			usage: { inputTokens: 10_000, requestInputTokens: 5_000 },
+		});
+	});
+
 	it("does not retry a non-empty turn", async () => {
 		const { fetchMock, events } = await run([textSse]);
 

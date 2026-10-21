@@ -238,6 +238,8 @@ export const compactionPayload = schema<ClineCompactionInfo>(
 		tokensAfter: optNum,
 		messagesBefore: optNum,
 		messagesAfter: optNum,
+		strategy: optStr,
+		summary: optStr,
 	}),
 )
 

@@ -197,9 +197,9 @@ large-context model when the conversation is long or many files are attached.
 Prefer a fast small model for short factual questions. When in doubt, choose the
 default route.`
 
-const BALANCE_GUIDANCE = `The quick and code tiers lead with free models and cost nothing; the reason
-tier runs on paid Claude with thinking on, and anything unclassified goes to
-paid Claude too. Choose quick for short factual questions, one-line or
+const BALANCE_GUIDANCE = `The quick tier and sub-agents lead with free models and cost nothing; the code
+and reason tiers run on paid Claude Sonnet 4.6 (thinking on for reason), and
+anything unclassified goes to paid Claude too. Choose quick for short factual questions, one-line or
 mechanical edits, lookups and reformatting. Choose code for implementation
 work: writing, editing, fixing and testing code, even when it is long, and for
 every chore around it: creating or updating a pull request, committing and

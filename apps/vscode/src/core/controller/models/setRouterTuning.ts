@@ -29,5 +29,6 @@ export async function setRouterTuning(
 	const { [profile]: _previous, ...rest } = current
 	const next: RouterTuningMap = tuning ? { ...rest, [profile]: tuning } : rest
 	controller.stateManager.setGlobalState("routerTuning", next)
+	await controller.postStateToWebview?.()
 	return routerSettingsResponse(controller)
 }

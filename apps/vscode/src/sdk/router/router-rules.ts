@@ -131,37 +131,38 @@ const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
 const QWEN_NEXT = "snps-provider/qwen3-next-80b-a3b-instruct-d79b4"
 const GLM = "snps-provider/GLM-5.2"
 const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
+const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
 
 /**
- * Models we want tried first. The rest of the pool follows in catalog order, so
- * a catalog refresh can add models without anyone editing this list, and an id
- * retired from the catalog simply disappears.
+ * Each profile's model order: the list of its main routes (default, coding,
+ * plan and ask reasoning) and the head of its pool. These are the orders the
+ * routers were tuned to in Settings → Router during the 0.2.4 field runs:
+ *
+ * - default: kimi-k2.6 leads (256k, the best throughput and the strongest
+ *   agentic coder in the free pool; its habit of ending a reply on an
+ *   announced step is what the completion guard exists for). The GLM-5.2
+ *   replicas (512k) follow, so a request too large for kimi lands on GLM
+ *   rather than on a smaller model, and the nemotrons are the last resort.
+ *   The 128k coder is out: it stops fitting long before compaction.
+ * - smart: GLM-5.2 leads, for the strongest reasoning and the 512k window.
+ * - fast: the 397B Qwen leads, the coder is the last resort.
+ * - balance: Claude Sonnet 4.6 (1M) leads every main route, Sonnet 5 is the
+ *   paid backup and kimi the free one.
  */
-const PREFERRED_HEAD = [
-	// Ordered from the live probe plus field experience: every model here
-	// answered and really called a tool. kimi-k2.6 leads the default and smart
-	// profiles: a 256k window, the best throughput, and the strongest agentic
-	// coder in the free pool. Its weak spot — ending a reply on an announced
-	// step — is what the completion guard exists for. The failure that used to
-	// take it out of the running, calls emitted as `functions-read_files` or
-	// not at all, came from the tool-call ids in its history: it now gets them
-	// in its own `functions.<tool>:<index>` form (`kimi-tool-calls.ts`).
-	// GLM-5.2 is last: the only 512k option, but far slower than the rest.
-	KIMI,
-	CODER,
-	NEMOTRON_ULTRA,
-	NEMOTRON_SUPER,
-	QWEN_397,
-	GLM,
-]
+const DEFAULT_MODELS = [KIMI, GLM_INTERNAL, GLM_VMODELS, NEMOTRON_ULTRA, NEMOTRON_SUPER]
+const SMART_MODELS = [GLM, GLM_INTERNAL, KIMI, NEMOTRON_ULTRA, NEMOTRON_SUPER]
+const FAST_MODELS = [QWEN_397, NEMOTRON_ULTRA, KIMI, CODER]
 
 /**
- * The fast profile's head: the Qwen family, coder first. Kimi reasons inside
- * its content on every call and answers in 2-6 s where the coder answers in
- * 1-2 s, so it is not what a profile called "fast" should lead with; it stays
- * in the pool only as a deep fallback.
+ * Models tried after a profile's own order. The rest of the pool follows in
+ * catalog order, so a catalog refresh can add models without anyone editing
+ * this list, and an id retired from the catalog simply disappears. Every model
+ * here answered the live probe and really called a tool.
  */
-const FAST_PREFERRED_HEAD = [CODER, QWEN_397, QWEN_NEXT, NEMOTRON_SUPER, NEMOTRON_ULTRA, GLM]
+const PREFERRED_HEAD = [KIMI, GLM_VMODELS, GLM_INTERNAL, GLM, NEMOTRON_ULTRA, NEMOTRON_SUPER, QWEN_397, CODER]
+
+/** The fast profile's head after its model order: the Qwen family first, as latency matters most. */
+const FAST_PREFERRED_HEAD = [QWEN_397, CODER, QWEN_NEXT, NEMOTRON_SUPER, NEMOTRON_ULTRA, KIMI, GLM]
 
 // Paid hosted models BalanceAuto routes to. Only ids the catalog verified to
 // call tools; the pool filter below drops any that a catalog refresh retires.
@@ -177,24 +178,40 @@ const GPT_52 = "azure-openai/gpt-5.2"
  * Paid models BalanceAuto may use, best first. They head its pool so that a
  * turn whose free candidates all fail still lands on a strong model.
  */
-const BALANCE_PAID_HEAD = [SONNET_5, SONNET_46_THINKING, SONNET_46, GPT_52, HAIKU_45]
+const BALANCE_PAID_HEAD = [SONNET_46, SONNET_5, SONNET_46_THINKING, GPT_52, HAIKU_45]
+
+/** BalanceAuto's model order: see DEFAULT_MODELS. */
+const BALANCE_MODELS = [SONNET_46, SONNET_5, KIMI]
+
+function unique(ids: string[]): string[] {
+	return [...new Set(ids)]
+}
 
 /**
- * The pool a profile may route to: the free self-hosted models, preferred ones
- * first, plus BalanceAuto's paid models at the front for the balance profile.
+ * The pool a profile may route to: its model order, then the free self-hosted
+ * models, preferred ones first, plus BalanceAuto's paid models at the front for
+ * the balance profile. The default profile is exclusive: it routes only to its
+ * routes' own models and never falls back to the rest of the catalog, as the
+ * Settings → Router "Use only these models" switch does.
  */
 export function defaultPool(profile = "default"): string[] {
 	const catalogIds = plinyFreePoolIds()
 	const available = new Set(catalogIds)
+	if (profile === "default") {
+		return unique([...DEFAULT_MODELS, ...DEFAULT_ROUTES.flatMap((route) => route.use)]).filter((id) => available.has(id))
+	}
+	const order = profile === "fast" ? FAST_MODELS : profile === "smart" ? SMART_MODELS : []
 	const preferred = profile === "fast" ? FAST_PREFERRED_HEAD : PREFERRED_HEAD
-	const head = preferred.filter((id) => available.has(id))
+	const head = unique([...order, ...preferred]).filter((id) => available.has(id))
 	const tail = catalogIds.filter((id) => !head.includes(id))
 	const free = [...head, ...tail]
 	if (!plinyRouterProfileAllowsPaid(profile)) {
 		return free
 	}
 	const hosted = new Set(plinyHostedPoolIds())
-	return [...BALANCE_PAID_HEAD.filter((id) => hosted.has(id)), ...free]
+	const paid = unique([...BALANCE_MODELS, ...BALANCE_PAID_HEAD]).filter((id) => hosted.has(id))
+	const freeLead = BALANCE_MODELS.filter((id) => available.has(id))
+	return unique([...paid, ...freeLead, ...free])
 }
 
 /**
@@ -211,16 +228,17 @@ export function routableModelIds(profile = "default"): string[] {
 }
 
 /**
- * The huge-context route is the same for every profile: both GLM replicas are
- * 512k. The vmodels replica is load-balanced and measured faster than the
- * primary, so it leads; the primary is the backup. Reasoning off: at this size
- * GLM's default thinking dominates the wait.
+ * The huge-context route is the same for every free profile: the GLM replicas
+ * are 512k. The vmodels replica is load-balanced and measured faster than the
+ * primary, so it leads; the internal-tests replica and the primary are the
+ * backups. Reasoning off: at this size GLM's default thinking dominates the
+ * wait. BalanceAuto adds Sonnet 4.6's 1M window behind them.
  */
 const HUGE_CONTEXT_ROUTE: RouterRoute = {
 	name: "huge-context",
 	tier: "huge",
 	when: { minEstimatedTokens: 180_000 },
-	use: [GLM_VMODELS, GLM],
+	use: [GLM_VMODELS, GLM_INTERNAL, GLM],
 	effort: "quick",
 }
 
@@ -230,119 +248,100 @@ const CODING_PROMPT =
 const QUICK_PROMPT = "^(what|how|where|which|is|does|can|list|show)\\b"
 
 /**
- * Routes of the default and smart profiles: kimi-k2.6 leads everything that
- * is multi-step, with the coder as its backup and the escalation target when
- * it stalls. Effort follows the thinking probe: reasoning is switched off for
- * everyday work (it multiplies latency on the models that do it by default,
- * GLM-5.2 above all) and on for planning. It only applies to models whose
- * switch was measured; every other model keeps its default.
+ * The routes of a FreeAuto profile, built around its model order: the main
+ * routes (default, coding, plan and ask reasoning) use the order, the others
+ * keep lists of their own. Effort follows the thinking probe: reasoning is
+ * switched off for everyday work (it multiplies latency on the models that do
+ * it by default, GLM-5.2 above all) and on for planning. It only applies to
+ * models whose switch was measured; every other model keeps its default.
  */
-const DEFAULT_ROUTES: RouterRoute[] = [
-	HUGE_CONTEXT_ROUTE,
-	{
-		name: "subagent",
-		// Delegated tasks are bounded but multi-step (explore, then report), and
-		// a sub-agent that stops early hands the parent a half result.
-		when: { subAgent: true, maxEstimatedTokens: 100_000 },
-		use: [KIMI, CODER, NEMOTRON_SUPER],
-		effort: "quick",
-	},
-	{
-		name: "plan-and-reasoning",
-		tier: "reason",
-		// Every plan-mode turn: a plan is only as good as the thinking behind it.
-		when: { mode: "plan" },
-		// kimi reasons in its content whatever the effort; the 397B is the
-		// backup with a real reasoning switch, turned on here.
-		use: [KIMI, QWEN_397, NEMOTRON_ULTRA],
-		effort: "think",
-		reasoningEffort: "high",
-	},
-	{
-		name: "ask-reasoning",
-		// Ask mode thinks only when the question asks for reasoning; a quick
-		// lookup stays on the quick route.
-		when: { mode: "ask", promptRegex: REASONING_PROMPT },
-		use: [KIMI, QWEN_397, NEMOTRON_ULTRA],
-		effort: "think",
-		reasoningEffort: "medium",
-	},
-	{
-		name: "coding",
-		tier: "code",
-		when: { mode: "act", maxEstimatedTokens: 100_000, promptRegex: CODING_PROMPT },
-		use: [KIMI, CODER, NEMOTRON_ULTRA],
-		effort: "quick",
-	},
-	{
-		name: "quick",
-		tier: "quick",
-		when: { maxPromptChars: 300, maxEstimatedTokens: 30_000, promptRegex: QUICK_PROMPT },
-		use: [QWEN_NEXT, NEMOTRON_SUPER, KIMI],
-		effort: "quick",
-	},
-	{
-		name: "default",
-		// The catch-all gets the long multi-step tasks.
-		use: [KIMI, CODER, NEMOTRON_ULTRA, NEMOTRON_SUPER],
-	},
-]
+function freeRoutes(spec: { models: string[]; planModels?: string[]; subagent: string[]; quick: string[] }): RouterRoute[] {
+	return [
+		HUGE_CONTEXT_ROUTE,
+		{
+			name: "subagent",
+			// Delegated tasks are bounded but multi-step (explore, then report), and
+			// a sub-agent that stops early hands the parent a half result.
+			when: { subAgent: true, maxEstimatedTokens: 100_000 },
+			use: spec.subagent,
+			effort: "quick",
+		},
+		{
+			name: "plan-and-reasoning",
+			tier: "reason",
+			// Every plan-mode turn: a plan is only as good as the thinking behind it.
+			when: { mode: "plan" },
+			use: spec.planModels ?? spec.models,
+			effort: "think",
+			reasoningEffort: "high",
+		},
+		{
+			name: "ask-reasoning",
+			// Ask mode thinks only when the question asks for reasoning; a quick
+			// lookup stays on the quick route.
+			when: { mode: "ask", promptRegex: REASONING_PROMPT },
+			use: spec.models,
+			effort: "think",
+			reasoningEffort: "medium",
+		},
+		{
+			name: "coding",
+			tier: "code",
+			when: { mode: "act", maxEstimatedTokens: 100_000, promptRegex: CODING_PROMPT },
+			use: spec.models,
+			effort: "quick",
+		},
+		{
+			name: "quick",
+			tier: "quick",
+			when: { maxPromptChars: 300, maxEstimatedTokens: 30_000, promptRegex: QUICK_PROMPT },
+			use: spec.quick,
+			effort: "quick",
+		},
+		{
+			name: "default",
+			// The catch-all gets the long multi-step tasks.
+			use: spec.models,
+		},
+	]
+}
 
 /**
- * Routes of the fast profile: the Qwen models only, coder first, reasoning
- * off everywhere. Kimi is deliberately absent from every route so the two
- * free profiles behave differently; it remains in the pool as a last resort.
+ * Routes of the default profile. Its pool is exactly these routes' models, so
+ * the sub-agent and quick routes stay on kimi and nemotron super too.
  */
-const FAST_ROUTES: RouterRoute[] = [
-	HUGE_CONTEXT_ROUTE,
-	{
-		name: "subagent",
-		when: { subAgent: true, maxEstimatedTokens: 100_000 },
-		use: [CODER, QWEN_397, NEMOTRON_SUPER],
-		effort: "quick",
-	},
-	{
-		name: "plan-and-reasoning",
-		tier: "reason",
-		// Every plan-mode turn gets the strongest Qwen, still without reasoning.
-		when: { mode: "plan" },
-		use: [QWEN_397, CODER, NEMOTRON_ULTRA],
-		effort: "quick",
-	},
-	{
-		name: "coding",
-		tier: "code",
-		when: { mode: "act", maxEstimatedTokens: 100_000, promptRegex: CODING_PROMPT },
-		use: [CODER, QWEN_397, NEMOTRON_ULTRA],
-		effort: "quick",
-	},
-	{
-		name: "quick",
-		tier: "quick",
-		when: { maxPromptChars: 300, maxEstimatedTokens: 30_000, promptRegex: QUICK_PROMPT },
-		use: [QWEN_NEXT, CODER, NEMOTRON_SUPER],
-		effort: "quick",
-	},
-	{
-		name: "default",
-		use: [CODER, QWEN_397, NEMOTRON_ULTRA],
-		effort: "quick",
-	},
-]
+const DEFAULT_ROUTES = freeRoutes({
+	models: DEFAULT_MODELS,
+	// Planning starts the GLM replicas the other way round: the load-balanced
+	// vmodels replica answers long reasoning calls faster.
+	planModels: [KIMI, GLM_VMODELS, GLM_INTERNAL, NEMOTRON_ULTRA, NEMOTRON_SUPER],
+	subagent: [KIMI, NEMOTRON_SUPER],
+	quick: [NEMOTRON_SUPER, KIMI],
+})
+
+/** Routes of the smart profile: GLM-led, with the classifier picking the tier. */
+const SMART_ROUTES = freeRoutes({
+	models: SMART_MODELS,
+	subagent: [KIMI, CODER, NEMOTRON_SUPER],
+	quick: [QWEN_NEXT, NEMOTRON_SUPER, KIMI],
+})
+
+/** Routes of the fast profile: reasoning is switched off everywhere by `defaultRules`. */
+const FAST_ROUTES = freeRoutes({
+	models: FAST_MODELS,
+	subagent: [CODER, QWEN_397, NEMOTRON_SUPER],
+	quick: [QWEN_NEXT, CODER, NEMOTRON_SUPER],
+}).filter((route) => route.name !== "ask-reasoning")
 
 /**
- * BalanceAuto routes: Sonnet where it earns its price, free models where they
- * do not lose much. Reasoning (design, planning, review, unknown bugs) and the
- * unclassified catch-all lead with paid Claude; coding leads with the free
- * kimi and coder, with Sonnet 5 as the failover and — because the guard's
- * escalation moves a stalling free model to the default route's lead — as the
- * model that takes over when a free one stops early. Short questions and
- * sub-agent runs stay free with the cheap Haiku as backup; huge requests stay
- * on the free 512k GLM, which no paid model here can hold. The classifier is
- * on, so its verdict, not the keyword heuristics, usually picks the tier.
+ * BalanceAuto routes: Claude Sonnet 4.6 leads the main routes, with Sonnet 5 as
+ * the paid failover and kimi as the free one. Short questions and sub-agent
+ * runs stay free with the cheap Haiku as backup; huge requests go to the free
+ * 512k GLM first, then Sonnet 4.6's 1M window. The classifier is on, so its
+ * verdict, not the keyword heuristics, usually picks the tier.
  */
 const BALANCE_ROUTES: RouterRoute[] = [
-	HUGE_CONTEXT_ROUTE,
+	{ ...HUGE_CONTEXT_ROUTE, use: [...HUGE_CONTEXT_ROUTE.use, SONNET_46] },
 	{
 		name: "subagent",
 		when: { subAgent: true },
@@ -354,14 +353,14 @@ const BALANCE_ROUTES: RouterRoute[] = [
 		tier: "reason",
 		// Every plan-mode turn: plans are where paid reasoning pays off most.
 		when: { mode: "plan" },
-		use: [SONNET_46_THINKING, SONNET_5, GPT_52],
+		use: BALANCE_MODELS,
 		effort: "think",
 		reasoningEffort: "high",
 	},
 	{
 		name: "ask-reasoning",
 		when: { mode: "ask", promptRegex: REASONING_PROMPT },
-		use: [SONNET_5, KIMI, SONNET_46],
+		use: BALANCE_MODELS,
 		effort: "think",
 		reasoningEffort: "medium",
 	},
@@ -369,7 +368,7 @@ const BALANCE_ROUTES: RouterRoute[] = [
 		name: "coding",
 		tier: "code",
 		when: { mode: "act", promptRegex: CODING_PROMPT },
-		use: [KIMI, CODER, SONNET_5],
+		use: BALANCE_MODELS,
 		effort: "quick",
 	},
 	{
@@ -381,7 +380,7 @@ const BALANCE_ROUTES: RouterRoute[] = [
 	},
 	{
 		name: "default",
-		use: [SONNET_5, KIMI, SONNET_46],
+		use: BALANCE_MODELS,
 	},
 ]
 
@@ -389,19 +388,20 @@ function routesForProfile(profile: string): RouterRoute[] {
 	if (plinyRouterProfileAllowsPaid(profile)) {
 		return BALANCE_ROUTES
 	}
-	return profile === "fast" ? FAST_ROUTES : DEFAULT_ROUTES
+	return profile === "fast" ? FAST_ROUTES : profile === "smart" ? SMART_ROUTES : DEFAULT_ROUTES
 }
 
 /**
  * Built-in rules for a router profile, used when its file does not exist or
  * cannot be parsed, and to seed the file on first activation.
  *
- * - default: kimi-led heuristic routes, reasoning per route, no classifier.
- * - fast: Qwen-only routes with reasoning off everywhere it can be switched off.
- * - smart: the default routes plus the classifier, which picks the tier and
+ * - default: kimi-led heuristic routes over an exclusive pool, reasoning per
+ *   route, no classifier.
+ * - fast: Qwen-led routes with reasoning off everywhere it can be switched off.
+ * - smart: GLM-led routes plus the classifier, which picks the tier and
  *   whether to think once per turn.
- * - balance: paid Claude for reasoning and the catch-all, free models for
- *   coding and simple work, with the classifier on so the split is decided
+ * - balance: Claude Sonnet 4.6 on the main routes, free models for
+ *   sub-agents and simple work, with the classifier on so the split is decided
  *   per turn.
  */
 export function defaultRules(profile = "default"): RouterRules {

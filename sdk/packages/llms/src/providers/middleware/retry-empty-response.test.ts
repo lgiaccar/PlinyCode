@@ -8,6 +8,7 @@ import {
 	addUsage,
 	createRetryEmptyResponseMiddleware,
 	isTransientNetworkError,
+	retriedRequestInputTokens,
 } from "./retry-empty-response";
 import { classifyModelStreamPart } from "./stream-part-classification";
 
@@ -263,6 +264,8 @@ describe("createRetryEmptyResponseMiddleware", () => {
 		// Fields undefined on every attempt stay undefined instead of
 		// becoming a fabricated zero.
 		expect(finishPart.usage.inputTokens.noCache).toBeUndefined();
+		// The request itself is the accepted attempt's: 11 input tokens.
+		expect(retriedRequestInputTokens(finishPart.providerMetadata)).toBe(11);
 	});
 
 	it("aggregates usage across all attempts when retries are exhausted", async () => {

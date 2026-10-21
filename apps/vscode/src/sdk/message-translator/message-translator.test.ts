@@ -6,6 +6,7 @@ import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
 import type { ClineAskUseMcpServer, ClineSayTool } from "@shared/ExtensionMessage"
 import { describe, expect, it } from "vitest"
 import { getDesktopDir } from "@/utils/path"
+import { compactionInfoFromProjection } from "./ask-builders"
 import {
 	buildToolApprovalAskMessage,
 	extractToolOutputText,
@@ -228,6 +229,63 @@ describe("translateSessionEvent — compaction cost", () => {
 		expect(result.messages[0].say).toBe("info")
 		expect(result.messages[0].text).toContain("still over the model's input limit")
 		expect(result.messages[0].text).toContain("150k of the model's 92k")
+	})
+
+	it("gives an overflow-recovery compaction a divider with the summary, instead of a raw slug", () => {
+		const state = new MessageTranslatorState()
+		const started = translateSessionEvent(
+			notice("overflow-recovery-compacting", { kind: "overflow_recovery_compaction", phase: "started" }),
+			state,
+		).messages
+		expect(started.map((m) => m.say)).toEqual(["compaction"])
+		const completed = translateSessionEvent(
+			notice("overflow-recovery-compacted", {
+				kind: "overflow_recovery_compaction",
+				phase: "completed",
+				tokensBefore: 260_000,
+				tokensAfter: 90_000,
+				strategy: "agentic",
+				summary: "## Original request\nFix the build",
+			}),
+			state,
+		).messages
+		expect(completed.map((m) => m.say)).toEqual(["compaction"])
+		expect(completed[0].ts).toBe(started[0].ts)
+		expect(JSON.parse(completed[0].text ?? "{}")).toMatchObject({
+			status: "completed",
+			mode: "overflow",
+			strategy: "agentic",
+			summary: "## Original request\nFix the build",
+		})
+	})
+
+	it("rebuilds the latest compaction's divider where it ran, from the sidecar", () => {
+		const messages = [
+			{ role: "user", content: "Original task" },
+			{ role: "assistant", content: "Working on it" },
+			{ role: "user", content: "Continue" },
+			{ role: "assistant", content: "Done" },
+		] as unknown as SdkMessage[]
+		const info = compactionInfoFromProjection({
+			sourceMessageCount: 2,
+			messages: [{ content: "Context summary:\n\nWe did things.", metadata: { kind: "compaction_summary" } }],
+		})
+		expect(info).toEqual({
+			status: "completed",
+			mode: "auto",
+			messagesBefore: 2,
+			messagesAfter: 1,
+			strategy: "agentic",
+			summary: "Context summary:\n\nWe did things.",
+		})
+		const rows = sdkMessagesToClineMessages(messages as MessageWithMetadata[], undefined, {
+			compaction: { sourceMessageCount: 2, info },
+		})
+		const says = rows.map((row) => `${row.say ?? row.ask}:${row.text ?? ""}`)
+		const divider = says.findIndex((entry) => entry.startsWith("compaction:"))
+		expect(divider).toBeGreaterThan(says.findIndex((entry) => entry.includes("Working on it")))
+		expect(divider).toBeLessThan(says.findIndex((entry) => entry.includes("Continue")))
+		expect(says.filter((entry) => entry.startsWith("compaction:"))).toHaveLength(1)
 	})
 
 	it("rebuilds the summarizer's usage row from a persisted compaction summary", () => {
@@ -2556,6 +2614,7 @@ describe("translateSessionEvent — agent_event usage", () => {
 			cacheReads: 24478,
 			cacheWrites: 0,
 			totalCost: 0.0112674,
+			contextTokens: 24481,
 		})
 	})
 

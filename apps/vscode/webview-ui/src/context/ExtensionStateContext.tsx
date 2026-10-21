@@ -241,6 +241,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		subagentsEnabled: true,
 		favoritedModelIds: [],
 		modelTuning: {},
+		routerTuning: {},
 		backgroundCommandRunning: false,
 		backgroundCommandTaskId: undefined,
 		foregroundCommandRunning: false,

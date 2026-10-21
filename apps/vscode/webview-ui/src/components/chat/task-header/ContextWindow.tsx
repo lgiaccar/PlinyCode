@@ -47,6 +47,8 @@ interface ContextWindowProgressProps extends ContextWindowInfoProps {
 	onCompactionThresholdChange?: (threshold: number) => void
 	hasEstimatedUsage?: boolean
 	contextBreakdown?: ClineContextBreakdown
+	/** Tokens the last request left out before it was sent (old tool output, earlier reasoning). */
+	prunedTokens?: number
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
 }
 
@@ -100,6 +102,7 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 	cacheReads,
 	hasEstimatedUsage,
 	contextBreakdown,
+	prunedTokens,
 }) => {
 	const [isOpened, setIsOpened] = useState(false)
 	const [confirmationNeeded, setConfirmationNeeded] = useState(false)
@@ -263,6 +266,7 @@ const ContextWindow: React.FC<ContextWindowProgressProps> = ({
 									contextWindow={tokenData.max}
 									hasEstimatedUsage={hasEstimatedUsage}
 									percentage={tokenData.percentage}
+									prunedTokens={prunedTokens}
 									tokensIn={tokensIn}
 									tokensOut={tokensOut}
 									tokenUsed={tokenData.used}

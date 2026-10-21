@@ -313,6 +313,29 @@ function resolveCompactionThresholdRatio(
 	);
 }
 
+/** Smallest token override honored; anything lower is taken for a mistake. */
+const MIN_TOKEN_OVERRIDE = 1_000;
+
+/**
+ * A token-count override (read now when it is a function), or undefined when
+ * it is unset, not a number or below MIN_TOKEN_OVERRIDE.
+ */
+function resolveTokenOverride(
+	configured: CoreCompactionConfig["maxInputTokensOverride"],
+): number | undefined {
+	let value: number | undefined;
+	try {
+		value = typeof configured === "function" ? configured() : configured;
+	} catch {
+		value = undefined;
+	}
+	return typeof value === "number" &&
+		Number.isFinite(value) &&
+		value >= MIN_TOKEN_OVERRIDE
+		? Math.floor(value)
+		: undefined;
+}
+
 function translateRequestBudgetToMessages(
 	requestTokens: number,
 	overheadTokens: number,
@@ -415,11 +438,19 @@ export function createContextCompactionPrepareTurn(
 			0,
 			requestInputTokens - apiMessageTokens,
 		);
+		const maxInputTokensOverride = resolveTokenOverride(
+			userCompaction?.maxInputTokensOverride,
+		);
+		const targetTokensOverride = resolveTokenOverride(
+			userCompaction?.targetTokensOverride,
+		);
 		const rawMaxInputTokens =
+			maxInputTokensOverride ??
 			resolveEffectiveMaxInputTokens({
 				maxInputTokens: context.model.info?.maxInputTokens,
 				contextWindow: context.model.info?.contextWindow,
-			}) ?? DEFAULT_MAX_INPUT_TOKENS;
+			}) ??
+			DEFAULT_MAX_INPUT_TOKENS;
 		// Every number here is in estimate units (CHARS_PER_TOKEN characters per
 		// token). The provider's real limit is translated into those units by
 		// scaling the whole budget, rather than re-estimating each message at
@@ -519,6 +550,8 @@ export function createContextCompactionPrepareTurn(
 				requestOverheadTokens,
 				maxInputTokens,
 				rawMaxInputTokens,
+				maxInputTokensOverride,
+				targetTokensOverride,
 				...factors,
 				requestTriggerTokens,
 				messageTriggerTokens,
@@ -543,12 +576,25 @@ export function createContextCompactionPrepareTurn(
 		let requestTargetTokens: number;
 		let messageTargetTokens: number;
 		if (effectiveMode === "auto") {
-			requestTargetTokens = resolveAutoRequestTargetTokens({
-				maxInputTokens,
-				modelMaxTokens: context.model.info?.maxTokens,
-				triggerTokens: requestTriggerTokens,
-				typedTurnCount: countTypedTurns(context.messages),
-			});
+			// An override is in the provider's tokens, like the budget: the same
+			// scale turns it into estimate units, and it stays below the trigger
+			// so that a compaction always shrinks the request.
+			requestTargetTokens =
+				targetTokensOverride !== undefined
+					? Math.max(
+							1,
+							Math.min(
+								Math.floor(targetTokensOverride / budgetScale),
+								Math.floor(maxInputTokens),
+								Math.max(1, Math.floor(requestTriggerTokens) - 1),
+							),
+						)
+					: resolveAutoRequestTargetTokens({
+							maxInputTokens,
+							modelMaxTokens: context.model.info?.maxTokens,
+							triggerTokens: requestTriggerTokens,
+							typedTurnCount: countTypedTurns(context.messages),
+						});
 			messageTargetTokens = resolveAutoMessageTargetTokens({
 				requestTargetTokens,
 				overheadTokens: requestOverheadTokens,
@@ -614,6 +660,10 @@ export function createContextCompactionPrepareTurn(
 				messageTargetTokens,
 			),
 			thresholdRatio,
+			...(maxInputTokensOverride !== undefined
+				? { maxInputTokensOverride }
+				: {}),
+			...(targetTokensOverride !== undefined ? { targetTokensOverride } : {}),
 		};
 		const beforeDiagnostics = {
 			messages: context.messages.length,
@@ -950,6 +1000,7 @@ export function createContextCompactionPrepareTurn(
 				messagesAfter: result.messages.length,
 				maxInputTokens,
 				strategy: executedStrategy,
+				...summaryNoticeText(result),
 				...(result.summarizerUsage
 					? { summarizerUsage: result.summarizerUsage }
 					: {}),
@@ -1001,6 +1052,40 @@ export function createContextCompactionPrepareTurn(
  * What a compaction result says about its summary, for the diagnostics the
  * host traces: the summary message's size and the summarizer's call.
  */
+/** Most summary characters a completed notice carries for the chat to show. */
+const NOTICE_SUMMARY_MAX_CHARS = 8_000;
+
+/**
+ * The summary an agentic compaction put at the head of the history, for the
+ * chat's divider to show what the model continues from. The notice is never
+ * part of the model's context: only the summary message itself is. Empty for
+ * a compaction that made no summary (basic, custom).
+ */
+function summaryNoticeText(result: CoreCompactionResult): {
+	summary?: string;
+} {
+	const first = result.messages?.[0];
+	const metadata = first?.metadata as Record<string, unknown> | undefined;
+	if (metadata?.kind !== "compaction_summary" || !first) {
+		return {};
+	}
+	const text =
+		typeof first.content === "string"
+			? first.content
+			: first.content
+					.map((block) => (block.type === "text" ? block.text : ""))
+					.join("");
+	if (!text.trim()) {
+		return {};
+	}
+	return {
+		summary:
+			text.length > NOTICE_SUMMARY_MAX_CHARS
+				? `${text.slice(0, NOTICE_SUMMARY_MAX_CHARS)}…`
+				: text,
+	};
+}
+
 function describeSummaryResult(result: CoreCompactionResult): {
 	summary?: {
 		chars: number;

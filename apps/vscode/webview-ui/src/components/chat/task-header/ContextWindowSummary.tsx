@@ -28,6 +28,8 @@ interface TaskContextWindowButtonsProps extends TokenUsageInfoProps {
 	canSetThreshold?: boolean
 	hasEstimatedUsage?: boolean
 	contextBreakdown?: ClineContextBreakdown
+	/** Tokens the last request left out (old tool output, earlier reasoning): why the context can shrink without a compaction. */
+	prunedTokens?: number
 }
 
 const CONTEXT_BREAKDOWN_LABELS: Record<keyof ClineContextBreakdown, string> = {
@@ -150,6 +152,7 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 	canSetThreshold,
 	hasEstimatedUsage,
 	contextBreakdown,
+	prunedTokens,
 }) => {
 	// Accordion state
 	const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -245,6 +248,13 @@ export const ContextWindowSummary: React.FC<TaskContextWindowButtonsProps> = ({
 					value="">
 					<ContextBreakdownDetails breakdown={contextBreakdown} />
 				</AccordionItem>
+			)}
+			{prunedTokens !== undefined && prunedTokens > 0 && (
+				<div
+					className="text-xs text-description px-1 pt-1"
+					title="Before each call, old tool output, earlier turns' reasoning and superseded file reads are trimmed from the request. The conversation itself is unchanged; this is not a compaction.">
+					Trimmed from the last request: −{formatTokenNumber(prunedTokens)} tokens of old tool output and reasoning
+				</div>
 			)}
 		</div>
 	)

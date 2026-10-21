@@ -123,12 +123,34 @@ describe("renderConversationMarkdown", () => {
 		const markdown = render([
 			{ ts: 1, type: "say", say: "task", text: "hi" },
 			{ ts: 2, type: "say", say: "checkpoint_created" },
-			{ ts: 3, type: "say", say: "compaction", text: JSON.stringify({ status: "completed", mode: "auto" }) },
+			{ ts: 3, type: "say", say: "compaction", text: JSON.stringify({ status: "started", mode: "auto" }) },
 			{ ts: 4, type: "say", say: "subagent", text: JSON.stringify({ status: "running", items: [] }) },
 			{ ts: 5, type: "say", say: "task_progress", text: "1/3 done" },
 		])
 		expect(markdown).to.not.contain("## PlinyCode")
 		expect(markdown).to.not.contain("1/3 done")
+	})
+
+	it("writes a finished compaction as one line, with the summary folded away", () => {
+		const markdown = render([
+			{ ts: 1, type: "say", say: "task", text: "hi" },
+			{
+				ts: 2,
+				type: "say",
+				say: "compaction",
+				text: JSON.stringify({
+					status: "completed",
+					mode: "overflow",
+					tokensBefore: 182_000,
+					tokensAfter: 61_000,
+					strategy: "agentic",
+					summary: "## Original request\nhi",
+				}),
+			},
+		])
+		expect(markdown).to.contain("_Context compacted (the model rejected it as too large) · 182k → 61k tokens (agentic)_")
+		expect(markdown).to.contain("<summary>Summary the model continued from</summary>")
+		expect(markdown).to.contain("## Original request\nhi")
 	})
 
 	it("skips partial rows, which duplicate a final row with the same ts", () => {

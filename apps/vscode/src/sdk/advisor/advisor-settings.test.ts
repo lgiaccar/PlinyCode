@@ -16,9 +16,10 @@ const offered = (overrides: Partial<AdvisorSettings>, modelId: string | undefine
 	advisorUnavailableReason(settings(overrides), modelId) === undefined
 
 describe("advisor settings", () => {
-	it("defaults to the model that leads BalanceAuto's default route", () => {
+	it("defaults to a paid model BalanceAuto's default route uses", () => {
+		// Sonnet 5, the default route's paid failover: the strongest model it routes to.
 		const defaultRoute = defaultRules("balance").routes.find((route) => route.name === "default")
-		expect(SONNET_5).toBe(defaultRoute?.use[0])
+		expect(defaultRoute?.use).toContain(SONNET_5)
 	})
 
 	it("declares the same defaults in package.json as the code falls back to", () => {

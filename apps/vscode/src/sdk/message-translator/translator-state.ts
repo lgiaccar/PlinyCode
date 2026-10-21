@@ -39,6 +39,10 @@ export interface TranslationResult {
 		contextBreakdown?: ClineContextBreakdown
 		reasoningTokens?: number
 		modelId?: string
+		/** The request's whole input as last sent (cache included): what the context bar shows. */
+		contextTokens?: number
+		/** Tokens the engine left out of the request before sending it. */
+		prunedTokens?: number
 	}
 }
 
@@ -55,6 +59,8 @@ export function normalizeUsageEvent(usageEvent: {
 	contextBreakdown?: ClineContextBreakdown
 	reasoningTokens?: number
 	modelId?: string
+	requestInputTokens?: number
+	prunedTokens?: number
 }): NormalizedUsage {
 	const inputTokens = usageEvent.inputTokens ?? 0
 	const cacheReads = usageEvent.cacheReadTokens ?? 0
@@ -75,6 +81,12 @@ export function normalizeUsageEvent(usageEvent: {
 		...(usageEvent.contextBreakdown ? { contextBreakdown: usageEvent.contextBreakdown } : {}),
 		...(usageEvent.reasoningTokens ? { reasoningTokens: usageEvent.reasoningTokens } : {}),
 		...(usageEvent.modelId ? { modelId: usageEvent.modelId } : {}),
+		// After a retried empty reply inputTokens bills every attempt; the
+		// request itself is the last one.
+		...(inputTokens > 0 || usageEvent.requestInputTokens
+			? { contextTokens: usageEvent.requestInputTokens ?? inputTokens }
+			: {}),
+		...(usageEvent.prunedTokens ? { prunedTokens: usageEvent.prunedTokens } : {}),
 	}
 }
 
