@@ -20,6 +20,7 @@ import {
 } from "./legacy-task-handling"
 import type { MessageIdMinter } from "./message-id-minter"
 import { sdkMessagesToClineMessages } from "./message-translator"
+import { compactionInfoFromProjection } from "./message-translator/ask-builders"
 import type { SdkSessionLifecycle } from "./sdk-session-lifecycle"
 import {
 	addExtraUsage,
@@ -707,6 +708,21 @@ export class SdkTaskHistory {
 		}
 
 		const sdkMessages = await this.withHistoryHost((host) => host.readMessages(taskId) as Promise<SdkMessage[]>)
+		// The transcript is never compacted: the latest compaction is only in the
+		// sidecar, which says how many messages it covered.
+		const compactionState = sdkRecord
+			? await this.withHistoryHost((host) => host.readSessionCompactionState(taskId)).catch(() => undefined)
+			: undefined
+		const compaction =
+			compactionState && compactionState.source_message_count <= sdkMessages.length
+				? {
+						sourceMessageCount: compactionState.source_message_count,
+						info: compactionInfoFromProjection({
+							sourceMessageCount: compactionState.source_message_count,
+							messages: compactionState.messages,
+						}),
+					}
+				: undefined
 		const clineMessages = sdkMessagesToClineMessages(
 			sanitizeSdkUserMessagesForDisplay(sdkMessages),
 			this.options.getMinter?.(),
@@ -719,6 +735,7 @@ export class SdkTaskHistory {
 				finalTurnCompleted: sdkRecord?.status === "completed" || sdkRecord?.status === "idle",
 				// Relativize the absolute tool paths for display, same as the live path.
 				cwd: sdkRecord?.cwd || sdkRecord?.workspaceRoot || undefined,
+				...(compaction ? { compaction } : {}),
 			},
 		)
 		if (sdkRecord && legacyTask) {

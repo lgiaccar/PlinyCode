@@ -1,5 +1,11 @@
 import { COMMAND_OUTPUT_STRING } from "@shared/combineCommandSequences"
-import type { ClineAskUseMcpServer, ClineMessage, ClinePlanModeResponse, ClineSayTool } from "@shared/ExtensionMessage"
+import type {
+	ClineAskUseMcpServer,
+	ClineCompactionInfo,
+	ClineMessage,
+	ClinePlanModeResponse,
+	ClineSayTool,
+} from "@shared/ExtensionMessage"
 import { getApiMetrics } from "@shared/getApiMetrics"
 import type { HistoryItem } from "@shared/HistoryItem"
 import { historyItemWorkspaceDisplayPath } from "@shared/workspacePath"
@@ -31,7 +37,6 @@ const INTERNAL_SAYS: ReadonlySet<string> = new Set([
 	"api_req_finished",
 	"deleted_api_reqs",
 	"checkpoint_created",
-	"compaction",
 	"memory_proposal",
 	"subagent",
 	"use_subagents",
@@ -346,6 +351,40 @@ function renderAsk(message: ClineMessage): string[] {
 	return message.text ? [message.text.trim()] : []
 }
 
+function kTokens(count: number): string {
+	return count < 1_000 ? `${count}` : `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}k`
+}
+
+/**
+ * A finished compaction as one line, with the summary the model continued
+ * from in a collapsed block. A compaction still running, skipped or
+ * cancelled changed nothing, so it is left out.
+ */
+function compactionLines(info: ClineCompactionInfo | undefined): string[] {
+	if (!info || (info.status !== "completed" && info.status !== "failed")) {
+		return []
+	}
+	if (info.status === "failed") {
+		return ["_Compaction failed_"]
+	}
+	const parts = [
+		info.mode === "manual"
+			? "Context compacted (manual)"
+			: info.mode === "overflow"
+				? "Context compacted (the model rejected it as too large)"
+				: "Context compacted",
+	]
+	if (typeof info.tokensBefore === "number" && typeof info.tokensAfter === "number") {
+		parts.push(`${kTokens(info.tokensBefore)} → ${kTokens(info.tokensAfter)} tokens`)
+	}
+	if (typeof info.messagesBefore === "number" && typeof info.messagesAfter === "number") {
+		parts.push(`${info.messagesBefore} → ${info.messagesAfter} messages`)
+	}
+	const line = `_${parts.join(" · ")}${info.strategy ? ` (${info.strategy})` : ""}_`
+	const summary = info.summary?.trim()
+	return summary ? [line, `<details>\n<summary>Summary the model continued from</summary>\n\n${summary}\n\n</details>`] : [line]
+}
+
 function renderSay(message: ClineMessage, options: RenderMessageOptions): string[] {
 	const { say } = message
 	if (!say || INTERNAL_SAYS.has(say)) {
@@ -362,6 +401,9 @@ function renderSay(message: ClineMessage, options: RenderMessageOptions): string
 			const body = (message.text ?? "").trim()
 			return [...(body ? [body] : []), ...attachmentLines(message)]
 		}
+
+		case "compaction":
+			return compactionLines(parseJson<ClineCompactionInfo>(message.text))
 
 		case "user_feedback_diff": {
 			const diff = parseJson<ClineSayTool>(message.text)?.diff ?? message.text

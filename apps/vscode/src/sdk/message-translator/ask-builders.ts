@@ -71,6 +71,13 @@ export function buildToolApprovalAskMessage(
 	}
 }
 
+/** The compaction notice kinds that get a divider row, and the mode it shows. */
+const COMPACTION_NOTICE_MODES = new Map<unknown, ClineCompactionInfo["mode"]>([
+	["auto_compaction", "auto"],
+	["manual_compaction", "manual"],
+	["overflow_recovery_compaction", "overflow"],
+])
+
 /**
  * Extract a compaction divider payload from a status notice's metadata.
  * Mirrors the CLI's parseCompactionNoticeMetadata
@@ -82,10 +89,10 @@ export function parseCompactionNoticeMetadata(metadata: Record<string, unknown> 
 		return undefined
 	}
 	const kind = metadata.kind ?? metadata.reason
-	if (kind !== "auto_compaction" && kind !== "manual_compaction") {
+	const mode = COMPACTION_NOTICE_MODES.get(kind)
+	if (!mode) {
 		return undefined
 	}
-	const mode = kind === "manual_compaction" ? "manual" : "auto"
 	if (metadata.phase === "started") {
 		return { status: "started", mode }
 	}
@@ -99,6 +106,45 @@ export function parseCompactionNoticeMetadata(metadata: Record<string, unknown> 
 		tokensAfter: asFiniteNumber(metadata.tokensAfter),
 		messagesBefore: asFiniteNumber(metadata.messagesBefore),
 		messagesAfter: asFiniteNumber(metadata.messagesAfter),
+		...(typeof metadata.strategy === "string" ? { strategy: metadata.strategy } : {}),
+		...(typeof metadata.summary === "string" && metadata.summary ? { summary: metadata.summary } : {}),
+	}
+}
+
+/** Most summary characters a divider rebuilt from history shows, as the live notice does. */
+const DIVIDER_SUMMARY_MAX_CHARS = 8_000
+
+/**
+ * The divider of a saved compaction, from its sidecar's compacted messages: a
+ * summary at their head is an agentic compaction, anything else a basic one.
+ */
+export function compactionInfoFromProjection(input: {
+	sourceMessageCount: number
+	messages: ReadonlyArray<{ content: unknown; metadata?: unknown }>
+}): ClineCompactionInfo {
+	const first = input.messages[0]
+	const metadata = first?.metadata as Record<string, unknown> | undefined
+	const text =
+		metadata?.kind !== "compaction_summary"
+			? ""
+			: typeof first?.content === "string"
+				? first.content
+				: Array.isArray(first?.content)
+					? first.content
+							.map((block: { type?: string; text?: unknown }) =>
+								block?.type === "text" && typeof block.text === "string" ? block.text : "",
+							)
+							.join("")
+					: ""
+	return {
+		status: "completed",
+		mode: "auto",
+		messagesBefore: input.sourceMessageCount,
+		messagesAfter: input.messages.length,
+		strategy: text ? "agentic" : "basic",
+		...(text.trim()
+			? { summary: text.length > DIVIDER_SUMMARY_MAX_CHARS ? `${text.slice(0, DIVIDER_SUMMARY_MAX_CHARS)}…` : text }
+			: {}),
 	}
 }
 

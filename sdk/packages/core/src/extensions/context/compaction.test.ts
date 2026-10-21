@@ -1979,6 +1979,23 @@ describe("createContextCompactionPrepareTurn", () => {
 				}),
 			}),
 		);
+		// The notice carries the summary for the chat; the history the model
+		// works from holds the summary message and nothing about the notice.
+		const notice = emitStatusNotice.mock.calls.find(
+			([message]) => message === "auto-compacted",
+		)?.[1] as { summary?: string };
+		const summaryMessage = result?.messages[0];
+		const summaryText =
+			typeof summaryMessage?.content === "string"
+				? summaryMessage.content
+				: (summaryMessage?.content ?? [])
+						.map((block) => (block.type === "text" ? block.text : ""))
+						.join("");
+		expect(notice.summary).toBe(summaryText);
+		expect(JSON.stringify(result?.messages)).not.toContain("auto-compacted");
+		expect(JSON.stringify(result?.messages)).not.toContain(
+			"Context compacted",
+		);
 	});
 
 	it("trims inside the latest turn on the next call when the summary left the request over the trigger", async () => {

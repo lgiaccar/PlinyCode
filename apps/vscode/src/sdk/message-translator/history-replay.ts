@@ -5,7 +5,7 @@
 import { projectSessionMessagesForDisplay } from "@plinycode/core"
 import type { MessageWithMetadata as SdkMessage } from "@plinycode/llms"
 import type { AgentEvent, UserInputMode } from "@plinycode/shared"
-import type { ClineApiReqInfo, ClineAskQuestion, ClineMessage } from "@shared/ExtensionMessage"
+import type { ClineApiReqInfo, ClineAskQuestion, ClineCompactionInfo, ClineMessage } from "@shared/ExtensionMessage"
 import { MessageIdMinter } from "../message-id-minter"
 import {
 	extractPersistedHookContextChips,
@@ -13,7 +13,7 @@ import {
 	withoutHookContextBlocks,
 } from "../sdk-user-message-mapping"
 import { isKnownToolApprovalDenial } from "../tool-approval-denial"
-import { buildCompactionUsageMessage } from "./ask-builders"
+import { buildCompactionMessage, buildCompactionUsageMessage } from "./ask-builders"
 import { translateSessionEvent } from "./live-events"
 import { extractToolOutputText } from "./tool-mapping"
 import { MessageTranslatorState, normalizeUsageEvent } from "./translator-state"
@@ -255,6 +255,12 @@ export interface SdkMessagesToClineMessagesOptions {
 	 * display, matching the live streaming path.
 	 */
 	cwd?: string
+	/**
+	 * The latest compaction, from the session's compaction sidecar: its divider
+	 * is shown before the first message it did not cover, as it was live. The
+	 * transcript itself is never compacted, so this is the only record of it.
+	 */
+	compaction?: { sourceMessageCount: number; info: ClineCompactionInfo }
 }
 
 /**
@@ -330,8 +336,19 @@ export function sdkMessagesToClineMessages(
 		state.clearTurnOutcome()
 	}
 
+	let compactionShown = false
+	const showCompaction = () => {
+		if (options?.compaction && !compactionShown) {
+			compactionShown = true
+			clineMessages.push(buildCompactionMessage(options.compaction.info, state.nextTs()))
+		}
+	}
+
 	for (const { message, sourceIndex } of projectSessionMessagesForDisplay(messages)) {
 		const sourceMessage = messages[sourceIndex]
+		if (options?.compaction && sourceIndex >= options.compaction.sourceMessageCount) {
+			showCompaction()
+		}
 		if (message.role === "assistant") {
 			flushUnmatchedToolUses()
 
@@ -526,6 +543,9 @@ export function sdkMessagesToClineMessages(
 	if (options?.finalTurnCompleted !== false) {
 		endFinalTurn()
 	}
+	// A compaction that covered the whole transcript ran before a call that
+	// never answered: its divider still closes the history.
+	showCompaction()
 
 	// Always emit ask:"completion_result"
 	// as the LAST message so it comes after the usage event's

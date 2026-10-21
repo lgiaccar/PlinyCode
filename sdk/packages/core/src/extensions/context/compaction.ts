@@ -998,6 +998,7 @@ export function createContextCompactionPrepareTurn(
 				messagesAfter: result.messages.length,
 				maxInputTokens,
 				strategy: executedStrategy,
+				...summaryNoticeText(result),
 				...(result.summarizerUsage
 					? { summarizerUsage: result.summarizerUsage }
 					: {}),
@@ -1049,6 +1050,40 @@ export function createContextCompactionPrepareTurn(
  * What a compaction result says about its summary, for the diagnostics the
  * host traces: the summary message's size and the summarizer's call.
  */
+/** Most summary characters a completed notice carries for the chat to show. */
+const NOTICE_SUMMARY_MAX_CHARS = 8_000;
+
+/**
+ * The summary an agentic compaction put at the head of the history, for the
+ * chat's divider to show what the model continues from. The notice is never
+ * part of the model's context: only the summary message itself is. Empty for
+ * a compaction that made no summary (basic, custom).
+ */
+function summaryNoticeText(result: CoreCompactionResult): {
+	summary?: string;
+} {
+	const first = result.messages?.[0];
+	const metadata = first?.metadata as Record<string, unknown> | undefined;
+	if (metadata?.kind !== "compaction_summary" || !first) {
+		return {};
+	}
+	const text =
+		typeof first.content === "string"
+			? first.content
+			: first.content
+					.map((block) => (block.type === "text" ? block.text : ""))
+					.join("");
+	if (!text.trim()) {
+		return {};
+	}
+	return {
+		summary:
+			text.length > NOTICE_SUMMARY_MAX_CHARS
+				? `${text.slice(0, NOTICE_SUMMARY_MAX_CHARS)}…`
+				: text,
+	};
+}
+
 function describeSummaryResult(result: CoreCompactionResult): {
 	summary?: {
 		chars: number;

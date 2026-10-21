@@ -356,6 +356,11 @@ export class VscodeSessionHost implements SdkSessionHost {
 		return this.inner.updateSessionCompactionState(sessionId, state)
 	}
 
+	/** The session's compaction sidecar: the compacted history the model works from, if it was ever compacted. */
+	async readSessionCompactionState(sessionId: string): Promise<SessionCompactionState | undefined> {
+		return this.inner.readSessionCompactionState(sessionId)
+	}
+
 	async restore(input: RestoreInput): Promise<RestoreResult> {
 		// ClineCore.restore starts the checkpoint-restore replacement session
 		// WITHOUT running the prepare hook, which would drop the VS Code extra

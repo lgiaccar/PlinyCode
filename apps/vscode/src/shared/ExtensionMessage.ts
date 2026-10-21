@@ -447,11 +447,19 @@ export interface ClineApiReqInfo {
  */
 export interface ClineCompactionInfo {
 	status: "started" | "completed" | "skipped" | "failed" | "cancelled"
-	mode: "auto" | "manual"
+	/** overflow: the provider rejected the request as too large, and the history was compacted to retry it. */
+	mode: "auto" | "manual" | "overflow"
 	tokensBefore?: number
 	tokensAfter?: number
 	messagesBefore?: number
 	messagesAfter?: number
+	/** agentic, basic or custom. */
+	strategy?: string
+	/**
+	 * The summary the model continues from, for the row to show (capped). The row
+	 * itself never reaches the model: only the summary message in its history does.
+	 */
+	summary?: string
 }
 
 export interface ClineSubagentUsageInfo {
