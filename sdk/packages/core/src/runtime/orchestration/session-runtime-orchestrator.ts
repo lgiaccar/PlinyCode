@@ -38,6 +38,7 @@ import {
 	type Message,
 	type MessageWithMetadata,
 	type ModelInfo,
+	mergeModelOptions,
 	modelSupportsImageInput,
 	modelSupportsToolCalling,
 	usesImageGenerationOperation,
@@ -916,9 +917,23 @@ export class SessionRuntime {
 				const messages = control?.messages ?? ctx.request.messages;
 				const preparedMessages =
 					await this.prepareMessagesForModelRequest(messages);
+				// What preparation left out of this request (old tool output,
+				// earlier reasoning, superseded reads, side questions), for the
+				// context bar to explain a size that dropped without a compaction.
+				const prunedChars = Math.max(
+					0,
+					messageContentChars(messages) - messageContentChars(preparedMessages),
+				);
 				return {
 					...control,
 					messages: preparedMessages,
+					...(prunedChars > 0
+						? {
+								options: mergeModelOptions(control?.options, {
+									metadata: { prunedChars },
+								}),
+							}
+						: {}),
 				};
 			},
 		};
@@ -1064,5 +1079,45 @@ export class SessionRuntime {
 				});
 			}
 		}
+	}
+}
+
+/**
+ * The characters a request's messages carry the model reads: text, reasoning,
+ * file contents, tool inputs and outputs. Images and other media count only
+ * by their reference, so dropping one does not read as a large saving.
+ */
+function messageContentChars(messages: readonly AgentMessage[]): number {
+	let chars = 0;
+	for (const message of messages) {
+		for (const part of message.content) {
+			switch (part.type) {
+				case "text":
+				case "reasoning":
+					chars += part.text.length;
+					break;
+				case "file":
+					chars += part.content.length;
+					break;
+				case "tool-call":
+					chars += jsonChars(part.input);
+					break;
+				case "tool-result":
+					chars += jsonChars(part.output);
+					break;
+			}
+		}
+	}
+	return chars;
+}
+
+function jsonChars(value: unknown): number {
+	if (typeof value === "string") {
+		return value.length;
+	}
+	try {
+		return JSON.stringify(value)?.length ?? 0;
+	} catch {
+		return 0;
 	}
 }

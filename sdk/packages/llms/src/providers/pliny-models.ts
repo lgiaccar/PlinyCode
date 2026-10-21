@@ -445,7 +445,10 @@ export function plinyHostedPoolIds(): string[] {
  * files), then 150k. Fewer, later compactions keep more of the working set, at
  * the cost of slower prefill on the largest requests.
  */
-const ROUTER_BUDGETS: Record<string, { maxInputTokens: number; contextWindow: number }> = {
+const ROUTER_BUDGETS: Record<
+	string,
+	{ maxInputTokens: number; contextWindow: number }
+> = {
 	default: { maxInputTokens: 200_000, contextWindow: 512_000 },
 	smart: { maxInputTokens: 300_000, contextWindow: 512_000 },
 	fast: { maxInputTokens: 64_000, contextWindow: 256_000 },

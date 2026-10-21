@@ -438,6 +438,18 @@ export interface ClineApiReqInfo {
 	reasoningTokens?: number
 	/** The model that served this request: the routed model for FreeAuto/BalanceAuto, else the selected one. */
 	modelId?: string
+	/**
+	 * The request's whole input as last sent, cache included: what the context
+	 * bar shows. Differs from tokensIn + cache when a retried empty reply billed
+	 * the same request twice. Absent on rows written before 0.2.5.
+	 */
+	contextTokens?: number
+	/**
+	 * Tokens the engine left out of this request before sending it: old tool
+	 * output, earlier reasoning, superseded file reads, side questions. Why the
+	 * context can shrink between calls without a compaction.
+	 */
+	prunedTokens?: number
 }
 
 /**

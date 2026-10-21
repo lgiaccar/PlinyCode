@@ -243,7 +243,46 @@ function withAggregatedUsage(
 	for (const discarded of discardedUsage) {
 		usage = addUsage(discarded, usage);
 	}
-	return { ...finish, usage };
+	// The summed counts bill every attempt, but only the last one is the
+	// request the conversation now has: its input is passed on separately for
+	// the context bar, the compaction trigger and the token calibration, which
+	// a doubled count would throw off.
+	const requestInputTokens = finish.usage.inputTokens?.total;
+	return {
+		...finish,
+		usage,
+		...(requestInputTokens !== undefined
+			? {
+					providerMetadata: {
+						...finish.providerMetadata,
+						[RETRY_USAGE_METADATA_KEY]: {
+							...finish.providerMetadata?.[RETRY_USAGE_METADATA_KEY],
+							requestInputTokens,
+						},
+					},
+				}
+			: {}),
+	};
+}
+
+/** Provider-metadata key under which a retried call's last-attempt input count travels. */
+export const RETRY_USAGE_METADATA_KEY = "plinycodeRetry";
+
+/** The last attempt's input count a retried call carries in its provider metadata. */
+export function retriedRequestInputTokens(
+	providerMetadata: unknown,
+): number | undefined {
+	const entry =
+		providerMetadata && typeof providerMetadata === "object"
+			? (providerMetadata as Record<string, unknown>)[RETRY_USAGE_METADATA_KEY]
+			: undefined;
+	const value =
+		entry && typeof entry === "object"
+			? (entry as Record<string, unknown>).requestInputTokens
+			: undefined;
+	return typeof value === "number" && Number.isFinite(value) && value > 0
+		? value
+		: undefined;
 }
 
 /** Sleep that resolves early (without throwing) when the signal aborts. */

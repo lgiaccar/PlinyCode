@@ -660,7 +660,9 @@ export function createContextCompactionPrepareTurn(
 				messageTargetTokens,
 			),
 			thresholdRatio,
-			...(maxInputTokensOverride !== undefined ? { maxInputTokensOverride } : {}),
+			...(maxInputTokensOverride !== undefined
+				? { maxInputTokensOverride }
+				: {}),
 			...(targetTokensOverride !== undefined ? { targetTokensOverride } : {}),
 		};
 		const beforeDiagnostics = {

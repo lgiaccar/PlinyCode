@@ -268,7 +268,7 @@ describe("translateSessionEvent — compaction cost", () => {
 		] as unknown as SdkMessage[]
 		const info = compactionInfoFromProjection({
 			sourceMessageCount: 2,
-			messages: [{ role: "user", content: "Context summary:\n\nWe did things.", metadata: { kind: "compaction_summary" } }],
+			messages: [{ content: "Context summary:\n\nWe did things.", metadata: { kind: "compaction_summary" } }],
 		})
 		expect(info).toEqual({
 			status: "completed",
@@ -2614,6 +2614,7 @@ describe("translateSessionEvent — agent_event usage", () => {
 			cacheReads: 24478,
 			cacheWrites: 0,
 			totalCost: 0.0112674,
+			contextTokens: 24481,
 		})
 	})
 

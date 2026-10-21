@@ -48,6 +48,8 @@ interface TaskHeaderProps {
 	/** True when any request contributing to the totals above used a char-based estimate rather than provider-reported usage. */
 	hasEstimatedUsage?: boolean
 	contextBreakdown?: ClineContextBreakdown
+	/** Tokens the last request left out before it was sent (old tool output, earlier reasoning). */
+	prunedTokens?: number
 	onClose: () => void
 	onSendMessage?: (command: string, files: string[], images: string[]) => void
 }
@@ -68,6 +70,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 	lastApiReqTotalTokens,
 	hasEstimatedUsage,
 	contextBreakdown,
+	prunedTokens,
 	onClose,
 	onSendMessage,
 }) => {
@@ -297,6 +300,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							maxInputTokens={selectedModelInfo?.maxInputTokens}
 							onCompactionThresholdChange={setCompactionThreshold}
 							onSendMessage={onSendMessage}
+							prunedTokens={prunedTokens}
 							tokensIn={tokensIn}
 							tokensOut={tokensOut}
 							useAutoCondense={useAutoCondense !== false}

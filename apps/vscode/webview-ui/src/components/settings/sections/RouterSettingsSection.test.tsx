@@ -171,12 +171,12 @@ describe("RouterSettingsSection compaction", () => {
 		})
 	})
 
-	it("saves a budget in tokens and says which models hand larger requests on", async () => {
+	it("saves a budget in tokens and says which models pass larger requests on", async () => {
 		await renderSection()
 		const budget = screen.getByLabelText(/^Compaction budget(?! unit)/)
 		fireEvent.change(budget, { target: { value: "250000" } })
 		// Kimi takes (256k - 64k) / 1.15 ≈ 167k: below the 225k trigger.
-		expect(screen.getByText(/Kimi K2\.6 \(~167k\) hand larger requests on to GLM-5\.2/)).toBeTruthy()
+		expect(screen.getByText(/larger requests move from Kimi K2\.6 \(~167k\) to GLM-5\.2/)).toBeTruthy()
 		fireEvent.blur(budget)
 		expect(lastSaved()).toEqual({
 			profile: "default",

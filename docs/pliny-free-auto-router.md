@@ -43,23 +43,40 @@ that answer reliably, models that really call tools, then latency. A model that
 shows as **down** here is still left in the catalog (it may recover), but the
 router benches it automatically after repeated failures at runtime.
 
-FreeAuto advertises a 256k window, but the conversation compacts against a 150k
-input budget, at about 135k estimated tokens. That is sized to the lead of the
-coding route, kimi-k2.6 (256k), which still fits at the trigger with the 32k
-output reserve and the 1.15 margin, as do nemotron ultra (200k) and GLM-5.2
-(512k); the 128k tier (qwen3-coder) stops fitting past about 83k and the
-policy's size filter skips it above that. The budget was 92k, sized to that
-tier so the whole pool stayed routable, but a 26k-character system prompt and
-39k characters of tool definitions took a quarter of it, and long runs
-compacted every ten or so iterations and re-read the same files after each
-compaction ([context-compaction.md](context-compaction.md)). Fewer, later
+Each router compacts against an input budget of its own, at the
+`plinycode.compaction.threshold` share of it (90% by default), and advertises
+the largest window its model order holds (`plinyRouterBudget` in
+`sdk/packages/llms/src/providers/pliny-models.ts`):
+
+| Router | Budget | Compacts at (90%) | Window |
+| --- | ---: | ---: | ---: |
+| `auto-free` | 200k | about 180k | 512k |
+| `auto-free-smart` | 300k | about 270k | 512k |
+| `auto-free-fast` | 64k | about 58k | 256k |
+
+kimi-k2.6 leads `auto-free`. With its 64k output reserve and the 1.15 margin
+it takes requests up to about 167k of its own tokens; past that the size
+filter hands the request to the GLM-5.2 replicas (512k) that follow it in the
+order, which take about 388k. `auto-free-smart` leads with GLM-5.2, so a long
+run stays on it. The size filter measures each candidate in its own tokens,
+from the ratio the provider counts taught the token calibration
+([context-compaction.md](context-compaction.md)): until 0.2.5 it counted three
+characters per token for every model, and kimi, which packs about 3.9, dropped
+out at about 127k, before compaction ran.
+
+The budget was 92k, sized to the 128k tier so the whole pool stayed routable,
+then 150k. At 92k a 26k-character system prompt and 39k characters of tool
+definitions took a quarter of it, and long runs compacted every ten or so
+iterations and re-read the same files after each compaction. Fewer, later
 compactions keep more of the working set, at the cost of slower prefill on the
-largest requests.
-`auto-free-fast` compacts sooner, against a 64k budget (about 58k tokens): a
-shorter history keeps every call quick and on the small Qwen models, which
-degrade first as the context grows. The context setting of the model tuning
-button ([model-tuning.md](model-tuning.md)) can lower a router's budget
-further, never raise it.
+largest requests. `auto-free-fast` compacts sooner: a shorter history keeps
+every call quick and on the small Qwen models, which degrade first as the
+context grows.
+
+**Settings → Router → Compaction** sets a router's budget and the size a
+compaction shrinks to, in tokens or percent ([router-settings.md](router-settings.md#compaction)).
+The context setting of the model tuning button ([model-tuning.md](model-tuning.md))
+can lower a router's budget further, never raise it.
 The timestamped rows (below) are shown in the chat only; they never reach the
 model. Whether the conversation compacts at all follows the auto-condense
 setting like any other model: the router only attaches the free summarizer the
@@ -68,23 +85,31 @@ with the engine's overflow recovery alone.
 
 ## The profiles and their routes
 
-The three FreeAuto profiles share one router and one pool but lead their
-routes with different models, so that comparing them on real work says
-something. The built-in defaults (`router-rules.ts`) are, best first:
+The three FreeAuto profiles share one router but lead their routes with
+different models, so that comparing them on real work says something. Each
+profile has one model order, which the main routes (`default`, `coding`,
+`plan-and-reasoning`, `ask-reasoning`) use and which heads its pool. The
+built-in defaults (`router-rules.ts`) are the orders the routers were tuned to
+in Settings → Router during the 0.2.4 field runs:
 
-| Route | `auto-free` and `auto-free-smart` | `auto-free-fast` |
+| Profile | Model order | Pool |
 | --- | --- | --- |
-| `huge-context` (≥ 180k tokens) | GLM-5.2 (vmodels replica, then primary) | the same |
-| `subagent` | kimi-k2.6, qwen3-coder, nemotron super | qwen3-coder, qwen3.5-397b, nemotron super |
-| `plan-and-reasoning` (every plan-mode turn) | kimi-k2.6, qwen3.5-397b (thinking on, high), nemotron ultra | qwen3.5-397b, qwen3-coder, nemotron ultra (thinking off) |
-| `ask-reasoning` (ask mode, a why/explain/review question) | kimi-k2.6, qwen3.5-397b (thinking on, medium), nemotron ultra | none: such a question takes `quick` or `default` |
-| `coding` | kimi-k2.6, qwen3-coder, nemotron ultra | qwen3-coder, qwen3.5-397b, nemotron ultra |
-| `quick` | qwen3-next-80b, nemotron super, kimi-k2.6 | qwen3-next-80b, qwen3-coder, nemotron super |
-| `default` | kimi-k2.6, qwen3-coder, nemotron ultra, nemotron super | qwen3-coder, qwen3.5-397b, nemotron ultra |
+| `auto-free` | kimi-k2.6, GLM-5.2 (internal-tests), GLM-5.2 (vmodels), nemotron ultra, nemotron super; plan mode starts on the vmodels replica | only these routes' models: no fallback to the rest of the catalog |
+| `auto-free-smart` | GLM-5.2, GLM-5.2 (internal-tests), kimi-k2.6, nemotron ultra, nemotron super | the order, then every free model |
+| `auto-free-fast` | qwen3.5-397b, nemotron ultra, kimi-k2.6, qwen3-coder | the order, then every free model |
 
-`auto-free-smart` is `auto-free` plus the classifier. `auto-free-fast` is
-Qwen only, reasoning off everywhere: kimi is not on any of its routes and sits
-at the back of its pool as a last resort.
+The other routes keep their own lists:
+
+| Route | `auto-free` | `auto-free-smart` | `auto-free-fast` |
+| --- | --- | --- | --- |
+| `huge-context` (≥ 180k tokens) | GLM-5.2 (vmodels, internal-tests, primary) | the same | the same |
+| `subagent` | kimi-k2.6, nemotron super | kimi-k2.6, qwen3-coder, nemotron super | qwen3-coder, qwen3.5-397b, nemotron super |
+| `quick` | nemotron super, kimi-k2.6 | qwen3-next-80b, nemotron super, kimi-k2.6 | qwen3-next-80b, qwen3-coder, nemotron super |
+
+Planning thinks (`high`), a reasoning question in ask mode thinks (`medium`),
+coding and quick work do not. `auto-free-smart` adds the classifier.
+`auto-free-fast` has no `ask-reasoning` route and turns reasoning off
+everywhere.
 
 **Plan and ask mode route differently.** Every plan-mode turn takes the
 `plan-and-reasoning` route, whatever its wording: a plan is only as good as
@@ -97,7 +122,7 @@ takes `ask-reasoning`. A rules file can match the three modes with
 rules file you edited keeps its own routes until you delete it (or its YAML
 block) and let it be seeded again.
 
-Kimi leads the default and smart profiles again. It was demoted after a run of
+Kimi leads the default profile again. It was demoted after a run of
 turns in which it announced a tool call and never made it; the transcripts
 show why: it emits tool names with its chat template's namespace attached
 (`functions-read_files`), the gateway passes that through, and the AI SDK
@@ -107,7 +132,7 @@ gateway now repairs the name (`resolveMisnamedTool` in
 `sdk/packages/llms`), also covering hyphenated (`run-commands`) and
 namespaced (`tools.`, `default_api.`) variants, so the call runs. When kimi
 still stops early, the completion guard's escalation hands the turn to the
-coder, the second model of the default route.
+next model of the default route, a GLM-5.2 replica.
 
 ### Kimi and tool-call ids
 

@@ -374,7 +374,8 @@ async function generateAssistantMessageForRequest(
 					event.usage.inputTokens > 0 &&
 					event.usage.estimated !== true
 				) {
-					ctx.state.lastRequestInputTokens = event.usage.inputTokens;
+					ctx.state.lastRequestInputTokens =
+						event.usage.requestInputTokens ?? event.usage.inputTokens;
 				}
 				await updateUsage(ctx, event.usage);
 				break;
@@ -653,6 +654,8 @@ async function updateUsage(
 		// per-turn delta event below (see translateUsage in core).
 		estimated: usage.estimated,
 		contextBreakdown: usage.contextBreakdown,
+		requestInputTokens: usage.requestInputTokens,
+		prunedTokens: usage.prunedTokens,
 		modelId: usage.modelId,
 	};
 	await ctx.emit({

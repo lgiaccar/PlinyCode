@@ -266,7 +266,7 @@ export function resolveRouterCompaction(
 }
 
 /** Smallest size compaction can reliably reach: it always keeps the recent messages. */
-export const MIN_COMPACTION_TOKENS = 8_000
+const MIN_COMPACTION_TOKENS = 8_000
 
 export interface RouterCompactionNote {
 	level: "info" | "warning"
@@ -314,7 +314,7 @@ export function routerCompactionNotes(input: {
 		const handedOff = dropped.map((model) => `${model.name} (~${kTokens(model.limit)})`).join(", ")
 		notes.push({
 			level: "info",
-			text: `Compaction starts at about ${kTokens(trigger)}. Before that, ${handedOff} hand larger requests on to ${fits[0]?.name}.`,
+			text: `Compaction starts at about ${kTokens(trigger)}. Before that, larger requests move from ${handedOff} to ${fits[0]?.name}.`,
 		})
 	}
 	if (input.targetTokens !== undefined) {

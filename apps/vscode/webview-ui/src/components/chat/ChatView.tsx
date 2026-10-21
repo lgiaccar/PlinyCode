@@ -1,7 +1,7 @@
 import { combineApiRequests } from "@shared/combineApiRequests"
 import { combineCommandSequences } from "@shared/combineCommandSequences"
 import { combineHookSequences } from "@shared/combineHookSequences"
-import { getApiMetrics, getLastApiReqTotalTokens, getLastContextBreakdown } from "@shared/getApiMetrics"
+import { getApiMetrics, getLastApiReqTotalTokens, getLastContextBreakdown, getLastPrunedTokens } from "@shared/getApiMetrics"
 import { BooleanRequest, StringRequest } from "@shared/proto/cline/common"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMount } from "react-use"
@@ -143,6 +143,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 
 	const lastApiReqTotalTokens = useMemo(() => getLastApiReqTotalTokens(modifiedMessages) || undefined, [modifiedMessages])
 	const lastContextBreakdown = useMemo(() => getLastContextBreakdown(modifiedMessages), [modifiedMessages])
+	const lastPrunedTokens = useMemo(() => getLastPrunedTokens(modifiedMessages), [modifiedMessages])
 	const lastAppliedCheckpointRestoreSessionId = useRef<string | undefined>(checkpointRestoreInput?.sessionId)
 	const lastAppliedEditMessageRestartSessionId = useRef<string | undefined>(editMessageRestartFocus?.sessionId)
 
@@ -456,6 +457,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 						clineMessages={messages}
 						lastApiReqTotalTokens={lastApiReqTotalTokens}
 						lastContextBreakdown={lastContextBreakdown}
+						lastPrunedTokens={lastPrunedTokens}
 						messageHandlers={messageHandlers}
 						selectedModelInfo={{
 							supportsPromptCache: selectedModelInfo.supportsPromptCache,

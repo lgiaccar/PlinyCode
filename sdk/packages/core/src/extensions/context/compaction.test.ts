@@ -1993,9 +1993,7 @@ describe("createContextCompactionPrepareTurn", () => {
 						.join("");
 		expect(notice.summary).toBe(summaryText);
 		expect(JSON.stringify(result?.messages)).not.toContain("auto-compacted");
-		expect(JSON.stringify(result?.messages)).not.toContain(
-			"Context compacted",
-		);
+		expect(JSON.stringify(result?.messages)).not.toContain("Context compacted");
 	});
 
 	it("trims inside the latest turn on the next call when the summary left the request over the trigger", async () => {

@@ -16,6 +16,7 @@ interface TaskSectionProps {
 	}
 	lastApiReqTotalTokens?: number
 	lastContextBreakdown?: ClineContextBreakdown
+	lastPrunedTokens?: number
 	selectedModelInfo: {
 		supportsPromptCache: boolean
 		supportsImages: boolean
@@ -33,6 +34,7 @@ export const TaskSection: React.FC<TaskSectionProps> = ({
 	apiMetrics,
 	lastApiReqTotalTokens,
 	lastContextBreakdown,
+	lastPrunedTokens,
 	selectedModelInfo,
 	messageHandlers,
 }) => {
@@ -47,6 +49,7 @@ export const TaskSection: React.FC<TaskSectionProps> = ({
 			lastApiReqTotalTokens={lastApiReqTotalTokens}
 			onClose={messageHandlers.handleTaskCloseButtonClick}
 			onSendMessage={messageHandlers.handleSendMessage}
+			prunedTokens={lastPrunedTokens}
 			task={task}
 			tokensIn={apiMetrics.totalTokensIn}
 			tokensOut={apiMetrics.totalTokensOut}

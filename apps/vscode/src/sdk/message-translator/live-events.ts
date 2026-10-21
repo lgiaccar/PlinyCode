@@ -763,6 +763,8 @@ function translateAgentEvent(event: AgentEvent, state: MessageTranslatorState): 
 				...(usageEvent.contextBreakdown ? { contextBreakdown: usageEvent.contextBreakdown } : {}),
 				...(usageEvent.reasoningTokens ? { reasoningTokens: usageEvent.reasoningTokens } : {}),
 				...(usageEvent.modelId ? { modelId: usageEvent.modelId } : {}),
+				...(usageEvent.contextTokens !== undefined ? { contextTokens: usageEvent.contextTokens } : {}),
+				...(usageEvent.prunedTokens ? { prunedTokens: usageEvent.prunedTokens } : {}),
 			}
 			messages.push({
 				ts: state.nextTs(),

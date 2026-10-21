@@ -388,6 +388,10 @@ export class RuntimeEventAdapter {
 				cost: deltaCost === 0 ? undefined : deltaCost,
 				estimated: next.estimated,
 				contextBreakdown: next.contextBreakdown,
+				...(next.requestInputTokens !== undefined
+					? { requestInputTokens: next.requestInputTokens }
+					: {}),
+				...(next.prunedTokens ? { prunedTokens: next.prunedTokens } : {}),
 				...(deltaReasoning > 0 ? { reasoningTokens: deltaReasoning } : {}),
 				...(next.modelId ? { modelId: next.modelId } : {}),
 				totalInputTokens: next.inputTokens,
