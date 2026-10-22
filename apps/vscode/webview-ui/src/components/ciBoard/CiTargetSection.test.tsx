@@ -33,6 +33,7 @@ const item = (key: string, overrides: Partial<CiItem> = {}): CiItem => ({
 	headSha: "",
 	mergeState: "clean",
 	pipelines: [{ name: "ci", color: "green", status: "completed", result: "success", runId: 1, url: "" }],
+	expiredBuildPolicies: [],
 	conversationId: "",
 	conversationStatus: "",
 	watching: false,

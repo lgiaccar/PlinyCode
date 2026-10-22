@@ -50,6 +50,11 @@ Each row has:
 - a second line with the triage's one-line summary, or the branches and author when nothing fails;
 - the conversation the last action started, and the action buttons.
 
+Azure DevOps PRs also show **Expired** when a build-validation policy has expired after a target-branch update.
+Expand the row and use **Requeue** beside that validation to ask Azure DevOps to run it again. Expiration is a
+policy state, so an earlier successful build can still have a green run dot. Requeue acts on one policy at a time
+and does not start a code-fixing conversation.
+
 | Color  | Meaning                                                                                                   |
 | ------ | --------------------------------------------------------------------------------------------------------- |
 | Green  | Passed.                                                                                                   |

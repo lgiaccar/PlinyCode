@@ -115,6 +115,7 @@ describe("VscodeSessionHost", () => {
 
 		expect(mockCreateVscodeExtraTools).toHaveBeenCalledWith({} as never, {
 			cwd: "/workspace",
+			getWaitMinutesPerTurn: expect.any(Function),
 			getTerminalManager: undefined,
 			vscodeTerminalExecutionMode: undefined,
 		})

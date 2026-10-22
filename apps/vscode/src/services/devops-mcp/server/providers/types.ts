@@ -73,6 +73,13 @@ export interface Check {
 	url?: string
 }
 
+/** An Azure DevOps PR build validation whose policy status has expired. */
+export interface ExpiredBuildPolicy {
+	evaluationId: string
+	name: string
+	buildId?: number
+}
+
 export interface Provider {
 	readonly kind: string
 	readonly maxBodyLength: number
@@ -86,6 +93,9 @@ export interface Provider {
 	listRuns(branch: string | undefined, pr: PullRequest | undefined, limit: number): Promise<PipelineRun[]>
 	runReport(runId: number, logLines: number): Promise<RunReport>
 	prChecks(pr: PullRequest): Promise<Check[]>
+	/** Only Azure DevOps exposes build-policy expiration and requeue. */
+	listExpiredBuildPolicies?(pr: PullRequest): Promise<ExpiredBuildPolicy[]>
+	requeueBuildPolicy?(evaluationId: string): Promise<void>
 	/** Open pull requests, most recently updated first; `mine` keeps the signed-in user's. */
 	listOpenPrs(options: { mine: boolean; limit: number }): Promise<PullRequest[]>
 	/** The commit `branch` points at on the server, or undefined when the server has no such branch. */

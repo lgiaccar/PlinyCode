@@ -13,6 +13,7 @@ import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
+import { getMaxWaitMinutesPerTurn } from "@/hosts/vscode/wait-settings"
 import { isWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
@@ -64,6 +65,7 @@ export async function getStateToPostToWebview(controller: {
 	const webSearchEnabled = isWebSearchEnabled()
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
+	const maxWaitMinutesPerTurn = getMaxWaitMinutesPerTurn()
 	const memoryMaxTokens = getMemoryMaxTokens()
 	const memoryDistillEnabled = isMemoryDistillOfferEnabled()
 	const memoryConversationSearchEnabled = isConversationSearchEnabled()
@@ -133,6 +135,7 @@ export async function getStateToPostToWebview(controller: {
 		webSearchEnabled,
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,
+		maxWaitMinutesPerTurn,
 		memoryMaxTokens,
 		memoryDistillEnabled,
 		memoryConversationSearchEnabled,

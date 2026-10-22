@@ -315,6 +315,8 @@ export class CiBoardPoller {
 			}
 			const head = pr?.headSha ?? entry.head
 			const runs = head ? await runsForHead(provider, pr, entry.branch, head) : []
+			const expiredBuildPolicies =
+				pr && provider.listExpiredBuildPolicies ? await provider.listExpiredBuildPolicies(pr) : []
 			// Pipelines seen on this item before and missing now show grey.
 			const known = prev?.pipelines.map((p) => p.name) ?? []
 			return {
@@ -325,6 +327,7 @@ export class CiBoardPoller {
 					headSha: head,
 					mergeState: pr?.mergeState,
 					pipelines: groupPipelines(runs, known),
+					expiredBuildPolicies,
 					fork: pr?.fork ?? false,
 				},
 				detailTs: now,

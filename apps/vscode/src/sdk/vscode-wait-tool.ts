@@ -30,6 +30,8 @@ interface WaitToolInput {
 interface WaitToolOptions {
 	maxSeconds?: number
 	maxTotalSecondsPerRun?: number
+	/** Re-read before every call so settings changed during a turn take effect. */
+	getMaxTotalSecondsPerRun?: () => number | Promise<number>
 	/** Injectable for tests. */
 	sleep?: (ms: number, signal?: AbortSignal) => Promise<"done" | "aborted">
 	now?: () => number
@@ -76,7 +78,7 @@ export function createWaitTool(options: WaitToolOptions = {}): AgentTool {
 			`Pause for up to ${maxSeconds} seconds, then continue. Use it to wait for a command you started in the ` +
 			"background (a build, a test run, a benchmark) before checking its log or status again. Never end a reply with " +
 			'"I\'ll check back later": call wait, then read the log or run a status command, and repeat until the job ' +
-			`finishes or you hit a concrete blocker. At most ${Math.round(maxTotal / 60)} minutes of waiting per turn; ` +
+			`finishes or you hit a concrete blocker. The cumulative wait limit is configurable (currently ${maxTotal === 0 ? "unlimited" : `${maxTotal / 60} minutes`} per turn); ` +
 			"if the job needs longer, ask the user whether to keep polling.",
 		inputSchema: {
 			type: "object",
@@ -102,11 +104,13 @@ export function createWaitTool(options: WaitToolOptions = {}): AgentTool {
 		async execute(rawInput: unknown, context: AgentToolContext): Promise<string> {
 			const input = (rawInput ?? {}) as Partial<WaitToolInput>
 			const key = context.runId ?? "(no run)"
+			const configured = options.getMaxTotalSecondsPerRun ? await options.getMaxTotalSecondsPerRun() : maxTotal
+			const limit = Number.isFinite(configured) && configured >= 0 ? configured : maxTotal
 			const alreadyWaited = waitedPerRun.get(key) ?? 0
-			const remaining = maxTotal - alreadyWaited
-			if (remaining <= 0) {
+			const remaining = limit === 0 ? Number.POSITIVE_INFINITY : limit - alreadyWaited
+			if (limit !== 0 && remaining <= 0) {
 				throw new Error(
-					`Wait budget exhausted: this turn has already waited ${Math.round(alreadyWaited / 60)} minutes. ` +
+					`Wait budget exhausted: this turn has already waited ${Math.round(alreadyWaited / 60)} minutes of its ${limit / 60}-minute cumulative limit. Change the limit in the task header or Settings > General. ` +
 						"Do not wait further. Report the current state to the user and ask whether to keep polling.",
 				)
 			}
@@ -126,12 +130,15 @@ export function createWaitTool(options: WaitToolOptions = {}): AgentTool {
 				return `Wait cancelled after ${waited} s.`
 			}
 			const clamped = requested !== clampSeconds(input.seconds, Number.POSITIVE_INFINITY) || seconds !== requested
-			const budgetLeft = Math.max(0, maxTotal - alreadyWaited - waited)
+			const budgetLeft = Math.max(0, limit - alreadyWaited - waited)
 			return [
 				`Waited ${waited} s${input.reason ? ` for: ${input.reason}` : ""}.`,
 				clamped
-					? `(Requested ${input.seconds} s; each wait is capped at ${maxSeconds} s and this turn has ${Math.round(budgetLeft / 60)} min of waiting left.)`
+					? `(Requested ${input.seconds} s; each wait is capped at ${maxSeconds} s${limit === 0 ? "; cumulative waiting is unlimited" : ` and this turn has ${Math.round(budgetLeft / 60)} min of waiting left`}.)`
 					: undefined,
+				limit === 0
+					? "Cumulative waiting is unlimited for this turn."
+					: `Cumulative waiting left this turn: ${Math.round(budgetLeft / 60)} min.`,
 				`It is now ${new Date(now()).toISOString()}.`,
 				"Now check progress with a tool call: read the log file or run a status command. If the job is still running, call wait again.",
 			]

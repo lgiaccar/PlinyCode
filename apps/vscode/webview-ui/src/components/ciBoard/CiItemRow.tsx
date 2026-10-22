@@ -1,4 +1,4 @@
-import { type CiItem, CiItemRequest } from "@shared/proto/cline/ci_board"
+import { type CiItem, CiItemRequest, RequeueExpiredCiBuildRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { useCallback, useState } from "react"
 import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
@@ -25,13 +25,14 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 	const [expanded, setExpanded] = useState(false)
 	const [customPrompt, setCustomPrompt] = useState(false)
 	const [error, setError] = useState<string>()
+	const [requeueing, setRequeueing] = useState<string>()
 	const onError = useCallback((message: string | undefined) => setError(message), [])
 	const { busy, run } = useCiRun(targetId, item.key, onError)
 	const badge = MERGE_BADGES[item.mergeState]
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const failing = isFailing(item)
 	const triage = item.triage
-	const expandable = failing || !!triage || item.pipelines.length > 0
+	const expandable = failing || !!triage || item.pipelines.length > 0 || (item.expiredBuildPolicies?.length ?? 0) > 0
 	const severity = triage ? SEVERITY_META[triage.severity] : undefined
 	const branches = `${item.sourceBranch}${item.targetBranch ? ` → ${item.targetBranch}` : ""}${item.author ? ` · ${item.author}` : ""}`
 
@@ -44,11 +45,29 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 			setError(errorText(e)),
 		)
 	}
+	const requeue = async (evaluationId: string) => {
+		setError(undefined)
+		setRequeueing(evaluationId)
+		try {
+			await CiBoardServiceClient.requeueExpiredCiBuild(
+				RequeueExpiredCiBuildRequest.create({ targetId, itemKey: item.key, evaluationId }),
+			)
+		} catch (error) {
+			setError(errorText(error))
+		} finally {
+			setRequeueing(undefined)
+		}
+	}
 
 	const summary =
 		triage?.status === "pending" && !triage.summary
 			? "Analyzing the failures with a free model…"
-			: triage?.summary || (failing ? "" : branches)
+			: triage?.summary ||
+				((item.expiredBuildPolicies?.length ?? 0) > 0
+					? "Build validation expired; requeue to validate this PR again."
+					: failing
+						? ""
+						: branches)
 
 	return (
 		<div
@@ -109,6 +128,11 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					</CiTip>
 				)}
 				<CiAutoBadge auto={item.auto} />
+				{(item.expiredBuildPolicies?.length ?? 0) > 0 && (
+					<span className="text-[11px] rounded px-1.5 py-0.5 bg-warning/20 text-warning" data-testid="ci-expired-badge">
+						{item.expiredBuildPolicies.length} Expired
+					</span>
+				)}
 			</div>
 			<div className="flex items-center gap-2 text-[11px] text-description min-w-0 pl-5">
 				<CiTip tip={summary && summary !== branches ? summary : undefined}>
@@ -147,7 +171,9 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					busy={busy}
 					item={item}
 					onAnalyze={analyze}
+					onRequeue={requeue}
 					onRun={run}
+					requeueing={requeueing}
 					runningReason={
 						running
 							? "A run started from the board is still going for this pull request. Open its conversation to follow it."

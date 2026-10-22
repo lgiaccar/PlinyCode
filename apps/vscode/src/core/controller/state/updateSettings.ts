@@ -8,6 +8,7 @@ import { setPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-s
 import { setCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { setConversationSearchEnabled, setMemoryDistillOfferEnabled, setMemoryMaxTokens } from "@/hosts/vscode/memory-settings"
 import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
+import { setMaxWaitMinutesPerTurn } from "@/hosts/vscode/wait-settings"
 import { setWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
 import { McpDisplayMode } from "@/shared/McpDisplayMode"
 import { Logger } from "@/shared/services/Logger"
@@ -151,6 +152,9 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 		// Stored as the plinycode.spending.conversationLimit VS Code setting; read before every model call
 		if (request.conversationSpendingLimit !== undefined) {
 			await setConversationSpendingLimit(request.conversationSpendingLimit)
+		}
+		if (request.maxWaitMinutesPerTurn !== undefined) {
+			await setMaxWaitMinutesPerTurn(request.maxWaitMinutesPerTurn)
 		}
 
 		// Stored as plinycode.memory.* VS Code settings; read when the next conversation starts (docs/memory.md)

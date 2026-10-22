@@ -6,6 +6,7 @@ import { DevOpsError } from "../errors"
 import { adoCollectionUrl, type Remote } from "../repo"
 import {
 	type Check,
+	type ExpiredBuildPolicy,
 	type FailedStep,
 	type Fetch,
 	Http,
@@ -585,5 +586,28 @@ export class AzureDevOpsProvider implements ToolProvider {
 			checks.push({ name, status: sStatus, result: sResult, url: s.targetUrl })
 		}
 		return checks
+	}
+
+	async listExpiredBuildPolicies(pr: PullRequest): Promise<ExpiredBuildPolicy[]> {
+		const repo = await this.repo()
+		const artifactId = `vstfs:///CodeReview/CodeReviewId/${repo.project.id}/${pr.id}`
+		const response = await this.api("GET", "policy/evaluations", { artifactId, "api-version": "7.1-preview.1" })
+		return (response.value ?? [])
+			.filter(
+				(ev: any) =>
+					ev.context?.isExpired === true &&
+					Number.isSafeInteger(ev.context?.buildDefinitionId ?? ev.configuration?.settings?.buildDefinitionId),
+			)
+			.map((ev: any) => ({
+				evaluationId: String(ev.evaluationId),
+				name: ev.configuration?.settings?.displayName ?? ev.configuration?.type?.displayName ?? "Build validation",
+				buildId: Number.isSafeInteger(ev.context?.buildId) ? ev.context.buildId : undefined,
+			}))
+			.filter((ev: ExpiredBuildPolicy) => /^[0-9a-f-]{36}$/i.test(ev.evaluationId))
+	}
+
+	async requeueBuildPolicy(evaluationId: string): Promise<void> {
+		if (!/^[0-9a-f-]{36}$/i.test(evaluationId)) throw new DevOpsError("Invalid policy evaluation ID.")
+		await this.api("PATCH", `policy/evaluations/${evaluationId}`, { "api-version": "7.1-preview.1" }, { status: "queued" })
 	}
 }

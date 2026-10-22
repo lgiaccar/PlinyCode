@@ -119,6 +119,8 @@ export interface ExtensionState {
 	prereleaseUpdatesEnabled?: boolean
 	/** `plinycode.spending.conversationLimit`: the budget new conversations start with, in USD; 0 = no limit. */
 	conversationSpendingLimit?: number
+	/** Default cumulative `wait` time per agent turn in minutes; 0 means unlimited. */
+	maxWaitMinutesPerTurn?: number
 	/** `plinycode.memory.maxTokens`: the memory budget in the system prompt; 0 = memory off (docs/memory.md). */
 	memoryMaxTokens?: number
 	/** `plinycode.memory.distill` is "offer": memories are proposed after a run that edited files. */

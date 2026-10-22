@@ -96,6 +96,8 @@ interface VscodeSessionHostOptions {
 	 * with a custom tool that supports foreground/background terminal execution.
 	 */
 	getTerminalManager?: () => VscodeTerminalManager
+	/** Read the persisted conversation override at each wait call. */
+	getWaitMinutesPerTurn?: (sessionId: string) => Promise<number | undefined>
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/**
@@ -181,7 +183,12 @@ export class VscodeSessionHost implements SdkSessionHost {
 			const webSearch = options.getWebSearch?.()
 			const providerId = input.config.providerId
 			const modelId = input.config.modelId
+			const getWaitMinutesPerTurn = () =>
+				input.config.sessionId && options.getWaitMinutesPerTurn
+					? options.getWaitMinutesPerTurn(input.config.sessionId)
+					: undefined
 			const extraTools = await createVscodeExtraTools(options.mcpHub, {
+				getWaitMinutesPerTurn,
 				cwd: input.config.cwd,
 				getTerminalManager: options.getTerminalManager,
 				vscodeTerminalExecutionMode,
@@ -199,6 +206,7 @@ export class VscodeSessionHost implements SdkSessionHost {
 			// advisor and the memory tools stay with the root: docs/agent-tools.md.
 			const subAgentExtraTools = (
 				await createVscodeExtraTools(options.mcpHub, {
+					getWaitMinutesPerTurn,
 					cwd: input.config.cwd,
 					getTerminalManager: options.getTerminalManager,
 					vscodeTerminalExecutionMode,

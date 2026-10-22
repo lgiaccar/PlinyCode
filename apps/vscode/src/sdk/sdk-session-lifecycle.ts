@@ -37,6 +37,7 @@ interface SdkSessionLifecycleOptions {
 	onSessionEvent: (event: CoreSessionEvent) => void
 	/** Lazy factory for the VscodeTerminalManager (foreground terminal support). */
 	getTerminalManager?: () => VscodeTerminalManager
+	getWaitMinutesPerTurn?: (sessionId: string) => Promise<number | undefined>
 	/** Registry of in-flight foreground executions for "Proceed While Running". */
 	foregroundCommands?: SdkForegroundCommandCoordinator
 	/** The language servers behind the code intelligence tools (`find_symbol`, …); undefined leaves the tools out. */
@@ -469,6 +470,7 @@ export class SdkSessionLifecycle {
 				applyPatchExecutor: this.options.applyPatchExecutor,
 				readFileExecutor: this.options.readFileExecutor,
 				getTerminalManager: this.options.getTerminalManager,
+				getWaitMinutesPerTurn: this.options.getWaitMinutesPerTurn,
 				foregroundCommands: this.options.foregroundCommands,
 				getCodeIntel: this.options.getCodeIntel,
 				beginEditProblemCheck: this.options.beginEditProblemCheck,

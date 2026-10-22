@@ -172,6 +172,24 @@ export class CiBoard {
 		return this.poller.snapshot(targetId).items.find((i) => i.key === key)
 	}
 
+	/** Requeue one expired Azure DevOps PR build validation, then read its new policy state. */
+	async requeueExpiredBuildPolicy(targetId: string, key: string, evaluationId: string): Promise<void> {
+		const target = this.target(targetId)
+		const item = this.item(targetId, key)
+		if (
+			!target ||
+			target.provider !== "ado" ||
+			!item?.pr ||
+			!item.expiredBuildPolicies?.some((p) => p.evaluationId === evaluationId)
+		) {
+			throw new DevOpsError("That expired validation changed; refresh the board and try again.")
+		}
+		const provider = this.options.providerFor(remoteOf(target))
+		if (!provider.requeueBuildPolicy) throw new DevOpsError("This Azure DevOps server cannot requeue build policies.")
+		await provider.requeueBuildPolicy(evaluationId)
+		await this.poller.refresh(targetId)
+	}
+
 	linkFor(key: string): CiLink | undefined {
 		return this.links[key]
 	}

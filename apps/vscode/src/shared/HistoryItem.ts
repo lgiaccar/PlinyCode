@@ -81,6 +81,8 @@ export type HistoryItem = {
 	 * `plinycode.spending.conversationLimit` applies. See sdk/spending-limit.ts.
 	 */
 	spendingLimit?: number
+	/** Cumulative `wait` time allowed per agent turn, in minutes; 0 disables the limit. */
+	waitMinutesPerTurn?: number
 	/**
 	 * How much a budget stop raises the budget: the amount the user last typed for this
 	 * conversation. Absent until they set one; then the default budget is the step.

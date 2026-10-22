@@ -230,6 +230,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.isPinned ? { isPinned: true } : {}),
 		...(item.pinnedModelId ? { pinnedModelId: item.pinnedModelId } : {}),
 		...(item.spendingLimit !== undefined ? { spendingLimit: item.spendingLimit } : {}),
+		...(item.waitMinutesPerTurn !== undefined ? { waitMinutesPerTurn: item.waitMinutesPerTurn } : {}),
 		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
 		// The workspace binding, kept across resumes like the fields above.
 		...(item.workspacePath ? { workspacePath: item.workspacePath, workspaceKind: item.workspaceKind ?? "folder" } : {}),
@@ -340,6 +341,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		activeMs: metadataNumber(metadata, "activeMs"),
 		isRenamed: metadataBoolean(metadata, "isRenamed") === true || undefined,
 		spendingLimit: metadataNumber(metadata, "spendingLimit"),
+		waitMinutesPerTurn: metadataNumber(metadata, "waitMinutesPerTurn"),
 		spendingStep: metadataNumber(metadata, "spendingStep"),
 		...(metadataString(metadata, "workspacePath")
 			? {
@@ -833,6 +835,7 @@ export class SdkTaskHistory {
 			extra?: (stored: ExtraUsage | undefined) => ExtraUsage
 		},
 		flags?: { isFavorited?: boolean; isPinned?: boolean },
+		waitMinutesPerTurn?: number,
 	): Promise<void> {
 		const nextUsage = usage?.next
 		const {
@@ -844,6 +847,10 @@ export class SdkTaskHistory {
 			const metadata: Record<string, unknown> = {
 				...(existing?.metadata ?? {}),
 				...historyItemToSessionMetadata(item, existing?.model),
+			}
+			const storedWaitLimit = metadataNumber(existing?.metadata, "waitMinutesPerTurn")
+			if (waitMinutesPerTurn !== undefined || storedWaitLimit !== undefined) {
+				metadata.waitMinutesPerTurn = waitMinutesPerTurn ?? storedWaitLimit
 			}
 			if (usage?.extra) {
 				metadata[EXTRA_USAGE_METADATA_KEY] = usage.extra(readExtraUsage(existing?.metadata))
@@ -984,6 +991,14 @@ export class SdkTaskHistory {
 			spendingLimit: limit,
 			...(remember && limit > 0 ? { spendingStep: limit } : {}),
 		})
+		return true
+	}
+
+	async setTaskWaitMinutesPerTurn(taskId: string, minutes: number): Promise<boolean> {
+		if (!Number.isFinite(minutes) || minutes < 0) return false
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) return false
+		await this.updateSession(taskId, { ...historyItem, waitMinutesPerTurn: minutes }, undefined, undefined, minutes)
 		return true
 	}
 

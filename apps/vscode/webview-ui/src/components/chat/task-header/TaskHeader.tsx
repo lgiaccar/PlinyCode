@@ -30,6 +30,7 @@ import RenameTaskButton from "./buttons/RenameTaskButton"
 import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
 import TaskUsageCounter from "./TaskUsageCounter"
+import { TaskWaitLimit } from "./TaskWaitLimit"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
 import TaskWorktreeChip from "./TaskWorktreeChip"
 import TokenUsagePanel from "./TokenUsagePanel"
@@ -85,6 +86,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 		primaryRootIndex,
 		platform,
 		conversationSpendingLimit,
+		maxWaitMinutesPerTurn,
 		useAutoCondense,
 		compactionThreshold,
 		modelTuning,
@@ -238,6 +240,12 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
+						{currentTaskItem?.id && (
+							<TaskWaitLimit
+								minutes={currentTaskItem.waitMinutesPerTurn ?? maxWaitMinutesPerTurn ?? 60}
+								taskId={currentTaskItem.id}
+							/>
+						)}
 						<TaskUsageCounter
 							activeMs={currentTaskItem?.activeMs}
 							budget={budget}
