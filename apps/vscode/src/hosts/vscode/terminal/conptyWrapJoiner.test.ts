@@ -73,6 +73,33 @@ describe("ConptyWrapJoiner", () => {
 		expect(lines(run(["a\r\nb\r\nc"]))).toEqual(["a", "b", "c"])
 	})
 
+	it("breaks the line at a cursor move to the start of a row, and drops erase codes", () => {
+		// Recorded from powershell.exe in a 40-column ConPTY: a table run
+		// through the wide-output wrapper, then an error. ConPTY clears the rest
+		// of each row with ECH (ESC[nX) and skips the blank lines after the
+		// table by moving the cursor down instead of writing a line break.
+		const recorded =
+			"Name  Path                                               Size Owner\u001b[9X\r\n" +
+			"----  ----                                               ---- -----\u001b[9X\r\n" +
+			"alpha C:\\some\\very\\long\\path\\to\\a\\file\\that\\is\\long.txt 12345 DOMAIN\\someone\r\n" +
+			"beta  C:\\x.txt                                              1 me\u001b[12X\u001b[23;1H\u001b[?25h" +
+			"Get-Item : Cannot find path 'C:\\nope' because it does not exist.\r\n"
+		expect(lines(run([recorded]))).toEqual([
+			"Name  Path                                               Size Owner",
+			"----  ----                                               ---- -----",
+			"alpha C:\\some\\very\\long\\path\\to\\a\\file\\that\\is\\long.txt 12345 DOMAIN\\someone",
+			"beta  C:\\x.txt                                              1 me",
+			"Get-Item : Cannot find path 'C:\\nope' because it does not exist.",
+		])
+	})
+
+	it("adds no line break where one is already there", () => {
+		expect(run(["a\n", "\u001b[5;1Hb"])).toBe("a\nb")
+		expect(run(["a", "\u001b[5;1Hb"])).toBe("a\nb")
+		expect(run(["\u001b[1;1Hfirst"])).toBe("first")
+		expect(run(["x\u001b[30;1H\r\ny"])).toBe("x\r\ny")
+	})
+
 	it("holds back a trailing line break until the next chunk or flush", () => {
 		const joiner = new ConptyWrapJoiner()
 		expect(joiner.push("done\r\n")).toBe("done")

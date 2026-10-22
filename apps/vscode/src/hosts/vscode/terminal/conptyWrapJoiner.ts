@@ -22,6 +22,17 @@ const SOFT_WRAP = new RegExp(`([^\\n${MARK}])\\r?\\n${MARK}(\\d+)${MARK}\\1`, "g
 const UNUSED_MARK = new RegExp(`${MARK}\\d+${MARK}`, "g")
 
 /**
+ * A cursor move to the start of a row with no line break before or after
+ * it. ConPTY moves down this way instead of writing blank lines, so without
+ * a break the next line ran into the last: `me` and `Get-Item : …` came back
+ * as `meGet-Item : …`.
+ */
+const ROW_START = /(?<!\n(?:\x1b\[[0-9;?]*[A-Za-z])*)\x1b\[\d+;1H(?!\r?\n)/g
+
+/** Text that is nothing but escape sequences. */
+const ONLY_ESCAPES = /^(?:\x1b\[[0-9;?]*[A-Za-z])*$/
+
+/**
  * Turns raw terminal output into plain text, joining back the rows ConPTY
  * splits a long line into.
  *
@@ -77,9 +88,14 @@ export class ConptyWrapJoiner {
 		if (!data) {
 			return ""
 		}
-		const marked = data.replace(CONTINUATION, (match, between: string, column: string) =>
-			Number(column) > 1 ? `\r\n${between}${MARK}${column}${MARK}` : match,
-		)
+		const marked = data
+			.replace(CONTINUATION, (match, between: string, column: string) =>
+				Number(column) > 1 ? `\r\n${between}${MARK}${column}${MARK}` : match,
+			)
+			.replace(ROW_START, (match, offset: number, whole: string) =>
+				// At the start of a chunk, the last one may have ended the line.
+				ONLY_ESCAPES.test(whole.slice(0, offset)) && (this.lastChar === "\n" || this.lastChar === "") ? match : "\n",
+			)
 		const text = (this.lastChar + stripAnsi(marked))
 			.replace(SOFT_WRAP, (_match, char: string, column: string) => {
 				this.wrapColumn = Number(column)

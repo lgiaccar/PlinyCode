@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.5-test.1",
+	"version": "0.2.5-test.2",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -592,10 +592,15 @@
 					"default": "panel",
 					"markdownDescription": "Where PlinyCode opens the terminals it runs commands in. Programs lay their output out to the terminal's width before the model reads it, so in a narrow panel (one docked beside the editor, for example) tables lose columns and long lines and error messages are broken up. `editor` opens them as editor tabs instead, without taking focus. Terminals of a background task stay in the panel."
 				},
+				"plinycode.terminal.wideOutput": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "In PowerShell terminals, run commands through a small wrapper so their output is not laid out to the terminal's width: native programs write to a pipe instead of the console, and PowerShell formats tables and errors 400 columns wide. The command still runs in the terminal, with its environment, and you can watch it. Turn this off if a program needs a real console for its output (an interactive full-screen tool, for example). Not available in PowerShell's Constrained Language mode."
+				},
 				"plinycode.terminal.narrowWarning": {
 					"type": "boolean",
 					"default": true,
-					"description": "Warn, once per window, when PlinyCode's terminal is under 80 columns wide and commands' output reaches the model broken up."
+					"description": "Warn, once per window, when PlinyCode's terminal is under 80 columns wide and commands' output reaches the model broken up. Commands run through Wide Output do not trigger it."
 				},
 				"plinycode.edits.reportNewProblems": {
 					"type": "boolean",

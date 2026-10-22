@@ -3,6 +3,7 @@ import * as vscode from "vscode"
 import { stripAnsi } from "@/hosts/vscode/terminal/ansiUtils"
 import { ConptyWrapJoiner } from "@/hosts/vscode/terminal/conptyWrapJoiner"
 import { getLatestTerminalOutput } from "@/hosts/vscode/terminal/get-latest-output"
+import { canUseWideOutput, isWideOutputEnabled, prepareWideOutput, wideOutputCommand } from "@/hosts/vscode/terminal/wide-output"
 import {
 	EXIT_CODE_EVENT_TIMEOUT_MS,
 	INPUT_PROMPT_IDLE_TIMEOUT,
@@ -63,6 +64,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 	private terminalClosedMidCommand = false
 	private awaitingInput: string | undefined
 	private terminalColumns: number | undefined
+	private wideOutput = false
 	private unobservedCommand: UnobservedTerminalCommand | undefined
 	private ownership: "managed" | "continued" | "detached" = "managed"
 	private activeCloseDisposable: vscode.Disposable | undefined
@@ -75,6 +77,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 		this.unobservedCommand = undefined
 		this.awaitingInput = undefined
 		this.terminalColumns = undefined
+		this.wideOutput = false
 
 		// The pty may already be dead (exitStatus is set when the shell process
 		// terminates). executeCommand()/sendText() on a dead terminal never
@@ -98,7 +101,8 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			}
 		}
 
-		if (terminal.shellIntegration && terminal.shellIntegration.executeCommand) {
+		const shellIntegration = terminal.shellIntegration
+		if (shellIntegration?.executeCommand) {
 			// Shell integration is available (VS Code 1.93+). The read() stream yields
 			// raw terminal data including OSC 633 escape sequences. We use a
 			// chunk-boundary-safe parser to strip those sequences and extract the
@@ -112,7 +116,10 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			// Starting another execution can force the previous end event before
 			// its stream finishes flushing. We use the event for the exit code;
 			// D-marker parsing only delimits output segments, not exit codes.
-			const execution = terminal.shellIntegration.executeCommand(command)
+			// In PowerShell the command runs through a wrapper that keeps its
+			// output from being laid out to the terminal's width (wide-output.ts).
+			this.wideOutput = isWideOutputEnabled() && canUseWideOutput(terminal) && (await prepareWideOutput(terminal))
+			const execution = shellIntegration.executeCommand(this.wideOutput ? wideOutputCommand(command) : command)
 			const stream = execution.read()
 			const parser = new Osc633Parser()
 			// Rejoins long lines that ConPTY splits at the terminal's width.
@@ -606,6 +613,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			unobservedCommand: this.unobservedCommand,
 			...(this.awaitingInput !== undefined ? { awaitingInput: this.awaitingInput } : {}),
 			...(this.terminalColumns !== undefined ? { terminalColumns: this.terminalColumns } : {}),
+			...(this.wideOutput ? { wideOutput: true } : {}),
 		}
 	}
 

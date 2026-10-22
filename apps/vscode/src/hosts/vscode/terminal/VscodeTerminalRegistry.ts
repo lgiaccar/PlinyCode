@@ -2,6 +2,7 @@ import * as vscode from "vscode"
 import { Logger } from "@/shared/services/Logger"
 import { AGENT_TERMINAL_ENV } from "./agent-terminal-env"
 import { type TerminalLocation, terminalLocationOption } from "./terminal-location"
+import { wideOutputEnv } from "./wide-output"
 
 export interface TerminalInfo {
 	terminal: vscode.Terminal
@@ -55,6 +56,7 @@ export class TerminalRegistry {
 				// child processes (make, npm scripts, etc.) that read $SHELL
 				// see the correct value instead of the user's login shell.
 				...(shellPath ? { SHELL: shellPath } : {}),
+				...wideOutputEnv(shellPath),
 			},
 		}
 
