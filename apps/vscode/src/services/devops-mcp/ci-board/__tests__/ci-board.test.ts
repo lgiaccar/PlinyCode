@@ -106,6 +106,36 @@ describe("CiBoard", () => {
 		await expect(board.updateTarget(t.id, {})).rejects.toThrow(/no longer exists/)
 	})
 
+	it("requeues only a currently expired Azure DevOps validation and refreshes the board", async () => {
+		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
+		provider.prs = [boardPr(12, { url })]
+		const evaluationId = "11111111-1111-4111-8111-111111111111"
+		let expired = true
+		let requeueError: Error | undefined
+		const requeued: string[] = []
+		Object.assign(provider, {
+			listExpiredBuildPolicies: async () => (expired ? [{ evaluationId, name: "Build validation" }] : []),
+			requeueBuildPolicy: async (id: string) => {
+				if (requeueError) throw requeueError
+				requeued.push(id)
+				expired = false
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url })
+		await board.refresh()
+		const item = board.view()[0].items[0]
+		expect(item.expiredBuildPolicies?.[0]?.evaluationId).toBe(evaluationId)
+		await expect(board.requeueExpiredBuildPolicy(target.id, item.key, "missing")).rejects.toThrow(/changed/)
+		expect(requeued).toEqual([])
+		requeueError = new Error("Azure DevOps is unavailable")
+		await expect(board.requeueExpiredBuildPolicy(target.id, item.key, evaluationId)).rejects.toThrow(/unavailable/)
+		expect(board.view()[0].items[0].expiredBuildPolicies).toHaveLength(1)
+		requeueError = undefined
+		await board.requeueExpiredBuildPolicy(target.id, item.key, evaluationId)
+		expect(requeued).toEqual([evaluationId])
+		expect(board.view()[0].items[0].expiredBuildPolicies).toEqual([])
+	})
+
 	it("blocks runs without a checkout, on forks and on closed PRs", async () => {
 		const t = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
 		await board.refresh()

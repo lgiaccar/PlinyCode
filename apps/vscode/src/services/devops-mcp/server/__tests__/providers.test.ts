@@ -435,6 +435,28 @@ describe("AzureDevOpsProvider", () => {
 		expect(checks[0].url).toEndWith("buildId=7")
 	})
 
+	it("detects expired build validations and requeues the selected evaluation", async () => {
+		const evaluationId = "12345678-1234-1234-1234-123456789abc"
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/policy/evaluations`, {
+				value: [
+					{
+						evaluationId,
+						context: { isExpired: true, buildId: 7, buildDefinitionId: 4 },
+						configuration: { settings: { displayName: "CI" } },
+					},
+					{ evaluationId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", context: { isExpired: false, buildDefinitionId: 5 } },
+				],
+			})
+			.on("PATCH", `${PROJ}/policy/evaluations/${evaluationId}`, { status: "queued" })
+		const provider = azdo(api)
+		expect(await provider.listExpiredBuildPolicies({ id: 42 } as PullRequest)).toEqual([
+			{ evaluationId, name: "CI", buildId: 7 },
+		])
+		await provider.requeueBuildPolicy(evaluationId)
+		expect(api.lastJson("PATCH")).toEqual({ status: "queued" })
+	})
+
 	it("reports an HTML sign-in page as rejected credentials", async () => {
 		const api = new FakeApi()
 		const provider = azdo(api)

@@ -565,6 +565,7 @@ export class Controller {
 			getCodeIntel: () => (isCodeIntelEnabled() ? createVscodeCodeIntelSource() : undefined),
 			beginEditProblemCheck: (files, cwd) => this.diffEdits.beginExternalEditCheck(files, cwd),
 			getWebSearch: () => createVscodeWebSearchSetup(),
+			getWaitMinutesPerTurn: async (sessionId) => (await this.taskHistory.findHistoryItem(sessionId))?.waitMinutesPerTurn,
 			getTerminalManager: () => {
 				// Guarded by getEffectiveTerminalExecutionMode() at the read sites
 				// (vscode-session-host.ts, sdk-terminal-execution-mode-coordinator.ts):
@@ -1049,7 +1050,10 @@ export class Controller {
 	}
 
 	private createTempSessionHost(): Promise<VscodeSessionHost> {
-		return VscodeSessionHost.create({ mcpHub: this.mcpHub })
+		return VscodeSessionHost.create({
+			mcpHub: this.mcpHub,
+			getWaitMinutesPerTurn: async (sessionId) => (await this.taskHistory.findHistoryItem(sessionId))?.waitMinutesPerTurn,
+		})
 	}
 
 	/** @deprecated kept for API compatibility; delegates to the slash/mention resolver. */
@@ -1559,6 +1563,7 @@ export class Controller {
 				activeMs: historyItem?.activeMs,
 				isRenamed: historyItem?.isRenamed,
 				spendingLimit: historyItem?.spendingLimit,
+				waitMinutesPerTurn: historyItem?.waitMinutesPerTurn,
 				spendingStep: historyItem?.spendingStep,
 			}
 			const startInput = {
@@ -1574,6 +1579,9 @@ export class Controller {
 					...(carriedHistoryFields.isRenamed ? { isRenamed: true } : {}),
 					...(carriedHistoryFields.spendingLimit !== undefined
 						? { spendingLimit: carriedHistoryFields.spendingLimit }
+						: {}),
+					...(carriedHistoryFields.waitMinutesPerTurn !== undefined
+						? { waitMinutesPerTurn: carriedHistoryFields.waitMinutesPerTurn }
 						: {}),
 					...(carriedHistoryFields.spendingStep !== undefined
 						? { spendingStep: carriedHistoryFields.spendingStep }
@@ -2108,6 +2116,13 @@ export class Controller {
 		if (!(await this.taskHistory.setTaskSpendingLimit(taskId, limit))) {
 			Logger.log(`[setTaskSpendingLimit] Task not found in history or invalid amount: ${taskId} ${limit}`)
 			return
+		}
+		await this.postStateToWebview()
+	}
+
+	async setTaskWaitMinutesPerTurn(taskId: string, minutes: number): Promise<void> {
+		if (!(await this.taskHistory.setTaskWaitMinutesPerTurn(taskId, minutes))) {
+			throw new Error(`Task not found or invalid wait limit: ${taskId}`)
 		}
 		await this.postStateToWebview()
 	}

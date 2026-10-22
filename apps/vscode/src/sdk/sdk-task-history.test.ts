@@ -632,6 +632,18 @@ describe("SdkTaskHistory", () => {
 		expect((await history.findHistoryItem("task-1"))?.spendingLimit).toBe(0)
 	})
 
+	it("persists the per-conversation wait limit, including unlimited, across other history writes", async () => {
+		const { history } = makeHistory([makeSessionRecord("task-1")])
+		expect(await history.setTaskWaitMinutesPerTurn("task-1", 90)).toBe(true)
+		await history.updateTaskHistoryItem(makeHistoryItem("task-1", { task: "later write" }))
+		expect((await history.findHistoryItem("task-1"))?.waitMinutesPerTurn).toBe(90)
+		expect(await history.setTaskWaitMinutesPerTurn("task-1", 0)).toBe(true)
+		expect((await history.findHistoryItem("task-1"))?.waitMinutesPerTurn).toBe(0)
+		await history.updateTaskHistoryItem(makeHistoryItem("task-1", { waitMinutesPerTurn: 90 }))
+		expect((await history.findHistoryItem("task-1"))?.waitMinutesPerTurn).toBe(0)
+		expect(await history.setTaskWaitMinutesPerTurn("task-1", -1)).toBe(false)
+	})
+
 	it("remembers the typed budget as the step, but not a budget raised by a stop", async () => {
 		const { history } = makeHistory([makeSessionRecord("task-1")])
 

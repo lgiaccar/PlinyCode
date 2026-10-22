@@ -135,6 +135,11 @@ run in a PlinyCode terminal, and the output is read through shell integration
   (`longRunningNote` on the engine's `createShellTool`). That way it runs a
   benchmark as an ordinary command and follows it with `wait`, instead of
   launching it with `Start-Process` and losing its output and errors.
+- **`wait`.** One pause is capped at 10 minutes. The cumulative time spent in `wait` calls during one agent turn
+  defaults to 60 minutes. Change this in **Settings → General → Default cumulative wait per agent turn**
+  (`plinycode.wait.maxMinutesPerTurn`), or click **Wait** in a conversation's task header to override it there.
+  The limit is checked before each `wait` call, so changes take effect during the turn. Set it to `0` for no
+  cumulative limit. This limit does not count thinking, commands, or the entire conversation's elapsed time.
 - **`background: true`.** An optional argument for a server, watcher or
   other job the model does not want to wait for. The commands start as child
   processes of the extension host, in either terminal mode and in

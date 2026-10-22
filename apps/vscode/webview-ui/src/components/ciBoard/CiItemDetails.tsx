@@ -243,13 +243,15 @@ const PipelineRow = ({ item, pipeline, fix, triage, ...run }: PipelineRowProps) 
 interface CiItemDetailsProps extends RunProps {
 	item: CiItem
 	onAnalyze: () => void
+	onRequeue: (evaluationId: string) => Promise<void>
+	requeueing?: string
 }
 
 /**
  * An item, pipeline by pipeline: what is wrong with each one and the single
  * fix that fits it, then Fix them all, which works through every problem at once.
  */
-export const CiItemDetails = ({ item, onAnalyze, ...run }: CiItemDetailsProps) => {
+export const CiItemDetails = ({ item, onAnalyze, onRequeue, requeueing, ...run }: CiItemDetailsProps) => {
 	const triage = item.triage
 	const fixes = new Map(item.fixes.map((f) => [f.pipeline, f]))
 	const conflict = fixes.get("")
@@ -260,6 +262,26 @@ export const CiItemDetails = ({ item, onAnalyze, ...run }: CiItemDetailsProps) =
 	return (
 		<div className="text-xs pl-5 pr-1 pb-1" data-testid="ci-item-details">
 			{conflict && <PipelineRow fix={conflict} item={item} {...run} />}
+			{(item.expiredBuildPolicies ?? []).map((policy) => (
+				<div
+					className="py-1.5 border-t border-border-panel flex items-center gap-2"
+					data-testid="ci-expired-policy"
+					key={policy.evaluationId}>
+					<span className="codicon codicon-warning text-warning" />
+					<span className="min-w-0 truncate" title={policy.name}>
+						{policy.name}
+					</span>
+					<span className="rounded px-1 text-[10px] bg-warning/15 text-warning">Expired</span>
+					<span className="flex-1" />
+					<Button
+						disabled={!!requeueing}
+						onClick={() => void onRequeue(policy.evaluationId)}
+						size="sm"
+						variant="secondary">
+						{requeueing === policy.evaluationId ? "Requeueing…" : "Requeue"}
+					</Button>
+				</div>
+			))}
 			{item.pipelines.map((pipeline) => (
 				<PipelineRow
 					fix={fixes.get(pipeline.name)}

@@ -3,7 +3,7 @@
  * with one status per pipeline, and prompts ("actions") to run against them.
  * No `vscode` import, so the board's logic runs in bun unit tests.
  */
-import type { MergeState, PullRequest, Status } from "../server/providers/types"
+import type { ExpiredBuildPolicy, MergeState, PullRequest, Status } from "../server/providers/types"
 import type { ProviderKind } from "../server/repo"
 
 /** One pull request (`pr`), a branch's open PR or head (`branch`), or every open PR of a repository (`repo`). */
@@ -79,6 +79,7 @@ export interface CiBoardItem {
 	headSha?: string
 	mergeState?: MergeState
 	pipelines: CiPipelineStatus[]
+	expiredBuildPolicies?: ExpiredBuildPolicy[]
 	fork: boolean
 	error?: string
 }

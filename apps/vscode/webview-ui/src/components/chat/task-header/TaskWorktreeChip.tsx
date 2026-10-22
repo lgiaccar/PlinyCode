@@ -1,7 +1,7 @@
 import type { TaskWorktree } from "@shared/HistoryItem"
 import { StringRequest } from "@shared/proto/cline/common"
 import { WorktreeActionRequest } from "@shared/proto/cline/task"
-import { ExternalLinkIcon, GitBranchIcon, GitMergeIcon, GitPullRequestIcon, Trash2Icon } from "lucide-react"
+import { CopyIcon, ExternalLinkIcon, GitBranchIcon, GitMergeIcon, GitPullRequestIcon, Trash2Icon } from "lucide-react"
 import type React from "react"
 import { TaskServiceClient } from "@/services/grpc-client"
 
@@ -43,9 +43,13 @@ const TaskWorktreeChip: React.FC<{ taskId?: string; worktree?: TaskWorktree }> =
 		</button>
 	)
 	const removed = !!worktree.removedTs
+	const copyPath = (event: React.MouseEvent) => {
+		event.stopPropagation()
+		navigator.clipboard.writeText(worktree.path).catch((error) => console.error("Failed to copy the worktree path:", error))
+	}
 	return (
 		<div
-			className="flex items-center justify-center gap-1 w-full min-w-0 text-xs text-description"
+			className="flex items-center justify-center gap-1 w-full min-w-0 text-xs text-description select-text"
 			data-testid="task-worktree-chip"
 			title={
 				removed
@@ -54,7 +58,26 @@ const TaskWorktreeChip: React.FC<{ taskId?: string; worktree?: TaskWorktree }> =
 			}>
 			<GitBranchIcon className="shrink-0" size={11} />
 			<span className="shrink-0">Worktree</span>
-			<code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{worktree.branch}</code>
+			<code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={worktree.branch}>
+				{worktree.branch}
+			</code>
+			<span aria-hidden="true">·</span>
+			{removed ? (
+				<code className="min-w-0 break-all text-left" title={worktree.path}>
+					{worktree.path}
+				</code>
+			) : (
+				<button
+					aria-label={`Open worktree at ${worktree.path}`}
+					className="min-w-0 break-all text-left text-link bg-transparent border-0 p-0 cursor-pointer select-text"
+					onClick={openInNewWindow}
+					onKeyDown={(event) => event.stopPropagation()}
+					title={worktree.path}
+					type="button">
+					{worktree.path}
+				</button>
+			)}
+			{button("Copy worktree path", `Copy ${worktree.path}`, copyPath, <CopyIcon size={11} />)}
 			{removed ? (
 				<span className="shrink-0">(removed)</span>
 			) : (

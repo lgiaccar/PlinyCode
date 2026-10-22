@@ -1,6 +1,7 @@
 import PreferredLanguageSetting from "../PreferredLanguageSetting"
 import Section from "../Section"
 import SpendingLimitSetting from "../SpendingLimitSetting"
+import WaitLimitSetting from "../WaitLimitSetting"
 
 interface GeneralSettingsSectionProps {
 	renderSectionHeader: (tabId: string) => JSX.Element | null
@@ -14,6 +15,7 @@ const GeneralSettingsSection = ({ renderSectionHeader }: GeneralSettingsSectionP
 				<PreferredLanguageSetting />
 
 				<SpendingLimitSetting />
+				<WaitLimitSetting />
 			</Section>
 		</div>
 	)

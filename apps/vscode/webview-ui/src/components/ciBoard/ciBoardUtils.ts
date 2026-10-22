@@ -117,11 +117,16 @@ export function itemRank(item: CiItem): number {
 	if (severity) return { blocker: 5, high: 4, medium: 3, low: 2, info: 1 }[severity] ?? 0
 	if (item.mergeState === "conflicts") return 4
 	if (item.pipelines.some((p) => p.color === "red")) return 3
+	if (item.expiredBuildPolicies?.length > 0) return 2
 	return 0
 }
 
 export function isFailing(item: CiItem): boolean {
-	return item.mergeState === "conflicts" || item.pipelines.some((p) => p.color === "red")
+	return (
+		item.mergeState === "conflicts" ||
+		item.pipelines.some((p) => p.color === "red") ||
+		(item.expiredBuildPolicies?.length ?? 0) > 0
+	)
 }
 
 export function timeAgo(ts: number, now = Date.now()): string {

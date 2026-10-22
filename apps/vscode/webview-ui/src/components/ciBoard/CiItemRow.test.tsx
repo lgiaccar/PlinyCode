@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	openCiConversation: vi.fn(),
 	analyzeCiItem: vi.fn(),
 	runCiCustomPrompt: vi.fn(),
+	requeueExpiredCiBuild: vi.fn(),
 	openUrl: vi.fn(),
 	openFile: vi.fn(),
 }))
@@ -26,6 +27,7 @@ vi.mock("@/services/grpc-client", () => ({
 		openCiConversation: mocks.openCiConversation,
 		analyzeCiItem: mocks.analyzeCiItem,
 		runCiCustomPrompt: mocks.runCiCustomPrompt,
+		requeueExpiredCiBuild: mocks.requeueExpiredCiBuild,
 	},
 	UiServiceClient: { openUrl: mocks.openUrl },
 	FileServiceClient: { openFile: mocks.openFile },
@@ -107,6 +109,7 @@ function makeItem(overrides: Partial<CiItem> = {}): CiItem {
 			{ name: "linux_cpu", color: "green", status: "completed", result: "success", runId: 102, url: "https://ci/102" },
 			{ name: "win_cuda", color: "grey", status: "", result: "", runId: 0, url: "" },
 		],
+		expiredBuildPolicies: [],
 		conversationId: "",
 		conversationStatus: "",
 		watching: false,
@@ -128,6 +131,7 @@ describe("CiItemRow", () => {
 		mocks.openCiConversation.mockReset().mockResolvedValue({})
 		mocks.analyzeCiItem.mockReset().mockResolvedValue({})
 		mocks.runCiCustomPrompt.mockReset().mockResolvedValue({ value: "conv-2" })
+		mocks.requeueExpiredCiBuild.mockReset().mockResolvedValue({})
 		mocks.openUrl.mockReset().mockResolvedValue({})
 		mocks.openFile.mockReset().mockResolvedValue({})
 	})
@@ -146,6 +150,24 @@ describe("CiItemRow", () => {
 		expect(screen.queryByTestId("merge-badge")).toBeNull()
 		rerender(row(makeItem({ mergeState: "conflicts" })))
 		expect(screen.getByTestId("merge-badge")).toHaveTextContent("Conflicts")
+	})
+
+	it("shows expired validation separately and requeues its policy", async () => {
+		const evaluationId = "12345678-1234-1234-1234-123456789abc"
+		render(
+			row(
+				makeItem({
+					pipelines: [],
+					fixes: [],
+					expiredBuildPolicies: [{ evaluationId, name: "PR validation", buildId: 7 }],
+				}),
+			),
+		)
+		expect(screen.getByTestId("ci-expired-badge")).toHaveTextContent("Expired")
+		fireEvent.click(screen.getByLabelText("Show details"))
+		expect(screen.getByTestId("ci-expired-policy")).toHaveTextContent("PR validation")
+		fireEvent.click(screen.getByRole("button", { name: "Requeue" }))
+		await waitFor(() => expect(mocks.requeueExpiredCiBuild).toHaveBeenCalledWith(expect.objectContaining({ evaluationId })))
 	})
 
 	it("runs the main action, and shows why when it cannot", async () => {

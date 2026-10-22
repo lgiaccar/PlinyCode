@@ -46,6 +46,7 @@ service TaskService {
   rpc improvePrompt(ImprovePromptRequest) returns (ImprovePromptResult);
   // Sets a conversation's budget in USD (0 = no limit). A negative amount is ignored.
   rpc setTaskSpendingLimit(SetTaskSpendingLimitRequest) returns (Empty);
+  rpc setTaskWaitMinutesPerTurn(SetTaskWaitMinutesPerTurnRequest) returns (Empty);
   // Gets filtered task history
   rpc getTaskHistory(GetTaskHistoryRequest) returns (TaskHistoryArray);
   // Sends a response to a previous ask operation
@@ -160,6 +161,13 @@ message SetTaskSpendingLimitRequest {
   string task_id = 2;
   // USD; 0 turns the limit off for this conversation
   double limit = 3;
+}
+
+message SetTaskWaitMinutesPerTurnRequest {
+  Metadata metadata = 1;
+  string task_id = 2;
+  // Cumulative wait minutes per agent turn; 0 disables the limit.
+  double minutes = 3;
 }
 
 // Response for task details

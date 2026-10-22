@@ -567,6 +567,8 @@ message UpdateSettingsRequest {
   optional bool pliny_paid_models_unlocked = 52;
   // plinycode.compaction.threshold: the share of the model's input limit at which auto-condense compacts (0.1 to 0.95)
   optional double compaction_threshold = 53;
+  // plinycode.wait.maxMinutesPerTurn: cumulative wait minutes per agent turn; 0 means unlimited
+  optional double max_wait_minutes_per_turn = 54;
 }
 
 message UpdateTerminalConnectionTimeoutRequest {

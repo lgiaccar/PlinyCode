@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.5-test.2",
+	"version": "0.2.5-test.4",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -680,6 +680,12 @@
 					"default": 5,
 					"minimum": 0,
 					"markdownDescription": "The budget, in US dollars, that each new conversation starts with. The task header shows a conversation's cost against its budget, and you can change one conversation's budget there. When a conversation reaches its budget, PlinyCode pauses before the next model call; send a message to continue, which raises that conversation's budget by this amount. Free models and the auto-free routers are never limited. Set to `0` for no limit."
+				},
+				"plinycode.wait.maxMinutesPerTurn": {
+					"type": "number",
+					"default": 60,
+					"minimum": 0,
+					"markdownDescription": "Maximum cumulative time, in minutes, that the agent may spend in `wait` calls during one turn. This does not limit other work or the whole conversation. Each `wait` call remains capped at 10 minutes. A conversation can override this in its task header. Set to `0` for no cumulative limit."
 				},
 				"plinycode.updates.enabled": {
 					"type": "boolean",

@@ -1,6 +1,7 @@
 import { createMcpTools } from "@plinycode/core"
 import type { AgentMode, AgentTool, AgentToolContext } from "@plinycode/shared"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
+import { getMaxWaitMinutesPerTurn } from "@/hosts/vscode/wait-settings"
 import { getRunningBuiltinMcpSources } from "@/services/devops-mcp/builtin-mcp-registry"
 import type { McpHub } from "@/services/mcp/McpHub"
 import { resolveMcpServerTimeoutMs } from "@/services/mcp/timeout"
@@ -61,6 +62,8 @@ export class McpHubToolProvider {
 
 interface VscodeExtraToolsOptions {
 	cwd?: string
+	/** Live conversation override; undefined follows the global setting. */
+	getWaitMinutesPerTurn?: () => number | undefined | Promise<number | undefined>
 	/**
 	 * Lazy factory for the VscodeTerminalManager.
 	 * When provided, the custom `run_commands` tool replaces the SDK's
@@ -198,7 +201,13 @@ export async function createVscodeExtraTools(mcpHub: McpHub, options?: VscodeExt
 
 	// `wait` gives the agent a way to pass time between checks on a long-running
 	// command, instead of ending its turn with "I'll check back later".
-	tools.push(createWaitTool())
+	const readWaitLimitSeconds = async () => ((await options?.getWaitMinutesPerTurn?.()) ?? getMaxWaitMinutesPerTurn()) * 60
+	tools.push(
+		createWaitTool({
+			maxTotalSecondsPerRun: await readWaitLimitSeconds(),
+			getMaxTotalSecondsPerRun: readWaitLimitSeconds,
+		}),
+	)
 
 	// A task list the model keeps and the user sees, so long runs do not lose
 	// track of what is left.

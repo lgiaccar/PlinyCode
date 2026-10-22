@@ -57,6 +57,26 @@ describe("CiBoardPoller", () => {
 		expect(provider.calls.listRuns).toBe(after.listRuns + 1)
 	})
 
+	it("refreshes Azure DevOps expiration even when the PR source commit and successful run are unchanged", async () => {
+		const provider = Object.assign(new FakeBoardProvider("Azure DevOps"), {
+			expired: false,
+			async listExpiredBuildPolicies() {
+				return this.expired ? [{ evaluationId: "12345678-1234-1234-1234-123456789abc", name: "CI", buildId: 10 }] : []
+			},
+		})
+		const { poller, clock, start } = setup(provider)
+		provider.prs = [boardPr(1)]
+		provider.runs.set(SHA_A, [boardRun(10, "CI", "completed", "success")])
+		poller.setVisible(true)
+		start()
+		await clock.advance(0)
+		expect(poller.snapshot("t1").items[0].expiredBuildPolicies).toEqual([])
+		provider.expired = true
+		await clock.advance(10 * MINUTE)
+		expect(poller.snapshot("t1").items[0].expiredBuildPolicies?.[0]?.name).toBe("CI")
+		expect(poller.snapshot("t1").items[0].pipelines[0].color).toBe("green")
+	})
+
 	it("keeps fetching runs that are still going, and reports a pipeline turning red", async () => {
 		const { provider, clock, start, poller, transitions } = setup()
 		provider.prs = [boardPr(1)]

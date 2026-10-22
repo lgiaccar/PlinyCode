@@ -18,6 +18,10 @@ describe("TaskWorktreeChip", () => {
 	beforeEach(() => {
 		openTaskWorktree.mockClear()
 		worktreeAction.mockClear()
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText: vi.fn().mockResolvedValue(undefined) },
+		})
 	})
 
 	it("shows the branch and opens the worktree in a new window without toggling the header", () => {
@@ -29,7 +33,10 @@ describe("TaskWorktreeChip", () => {
 			</div>,
 		)
 
-		expect(screen.getByTestId("task-worktree-chip").textContent).toContain("Worktreeplinycode/fix-login-ab12")
+		expect(screen.getByTestId("task-worktree-chip").textContent).toContain(worktree.path)
+		fireEvent.click(screen.getByLabelText(`Open worktree at ${worktree.path}`))
+		fireEvent.click(screen.getByLabelText("Copy worktree path"))
+		expect(navigator.clipboard.writeText).toHaveBeenCalledWith(worktree.path)
 		fireEvent.click(screen.getByLabelText("Open the worktree in a new window"))
 		expect(openTaskWorktree).toHaveBeenCalledWith(expect.objectContaining({ value: "task-1" }))
 		expect(onHeaderClick).not.toHaveBeenCalled()
@@ -56,10 +63,12 @@ describe("TaskWorktreeChip", () => {
 		expect(onHeaderClick).not.toHaveBeenCalled()
 	})
 
-	it("marks a removed worktree and offers no actions for it", () => {
+	it("marks a removed worktree and retains its copyable path", () => {
 		render(<TaskWorktreeChip taskId="task-1" worktree={{ ...worktree, removedTs: 5 }} />)
 		expect(screen.getByTestId("task-worktree-chip").textContent).toContain("(removed)")
-		expect(screen.queryByRole("button")).toBeNull()
+		expect(screen.getByTestId("task-worktree-chip").textContent).toContain(worktree.path)
+		expect(screen.queryByLabelText(`Open worktree at ${worktree.path}`)).toBeNull()
+		expect(screen.getByLabelText("Copy worktree path")).toBeInTheDocument()
 	})
 
 	it("renders nothing for a conversation without a worktree", () => {

@@ -53,6 +53,24 @@ describe("createWaitTool", () => {
 		await expect(tool.execute({ seconds: 10 }, context({ runId: "run-2" }))).resolves.toContain("Waited 10 s")
 	})
 
+	it("uses a changed limit on the next call, permits unlimited waiting, and resets for another run", async () => {
+		const clock = fakeClock()
+		let limit = 120
+		const tool = createWaitTool({
+			maxSeconds: 600,
+			getMaxTotalSecondsPerRun: () => limit,
+			sleep: clock.sleep,
+			now: clock.now,
+		})
+		await tool.execute({ seconds: 120 }, context())
+		limit = 60
+		await expect(tool.execute({ seconds: 1 }, context())).rejects.toThrow("Wait budget exhausted")
+		limit = 0
+		await expect(tool.execute({ seconds: 600 }, context())).resolves.toContain("unlimited")
+		limit = 60
+		await expect(tool.execute({ seconds: 60 }, context({ runId: "new-turn" }))).resolves.toContain("Waited 60 s")
+	})
+
 	it("returns early when the run is cancelled", async () => {
 		const clock = fakeClock()
 		const tool = createWaitTool({ sleep: clock.sleep, now: clock.now })

@@ -27,8 +27,9 @@ When the conversation starts:
 An info row in the chat says which branch and folder the conversation works in. Uncommitted changes in your
 checkout are not in the worktree, which starts from the last commit; the row says so when there are any.
 
-The task header shows **Worktree** and the branch under the conversation's title, with buttons to open the
-worktree in a new VS Code window and to bring the work back (see below). History rows of worktree conversations
+The task header shows **Worktree**, the branch, and the full folder path under the conversation's title. Click the
+path to open the folder in a new VS Code window, or use **Copy path**. The path remains visible after removal,
+marked **removed**. History rows of worktree conversations
 carry a small **worktree** marker, and searching history matches the branch name.
 
 If the worktree cannot be created (git is not installed, the folder is not in a repository, the repository has
@@ -37,11 +38,12 @@ why. A failed submodule checkout leaves nothing behind: the half-made worktree a
 
 ## Bringing the work back
 
-The worktree line in the task header has four buttons after the branch name:
+The worktree line in the task header has these buttons after the branch and path:
 
 | Button                 | What it does                                                                                         |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- |
 | **Open in new window** | Opens the worktree folder in a new VS Code window.                                                   |
+| **Copy path**          | Copies the full worktree folder path.                                                                  |
 | **Apply**              | Applies the worktree's changes to the checkout it was branched from and stages them there.           |
 | **Create PR**          | Commits what is uncommitted, pushes the branch and opens a draft pull request.                      |
 | **Remove worktree**    | Removes the worktree, and its branch when it is merged or you choose to delete it.                   |
