@@ -709,9 +709,12 @@ export async function executeForeground(
 					? [...outputLines, `\n... (${droppedLines} earlier lines dropped) ...\n`].join("\n")
 					: outputLines.join("\n")
 			const truncated = digestOrTruncate(bufferedOutput.trim(), maxOutputChars)
+			const completionDetails = process.getCompletionDetails?.()
+			// Output that came through the wide-output wrapper was not laid out
+			// to the terminal's width; ConPTY's own wraps were joined back.
 			const note =
-				truncated.length > 0
-					? narrowTerminalNote(process.getCompletionDetails?.()?.terminalColumns, terminalInfo.location ?? "panel")
+				truncated.length > 0 && !completionDetails?.wideOutput
+					? narrowTerminalNote(completionDetails?.terminalColumns, terminalInfo.location ?? "panel")
 					: undefined
 			const output = note ? `${truncated}\n${note}` : truncated
 
@@ -722,8 +725,6 @@ export async function executeForeground(
 			if (detachedLog !== undefined) {
 				return formatDetachedResult(detachedLog.path, output, detachReason ?? "timeout", tracked?.id)
 			}
-
-			const completionDetails = process.getCompletionDetails?.()
 
 			// A terminal closed mid-command has no exit code and no reliable output —
 			// whatever the command was doing (e.g. running a test suite) was interrupted,

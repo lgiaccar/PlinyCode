@@ -154,15 +154,57 @@ run in a PlinyCode terminal, and the output is read through shell integration
   with `\r\n`, moves the cursor back to the end of the row and writes that
   row's last character again. `ConptyWrapJoiner` joins such rows back into
   one line before the output is split into lines, so a path comes back whole
-  instead of as `…_2026100` / `06_124919`.
+  instead of as `…_2026100` / `06_124919`. Instead of writing blank lines,
+  ConPTY may move the cursor down to the start of a row; that move counts as
+  a line break, so the next line does not run into the last. Its erase codes
+  (`ESC[nX`) are stripped with the other escape sequences.
 - **Narrow terminals.** Programs format to the terminal's width before
   PlinyCode sees their output: PowerShell tables lose columns and error
   messages break mid-word, and nothing afterwards can undo that. A terminal
-  panel docked beside the editor is often only 30–60 columns wide. The VS Code
-  API does not report a shell terminal's width, but a wrapped line shows it
-  (the column ConPTY moves back to). Below 80 columns the result ends with a
-  note telling the model the output was formatted to that width. The note
-  also suggests `Out-String -Width 300` or writing to a file.
+  panel docked beside the editor is often only 30–60 columns wide.
+  - **Wide output (PowerShell).** With `plinycode.terminal.wideOutput` on
+    (the default), commands in PowerShell terminals run through a wrapper
+    (`wide-output.ts`), so their output is not laid out to the terminal's
+    width. The command still runs in the user's terminal, with its profile
+    and environment, and the user can watch it:
+    - The terminal shows `. plinyrun '<command>'`. `plinyrun` is a function
+      defined once per terminal from the `PLINYCODE_RUN` environment
+      variable, which PlinyCode sets on the PowerShell terminals it creates.
+      The definition is the terminal's first line,
+      `if ($env:PLINYCODE_RUN -and … 'FullLanguage') { Set-Item function:plinyrun … }`.
+      It runs only in full language mode: under Constrained Language mode
+      (AppLocker, WDAC) the wrapper's method calls are blocked, so commands
+      run as typed.
+    - The function is dot-sourced, so the command runs in the prompt's
+      scope: variables, imported modules and `cd` stay as if typed.
+    - Its output goes through the pipeline. Native programs write to a pipe
+      instead of the console, so they do not measure its width, and they drop
+      colors and progress bars. PowerShell objects are formatted by
+      `Out-String -Width 400`. Error, warning and verbose records are written
+      as one line each, not through the error view, which wraps to the
+      console's width.
+    - During the command `COLUMNS=200` is set, for tools that cannot measure
+      a pipe (Python's `shutil`, `rich`, `pytest`), and so is
+      `PYTHONUNBUFFERED=1`, so Python's output stays live.
+    - The `$?` of the command's last statement is handed back. Shell
+      integration still reports a failure as exit code 1, as it did for the
+      typed command.
+    - ConPTY still wraps the long lines on screen, and `ConptyWrapJoiner`
+      joins them back. A partial line, such as a native program's
+      `Continue? [y/N]` with no line break, only appears once the line ends.
+      So the keyboard-prompt check does not see it; the command is handed
+      over after 5 minutes like any other long one.
+    - In a 40-column ConPTY, a four-column table came back with all four
+      columns, and a `Get-Item` error took 3 lines, its message on one.
+      Without the wrapper, the table lost two columns and cut the third
+      short, and the error was broken over 17 lines.
+  - **The note.** The other commands (bash and other shells, Constrained
+    Language mode, wide output off) still format to the terminal's width.
+    The VS Code API does not report a shell terminal's width, but a wrapped
+    line shows it (the column ConPTY moves back to). Below 80 columns, the
+    result of a command that did not run through the wrapper ends with a note
+    telling the model the output was formatted to that width. The note also
+    suggests `Out-String -Width 300` or writing to a file.
   - **The warning.** The first time this happens in a window, the user is
     warned, with two buttons: **Open Terminals in Editor Area** sets
     `plinycode.terminal.location` to `editor`, and **Don't Show Again** sets

@@ -62,6 +62,11 @@ export interface TerminalCompletionDetails {
 	 * and so revealed it (the VS Code API does not expose it).
 	 */
 	terminalColumns?: number
+	/**
+	 * The command ran through PowerShell's wide-output wrapper, so programs
+	 * did not lay their output out to the terminal's width.
+	 */
+	wideOutput?: boolean
 }
 
 export interface TerminalProcessEvents {
