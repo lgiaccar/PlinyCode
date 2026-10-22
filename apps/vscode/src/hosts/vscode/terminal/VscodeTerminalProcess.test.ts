@@ -7,6 +7,7 @@ import * as vscode from "vscode"
 import * as getLatestOutputModule from "./get-latest-output"
 import { VscodeTerminalProcess } from "./VscodeTerminalProcess"
 import { TerminalRegistry } from "./VscodeTerminalRegistry"
+import * as wideOutputModule from "./wide-output"
 
 // Create a mock stream for simulating terminal output - this is only used for tests
 // that need controlled output which can't be guaranteed with real terminals
@@ -62,6 +63,9 @@ describe("TerminalProcess (Integration Tests)", () => {
 	beforeEach(() => {
 		sandbox = sinon.createSandbox({ useFakeTimers: true })
 		setVscodeHostProviderMock()
+		// Terminals created here get PowerShell's wide-output wrapper when it is
+		// the default shell (Windows); the tests below expect commands as typed.
+		sandbox.stub(wideOutputModule, "isWideOutputEnabled").returns(false)
 		process = new VscodeTerminalProcess()
 	})
 
@@ -287,6 +291,26 @@ describe("TerminalProcess (Integration Tests)", () => {
 			// Check that the events were emitted
 			;(emitSpy as sinon.SinonSpy).calledWith("completed").should.be.true()
 			;(emitSpy as sinon.SinonSpy).calledWith("continue").should.be.true()
+		})
+
+		it("runs the command through the wide-output wrapper once the terminal is prepared", async () => {
+			const terminal = TerminalRegistry.createTerminal().terminal
+			createdTerminals.push(terminal)
+			;(wideOutputModule.isWideOutputEnabled as sinon.SinonStub).returns(true)
+			sandbox.stub(wideOutputModule, "canUseWideOutput").returns(true)
+
+			const mockExecuteCommand = sandbox.stub()
+			mockExecuteCommand.onFirstCall().returns({ read: () => createMockStream(["plinycode-wide-output-ready"]) })
+			mockExecuteCommand.onSecondCall().returns({ read: () => createMockStreamWithMarkers(["test output"]) })
+			sandbox.stub(terminal, "shellIntegration").get(() => ({ executeCommand: mockExecuteCommand }))
+
+			const runPromise = process.run(terminal, "Get-Item 'a b'")
+			await sandbox.clock.tickAsync(3000)
+			await runPromise
+
+			mockExecuteCommand.firstCall.args[0].should.equal(wideOutputModule.WIDE_OUTPUT_PREPARE_COMMAND)
+			mockExecuteCommand.secondCall.args[0].should.equal(". plinyrun 'Get-Item ''a b'''")
+			process.getCompletionDetails().wideOutput?.should.be.true()
 		})
 
 		it("prefers the onDidEndTerminalShellExecution exit code over a conflicting D-marker exit code", async () => {
