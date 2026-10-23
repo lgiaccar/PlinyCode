@@ -17,7 +17,7 @@ const HomeHeader = () => {
 
 	const isDecember = new Date().getMonth() === 11 // 11 = December (0-indexed)
 	const LogoComponent = isDecember ? ClineLogoSanta : ClineLogoVariable
-	const headingText = "What can PlinyCode do for you?"
+	const headingText = "AI, Code & Rock & Roll"
 
 	return (
 		<div className="flex flex-col items-center mb-5">
