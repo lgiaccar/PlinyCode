@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useExtensionState } from "@/context/ExtensionStateContext"
+import { MemoryPendingBadge } from "../MemoryPendingBadge"
 import MemorySettings from "../MemorySettings"
 import Section from "../Section"
 import { updateSetting } from "../utils/settingsHandlers"
@@ -176,7 +177,9 @@ const FeatureSettingsSection = ({ renderSectionHeader }: FeatureSettingsSectionP
 
 					{/* Repo memory (docs/memory.md) */}
 					<div>
-						<div className="text-xs font-medium text-foreground/80 uppercase tracking-wider mb-3">Memory</div>
+						<div className="text-xs font-medium text-foreground/80 uppercase tracking-wider mb-3">
+							Memory <MemoryPendingBadge />
+						</div>
 						<div
 							className="relative p-3 pt-0 my-3 rounded-md border border-editor-widget-border/50"
 							id="memory-features">

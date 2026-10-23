@@ -25,8 +25,14 @@ export async function openFile(controller: Controller, request: StringRequest): 
 				throw new Error(`Unknown router profile: ${profile}`)
 			}
 			await openFreeAutoRulesFile(profile)
-		} else if (request.value === PLINY_REPO_MEMORY_URI || request.value === PLINY_USER_MEMORY_URI) {
-			const { file } = await controller.ensureMemoryFile(request.value === PLINY_USER_MEMORY_URI ? "user" : "repo")
+		} else if (
+			request.value === PLINY_REPO_MEMORY_URI ||
+			request.value === PLINY_USER_MEMORY_URI ||
+			request.value === "pliny://memory/group"
+		) {
+			const { file } = await controller.ensureMemoryFile(
+				request.value === PLINY_USER_MEMORY_URI ? "user" : request.value === "pliny://memory/group" ? "group" : "repo",
+			)
 			await openFileIntegration(file)
 		} else {
 			await openFileIntegration(request.value)

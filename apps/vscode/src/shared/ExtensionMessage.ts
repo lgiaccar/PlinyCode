@@ -123,6 +123,8 @@ export interface ExtensionState {
 	maxWaitMinutesPerTurn?: number
 	/** `plinycode.memory.maxTokens`: the memory budget in the system prompt; 0 = memory off (docs/memory.md). */
 	memoryMaxTokens?: number
+	memoryPendingCount?: number
+	memoryConfigurationVersion?: string
 	/** `plinycode.memory.distill` is "offer": memories are proposed after a run that edited files. */
 	memoryDistillEnabled?: boolean
 	/** `plinycode.memory.conversationSearch`: the model can search and read earlier conversations. */

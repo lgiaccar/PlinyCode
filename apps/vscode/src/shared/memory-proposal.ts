@@ -4,11 +4,16 @@
 // object as JSON; the webview renders it with checkboxes and sends the choice
 // back through TaskService.resolveMemoryProposal.
 
+import type { MemoryScope, MemoryType } from "./memory"
+
 export type MemoryProposalStatus = "pending" | "saving" | "saved" | "dismissed" | "empty"
 
 export interface MemoryProposalItem {
 	id: string
-	scope: "repo" | "user"
+	scope: MemoryScope
+	type?: MemoryType
+	details?: string
+	autoSaved?: boolean
 	text: string
 	importance: "high" | "normal"
 	/**
@@ -26,6 +31,7 @@ export interface MemoryProposalItem {
 }
 
 export interface MemoryProposal {
+	createdAt?: number
 	id: string
 	conversationId: string
 	status: MemoryProposalStatus
@@ -45,7 +51,27 @@ export function parseMemoryProposal(text: string | undefined): MemoryProposal | 
 	}
 	try {
 		const parsed = JSON.parse(text) as MemoryProposal
-		return parsed && typeof parsed.id === "string" && Array.isArray(parsed.items) ? parsed : undefined
+		if (
+			!parsed ||
+			typeof parsed.id !== "string" ||
+			typeof parsed.conversationId !== "string" ||
+			!["pending", "saving", "saved", "dismissed", "empty"].includes(parsed.status) ||
+			!Array.isArray(parsed.items)
+		)
+			return undefined
+		if (
+			!parsed.items.every(
+				(item) =>
+					item &&
+					typeof item.id === "string" &&
+					typeof item.text === "string" &&
+					["repo", "group", "user"].includes(item.scope) &&
+					["high", "normal"].includes(item.importance) &&
+					(item.details === undefined || typeof item.details === "string"),
+			)
+		)
+			return undefined
+		return parsed
 	} catch {
 		return undefined
 	}

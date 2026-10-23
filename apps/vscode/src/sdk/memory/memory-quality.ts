@@ -35,6 +35,12 @@ const CODE_FACT =
  * git, not in a memory that is sent with every request.
  */
 export function looksLikeChangeLog(text: string): boolean {
+	// A task narrative can masquerade as a rule by putting "When" in front.
+	if (/^when\s+(?:resolving|instrumenting|implementing|refactoring|merging)\b/i.test(text)) {
+		const condition = text.split(",")[0]
+		if (condition.split(/\s+/).length > 12 || /\b\w+\.(?:cxx|cpp|ts|tsx|py)\b/i.test(condition)) return true
+	}
+	if (/\b\w+\.(?:cxx|cpp|ts|tsx|py)\b.*\b(?:added|fixed|changed|renamed|replaced)\b/i.test(text)) return true
 	const head = text.slice(0, CHANGE_LOG_WINDOW_CHARS)
 	const verb = head.match(CHANGE_LOG_VERB)
 	if (verb && verb.index !== undefined) {
@@ -60,6 +66,3 @@ export function readsAsRule(text: string): boolean {
 /** How a write was refused or adjusted, for the caller to explain. */
 export type MemorySaveRejection = "change-log" | "conversation-cap"
 export type MemoryImportanceDemotion = "not-a-rule" | "important-full"
-
-export const MAX_IMPORTANT_ENTRIES = 15
-export const MAX_SAVES_PER_CONVERSATION = 8

@@ -676,6 +676,7 @@ ${ctx.cellJson || "{}"}
 			if (!controller) {
 				return
 			}
+			const memoryState = await controller.manageMemory({ action: "read" })
 			const picked = await vscode.window.showQuickPick(
 				[
 					{
@@ -684,6 +685,17 @@ ${ctx.cellJson || "{}"}
 						scope: "repo" as const,
 					},
 					{ label: "Your memory", detail: "Your own notes, loaded in every repository", scope: "user" as const },
+					{
+						label: "Group memory",
+						detail: "Shared by repositories in this organization or ADO project",
+						scope: "group" as const,
+					},
+					...memoryState.adoption.map((candidate) => ({
+						label: `Adopt memory from ${candidate.identity}`,
+						detail: "Reuse memory after a remote host move",
+						scope: "repo" as const,
+						adoptKey: candidate.key,
+					})),
 				],
 				{ placeHolder: "Which memory?" },
 			)
@@ -691,6 +703,8 @@ ${ctx.cellJson || "{}"}
 				return
 			}
 			try {
+				if ("adoptKey" in picked && typeof picked.adoptKey === "string")
+					await controller.manageMemory({ action: "adopt", key: picked.adoptKey })
 				const { file } = await controller.ensureMemoryFile(picked.scope)
 				await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(file))
 			} catch (error) {

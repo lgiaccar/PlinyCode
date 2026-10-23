@@ -99,7 +99,8 @@ const REMEMBER_INSTRUCTIONS = `<explicit_instructions type="remember">
 The user wants you to remember something for later conversations. Save it with the save_memory tool, then confirm in one short sentence what you saved and where.
 
 - Rewrite it as one clear, self-contained line that will still make sense in a conversation that has none of this context. If it holds several separate facts, save each one with its own call.
-- scope: "user" when it is a personal preference that applies to every repository (how they like to work, answer style, tools they use everywhere); otherwise "repo".
+- type: convention (PR target), gotcha (Conan library trap), decision (a choice with its reason and date), environment (shell/tool path), preference (answer style), or reference (catalog URL).
+- scope: "user" for machine facts and personal preferences across repositories; "group" for organization/ADO-project workflows shared by repositories; "repo" for repository-specific conventions, decisions and references.
 - importance: "high" only when forgetting it would cause real mistakes; otherwise "normal".
 - If it needs more than one line, keep the line short and put the rest in details, with a topic name.
 - If nothing follows the command, save the most important thing learned in this conversation so far, and say what you chose.
@@ -129,11 +130,26 @@ export function builtinSlashCommands(options: { memoryEnabled: boolean }): Avail
 	return options.memoryEnabled
 		? BUILTIN_SLASH_COMMANDS
 		: BUILTIN_SLASH_COMMANDS.map((command) =>
-				command.id === "builtin:remember" ? { ...command, instructions: REMEMBER_WHILE_OFF_INSTRUCTIONS } : command,
+				command.id === "builtin:remember"
+					? { ...command, instructions: REMEMBER_WHILE_OFF_INSTRUCTIONS }
+					: command.id === "builtin:forget"
+						? {
+								...command,
+								instructions:
+									"Memory is disabled. Tell the user to enable memory in Settings → Features → Memory before using /forget. What they wanted to forget:",
+							}
+						: command,
 			)
 }
 
 const BUILTIN_SLASH_COMMANDS: AvailableRuntimeCommand[] = [
+	{
+		id: "builtin:forget",
+		name: "forget",
+		kind: "skill",
+		instructions:
+			"The user wants to forget a memory. Use recall_memory to find the matching entry. Quote it and ask for confirmation before removing it with save_memory {text: <matching entry>, scope: <its scope>, remove: true}. If no match exists, say so. What to forget:",
+	},
 	{
 		id: "builtin:deep-planning",
 		name: "deep-planning",

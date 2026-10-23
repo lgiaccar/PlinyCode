@@ -6,6 +6,7 @@ export interface SlashCommand {
 }
 
 export const BASE_SLASH_COMMANDS: SlashCommand[] = [
+	{ name: "forget", description: "Find and remove a memory after confirmation", section: "default", cliCompatible: false },
 	// `/newtask` is an alias of `/compact`: condensing achieves its goal
 	// (continue working with a fresh, summarized context window) without the
 	// legacy new_task tool. The webview intercepts all three spellings and

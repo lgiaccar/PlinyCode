@@ -79,6 +79,16 @@ export function repoKeyFromIdentity(identity: string): string {
 	return slug ? `${slug}-${hash}` : hash
 }
 
+/** Share ADO project/collection and GitHub organization conventions across repositories. */
+export function groupIdentity(repo: RepoIdentity): string | undefined {
+	if (repo.kind !== "remote" || !repo.identity.includes("/")) return undefined
+	if (repo.identity.startsWith("/") || /^[a-z]:\//i.test(repo.identity)) return undefined
+	const parts = repo.identity.split("/")
+	const gitIndex = parts.indexOf("_git")
+	if (gitIndex > 1) return parts.slice(0, gitIndex).join("/")
+	return parts.length >= 3 ? parts.slice(0, -1).join("/") : undefined
+}
+
 async function gitOutput(runGit: GitRunner, cwd: string, args: string[]): Promise<string | undefined> {
 	const controller = new AbortController()
 	const timer = setTimeout(() => controller.abort(), GIT_TIMEOUT_MS)

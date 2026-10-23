@@ -6,7 +6,7 @@
 // - memory-distiller.ts, memory-coordinator.ts, memory-model.ts: proposing memories after a run.
 
 import { SessionHistorySearchService } from "@plinycode/core"
-import { getMemoryMaxTokens, isConversationSearchEnabled } from "@/hosts/vscode/memory-settings"
+import { getMemoryMaxTokens, getMemoryTuning, isConversationSearchEnabled } from "@/hosts/vscode/memory-settings"
 import { ConversationMemorySnapshots } from "./conversation-memory-snapshots"
 import { ConversationSearch, type ConversationSource, MAX_INDEX_BYTES, MAX_INDEXED_SESSIONS } from "./conversation-search"
 import type { MemoryInstallDeps } from "./install-memory"
@@ -20,10 +20,16 @@ export interface MemoryServices extends MemoryInstallDeps {
 
 /** Wires the memory parts to the VS Code settings and the conversation history. */
 export function createMemoryServices(source: ConversationSource): MemoryServices {
-	const store = new MemoryStore()
+	const store = new MemoryStore({ getTuning: getMemoryTuning })
+	const snapshots = new ConversationMemorySnapshots({
+		getMaxTokens: getMemoryMaxTokens,
+		getUserShare: () => getMemoryTuning().userShare,
+		read: (cwd) => store.read(cwd),
+	})
 	return {
 		store,
-		snapshots: new ConversationMemorySnapshots({ getMaxTokens: getMemoryMaxTokens, read: (cwd) => store.read(cwd) }),
+		snapshots,
+		selection: snapshots,
 		search: new ConversationSearch({
 			source,
 			createIndex: (host) =>

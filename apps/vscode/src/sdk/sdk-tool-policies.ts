@@ -19,6 +19,7 @@ const READ_TOOLS = [
 	"rename_preview",
 	"search_conversations",
 	"read_conversation",
+	"recall_memory",
 	"process_list",
 	"process_output",
 	"view_image",
@@ -34,7 +35,13 @@ const EDIT_TOOLS = ["editor", "replace_in_file", "write_to_file", "apply_patch",
  * the conversation, so saving or searching one stays with the agent the user
  * talks to. Everything else the root has, the sub-agent has too.
  */
-const SUB_AGENT_DENIED_TOOLS = new Set(["ask_advisor", "save_memory", "search_conversations", "read_conversation"])
+const SUB_AGENT_DENIED_TOOLS = new Set([
+	"ask_advisor",
+	"save_memory",
+	"recall_memory",
+	"search_conversations",
+	"read_conversation",
+])
 
 export function isSubAgentDeniedTool(toolName: string): boolean {
 	return SUB_AGENT_DENIED_TOOLS.has(toolName)

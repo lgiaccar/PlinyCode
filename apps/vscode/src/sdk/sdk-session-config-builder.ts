@@ -11,6 +11,7 @@ import { installInstructionContextRows } from "./instruction-context-rows"
 import { installLastRequestCapture } from "./last-model-request"
 import type { ConversationMemorySnapshots } from "./memory/conversation-memory-snapshots"
 import { installMemory, type MemoryInstallDeps } from "./memory/install-memory"
+import { renderSubAgentMemoryExcerpt } from "./memory/memory-section"
 import { installRouter, type RouterImageDeps, type RouterInstallDeps } from "./router/router-integration"
 import type { PastedCommandBodies } from "./slash-command-expansion"
 import { installSessionTrace, type SessionTrace, type SessionTraceDeps } from "./trace/session-trace"
@@ -113,10 +114,9 @@ export class SdkSessionConfigBuilder {
 		// A conversation started in the background is not the displayed one, so
 		// it must not pick up the displayed task's snapshots or pinned model.
 		const conversationId = input.newConversation ? undefined : this.options.getConversationId?.()?.trim() || undefined
-		const [git, date, memory] = await Promise.all([
+		const [git, date] = await Promise.all([
 			this.options.gitSnapshots?.prepare(conversationId, input.cwd),
 			this.options.promptDates?.prepare(conversationId),
-			this.options.memory?.snapshots.prepare(conversationId, input.cwd),
 		])
 		const modelId = input.modelId?.trim() || this.pinnedModel(conversationId)
 		const config = await buildSessionConfig({
@@ -124,8 +124,14 @@ export class SdkSessionConfigBuilder {
 			...(modelId ? { modelId } : {}),
 			...(git?.snapshot ? { gitSnapshot: git.snapshot } : {}),
 			...(date ? { currentDate: date.date } : {}),
-			...(memory?.section ? { memorySection: memory.section } : {}),
 		})
+		const window = config.knownModels?.[config.modelId]?.contextWindow ?? 32_000
+		const memory = await this.options.memory?.snapshots.prepare(conversationId, input.cwd, window)
+		if (memory?.section) {
+			config.systemPrompt = `${config.systemPrompt ?? ""}${memory.section}`
+			const excerpt = renderSubAgentMemoryExcerpt(memory.section)
+			if (excerpt) config.subAgentPrompt = { ...config.subAgentPrompt, suffix: excerpt }
+		}
 		// A session id is fixed up front so per-session emitters below can tell
 		// whether their session runs in the background. Callers that reuse an
 		// existing id overwrite config.sessionId; the emitters read it lazily.
@@ -139,7 +145,9 @@ export class SdkSessionConfigBuilder {
 		const memoryText = memory?.section
 		const pastedBodies = this.options.pastedCommandBodies
 		config.contextSources = () => ({
-			...(memoryText ? { memoryText } : {}),
+			...(memoryText
+				? { memoryText: memoryText + (this.options.memory?.selection?.get(config.sessionId ?? "")?.relevant ?? "") }
+				: {}),
 			...(pastedBodies?.() ?? {}),
 		})
 		const isBackground = () => this.options.isBackgroundSession?.(config.sessionId) === true
@@ -224,7 +232,11 @@ export class SdkSessionConfigBuilder {
 		}
 
 		if (this.options.memory) {
-			installMemory(config, input.cwd, this.options.memory)
+			installMemory(config, input.cwd, {
+				...this.options.memory,
+				contextQuery: JSON.stringify(git?.snapshot?.status ?? []),
+				onSelection: (selection) => trace?.recordMemory(selection),
+			})
 		}
 
 		// After the router, so the advisor's model factory wraps the router's.

@@ -66,7 +66,7 @@ Where: `sdk/packages/core/src/extensions/tools/team/`, `sdk/packages/core/src/ru
 
 Where: `apps/vscode/src/sdk/memory/`, `sdk/packages/core/src/session/search/`, `sdk/packages/core/src/extensions/config/`, `sdk/packages/core/src/runtime/safety/rules.ts`.
 
-- Memory is keyed by repository, loaded once per conversation within `plinycode.memory.maxTokens`, and written by `save_memory`, `/remember` and distillation. Entries are dated, near duplicates (Jaccard similarity of 0.8 or more) bump the existing entry instead of adding one, and entries not used for 90 days are proposed for removal (docs/memory.md).
+- Memory is keyed by repository, loaded once per conversation within `plinycode.memory.maxTokens`, and written by `save_memory`, `/remember` and distillation. Entries are dated, near duplicates (Jaccard similarity of 0.7 or more) bump the existing entry instead of adding one, and entries not used for 90 days are proposed for removal (docs/memory.md).
 - Past-conversation search is SQLite FTS5 over every message, built on first use, refreshed every five minutes, limited to the 20,000 most recently active conversations and 200 MB, and compacted after large evictions or weekly. The history view searches message text through it too.
 - Rules: the root `AGENTS.md`, `.clinerules`, `.cline/rules`, the running editor's own rule folders, and one global folder. Always-on rules are inlined up to 12k characters each and 40k in total, sorted by name; scoped rules are listed by path. Rules are re-read on every run.
 - Skills are listed by name and description in the `skills` tool and loaded when called. Nothing indexes the code.

@@ -4,9 +4,17 @@
 // the ones they keep are saved.
 
 import { offTheRecordMessageIndices } from "@plinycode/core"
+import { MEMORY_TYPES, type MemoryScope, type MemoryType } from "@shared/memory"
 import { extractJsonObjects } from "../router/router-classifier"
 import { messageToText } from "./conversation-search"
-import { hasNearDuplicate, memoryEntryKey, memoryEntryKeys, normalizeEntryText, stripEntryMeta } from "./memory-file"
+import {
+	hasNearDuplicate,
+	MAX_ENTRY_CHARS,
+	memoryEntryKey,
+	memoryEntryKeys,
+	normalizeEntryText,
+	stripEntryMeta,
+} from "./memory-file"
 import { looksLikeChangeLog } from "./memory-quality"
 
 const MAX_DISTILL_TRANSCRIPT_CHARS = 24_000
@@ -16,7 +24,7 @@ const MAX_MEMORY_CONTEXT_CHARS = 8_000
 // request for that repository.
 const MAX_PROPOSED_MEMORIES = 4
 /** The prompt asks for at most this; a longer reply is cut so the row shows what will be saved. */
-const MAX_PROPOSED_MEMORY_CHARS = 200
+const MAX_PROPOSED_MEMORY_CHARS = MAX_ENTRY_CHARS
 
 // A proposal that records what the conversation did, or restates the code,
 // rather than something a later conversation needs, is rejected
@@ -24,7 +32,9 @@ const MAX_PROPOSED_MEMORY_CHARS = 200
 // holds only candidates worth a look. The same gate runs again at save.
 
 interface DistilledMemory {
-	scope: "repo" | "user"
+	scope: MemoryScope
+	type?: MemoryType
+	details?: string
 	text: string
 	importance: "high" | "normal"
 }
@@ -82,9 +92,10 @@ Do not propose: what the code or its docs already say or a search of the code wo
 Bad: "Added FieldIsExpected helper to skip validation for missing baseline fields". Bad: "ExtractFaceBasedTetMesh takes local_num_surface as the third argument". Good: "The CUDA test baseline HexCoreTest_CUDA.json must be updated together with the CPU_MT one, or win_cuda_pipeline fails". Good: "Python is not on PATH on this machine; use py.exe".
 
 Output one JSON object and nothing else:
-{"memories": [{"text": "<one line, at most 200 characters, self-contained>", "scope": "repo" | "user", "importance": "high" | "normal"}]}
+{"memories": [{"text": "<self-contained line, aim for 200 characters, up to 600 if needed>", "details": "<optional full explanation>", "type": "convention|gotcha|decision|environment|preference|reference", "scope": "repo" | "group" | "user", "importance": "high" | "normal"}]}
 
-- scope "user" only for the user's personal preferences that apply to every repository; everything else is "repo".
+- Types and scopes: convention (repo: PRs target stage); gotcha (repo/group: Conan Debug needs Release gtest libs); decision (repo: chose simpler thresholds, with reason and date); environment (user: use powershell.exe on this machine); preference (user: keep answers brief); reference (repo/user: catalog URL).
+- Use group for facts shared by repositories in the same organization or ADO project. Use repo for repository-specific workflows. Never save task narration disguised as a When-rule, signatures or line numbers.
 - importance "high" only when forgetting it would cause a real mistake, and say what the mistake is.
 - At most ${MAX_PROPOSED_MEMORIES} memories, the most valuable first. Most conversations deserve zero or one. If nothing is worth keeping, output {"memories": []}.`
 
@@ -131,6 +142,7 @@ export function parseDistillReply(
 	existing: string,
 	dismissed: ReadonlySet<string> = new Set(),
 	rediscovered: string[] = [],
+	maxProposals = MAX_PROPOSED_MEMORIES,
 ): DistilledMemory[] {
 	const known = memoryEntryKeys(existing)
 	const seen = new Set<string>()
@@ -139,7 +151,12 @@ export function parseDistillReply(
 		if (!Array.isArray(object.memories)) continue
 		for (const raw of object.memories) {
 			const item = asRecord(raw)
-			const text = typeof item?.text === "string" ? capProposal(normalizeEntryText(item.text)) : ""
+			const full = typeof item?.text === "string" ? stripEntryMeta(item.text).replace(/\s+/g, " ").trim() : ""
+			const overflow = full.length > MAX_ENTRY_CHARS
+			const text = overflow ? capProposal(full) : normalizeEntryText(full)
+			const details = [overflow ? full : "", typeof item?.details === "string" ? item.details : ""]
+				.filter(Boolean)
+				.join("\n\n")
 			const key = memoryEntryKey(text)
 			if (!text || seen.has(key) || dismissed.has(key) || looksLikeChangeLog(text)) continue
 			if (known.has(key) || hasNearDuplicate(existing, text)) {
@@ -149,10 +166,12 @@ export function parseDistillReply(
 			seen.add(key)
 			memories.push({
 				text,
-				scope: item?.scope === "user" ? "user" : "repo",
+				...(details ? { details } : {}),
+				type: MEMORY_TYPES.find((type) => type === item?.type),
+				scope: item?.scope === "user" ? "user" : item?.scope === "group" ? "group" : "repo",
 				importance: item?.importance === "high" ? "high" : "normal",
 			})
-			if (memories.length >= MAX_PROPOSED_MEMORIES) return memories
+			if (memories.length >= maxProposals) return memories
 		}
 		break
 	}

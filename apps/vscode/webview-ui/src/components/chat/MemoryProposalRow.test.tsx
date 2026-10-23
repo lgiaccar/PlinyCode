@@ -125,7 +125,8 @@ describe("MemoryProposalRow", () => {
 	it("shows the outcome once resolved, without buttons", () => {
 		render(<MemoryProposalRow message={row({ ...PROPOSAL, status: "saved", savedCount: 2 })} />)
 		expect(screen.getByText("Saved 2 memories.")).toBeTruthy()
-		expect(screen.queryByRole("button")).toBeNull()
+		expect(screen.queryByRole("button", { name: "Apply" })).toBeNull()
+		expect(screen.getAllByRole("button", { name: "Promote to AGENTS.md" })).toHaveLength(2)
 		expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).disabled).toBe(true)
 	})
 })

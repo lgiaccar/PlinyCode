@@ -5,7 +5,7 @@ import { CHARS_PER_TOKEN } from "@plinycode/shared"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { GitRunner } from "../context/git-snapshot"
 import { ConversationMemorySnapshots } from "./conversation-memory-snapshots"
-import { renderMemorySection } from "./memory-section"
+import { selectMemories } from "./memory-retrieval"
 import { MemoryStore, topicFileName, withFileLock } from "./memory-store"
 import { createSaveMemoryTool, parseSaveMemoryInput } from "./memory-tools"
 
@@ -323,64 +323,49 @@ describe("topicFileName", () => {
 	})
 })
 
-describe("renderMemorySection", () => {
-	it("gives the user memory at most a quarter of the budget and the repository the rest", async () => {
+describe("Memory selection", () => {
+	it("bounds user memory and keeps whole entries in prefix fallback", async () => {
 		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
 		for (let index = 0; index < 40; index++) {
 			await store.save("/work/a", { scope: "user", text: `personal preference number ${index}`, importance: "normal" })
 			await store.save("/work/a", { scope: "repo", text: `repository fact number ${index}`, importance: "normal" })
 		}
-		const maxTokens = 700
-		const section = renderMemorySection(await store.read("/work/a"), maxTokens)
-		expect(section).toBeDefined()
-		const text = section?.text ?? ""
-		expect(text.startsWith("\n\n# Memory\n")).toBe(true)
-		// The whole section, instructions included, stays within the budget; only the
-		// two headings with their file paths come on top.
-		expect(text.length).toBeLessThanOrEqual(maxTokens * CHARS_PER_TOKEN + 400)
-		const userPart = text.slice(text.indexOf("## Your memory"))
-		const repoPart = text.slice(text.indexOf("## Repository memory"), text.indexOf("## Your memory"))
-		expect(userPart.length).toBeLessThan(repoPart.length)
-		// Notes are newest first, so the budget keeps the latest and drops the oldest.
-		expect(text).toContain("repository fact number 39")
-		expect(text).not.toContain("repository fact number 0\n")
-		expect(text).toMatch(/\[\d+ more entries are in `[^`]+MEMORY\.md`/)
-		// The files' titles are dropped and their sections sit below the part's heading.
-		expect(text).not.toContain("Repository memory: github.com/org/repo")
-		expect(text).toContain("\n### Notes\n")
-		// The user memory has no important entries: its empty section is left out.
-		expect(userPart).not.toContain("### Important")
-		// The entries are dated in the files, but the dates cost no prompt tokens.
-		expect((await store.read("/work/a")).repoText).toContain("<!-- added:")
-		expect(text).not.toContain("<!--")
+		const selection = selectMemories(await store.read("/work/a"), 800, "unmatched-query")
+		expect(selection.summary.chars).toBeLessThanOrEqual(800 * CHARS_PER_TOKEN)
+		expect(selection.cut.length).toBeGreaterThan(0)
+		expect(selection.relevant).toContain("repository fact number 39")
+		expect(selection.relevant).not.toContain("repository fact number 0\n")
+		expect(selection.relevant).not.toContain("<!--")
+		const personal = selection.loaded
+			.filter((item) => item.entry.scope === "user")
+			.reduce((sum, item) => sum + item.entry.text.length, 0)
+		expect(personal).toBeLessThanOrEqual(1000 * CHARS_PER_TOKEN * 0.25)
 	})
-
-	it("is off at 0 tokens and still explains saving when memory is empty", async () => {
+	it("loads no text at zero and explains saving when memory is empty", async () => {
 		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
-		expect(renderMemorySection(await store.read("/work/a"), 0)).toBeUndefined()
-		const empty = renderMemorySection(await store.read("/work/a"), 4000)
-		expect(empty?.text).toContain("save_memory")
-		expect(empty?.text).toContain("(empty)")
-		expect(empty?.summary.entries).toBe(0)
+		expect(selectMemories(await store.read("/work/a"), 0).text).toBe("")
+		const empty = selectMemories(await store.read("/work/a"), 4000)
+		expect(empty.text).toContain("save_memory")
+		expect(empty.summary.entries).toBe(0)
 	})
 })
 
 describe("ConversationMemorySnapshots", () => {
 	it("reads the files once per conversation, so a save mid-conversation does not change its prompt", async () => {
 		const store = new MemoryStore({ rootDir: root, runGit: REMOTE })
-		await store.save("/work/a", { scope: "repo", text: "first fact", importance: "normal" })
+		await store.save("/work/a", { scope: "repo", text: "Always use the first workflow", importance: "high" })
 		const snapshots = new ConversationMemorySnapshots({ getMaxTokens: () => 4000, read: (cwd) => store.read(cwd) })
 
 		const started = await snapshots.prepare(undefined, "/work/a")
 		started.bindToSession("conv-1")
-		await store.save("/work/a", { scope: "repo", text: "second fact", importance: "normal" })
+		await store.save("/work/a", { scope: "repo", text: "Never invoke the second workflow", importance: "high" })
 
 		const rebuilt = await snapshots.prepare("conv-1", "/work/a")
 		expect(rebuilt.section).toBe(started.section)
-		expect(rebuilt.section).not.toContain("second fact")
+		expect(rebuilt.section).not.toContain("second workflow")
 
 		const next = await snapshots.prepare(undefined, "/work/a")
-		expect(next.section).toContain("second fact")
+		expect(next.section).toContain("second workflow")
 	})
 
 	it("shows nothing while the budget is 0", async () => {
@@ -408,10 +393,10 @@ describe("save_memory", () => {
 		const tool = createSaveMemoryTool({ store, getCwd: () => "/work/a", getMaxTokens: () => 4000 })
 		const context = { agentId: "a", iteration: 1 }
 		expect(await tool.execute({ text: "Use bun", importance: "high" }, context)).toMatch(
-			/^Saved to .*at the top of Important\. Later conversations will see it\./,
+			/^Saved to .*at the top of Important\. It is available to later conversations through/,
 		)
 		expect(await tool.execute({ text: "Prefer vitest" }, context)).toMatch(
-			/at the top of Notes\. Later conversations will see it\./,
+			/at the top of Notes\. It is available to later conversations through/,
 		)
 		expect(await tool.execute({ text: "Use bun" }, context)).toMatch(/already in .* as "Use bun"; no line was added/)
 		expect(await tool.execute({ text: "prefer Vitest!" }, context)).toMatch(/marked as used today/)
@@ -455,6 +440,6 @@ describe("save_memory", () => {
 		)
 		// Without the budget the tool cannot tell and does not claim either way.
 		const blind = createSaveMemoryTool({ store, getCwd: () => "/work/a" })
-		expect(await blind.execute({ text: "Another note" }, context)).toMatch(/Later conversations will see it/)
+		expect(await blind.execute({ text: "Another note" }, context)).toMatch(/It is available to later conversations/)
 	})
 })

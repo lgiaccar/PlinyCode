@@ -19,6 +19,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Logger } from "@/shared/services/Logger"
 import { resolveDataDir } from "../legacy-state-reader"
+import type { MemorySelection } from "../memory/memory-retrieval"
 import type { RouterCallEvent } from "../router/router-integration"
 
 const TRACES_DIRNAME = "traces"
@@ -56,6 +57,7 @@ export interface SessionTraceDeps {
 }
 
 export interface SessionTrace {
+	recordMemory(selection: MemorySelection): void
 	/** Records what the router did on a call attempt (route, candidate, failover, error). */
 	recordRouterEvent(event: RouterCallEvent): void
 	/** Resolves once every record queued so far is on disk. */
@@ -86,6 +88,14 @@ interface TraceUsage {
 }
 
 type TraceRecord =
+	| (TraceRecordBase & {
+			type: "memory"
+			loaded: { id: string; tier: string }[]
+			cut: string[]
+			budget: number
+			chars: number
+			estimatedTokens: number
+	  })
 	| (TraceRecordBase & {
 			type: "request"
 			/** The model the session runs on; for a router, the router's id. */
@@ -652,6 +662,17 @@ export function installSessionTrace(config: CoreSessionConfig, deps: SessionTrac
 
 	return {
 		recordRouterEvent: (event) => safe("router", () => record(undefined, { type: "router", ...event })),
+		recordMemory: (selection) =>
+			safe("memory", () =>
+				record(undefined, {
+					type: "memory",
+					loaded: selection.loaded.map(({ entry, tier }) => ({ id: entry.id, tier })),
+					cut: selection.cut.map((entry) => entry.id),
+					budget: selection.budget,
+					chars: selection.summary.chars,
+					estimatedTokens: Math.ceil(selection.summary.chars / 3),
+				}),
+			),
 		flush: () => Promise.all([...files.values()].map((file) => file.flush())).then(() => undefined),
 	}
 }

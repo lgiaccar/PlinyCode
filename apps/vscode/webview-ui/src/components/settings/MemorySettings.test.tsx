@@ -1,86 +1,95 @@
-import { PLINY_REPO_MEMORY_URI, PLINY_USER_MEMORY_URI } from "@shared/pliny"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { DEFAULT_MEMORY_TUNING } from "@shared/memory"
+import type { MemoryPanelState } from "@shared/memory-panel"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MemorySettings from "./MemorySettings"
 
-const mockUpdateSetting = vi.fn()
-const mockOpenFile = vi.fn((_request: { value: string }) => Promise.resolve({}))
-const state = vi.hoisted(() => ({
-	value: { memoryMaxTokens: 4000, memoryDistillEnabled: true, memoryConversationSearchEnabled: true } as Record<
-		string,
-		unknown
-	>,
-}))
-
-vi.mock("@/context/ExtensionStateContext", () => ({
-	useExtensionState: () => state.value,
-}))
-
-vi.mock("./utils/settingsHandlers", () => ({
-	updateSetting: (...args: unknown[]) => mockUpdateSetting(...args),
-}))
-
+const mocks = vi.hoisted(() => ({ request: vi.fn(), update: vi.fn(), open: vi.fn(async () => ({})) }))
+vi.mock("@/services/memory-client", () => ({ memoryRequest: mocks.request }))
+vi.mock("@/context/ExtensionStateContext", () => ({ useExtensionState: () => ({ memoryConversationSearchEnabled: true }) }))
+vi.mock("./utils/settingsHandlers", () => ({ updateSetting: mocks.update }))
 vi.mock("@/services/grpc-client", () => ({
-	FileServiceClient: { openFile: (request: { value: string }) => mockOpenFile(request) },
+	FileServiceClient: { openFile: mocks.open },
+	TaskServiceClient: { resolveMemoryProposal: vi.fn() },
 }))
 
-vi.mock("@vscode/webview-ui-toolkit/react", () => ({
-	VSCodeTextField: ({ id, value, onInput, onBlur }: any) => (
-		<input id={id} onBlur={onBlur} onInput={onInput} readOnly={false} value={value} />
-	),
-	VSCodeLink: ({ children, onClick }: any) => (
-		<a href="#" onClick={onClick}>
-			{children}
-		</a>
-	),
-}))
-
-describe("MemorySettings", () => {
-	beforeEach(() => {
-		mockUpdateSetting.mockClear()
-		mockOpenFile.mockClear()
-		state.value = { memoryMaxTokens: 4000, memoryDistillEnabled: true, memoryConversationSearchEnabled: true }
+let state: MemoryPanelState
+beforeEach(() => {
+	mocks.request.mockReset()
+	mocks.update.mockClear()
+	mocks.open.mockClear()
+	state = {
+		entries: [
+			{ id: "repo:1", scope: "repo", text: "Always target stage", importance: "high", pinned: false, type: "convention" },
+		],
+		pending: [],
+		budget: "auto",
+		distill: "offer",
+		tuning: { ...DEFAULT_MEMORY_TUNING },
+		adoption: [],
+		usage: {},
+	}
+	mocks.request.mockImplementation(async (input: Record<string, unknown> = {}) => {
+		if (input.action === "settings" && input.budget !== undefined) state.budget = input.budget as string
+		return { ...state }
 	})
+})
 
-	it("shows the budget and saves a valid new one", () => {
-		const { container } = render(<MemorySettings />)
-		const input = container.querySelector("#memory-max-tokens") as HTMLInputElement
-		expect(input.value).toBe("4000")
-
-		fireEvent.input(input, { target: { value: "8000" } })
-		expect(mockUpdateSetting).toHaveBeenCalledWith("memoryMaxTokens", 8000)
-	})
-
-	it("rejects a budget that is not a whole number in range", () => {
-		const { container } = render(<MemorySettings />)
-		const input = container.querySelector("#memory-max-tokens") as HTMLInputElement
-		for (const value of ["-1", "1.5", "abc", "100000"]) {
-			fireEvent.input(input, { target: { value } })
-		}
-		expect(mockUpdateSetting).not.toHaveBeenCalled()
-		expect(screen.getByText(/Enter a whole number from 0 to 64,000/)).toBeTruthy()
-	})
-
-	it("toggles proposals and conversation search", () => {
-		const { container } = render(<MemorySettings />)
-		fireEvent.click(container.querySelector("#memory-distill") as Element)
-		expect(mockUpdateSetting).toHaveBeenCalledWith("memoryDistillEnabled", false)
-		fireEvent.click(container.querySelector("#memory-conversation-search") as Element)
-		expect(mockUpdateSetting).toHaveBeenCalledWith("memoryConversationSearchEnabled", false)
-	})
-
-	it("disables proposals while memory is off", () => {
-		state.value = { ...state.value, memoryMaxTokens: 0 }
-		const { container } = render(<MemorySettings />)
-		const distill = container.querySelector("#memory-distill") as HTMLButtonElement
-		expect(distill.disabled).toBe(true)
-		expect(distill.getAttribute("aria-checked")).toBe("false")
-	})
-
-	it("opens the repository's and the user's memory file", () => {
+describe("Memory settings", () => {
+	it("accepts token and percentage budgets", async () => {
 		render(<MemorySettings />)
-		fireEvent.click(screen.getByText("Open repository memory"))
-		fireEvent.click(screen.getByText("Open your memory"))
-		expect(mockOpenFile.mock.calls.map(([request]) => request.value)).toEqual([PLINY_REPO_MEMORY_URI, PLINY_USER_MEMORY_URI])
+		const field = await screen.findByLabelText("Memory budget (tokens or %)")
+		fireEvent.change(field, { target: { value: "8000" } })
+		fireEvent.blur(field)
+		await waitFor(() => expect(mocks.request).toHaveBeenCalledWith({ action: "settings", budget: "8000" }))
+		fireEvent.change(field, { target: { value: "4%" } })
+		fireEvent.blur(field)
+		await waitFor(() => expect(mocks.request).toHaveBeenCalledWith({ action: "settings", budget: "4%" }))
+	})
+	it("offers auto distillation and keeps its review explanation visible", async () => {
+		render(<MemorySettings />)
+		const field = await screen.findByLabelText("After a conversation")
+		fireEvent.change(field, { target: { value: "auto" } })
+		await waitFor(() => expect(mocks.request).toHaveBeenCalledWith({ action: "settings", distill: "auto" }))
+		expect(screen.getByText(/Important proposals always need review/)).toBeTruthy()
+	})
+	it("disables automatic offers when memory is off", async () => {
+		state.budget = 0
+		render(<MemorySettings />)
+		const field = (await screen.findByLabelText("After a conversation")) as HTMLSelectElement
+		expect(field.disabled).toBe(true)
+	})
+	it("edits, pins and deletes entries through the host", async () => {
+		render(<MemorySettings />)
+		const field = await screen.findByLabelText("Memory text")
+		fireEvent.change(field, { target: { value: "Always target stage after CI" } })
+		fireEvent.click(screen.getByText("Save edit"))
+		await waitFor(() =>
+			expect(mocks.request).toHaveBeenCalledWith({
+				action: "edit",
+				id: "repo:1",
+				patch: { text: "Always target stage after CI" },
+			}),
+		)
+		await waitFor(() => expect((screen.getByText("Pin") as HTMLButtonElement).disabled).toBe(false))
+		fireEvent.click(screen.getByText("Pin"))
+		await waitFor(() => expect(mocks.request).toHaveBeenCalledWith({ action: "edit", id: "repo:1", patch: { pinned: true } }))
+		await waitFor(() => expect((screen.getByText("Delete") as HTMLButtonElement).disabled).toBe(false))
+		fireEvent.click(screen.getByText("Delete"))
+		await waitFor(() => expect(mocks.request).toHaveBeenCalledWith({ action: "delete", id: "repo:1" }))
+	})
+	it("shows host errors and opens all memory scopes", async () => {
+		render(<MemorySettings />)
+		await screen.findByLabelText("Memory text")
+		mocks.request.mockRejectedValueOnce(new Error("Invalid memory budget"))
+		const field = screen.getByLabelText("Memory budget (tokens or %)")
+		fireEvent.change(field, { target: { value: "invalid" } })
+		fireEvent.blur(field)
+		expect(await screen.findByRole("alert")).toHaveTextContent("Invalid memory budget")
+		for (const label of ["Open repository memory", "Open group memory", "Open your memory"])
+			fireEvent.click(screen.getByText(label))
+		expect(mocks.open.mock.calls).toHaveLength(3)
+		fireEvent.click(screen.getByLabelText("Search earlier conversations"))
+		expect(mocks.update).toHaveBeenCalledWith("memoryConversationSearchEnabled", false)
 	})
 })

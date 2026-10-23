@@ -1,147 +1,104 @@
 # Repo memory
 
-PlinyCode keeps notes that carry over from one conversation to the next: conventions, gotchas, decisions and their reasons, and the user's own preferences. They are loaded into the system prompt within a token budget, ordered by importance. They are written in three ways:
+PlinyCode keeps conventions, gotchas, decisions and preferences across conversations. Important entries form a stable system-prompt section. Relevant notes are retrieved into the first user message; `recall_memory` can find more during a task. Current user instructions take precedence over remembered notes.
 
-- by the model, with the `save_memory` tool;
-- by the user, with `/remember <text>`;
-- through distillation, which the user approves: a free model proposes memories at the end of a run, or on `/distill`.
-
-The model can also search and read earlier conversations (`search_conversations`, `read_conversation`).
-
-The code is in [apps/vscode/src/sdk/memory/](../apps/vscode/src/sdk/memory/index.ts).
+The implementation is in [apps/vscode/src/sdk/memory/](../apps/vscode/src/sdk/memory/index.ts).
 
 ## Where memory lives
 
-Memory is stored per user, outside every repository, under `~/.cline/data/memory/` (`resolveMemoryDataDir` in [paths.ts](../sdk/packages/shared/src/storage/paths.ts); `CLINE_MEMORY_DATA_DIR` overrides it):
+Memory stays outside repositories under `~/.cline/data/memory/` (`CLINE_MEMORY_DATA_DIR` overrides it):
 
+```text
+user/MEMORY.md                    personal preferences and machine facts
+repos/<key>/MEMORY.md             one repository's entries
+repos/<key>/repo.json             repository identity, aliases, group override
+groups/<key>/MEMORY.md            organization or ADO project entries
+{user,repos/<key>,groups/<key>}/<topic>.md   longer explanations
+{user,repos/<key>,groups/<key>}/usage.json   retrieval dates and counts
+pending/<conversation>.json       proposals awaiting review or Undo
+distill/<conversation>.json       distillation position, dismissals, save count
 ```
-memory/
-  user/MEMORY.md                  the user's own memory, loaded in every repository
-  repos/<repo key>/MEMORY.md      one repository's memory
-  repos/<repo key>/<topic>.md     detail, read on demand
-  repos/<repo key>/repo.json      which repository the key stands for
-  pending/<conversation>.json     distill proposals not yet saved or dismissed
-  distill/<conversation>.json     how far a conversation was distilled, and what was turned down
+
+Repository keys use the normalized origin remote, falling back to the git top-level folder or working folder. Clones and worktrees share one memory. Multi-root workspaces use the repository of the conversation's working folder.
+
+Groups are derived automatically from the remote prefix: `github.com/org/repo` uses `github.com/org`; `dev.azure.com/org/project/_git/repo` uses `dev.azure.com/org/project`. ADO collection/project paths work the same way. Set `"group": "custom/prefix"` in `repo.json` to override this, or `"group": false` to disable it. A folder without a remote has no automatic group. The files are rendered in repository, group, user order.
+
+When the host of an origin remote changes, the Memory panel offers **Adopt memory from …** for a saved remote with the same path. Adoption requires the new repository memory to be empty, preserves the old files, and adds the new remote identity to `repo.json`'s `aliases` array. Future clones on either host use that memory.
+
+**PlinyCode: Open Memory** opens repository, group or personal memory. The files are plain Markdown and can be edited by hand.
+
+## Entry format and types
+
+`MEMORY.md` has `## Important` and `## Notes` sections. New entries go first in their section. Entries have tolerant, optional metadata:
+
+```markdown
+- Always link Release gtest libraries for Debug builds. <!-- added:2026-10-17 used:2026-10-23 pinned type:gotcha -->
 ```
 
-The `pending/` and `distill/` files of a conversation that was deleted are removed once per window, when the first conversation is opened. Nothing is removed when the history cannot be listed or is empty, nor a file changed in the last day, whose conversation may not be in the history yet.
+`added` records creation, `used` records a repeated save or an explicit keep during cleanup, and `pinned` prevents cleanup proposals. Older `last_used:` comments are still understood. Metadata is omitted from model text. Retrieval dates and counts live in `usage.json`; loading the stable system tier does not count as retrieval or rewrite Markdown.
 
-**Keyed by repository, not by workspace.** The repo key comes from the `origin` remote, with its protocol, user name and `.git` stripped and the result lower-cased. A repository without a remote is keyed by its top-level folder, and a folder outside git by the folder itself ([repo-key.ts](../apps/vscode/src/sdk/memory/repo-key.ts)). This has three consequences:
+| Type | Example | Usual scope |
+| --- | --- | --- |
+| `convention` | PRs target stage | repo |
+| `gotcha` | Conan Debug needs Release gtest libraries | repo or group |
+| `decision` | Chose simpler thresholds, with reason and date | repo |
+| `environment` | Use powershell.exe on this machine | user |
+| `preference` | Keep answers brief | user |
+| `reference` | A model catalog URL | repo or user |
 
-- Every clone and every git worktree of a repository, CI Board worktrees included, shares one memory.
-- A multi-root `.code-workspace` does not mix the memories of the repositories it holds: a conversation uses the memory of the repository its working folder belongs to.
-- Nothing appears in `git status`.
+Untyped existing entries remain valid. A typed user preference is eligible for the stable tier regardless of importance; legacy untyped Important user entries stay eligible too. Pinned entries are eligible in every scope.
 
-Knowledge the whole team should share belongs in `AGENTS.md` or a rules file, where it is reviewed with the code.
+Near duplicates use Jaccard similarity of significant words at 0.7 or the same first six significant words. Negations are preserved, so a memory and its negation remain distinct. Saving checks all applicable scopes, keeps an existing duplicate in its original scope, bumps its date and returns that file. Details are attached there too. Cleanup can propose older cross-scope duplicates for removal.
 
-**Opening the files.** **PlinyCode: Open Memory** opens the repository's or your own `MEMORY.md`, and creates it if it does not exist yet. The files are plain markdown and can be edited by hand.
+## Budget and retrieval
 
-## The format: order is priority
+`plinycode.memory.maxTokens` accepts a token count, a percentage such as `4%`, or `auto`. The default is `auto`: the smaller of 4000 tokens and 4% of the selected model's context window (1280 tokens for a 32k window). Explicit numeric settings remain supported. `0` disables automatic loading and memory tools. Text estimates use characters / 3.
 
-`MEMORY.md` has two sections, `## Important` and `## Notes`. An entry is a top-level bullet together with the lines under it ([memory-file.ts](../apps/vscode/src/sdk/memory/memory-file.ts)).
+[selectMemories](../apps/vscode/src/sdk/memory/memory-retrieval.ts) keeps whole entries within one budget, including instructions and wrapper text:
 
-- **Insertion.** `save_memory` inserts deterministically: an important entry goes first under `## Important`, any other goes first under `## Notes`, so each section reads newest first.
-- **Near duplicates.** An entry that is already there is not added again, even worded differently: two memories are the same when the Jaccard similarity of their significant words is at least 0.7, or when they open with the same six significant words (three "Release workflow: build with X, then run Y …" entries that differed by a trailing clause once coexisted in one file). Words are compared in lower case, without punctuation, and without very common words (`the`, `a`, `to`, `in`, `with`, …). A memory and its negation never count as the same (`not`, `no`, `never`, `don't`, `avoid` and `without` are kept and compared), so "use npm" and "never use npm" stay two entries. For a duplicate, the existing entry's `used` date is bumped instead, and the tool result quotes the existing entry so the model can reword it with `editor` if the new wording is better. With `details`, the details still go to the topic file, and the existing entry gets the pointer if it had none.
-- **Dates.** Each entry's first line ends with a comment: `<!-- added:2026-10-17 used:2026-11-02 -->`. `added` is the day it was saved; `used` (left out while it equals `added`) is the last day it was saved again, matched as a duplicate (by `save_memory` or by a distill proposal), or kept when proposed for removal. The comment is removed from the system prompt and from the distiller's input, so it costs no tokens there. It is parsed tolerantly: `Added: …`, `added=…` and `last_used` are understood, a missing or mangled comment just leaves the entry undated, and other HTML comments are left alone. Every write through `save_memory` stamps undated entries with that day's date, so entries written by hand start ageing from then.
-- **Why not "used" when shown.** Every entry is in every conversation's prompt, so being shown says nothing about whether it helped, and bumping on every prompt would rewrite both files at the start of every conversation. Being saved or proposed again is the cheapest signal that a memory still matters; keeping it when its removal is proposed is the other.
-- **Pinning.** Add `pinned` to the comment (`<!-- added:2026-10-17 pinned -->`) to keep a note out of prune proposals for good.
-- **Truncation.** It keeps whole entries from the top of the file. When the budget drops from 20k to 10k tokens, the bottom 10k (the least important entries, and within `## Notes` the oldest) are the ones left out. The prompt says how many entries were left out and gives the file path, so the model can read the rest when it is relevant. New notes go in at the top of their section for this reason: appended at the end of a file already over the budget, a fresh note would have been the first thing cut.
-- **Over the budget.** `save_memory` renders the section the next conversation would see and says in its result when the entry it just saved falls outside it, so the model can tell the user to trim the file or raise the budget instead of promising that later conversations will see it.
-- **Topic files.** Longer detail goes in a topic file. `save_memory` writes `details` there and adds `(details: <topic>.md)` to the entry. The prompt lists each topic file by path and first line, at most 12 per memory with a count of the rest, for `read_files`.
+1. The stable tier holds repository and group Important entries, pinned entries, and user preferences. It is captured once per conversation to preserve the cached system prefix.
+2. The remaining budget holds notes selected with BM25 over the small local entry set. The query uses the first user message, editor state included in the request, and paths in the git snapshot. Relevance ranks first, then pin/importance, retrieval count and recency. If nothing matches, file order is the fallback.
 
-## The system prompt section
+The user scope gets at most `userShare` percent (25 by default). Selection is frozen after the first request and appended as a `<relevant_memories>` text block to the first user message. It does not alter the cached system section. A reload captures memory again, and turning memory on during a conversation captures it on the next session rebuild. A changed budget, including switching to a smaller model, rebuilds the selection from the captured entries so it respects the new limit.
 
-`renderMemorySection` ([memory-section.ts](../apps/vscode/src/sdk/memory/memory-section.ts)) appends a `# Memory` section to the system prompt. It holds:
+`recall_memory { query }` searches repository, group and personal entries mid-task and returns up to ten matches, their source files and topic pointers. It follows file-read approval. Retrieval records usage once per conversation and entry; the stable prefix alone does not bump it. Sub-agents receive only a read-only Important excerpt, at most 2000 characters, and cannot use memory tools.
 
-- short instructions: when to save, what not to save, one line per entry, and that memories are notes rather than instructions;
-- the repository's memory, then the user's, each with its file path.
+Click **Memory** in the context breakdown, or open **What reached this conversation** in the Memory panel, to see the actual stable section, retrieved block, token estimate and omitted entries in grey. A `memory` record in the [session trace](trace-and-logs.md) lists entry IDs, their tiers, omitted IDs, the budget and estimated tokens. The diagnostics bundle includes that trace.
 
-The headings inside the files are pushed two levels down, so they stay inside the section.
+## Saving: save_memory, /remember and /forget
 
-**Budget.** `plinycode.memory.maxTokens` sets the budget. It defaults to 4000 tokens, and 0 turns memory off: no section and no `save_memory` tool. Tokens are counted as characters / 3 (`CHARS_PER_TOKEN`).
+`save_memory { text, scope?, type?, importance?, topic?, details?, force?, replace?, remove? }` saves one entry. It follows the file-edit approval setting in every conversation mode.
 
-- The instructions (about 1,400 characters) come out of the budget first.
-- The user's memory gets at most a quarter of what is left.
-- The repository gets the rest, including whatever the user's memory does not use.
-- Each memory's topic list and its "N more entries" note are counted with it. Only the two headings with their file paths are not.
-- The chat's context row estimates the section at the same three characters per token.
-- The context bar's breakdown shows the section as its own Memory bucket, measured on the last request ([context-compaction.md](context-compaction.md), "The context bar").
+- `scope`: repository (`repo`, the default), organization/project (`group`), or personal/machine (`user`).
+- `importance`: `high` requests Important; `normal` requests Notes. The rule heuristic can demote High, never promote Normal. Important is capped at 15 per scope by default.
+- `details` and `topic`: longer Markdown stored in a topic file, referenced from the entry. Index entries fit in 600 characters; oversized tool saves retain their full text in details.
+- `replace: true`: correct a near duplicate in place, preserving its creation date and topic pointer.
+- `remove: true`: remove a matching memory after confirming which entry the user meant. Exact prune proposals remain protected against intervening text edits.
+- `force: true`: only for wording the user explicitly requested with `/remember`; bypasses the change-log gate and save cap.
 
-For comparison, 4000 tokens is about 12,000 characters: some 60–100 one-line entries, a third of the rules budget (`MAX_RULES_TOTAL_CHARS`), and small enough for the 32k-context free models.
+The quality gate refuses change logs, facts derivable from code, and task narration dressed as rules, including “When resolving merge conflicts between a branch …” and “When instrumenting Triangulate() in SurfaceTetMesh.cxx …”. Do not save secrets, task state, signatures or line numbers.
 
-**Once per conversation.** The section is built once per conversation, like the git snapshot ([conversation-memory-snapshots.ts](../apps/vscode/src/sdk/memory/conversation-memory-snapshots.ts)):
+The model can save at most eight new entries per conversation by default. The counter is kept in `distill/<conversation>.json`, shared by tool saves and approved distillation proposals, and survives window reloads. Cross-scope repeats do not consume another save.
 
-- Every rebuild of the conversation's session (mode switch, MCP change, resume, compaction) gets the same text, so the prompt's cached prefix survives.
-- A memory saved during the conversation is already in its transcript and shows up in the next conversation.
-- The section is kept in memory only, not in session metadata. A conversation resumed after a window restart reads the files again, which costs one prompt-cache miss.
-
-The per-turn context row shows the section's size: `Context: … · memory (~1.2k tokens)` ([instruction-context-rows.ts](../apps/vscode/src/sdk/instruction-context-rows.ts)).
-
-## Saving: `save_memory` and `/remember`
-
-`save_memory { text, scope?, importance?, topic?, details?, force? }` ([memory-tools.ts](../apps/vscode/src/sdk/memory/memory-tools.ts)) takes these inputs:
-
-- `scope`: `repo` (the default) or `user`;
-- `importance`: `high` or `normal`;
-- `force`: only when the user asked to remember that exact wording (`/remember`).
-
-**What is not saved.** Every write, by the tool or from a [distillation](#distillation) proposal, goes through the same gate in `MemoryStore.save` ([memory-quality.ts](../apps/vscode/src/sdk/memory/memory-quality.ts)):
-
-- **A change log is refused.** Text that records what a task changed is not a memory: "Fixed …", "Added …", "Removed …", "X now uses … instead of …", "In foo.py, add …", anything bound to "this PR" or "the current pending commit", and a restated signature ("takes X as the third argument"). The verb is looked for in the first 60 characters, so "Benchmark report guards fixed: …" is caught too; a modal before it ("must be updated", "should never be renamed") marks a rule and is kept. The tool result says why and how to reword it; `force` skips the check for the user's own words. A repository's memory had gained twenty such entries in a day, most of them under `## Important`, each then sent with every request for that repository.
-- **Important is earned.** `importance: high` is kept only for text that reads as a rule or a gotcha (`when`, `must`, `never`, `always`, `avoid`, `use`, `instead`, `before`, `after`, …) and while `## Important` holds fewer than 15 entries; otherwise the entry goes under `## Notes` and the result says so. Important entries are never pruned for age and are kept first by the budget, so a plain statement there would push a real rule out.
-- **Eight per conversation.** After eight entries saved by one conversation (tool and proposals together) further saves are refused; `force` is exempt. Most tasks deserve one or two.
-
-It is an extension tool, installed by `installMemory` ([install-memory.ts](../apps/vscode/src/sdk/memory/install-memory.ts)), rather than an edit through `editor`, for four reasons:
-
-- **It works in every mode.** Ask mode has no editor, and plan mode's guard would allow any markdown file.
-- **Placement is decided by code.** Where an entry lands, and whether it is a duplicate, is not left to the model.
-- **Approval.** It is approved like a file edit: it follows the "Edit files" auto-approve toggle ([sdk-tool-policies.ts](../apps/vscode/src/sdk/sdk-tool-policies.ts)). A memory is sent with every later request, so a write prompted by injected text would outlive the conversation.
-- **Side questions are blocked.** Core's off-the-record guard rejects it in a side question (`isOffTheRecordBlockedTool` in [command-guard-extension.ts](../sdk/packages/core/src/extensions/tools/command-guard-extension.ts)).
-
-Writes to one file go through one at a time and land with a rename ([memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)). Each write also holds `<file>.lock`, created exclusively, so two VS Code windows saving at once cannot overwrite each other's entry; a lock older than ten seconds is broken, and a write that waited two seconds goes ahead without it. Reorganising or pruning a memory file is a normal edit with `editor` in act or plan mode; the prompt gives the absolute paths. Stale entries are also offered for removal by [prune proposals](#distillation).
-
-`/remember <text>` is a built-in slash command ([builtin-slash-commands.ts](../apps/vscode/src/sdk/builtin-slash-commands.ts)). It expands into instructions to call `save_memory`, choose the scope and importance, and keep the entry to one line. While memory is off it expands into a note telling the model to say so instead. Sub-agents get neither tool: the extension leaves them out of the tools it hands sub-agents (`SUB_AGENT_DENIED_TOOLS`), since a memory outlives the conversation and a sub-agent reports to the parent instead. A sub-agent's prompt does carry a read-only excerpt of the repository's `## Important` entries, at most 2,000 characters (`renderSubAgentMemoryExcerpt` in [memory-section.ts](../apps/vscode/src/sdk/memory/memory-section.ts)).
+`/remember <text>` asks the model to choose a type, scope and importance and save it. `/forget <text>` searches for a near match, quotes it for confirmation and then removes it with `save_memory`. Both explain that memory is unavailable when it is disabled.
 
 ## Distillation
 
-After a run, a free model reads the conversation and proposes memories, and the user picks which to keep ([memory-coordinator.ts](../apps/vscode/src/sdk/memory/memory-coordinator.ts), [memory-distiller.ts](../apps/vscode/src/sdk/memory/memory-distiller.ts)).
+A free utility model proposes up to four memories. Agent runs qualify after a successful edit. Plan and Ask runs qualify without an edit and focus on decisions, their reasons and preferences. Background runs and off-the-record side questions do not distill. `/distill` requests a proposal manually.
 
-**When it runs.** `onSendComplete` in `SdkController` calls `maybeOfferDistill`. It runs only when all of these hold:
+The model is asked to aim for 200 characters; complete entries up to 600 characters are retained. Longer entries keep the full text in `details`, shown in the proposal row and saved to a topic file. No trailing fact is silently discarded.
 
-- `plinycode.memory.distill` is `offer` (the default);
-- the mode is act;
-- the session is not a background or CI Board session;
-- the conversation is the one displayed;
-- the newest turn is not a side question;
-- the run made an `editor` or `apply_patch` call that did not fail.
+The default `distill: offer` requires review. `distill: off` leaves only `/distill`. Opt-in `distill: auto` immediately saves Normal proposals and shows an **Undo** action; Important proposals and all removals still need review. Undo removes only the exact saved wording and leaves a changed entry alone.
 
-`/distill` runs it on demand for the whole conversation. The webview intercepts it, as it does `/compact`, and calls `SlashService.distill`; the conversation's own model never sees it.
+The chat row remains, and unresolved proposals also appear in the Memory inbox with a badge and a **Review** banner in the next conversation in the repository. Inbox actions operate on the original proposal, including after a reload. Existing pending proposals are reviewed before another one replaces them. Pending records expire after 30 days. Deleted conversations' old pending/distill files are pruned when history is available, with a one-day grace period; a missing or empty history deletes nothing.
 
-**The model call.**
+**Clean up memory now** finds candidates without calling the distillation model: change logs, within/cross-scope duplicates, Notes not used for the configured stale age, and orphan topic files. Pinned and recently kept entries are protected; Important and undated entries are not removed for age. Retrieval usage delays stale proposals. Entries are removed only after review, and only if their wording still matches. Keeping a proposed removal bumps its date.
 
-- The model is the router rules' free utility summarizer (`utility.summarizer`), called through `buildApiHandler` with a model override ([memory-model.ts](../apps/vscode/src/sdk/memory/memory-model.ts)). It costs nothing and needs no budget check.
-- The input is a compact transcript of the messages since the last offer: text, tool calls on one line, and the start of each tool result. Side questions are left out. The transcript is capped at 24k characters, keeping the end.
-- The current memory goes with it, so known facts are skipped. A proposal that is a near duplicate of an entry, as in `save_memory`, is not proposed; the entry it matched is marked as used instead.
-- The reply is JSON, at most 4 memories. A timeout (90 s) or an unusable reply ends silently, unless the user typed `/distill`.
-- **What is not proposed.** The prompt rules out what the code or a search of it would show (signatures, argument orders, which class has which constructor) and what the conversation changed, with an example of each; and the same change-log gate as `save_memory` (`looksLikeChangeLog`, [memory-quality.ts](../apps/vscode/src/sdk/memory/memory-quality.ts)) drops any reply item that still reads as one. A proposal longer than the 200 characters the prompt asks for is cut at a word, with an ellipsis, so the row shows what will be saved. The gate runs again when a checked proposal is saved.
-- **Kept between windows.** How far each conversation was distilled, and the memories the user dismissed or left unchecked, are stored in `memory/distill/<conversation>.json`. A reload does not re-read the whole conversation, and a memory the user turned down is not proposed for that conversation again, `/distill` included.
+## Editing and promotion
 
-**The approval row.** The proposals appear as a `memory_proposal` chat row (`MemoryProposalRow` in the webview), one checkbox per memory, with **Save** and **Dismiss**. Every proposal starts unchecked, important ones too, so pressing **Save** without reading keeps nothing: important proposals used to start checked, and that is how a repository's memory filled with change logs the distiller had marked important.
+**Settings → Features → Memory** groups entries by scope and section, with filtering, text editing, delete, pin, scope move, importance and type controls. Dates and retrieval counts are visible. Moving an entry copies its topic details before removing the source.
 
-- Nothing is written until **Save**.
-- `TaskService.resolveMemoryProposal` saves the checked items through the same store as `save_memory`, then updates the row in place (same `ts`).
-- Rows the extension emits are not part of the transcript, so an unresolved proposal is also written to `memory/pending/<conversation>.json` and shown again when the conversation is reopened.
-
-**Prune proposals.** Each distillation, automatic or `/distill`, also looks for memory that should go (`MemoryStore.pruneCandidates` in [memory-store.ts](../apps/vscode/src/sdk/memory/memory-store.ts)), and lists it on the same row with the kind `remove`, grouped by reason. When the model found nothing new but something should go, the row shows the removals alone, titled **Memory cleanup**.
-
-- **What is proposed.** Three kinds, each with its own heading on the row:
-  - *Reads as a change log*: entries the change-log gate above matches, in any section, `## Important` included. This is how a memory written before the gate existed gets cleaned up.
-  - *Says the same as another entry*: of two entries that are near duplicates of each other (same 0.7 rule), the shorter one; the longer wording is kept.
-  - *Not used for 90 days*: entries whose later date (`used`, else `added`) is 90 days old or more, at most 5 per memory, oldest first. Entries under `## Important`, pinned entries and undated entries are never proposed for age.
-
-  Change-log and duplicate proposals are capped at 8 per memory and distillation; pinned entries, and entries marked as used in the last 90 days (saved again, or kept when proposed before), are left alone. Topic files that no entry points to and that were not changed for 90 days are proposed too, at most 3 per memory.
-- **Nothing is removed without approval.** Checked removals are applied when the user presses the button, which reads **Apply** while any removal is checked. An entry is removed only if its text is still exactly what was proposed, and a topic file only its removed entries pointed to goes with them.
-- **Kept is used.** A removal left unchecked, or a dismissed row, keeps the entry and marks it as used today (a topic file gets a new modification time), so it is not proposed again for another 90 days.
+**Promote to AGENTS.md**, also available on a saved proposal row, opens an editable Markdown draft based on the nearest `AGENTS.md`. Review and save it to the displayed path. **Finish promotion** checks the saved file contains the convention before removing it from memory. This keeps team conventions in a file reviewed with the repository.
 
 ## Searching earlier conversations
 
@@ -172,13 +129,19 @@ After a run, a free model reads the conversation and proposes memories, and the 
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `plinycode.memory.maxTokens` | 4000 | Memory budget in the system prompt; 0 turns memory and `save_memory` off |
-| `plinycode.memory.distill` | `offer` | `off`: only `/distill` proposes memories |
-| `plinycode.memory.conversationSearch` | true | The `search_conversations` and `read_conversation` tools |
+| `plinycode.memory.maxTokens` | `auto` | Tokens, percentage or adaptive budget; 0 disables memory |
+| `plinycode.memory.distill` | `offer` | Review proposals, opt-in `auto` with Undo, or `off` |
+| `plinycode.memory.conversationSearch` | true | Search/read previous conversations |
+| `plinycode.memory.userShare` | 25 | Personal memory's maximum percentage of the budget |
+| `plinycode.memory.importantCap` | 15 | Important entries per scope before model saves are demoted |
+| `plinycode.memory.saveCap` | 8 | New model saves per conversation |
+| `plinycode.memory.staleDays` | 90 | Age without use before a Notes entry becomes a cleanup candidate |
+| `plinycode.memory.proposalCount` | 4 | Maximum proposals per distillation |
 
-All three are also in PlinyCode's own **Settings → Features → Memory**, with links that open the repository's and your own `MEMORY.md` ([MemorySettings.tsx](../apps/vscode/webview-ui/src/components/settings/MemorySettings.tsx)). Both places edit the same VS Code settings, and the view follows changes made in VS Code's settings. The view accepts budgets from 0 to 64,000 tokens.
+The limits are under **Advanced** in the Memory panel, beside per-scope counts and the captured token/omission report. Both the panel and VS Code settings update the same values.
 
 ## Related
 
-- [environment-context.md](environment-context.md): the git snapshot. Its commit list was replaced by a hint to run `git log` when the history matters.
-- [side-questions.md](side-questions.md): what side questions leave out, memory included.
+- [environment-context.md](environment-context.md): git snapshots and editor state.
+- [side-questions.md](side-questions.md): side questions stay out of distillation.
+- [trace-and-logs.md](trace-and-logs.md): trace records and diagnostics.
