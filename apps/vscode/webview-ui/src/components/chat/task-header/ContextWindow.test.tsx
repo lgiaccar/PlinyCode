@@ -11,7 +11,8 @@ vi.mock("@/services/grpc-client", () => ({
 	},
 }))
 
-vi.mock("@shared/proto/cline/common", () => ({
+vi.mock("@shared/proto/cline/common", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@shared/proto/cline/common")>()),
 	StringRequest: {
 		create: (request: unknown) => request,
 	},
