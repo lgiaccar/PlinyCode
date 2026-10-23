@@ -652,20 +652,27 @@
 					"description": "How many results a web search returns when the model does not ask for a number."
 				},
 				"plinycode.memory.maxTokens": {
-					"type": "integer",
-					"default": 4000,
+					"type": [
+						"integer",
+						"string"
+					],
+					"default": "auto",
 					"minimum": 0,
-					"markdownDescription": "How many tokens of memory go into every conversation's system prompt: the repository's memory and your own (which gets at most a quarter of the budget). Entries are kept from the top of each file, where the most important ones are, so a smaller budget drops the least important first. `0` turns memory off. Run **PlinyCode: Open Memory** to edit the files."
+					"maximum": 64000,
+					"pattern": "^(auto|[0-9]+(?:\\.[0-9]+)?%?)$",
+					"markdownDescription": "Memory budget across repository, group and personal notes. Use a token count, a percentage such as 4%, or auto (the smaller of 4000 tokens or 4% of the model window). 0 turns memory off. Important conventions are always loaded; relevant notes are retrieved for the first user message."
 				},
 				"plinycode.memory.distill": {
 					"type": "string",
 					"enum": [
 						"offer",
+						"auto",
 						"off"
 					],
 					"enumDescriptions": [
-						"After an act-mode run that edited files, a free model proposes memories worth keeping; nothing is saved until you choose.",
-						"Only propose memories when you type /distill."
+						"Propose memories after Agent edits and Plan or Ask conversations; review before saving.",
+						"Save normal proposals automatically with Undo. Important proposals still require review.",
+						"Only propose memories on /distill."
 					],
 					"default": "offer",
 					"description": "Whether PlinyCode offers memories to save at the end of a run."
@@ -702,6 +709,41 @@
 					"type": "string",
 					"default": "https://github.com/lgiaccar/PlinyCode/releases/latest/download/latest.json",
 					"description": "URL of the latest.json that describes the newest official PlinyCode release. Leave empty to use the default GitHub URL."
+				},
+				"plinycode.memory.userShare": {
+					"type": "integer",
+					"default": 25,
+					"minimum": 0,
+					"maximum": 100,
+					"description": "Maximum share of the memory budget for personal notes, in percent."
+				},
+				"plinycode.memory.importantCap": {
+					"type": "integer",
+					"default": 15,
+					"minimum": 1,
+					"maximum": 1000,
+					"description": "Maximum Important entries per scope before model saves are demoted to Notes."
+				},
+				"plinycode.memory.saveCap": {
+					"type": "integer",
+					"default": 8,
+					"minimum": 1,
+					"maximum": 1000,
+					"description": "Maximum model saves per conversation, persisted across reloads."
+				},
+				"plinycode.memory.staleDays": {
+					"type": "integer",
+					"default": 90,
+					"minimum": 1,
+					"maximum": 1000,
+					"description": "Days without retrieval before a dated note becomes a cleanup candidate."
+				},
+				"plinycode.memory.proposalCount": {
+					"type": "integer",
+					"default": 4,
+					"minimum": 1,
+					"maximum": 1000,
+					"description": "Maximum memories proposed per distillation."
 				}
 			}
 		}

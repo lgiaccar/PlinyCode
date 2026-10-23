@@ -5,6 +5,7 @@ import { BrainIcon, LoaderCircleIcon } from "lucide-react"
 import { memo, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { TaskServiceClient } from "@/services/grpc-client"
+import { memoryRequest } from "@/services/memory-client"
 
 interface MemoryProposalRowProps {
 	message: ClineMessage
@@ -53,6 +54,7 @@ const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 		() => new Set(proposal?.items.filter((item) => item.action === "remove").map((item) => item.id)),
 	)
 	const [submitting, setSubmitting] = useState(false)
+	const [actionError, setActionError] = useState("")
 	const status = proposal?.status
 
 	// The extension re-emits the row (same ts) once the choice is applied, or
@@ -70,10 +72,12 @@ const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 		setSubmitting(true)
 		TaskServiceClient.resolveMemoryProposal(
 			ResolveMemoryProposalRequest.create({ proposalId: proposal.id, save, itemIds: [...checked] }),
-		).catch((error) => {
-			console.error("Failed to resolve the memory proposal:", error)
-			setSubmitting(false)
-		})
+		)
+			.then(() => window.dispatchEvent(new Event("pliny-memory-changed")))
+			.catch((error) => {
+				console.error("Failed to resolve the memory proposal:", error)
+				setSubmitting(false)
+			})
 	}
 	const toggle = (id: string, on: boolean) => {
 		setChecked((previous) => {
@@ -111,18 +115,58 @@ const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 				<input
 					checked={checked.has(item.id)}
 					className="mt-[3px] shrink-0"
-					disabled={!pending}
+					disabled={!pending || item.autoSaved}
 					onChange={(event) => toggle(item.id, event.target.checked)}
 					type="checkbox"
 				/>
 				<span className="min-w-0 break-words">
 					{item.text}
+					{item.details && (
+						<details>
+							<summary>Full details</summary>
+							<div className="whitespace-pre-wrap">{item.details}</div>
+						</details>
+					)}
 					<span className="ml-1 text-description text-xs">
-						{item.scope === "user" ? "· your memory" : "· repository memory"}
+						{item.scope === "user"
+							? "· your memory"
+							: item.scope === "group"
+								? "· group memory"
+								: "· repository memory"}
 						{item.importance === "high" ? " · important" : ""}
 					</span>
 				</span>
 			</label>
+			{item.autoSaved && (
+				<Button
+					onClick={() => {
+						memoryRequest({ action: "undo", proposalId: proposal.id, itemId: item.id }).catch((reason) =>
+							setActionError(String(reason)),
+						)
+					}}
+					size="sm"
+					variant="secondary">
+					Saved automatically · Undo
+				</Button>
+			)}
+			{(item.autoSaved || proposal.status === "saved") && item.action !== "remove" && (
+				<Button
+					onClick={() => {
+						memoryRequest()
+							.then((state) => {
+								const entry = state.entries.find(
+									(entry) => entry.scope === item.scope && entry.text.startsWith(item.text),
+								)
+								if (!entry) throw new Error("The saved memory has changed.")
+								return memoryRequest({ action: "promote", id: entry.id })
+							})
+							.catch((reason) => setActionError(String(reason)))
+					}}
+					size="sm"
+					variant="secondary">
+					Promote to AGENTS.md
+				</Button>
+			)}
 		</li>
 	)
 
@@ -142,6 +186,11 @@ const MemoryProposalRow = memo(({ message }: MemoryProposalRowProps) => {
 				</div>
 			))}
 			{proposal.error && <div className="text-error text-xs">{proposal.error}</div>}
+			{actionError && (
+				<div className="text-error text-xs" role="alert">
+					{actionError}
+				</div>
+			)}
 			{pending ? (
 				<div className="flex gap-2">
 					<Button disabled={checked.size === 0} onClick={() => resolve(true)}>

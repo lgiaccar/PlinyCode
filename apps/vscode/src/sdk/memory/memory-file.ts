@@ -18,6 +18,9 @@
 // leaves the entry valid, only undated. Writes through `save_memory` stamp
 // undated entries with today's date, so hand-written entries start ageing too.
 
+import { createHash } from "node:crypto"
+import { MEMORY_TYPES, type MemoryEntry, type MemoryType } from "@shared/memory"
+
 export const MEMORY_FILE_NAME = "MEMORY.md"
 const IMPORTANT_HEADING = "## Important"
 const NOTES_HEADING = "## Notes"
@@ -85,6 +88,7 @@ function headingLevel(line: string): number {
 // Entry dates
 
 interface EntryDates {
+	type?: MemoryType
 	/** YYYY-MM-DD */
 	added?: string
 	/** YYYY-MM-DD */
@@ -92,7 +96,7 @@ interface EntryDates {
 	pinned: boolean
 }
 
-const META_SOURCE = String.raw`[ \t]*<!--\s*(?:added|used|last[_-]?used|pinned)\b[^>]*?-->`
+const META_SOURCE = String.raw`[ \t]*<!--\s*(?:added|used|last[_-]?used|pinned|type)\b[^>]*?-->`
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const DETAILS_SUFFIX = / \(details: [^)]*\)$/
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -105,6 +109,7 @@ function validDate(value: string | undefined): string | undefined {
 function parseEntryDates(text: string): EntryDates {
 	const comment = text.match(new RegExp(META_SOURCE, "i"))?.[0] ?? ""
 	return {
+		type: MEMORY_TYPES.find((type) => new RegExp(`\\btype\\s*[:= ]\\s*${type}\\b`, "i").test(comment)),
 		added: validDate(comment.match(/\badded\s*[:= ]\s*(\d{4}-\d{2}-\d{2})/i)?.[1]),
 		used: validDate(comment.match(/\b(?:last[_-]?)?used\s*[:= ]\s*(\d{4}-\d{2}-\d{2})/i)?.[1]),
 		pinned: /\bpinned\b/i.test(comment),
@@ -117,6 +122,7 @@ function formatEntryDates(dates: EntryDates): string {
 	if (dates.added) parts.push(`added:${dates.added}`)
 	if (dates.used && dates.used !== dates.added) parts.push(`used:${dates.used}`)
 	if (dates.pinned) parts.push("pinned")
+	if (dates.type) parts.push(`type:${dates.type}`)
 	return parts.length > 0 ? `<!-- ${parts.join(" ")} -->` : ""
 }
 
@@ -201,6 +207,46 @@ function rangeText(lines: readonly string[], range: EntryRange): string {
 /** How an entry is identified for removal: memoryEntryKey of its text without dates and topic pointer. */
 function entryKey(text: string): string {
 	return comparable(normalizeEntryText(text).replace(DETAILS_SUFFIX, ""))
+}
+
+/** Stable within a file until its wording changes; dates do not affect identity. */
+export function listMemoryEntries(content: string, scope: MemoryEntry["scope"]): MemoryEntry[] {
+	const lines = content.replace(/\r\n/g, "\n").split("\n")
+	return entryRanges(lines).map((range) => {
+		const raw = rangeText(lines, range)
+		return {
+			id: `${scope}:${createHash("sha256").update(entryKey(raw)).digest("hex").slice(0, 16)}`,
+			scope,
+			text: normalizeEntryText(raw),
+			importance: range.section === "important" ? "high" : "normal",
+			...parseEntryDates(lines[range.start]),
+			topicFile: [...referencedTopicFiles(raw)][0],
+		}
+	})
+}
+
+/** Changes an exact entry, preserving its creation date and topic pointer. */
+export function editMemoryEntry(content: string, entry: MemoryEntry, patch: Partial<MemoryEntry>): string {
+	const lines = content.replace(/\r\n/g, "\n").split("\n")
+	const range = entryRanges(lines).find((candidate) => entryKey(rangeText(lines, candidate)) === entryKey(entry.text))
+	if (!range) throw new Error("Memory changed since it was loaded; refresh and try again.")
+	const updated = { ...entry, ...patch }
+	const pointer = updated.topicFile ? ` (details: ${updated.topicFile})` : ""
+	const text = normalizeEntryText(updated.text.replace(DETAILS_SUFFIX, ""))
+	if (updated.importance !== entry.importance) {
+		const removed = removeMemoryEntries(content, [entry.text]).content
+		const inserted = insertMemoryEntry(removed, {
+			text,
+			importance: updated.importance,
+			type: updated.type,
+			pinned: updated.pinned,
+			topicFile: updated.topicFile,
+			date: updated.added,
+		}).content
+		return updated.used ? touchMemoryEntries(inserted, [text], updated.used).content : inserted
+	}
+	lines.splice(range.start, range.end - range.start, `- ${text}${pointer} ${formatEntryDates(updated)}`.trimEnd())
+	return tidy(lines.join("\n"))
 }
 
 /** Stamps every undated entry with `date`. */
@@ -489,6 +535,8 @@ function comparable(line: string): string {
 }
 
 interface MemoryInsertion {
+	type?: MemoryType
+	pinned?: boolean
 	text: string
 	importance: "high" | "normal"
 	/** Appended to the entry as ` (details: <topicFile>)`. */
@@ -523,7 +571,8 @@ export function insertMemoryEntry(content: string, insertion: MemoryInsertion, t
 	const entryText = normalizeEntryText(insertion.text)
 	const pointer = insertion.topicFile ? ` (details: ${insertion.topicFile})` : ""
 	const date = insertion.date
-	const line = `- ${entryText}${pointer}${date ? ` ${formatEntryDates({ added: date, pinned: false })}` : ""}`
+	const meta = formatEntryDates({ added: date, pinned: insertion.pinned ?? false, type: insertion.type })
+	const line = `- ${entryText}${pointer}${meta ? ` ${meta}` : ""}`
 	const base = content.trim() ? content.replace(/\r\n/g, "\n") : memoryFileTemplate(title)
 	const lines = base.replace(/\n+$/, "").split("\n")
 	const ranges = entryRanges(lines)

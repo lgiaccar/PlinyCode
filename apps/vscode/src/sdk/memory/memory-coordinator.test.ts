@@ -99,11 +99,10 @@ describe("memory-distiller", () => {
 		])
 	})
 
-	it("cuts a proposal at 200 characters, at a word", () => {
+	it("keeps proposals above 200 characters whole", () => {
 		const long = `Use the ${"very ".repeat(60)}long form of the command`
 		const [memory] = parseDistillReply(JSON.stringify({ memories: [{ text: long, scope: "repo" }] }), "")
-		expect(memory.text.length).toBeLessThanOrEqual(200)
-		expect(memory.text).toMatch(/very…$/)
+		expect(memory.text).toBe(long)
 	})
 
 	it("skips near duplicates of an entry and reports them as rediscovered", () => {
@@ -172,10 +171,9 @@ describe("MemoryCoordinator", () => {
 		expect(memory.userText).toBe("")
 	})
 
-	it("does not offer when the run edited nothing, in plan mode, in the background or for a side question", async () => {
+	it("does not offer when an act run edited nothing, in the background or for a side question", async () => {
 		const cases: Array<Partial<MemoryCoordinatorDeps>> = [
 			{ readMessages: async () => [user("question"), reply("answer")] },
-			{ isActMode: () => false },
 			{ isBackgroundSession: () => true },
 			{ isOfferEnabled: () => false },
 			{ getDisplayedConversationId: () => "other" },

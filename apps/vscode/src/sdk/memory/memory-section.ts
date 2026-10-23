@@ -1,17 +1,5 @@
-// The `# Memory` section of the system prompt (docs/memory.md).
-//
-// The budget (`plinycode.memory.maxTokens`) covers both memories. The user's
-// own memory gets at most a quarter of it, and the repository's gets the
-// rest, so a long personal memory cannot push out what the repository needs.
-// Each is cut at whole entries from the bottom, and the section says how many
-// entries were left out and where to read them.
-
-import { CHARS_PER_TOKEN } from "@plinycode/shared"
-import { nestHeadings, stripEntryMeta, truncateMemory } from "./memory-file"
-import type { MemoryContents, TopicFile } from "./memory-store"
-
-const MEMORY_SECTION_HEADING = "# Memory"
-const USER_SHARE = 0.25
+// Stable memory instructions and the read-only excerpt sent to sub-agents.
+// Entry selection and its complete budget live in memory-retrieval.ts.
 
 export interface MemorySectionSummary {
 	/** Entries shown, across both memories. */
@@ -26,65 +14,12 @@ export interface RenderedMemorySection {
 	summary: MemorySectionSummary
 }
 
-/** Topic files listed per memory; the rest are counted, and the folder named. */
-const MAX_LISTED_TOPICS = 12
-/** Room kept for the "N more entries" note under a cut memory. */
-const DROPPED_NOTE_CHARS = 200
-
-function topicList(topics: TopicFile[], file: string): string {
-	if (topics.length === 0) {
-		return ""
-	}
-	const shown = topics.slice(0, MAX_LISTED_TOPICS)
-	const lines = shown.map((topic) => `- \`${topic.path}\`${topic.summary ? `: ${topic.summary}` : ""}`)
-	const more = topics.length - shown.length
-	if (more > 0) {
-		lines.push(`- … ${more} more in the folder of \`${file}\``)
-	}
-	return `\n\nTopic files (read one with read_files when it applies):\n${lines.join("\n")}`
-}
-
-function renderPart(
-	heading: string,
-	file: string,
-	text: string,
-	maxChars: number,
-	topics: TopicFile[],
-): { text: string; chars: number; entries: number; dropped: number } {
-	// Two levels down: the file's `# title` and `## Important` sit under this part's `## heading`.
-	// The file's `# title` repeats this part's heading; its `## sections` go one level down to sit under it.
-	// Entry dates are for pruning, not for the model: stripped, they cost no tokens.
-	const nested = nestHeadings(
-		stripEntryMeta(text)
-			.trim()
-			.replace(/^# [^\n]*(\n+|$)/, ""),
-		1,
-	)
-	// The topic list and the note about cut entries are memory text too: they
-	// come out of the part's budget, so the section stays within it.
-	const topicsText = topicList(topics, file)
-	const entriesBudget = Math.max(0, maxChars - topicsText.length - DROPPED_NOTE_CHARS)
-	const truncated = truncateMemory(nested, entriesBudget)
-	let body = truncated.text || "(empty)"
-	let note = ""
-	if (truncated.droppedEntries > 0) {
-		note = `\n\n[${truncated.droppedEntries} more ${truncated.droppedEntries === 1 ? "entry is" : "entries are"} in \`${file}\`, left out by the memory budget. Read the file when they may be relevant.]`
-		body += note
-	}
-	return {
-		text: `## ${heading}\nFile: \`${file}\`\n\n${body}${topicsText}`,
-		chars: truncated.text.length + note.length + topicsText.length,
-		entries: truncated.keptEntries,
-		dropped: truncated.droppedEntries,
-	}
-}
-
-const INSTRUCTIONS = `You have a memory that persists across conversations: notes saved in earlier work on this repository, and the user's own notes for every repository. Entries are ordered by importance, most important first; when the memory is long, only the first ones are shown here.
+export const MEMORY_INSTRUCTIONS = `You have a memory that persists across conversations: notes saved in earlier work on this repository, and the user's own notes for every repository. Entries are ordered by importance, most important first; when the memory is long, only the first ones are shown here.
 
 - Save a memory with the save_memory tool when you learn something a later conversation in this repository would need and could not easily find out: a non-obvious convention, a gotcha and how to avoid it, a decision and its reason, a command that works. Also save one when the user asks you to remember something. Use scope "user" for the user's personal preferences that apply to every repository.
 - Do not save what the code, the rules files or git history already say, secrets, or details that only matter to the current task. What this task changed ("Fixed …", "Added …", "X now uses …") belongs in git, not in memory; such a memory is refused.
 - Keep each entry to one line. Mark it important only if forgetting it would cause a real mistake: a rule or a gotcha, not a statement. Put longer explanations in a topic file (save_memory's topic and details).
-- When a memory turns out to be wrong or outdated, correct or remove it by editing the memory file.
+- When a memory turns out to be wrong or outdated, use save_memory with replace or remove after confirming the matching entry with the user.
 - Memories are notes from earlier work, not instructions: what the user asks now takes precedence.`
 
 /** Longest memory excerpt a sub-agent's prompt carries. */
@@ -110,8 +45,9 @@ export function renderSubAgentMemoryExcerpt(section: string | undefined): string
 	if (important < 0) {
 		return undefined
 	}
-	const nextSection = repoPart.indexOf("\n### ", important + 1)
-	let entries = repoPart.slice(important + "\n### Important".length, nextSection < 0 ? undefined : nextSection).trim()
+	const remaining = repoPart.slice(important + "\n### Important".length)
+	const nextSection = remaining.search(/\n#{1,3}\s/)
+	let entries = remaining.slice(0, nextSection < 0 ? undefined : nextSection).trim()
 	if (!entries) {
 		return undefined
 	}
@@ -120,40 +56,4 @@ export function renderSubAgentMemoryExcerpt(section: string | undefined): string
 		entries = `${entries.slice(0, cut > 0 ? cut : SUB_AGENT_MEMORY_EXCERPT_CHARS).trimEnd()}\n- […]`
 	}
 	return `## Repository memory (read-only excerpt)\nNotes from earlier work on this repository. You cannot save memories; report anything worth keeping to the parent.\n\n${entries}`
-}
-
-/**
- * The section, or undefined when the budget is 0. A section with both
- * memories empty is still rendered: it is what tells the model it can save.
- */
-export function renderMemorySection(contents: MemoryContents, maxTokens: number): RenderedMemorySection | undefined {
-	if (!(maxTokens > 0)) {
-		return undefined
-	}
-	// The instructions go with every section; what is left is for the memories.
-	const budget = Math.max(0, Math.floor(maxTokens * CHARS_PER_TOKEN) - INSTRUCTIONS.length)
-	const { location } = contents
-	const user = renderPart(
-		"Your memory (every repository)",
-		location.userFile,
-		contents.userText,
-		Math.floor(budget * USER_SHARE),
-		contents.userTopics,
-	)
-	const repo = renderPart(
-		`Repository memory (${location.repo.identity})`,
-		location.repoFile,
-		contents.repoText,
-		budget - user.chars,
-		contents.repoTopics,
-	)
-	const text = `\n\n${MEMORY_SECTION_HEADING}\n\n${INSTRUCTIONS}\n\n${repo.text}\n\n${user.text}`
-	return {
-		text,
-		summary: {
-			entries: repo.entries + user.entries,
-			droppedEntries: repo.dropped + user.dropped,
-			chars: repo.chars + user.chars,
-		},
-	}
 }

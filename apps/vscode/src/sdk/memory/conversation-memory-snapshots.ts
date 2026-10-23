@@ -13,14 +13,16 @@
 // files again, which costs one cache miss.
 
 import { Logger } from "@/shared/services/Logger"
-import { type MemorySectionSummary, type RenderedMemorySection, renderMemorySection } from "./memory-section"
+import { type MemorySelection, selectMemories } from "./memory-retrieval"
+import type { MemorySectionSummary } from "./memory-section"
 import type { MemoryContents } from "./memory-store"
 
 const MAX_REMEMBERED_CONVERSATIONS = 100
 
 interface ConversationMemorySnapshotsOptions {
 	/** `plinycode.memory.maxTokens`, read on every build. 0 turns memory off. */
-	getMaxTokens: () => number
+	getMaxTokens: (contextWindow?: number) => number
+	getUserShare?: () => number
 	read: (cwd: string) => Promise<MemoryContents>
 }
 
@@ -32,7 +34,7 @@ interface PreparedMemorySection {
 }
 
 export class ConversationMemorySnapshots {
-	private readonly bySession = new Map<string, RenderedMemorySection | null>()
+	private readonly bySession = new Map<string, MemorySelection | null>()
 
 	constructor(private readonly options: ConversationMemorySnapshotsOptions) {}
 
@@ -41,14 +43,22 @@ export class ConversationMemorySnapshots {
 	 * a new one. Either way the files are read only when this window has no
 	 * section for the conversation yet.
 	 */
-	async prepare(conversationId: string | undefined, cwd: string): Promise<PreparedMemorySection> {
-		const maxTokens = this.maxTokens()
+	async prepare(conversationId: string | undefined, cwd: string, contextWindow?: number): Promise<PreparedMemorySection> {
+		const maxTokens = this.maxTokens(contextWindow)
 		let rendered = conversationId ? this.bySession.get(conversationId) : undefined
-		if (rendered === undefined) {
+		if (!(maxTokens > 0)) {
+			rendered = null
+			if (conversationId) this.remember(conversationId, null)
+		}
+		if (rendered === undefined || (rendered === null && maxTokens > 0)) {
 			rendered = maxTokens > 0 ? await this.capture(cwd, maxTokens) : null
 			if (conversationId) {
 				this.remember(conversationId, rendered)
 			}
+		}
+		if (rendered && rendered.budget !== maxTokens) {
+			rendered = selectMemories(rendered.source, maxTokens, undefined, {}, this.options.getUserShare?.() ?? 25)
+			if (conversationId) this.remember(conversationId, rendered)
 		}
 		const shown = maxTokens > 0 ? (rendered ?? undefined) : undefined
 		return {
@@ -58,24 +68,40 @@ export class ConversationMemorySnapshots {
 		}
 	}
 
-	private maxTokens(): number {
+	get(sessionId: string): MemorySelection | undefined {
+		return this.bySession.get(sessionId) ?? undefined
+	}
+
+	retrieve(
+		sessionId: string,
+		query: string,
+		usage: Record<string, { count?: number; used?: string }> = {},
+	): MemorySelection | undefined {
+		const captured = this.get(sessionId)
+		if (!captured || captured.retrieved) return captured
+		const selected = selectMemories(captured.source, captured.budget, query, usage, captured.userShare)
+		this.remember(sessionId, selected)
+		return selected
+	}
+
+	private maxTokens(contextWindow?: number): number {
 		try {
-			return this.options.getMaxTokens()
+			return this.options.getMaxTokens(contextWindow)
 		} catch {
 			return 0
 		}
 	}
 
-	private async capture(cwd: string, maxTokens: number): Promise<RenderedMemorySection | null> {
+	private async capture(cwd: string, maxTokens: number): Promise<MemorySelection | null> {
 		try {
-			return renderMemorySection(await this.options.read(cwd), maxTokens) ?? null
+			return selectMemories(await this.options.read(cwd), maxTokens, undefined, {}, this.options.getUserShare?.() ?? 25)
 		} catch (error) {
 			Logger.debug("[Memory] Failed to read the memory files:", error)
 			return null
 		}
 	}
 
-	private remember(sessionId: string, rendered: RenderedMemorySection | null): void {
+	private remember(sessionId: string, rendered: MemorySelection | null): void {
 		this.bySession.delete(sessionId)
 		this.bySession.set(sessionId, rendered)
 		if (this.bySession.size > MAX_REMEMBERED_CONVERSATIONS) {

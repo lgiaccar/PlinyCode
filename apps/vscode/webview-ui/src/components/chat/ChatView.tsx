@@ -45,6 +45,8 @@ interface ChatViewProps {
 // Use constants from the imported module
 const MAX_IMAGES_AND_FILES_PER_MESSAGE = CHAT_CONSTANTS.MAX_IMAGES_AND_FILES_PER_MESSAGE
 
+import MemoryInboxBanner from "./MemoryInboxBanner"
+
 const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 	const showNavbar = useShowNavbar()
 	const {
@@ -284,12 +286,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 					value: selectedModelInfo.supportsImages,
 				}),
 			)
-			if (
-				response &&
-				response.values1 &&
-				response.values2 &&
-				(response.values1.length > 0 || response.values2.length > 0)
-			) {
+			if (response?.values1 && response.values2 && (response.values1.length > 0 || response.values2.length > 0)) {
 				const currentTotal = selectedImages.length + selectedFiles.length
 				const availableSlots = MAX_IMAGES_AND_FILES_PER_MESSAGE - currentTotal
 
@@ -310,7 +307,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		} catch (error) {
 			console.error("Error selecting images & files:", error)
 		}
-	}, [selectedModelInfo.supportsImages])
+	}, [selectedModelInfo.supportsImages, selectedFiles.length, selectedImages.length, setSelectedFiles, setSelectedImages])
 
 	const shouldDisableFilesAndImages = selectedImages.length + selectedFiles.length >= MAX_IMAGES_AND_FILES_PER_MESSAGE
 
@@ -335,7 +332,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		)
 
 		return cleanup
-	}, [isHidden])
+	}, [isHidden, textAreaRef.current?.focus])
 
 	// Set up addToInput subscription
 	useEffect(() => {
@@ -346,7 +343,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 					if (event.value) {
 						setInputValue((prevValue) => {
 							const newText = event.value
-							const newTextWithNewline = newText + "\n"
+							const newTextWithNewline = `${newText}\n`
 							return prevValue ? `${prevValue}\n${newTextWithNewline}` : newTextWithNewline
 						})
 						// Add scroll to bottom after state update
@@ -369,7 +366,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		)
 
 		return cleanup
-	}, [])
+	}, [setInputValue, textAreaRef.current])
 
 	useMount(() => {
 		// NOTE: the vscode window needs to be focused for this to work
@@ -385,7 +382,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		return () => {
 			clearTimeout(timer)
 		}
-	}, [isHidden, sendingDisabled, enableButtons])
+	}, [isHidden, sendingDisabled, enableButtons, textAreaRef.current?.focus])
 
 	const visibleMessages = useMemo(() => {
 		return filterVisibleMessages(modifiedMessages)
@@ -451,6 +448,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		<ChatLayout isHidden={isHidden}>
 			<div className="flex flex-col flex-1 overflow-hidden">
 				{showNavbar && <Navbar />}
+				<MemoryInboxBanner />
 				{task ? (
 					<TaskSection
 						apiMetrics={apiMetrics}

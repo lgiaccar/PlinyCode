@@ -11,6 +11,8 @@ option java_multiple_files = true;
 option java_package = "bot.cline.proto";
 
 service TaskService {
+  // Memory entries, proposals inbox, settings and the current prompt selection.
+  rpc manageMemory(StringRequest) returns (String);
   // Cancels the currently running task
   rpc cancelTask(EmptyRequest) returns (Empty);
   // Cancels a queued prompt by ID

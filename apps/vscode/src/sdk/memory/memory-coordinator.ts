@@ -53,6 +53,8 @@ function safeFileName(conversationId: string): string {
 const DISTILL_TIMEOUT_MS = 90_000
 
 export interface MemoryCoordinatorDeps {
+	distillMode?: () => "off" | "offer" | "auto"
+	onChanged?: () => void
 	store: MemoryStore
 	emitRow: (message: ClineMessage) => void
 	nextMessageTs: () => number
@@ -136,9 +138,7 @@ export class MemoryCoordinator {
 	private async saveState(conversationId: string, state: DistillState): Promise<void> {
 		this.states.set(conversationId, state)
 		try {
-			const file = this.stateFile(conversationId)
-			await fs.mkdir(path.dirname(file), { recursive: true })
-			await fs.writeFile(file, JSON.stringify(state), "utf8")
+			await this.deps.store.updateState(conversationId, { ...state })
 		} catch (error) {
 			Logger.debug("[Memory] Failed to store the distillation state:", error)
 		}
@@ -158,7 +158,6 @@ export class MemoryCoordinator {
 	async maybeOfferDistill(sessionId: string): Promise<void> {
 		if (
 			!this.deps.isOfferEnabled() ||
-			!this.deps.isActMode(sessionId) ||
 			this.deps.isBackgroundSession(sessionId) ||
 			this.deps.getDisplayedConversationId() !== sessionId
 		) {
@@ -169,7 +168,7 @@ export class MemoryCoordinator {
 		if (messages.length === 0 || isOffTheRecordTurnActive(messages as Parameters<typeof isOffTheRecordTurnActive>[0])) {
 			return
 		}
-		if (!hasSuccessfulEdit(messages, lastUserRunStart(messages))) {
+		if (this.deps.isActMode(sessionId) && !hasSuccessfulEdit(messages, lastUserRunStart(messages))) {
 			return
 		}
 		await this.distill(sessionId, messages, { manual: false })
@@ -201,6 +200,10 @@ export class MemoryCoordinator {
 		try {
 			const cwd = await this.deps.getCwd()
 			const memory = await this.deps.store.read(cwd)
+			if ((await this.inbox(cwd)).some((proposal) => proposal.conversationId === conversationId)) {
+				if (options.manual) this.info("Review the pending memory proposal before distilling this conversation again.")
+				return
+			}
 			if (options.manual) {
 				this.info("Looking for memories worth keeping in this conversation…")
 			}
@@ -209,8 +212,8 @@ export class MemoryCoordinator {
 			let reply: string
 			try {
 				reply = await this.deps.complete(
-					DISTILL_SYSTEM_PROMPT,
-					buildDistillUserPrompt(transcript, memory.repoText, memory.userText),
+					`${DISTILL_SYSTEM_PROMPT.replace("At most 4 memories", `At most ${this.deps.store.tuning().proposalCount} memories`)}${!this.deps.isActMode(conversationId) ? "\nThis was a plan or question: focus on decisions, their reasons and user preferences." : ""}`,
+					buildDistillUserPrompt(transcript, `${memory.repoText}\n${memory.groupText ?? ""}`, memory.userText),
 					controller.signal,
 				)
 			} finally {
@@ -221,11 +224,13 @@ export class MemoryCoordinator {
 			const rediscovered: string[] = []
 			const memories = parseDistillReply(
 				reply,
-				`${memory.repoText}\n${memory.userText}`,
+				`${memory.repoText}\n${memory.groupText ?? ""}\n${memory.userText}`,
 				new Set(latest.dismissed),
 				rediscovered,
+				this.deps.store.tuning().proposalCount,
 			)
 			// A memory proposed again is still relevant: its entry counts as used.
+			if (!memory.location.groupFile) for (const entry of memories) if (entry.scope === "group") entry.scope = "repo"
 			await this.deps.store.touch(cwd, rediscovered).catch(() => 0)
 			const removals = await this.deps.store.pruneCandidates(cwd).catch(() => [] as PruneCandidate[])
 			if (memories.length === 0 && removals.length === 0) {
@@ -237,6 +242,7 @@ export class MemoryCoordinator {
 				return
 			}
 			const proposal: MemoryProposal = {
+				createdAt: Date.now(),
 				id: `${conversationId}-${Date.now()}`,
 				conversationId,
 				status: "pending",
@@ -247,6 +253,8 @@ export class MemoryCoordinator {
 							scope: memory.scope,
 							text: memory.text,
 							importance: memory.importance,
+							type: memory.type,
+							details: memory.details,
 						}),
 					),
 					// Prune proposals ride on the same row: nothing is removed without approval.
@@ -265,6 +273,12 @@ export class MemoryCoordinator {
 				repo: memory.location.repo.identity,
 			}
 			const record: PendingRecord = { proposal, cwd }
+			if (this.deps.distillMode?.() === "auto" && !options.manual) {
+				for (const item of proposal.items.filter((item) => item.action !== "remove" && item.importance === "normal")) {
+					const saved = await this.deps.store.save(cwd, { ...item, conversationId })
+					if (saved.inserted) item.autoSaved = true
+				}
+			}
 			this.show(record)
 			await this.persist(record)
 		} catch (error) {
@@ -289,7 +303,7 @@ export class MemoryCoordinator {
 			return
 		}
 		const conversationId = record.proposal.conversationId
-		const additions = record.proposal.items.filter((item) => item.action !== "remove")
+		const additions = record.proposal.items.filter((item) => item.action !== "remove" && !item.autoSaved)
 		const removals = record.proposal.items.filter((item) => item.action === "remove")
 		if (!save) {
 			record.proposal = { ...record.proposal, status: "dismissed" }
@@ -310,6 +324,7 @@ export class MemoryCoordinator {
 		record.proposal = { ...record.proposal, status: "saving" }
 		this.show(record)
 		let saved = 0
+		const refused: string[] = []
 		try {
 			for (const item of chosen) {
 				// The same gate as save_memory: a proposal that slipped past the
@@ -318,9 +333,15 @@ export class MemoryCoordinator {
 					scope: item.scope,
 					text: item.text,
 					importance: item.importance,
+					type: item.type,
+					details: item.details,
 					conversationId,
 				})
 				if (result.inserted) saved++
+				if (result.rejected)
+					refused.push(
+						`${item.text}: ${result.rejected === "conversation-cap" ? "conversation save limit reached" : "reads as a change log"}`,
+					)
 			}
 			const removed = await this.remove(
 				record.cwd,
@@ -334,6 +355,7 @@ export class MemoryCoordinator {
 				...record.proposal,
 				status: "saved",
 				savedCount: saved,
+				...(refused.length ? { error: `Not saved: ${refused.join("; ")}` } : {}),
 				...(removals.length > 0 ? { removedCount: removed } : {}),
 			}
 		} catch (error) {
@@ -343,6 +365,7 @@ export class MemoryCoordinator {
 				error: `Saving failed: ${error instanceof Error ? error.message : String(error)}`,
 			}
 			this.show(record)
+			await this.persist(record)
 			return
 		}
 		this.show(record)
@@ -352,7 +375,7 @@ export class MemoryCoordinator {
 	/** Removes the approved prune items, per memory. Returns how many were removed. */
 	private async remove(cwd: string, items: readonly MemoryProposalItem[]): Promise<number> {
 		let removed = 0
-		for (const scope of ["repo", "user"] as const) {
+		for (const scope of ["repo", "group", "user"] as const) {
 			const mine = items.filter((item) => item.scope === scope)
 			if (mine.length === 0) continue
 			removed += await this.deps.store.remove(cwd, scope, {
@@ -369,7 +392,7 @@ export class MemoryCoordinator {
 			cwd,
 			items.filter((item) => !item.topicFile).map((item) => item.text),
 		)
-		for (const scope of ["repo", "user"] as const) {
+		for (const scope of ["repo", "group", "user"] as const) {
 			const topics = items.flatMap((item) => (item.scope === scope && item.topicFile ? [item.topicFile] : []))
 			if (topics.length > 0) await this.deps.store.keepTopicFiles(cwd, scope, topics)
 		}
@@ -392,6 +415,7 @@ export class MemoryCoordinator {
 		for (const dir of [this.pendingDir, path.join(this.deps.store.rootDir, "distill")]) {
 			const names = await fs.readdir(dir).catch(() => [] as string[])
 			for (const name of names) {
+				if (name.startsWith("memory-cleanup-")) continue
 				if (!name.endsWith(".json") || live.has(name.slice(0, -".json".length))) continue
 				const file = path.join(dir, name)
 				const modified = await fs
@@ -422,6 +446,7 @@ export class MemoryCoordinator {
 	/** Shows the conversation's unresolved proposal again, at the end of the chat. Called when a conversation is opened. */
 	async showPending(conversationId: string): Promise<void> {
 		this.scheduleHousekeeping()
+		await this.inbox(await this.deps.getCwd())
 		let record = this.pending.get(conversationId)
 		if (!record) {
 			try {
@@ -442,6 +467,86 @@ export class MemoryCoordinator {
 			record.ts = undefined
 			this.show(record)
 		}
+	}
+
+	/** Loads the repository inbox, including proposals from other conversations. */
+	async inbox(cwd: string): Promise<MemoryProposal[]> {
+		const location = await this.deps.store.locate(cwd)
+		const proposals: MemoryProposal[] = []
+		const seen = new Set<string>()
+		for (const name of await fs.readdir(this.pendingDir).catch(() => [] as string[])) {
+			if (!name.endsWith(".json")) continue
+			const file = path.join(this.pendingDir, name)
+			try {
+				const raw = JSON.parse(await fs.readFile(file, "utf8"))
+				const proposal = parseMemoryProposal(JSON.stringify(raw.proposal))
+				if (!proposal || typeof raw.cwd !== "string") continue
+				const created = proposal.createdAt ?? (await fs.stat(file)).mtimeMs
+				if (Date.now() - created > 30 * 24 * 60 * 60 * 1000) {
+					await fs.rm(file, { force: true })
+					this.pending.delete(proposal.conversationId)
+					continue
+				}
+				const source = await this.deps.store.locate(raw.cwd)
+				if (source.repoDir !== location.repoDir || proposal.status !== "pending") continue
+				seen.add(proposal.conversationId)
+				const current = this.pending.get(proposal.conversationId)
+				if (current?.proposal.status !== "saving")
+					this.pending.set(proposal.conversationId, {
+						proposal,
+						cwd: raw.cwd,
+						ts: current?.proposal.id === proposal.id ? current.ts : undefined,
+					})
+				proposals.push(this.pending.get(proposal.conversationId)?.proposal ?? proposal)
+			} catch {
+				/* Ignore invalid or concurrently removed proposal files. */
+			}
+		}
+		for (const [id, record] of this.pending) {
+			if (
+				!seen.has(id) &&
+				record.proposal.status === "pending" &&
+				(await this.deps.store.locate(record.cwd)).repoDir === location.repoDir
+			)
+				this.pending.delete(id)
+		}
+		return proposals.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+	}
+
+	async cleanupNow(): Promise<void> {
+		const cwd = await this.deps.getCwd()
+		const memory = await this.deps.store.read(cwd)
+		const items = await this.deps.store.pruneCandidates(cwd)
+		const conversationId = this.deps.getDisplayedConversationId() ?? `memory-cleanup-${memory.location.repo.key}`
+		const record: PendingRecord = {
+			cwd,
+			proposal: {
+				id: `${conversationId}-${Date.now()}`,
+				conversationId,
+				createdAt: Date.now(),
+				status: "pending",
+				repo: memory.location.repo.identity,
+				items: items.map((item, index) => ({ ...item, id: `remove-${index}`, action: "remove", importance: "normal" })),
+			},
+		}
+		if (!items.length) {
+			this.info("Memory cleanup found no candidates.")
+			return
+		}
+		if ((await this.inbox(cwd)).some((item) => item.conversationId === conversationId))
+			throw new Error("Review the pending proposal before requesting another cleanup.")
+		this.show(record)
+		await this.persist(record)
+	}
+
+	async undo(proposalId: string, itemId: string): Promise<void> {
+		const record = [...this.pending.values()].find((value) => value.proposal.id === proposalId)
+		const item = record?.proposal.items.find((value) => value.id === itemId && value.autoSaved)
+		if (!record || !item) throw new Error("Automatic save is no longer available to undo.")
+		await this.deps.store.remove(record.cwd, item.scope, { texts: [item.text], topicFiles: [] })
+		item.autoSaved = false
+		this.show(record)
+		await this.persist(record)
 	}
 
 	private show(record: PendingRecord): void {
@@ -468,6 +573,8 @@ export class MemoryCoordinator {
 			await fs.mkdir(this.pendingDir, { recursive: true })
 			const content = JSON.stringify({ proposal: record.proposal, cwd: record.cwd }, null, 2)
 			await fs.writeFile(this.pendingFile(record.proposal.conversationId), content, "utf8")
+			this.pending.set(record.proposal.conversationId, record)
+			this.deps.onChanged?.()
 		} catch (error) {
 			Logger.debug("[Memory] Failed to store the pending proposal:", error)
 		}
@@ -476,5 +583,6 @@ export class MemoryCoordinator {
 	private async forget(record: PendingRecord): Promise<void> {
 		this.pending.delete(record.proposal.conversationId)
 		await fs.rm(this.pendingFile(record.proposal.conversationId), { force: true }).catch(() => {})
+		this.deps.onChanged?.()
 	}
 }

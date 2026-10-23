@@ -1,6 +1,9 @@
 import type { ClineContextBreakdown } from "@shared/ExtensionMessage"
+import type { MemoryPanelState } from "@shared/memory-panel"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import React, { memo, useCallback, useMemo, useState } from "react"
+import { MemorySelectionView } from "@/components/settings/MemoryPanel"
+import { memoryRequest } from "@/services/memory-client"
 import { formatLargeNumber as formatTokenNumber } from "@/utils/format"
 import { DEFAULT_COMPACTION_THRESHOLD } from "./autoCompactThreshold"
 
@@ -44,6 +47,8 @@ const CONTEXT_BREAKDOWN_LABELS: Record<keyof ClineContextBreakdown, string> = {
 }
 
 const ContextBreakdownDetails = memo<{ breakdown: ClineContextBreakdown }>(({ breakdown }) => {
+	const [memory, setMemory] = useState<MemoryPanelState>()
+	const [error, setError] = useState("")
 	const rows = useMemo(() => {
 		const total = Object.values(breakdown).reduce((sum, value) => sum + (value ?? 0), 0)
 		return (Object.keys(CONTEXT_BREAKDOWN_LABELS) as Array<keyof ClineContextBreakdown>)
@@ -63,12 +68,27 @@ const ContextBreakdownDetails = memo<{ breakdown: ClineContextBreakdown }>(({ br
 		<div className="space-y-1">
 			{rows.map((row) => (
 				<div className="flex justify-between" key={row.key}>
-					<span>{row.label}</span>
+					{row.key === "memory" ? (
+						<button
+							className="underline"
+							onClick={() => {
+								memoryRequest()
+									.then(setMemory)
+									.catch((reason) => setError(String(reason)))
+							}}
+							type="button">
+							{row.label}
+						</button>
+					) : (
+						<span>{row.label}</span>
+					)}
 					<span className="font-mono">
 						{formatTokenNumber(row.value ?? 0)} ({row.percentage.toFixed(0)}%)
 					</span>
 				</div>
 			))}
+			{error && <p role="alert">{error}</p>}
+			{memory && <MemorySelectionView state={memory} />}
 		</div>
 	)
 })

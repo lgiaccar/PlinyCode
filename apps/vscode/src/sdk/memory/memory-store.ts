@@ -13,38 +13,38 @@
 import { promises as fs } from "node:fs"
 import * as path from "node:path"
 import { resolveMemoryDataDir } from "@plinycode/shared/storage"
+import { DEFAULT_MEMORY_TUNING, type MemoryEntry, type MemoryScope, type MemoryTuning, type MemoryType } from "@shared/memory"
 import type { GitRunner } from "../context/git-snapshot"
 import {
 	countImportantEntries,
+	editMemoryEntry,
+	hasNearDuplicate,
 	insertMemoryEntry,
+	listMemoryEntries,
+	MAX_ENTRY_CHARS,
 	MEMORY_FILE_NAME,
 	memoryDate,
 	memoryFileTemplate,
 	normalizeEntryText,
 	referencedTopicFiles,
 	removeMemoryEntries,
-	STALE_AFTER_DAYS,
 	selectCleanupEntries,
 	selectStaleEntries,
 	touchMemoryEntries,
 } from "./memory-file"
-import {
-	looksLikeChangeLog,
-	MAX_IMPORTANT_ENTRIES,
-	MAX_SAVES_PER_CONVERSATION,
-	type MemoryImportanceDemotion,
-	type MemorySaveRejection,
-	readsAsRule,
-} from "./memory-quality"
-import { type RepoIdentity, resolveRepoIdentity } from "./repo-key"
+import { looksLikeChangeLog, type MemoryImportanceDemotion, type MemorySaveRejection, readsAsRule } from "./memory-quality"
+import { groupIdentity, type RepoIdentity, repoKeyFromIdentity, resolveRepoIdentity } from "./repo-key"
 
-export type MemoryScope = "repo" | "user"
+export type { MemoryScope } from "@shared/memory"
 
 const MAX_TOPIC_FILES = 30
 const MAX_TOPIC_DETAILS_CHARS = 20_000
 const MAX_CACHED_FOLDERS = 50
 
 export interface MemoryLocation {
+	group?: string
+	groupDir?: string
+	groupFile?: string
 	repo: RepoIdentity
 	repoDir: string
 	repoFile: string
@@ -59,6 +59,8 @@ export interface TopicFile {
 }
 
 export interface MemoryContents {
+	groupText?: string
+	groupTopics?: TopicFile[]
 	location: MemoryLocation
 	repoText: string
 	userText: string
@@ -67,6 +69,9 @@ export interface MemoryContents {
 }
 
 export interface MemorySaveInput {
+	type?: MemoryType
+	replace?: boolean
+	remove?: boolean
 	scope: MemoryScope
 	text: string
 	importance: "high" | "normal"
@@ -87,6 +92,8 @@ export interface MemorySaveInput {
 }
 
 interface MemorySaveResult {
+	removed?: number
+	replaced?: boolean
 	file: string
 	inserted: boolean
 	topicFile?: string
@@ -118,6 +125,7 @@ const MAX_PRUNE_TOPICS = 3
 const MAX_CLEANUP_ENTRIES = 8
 
 interface MemoryStoreOptions {
+	getTuning?: () => MemoryTuning
 	rootDir?: string
 	runGit?: GitRunner
 	/** Clock for entry dates, for tests. */
@@ -222,15 +230,16 @@ export class MemoryStore {
 	readonly rootDir: string
 	private readonly runGit: GitRunner | undefined
 	private readonly now: () => Date
+	readonly tuning: () => MemoryTuning
 	private readonly locations = new Map<string, Promise<MemoryLocation>>()
 	private readonly writeQueues = new Map<string, Promise<unknown>>()
 	/** Entries written per conversation in this window, for the cap. */
-	private readonly savesByConversation = new Map<string, number>()
 
 	constructor(options: MemoryStoreOptions = {}) {
 		this.rootDir = options.rootDir ?? resolveMemoryDataDir()
 		this.runGit = options.runGit
 		this.now = options.now ?? (() => new Date())
+		this.tuning = options.getTuning ?? (() => DEFAULT_MEMORY_TUNING)
 	}
 
 	/** Today, as entries record it. */
@@ -242,10 +251,24 @@ export class MemoryStore {
 	locate(cwd: string): Promise<MemoryLocation> {
 		let location = this.locations.get(cwd)
 		if (!location) {
-			location = resolveRepoIdentity(cwd, this.runGit).then((repo) => {
-				const repoDir = path.join(this.rootDir, "repos", repo.key)
+			location = resolveRepoIdentity(cwd, this.runGit).then(async (repo) => {
+				let repoDir = path.join(this.rootDir, "repos", repo.key)
+				for (const name of await fs.readdir(path.join(this.rootDir, "repos")).catch(() => [] as string[])) {
+					const candidate = path.join(this.rootDir, "repos", name)
+					const saved = await this.readJson(path.join(candidate, "repo.json"))
+					if (Array.isArray(saved.aliases) && saved.aliases.includes(repo.identity)) {
+						repoDir = candidate
+						break
+					}
+				}
 				const userDir = path.join(this.rootDir, "user")
+				const note = await this.readJson(path.join(repoDir, "repo.json"))
+				const group = note.group === false ? undefined : typeof note.group === "string" ? note.group : groupIdentity(repo)
+				const groupDir = group ? path.join(this.rootDir, "groups", repoKeyFromIdentity(group)) : undefined
 				return {
+					group,
+					groupDir,
+					groupFile: groupDir ? path.join(groupDir, MEMORY_FILE_NAME) : undefined,
 					repo,
 					repoDir,
 					repoFile: path.join(repoDir, MEMORY_FILE_NAME),
@@ -270,7 +293,43 @@ export class MemoryStore {
 			this.listTopics(location.repoDir),
 			this.listTopics(location.userDir),
 		])
-		return { location, repoText, userText, repoTopics, userTopics }
+		const groupText = location.groupFile ? await readText(location.groupFile) : ""
+		const groupTopics = location.groupDir ? await this.listTopics(location.groupDir) : []
+		return { location, repoText, userText, repoTopics, userTopics, groupText, groupTopics }
+	}
+
+	fileFor(location: MemoryLocation, scope: MemoryScope): string {
+		const file = scope === "user" ? location.userFile : scope === "group" ? location.groupFile : location.repoFile
+		if (!file) throw new Error("This repository has no group. Set group in repo.json to enable it.")
+		return file
+	}
+
+	private scopeFiles(location: MemoryLocation): [MemoryScope, string][] {
+		return [
+			["repo", location.repoFile],
+			...(location.groupFile ? [["group", location.groupFile] as [MemoryScope, string]] : []),
+			["user", location.userFile],
+		]
+	}
+
+	private async readJson(file: string): Promise<Record<string, unknown>> {
+		try {
+			const value = JSON.parse(await readText(file))
+			return value && typeof value === "object" && !Array.isArray(value) ? value : {}
+		} catch {
+			return {}
+		}
+	}
+
+	stateFile(conversationId: string): string {
+		return path.join(this.rootDir, "distill", `${conversationId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`)
+	}
+
+	async updateState(conversationId: string, patch: Record<string, unknown>): Promise<void> {
+		const file = this.stateFile(conversationId)
+		await this.serialized(file, async () =>
+			writeAtomically(file, JSON.stringify({ ...(await this.readJson(file)), ...patch })),
+		)
 	}
 
 	async listTopics(dir: string): Promise<TopicFile[]> {
@@ -301,16 +360,38 @@ export class MemoryStore {
 	 * under Notes. `force` (the user's own wording) skips the refusals.
 	 */
 	async save(cwd: string, input: MemorySaveInput): Promise<MemorySaveResult> {
+		return this.serialized(path.join(this.rootDir, ".mutations"), () => this.saveUnlocked(cwd, input))
+	}
+
+	private async saveUnlocked(cwd: string, input: MemorySaveInput): Promise<MemorySaveResult> {
 		const location = await this.locate(cwd)
-		const dir = input.scope === "user" ? location.userDir : location.repoDir
-		const file = input.scope === "user" ? location.userFile : location.repoFile
+		let file = this.fileFor(location, input.scope)
+		// Prefer the existing scope, so a repeated fact does not fill several files.
+		for (const [, other] of this.scopeFiles(location)) {
+			if (input.remove && other !== file) continue
+			if (hasNearDuplicate(await readText(other), input.text)) {
+				file = other
+				break
+			}
+		}
+		const dir = path.dirname(file)
 		const text = normalizeEntryText(input.text)
+		const existingEntry = listMemoryEntries(await readText(file), input.scope).find((entry) =>
+			hasNearDuplicate(`- ${entry.text}`, text),
+		)
+		if (input.remove) {
+			const scope = this.scopeFiles(location).find(([, candidate]) => candidate === file)?.[0] ?? input.scope
+			const removed = existingEntry ? await this.remove(cwd, scope, { texts: [existingEntry.text], topicFiles: [] }) : 0
+			return { file, inserted: false, removed, importance: input.importance }
+		}
 		if (!input.force) {
 			if (looksLikeChangeLog(text)) {
 				return { file, inserted: false, rejected: "change-log", importance: input.importance }
 			}
-			const saved = input.conversationId ? (this.savesByConversation.get(input.conversationId) ?? 0) : 0
-			if (saved >= MAX_SAVES_PER_CONVERSATION) {
+			const saved = input.conversationId
+				? Number((await this.readJson(this.stateFile(input.conversationId))).saveCount ?? 0)
+				: 0
+			if (!existingEntry && saved >= this.tuning().saveCap) {
 				return { file, inserted: false, rejected: "conversation-cap", importance: input.importance }
 			}
 		}
@@ -319,12 +400,18 @@ export class MemoryStore {
 		if (importance === "high") {
 			if (!readsAsRule(text)) {
 				demoted = "not-a-rule"
-			} else if (countImportantEntries(await readText(file)) >= MAX_IMPORTANT_ENTRIES) {
+			} else if (!existingEntry && countImportantEntries(await readText(file)) >= this.tuning().importantCap) {
 				demoted = "important-full"
 			}
 			if (demoted) importance = "normal"
 		}
-		const details = input.details?.trim()
+		const details = [input.text.length > MAX_ENTRY_CHARS ? input.text : "", input.details?.trim()]
+			.filter(Boolean)
+			.join("\n\n")
+		if (details.length > MAX_TOPIC_DETAILS_CHARS)
+			throw new Error(
+				`Memory details exceed ${MAX_TOPIC_DETAILS_CHARS} characters; split the explanation into separate memories.`,
+			)
 		const topicName = details ? topicFileName(input.topic || input.text.split(/\s+/).slice(0, 4).join(" ")) : undefined
 		const topicPath = topicName ? path.join(dir, topicName) : undefined
 
@@ -338,6 +425,22 @@ export class MemoryStore {
 			})
 		}
 
+		if (input.replace && existingEntry) {
+			await this.serialized(file, async () => {
+				await writeAtomically(
+					file,
+					editMemoryEntry(await readText(file), existingEntry, {
+						text,
+						importance,
+						type: input.type ?? existingEntry.type,
+						topicFile: topicName ?? existingEntry.topicFile,
+						used: this.today(),
+					}),
+				)
+			})
+			return { file, inserted: false, replaced: true, importance, topicFile: topicPath }
+		}
+
 		const result = await this.serialized(file, async () => {
 			const title = input.scope === "user" ? "My memory" : `Repository memory: ${location.repo.identity}`
 			const existing = await readText(file)
@@ -348,6 +451,7 @@ export class MemoryStore {
 					importance,
 					topicFile: topicName,
 					date: this.today(),
+					type: input.type,
 				},
 				title,
 			)
@@ -362,7 +466,11 @@ export class MemoryStore {
 			await this.writeRepoNote(location).catch(() => {})
 		}
 		if (result.inserted && input.conversationId && !input.force) {
-			this.savesByConversation.set(input.conversationId, (this.savesByConversation.get(input.conversationId) ?? 0) + 1)
+			const stateFile = this.stateFile(input.conversationId)
+			await this.serialized(stateFile, async () => {
+				const state = await this.readJson(stateFile)
+				await writeAtomically(stateFile, JSON.stringify({ ...state, saveCount: Number(state.saveCount ?? 0) + 1 }))
+			})
 		}
 		return {
 			file,
@@ -384,7 +492,7 @@ export class MemoryStore {
 		}
 		const location = await this.locate(cwd)
 		let touched = 0
-		for (const file of [location.repoFile, location.userFile]) {
+		for (const [, file] of this.scopeFiles(location)) {
 			touched += await this.serialized(file, async () => {
 				const existing = await readText(file)
 				if (!existing) return 0
@@ -408,8 +516,8 @@ export class MemoryStore {
 		items: { texts: readonly string[]; topicFiles: readonly string[] },
 	): Promise<number> {
 		const location = await this.locate(cwd)
-		const dir = scope === "user" ? location.userDir : location.repoDir
-		const file = scope === "user" ? location.userFile : location.repoFile
+		const file = this.fileFor(location, scope)
+		const dir = path.dirname(file)
 		let removed = 0
 		const orphaned: string[] = []
 		if (items.texts.length > 0) {
@@ -437,7 +545,7 @@ export class MemoryStore {
 	/** Keeps orphaned topic files out of prune proposals for another STALE_AFTER_DAYS. */
 	async keepTopicFiles(cwd: string, scope: MemoryScope, names: readonly string[]): Promise<void> {
 		const location = await this.locate(cwd)
-		const dir = scope === "user" ? location.userDir : location.repoDir
+		const dir = path.dirname(this.fileFor(location, scope))
 		const now = this.now()
 		for (const name of names) {
 			if (isTopicFileName(name)) {
@@ -456,18 +564,38 @@ export class MemoryStore {
 	async pruneCandidates(cwd: string): Promise<PruneCandidate[]> {
 		const location = await this.locate(cwd)
 		const today = this.today()
-		const cutoff = this.now().getTime() - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000
+		const cutoff = this.now().getTime() - this.tuning().staleDays * 24 * 60 * 60 * 1000
 		const candidates: PruneCandidate[] = []
-		for (const scope of ["repo", "user"] as const) {
-			const file = scope === "user" ? location.userFile : location.repoFile
-			const dir = scope === "user" ? location.userDir : location.repoDir
+		const broader = `${location.groupFile ? await readText(location.groupFile) : ""}\n${await readText(location.userFile)}`
+		for (const [scope, file] of this.scopeFiles(location)) {
+			const dir = path.dirname(file)
 			const text = await readText(file)
 			const cleanup = selectCleanupEntries(text, looksLikeChangeLog, today, MAX_CLEANUP_ENTRIES)
+			const other = scope === "repo" ? broader : scope === "group" ? await readText(location.userFile) : ""
+			for (const entry of listMemoryEntries(text, scope)) {
+				const keptRecently =
+					entry.used && Date.parse(today) - Date.parse(entry.used) < this.tuning().staleDays * 24 * 60 * 60 * 1000
+				if (
+					cleanup.length < MAX_CLEANUP_ENTRIES &&
+					!entry.pinned &&
+					!keptRecently &&
+					hasNearDuplicate(other, entry.text) &&
+					!cleanup.some((item) => item.text === entry.text)
+				)
+					cleanup.push({ text: entry.text, reason: "duplicate" })
+			}
 			for (const entry of cleanup) {
 				candidates.push({ scope, text: entry.text, reason: entry.reason })
 			}
 			const offered = new Set(cleanup.map((entry) => entry.text))
-			for (const entry of selectStaleEntries(text, today, STALE_AFTER_DAYS, MAX_PRUNE_ENTRIES)) {
+			const usage = await this.readJson(path.join(dir, "usage.json"))
+			const withUsage = listMemoryEntries(text, scope).reduce((content, entry) => {
+				const record = usage[entry.id] as { used?: string } | undefined
+				return record?.used && record.used > (entry.used ?? entry.added ?? "")
+					? touchMemoryEntries(content, [entry.text], record.used).content
+					: content
+			}, text)
+			for (const entry of selectStaleEntries(withUsage, today, this.tuning().staleDays, MAX_PRUNE_ENTRIES)) {
 				if (!offered.has(entry.text)) candidates.push({ scope, text: entry.text })
 			}
 			const referenced = referencedTopicFiles(text)
@@ -495,7 +623,7 @@ export class MemoryStore {
 	/** The memory file of a scope, created from the template when it does not exist yet. */
 	async ensureFile(cwd: string, scope: MemoryScope): Promise<string> {
 		const location = await this.locate(cwd)
-		const file = scope === "user" ? location.userFile : location.repoFile
+		const file = this.fileFor(location, scope)
 		await this.serialized(file, async () => {
 			if (!(await readText(file))) {
 				const title = scope === "user" ? "My memory" : `Repository memory: ${location.repo.identity}`
@@ -510,16 +638,151 @@ export class MemoryStore {
 
 	/** `repo.json` says which repository a `repos/<key>` folder belongs to, for whoever browses the folder. */
 	private async writeRepoNote(location: MemoryLocation): Promise<void> {
+		const file = path.join(location.repoDir, "repo.json")
 		const note = {
+			...(await this.readJson(file)),
 			identity: location.repo.identity,
 			kind: location.repo.kind,
 			...(location.repo.remoteUrl ? { remote: location.repo.remoteUrl } : {}),
 		}
-		const file = path.join(location.repoDir, "repo.json")
 		const content = `${JSON.stringify(note, null, 2)}\n`
 		if ((await readText(file)) !== content) {
 			await this.serialized(file, () => writeAtomically(file, content))
 		}
+	}
+
+	async entries(cwd: string): Promise<MemoryEntry[]> {
+		const location = await this.locate(cwd)
+		const result: MemoryEntry[] = []
+		for (const [scope, file] of this.scopeFiles(location)) result.push(...listMemoryEntries(await readText(file), scope))
+		return result
+	}
+
+	async edit(cwd: string, id: string, patch: Partial<MemoryEntry>): Promise<void> {
+		const entry = (await this.entries(cwd)).find((item) => item.id === id)
+		if (!entry) throw new Error("Memory changed; refresh and try again.")
+		const location = await this.locate(cwd)
+		const file = this.fileFor(location, entry.scope)
+		await this.serialized(file, async () => writeAtomically(file, editMemoryEntry(await readText(file), entry, patch)))
+	}
+
+	async move(cwd: string, id: string, scope: MemoryScope): Promise<void> {
+		await this.serialized(path.join(this.rootDir, ".mutations"), async () => {
+			const entry = (await this.entries(cwd)).find((item) => item.id === id)
+			if (!entry) throw new Error("Memory changed; refresh and try again.")
+			if (entry.scope === scope) return
+			const location = await this.locate(cwd)
+			const source = this.fileFor(location, entry.scope)
+			const target = this.fileFor(location, scope)
+			// Copy details first, preserving them even when the destination already has this entry.
+			let topicFile: string | undefined
+			if (entry.topicFile && isTopicFileName(entry.topicFile)) {
+				topicFile = `${Date.now()}-${entry.topicFile}`
+				await writeAtomically(
+					path.join(path.dirname(target), topicFile),
+					await fs.readFile(path.join(path.dirname(source), entry.topicFile), "utf8"),
+				)
+			}
+			await this.serialized(target, async () => {
+				const existing = await readText(target)
+				const duplicate = listMemoryEntries(existing, scope).find((candidate) =>
+					hasNearDuplicate(`- ${candidate.text}`, entry.text),
+				)
+				if (topicFile && duplicate?.topicFile && isTopicFileName(duplicate.topicFile)) {
+					const previous = await fs.readFile(path.join(path.dirname(target), duplicate.topicFile), "utf8")
+					const copied = await fs.readFile(path.join(path.dirname(target), topicFile), "utf8")
+					await writeAtomically(path.join(path.dirname(target), topicFile), `${previous.trimEnd()}\n\n${copied}`)
+				}
+				let next = insertMemoryEntry(existing, {
+					text: entry.text.replace(/ \(details: [^)]+\)$/, ""),
+					importance: entry.importance,
+					topicFile,
+					type: entry.type,
+					pinned: entry.pinned,
+					date: entry.added ?? this.today(),
+				}).content
+				const saved = listMemoryEntries(next, scope).find((candidate) =>
+					hasNearDuplicate(`- ${candidate.text}`, entry.text),
+				)
+				if (saved)
+					next = editMemoryEntry(next, saved, {
+						...(topicFile ? { topicFile } : {}),
+						pinned: saved.pinned || entry.pinned,
+						used: duplicate ? this.today() : entry.used,
+						added: duplicate ? saved.added : (entry.added ?? this.today()),
+					})
+				await writeAtomically(target, next)
+			})
+			await this.remove(cwd, entry.scope, { texts: [entry.text], topicFiles: [] })
+		})
+	}
+
+	async adoptionCandidates(cwd: string): Promise<{ key: string; identity: string }[]> {
+		const { repo, repoDir } = await this.locate(cwd)
+		if (repo.kind !== "remote") return []
+		const result: { key: string; identity: string }[] = []
+		for (const key of await fs.readdir(path.join(this.rootDir, "repos")).catch(() => [] as string[])) {
+			if (path.join(this.rootDir, "repos", key) === repoDir) continue
+			const note = await this.readJson(path.join(this.rootDir, "repos", key, "repo.json"))
+			if (
+				typeof note.identity === "string" &&
+				note.identity !== repo.identity &&
+				note.identity.split("/").slice(1).join("/") === repo.identity.split("/").slice(1).join("/")
+			)
+				result.push({ key, identity: note.identity })
+		}
+		return result
+	}
+
+	async adopt(cwd: string, key: string): Promise<void> {
+		if (!(await this.adoptionCandidates(cwd)).some((item) => item.key === key))
+			throw new Error("Unknown memory adoption candidate.")
+		const location = await this.locate(cwd)
+		if (listMemoryEntries(await readText(location.repoFile), "repo").length > 0)
+			throw new Error("Repository memory already has entries. Move or export them before adopting another memory.")
+		const file = path.join(this.rootDir, "repos", key, "repo.json")
+		await this.serialized(file, async () => {
+			const note = await this.readJson(file)
+			const aliases = Array.isArray(note.aliases) ? note.aliases.filter((value) => typeof value === "string") : []
+			await writeAtomically(
+				file,
+				JSON.stringify({ ...note, aliases: [...new Set([...aliases, location.repo.identity])] }, null, 2),
+			)
+		})
+		this.locations.clear()
+	}
+
+	async recordUsage(cwd: string, conversationId: string, entries: readonly MemoryEntry[]): Promise<void> {
+		const location = await this.locate(cwd)
+		for (const [scope, memoryFile] of this.scopeFiles(location)) {
+			const selected = entries.filter((entry) => entry.scope === scope)
+			if (!selected.length) continue
+			const file = path.join(path.dirname(memoryFile), "usage.json")
+			await this.serialized(file, async () => {
+				const usage = await this.readJson(file)
+				let changed = false
+				for (const entry of selected) {
+					const previous = usage[entry.id] as { count?: number; conversations?: string[] } | undefined
+					const conversations = previous?.conversations ?? []
+					if (conversations.includes(conversationId)) continue
+					changed = true
+					usage[entry.id] = {
+						count: (previous?.count ?? 0) + 1,
+						used: this.today(),
+						conversations: [...conversations, conversationId].slice(-100),
+					}
+				}
+				if (changed) await writeAtomically(file, JSON.stringify(usage))
+			})
+		}
+	}
+
+	async usage(cwd: string): Promise<Record<string, { count?: number; used?: string }>> {
+		const location = await this.locate(cwd)
+		const all = await Promise.all(
+			this.scopeFiles(location).map(([, file]) => this.readJson(path.join(path.dirname(file), "usage.json"))),
+		)
+		return Object.assign({}, ...all)
 	}
 
 	private serialized<T>(file: string, task: () => Promise<T>): Promise<T> {

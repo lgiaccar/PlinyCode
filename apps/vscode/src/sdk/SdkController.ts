@@ -33,7 +33,12 @@ import { HostProvider } from "@/hosts/host-provider"
 import { getAdvisorSettings } from "@/hosts/vscode/advisor-settings"
 import { createVscodeCodeIntelSource, isCodeIntelEnabled } from "@/hosts/vscode/code-intel-source"
 import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@/hosts/vscode/edit-diagnostics"
-import { isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
+import {
+	getMemoryBudget,
+	getMemoryDistillMode,
+	getMemoryTuning,
+	isMemoryDistillOfferEnabled,
+} from "@/hosts/vscode/memory-settings"
 import { getRouterImageMode } from "@/hosts/vscode/router-image-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
@@ -60,6 +65,7 @@ import { suggestConversationTitle } from "./conversation-title"
 import { createHookStatusRows } from "./hook-status-rows"
 import { createMemoryServices, type MemoryServices } from "./memory"
 import { MemoryCoordinator } from "./memory/memory-coordinator"
+import { manageMemory } from "./memory/memory-management"
 import { completeWithUtilityModel } from "./memory/memory-model"
 import { compactionUsageFromNotice, MessageTranslatorState, normalizeUsageEvent } from "./message-translator"
 import type { SubagentTranscripts } from "./message-translator/subagent-transcripts"
@@ -483,6 +489,10 @@ export class Controller {
 			complete: async (system, user, signal) =>
 				completeWithUtilityModel(system, user, signal, await this.getWorkspaceRoot()),
 			isOfferEnabled: isMemoryDistillOfferEnabled,
+			distillMode: getMemoryDistillMode,
+			onChanged: () => {
+				void this.postStateToWebview().catch(() => {})
+			},
 			isActMode: (sessionId) => this.sessionMode(sessionId) === "act",
 			isBackgroundSession: (sessionId) => this.background.has(sessionId),
 			listConversationIds: async () =>
@@ -1199,7 +1209,7 @@ export class Controller {
 				modelId,
 			)
 		} catch (error) {
-			Logger.warn("[SdkController] Failed to emit FreeAuto turn summary:" + String(error))
+			Logger.warn(`[SdkController] Failed to emit FreeAuto turn summary:${String(error)}`)
 		}
 	}
 
@@ -1763,7 +1773,18 @@ export class Controller {
 	 * The memory file of the displayed conversation's repository, or the
 	 * user's own, created from the template when missing (docs/memory.md).
 	 */
-	async ensureMemoryFile(scope: "repo" | "user"): Promise<{ file: string; repo: string }> {
+	async manageMemory(input: Record<string, unknown>) {
+		return manageMemory(
+			this.memoryServices.store,
+			this.memoryServices.snapshots,
+			this.memory,
+			await this.getWorkspaceRoot(),
+			this.task?.taskId,
+			input,
+		)
+	}
+
+	async ensureMemoryFile(scope: "repo" | "group" | "user"): Promise<{ file: string; repo: string }> {
 		const cwd = await this.getWorkspaceRoot()
 		const file = await this.memoryServices.store.ensureFile(cwd, scope)
 		const location = await this.memoryServices.store.locate(cwd)
@@ -2210,6 +2231,15 @@ export class Controller {
 				workspaceManager: await this.ensureWorkspaceManager(),
 			})
 
+			baseState.memoryPendingCount = (await this.memory.inbox(await this.getWorkspaceRoot()).catch(() => [])).reduce(
+				(sum, proposal) => sum + proposal.items.filter((item) => !item.autoSaved).length,
+				0,
+			)
+			baseState.memoryConfigurationVersion = JSON.stringify({
+				budget: getMemoryBudget(),
+				distill: getMemoryDistillMode(),
+				tuning: getMemoryTuning(),
+			})
 			let queuedPrompts: ExtensionState["queuedPrompts"] = []
 			const activeSession = this.sessions.getActiveSession()
 			if (activeSession) {
