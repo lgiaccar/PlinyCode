@@ -1,6 +1,13 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { describe, expect, it } from "vitest"
-import { canRestoreWorkspaceFromMessage, filterVisibleMessages, groupLowStakesTools, isToolGroup } from "./messageUtils"
+import {
+	canRestoreWorkspaceFromMessage,
+	filterVisibleMessages,
+	getTurnBoundaryLabels,
+	groupLowStakesTools,
+	isToolGroup,
+	isUserTurnStart,
+} from "./messageUtils"
 
 const createTextMessage = (ts: number, text: string): ClineMessage => ({
 	type: "say",
@@ -90,6 +97,39 @@ describe("filterVisibleMessages", () => {
 		const visible = filterVisibleMessages([askMessage, userMessage])
 
 		expect(visible).toEqual([askMessage, userMessage])
+	})
+})
+
+describe("turn boundaries", () => {
+	it("labels real follow-ups and side questions across tool answers and progress rows", () => {
+		const followUp = createUserFeedbackMessage(4, "second prompt")
+		const sideQuestion = { ...createUserFeedbackMessage(8, "quick question"), offTheRecord: true }
+		const rows: (ClineMessage | ClineMessage[])[] = [
+			createTextMessage(2, "answer"),
+			createAskMessage(3, "followup", ["yes"]),
+			{ ...createUserFeedbackMessage(3.5, "yes"), answersTool: true },
+			followUp,
+			[createToolMessage(5, "readFile")],
+			{ ts: 6, type: "say", say: "task_progress", text: "working" },
+			{ ...createUserFeedbackMessage(7, "approved"), answersTool: true },
+			createUserFeedbackMessage(7.5, "[CI WATCHER] passed"),
+			sideQuestion,
+		]
+		expect(getTurnBoundaryLabels(rows)).toEqual([
+			undefined,
+			undefined,
+			undefined,
+			"Follow-up 2",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			"Side question 3",
+		])
+		expect(isUserTurnStart(followUp)).toBe(true)
+		expect(isUserTurnStart(rows[2] as ClineMessage)).toBe(false)
+		expect(isUserTurnStart(createAskMessage(9, "followup", []))).toBe(false)
+		expect(isUserTurnStart(createUserFeedbackMessage(10, "[CI WATCHER] result"))).toBe(false)
 	})
 })
 

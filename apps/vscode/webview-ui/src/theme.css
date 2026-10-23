@@ -293,13 +293,31 @@
 
 	.inline-markdown-block {
 		@apply text-base text-foreground font-base;
+		min-width: 0;
+		max-width: 100%;
+		overflow-wrap: anywhere;
+
+		.markdown-content > :first-child {
+			margin-top: 0;
+		}
+
+		.markdown-content > :last-child {
+			margin-bottom: 0;
+		}
+
+		.markdown-content-compact > p {
+			margin-block: 0;
+		}
 
 		pre {
 			@apply bg-code rounded-xs overflow-x-auto overflow-y-hidden;
-			margin: 13px 0;
+			margin: 10px 0;
 			padding: 10px 10px;
-			max-width: calc(100vw - 20px);
+			max-width: 100%;
+			min-width: 0;
 			padding-right: 70px;
+			box-sizing: border-box;
+			white-space: pre;
 		}
 
 		pre > code .hljs-deletion {
@@ -316,23 +334,41 @@
 		code {
 			@apply break-words rounded-xs;
 		}
+		pre code {
+			white-space: inherit;
+			word-break: normal;
+			overflow-wrap: normal;
+		}
 		p,
-		li,
-		ol,
-		ul {
-			@apply leading-tight;
+		li {
+			line-height: 1.5;
 		}
 		hr,
 		ul,
 		ol {
-			@apply my-3 ml-5;
+			@apply my-3;
+		}
+		ul,
+		ol {
+			@apply ml-5;
 		}
 		li > ul,
 		li > ol {
 			@apply my-1 ml-2;
 		}
+		.markdown-table-scroll {
+			max-width: 100%;
+			overflow-x: auto;
+			margin-block: 10px;
+		}
+		.markdown-table-scroll:focus-visible {
+			outline: 1px solid var(--vscode-focusBorder);
+			outline-offset: -1px;
+		}
 		table {
-			@apply border-collapse w-full my-3;
+			@apply border-collapse;
+			width: max-content;
+			min-width: 100%;
 		}
 		th,
 		td {
@@ -357,5 +393,52 @@
 			content: "";
 			@apply inline-block w-0.5 h-[1em] ml-0.5 bg-foreground align-text-bottom animate-cursor-blink;
 		}
+	}
+
+	.markdown-response {
+		min-width: 0;
+		max-width: 100%;
+	}
+	/* The global paragraph rule clamps previews; assistant Markdown must stay complete. */
+	.markdown-response p {
+		display: block;
+		overflow: visible;
+		-webkit-line-clamp: unset;
+	}
+	.markdown-response .inline-markdown-block {
+		line-height: 1.5;
+	}
+	.markdown-response h1,
+	.markdown-response h2,
+	.markdown-response h3,
+	.markdown-response h4 {
+		line-height: 1.3;
+		margin-block: 16px 6px;
+	}
+	.markdown-response h1 {
+		font-size: 1.3em;
+	}
+	.markdown-response h2 {
+		font-size: 1.15em;
+	}
+	.markdown-response h3 {
+		font-size: 1.05em;
+	}
+	.markdown-response p {
+		margin-block: 0 10px;
+	}
+	.markdown-response .markdown-content > :last-child {
+		margin-bottom: 0;
+	}
+	.markdown-response blockquote {
+		margin: 10px 0;
+		padding: 1px 0 1px 10px;
+		border-left: 2px solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border));
+		color: var(--vscode-textBlockQuote-foreground, var(--vscode-foreground));
+		background: var(--vscode-textBlockQuote-background, transparent);
+	}
+	.markdown-response a {
+		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 }

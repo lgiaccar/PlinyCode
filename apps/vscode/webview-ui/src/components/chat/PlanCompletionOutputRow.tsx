@@ -40,7 +40,7 @@ const PlanCompletionOutputRow = memo(({ text, rootPlanFile, onExecutePlan }: Pla
 				<CopyButton ariaLabel="Copy plan response" className="text-warning/70" textToCopy={text} />
 			</div>
 			<div className="plan-completion-content p-2 w-full [&_hr]:opacity-20 [&_p:last-child]:mb-0">
-				<div className="wrap-anywhere [&_hr]:opacity-20">
+				<div className="markdown-response min-w-0">
 					<MarkdownBlock markdown={text} />
 				</div>
 			</div>
