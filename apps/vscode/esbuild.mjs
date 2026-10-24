@@ -67,19 +67,36 @@ const aliasResolverPlugin = {
 	},
 }
 
+// Both the extension and DevOps MCP bundles must succeed before F5 can start.
+// A successful second bundle must not hide a failed extension bundle.
+const expectedBundleCount = e2eBuild ? 1 : 2
+const buildOutcomes = new Map()
+const activeBuilds = new Set()
 const esbuildProblemMatcherPlugin = {
 	name: "esbuild-problem-matcher",
 
 	setup(build) {
+		const output = build.initialOptions.outfile
 		build.onStart(() => {
+			activeBuilds.add(output)
 			console.log("[watch] build started")
 		})
 		build.onEnd((result) => {
+			activeBuilds.delete(output)
+			buildOutcomes.set(output, result.errors.length === 0)
 			result.errors.forEach(({ text, location }) => {
 				console.error(`✘ [ERROR] ${text}`)
-				console.error(`    ${location.file}:${location.line}:${location.column}:`)
+				if (location) console.error(`    ${location.file}:${location.line}:${location.column}:`)
 			})
-			console.log("[watch] build finished")
+			if (result.errors.length > 0) {
+				console.log("[watch] build failed")
+			} else if (
+				buildOutcomes.size === expectedBundleCount &&
+				[...buildOutcomes.values()].every(Boolean) &&
+				activeBuilds.size === 0
+			) {
+				console.log("[watch] build finished")
+			}
 		})
 	},
 }

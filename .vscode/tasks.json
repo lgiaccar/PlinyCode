@@ -22,8 +22,6 @@
 		{
 			"label": "watch",
 			"dependsOn": [
-				"npm: protos",
-				"npm: build:webview",
 				"npm: dev:webview",
 				"npm: watch:tsc",
 				"npm: watch:esbuild",
@@ -44,9 +42,6 @@
 			"problemMatcher": [],
 			"isBackground": false,
 			"label": "npm: build:webview",
-			"dependsOn": [
-				"npm: protos"
-			],
 			"presentation": {
 				"group": "watch",
 				"reveal": "always"
@@ -82,7 +77,7 @@
 			"isBackground": true,
 			"label": "npm: dev:webview",
 			"dependsOn": [
-				"npm: protos"
+				"npm: build:webview"
 			],
 			"presentation": {
 				"group": "watch",
@@ -121,7 +116,7 @@
 			"isBackground": true,
 			"label": "npm: watch:esbuild",
 			"dependsOn": [
-				"npm: protos",
+				"npm: build:webview",
 				"build-sdk:debug"
 			],
 			"presentation": {
@@ -146,9 +141,9 @@
 			"problemMatcher": {
 				"base": "$tsc",
 				"background": {
-					"activeOnStart": false,
+					"activeOnStart": true,
 					"beginsPattern": "^\\[watch:sdk\\] build started",
-					"endsPattern": "^\\[watch:sdk\\] build (finished|failed)$"
+					"endsPattern": "^\\[watch:sdk\\] (watching .*|build (finished|failed))$"
 				}
 			},
 			"isBackground": true,
@@ -175,7 +170,7 @@
 			"isBackground": true,
 			"label": "npm: watch:tsc",
 			"dependsOn": [
-				"npm: protos"
+				"npm: build:webview"
 			],
 			"presentation": {
 				"group": "watch",
@@ -192,7 +187,7 @@
 			"problemMatcher": "$tsc-watch",
 			"isBackground": true,
 			"dependsOn": [
-				"npm: protos"
+				"npm: build:webview"
 			],
 			"presentation": {
 				"reveal": "always",

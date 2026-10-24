@@ -2,8 +2,32 @@
  * Utility functions for message filtering, grouping, and manipulation
  */
 
+import { isCiWatchReport } from "@shared/ciWatch"
 import type { ClineAskQuestion, ClineMessage, ClinePlanModeResponse, ClineSayTool } from "@shared/ExtensionMessage"
 import { FileIcon, FolderOpenDotIcon, FolderOpenIcon, SearchIcon, ShapesIcon, WrenchIcon } from "lucide-react"
+
+/** A user prompt that starts a new visible turn, rather than answering an agent request. */
+export function isUserTurnStart(message: ClineMessage): boolean {
+	return (
+		message.type === "say" &&
+		(message.say === "task" || message.say === "user_feedback") &&
+		!message.answersTool &&
+		!isCiWatchReport(message.text)
+	)
+}
+
+/**
+ * The initial task prompt is displayed in the header, so list prompts begin at turn two.
+ * Keep labels on existing rows so Virtuoso indices and message timestamps stay unchanged.
+ */
+export function getTurnBoundaryLabels(rows: (ClineMessage | ClineMessage[])[]): (string | undefined)[] {
+	let turnNumber = 1
+	return rows.map((row) => {
+		if (Array.isArray(row) || !isUserTurnStart(row)) return undefined
+		turnNumber += 1
+		return `${row.offTheRecord ? "Side question" : "Follow-up"} ${turnNumber}`
+	})
+}
 
 /**
  * Low-stakes tool types that should be grouped together

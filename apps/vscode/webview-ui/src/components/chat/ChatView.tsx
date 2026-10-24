@@ -29,6 +29,7 @@ import {
 	WelcomeSection,
 } from "./chat-view"
 import { type ScheduledPrompt, ScheduledPrompts } from "./chat-view/components/layout/ScheduledPrompts"
+import { groupActivityRows } from "./chat-view/utils/activityGroups"
 import {
 	hasPendingMessageConfirmation,
 	isPendingResponseUnconfirmed,
@@ -389,7 +390,7 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 	}, [modifiedMessages])
 
 	const groupedMessages = useMemo(() => {
-		return groupLowStakesTools(visibleMessages)
+		return groupActivityRows(groupLowStakesTools(visibleMessages))
 	}, [visibleMessages])
 
 	// Use scroll behavior hook

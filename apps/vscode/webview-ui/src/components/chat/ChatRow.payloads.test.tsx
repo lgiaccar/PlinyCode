@@ -213,3 +213,30 @@ describe("ChatRow payloads", () => {
 		expect(screen.getByText("PlinyCode wants to read this file:")).toBeTruthy()
 	})
 })
+
+describe("ChatRow reasoning disclosure", () => {
+	it("keeps streaming reasoning collapsed and allows its row to be toggled", () => {
+		const onToggleExpand = vi.fn()
+		const message = { ...sayMessage("reasoning", "Private reasoning", 2_000), partial: true }
+		const props = {
+			isLast: true,
+			message,
+			onHeightChange: vi.fn(),
+			onLastRowContentChange: vi.fn(),
+			onSetQuote: vi.fn(),
+			onToggleExpand,
+		}
+		const { rerender } = render(<ChatRow {...props} isExpanded={false} />)
+		const disclosure = screen.getByRole("button", { name: "Thinking..." })
+		expect(disclosure).toHaveAttribute("aria-expanded", "false")
+		expect(screen.queryByText("Private reasoning")).toBeNull()
+		fireEvent.click(disclosure)
+		expect(onToggleExpand).toHaveBeenCalledWith(2_000)
+		rerender(<ChatRow {...props} isExpanded={true} />)
+		expect(screen.getByText("Private reasoning")).toBeInTheDocument()
+		rerender(<ChatRow {...props} isExpanded={true} message={{ ...message, partial: false }} />)
+		expect(screen.getByRole("button", { name: "Thinking" })).toHaveAttribute("aria-expanded", "true")
+		rerender(<ChatRow {...props} isExpanded={false} message={{ ...message, partial: false }} />)
+		expect(screen.queryByText("Private reasoning")).toBeNull()
+	})
+})

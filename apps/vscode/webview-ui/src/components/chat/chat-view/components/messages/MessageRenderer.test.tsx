@@ -39,6 +39,7 @@ function List({ messages }: { messages: ClineMessage[] }) {
 		"",
 		{ executeButtonAction: vi.fn(), handleSendMessage: vi.fn() } as unknown as MessageHandlers,
 		false,
+		{ isExpanded: () => false, onToggle: vi.fn() },
 	)
 	return <div>{messages.map((m, index) => renderItem(index, m))}</div>
 }

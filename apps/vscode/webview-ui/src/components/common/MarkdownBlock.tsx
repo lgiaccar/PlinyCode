@@ -77,6 +77,12 @@ const MemoizedMarkdownBlock = memo(
 						return <strong {...props} />
 					},
 					img: (props) => <UnsafeImage {...props} />,
+					table: ({ children, ...tableProps }: React.ComponentProps<"table">) => (
+						// biome-ignore lint/a11y/noNoninteractiveTabindex: Wide tables need keyboard focus to scroll inside the message.
+						<section aria-label="Markdown table" className="markdown-table-scroll" tabIndex={0}>
+							<table {...tableProps}>{children}</table>
+						</section>
+					),
 				}}
 				rehypePlugins={[[rehypeHighlight as any, {} as Options]]}
 				remarkPlugins={[
@@ -441,13 +447,13 @@ const InlineCodeWithFileCheck: React.FC<ComponentProps<"code"> & { [key: string]
 const MarkdownBlock = memo(({ markdown, compact, showCursor }: MarkdownBlockProps) => {
 	return (
 		<div className="inline-markdown-block">
-			<span
-				className={cn("inline [&>p]:mt-0", {
+			<div
+				className={cn("markdown-content", {
 					"inline-cursor-container": showCursor,
-					"[&>p]:m-0": compact,
+					"markdown-content-compact": compact,
 				})}>
 				{markdown ? <MemoizedMarkdown content={markdown} id="markdown-block" /> : markdown}
-			</span>
+			</div>
 		</div>
 	)
 })

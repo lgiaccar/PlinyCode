@@ -8,7 +8,7 @@ import { globby } from "globby"
 import { createRequire } from "module"
 import os from "os"
 import * as path from "path"
-import { rmrf } from "./file-utils.mjs"
+import { rmrf, writeFileWithMkdirs } from "./file-utils.mjs"
 import { main as generateHostBridgeClient } from "./generate-host-bridge-client.mjs"
 import { main as generateProtoBusSetup } from "./generate-protobus-setup.mjs"
 
@@ -123,35 +123,50 @@ async function compileProtos() {
 	// Check for Apple Silicon compatibility before proceeding
 	checkAppleSiliconCompatibility()
 
-	// Create output directories if they don't exist
-	for (const dir of [TS_OUT_DIR, DESCRIPTOR_OUT_DIR]) {
+	// Generate in scratch space. Replacing only changed outputs avoids deleting
+	// imports while esbuild and Vite are watching the live source directories.
+	const stagingRoot = path.resolve("../../ai_output")
+	for (const dir of [stagingRoot, DESCRIPTOR_OUT_DIR]) {
 		await fs.mkdir(dir, { recursive: true })
 	}
+	const stagingDir = await fs.mkdtemp(path.join(stagingRoot, "protos-"))
 
-	// Process all proto files
-	const protoFiles = await globby("**/*.proto", { cwd: PROTO_DIR, realpath: true })
-	console.log(chalk.cyan(`Processing ${protoFiles.length} proto files from`), PROTO_DIR)
-
-	tsProtoc(TS_OUT_DIR, protoFiles, TS_PROTO_OPTIONS)
-
-	const descriptorFile = path.join(DESCRIPTOR_OUT_DIR, "descriptor_set.pb")
-	const descriptorProtocArgs = [
-		`--proto_path=${PROTO_DIR}`,
-		`--descriptor_set_out=${descriptorFile}`,
-		"--include_imports",
-		...protoFiles,
-	]
 	try {
+		// Process all proto files
+		const protoFiles = await globby("**/*.proto", { cwd: PROTO_DIR, realpath: true })
+		console.log(chalk.cyan(`Processing ${protoFiles.length} proto files from`), PROTO_DIR)
+
+		tsProtoc(stagingDir, protoFiles, TS_PROTO_OPTIONS)
+
+		const descriptorFile = path.join(DESCRIPTOR_OUT_DIR, "descriptor_set.pb")
+		const descriptorProtocArgs = [
+			`--proto_path=${PROTO_DIR}`,
+			`--descriptor_set_out=${descriptorFile}`,
+			"--include_imports",
+			...protoFiles,
+		]
 		log_verbose(chalk.cyan("Generating descriptor set..."))
 		log_verbose(`${PROTOC} ${descriptorProtocArgs.join(" ")}`)
 		execFileSync(PROTOC, descriptorProtocArgs, { stdio: "inherit" })
-	} catch (error) {
-		console.error(chalk.red("Error generating descriptor set for proto file:"), error)
-		process.exit(1)
-	}
+		await syncGeneratedProtos(stagingDir)
 
-	log_verbose(chalk.green("Protocol Buffer code generation completed successfully."))
-	log_verbose(chalk.green(`TypeScript files generated in: ${TS_OUT_DIR}`))
+		log_verbose(chalk.green("Protocol Buffer code generation completed successfully."))
+		log_verbose(chalk.green(`TypeScript files generated in: ${TS_OUT_DIR}`))
+	} finally {
+		await rmrf(stagingDir)
+	}
+}
+
+async function syncGeneratedProtos(stagingDir) {
+	const generatedFiles = await globby("**/*.ts", { cwd: stagingDir })
+	const generatedSet = new Set(generatedFiles)
+	for (const relativePath of generatedFiles) {
+		await writeFileWithMkdirs(path.join(TS_OUT_DIR, relativePath), await fs.readFile(path.join(stagingDir, relativePath)))
+	}
+	if (!fsSync.existsSync(TS_OUT_DIR)) return
+	for (const relativePath of await globby("**/*.ts", { cwd: TS_OUT_DIR })) {
+		if (!generatedSet.has(relativePath)) await rmrf(path.join(TS_OUT_DIR, relativePath))
+	}
 }
 
 function tsProtoc(outDir, protoFiles, protoOptions) {
@@ -168,16 +183,11 @@ function tsProtoc(outDir, protoFiles, protoOptions) {
 		execFileSync(PROTOC, args, { stdio: "inherit" })
 	} catch (error) {
 		console.error(chalk.red("Error generating TypeScript for proto files:"), error)
-		process.exit(1)
+		throw error
 	}
 }
 
 async function cleanup() {
-	// Clean up existing generated files
-	log_verbose(chalk.cyan("Cleaning up existing generated TypeScript files..."))
-	await rmrf(TS_OUT_DIR)
-	await rmrf("src/generated")
-
 	// Clean up generated files that were moved.
 	await rmrf("src/hosts/vscode/host-grpc-service-config.ts")
 	await rmrf("src/core/controller/grpc-service-config.ts")
