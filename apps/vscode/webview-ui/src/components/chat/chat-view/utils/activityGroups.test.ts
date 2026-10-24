@@ -59,8 +59,10 @@ describe("groupActivityRows", () => {
 		expect(groupActivityRows([say(1, "reasoning"), approval]).at(-1)).toBe(approval)
 		const feedback = { ...say(3, "user_feedback", "Approved"), answersTool: true }
 		const result = groupActivityRows([say(1, "reasoning"), approval, feedback, say(4, "completion_result", "Done")])
-		expect(result).toHaveLength(2)
+		expect(result).toHaveLength(4)
 		expect(isActivityGroup(result[0])).toBe(true)
+		expect(result[1]).toBe(approval)
+		expect(isActivityGroup(result[2])).toBe(true)
 	})
 
 	it("keeps all adjacent final text blocks visible when there is no completion row", () => {

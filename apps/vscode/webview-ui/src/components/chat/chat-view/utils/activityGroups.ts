@@ -32,8 +32,9 @@ function isCompletion(item: ChatListItem): boolean {
 function mustStayVisible(item: ChatListItem): boolean {
 	if (Array.isArray(item)) return false
 	return (
-		(item.type === "say" && ["error", "diff_error", "clineignore_error", "memory_proposal"].includes(item.say ?? "")) ||
-		(item.type === "ask" && item.ask === "mistake_limit_reached")
+		(item.type === "say" &&
+			["error", "diff_error", "clineignore_error", "memory_proposal", "hook_status", "command"].includes(item.say ?? "")) ||
+		(item.type === "ask" && ["mistake_limit_reached", "tool"].includes(item.ask ?? ""))
 	)
 }
 
