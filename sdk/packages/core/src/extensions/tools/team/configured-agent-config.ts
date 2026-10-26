@@ -161,6 +161,26 @@ export function loadConfiguredAgentConfigs(input: {
 	const configsByName = new Map<string, ConfiguredAgentConfig>();
 	const errors: ConfiguredAgentReadError[] = [];
 
+	/**
+	 * Loads a single agent file: reads, parses, and deduplicates by name.
+	 * Shared between top-level files and files in subdirectories.
+	 */
+	const loadFile = (filePath: string): void => {
+		try {
+			const raw = readFileSync(filePath, "utf8");
+			const config = parseConfiguredAgentConfig(raw, { path: filePath });
+			const normalizedName = normalizeAgentName(config.name);
+			if (!configsByName.has(normalizedName)) {
+				configsByName.set(normalizedName, config);
+			}
+		} catch (error) {
+			errors.push({
+				path: filePath,
+				error: error instanceof Error ? error : new Error(String(error)),
+			});
+		}
+	};
+
 	for (const directory of searchPaths.filter(Boolean)) {
 		if (!existsSync(directory)) {
 			continue;
@@ -178,23 +198,23 @@ export function loadConfiguredAgentConfigs(input: {
 		}
 
 		for (const entry of entries) {
-			if (!entry.isFile() || !isConfiguredAgentFileName(entry.name)) {
-				continue;
-			}
-
-			const filePath = join(directory, entry.name);
-			try {
-				const raw = readFileSync(filePath, "utf8");
-				const config = parseConfiguredAgentConfig(raw, { path: filePath });
-				const normalizedName = normalizeAgentName(config.name);
-				if (!configsByName.has(normalizedName)) {
-					configsByName.set(normalizedName, config);
+			if (entry.isFile() && isConfiguredAgentFileName(entry.name)) {
+				loadFile(join(directory, entry.name));
+			} else if (entry.isDirectory()) {
+				// Recurse one level into subdirectories (e.g. .github/agents/fm-agents/*.md)
+				// so agents organized in folders are discovered, matching how skills work.
+				const subDir = join(directory, entry.name);
+				let subEntries: Dirent[];
+				try {
+					subEntries = readdirSync(subDir, { withFileTypes: true });
+				} catch {
+					continue;
 				}
-			} catch (error) {
-				errors.push({
-					path: filePath,
-					error: error instanceof Error ? error : new Error(String(error)),
-				});
+				for (const subEntry of subEntries) {
+					if (subEntry.isFile() && isConfiguredAgentFileName(subEntry.name)) {
+						loadFile(join(subDir, subEntry.name));
+					}
+				}
 			}
 		}
 	}

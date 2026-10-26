@@ -7,13 +7,20 @@ import * as vscode from "vscode"
  * to point at custom agent files). Returns absolute paths; relative entries are
  * resolved against the workspace root.
  *
- * Returns [] when running outside VS Code or when the setting is absent/empty.
+ * Falls back to `github.copilot.chat.agentFilesLocations` (Copilot's own key) so
+ * workspaces that already declare agent locations for Copilot are picked up
+ * automatically. Returns [] when running outside VS Code or when the setting is
+ * absent/empty.
  */
 export function readAgentFileLocations(workspaceRoot: string | undefined): string[] {
 	try {
-		const config = vscode.workspace.getConfiguration("chat")
-		const raw = config.get<string[]>("agentFilesLocations", [])
-		if (!Array.isArray(raw) || raw.length === 0) {
+		// PlinyCode's own setting (declared in package.json under "chat").
+		const ownRaw = vscode.workspace.getConfiguration("chat").get<unknown[]>("agentFilesLocations", [])
+		// Copilot's setting, used as a fallback when the workspace already lists
+		// agent folders for Copilot under its own namespace.
+		const copilotRaw = vscode.workspace.getConfiguration("github.copilot.chat").get<unknown[]>("agentFilesLocations", [])
+		const raw = [...(Array.isArray(ownRaw) ? ownRaw : []), ...(Array.isArray(copilotRaw) ? copilotRaw : [])]
+		if (raw.length === 0) {
 			return []
 		}
 		return raw

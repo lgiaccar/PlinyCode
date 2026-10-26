@@ -126,4 +126,27 @@ describe("loadConfiguredAgentConfigs", () => {
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
+
+	it("loads agent files from immediate subdirectories", () => {
+		const dir = mkdtempSync(join(tmpdir(), "configured-agents-"));
+		try {
+			const agentsDir = join(dir, "agents");
+			const subDir = join(agentsDir, "fm-agents");
+			mkdirSync(subDir, { recursive: true });
+			const body = (name: string) =>
+				`---\nname: ${name}\ndescription: Does ${name}\n---\nYou are ${name}.\n`;
+			writeFileSync(join(subDir, "coder.md"), body("coder"));
+			writeFileSync(join(subDir, "planner.md"), body("planner"));
+			const { configs, errors } = loadConfiguredAgentConfigs({
+				searchPaths: [agentsDir],
+			});
+			expect(errors).toEqual([]);
+			expect(configs.map((config) => config.name).sort()).toEqual([
+				"coder",
+				"planner",
+			]);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });
