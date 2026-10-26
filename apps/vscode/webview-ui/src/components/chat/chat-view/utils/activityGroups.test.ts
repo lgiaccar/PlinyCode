@@ -91,6 +91,43 @@ describe("groupActivityRows", () => {
 		expect(result.slice(1)).toEqual([first, second])
 	})
 
+	it.each([
+		"",
+		"[Command exited with code 1]\nThe term 'head' is not recognized",
+	])("groups completed commands and their output, including failures (%s)", (output) => {
+		const command = { ...say(2, "command", `git grep example\n${output}`), commandCompleted: true }
+		const reasoning = say(1, "reasoning")
+		const answer = say(3, "completion_result", "Done")
+		for (const rows of [
+			[reasoning, command],
+			[reasoning, command, answer],
+		]) {
+			const result = groupActivityRows(rows)
+			expect(result).toHaveLength(rows.length === 2 ? 1 : 2)
+			expect(isActivityGroup(result[0])).toBe(true)
+			if (isActivityGroup(result[0])) {
+				expect(result[0].items).toEqual([reasoning, command])
+			}
+			if (rows.length === 3) expect(result[1]).toBe(answer)
+		}
+	})
+
+	it.each([undefined, false])("keeps an unfinished command visible (commandCompleted=%s)", (commandCompleted) => {
+		const command = { ...say(2, "command", "bun test"), partial: true, commandCompleted }
+		const result = groupActivityRows([say(1, "reasoning"), command])
+		expect(result).toHaveLength(2)
+		expect(isActivityGroup(result[0])).toBe(true)
+		expect(result[1]).toBe(command)
+	})
+
+	it("keeps a pending command approval visible", () => {
+		const approval: ClineMessage = { ts: 2, type: "ask", ask: "command", text: "bun test" }
+		const result = groupActivityRows([say(1, "reasoning"), approval])
+		expect(result).toHaveLength(2)
+		expect(isActivityGroup(result[0])).toBe(true)
+		expect(result[1]).toBe(approval)
+	})
+
 	it("treats text before an unfinished tool call as activity", () => {
 		const result = groupActivityRows([say(1, "text", "I will search"), say(2, "tool", "Searching")])
 		expect(result).toHaveLength(1)

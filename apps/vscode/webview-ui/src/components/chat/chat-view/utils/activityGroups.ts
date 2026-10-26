@@ -33,7 +33,8 @@ function mustStayVisible(item: ChatListItem): boolean {
 	if (Array.isArray(item)) return false
 	return (
 		(item.type === "say" &&
-			["error", "diff_error", "clineignore_error", "memory_proposal", "hook_status", "command"].includes(item.say ?? "")) ||
+			(["error", "diff_error", "clineignore_error", "memory_proposal", "hook_status"].includes(item.say ?? "") ||
+				(item.say === "command" && item.commandCompleted !== true))) ||
 		(item.type === "ask" && ["mistake_limit_reached", "tool"].includes(item.ask ?? ""))
 	)
 }

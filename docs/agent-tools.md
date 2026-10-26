@@ -106,6 +106,11 @@ An extension tool that searches the public web and returns titles, URLs and snip
 
 ## Shell commands (`run_commands`)
 
+In chat, completed commands and their output (including non-zero exit codes)
+are collapsed under **Show activity**. Expand it to inspect the command and
+output. Running commands and pending command approvals stay visible so their
+progress and controls remain accessible.
+
 With Terminal Execution Mode set to VS Code Terminal (the default), commands
 run in a PlinyCode terminal, and the output is read through shell integration
 (`VscodeTerminalProcess`).

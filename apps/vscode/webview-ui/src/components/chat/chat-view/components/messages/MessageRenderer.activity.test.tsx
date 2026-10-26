@@ -28,11 +28,13 @@ const say = (ts: number, kind: ClineMessage["say"], text: string): ClineMessage 
 describe("activity disclosure", () => {
 	it("shows only the answer until the user expands the activity", async () => {
 		const editRecord = JSON.stringify({ tool: "editedExistingFile", path: "test.ts", content: "updated content" })
+		const commandRecord = "git grep example\n[Command exited with code 1]\nThe term 'head' is not recognized"
 		const rows = groupActivityRows([
 			say(1, "reasoning", "Private thinking"),
 			say(2, "tool", "Web search results"),
 			say(3, "tool", editRecord),
-			say(4, "completion_result", "Final answer"),
+			{ ...say(4, "command", commandRecord), commandCompleted: true },
+			say(5, "completion_result", "Final answer"),
 		])
 		const onActivityToggle = vi.fn()
 		function ActivityList({ showActivity = true }: { showActivity?: boolean }) {
@@ -52,10 +54,12 @@ describe("activity disclosure", () => {
 		expect(screen.getByText("Final answer")).toBeInTheDocument()
 		expect(screen.queryByText("Web search results")).toBeNull()
 		expect(screen.queryByText(editRecord)).toBeNull()
+		expect(screen.queryByText(/git grep example/)).toBeNull()
 		await userEvent.setup().click(disclosure)
 		expect(disclosure).toHaveAttribute("aria-expanded", "true")
 		expect(screen.getByText("Web search results")).toBeInTheDocument()
 		expect(screen.getByText(editRecord)).toBeInTheDocument()
+		expect(screen.getByText(/git grep example/)).toHaveTextContent(commandRecord.replaceAll("\n", " "))
 		expect(screen.getByText("Private thinking")).toBeInTheDocument()
 		expect(onActivityToggle).toHaveBeenCalledTimes(1)
 		rerender(<ActivityList showActivity={false} />)
@@ -67,15 +71,16 @@ describe("activity disclosure", () => {
 		expect(reopenedDisclosure).toHaveAttribute("aria-expanded", "false")
 		expect(screen.queryByText("Web search results")).toBeNull()
 		expect(screen.queryByText(editRecord)).toBeNull()
+		expect(screen.queryByText(/git grep example/)).toBeNull()
 		expect(screen.getByText("Final answer")).toBeInTheDocument()
 	})
 
-	it("keeps a file approval request visible without expanding activity", () => {
+	it.each(["tool", "command"] as const)("keeps a %s approval request visible without expanding activity", (ask) => {
 		const approvalText = JSON.stringify({ tool: "editedExistingFile", path: "test.ts", content: "pending content" })
 		const approval: ClineMessage = {
 			ts: 3,
 			type: "ask",
-			ask: "tool",
+			ask,
 			text: approvalText,
 		}
 		const rows = groupActivityRows([say(1, "reasoning", "Private thinking"), approval])
