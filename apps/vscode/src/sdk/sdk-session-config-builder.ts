@@ -115,9 +115,14 @@ export class SdkSessionConfigBuilder {
 	/**
 	 * Keeps a conversation under the given agent file's instructions through
 	 * every rebuild (mode, MCP, compaction, resume, checkpoint restore).
+	 * Pass undefined to unpin (go back to generic agent).
 	 */
-	pinAgentPath(conversationId: string, agentPath: string): void {
-		this.pinnedAgentPaths.set(conversationId, agentPath)
+	pinAgentPath(conversationId: string, agentPath: string | undefined): void {
+		if (agentPath === undefined) {
+			this.pinnedAgentPaths.delete(conversationId)
+		} else {
+			this.pinnedAgentPaths.set(conversationId, agentPath)
+		}
 	}
 
 	pinnedAgentPath(conversationId: string | undefined): string | undefined {

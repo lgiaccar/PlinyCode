@@ -67,6 +67,8 @@ service TaskService {
   // Streams one sub-agent's live transcript: the messages kept so far, then each change
   // (docs/agent-tools.md, "Sub-agents")
   rpc subscribeToSubagentMessages(SubagentMessagesRequest) returns (stream SubagentMessagesUpdate);
+  // Updates the agent path for the current conversation (switches the agent mid-conversation)
+  rpc updateAgentPath(UpdateAgentPathRequest) returns (Empty);
 }
 
 // Which sub-agent's transcript to stream
@@ -301,3 +303,11 @@ message ImprovePromptResult {
   // Why it could not be improved; empty on success.
   string error = 2;
 }
+
+// Request for updating the agent path of the current conversation
+message UpdateAgentPathRequest {
+  Metadata metadata = 1;
+  // New agent path; empty means generic agent (no custom agent)
+  string agent_path = 2;
+}
+

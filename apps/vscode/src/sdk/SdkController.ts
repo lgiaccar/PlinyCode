@@ -102,6 +102,7 @@ import {
 	metadataNumber,
 	metadataWorktree,
 	SdkTaskHistory,
+	sessionHistoryRecordToHistoryItem,
 	sessionHistoryRecordToTaskItemFields,
 } from "./sdk-task-history"
 import { type BackgroundStartResult, SdkTaskStartCoordinator, type TaskStartOptions } from "./sdk-task-start-coordinator"
@@ -2122,6 +2123,40 @@ export class Controller {
 	/** Rewrites a draft prompt with a small free model (the "Improve prompt" button). */
 	async improvePrompt(text: string, mode: Mode): Promise<ImprovedPrompt> {
 		return improvePromptText(text, mode, await this.getWorkspaceRoot(), completeWithUtilityModel)
+	}
+
+	/** Updates the agent path for the current conversation, persisting it across rebuilds. */
+	async updateAgentPath(agentPath: string | undefined): Promise<void> {
+		const activeSession = this.sessions.getActiveSession()
+		if (!activeSession) {
+			Logger.log("[updateAgentPath] No active session")
+			return
+		}
+		const sessionId = activeSession.sessionId
+		Logger.log(`[updateAgentPath] Updating agent path for session ${sessionId}: ${agentPath ?? "(none)"}`)
+
+		// Pin the new agent path in the session config builder
+		this.sessionConfigBuilder.pinAgentPath(sessionId, agentPath)
+
+		// Update the history item so it persists across restarts
+		const updated = await this.taskHistory.updateAgentPath(sessionId, agentPath)
+		Logger.log(`[updateAgentPath] History update result: ${updated}`)
+
+		// Refresh the global state taskHistory cache so the webview sees the change
+		const freshHistory = await this.taskHistory.listHistory({ hydrate: false })
+		this.stateManager.setGlobalState("taskHistory", freshHistory.map(sessionHistoryRecordToHistoryItem))
+		Logger.log(`[updateAgentPath] Refreshed taskHistory cache (${freshHistory.length} items)`)
+
+		// Rebuild the session with the new agent (like mode changes do)
+		// This injects the new agent's instructions into the system prompt
+		Logger.log(`[updateAgentPath] Rebuilding session with new agent...`)
+		const currentMode = this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"
+		await this.mode.rebuildSessionForMode(currentMode)
+		Logger.log(`[updateAgentPath] Session rebuilt`)
+
+		// Post updated state to webview so the picker reflects the change immediately
+		await this.postStateToWebview()
+		Logger.log("[updateAgentPath] Posted state to webview")
 	}
 
 	async renameTask(taskId: string, title: string): Promise<void> {

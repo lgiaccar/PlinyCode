@@ -241,8 +241,11 @@ export class SdkTaskStartCoordinator {
 				newHistoryItem.pinnedModelId = startOptions.modelId
 			}
 			if (startOptions?.agentPath) {
+				Logger.log(`[TaskStart] Saving agentPath to history: ${startOptions.agentPath}`)
 				this.options.sessionConfigBuilder.pinAgentPath(taskSessionId, startOptions.agentPath)
 				newHistoryItem.agentPath = startOptions.agentPath
+			} else {
+				Logger.log("[TaskStart] No agentPath in startOptions")
 			}
 			if (startOptions?.title) newHistoryItem.task = startOptions.title
 			if (worktree) newHistoryItem.worktree = worktree

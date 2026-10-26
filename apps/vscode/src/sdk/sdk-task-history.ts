@@ -976,6 +976,16 @@ export class SdkTaskHistory {
 		return true
 	}
 
+	/** Updates the agent path for a task. Returns false when the task is unknown. */
+	async updateAgentPath(taskId: string, agentPath: string | undefined): Promise<boolean> {
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateTaskHistoryItem({ ...historyItem, agentPath })
+		return true
+	}
+
 	/**
 	 * Sets the conversation's budget in USD (0 = no limit). Returns false when the task is unknown or the amount invalid.
 	 * `remember` (the user typed it) also makes this amount the step a later budget stop raises the budget by.
