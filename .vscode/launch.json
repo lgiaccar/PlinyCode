@@ -6,6 +6,32 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "Run Extension (no prelaunch)",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
+				"--disable-workspace-trust",
+				"--disable-extension",
+				"synopsys-plinycode.plinycode-dev",
+				"--disable-extension",
+				"saoudrizwan.claude-dev",
+				"--disable-extension",
+				"saoudrizwan.cline-nightly",
+				"${workspaceFolder}/apps/vscode",
+				"--disable-extensions"
+			],
+			"outFiles": [
+				"${workspaceFolder}/apps/vscode/dist/**/*.js"
+			],
+			"envFile": "${workspaceFolder}/apps/vscode/.env",
+			"env": {
+				"IS_DEV": "true",
+				"DEV_WORKSPACE_FOLDER": "${workspaceFolder}/apps/vscode",
+				"CLINE_ENVIRONMENT": "production"
+			}
+		},
+		{
 			"name": "Run Extension (production)",
 			"type": "extensionHost",
 			"request": "launch",

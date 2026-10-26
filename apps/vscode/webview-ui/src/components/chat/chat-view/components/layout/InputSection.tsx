@@ -1,6 +1,5 @@
 import React from "react"
 import ChatTextArea from "@/components/chat/ChatTextArea"
-import { AgentPicker } from "@/components/chat/chat-textarea/components/AgentPicker"
 import QuotedMessagePreview from "@/components/chat/QuotedMessagePreview"
 import type { ScheduleRepeat } from "@/components/chat/scheduleTime"
 import { NewTaskWorkspacePicker } from "@/components/workspace/NewTaskWorkspacePicker"
@@ -74,13 +73,6 @@ export const InputSection: React.FC<InputSectionProps> = ({
 					worktree={nextTaskWorktree}
 				/>
 			)}
-			{!task && mode === "act" && (
-				<AgentPicker
-					agents={[...(globalAgents ?? []), ...(localAgents ?? [])]}
-					onChange={setSelectedAgentPath}
-					value={selectedAgentPath}
-				/>
-			)}
 			{activeQuote && (
 				<div style={{ marginBottom: "-12px", marginTop: "10px" }}>
 					<QuotedMessagePreview
@@ -101,12 +93,14 @@ export const InputSection: React.FC<InputSectionProps> = ({
 					}
 				}}
 				onSchedulePrompt={onSchedulePrompt}
+				onSelectedAgentPathChange={setSelectedAgentPath}
 				onSelectFilesAndImages={selectFilesAndImages}
 				onSend={(delivery, options) =>
 					messageHandlers.handleSendMessage(inputValue, selectedImages, selectedFiles, delivery, options)
 				}
 				placeholderText={placeholderText}
 				ref={textAreaRef}
+				selectedAgentPath={selectedAgentPath}
 				selectedFiles={selectedFiles}
 				selectedImages={selectedImages}
 				sendingDisabled={submitDisabled}
