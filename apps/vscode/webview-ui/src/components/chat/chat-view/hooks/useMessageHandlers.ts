@@ -231,7 +231,10 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 					// The pick applies to one conversation; the next one defaults to the window's workspace again.
 					setNextTaskWorkspace(undefined)
 					setNextTaskWorktree(false)
-					setSelectedAgentPath(undefined)
+					// Do NOT clear selectedAgentPath here: ConversationAgentPicker uses it
+					// as a fallback display until currentTaskItem.agentPath arrives from the
+					// extension, avoiding a flash back to "Generic Agent". It is harmless
+					// once the task exists (isNewTask is false) and agentPath is populated.
 					messageSent = true
 				} else if (turnState?.phase === "awaiting_approval") {
 					await sendAskResponseWithPendingState(
@@ -397,8 +400,10 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 		// on the previous task (#12924).
 		setPendingUserMessage(undefined)
 		setPendingResponse(undefined)
+		// Reset the agent picker so the next conversation starts as Generic.
+		setSelectedAgentPath(undefined)
 		await TaskServiceClient.clearTask(EmptyRequest.create({}))
-	}, [messages.length, setActiveQuote, setPendingUserMessage, setPendingResponse])
+	}, [messages.length, setActiveQuote, setPendingUserMessage, setPendingResponse, setSelectedAgentPath])
 
 	// Clear input state helper
 	const clearInputState = useCallback(() => {
@@ -553,9 +558,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 		[
 			clineAsk,
 			lastMessage,
-			messages,
 			clearInputState,
-			handleSendMessage,
 			startNewTask,
 			chatState,
 			backgroundCommandRunning,
