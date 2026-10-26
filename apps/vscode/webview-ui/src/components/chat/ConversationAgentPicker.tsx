@@ -107,9 +107,7 @@ export const ConversationAgentPicker: React.FC<ConversationAgentPickerProps> = (
 
 	// Current agent path: from props for new tasks (or as fallback until the history
 	// item arrives from the extension), from history item for existing tasks.
-	const currentAgentPath = isNewTask
-		? propsAgentPath
-		: (currentTaskItem?.agentPath ?? propsAgentPath)
+	const currentAgentPath = isNewTask ? propsAgentPath : (currentTaskItem?.agentPath ?? propsAgentPath)
 
 	// All enabled agents
 	const allAgents = [...(globalAgents ?? []), ...(localAgents ?? [])]

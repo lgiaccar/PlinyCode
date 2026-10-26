@@ -380,7 +380,6 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 			nextTaskWorktree,
 			setNextTaskWorktree,
 			selectedAgentPath,
-			setSelectedAgentPath,
 		],
 	)
 
