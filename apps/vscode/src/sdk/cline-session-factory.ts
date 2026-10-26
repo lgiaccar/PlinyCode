@@ -8,10 +8,13 @@
 //
 // The factory does NOT handle UI concerns — that's the SdkController's job.
 
+import { readFileSync } from "node:fs"
+
 import {
 	type ClineCoreStartInput,
 	type CoreSessionConfig,
 	type ProviderSettings,
+	parseConfiguredAgentConfig,
 	readCompactionStrategyGlobally,
 	resolveProviderApiKeyFromSettings,
 	type StartSessionResult,
@@ -100,6 +103,13 @@ export interface SessionConfigInput {
 	 * not be read from the displayed task.
 	 */
 	newConversation?: boolean
+	/**
+	 * Optional path to a custom agent file (e.g. `.cursor/agents/reviewer.md`)
+	 * selected by the user in the new-task UI. When set, the agent's body text
+	 * is prepended to the built system prompt so the conversation runs under
+	 * that agent's instructions. Empty or undefined means the default generic agent.
+	 */
+	agentPath?: string
 }
 
 /** Active session state tracked by the factory */
@@ -578,6 +588,42 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	if (input.memorySection) {
 		systemPrompt = `${systemPrompt}${input.memorySection}`
 	}
+
+	// When the user selected a custom agent for this conversation, load its
+	// body text and replace the "You are Cline..." identity line in the system
+	// prompt, keeping all the tool behaviour rules and environment info intact.
+	if (input.agentPath) {
+		try {
+			const raw = readFileSync(input.agentPath, "utf-8")
+			const agentConfig = parseConfiguredAgentConfig(raw, { path: input.agentPath })
+			if (agentConfig.systemPrompt?.trim()) {
+				// Find where the default Cline identity paragraph ends (search for the
+				// first double-newline paragraph break). If the prompt starts with
+				// "You are Cline...", replace that entire opening paragraph with the
+				// agent's own identity instructions so the model adopts the custom
+				// role instead of falling back to "I am Cline".
+				const clinePrefix = "You are Cline"
+				if (systemPrompt.startsWith(clinePrefix)) {
+					const firstParagraphEnd = systemPrompt.search(/\n\s*\n/)
+					if (firstParagraphEnd !== -1) {
+						systemPrompt = `${agentConfig.systemPrompt.trim()}${systemPrompt.slice(firstParagraphEnd)}`
+						Logger.log(`[SessionFactory] Replaced Cline identity with custom agent from ${input.agentPath}`)
+					} else {
+						// No paragraph break found — replace the entire prompt
+						systemPrompt = agentConfig.systemPrompt.trim()
+						Logger.log(`[SessionFactory] Replaced entire system prompt with custom agent from ${input.agentPath}`)
+					}
+				} else {
+					// Default prompt format changed — prepend as fallback
+					systemPrompt = `${agentConfig.systemPrompt.trim()}\n\n---\n\n${systemPrompt}`
+					Logger.log(`[SessionFactory] Prepended custom agent instructions from ${input.agentPath}`)
+				}
+			}
+		} catch (error) {
+			Logger.warn(`[SessionFactory] Failed to load custom agent from ${input.agentPath}:`, error)
+		}
+	}
+
 	const memoryExcerpt = renderSubAgentMemoryExcerpt(input.memorySection)
 
 	const stateManager = StateManager.get()

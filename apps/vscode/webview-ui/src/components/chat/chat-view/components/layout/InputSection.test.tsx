@@ -7,7 +7,11 @@ import { InputSection } from "./InputSection"
 
 const mockTurnState = vi.fn<() => TurnState | undefined>(() => undefined)
 vi.mock("@/context/ExtensionStateContext", () => ({
-	useExtensionState: () => ({ turnState: mockTurnState() }),
+	useExtensionState: () => ({ turnState: mockTurnState(), mode: "act", globalAgents: [], localAgents: [] }),
+}))
+
+vi.mock("@/components/chat/chat-textarea/components/AgentPicker", () => ({
+	AgentPicker: () => null,
 }))
 
 vi.mock("@/components/workspace/NewTaskWorkspacePicker", () => ({
@@ -47,6 +51,8 @@ function makeChatState(overrides: Partial<ChatState> = {}): ChatState {
 		setSelectedFiles: vi.fn(),
 		textAreaRef: { current: null },
 		handleFocusChange: vi.fn(),
+		selectedAgentPath: undefined,
+		setSelectedAgentPath: vi.fn(),
 		...overrides,
 	} as unknown as ChatState
 }

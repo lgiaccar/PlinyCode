@@ -108,6 +108,13 @@ export interface TaskStartOptions {
 	 * start fails with an error row and nothing runs.
 	 */
 	worktree?: boolean
+	/**
+	 * Path to a custom agent file (e.g. `.cursor/agents/reviewer.md`) to use as
+	 * the primary agent for this conversation. When set, the session prepends the
+	 * agent's instructions to the system prompt. Empty or undefined means the
+	 * default generic agent.
+	 */
+	agentPath?: string
 }
 
 export type BackgroundStartResult =
@@ -157,6 +164,7 @@ export class SdkTaskStartCoordinator {
 				cwd,
 				mode,
 				modelId: startOptions?.modelId,
+				agentPath: startOptions?.agentPath,
 			})
 
 			Logger.log(
@@ -231,6 +239,13 @@ export class SdkTaskStartCoordinator {
 			if (startOptions?.modelId) {
 				this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
 				newHistoryItem.pinnedModelId = startOptions.modelId
+			}
+			if (startOptions?.agentPath) {
+				Logger.log(`[TaskStart] Saving agentPath to history: ${startOptions.agentPath}`)
+				this.options.sessionConfigBuilder.pinAgentPath(taskSessionId, startOptions.agentPath)
+				newHistoryItem.agentPath = startOptions.agentPath
+			} else {
+				Logger.log("[TaskStart] No agentPath in startOptions")
 			}
 			if (startOptions?.title) newHistoryItem.task = startOptions.title
 			if (worktree) newHistoryItem.worktree = worktree

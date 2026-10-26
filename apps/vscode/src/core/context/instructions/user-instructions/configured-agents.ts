@@ -37,8 +37,9 @@ interface AgentLocations {
 	globalDir: string
 }
 
-export function resolveAgentLocations(workspaceRoot: string | undefined): AgentLocations {
-	return { searchPaths: resolveAgentConfigSearchPaths(workspaceRoot), globalDir: resolveAgentsConfigDirPath() }
+export function resolveAgentLocations(workspaceRoot: string | undefined, extraPaths: string[] = []): AgentLocations {
+	const searchPaths = [...resolveAgentConfigSearchPaths(workspaceRoot), ...extraPaths]
+	return { searchPaths, globalDir: resolveAgentsConfigDirPath() }
 }
 
 /** The workspace folder the New agent button writes to. */

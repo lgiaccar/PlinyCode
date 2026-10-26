@@ -33,6 +33,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 		setNextTaskWorkspace,
 		nextTaskWorktree,
 		setNextTaskWorktree,
+		selectedAgentPath,
+		setSelectedAgentPath,
 	} = chatState
 	const cancelInFlightRef = useRef(false)
 	const pendingResponseIdRef = useRef(0)
@@ -205,6 +207,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 						workspacePath: nextTaskWorkspace?.path ?? "",
 						// "Run in worktree": a new branch and git worktree for this conversation.
 						worktree: nextTaskWorktree,
+						agentPath: selectedAgentPath ?? "",
 					})
 					clearSentMessageState()
 					trackPromptSubmitted(false)
@@ -371,6 +374,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 			setNextTaskWorkspace,
 			nextTaskWorktree,
 			setNextTaskWorktree,
+			selectedAgentPath,
 		],
 	)
 
@@ -390,8 +394,10 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 		// on the previous task (#12924).
 		setPendingUserMessage(undefined)
 		setPendingResponse(undefined)
+		// Reset the agent picker so the next conversation starts as Generic.
+		setSelectedAgentPath(undefined)
 		await TaskServiceClient.clearTask(EmptyRequest.create({}))
-	}, [messages.length, setActiveQuote, setPendingUserMessage, setPendingResponse])
+	}, [messages.length, setActiveQuote, setPendingUserMessage, setPendingResponse, setSelectedAgentPath])
 
 	// Clear input state helper
 	const clearInputState = useCallback(() => {

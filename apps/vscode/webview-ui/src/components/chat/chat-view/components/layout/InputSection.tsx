@@ -47,11 +47,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		setNextTaskWorkspace,
 		nextTaskWorktree,
 		setNextTaskWorktree,
+		selectedAgentPath,
+		setSelectedAgentPath,
 		clineAsk,
 	} = chatState
 
 	const { isAtBottom, scrollToBottomAuto } = scrollBehavior
-	const { turnState } = useExtensionState()
+	const { turnState, mode, globalAgents, localAgents } = useExtensionState()
 	const legacyTaskRunning =
 		turnState === undefined &&
 		(lastMessage?.partial === true || (lastMessage?.type === "say" && lastMessage.say === "api_req_started"))
@@ -91,12 +93,14 @@ export const InputSection: React.FC<InputSectionProps> = ({
 					}
 				}}
 				onSchedulePrompt={onSchedulePrompt}
+				onSelectedAgentPathChange={setSelectedAgentPath}
 				onSelectFilesAndImages={selectFilesAndImages}
 				onSend={(delivery, options) =>
 					messageHandlers.handleSendMessage(inputValue, selectedImages, selectedFiles, delivery, options)
 				}
 				placeholderText={placeholderText}
 				ref={textAreaRef}
+				selectedAgentPath={selectedAgentPath}
 				selectedFiles={selectedFiles}
 				selectedImages={selectedImages}
 				sendingDisabled={submitDisabled}

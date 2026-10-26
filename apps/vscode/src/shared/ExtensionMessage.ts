@@ -153,6 +153,8 @@ export interface ExtensionState {
 	localSkillsToggles?: Record<string, boolean>
 	backgroundEditEnabled?: boolean
 	showFeatureTips?: boolean
+	globalAgents?: AgentStateEntry[]
+	localAgents?: AgentStateEntry[]
 }
 
 /**
@@ -498,3 +500,12 @@ export interface ClineSubagentUsageInfo {
 type ClineApiReqCancelReason = "streaming_failed" | "user_cancelled" | "retries_exhausted"
 
 export const COMPLETION_RESULT_CHANGES_FLAG = "HAS_CHANGES"
+
+export interface AgentStateEntry {
+	name: string
+	path: string
+	enabled: boolean
+	description?: string
+	model?: string
+	error?: string
+}
