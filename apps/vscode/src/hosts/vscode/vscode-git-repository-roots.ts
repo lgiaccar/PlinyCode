@@ -14,7 +14,7 @@ type GitExtensionExports = {
 }
 
 /** Repository roots the built-in Git extension knows about (includes nested repos). */
-export function listVscodeGitRepositoryRoots(): string[] {
+function listVscodeGitRepositoryRoots(): string[] {
 	const gitExtension = vscode.extensions.getExtension<GitExtensionExports>("vscode.git")?.exports
 	if (!gitExtension) {
 		return []

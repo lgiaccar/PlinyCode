@@ -177,17 +177,17 @@ export function parseRemote(url: string, provider?: string): Remote {
 	return { kind: "ado", host: "dev.azure.com", owner: org, repo: stripGit(repo), project }
 }
 
-export type GitFailureReason = "git-missing" | "dubious-ownership" | "not-a-repo" | "other"
+type GitFailureReason = "git-missing" | "dubious-ownership" | "not-a-repo" | "other"
 
-export type GitRunFailure = {
+type GitRunFailure = {
 	ok: false
 	stderr: string
 	reason: GitFailureReason
 }
 
-export type GitRunSuccess = { ok: true; stdout: string }
+type GitRunSuccess = { ok: true; stdout: string }
 
-export type GitRunResult = GitRunSuccess | GitRunFailure
+type GitRunResult = GitRunSuccess | GitRunFailure
 
 function classifyGitFailure(stderr: string): GitFailureReason {
 	const lower = stderr.toLowerCase()
@@ -200,7 +200,7 @@ function classifyGitFailure(stderr: string): GitFailureReason {
 	return "other"
 }
 
-export function formatGitRepoFailureMessage(start: string, failure: GitRunFailure): string {
+function formatGitRepoFailureMessage(start: string, failure: GitRunFailure): string {
 	switch (failure.reason) {
 		case "git-missing":
 			return `Git is not installed or not on PATH (needed to find the repository for ${start}). Install Git and ensure the editor can run it.`
@@ -213,7 +213,7 @@ export function formatGitRepoFailureMessage(start: string, failure: GitRunFailur
 	}
 }
 
-export function runGit(cwd: string, args: string[]): Promise<GitRunResult> {
+function runGit(cwd: string, args: string[]): Promise<GitRunResult> {
 	return new Promise((resolve) => {
 		execFile("git", ["-C", cwd, ...args], { windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
 			if (!error) {
@@ -235,14 +235,6 @@ function git(cwd: string, args: string[]): Promise<string | undefined> {
 	return runGit(cwd, args).then((result) => (result.ok ? result.stdout : undefined))
 }
 
-export async function resolveRepoRoot(start: string): Promise<{ root: string } | GitRunFailure> {
-	const result = await runGit(start, ["rev-parse", "--show-toplevel"])
-	if (result.ok) {
-		return { root: result.stdout }
-	}
-	return result
-}
-
 function resolveWorkspace(workspace?: string): string {
 	const raw = workspace || process.env.DEVOPS_MCP_WORKSPACE || process.cwd()
 	const expanded = raw.startsWith("~") ? path.join(os.homedir(), raw.slice(1)) : raw
@@ -254,13 +246,13 @@ function resolveWorkspace(workspace?: string): string {
 
 export async function loadContext(workspace?: string): Promise<RepoContext> {
 	const start = resolveWorkspace(workspace)
-	const resolved = await resolveRepoRoot(start)
-	if (!("root" in resolved)) {
+	const rootResult = await runGit(start, ["rev-parse", "--show-toplevel"])
+	if (!rootResult.ok) {
 		throw new DevOpsError(
-			`${formatGitRepoFailureMessage(start, resolved)} Pass \`workspace\` with the absolute path of the repository when needed.`,
+			`${formatGitRepoFailureMessage(start, rootResult)} Pass \`workspace\` with the absolute path of the repository when needed.`,
 		)
 	}
-	const root = resolved.root
+	const root = rootResult.stdout
 	const remoteName = process.env.DEVOPS_MCP_REMOTE || "origin"
 	const url = await git(root, ["remote", "get-url", remoteName])
 	if (!url) {
@@ -276,11 +268,11 @@ export async function loadContext(workspace?: string): Promise<RepoContext> {
  * with (GitHub, Azure DevOps, or any host when DEVOPS_MCP_PROVIDER is set).
  */
 export async function hasSupportedRemote(cwd: string): Promise<boolean> {
-	const resolved = await resolveRepoRoot(cwd)
-	if (!("root" in resolved)) {
+	const root = await git(cwd, ["rev-parse", "--show-toplevel"])
+	if (!root) {
 		return false
 	}
-	const remotes = await git(resolved.root, ["remote", "-v"])
+	const remotes = await git(root, ["remote", "-v"])
 	if (!remotes) {
 		return false
 	}
