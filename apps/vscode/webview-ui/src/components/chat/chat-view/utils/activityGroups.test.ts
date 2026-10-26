@@ -65,6 +65,25 @@ describe("groupActivityRows", () => {
 		expect(isActivityGroup(result[2])).toBe(true)
 	})
 
+	it.each([
+		"editedExistingFile",
+		"newFileCreated",
+	] as const)("groups automatic %s activity but keeps approval requests visible", (tool) => {
+		const edit = say(2, "tool", JSON.stringify({ tool, path: "test.ts", content: 'export const name = "cline"' }))
+		const answer = say(3, "completion_result", "Done")
+		const result = groupActivityRows([say(1, "reasoning"), edit, answer])
+		expect(result).toHaveLength(2)
+		expect(isActivityGroup(result[0])).toBe(true)
+		if (isActivityGroup(result[0])) {
+			expect(result[0].items).toContain(edit)
+		}
+		expect(result[1]).toBe(answer)
+
+		const approval: ClineMessage = { ts: edit.ts, type: "ask", ask: "tool", text: edit.text }
+		const pending = groupActivityRows([say(1, "reasoning"), approval])
+		expect(pending.at(-1)).toBe(approval)
+	})
+
 	it("keeps all adjacent final text blocks visible when there is no completion row", () => {
 		const first = say(3, "text", "First paragraph")
 		const second = say(4, "text", "Second paragraph")

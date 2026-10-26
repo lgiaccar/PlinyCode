@@ -27,10 +27,12 @@ const say = (ts: number, kind: ClineMessage["say"], text: string): ClineMessage 
 
 describe("activity disclosure", () => {
 	it("shows only the answer until the user expands the activity", async () => {
+		const editRecord = JSON.stringify({ tool: "editedExistingFile", path: "test.ts", content: "updated content" })
 		const rows = groupActivityRows([
 			say(1, "reasoning", "Private thinking"),
 			say(2, "tool", "Web search results"),
-			say(3, "completion_result", "Final answer"),
+			say(3, "tool", editRecord),
+			say(4, "completion_result", "Final answer"),
 		])
 		const onActivityToggle = vi.fn()
 		function ActivityList({ showActivity = true }: { showActivity?: boolean }) {
@@ -49,9 +51,11 @@ describe("activity disclosure", () => {
 		expect(disclosure).toHaveAttribute("aria-expanded", "false")
 		expect(screen.getByText("Final answer")).toBeInTheDocument()
 		expect(screen.queryByText("Web search results")).toBeNull()
+		expect(screen.queryByText(editRecord)).toBeNull()
 		await userEvent.setup().click(disclosure)
 		expect(disclosure).toHaveAttribute("aria-expanded", "true")
 		expect(screen.getByText("Web search results")).toBeInTheDocument()
+		expect(screen.getByText(editRecord)).toBeInTheDocument()
 		expect(screen.getByText("Private thinking")).toBeInTheDocument()
 		expect(onActivityToggle).toHaveBeenCalledTimes(1)
 		rerender(<ActivityList showActivity={false} />)
@@ -62,6 +66,39 @@ describe("activity disclosure", () => {
 		await userEvent.setup().keyboard("{Enter}")
 		expect(reopenedDisclosure).toHaveAttribute("aria-expanded", "false")
 		expect(screen.queryByText("Web search results")).toBeNull()
+		expect(screen.queryByText(editRecord)).toBeNull()
+		expect(screen.getByText("Final answer")).toBeInTheDocument()
+	})
+
+	it("keeps a file approval request visible without expanding activity", () => {
+		const approvalText = JSON.stringify({ tool: "editedExistingFile", path: "test.ts", content: "pending content" })
+		const approval: ClineMessage = {
+			ts: 3,
+			type: "ask",
+			ask: "tool",
+			text: approvalText,
+		}
+		const rows = groupActivityRows([say(1, "reasoning", "Private thinking"), approval])
+		const renderItem = createMessageRenderer(
+			rows,
+			rows.flat(),
+			{},
+			vi.fn(),
+			vi.fn(),
+			vi.fn(),
+			vi.fn(),
+			"",
+			{} as never,
+			false,
+			{
+				isExpanded: () => false,
+				onToggle: vi.fn(),
+			},
+		)
+		render(<div>{rows.map((row, index) => renderItem(index, row))}</div>)
+		expect(screen.getByRole("button", { name: "Show activity" })).toHaveAttribute("aria-expanded", "false")
+		expect(screen.queryByText("Private thinking")).toBeNull()
+		expect(screen.getByText(approvalText)).toBeInTheDocument()
 	})
 })
 
