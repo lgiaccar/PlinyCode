@@ -66,5 +66,9 @@
 		"src/extension.ts"
 	],
 	"include": [],
-	"exclude": []
+	"exclude": [
+		"node_modules",
+		".vscode-test",
+		"webview-ui"
+	]
 }
