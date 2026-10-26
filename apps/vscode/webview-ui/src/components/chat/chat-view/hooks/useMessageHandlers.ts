@@ -33,6 +33,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 		setNextTaskWorkspace,
 		nextTaskWorktree,
 		setNextTaskWorktree,
+		selectedAgentPath,
+		setSelectedAgentPath,
 	} = chatState
 	const cancelInFlightRef = useRef(false)
 	const pendingResponseIdRef = useRef(0)
@@ -205,6 +207,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 						workspacePath: nextTaskWorkspace?.path ?? "",
 						// "Run in worktree": a new branch and git worktree for this conversation.
 						worktree: nextTaskWorktree,
+						// A custom agent for this conversation; empty means the generic agent.
+						agentPath: selectedAgentPath ?? "",
 					})
 					clearSentMessageState()
 					trackPromptSubmitted(false)
@@ -227,6 +231,7 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 					// The pick applies to one conversation; the next one defaults to the window's workspace again.
 					setNextTaskWorkspace(undefined)
 					setNextTaskWorktree(false)
+					setSelectedAgentPath(undefined)
 					messageSent = true
 				} else if (turnState?.phase === "awaiting_approval") {
 					await sendAskResponseWithPendingState(
@@ -371,6 +376,8 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 			setNextTaskWorkspace,
 			nextTaskWorktree,
 			setNextTaskWorktree,
+			selectedAgentPath,
+			setSelectedAgentPath,
 		],
 	)
 

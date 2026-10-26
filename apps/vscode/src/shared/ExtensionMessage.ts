@@ -153,6 +153,29 @@ export interface ExtensionState {
 	localSkillsToggles?: Record<string, boolean>
 	backgroundEditEnabled?: boolean
 	showFeatureTips?: boolean
+	/**
+	 * Discovered configured agents (global scope) for the new-task agent selector.
+	 * Kept in state so the input area can show the picker without a separate RPC.
+	 */
+	globalAgents?: AgentStateEntry[]
+	/**
+	 * Discovered configured agents (workspace scope) for the new-task agent selector.
+	 */
+	localAgents?: AgentStateEntry[]
+}
+
+/**
+ * A lightweight agent entry kept in extension state for the new-task agent selector.
+ * Mirrors AgentInfo from the proto without the proto dependency.
+ */
+export interface AgentStateEntry {
+	name: string
+	description: string
+	path: string
+	enabled: boolean
+	model: string
+	toolName: string
+	error?: string
 }
 
 /**

@@ -57,6 +57,9 @@ export interface ChatState {
 	/** Whether the next conversation runs in a git worktree of its own ("Run in worktree"). */
 	nextTaskWorktree: boolean
 	setNextTaskWorktree: React.Dispatch<React.SetStateAction<boolean>>
+	/** The custom agent file path for the next conversation, or undefined for the generic agent. */
+	selectedAgentPath: string | undefined
+	setSelectedAgentPath: React.Dispatch<React.SetStateAction<string | undefined>>
 
 	// Refs
 	textAreaRef: React.RefObject<HTMLTextAreaElement>

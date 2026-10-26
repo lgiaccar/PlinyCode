@@ -519,6 +519,13 @@ function dedupePaths(paths: ReadonlyArray<string>): string[] {
 export const EXTERNAL_SKILLS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
 
 /**
+ * Config roots of other coding tools whose `agents/*.md` layout follows the
+ * same convention, so a workspace set up for GitHub Copilot, Cursor or Claude
+ * Code gets its custom agents without copying them.
+ */
+export const EXTERNAL_AGENTS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
+
+/**
  * With an editor set (setInstructionHost), another editor's *rules* are
  * skipped: they are written in that editor's dialect, and loading them
  * everywhere doubles up on guidance the workspace usually keeps in AGENTS.md
@@ -550,12 +557,19 @@ export function resolveAgentsConfigDirPath(): string {
 export function resolveAgentConfigSearchPaths(
 	workspacePath?: string,
 ): string[] {
-	return dedupePaths([
-		workspacePath
-			? join(workspacePath, CLINE_CONFIG_DIR, AGENT_CONFIG_DIRECTORY_NAME)
-			: "",
-		resolveAgentsConfigDirPath(),
-	]);
+	const dirs: string[] = [];
+	if (workspacePath) {
+		for (const base of [
+			DEPRECATED_CONFIG_DIR,
+			CLINE_CONFIG_DIR,
+			LEGACY_AGENT_SKILLS_CONFIG_DIR,
+			...EXTERNAL_AGENTS_CONFIG_DIRS,
+		]) {
+			dirs.push(join(workspacePath, base, AGENT_CONFIG_DIRECTORY_NAME));
+		}
+	}
+	dirs.push(resolveAgentsConfigDirPath());
+	return dedupePaths(dirs);
 }
 
 export function resolveHooksConfigSearchPaths(

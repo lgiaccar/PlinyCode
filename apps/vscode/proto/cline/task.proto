@@ -107,6 +107,10 @@ message NewTaskRequest {
   // Runs the conversation in a new git worktree of the workspace's repository,
   // on a branch of its own (docs/task-worktrees.md).
   bool worktree = 7;
+  // Optional path to a custom agent file to use for this conversation.
+  // When set (and the agent is enabled), the session runs under that agent's
+  // instructions instead of the default system prompt. Empty means generic agent.
+  optional string agent_path = 8;
 }
 
 // Request message for exporting a task as a Markdown document

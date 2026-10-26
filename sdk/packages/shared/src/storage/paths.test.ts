@@ -33,6 +33,7 @@ import {
 	resolveRulesConfigSearchPaths,
 	resolveSessionDataDir,
 	resolveSkillsConfigSearchPaths,
+	resolveAgentConfigSearchPaths,
 	resolveWorkflowsConfigSearchPaths,
 	resolveWorkspaceRulesConfigPaths,
 	setHomeDir,
@@ -665,4 +666,35 @@ describe("instruction host", () => {
 			),
 		).toBe(false);
 	});
+
+	it("agent search paths include .cursor/agents and .github/agents", () => {
+		const agents = resolveAgentConfigSearchPaths("/repo");
+		expect(agents).toContain(join("/repo", ".cursor", "agents"));
+		expect(agents).toContain(join("/repo", ".github", "agents"));
+		expect(agents).toContain(join("/repo", ".claude", "agents"));
+	});
+
+	it("agent search paths include .cline/agents", () => {
+		const agents = resolveAgentConfigSearchPaths("/repo");
+		expect(agents).toContain(join("/repo", ".cline", "agents"));
+	});
+
+	it("agent search paths include .clinerules/agents (legacy)", () => {
+		const agents = resolveAgentConfigSearchPaths("/repo");
+		expect(agents).toContain(join("/repo", ".clinerules", "agents"));
+	});
+
+	it("agent search paths have no duplicates", () => {
+		const agents = resolveAgentConfigSearchPaths("/repo");
+		const unique = new Set(agents);
+		expect(agents.length).toBe(unique.size);
+	});
+
+	it("agent search paths are empty workspace paths when no workspace is given", () => {
+		const agents = resolveAgentConfigSearchPaths(undefined);
+		// No workspace-relative paths — only the global dir
+		expect(agents.every((p) => !p.startsWith("/repo"))).toBe(true);
+		expect(agents.length).toBeGreaterThan(0);
+	});
+
 });

@@ -2,6 +2,7 @@ import React from "react"
 import ChatTextArea from "@/components/chat/ChatTextArea"
 import QuotedMessagePreview from "@/components/chat/QuotedMessagePreview"
 import type { ScheduleRepeat } from "@/components/chat/scheduleTime"
+import { AgentPicker } from "@/components/chat/chat-textarea/components/AgentPicker"
 import { NewTaskWorkspacePicker } from "@/components/workspace/NewTaskWorkspacePicker"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { ChatState, MessageHandlers, ScrollBehavior } from "../../types/chatTypes"
@@ -47,11 +48,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		setNextTaskWorkspace,
 		nextTaskWorktree,
 		setNextTaskWorktree,
+		selectedAgentPath,
+		setSelectedAgentPath,
 		clineAsk,
 	} = chatState
 
 	const { isAtBottom, scrollToBottomAuto } = scrollBehavior
-	const { turnState } = useExtensionState()
+	const { turnState, mode, globalAgents, localAgents } = useExtensionState()
 	const legacyTaskRunning =
 		turnState === undefined &&
 		(lastMessage?.partial === true || (lastMessage?.type === "say" && lastMessage.say === "api_req_started"))
@@ -69,6 +72,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
 					onWorktreeChange={setNextTaskWorktree}
 					value={nextTaskWorkspace}
 					worktree={nextTaskWorktree}
+				/>
+			)}
+			{!task && mode === "act" && (
+				<AgentPicker
+					agents={[...(globalAgents ?? []), ...(localAgents ?? [])]}
+					onChange={setSelectedAgentPath}
+					value={selectedAgentPath}
 				/>
 			)}
 			{activeQuote && (

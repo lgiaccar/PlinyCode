@@ -5,10 +5,12 @@
 // without inheriting the entire classic Controller implementation.
 
 import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
+import { listConfiguredAgents, resolveAgentLocations } from "@core/context/instructions/user-instructions/configured-agents"
 import { readCompactionStrategyGlobally } from "@plinycode/core"
-import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
+import type { AgentStateEntry, ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
+import { readAgentFileLocations } from "@/hosts/vscode/agent-file-locations"
 import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
 import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
@@ -18,6 +20,7 @@ import { isWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { PLINY_DEFAULT_MODEL_ID, PLINY_PROVIDER_ID } from "@/shared/pliny"
+import { HostProvider } from "@/hosts/host-provider"
 
 /**
  * Builds the ExtensionState object to push to the webview.
@@ -119,6 +122,26 @@ export async function getStateToPostToWebview(controller: {
 	const clineConfig = ClineEnv.config()
 	const environment = clineConfig.environment
 
+	// Discover configured agents for the new-task agent selector.
+	// Failures (no workspace, no agent files) are silent — the picker just stays hidden.
+	let globalAgents: AgentStateEntry[] | undefined
+	let localAgents: AgentStateEntry[] | undefined
+	try {
+		const workspacePaths = await HostProvider.workspace.getWorkspacePaths({})
+		const primaryWorkspace = workspacePaths.paths[0]
+		const extraPaths = readAgentFileLocations(primaryWorkspace)
+		const locations = resolveAgentLocations(primaryWorkspace, extraPaths)
+		const agents = listConfiguredAgents(primaryWorkspace, stateManager, locations)
+		globalAgents = agents
+			.filter((a) => a.scope === "global")
+			.map((a) => ({ name: a.name, description: a.description, path: a.path, enabled: a.enabled, model: a.model, toolName: a.toolName, error: a.error }))
+		localAgents = agents
+			.filter((a) => a.scope === "workspace")
+			.map((a) => ({ name: a.name, description: a.description, path: a.path, enabled: a.enabled, model: a.model, toolName: a.toolName, error: a.error }))
+	} catch {
+		// Agents are optional — the picker simply won't show if discovery fails.
+	}
+
 	return {
 		version,
 		apiConfiguration,
@@ -177,5 +200,7 @@ export async function getStateToPostToWebview(controller: {
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
 		backgroundEditEnabled: stateManager.getGlobalSettingsKey("backgroundEditEnabled"),
 		showFeatureTips,
+		globalAgents,
+		localAgents,
 	} as ExtensionState
 }

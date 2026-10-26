@@ -8,9 +8,12 @@
 //
 // The factory does NOT handle UI concerns — that's the SdkController's job.
 
+import { readFileSync } from "node:fs"
+
 import {
 	type ClineCoreStartInput,
 	type CoreSessionConfig,
+	parseConfiguredAgentConfig,
 	type ProviderSettings,
 	readCompactionStrategyGlobally,
 	resolveProviderApiKeyFromSettings,
@@ -100,6 +103,13 @@ export interface SessionConfigInput {
 	 * not be read from the displayed task.
 	 */
 	newConversation?: boolean
+	/**
+	 * Optional path to a custom agent file (e.g. `.cursor/agents/reviewer.md`)
+	 * selected by the user in the new-task UI. When set, the agent's body text
+	 * is prepended to the built system prompt so the conversation runs under
+	 * that agent's instructions. Empty or undefined means the default generic agent.
+	 */
+	agentPath?: string
 }
 
 /** Active session state tracked by the factory */
@@ -578,6 +588,22 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	if (input.memorySection) {
 		systemPrompt = `${systemPrompt}${input.memorySection}`
 	}
+
+	// When the user selected a custom agent for this conversation, load its
+	// body text and prepend it to the system prompt as the agent's role instructions.
+	if (input.agentPath) {
+		try {
+			const raw = readFileSync(input.agentPath, "utf-8")
+			const agentConfig = parseConfiguredAgentConfig(raw, { path: input.agentPath })
+			if (agentConfig.systemPrompt?.trim()) {
+				systemPrompt = `${agentConfig.systemPrompt.trim()}\n\n---\n\n${systemPrompt}`
+				Logger.log(`[SessionFactory] Injected custom agent instructions from ${input.agentPath}`)
+			}
+		} catch (error) {
+			Logger.warn(`[SessionFactory] Failed to load custom agent from ${input.agentPath}:`, error)
+		}
+	}
+
 	const memoryExcerpt = renderSubAgentMemoryExcerpt(input.memorySection)
 
 	const stateManager = StateManager.get()

@@ -10,6 +10,7 @@ export {
 	type CronSpecsScope,
 	discoverPluginModulePaths,
 	EXTERNAL_SKILLS_CONFIG_DIRS,
+	EXTERNAL_AGENTS_CONFIG_DIRS,
 	ensureFileExists,
 	ensureHookLogDir,
 	ensureParentDir,
