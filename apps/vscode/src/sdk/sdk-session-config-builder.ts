@@ -95,6 +95,8 @@ interface SdkSessionConfigBuilderOptions {
 export class SdkSessionConfigBuilder {
 	/** Conversations that run on a model of their own (CI board runs), by conversation id. */
 	private readonly pinnedModels = new Map<string, string>()
+	/** Conversations that run under a custom agent's instructions, by conversation id. */
+	private readonly pinnedAgentPaths = new Map<string, string>()
 
 	constructor(private readonly options: SdkSessionConfigBuilderOptions) {}
 
@@ -110,6 +112,18 @@ export class SdkSessionConfigBuilder {
 		return conversationId ? this.pinnedModels.get(conversationId) : undefined
 	}
 
+	/**
+	 * Keeps a conversation under the given agent file's instructions through
+	 * every rebuild (mode, MCP, compaction, resume, checkpoint restore).
+	 */
+	pinAgentPath(conversationId: string, agentPath: string): void {
+		this.pinnedAgentPaths.set(conversationId, agentPath)
+	}
+
+	pinnedAgentPath(conversationId: string | undefined): string | undefined {
+		return conversationId ? this.pinnedAgentPaths.get(conversationId) : undefined
+	}
+
 	async build(input: SessionConfigInput): Promise<Awaited<ReturnType<typeof buildSessionConfig>>> {
 		// A conversation started in the background is not the displayed one, so
 		// it must not pick up the displayed task's snapshots or pinned model.
@@ -119,9 +133,11 @@ export class SdkSessionConfigBuilder {
 			this.options.promptDates?.prepare(conversationId),
 		])
 		const modelId = input.modelId?.trim() || this.pinnedModel(conversationId)
+		const agentPath = input.agentPath?.trim() || this.pinnedAgentPath(conversationId)
 		const config = await buildSessionConfig({
 			...input,
 			...(modelId ? { modelId } : {}),
+			...(agentPath ? { agentPath } : {}),
 			...(git?.snapshot ? { gitSnapshot: git.snapshot } : {}),
 			...(date ? { currentDate: date.date } : {}),
 		})

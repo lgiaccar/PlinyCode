@@ -29,6 +29,7 @@ import OpenDiskConversationHistoryButton from "./buttons/OpenDiskConversationHis
 import RenameTaskButton from "./buttons/RenameTaskButton"
 import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
+import TaskAgentChip from "./TaskAgentChip"
 import TaskUsageCounter from "./TaskUsageCounter"
 import { TaskWaitLimit } from "./TaskWaitLimit"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
@@ -238,6 +239,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							</div>
 						)}
 						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
+						<TaskAgentChip agentPath={currentTaskItem?.agentPath} />
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
 						{currentTaskItem?.id && (

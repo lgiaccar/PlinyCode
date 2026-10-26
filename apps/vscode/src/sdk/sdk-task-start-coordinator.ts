@@ -240,6 +240,10 @@ export class SdkTaskStartCoordinator {
 				this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
 				newHistoryItem.pinnedModelId = startOptions.modelId
 			}
+			if (startOptions?.agentPath) {
+				this.options.sessionConfigBuilder.pinAgentPath(taskSessionId, startOptions.agentPath)
+				newHistoryItem.agentPath = startOptions.agentPath
+			}
 			if (startOptions?.title) newHistoryItem.task = startOptions.title
 			if (worktree) newHistoryItem.worktree = worktree
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)

@@ -50,7 +50,15 @@ export async function prepareTaskResumeStartInput(
 	if (historyItem?.pinnedModelId) {
 		deps.sessionConfigBuilder.pinModel(taskId, historyItem.pinnedModelId)
 	}
-	const config = await deps.sessionConfigBuilder.build({ cwd, mode, modelId: historyItem?.pinnedModelId })
+	if (historyItem?.agentPath) {
+		deps.sessionConfigBuilder.pinAgentPath(taskId, historyItem.agentPath)
+	}
+	const config = await deps.sessionConfigBuilder.build({
+		cwd,
+		mode,
+		modelId: historyItem?.pinnedModelId,
+		agentPath: historyItem?.agentPath,
+	})
 	config.sessionId = taskId
 
 	const isLegacyTask = await deps.taskHistory.isLegacyTask(taskId)

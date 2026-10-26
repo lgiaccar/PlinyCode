@@ -151,6 +151,8 @@ export class SdkCheckpointCoordinator {
 			),
 			isFavorited: previousHistoryItem?.isFavorited,
 			isPinned: previousHistoryItem?.isPinned,
+			pinnedModelId: previousHistoryItem?.pinnedModelId,
+			agentPath: previousHistoryItem?.agentPath,
 		}
 		await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 
