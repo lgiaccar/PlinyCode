@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { promises as fs } from "node:fs"
+import { promises as fs, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -48,6 +48,13 @@ describe("loadContext", () => {
 			})
 		}
 		const ctx = await loadContext(root)
-		expect(arePathsEqual(ctx.root, root)).toBe(true)
+		const canonical = (value: string) => {
+			try {
+				return realpathSync(value)
+			} catch {
+				return value
+			}
+		}
+		expect(arePathsEqual(canonical(ctx.root), canonical(root))).toBe(true)
 	})
 })
