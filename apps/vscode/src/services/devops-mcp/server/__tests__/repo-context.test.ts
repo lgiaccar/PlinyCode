@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
+import { arePathsEqual } from "@/utils/path"
 import { loadContext } from "../repo"
 
 const dirs: string[] = []
@@ -47,6 +48,6 @@ describe("loadContext", () => {
 			})
 		}
 		const ctx = await loadContext(root)
-		expect(ctx.root.replace(/\\/g, "/").toLowerCase()).toBe(root.replace(/\\/g, "/").toLowerCase())
+		expect(arePathsEqual(ctx.root, root)).toBe(true)
 	})
 })
