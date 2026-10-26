@@ -65,10 +65,16 @@
 	"files": [
 		"src/extension.ts"
 	],
-	"include": [],
+	"include": [
+		"src/**/*",
+		"../../sdk/packages/core/src/**/*",
+		"../../sdk/packages/llms/src/**/*",
+		"../../sdk/packages/shared/src/**/*"
+	],
 	"exclude": [
 		"node_modules",
 		".vscode-test",
 		"webview-ui"
 	]
 }
+
