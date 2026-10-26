@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { promises as fs, realpathSync } from "node:fs"
+import { promises as fs } from "node:fs"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
