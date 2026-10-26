@@ -9,7 +9,7 @@ import MemoryPanel from "./MemoryPanel"
 import { updateSetting } from "./utils/settingsHandlers"
 
 export default function MemorySettings() {
-	const { memoryConversationSearchEnabled } = useExtensionState()
+	const { memoryEnabled, memoryConversationSearchEnabled } = useExtensionState()
 	const [error, setError] = useState("")
 	const open = (uri: string) => {
 		FileServiceClient.openFile(StringRequest.create({ value: uri })).catch((reason) => setError(String(reason)))
@@ -28,6 +28,14 @@ export default function MemorySettings() {
 				</Button>
 			</div>
 			{error && <p role="alert">{error}</p>}
+			<label className="flex justify-between gap-2" htmlFor="memory-use">
+				Use memory
+				<Switch
+					checked={memoryEnabled !== false}
+					id="memory-use"
+					onCheckedChange={(checked) => updateSetting("memoryEnabled", checked)}
+				/>
+			</label>
 			<label className="flex justify-between gap-2" htmlFor="memory-conversation-search">
 				Search earlier conversations
 				<Switch
@@ -36,7 +44,7 @@ export default function MemorySettings() {
 					onCheckedChange={(checked) => updateSetting("memoryConversationSearchEnabled", checked)}
 				/>
 			</label>
-			<MemoryPanel />
+			<MemoryPanel memoryDisabled={memoryEnabled === false} />
 		</div>
 	)
 }

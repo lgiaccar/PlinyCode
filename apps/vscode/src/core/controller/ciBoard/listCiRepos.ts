@@ -1,6 +1,7 @@
 import { type CiRepo, CiRepoList } from "@shared/proto/cline/ci_board"
 import type { EmptyRequest } from "@shared/proto/cline/common"
 import { HostProvider } from "@/hosts/host-provider"
+import { workspaceGitDiscoveryPaths } from "@/hosts/vscode/vscode-git-repository-roots"
 import { loadContext } from "@/services/devops-mcp/server/repo"
 import type { Controller } from "../index"
 
@@ -8,7 +9,7 @@ import type { Controller } from "../index"
 export async function listCiRepos(_controller: Controller, _request: EmptyRequest): Promise<CiRepoList> {
 	const { paths } = await HostProvider.workspace.getWorkspacePaths({})
 	const repos: CiRepo[] = []
-	for (const folder of paths ?? []) {
+	for (const folder of workspaceGitDiscoveryPaths(paths ?? [])) {
 		try {
 			const ctx = await loadContext(folder)
 			if (!repos.some((r) => r.root === ctx.root)) {

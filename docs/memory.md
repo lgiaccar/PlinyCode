@@ -52,7 +52,9 @@ Near duplicates use Jaccard similarity of significant words at 0.7 or the same f
 
 ## Budget and retrieval
 
-`plinycode.memory.maxTokens` accepts a token count, a percentage such as `4%`, or `auto`. The default is `auto`: the smaller of 4000 tokens and 4% of the selected model's context window (1280 tokens for a 32k window). Explicit numeric settings remain supported. `0` disables automatic loading and memory tools. Text estimates use characters / 3.
+`plinycode.memory.enabled` (default on) is the master switch for loading memory into the prompt, the `save_memory` and `recall_memory` tools, `/remember` and `/forget`, and distillation (`/distill` and automatic offers). Turn it off in Settings → Features → Memory while keeping your `MEMORY.md` files editable. Past-conversation search stays on its own setting.
+
+`plinycode.memory.maxTokens` accepts a token count, a percentage such as `4%`, or `auto`. The default is `auto`: the smaller of 4000 tokens and 4% of the selected model's context window (1280 tokens for a 32k window). Explicit numeric settings remain supported. `0` also disables automatic loading and memory tools when memory is enabled. Text estimates use characters / 3.
 
 [selectMemories](../apps/vscode/src/sdk/memory/memory-retrieval.ts) keeps whole entries within one budget, including instructions and wrapper text:
 
@@ -129,7 +131,8 @@ The chat row remains, and unresolved proposals also appear in the Memory inbox w
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `plinycode.memory.maxTokens` | `auto` | Tokens, percentage or adaptive budget; 0 disables memory |
+| `plinycode.memory.enabled` | true | Load memory, memory tools, slash saves and distillation |
+| `plinycode.memory.maxTokens` | `auto` | Tokens, percentage or adaptive budget; 0 disables memory when enabled |
 | `plinycode.memory.distill` | `offer` | Review proposals, opt-in `auto` with Undo, or `off` |
 | `plinycode.memory.conversationSearch` | true | Search/read previous conversations |
 | `plinycode.memory.userShare` | 25 | Personal memory's maximum percentage of the budget |

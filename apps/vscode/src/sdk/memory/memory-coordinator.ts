@@ -66,6 +66,8 @@ export interface MemoryCoordinatorDeps {
 	/** One call to the distillation model; resolves with its reply text. */
 	complete: (system: string, user: string, signal: AbortSignal) => Promise<string>
 	isOfferEnabled: () => boolean
+	/** False when memory is turned off in settings (no prompt section or save_memory). */
+	isMemoryEnabled: () => boolean
 	/** Whether the session ran in act mode: its own mode, not the mode switch's current position. */
 	isActMode: (sessionId: string) => boolean
 	isBackgroundSession: (sessionId: string) => boolean
@@ -176,6 +178,10 @@ export class MemoryCoordinator {
 
 	/** `/distill`: proposes memories from the whole displayed conversation. */
 	async distillNow(): Promise<void> {
+		if (!this.deps.isMemoryEnabled()) {
+			this.info("Memory is turned off. Turn on **Use memory** in Settings → Features → Memory to distill conversations.")
+			return
+		}
 		const conversationId = this.deps.getDisplayedConversationId()
 		if (!conversationId) {
 			this.info("Start or open a conversation first: /distill proposes memories from the conversation shown.")

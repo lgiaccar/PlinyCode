@@ -101,6 +101,7 @@ describe("memory upgrades", () => {
 				readMessages: async () => [],
 				complete: async () => "",
 				isOfferEnabled: () => true,
+				isMemoryEnabled: () => true,
 				isActMode: () => false,
 				isBackgroundSession: () => false,
 			})
@@ -357,6 +358,7 @@ describe("memory upgrades", () => {
 				}),
 			),
 			isOfferEnabled: () => true,
+			isMemoryEnabled: () => true,
 			isActMode: () => false,
 			isBackgroundSession: () => false,
 			distillMode: () => "auto" as const,

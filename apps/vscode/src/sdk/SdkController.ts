@@ -36,6 +36,7 @@ import { createVscodeEditDiagnosticsSource, isReportNewProblemsEnabled } from "@
 import {
 	getMemoryBudget,
 	getMemoryDistillMode,
+	getMemoryMaxTokens,
 	getMemoryTuning,
 	isMemoryDistillOfferEnabled,
 } from "@/hosts/vscode/memory-settings"
@@ -489,6 +490,7 @@ export class Controller {
 			complete: async (system, user, signal) =>
 				completeWithUtilityModel(system, user, signal, await this.getWorkspaceRoot()),
 			isOfferEnabled: isMemoryDistillOfferEnabled,
+			isMemoryEnabled: () => getMemoryMaxTokens() > 0,
 			distillMode: getMemoryDistillMode,
 			onChanged: () => {
 				void this.postStateToWebview().catch(() => {})
@@ -2231,10 +2233,13 @@ export class Controller {
 				workspaceManager: await this.ensureWorkspaceManager(),
 			})
 
-			baseState.memoryPendingCount = (await this.memory.inbox(await this.getWorkspaceRoot()).catch(() => [])).reduce(
-				(sum, proposal) => sum + proposal.items.filter((item) => !item.autoSaved).length,
-				0,
-			)
+			baseState.memoryPendingCount =
+				getMemoryMaxTokens() > 0
+					? (await this.memory.inbox(await this.getWorkspaceRoot()).catch(() => [])).reduce(
+							(sum, proposal) => sum + proposal.items.filter((item) => !item.autoSaved).length,
+							0,
+						)
+					: 0
 			baseState.memoryConfigurationVersion = JSON.stringify({
 				budget: getMemoryBudget(),
 				distill: getMemoryDistillMode(),

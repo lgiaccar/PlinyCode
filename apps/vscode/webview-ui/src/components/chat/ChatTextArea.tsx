@@ -22,6 +22,7 @@ import { ModelButton } from "./chat-textarea/components/ModelButton"
 import { ModeSwitch, modeColor, nextMode } from "./chat-textarea/components/ModeSwitch"
 import { SideQuestionToggle } from "./chat-textarea/components/SideQuestionToggle"
 import { useComposerKeyboardHandler } from "./chat-textarea/hooks/useComposerKeyboardHandler"
+import { useComposerSkills } from "./chat-textarea/hooks/useComposerSkills"
 import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hooks/useContextMenu"
 import { useDropHandling } from "./chat-textarea/hooks/useDropHandling"
 import { useImprovePrompt } from "./chat-textarea/hooks/useImprovePrompt"
@@ -108,6 +109,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			mcpServers,
 			chatInputMaxRows: persistedChatInputMaxRows,
 		} = useExtensionState()
+		const composerSkills = useComposerSkills()
 		const [isTextAreaFocused, setIsTextAreaFocused] = useState(false)
 
 		const [thumbnailsHeight, setThumbnailsHeight] = useState(0)
@@ -294,7 +296,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				textAreaRef.current.setSelectionRange(intendedCursorPosition, intendedCursorPosition)
 				setIntendedCursorPosition(null) // Reset the state after applying
 			}
-		}, [inputValue, intendedCursorPosition, setIntendedCursorPosition])
+		}, [intendedCursorPosition, setIntendedCursorPosition])
 
 		const handleInputChange = useCallback(
 			(e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -416,7 +418,13 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 				// Extract just the command name (without the slash)
 				const commandName = command.substring(1)
-				const isValidCommand = validateSlashCommand(commandName, localWorkflowToggles, globalWorkflowToggles)
+				const isValidCommand = validateSlashCommand(
+					commandName,
+					localWorkflowToggles,
+					globalWorkflowToggles,
+					mcpServers,
+					composerSkills,
+				)
 
 				if (isValidCommand) {
 					hasHighlightedSlashCommand = true
@@ -429,11 +437,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			highlightLayerRef.current.innerHTML = processedText
 			highlightLayerRef.current.scrollTop = textAreaRef.current.scrollTop
 			highlightLayerRef.current.scrollLeft = textAreaRef.current.scrollLeft
-		}, [localWorkflowToggles, globalWorkflowToggles])
+		}, [localWorkflowToggles, globalWorkflowToggles, mcpServers, composerSkills])
 
 		useLayoutEffect(() => {
 			updateHighlights()
-		}, [inputValue, updateHighlights])
+		}, [updateHighlights])
 
 		const updateCursorPosition = useCallback(() => {
 			if (textAreaRef.current) {
@@ -545,7 +553,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			if (inputValue.endsWith(" ")) {
 				const event = {
 					target: {
-						value: inputValue + "@",
+						value: `${inputValue}@`,
 						selectionStart: inputValue.length + 1,
 					},
 				} as React.ChangeEvent<HTMLTextAreaElement>
@@ -557,7 +565,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			// Otherwise add space then @
 			const event = {
 				target: {
-					value: inputValue + " @",
+					value: `${inputValue} @`,
 					selectionStart: inputValue.length + 2,
 				},
 			} as React.ChangeEvent<HTMLTextAreaElement>
@@ -603,6 +611,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								query={slashCommandsQuery}
 								selectedIndex={selectedSlashCommandsIndex}
 								setSelectedIndex={setSelectedSlashCommandsIndex}
+								skills={composerSkills}
 							/>
 						</div>
 					)}

@@ -139,6 +139,7 @@ function makeCoordinator(overrides: Partial<MemoryCoordinatorDeps> = {}) {
 		getCwd: async () => "/work/a",
 		complete: vi.fn(async () => MODEL_REPLY),
 		isOfferEnabled: () => true,
+		isMemoryEnabled: () => true,
 		isActMode: () => true,
 		isBackgroundSession: () => false,
 		...overrides,
@@ -169,6 +170,12 @@ describe("MemoryCoordinator", () => {
 		const memory = await store.read("/work/a")
 		expect(memory.repoText).toContain("git log hangs without --no-pager")
 		expect(memory.userText).toBe("")
+	})
+
+	it("refuses /distill when memory is turned off", async () => {
+		const { coordinator, rows } = makeCoordinator({ isMemoryEnabled: () => false })
+		await coordinator.distillNow()
+		expect(rows.some((row) => row.say === "info" && row.text?.includes("Memory is turned off"))).toBe(true)
 	})
 
 	it("does not offer when an act run edited nothing, in the background or for a side question", async () => {

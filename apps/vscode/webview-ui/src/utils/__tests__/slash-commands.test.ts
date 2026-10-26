@@ -1,6 +1,12 @@
 import type { McpServer } from "@shared/mcp"
 import { describe, expect, it } from "vitest"
-import { getMatchingSlashCommands, getMcpPromptCommands, slashCommandRegex, validateSlashCommand } from "../slash-commands"
+import {
+	getMatchingSlashCommands,
+	getMcpPromptCommands,
+	getSkillCommands,
+	slashCommandRegex,
+	validateSlashCommand,
+} from "../slash-commands"
 
 // Helper to create a mock MCP server
 function createMockMcpServer(overrides: Partial<McpServer> = {}): McpServer {
@@ -187,6 +193,32 @@ describe("slash-commands", () => {
 		})
 	})
 
+	describe("getSkillCommands", () => {
+		it("lists enabled skills and hides built-in name collisions", () => {
+			const commands = getSkillCommands([
+				{
+					name: "compact",
+					description: "Built-in clash",
+					path: "/a/compact/SKILL.md",
+					enabled: true,
+					tokens: 10,
+					warnings: [],
+				},
+				{
+					name: "prerelease",
+					description: "Test build",
+					path: "/a/pre/SKILL.md",
+					enabled: true,
+					tokens: 10,
+					warnings: [],
+				},
+				{ name: "off", description: "Off", path: "/a/off/SKILL.md", enabled: false, tokens: 0, warnings: [] },
+			])
+			expect(commands.map((command) => command.name)).toEqual(["prerelease"])
+			expect(commands[0].section).toBe("skill")
+		})
+	})
+
 	describe("validateSlashCommand with MCP servers", () => {
 		const mcpServers = [
 			createMockMcpServer({
@@ -221,14 +253,14 @@ describe("slash-commands", () => {
 			const text = "/mcp:server:prompt"
 			const match = text.match(slashCommandRegex)
 			expect(match).not.toBeNull()
-			expect(match![2]).toBe("/mcp:server:prompt")
+			expect(match?.[2]).toBe("/mcp:server:prompt")
 		})
 
 		it("should match MCP command in middle of text", () => {
 			const text = "Please run /mcp:server:prompt now"
 			const match = text.match(slashCommandRegex)
 			expect(match).not.toBeNull()
-			expect(match![2]).toBe("/mcp:server:prompt")
+			expect(match?.[2]).toBe("/mcp:server:prompt")
 		})
 
 		it("should not match MCP-like pattern in URL", () => {

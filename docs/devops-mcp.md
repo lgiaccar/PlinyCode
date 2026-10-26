@@ -296,7 +296,12 @@ Environment variables read by the server: `DEVOPS_MCP_WORKSPACE` (repository whe
 - **"No credentials available".** Sign in when the editor asks, or run `gh auth login` / `az login` once.
 - **`TF400813` or "needs a personal access token" on an Azure DevOps Server.** Use the **Sign in to Azure DevOps
   Server** button next to the error, or **Replace** on the DevOps card if the stored token expired.
-- **"is not inside a git repository".** The agent passed no `workspace` and the window's first folder isn't a
+- **"is not inside a git repository" or git errors.** PlinyCode resolves the repo with `git rev-parse
+  --show-toplevel` from the session folder (not by listing `.git` on disk), so a hidden `.git` folder on Windows is
+  not the usual cause. Check that the opened folder is inside the work tree (not a parent directory), that Git is on
+  PATH in the editor, and that `git config --global --add safe.directory <repo>` is set when Git reports dubious
+  ownership. The CI Board also lists repositories the built-in Git extension already knows about. The agent passed no
+  `workspace` and the window's first folder isn't a
   git checkout; ask it to pass the repository path.
 
 ## For developers

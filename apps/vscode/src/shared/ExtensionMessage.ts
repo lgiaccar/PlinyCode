@@ -122,6 +122,7 @@ export interface ExtensionState {
 	/** Default cumulative `wait` time per agent turn in minutes; 0 means unlimited. */
 	maxWaitMinutesPerTurn?: number
 	/** `plinycode.memory.maxTokens`: the memory budget in the system prompt; 0 = memory off (docs/memory.md). */
+	memoryEnabled?: boolean
 	memoryMaxTokens?: number
 	memoryPendingCount?: number
 	memoryConfigurationVersion?: string

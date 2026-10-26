@@ -117,7 +117,7 @@ export const ExtensionStateContextProvider: React.FC<{
 	const closeMcpView = useCallback(() => {
 		setShowMcp(false)
 		setMcpTab(undefined)
-	}, [setShowMcp, setMcpTab])
+	}, [])
 
 	// Hide functions
 	const hideSettings = useCallback(() => {
@@ -125,22 +125,19 @@ export const ExtensionStateContextProvider: React.FC<{
 		setSettingsTargetSection(undefined)
 		setSettingsInitialModelTab(undefined)
 	}, [])
-	const hideHistory = useCallback(() => setShowHistory(false), [setShowHistory])
+	const hideHistory = useCallback(() => setShowHistory(false), [])
 	const hideCiBoard = useCallback(() => setShowCiBoard(false), [])
 	const hidePipelines = useCallback(() => setShowPipelines(false), [])
 
 	// Navigation functions
-	const navigateToMcp = useCallback(
-		(tab?: McpViewTab) => {
-			setShowPipelines(false)
-			setShowSettings(false)
-			setShowHistory(false)
-			setShowCiBoard(false)
-			setMcpTab(tab)
-			setShowMcp(true)
-		},
-		[setMcpTab, setShowSettings, setShowHistory],
-	)
+	const navigateToMcp = useCallback((tab?: McpViewTab) => {
+		setShowPipelines(false)
+		setShowSettings(false)
+		setShowHistory(false)
+		setShowCiBoard(false)
+		setMcpTab(tab)
+		setShowMcp(true)
+	}, [])
 
 	const navigateToSettings = useCallback(
 		(targetSection?: string) => {
@@ -174,7 +171,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		closeMcpView()
 		setShowCiBoard(false)
 		setShowHistory(true)
-	}, [setShowSettings, closeMcpView, setShowHistory])
+	}, [closeMcpView])
 
 	const navigateToCiBoard = useCallback(() => {
 		setShowPipelines(false)
@@ -198,7 +195,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		closeMcpView()
 		setShowHistory(false)
 		setShowCiBoard(false)
-	}, [setShowSettings, closeMcpView, setShowHistory])
+	}, [closeMcpView])
 
 	const [state, setState] = useState<ExtensionState>({
 		version: "",
@@ -235,6 +232,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		webSearchEnabled: false,
 		prereleaseUpdatesEnabled: false,
 		conversationSpendingLimit: 5,
+		memoryEnabled: true,
 		memoryMaxTokens: 4000,
 		memoryDistillEnabled: true,
 		memoryConversationSearchEnabled: true,
@@ -625,7 +623,14 @@ export const ExtensionStateContextProvider: React.FC<{
 				mcpServersSubscriptionRef.current = null
 			}
 		}
-	}, [])
+	}, [
+		navigateToChat,
+		navigateToCiBoard,
+		navigateToHistory,
+		navigateToMcp,
+		navigateToPipelines, // When settings button is clicked, navigate to settings
+		navigateToSettings,
+	])
 
 	const contextValue: ExtensionStateContextType = {
 		...state,
