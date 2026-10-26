@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useEvent } from "react-use"
 import { ListRange, VirtuosoHandle } from "react-virtuoso"
 import { ScrollBehavior } from "../types/chatTypes"
+import { isUserTurnStart } from "../utils/messageUtils"
 
 // Height of the sticky user message header (padding + content)
 const STICKY_HEADER_HEIGHT = 32
@@ -45,7 +46,7 @@ export function useScrollBehavior(
 
 	// Find all user feedback messages
 	const userFeedbackMessages = useMemo(() => {
-		return visibleMessages.filter((msg) => msg.say === "user_feedback")
+		return visibleMessages.filter((msg) => msg.say === "user_feedback" && isUserTurnStart(msg))
 	}, [visibleMessages])
 
 	// Build indices of user messages (task + user_feedback) inside groupedMessages for navigation
@@ -53,7 +54,7 @@ export function useScrollBehavior(
 		const indices: number[] = []
 		for (let i = 0; i < groupedMessages.length; i++) {
 			const item = groupedMessages[i]
-			if (!Array.isArray(item) && (item.say === "user_feedback" || item.say === "task")) {
+			if (!Array.isArray(item) && isUserTurnStart(item)) {
 				indices.push(i)
 			}
 		}

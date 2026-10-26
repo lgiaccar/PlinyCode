@@ -64,8 +64,16 @@ for (const profile of profiles) {
 		await sidebar.getByTestId("send-button").click()
 		await sidebar.getByRole("button", { name: "Run Command" }).click()
 
+		await expect(sidebar.getByText("PowerShell background execution diagnostic completed.")).toBeVisible({
+			timeout: 30_000,
+		})
 		const commandOutput = sidebar.locator("code").filter({ hasText: profile.version })
-		await expect(commandOutput).toBeVisible({ timeout: 30_000 })
+		await expect(commandOutput).not.toBeVisible()
+		const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true })
+		await expect(showActivity).toHaveAttribute("aria-expanded", "false")
+		await showActivity.click()
+		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true })).toHaveAttribute("aria-expanded", "true")
+		await expect(commandOutput).toBeVisible()
 		for (const expectedPathPart of profile.psHome) {
 			await expect(commandOutput).toContainText(expectedPathPart)
 		}

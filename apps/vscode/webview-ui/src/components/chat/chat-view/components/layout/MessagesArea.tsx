@@ -1,7 +1,7 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from "lucide-react"
 import type React from "react"
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso } from "react-virtuoso"
 import ChatRow from "@/components/chat/ChatRow"
 import { StickyUserMessage } from "@/components/chat/task-header/StickyUserMessage"
@@ -9,6 +9,8 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { cn } from "@/lib/utils"
 import { useThinkingLoaderRow } from "../../hooks/useThinkingLoaderRow"
 import type { ChatState, MessageHandlers, ScrollBehavior } from "../../types/chatTypes"
+import { isActivityGroup } from "../../utils/activityGroups"
+import { isUserTurnStart } from "../../utils/messageUtils"
 import { isPendingResponseUnconfirmed } from "../../utils/pendingResponse"
 import { createMessageRenderer } from "../messages/MessageRenderer"
 
@@ -86,13 +88,25 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 	}, [scrollToMessage, scrolledPastUserMessageIndex])
 
 	const { expandedRows, inputValue, setActiveQuote } = chatState
+	const [expandedActivityGroups, setExpandedActivityGroups] = useState<Record<string, boolean>>({})
+	const activityExpansion = useMemo(
+		() => ({
+			isExpanded: (groupTs: number) => expandedActivityGroups[`${task.ts}:${groupTs}`] ?? false,
+			onToggle: (groupTs: number) => {
+				disableAutoScrollRef.current = true
+				const key = `${task.ts}:${groupTs}`
+				setExpandedActivityGroups((current) => ({ ...current, [key]: !current[key] }))
+			},
+		}),
+		[expandedActivityGroups, task.ts, disableAutoScrollRef],
+	)
 	const lastVisibleRow = useMemo(() => groupedMessages.at(-1), [groupedMessages])
 
 	// Determine if there are multiple user messages to enable navigation buttons
 	const hasMultipleUserMessages = useMemo(() => {
 		let count = 0
 		for (const item of groupedMessages) {
-			if (!Array.isArray(item) && (item.say === "user_feedback" || item.say === "task")) {
+			if (!Array.isArray(item) && isUserTurnStart(item)) {
 				count++
 				if (count >= 2) {
 					return true
@@ -137,8 +151,12 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		if (!showThinkingLoaderRow || showEmptyListLoader) {
 			return groupedMessages
 		}
+		// The trailing activity disclosure already supplies the compact working status.
+		if (lastVisibleRow && isActivityGroup(lastVisibleRow)) {
+			return groupedMessages
+		}
 		return [...groupedMessages, WAITING_ROW]
-	}, [groupedMessages, showThinkingLoaderRow, showEmptyListLoader])
+	}, [groupedMessages, showThinkingLoaderRow, showEmptyListLoader, lastVisibleRow])
 
 	// useScrollBehavior auto-scrolls when groupedMessages.length changes, but rows can change here
 	// without that: the waiting row is turnState-driven (e.g. plan -> act auto-continue adds no
@@ -198,6 +216,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 				inputValue,
 				messageHandlers,
 				false,
+				activityExpansion,
 			),
 		[
 			displayedGroupedMessages,
@@ -209,6 +228,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 			setActiveQuote,
 			inputValue,
 			messageHandlers,
+			activityExpansion,
 		],
 	)
 

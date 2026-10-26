@@ -1,16 +1,16 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ChatState, MessageHandlers, ScrollBehavior } from "../../types/chatTypes"
+import { groupActivityRows } from "../../utils/activityGroups"
 import { MessagesArea } from "./MessagesArea"
 
 vi.mock("../../../../../context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({ clineMessages: [], turnState: undefined }),
 }))
 
-vi.mock("../../hooks/useThinkingLoaderRow", () => ({
-	useThinkingLoaderRow: () => false,
-}))
+const loader = vi.hoisted(() => ({ visible: false, rows: [] as unknown[] }))
+vi.mock("../../hooks/useThinkingLoaderRow", () => ({ useThinkingLoaderRow: () => loader.visible }))
 
 vi.mock("@/components/chat/task-header/StickyUserMessage", () => ({
 	StickyUserMessage: () => null,
@@ -31,8 +31,9 @@ const scrollToIndex = vi.fn()
 vi.mock("react-virtuoso", async () => {
 	const React = await import("react")
 	return {
-		Virtuoso: React.forwardRef((_props: unknown, ref: React.Ref<{ scrollToIndex: typeof scrollToIndex }>) => {
+		Virtuoso: React.forwardRef((props: { data?: unknown[] }, ref: React.Ref<{ scrollToIndex: typeof scrollToIndex }>) => {
 			React.useImperativeHandle(ref, () => ({ scrollToIndex }))
+			loader.rows = props.data ?? []
 			return <div data-testid="virtuoso" />
 		}),
 	}
@@ -87,6 +88,29 @@ function makeMessageHandlers(): MessageHandlers {
 }
 
 describe("MessagesArea", () => {
+	afterEach(() => {
+		loader.visible = false
+	})
+
+	it("uses a trailing activity disclosure as the working status without adding a separate thinking row", () => {
+		loader.visible = true
+		const task = makeMessage(1, "task", "hello")
+		const reasoning = makeMessage(2, "reasoning", "Planning")
+		const groupedMessages = groupActivityRows([reasoning])
+		render(
+			<MessagesArea
+				chatState={makeChatState()}
+				groupedMessages={groupedMessages}
+				messageHandlers={makeMessageHandlers()}
+				modifiedMessages={[reasoning]}
+				scrollBehavior={makeScrollBehavior()}
+				task={task}
+			/>,
+		)
+		expect(loader.rows).toHaveLength(1)
+		expect(loader.rows[0]).toBe(groupedMessages[0])
+	})
+
 	it("shows the scroll-to-top button even when Virtuoso reports at-top", () => {
 		const task = makeMessage(1, "task", "hello")
 		const groupedMessages = [task, makeMessage(2, "text", "response"), makeMessage(3, "user_feedback", "follow up")]

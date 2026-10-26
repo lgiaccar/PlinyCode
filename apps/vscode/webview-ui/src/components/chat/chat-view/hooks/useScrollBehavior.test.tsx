@@ -1,3 +1,4 @@
+import type { ClineMessage } from "@shared/ExtensionMessage"
 import { act, renderHook } from "@testing-library/react"
 import type { MutableRefObject } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -151,6 +152,18 @@ describe("useScrollBehavior", () => {
 			;(result.current.virtuosoRef as MutableRefObject<any>).current = { scrollToIndex, scrollTo }
 			return { result, scrollToIndex, scrollTo }
 		}
+
+		it("skips agent answers and CI reports when navigating prompts", () => {
+			const rows = [
+				groupedMessages[0],
+				{ ts: 2, type: "say", say: "user_feedback", text: "Approved", answersTool: true },
+				groupedMessages[2],
+				{ ts: 4, type: "say", say: "user_feedback", text: "[CI WATCHER] passed" },
+				{ ts: 5, type: "say", say: "user_feedback", text: "side question", offTheRecord: true },
+			]
+			const { result } = renderHook(() => useScrollBehavior([], [], rows as ClineMessage[], {}, vi.fn()))
+			expect(result.current.userMessageIndices).toEqual([0, 2, 4])
+		})
 
 		it("goes to the previous prompt above the viewport, aligned under the sticky header", () => {
 			const { result, scrollToIndex } = setup()

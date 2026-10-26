@@ -7,8 +7,8 @@ import { E2E_WORKSPACE_TYPES, e2e } from "./utils/helpers"
 // the file directly (Node fs) after the tool call is approved. It does not
 // stream the edit into the real document, so the preview is read-only and the
 // SDK executor applies the edit directly. This test asserts the default
-// auto-approval flow: ask row appears without manual approval buttons, the file
-// is modified on disk, and the turn-ending completion text appears.
+// auto-approval flow: the file is modified without manual approval, the final
+// reply stays visible, and the edit record is available under Show activity.
 e2e.describe("File Edit Auto-Approval", () => {
 	E2E_WORKSPACE_TYPES.forEach(({ title, workspaceType }) => {
 		e2e.extend({
@@ -33,12 +33,6 @@ e2e.describe("File Edit Auto-Approval", () => {
 				await inputbox.fill("edit_request")
 				await sidebar.getByTestId("send-button").click({ delay: 50 })
 
-				// File edits are auto-approved by default. The ask row appears with
-				// the file path, but no manual approval buttons are shown.
-				// Generous timeout: the mock streams a tool call then the SDK renders the
-				// ask row; CI runners can be slow.
-				await sidebar.waitForSelector('span:has-text("PlinyCode wants to edit this file:")', { timeout: 30_000 })
-				await expect(sidebar.getByText("test.ts").first()).toBeVisible({ timeout: 30_000 })
 				await expect(sidebar.getByRole("button", { name: "Reject" })).not.toBeVisible()
 				await expect(sidebar.getByRole("button", { name: "Save", exact: true })).not.toBeVisible()
 
@@ -48,6 +42,18 @@ e2e.describe("File Edit Auto-Approval", () => {
 
 				// The edit was actually applied to the file on disk.
 				expect(readFileSync(editedFilePath, "utf-8")).toContain('export const name = "cline"')
+
+				const editTitle = sidebar.getByText("PlinyCode wants to edit this file:", { exact: true })
+				await expect(editTitle).not.toBeVisible()
+				const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true })
+				await expect(showActivity).toHaveAttribute("aria-expanded", "false")
+				await showActivity.click()
+				const hideActivity = sidebar.getByRole("button", { name: "Hide activity", exact: true })
+				await expect(hideActivity).toHaveAttribute("aria-expanded", "true")
+				await expect(editTitle).toBeVisible()
+				await expect(
+					hideActivity.locator("..").getByRole("button", { name: "Expand code block", exact: true }),
+				).toContainText("test.ts")
 			} finally {
 				// Skip the restore when the initial read failed — there is
 				// nothing to restore and the read error is the real failure.
