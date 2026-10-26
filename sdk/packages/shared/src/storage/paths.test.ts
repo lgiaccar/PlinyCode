@@ -696,5 +696,4 @@ describe("instruction host", () => {
 		expect(agents.every((p) => !p.startsWith("/repo"))).toBe(true);
 		expect(agents.length).toBeGreaterThan(0);
 	});
-
 });

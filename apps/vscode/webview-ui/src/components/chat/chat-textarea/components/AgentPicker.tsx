@@ -31,8 +31,7 @@ export function AgentPicker({ agents, value, onChange }: AgentPickerProps) {
 				aria-label="Select agent"
 				className="text-xs bg-input-background text-input-foreground border border-input-border rounded px-1 py-0.5 outline-none focus:outline-none cursor-pointer flex-1 min-w-0"
 				onChange={handleChange}
-				value={value ?? ""}
-			>
+				value={value ?? ""}>
 				<option value="">Generic</option>
 				{enabledAgents.map((agent) => (
 					<option key={agent.path} title={agent.description} value={agent.path}>
