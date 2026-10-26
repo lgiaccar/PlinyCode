@@ -1,5 +1,5 @@
-import type { ChangeEvent } from "react"
 import type { AgentStateEntry } from "@shared/ExtensionMessage"
+import type { ChangeEvent } from "react"
 
 interface AgentPickerProps {
 	/** All enabled custom agents (global + workspace combined) */

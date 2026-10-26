@@ -13,8 +13,8 @@ import { readFileSync } from "node:fs"
 import {
 	type ClineCoreStartInput,
 	type CoreSessionConfig,
-	parseConfiguredAgentConfig,
 	type ProviderSettings,
+	parseConfiguredAgentConfig,
 	readCompactionStrategyGlobally,
 	resolveProviderApiKeyFromSettings,
 	type StartSessionResult,

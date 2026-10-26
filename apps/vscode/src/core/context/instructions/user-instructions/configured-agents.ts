@@ -39,10 +39,7 @@ interface AgentLocations {
 
 export function resolveAgentLocations(workspaceRoot: string | undefined, extraSearchPaths?: string[]): AgentLocations {
 	const base = resolveAgentConfigSearchPaths(workspaceRoot)
-	const searchPaths =
-		extraSearchPaths && extraSearchPaths.length > 0
-			? [...new Set([...base, ...extraSearchPaths])]
-			: base
+	const searchPaths = extraSearchPaths && extraSearchPaths.length > 0 ? [...new Set([...base, ...extraSearchPaths])] : base
 	return { searchPaths, globalDir: resolveAgentsConfigDirPath() }
 }
 

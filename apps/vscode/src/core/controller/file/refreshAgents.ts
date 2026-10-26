@@ -1,8 +1,12 @@
-import { type ConfiguredAgentEntry, listConfiguredAgents, resolveAgentLocations } from "@core/context/instructions/user-instructions/configured-agents"
-import { readAgentFileLocations } from "@/hosts/vscode/agent-file-locations"
+import {
+	type ConfiguredAgentEntry,
+	listConfiguredAgents,
+	resolveAgentLocations,
+} from "@core/context/instructions/user-instructions/configured-agents"
 import { EmptyRequest } from "@shared/proto/cline/common"
 import { AgentInfo, RefreshedAgents } from "@shared/proto/cline/file"
 import { HostProvider } from "@/hosts/host-provider"
+import { readAgentFileLocations } from "@/hosts/vscode/agent-file-locations"
 import type { Controller } from ".."
 
 function toAgentInfo(agent: ConfiguredAgentEntry): AgentInfo {
@@ -34,5 +38,3 @@ export async function buildRefreshedAgents(controller: Controller): Promise<Refr
 export async function refreshAgents(controller: Controller, _request: EmptyRequest): Promise<RefreshedAgents> {
 	return buildRefreshedAgents(controller)
 }
-
-
