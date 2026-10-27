@@ -27,6 +27,8 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 	const [nextTaskWorkspace, setNextTaskWorkspace] = useState<WorkspaceRef | undefined>(undefined)
 	// Whether the next conversation runs in a git worktree of its own ("Run in worktree").
 	const [nextTaskWorktree, setNextTaskWorktree] = useState(false)
+	// The custom agent file path for the next conversation, or undefined for the generic agent.
+	const [selectedAgentPath, setSelectedAgentPath] = useState<string | undefined>(undefined)
 
 	// Refs
 	const textAreaRef = useRef<HTMLTextAreaElement>(null)
@@ -58,7 +60,7 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 	// Auto-expand last message row when task or messages first changed.
 	useEffect(() => {
 		clearExpandedRows()
-	}, [task?.ts, clearExpandedRows])
+	}, [clearExpandedRows])
 
 	return {
 		// State values
@@ -90,6 +92,8 @@ export function useChatState(messages: ClineMessage[]): ChatState {
 		setNextTaskWorkspace,
 		nextTaskWorktree,
 		setNextTaskWorktree,
+		selectedAgentPath,
+		setSelectedAgentPath,
 
 		// Refs
 		textAreaRef,

@@ -62,6 +62,13 @@ export type HistoryItem = {
 	 */
 	pinnedModelId?: string
 	/**
+	 * Path to a custom agent file selected in the new-task UI. When set, the
+	 * conversation runs under that agent's instructions. Absent for the generic
+	 * agent. Persisted so the agent survives session rebuilds (mode change,
+	 * compaction, resume, checkpoint restore), like pinnedModelId.
+	 */
+	agentPath?: string
+	/**
 	 * Provider id the task ran on (from the SDK session record). Absent for
 	 * tasks recorded before this field existed and for legacy imports —
 	 * cost-display consumers treat an absent provider as "show", since

@@ -4,10 +4,13 @@
 // This allows the SdkController to reuse the classic state-building logic
 // without inheriting the entire classic Controller implementation.
 
+import { listConfiguredAgents, resolveAgentLocations } from "@core/context/instructions/user-instructions/configured-agents"
 import { getHooksEnabledSafe } from "@core/hooks/hooks-utils"
 import { readCompactionStrategyGlobally } from "@plinycode/core"
-import type { ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
+import type { AgentStateEntry, ClineMessage, ExtensionState, Platform } from "@shared/ExtensionMessage"
 import { ClineEnv } from "@/config"
+import { HostProvider } from "@/hosts/host-provider"
+import { readAgentFileLocations } from "@/hosts/vscode/agent-file-locations"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
@@ -119,6 +122,42 @@ export async function getStateToPostToWebview(controller: {
 	const clineConfig = ClineEnv.config()
 	const environment = clineConfig.environment
 
+	// Discover configured agents for the new-task agent selector.
+	// Failures (no workspace, no agent files) are silent — the picker just stays hidden.
+	let globalAgents: AgentStateEntry[] | undefined
+	let localAgents: AgentStateEntry[] | undefined
+	try {
+		const workspacePaths = await HostProvider.workspace.getWorkspacePaths({})
+		const primaryWorkspace = workspacePaths.paths[0]
+		const extraPaths = readAgentFileLocations(primaryWorkspace)
+		const locations = resolveAgentLocations(primaryWorkspace, extraPaths)
+		const agents = listConfiguredAgents(primaryWorkspace, stateManager, locations)
+		globalAgents = agents
+			.filter((a) => a.scope === "global")
+			.map((a) => ({
+				name: a.name,
+				description: a.description,
+				path: a.path,
+				enabled: a.enabled,
+				model: a.model,
+				toolName: a.toolName,
+				error: a.error,
+			}))
+		localAgents = agents
+			.filter((a) => a.scope === "workspace")
+			.map((a) => ({
+				name: a.name,
+				description: a.description,
+				path: a.path,
+				enabled: a.enabled,
+				model: a.model,
+				toolName: a.toolName,
+				error: a.error,
+			}))
+	} catch {
+		// Agents are optional — the picker simply won't show if discovery fails.
+	}
+
 	return {
 		version,
 		apiConfiguration,
@@ -177,5 +216,7 @@ export async function getStateToPostToWebview(controller: {
 		hooksEnabled: getHooksEnabledSafe(stateManager.getGlobalSettingsKey("hooksEnabled")),
 		backgroundEditEnabled: stateManager.getGlobalSettingsKey("backgroundEditEnabled"),
 		showFeatureTips,
+		globalAgents,
+		localAgents,
 	} as ExtensionState
 }

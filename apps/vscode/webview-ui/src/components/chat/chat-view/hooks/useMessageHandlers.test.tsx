@@ -82,6 +82,8 @@ function makeChatState(messages: ClineMessage[], overrides: Partial<ChatState> =
 		setNextTaskWorkspace: vi.fn(),
 		nextTaskWorktree: false,
 		setNextTaskWorktree: vi.fn(),
+		selectedAgentPath: undefined,
+		setSelectedAgentPath: vi.fn(),
 		textAreaRef: { current: null },
 		lastMessage: last,
 		secondLastMessage: messages.at(-2),

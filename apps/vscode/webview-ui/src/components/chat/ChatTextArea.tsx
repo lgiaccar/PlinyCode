@@ -76,6 +76,9 @@ interface ChatTextAreaProps {
 	shouldDisableFilesAndImages: boolean
 	onHeightChange?: (height: number) => void
 	onFocusChange?: (isFocused: boolean) => void
+	// Agent selection for new tasks
+	selectedAgentPath?: string | undefined
+	onSelectedAgentPathChange?: (agentPath: string | undefined) => void
 }
 
 const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
@@ -96,6 +99,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			onHeightChange,
 			onFocusChange,
 			sideQuestionAvailable = false,
+			selectedAgentPath,
+			onSelectedAgentPathChange,
 		},
 		ref,
 	) => {
@@ -294,7 +299,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				textAreaRef.current.setSelectionRange(intendedCursorPosition, intendedCursorPosition)
 				setIntendedCursorPosition(null) // Reset the state after applying
 			}
-		}, [inputValue, intendedCursorPosition, setIntendedCursorPosition])
+		}, [intendedCursorPosition, setIntendedCursorPosition])
 
 		const handleInputChange = useCallback(
 			(e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -433,7 +438,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 		useLayoutEffect(() => {
 			updateHighlights()
-		}, [inputValue, updateHighlights])
+		}, [updateHighlights])
 
 		const updateCursorPosition = useCallback(() => {
 			if (textAreaRef.current) {
@@ -545,7 +550,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			if (inputValue.endsWith(" ")) {
 				const event = {
 					target: {
-						value: inputValue + "@",
+						value: `${inputValue}@`,
 						selectionStart: inputValue.length + 1,
 					},
 				} as React.ChangeEvent<HTMLTextAreaElement>
@@ -557,7 +562,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			// Otherwise add space then @
 			const event = {
 				target: {
-					value: inputValue + " @",
+					value: `${inputValue} @`,
 					selectionStart: inputValue.length + 2,
 				},
 			} as React.ChangeEvent<HTMLTextAreaElement>
@@ -939,7 +944,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						<ModelButton
 							handleContextButtonClick={handleContextButtonClick}
 							mode={mode}
+							onSelectedAgentPathChange={onSelectedAgentPathChange}
 							onSelectFilesAndImages={onSelectFilesAndImages}
+							selectedAgentPath={selectedAgentPath}
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
 						/>
 					</div>

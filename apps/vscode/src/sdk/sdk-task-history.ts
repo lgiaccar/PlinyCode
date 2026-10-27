@@ -229,6 +229,7 @@ export function historyItemToSessionMetadata(item: HistoryItem, fallbackModelId?
 		...(item.isRenamed ? { isRenamed: true } : {}),
 		...(item.isPinned ? { isPinned: true } : {}),
 		...(item.pinnedModelId ? { pinnedModelId: item.pinnedModelId } : {}),
+		...(item.agentPath ? { agentPath: item.agentPath } : {}),
 		...(item.spendingLimit !== undefined ? { spendingLimit: item.spendingLimit } : {}),
 		...(item.waitMinutesPerTurn !== undefined ? { waitMinutesPerTurn: item.waitMinutesPerTurn } : {}),
 		...(item.spendingStep !== undefined ? { spendingStep: item.spendingStep } : {}),
@@ -332,6 +333,7 @@ export function sessionHistoryRecordToHistoryItem(item: SessionHistoryRecord): H
 		isPinned: metadataBoolean(metadata, "isPinned") === true || undefined,
 		modelId: item.model || metadataString(metadata, "modelId") || "",
 		pinnedModelId: metadataString(metadata, "pinnedModelId") || undefined,
+		agentPath: metadataString(metadata, "agentPath") || undefined,
 		apiProvider: item.provider || undefined,
 		cwdOnTaskInitialization: item.cwd || item.workspaceRoot || undefined,
 		workspaceRootOnTaskInitialization: (item.workspaceRoot || item.cwd || "").trim() || undefined,
@@ -971,6 +973,16 @@ export class SdkTaskHistory {
 			return false
 		}
 		await this.updateTaskHistoryItem({ ...historyItem, task: trimmed, isRenamed: true })
+		return true
+	}
+
+	/** Updates the agent path for a task. Returns false when the task is unknown. */
+	async updateAgentPath(taskId: string, agentPath: string | undefined): Promise<boolean> {
+		const historyItem = await this.findHistoryItem(taskId)
+		if (!historyItem) {
+			return false
+		}
+		await this.updateTaskHistoryItem({ ...historyItem, agentPath })
 		return true
 	}
 

@@ -71,7 +71,10 @@ export async function newTask(controller: Controller, request: NewTaskRequest): 
 		filteredTaskSettings,
 		workspace,
 		// "Run in worktree": a new git worktree and branch for this conversation (docs/task-worktrees.md).
-		request.worktree ? { worktree: true } : undefined,
+		// agentPath: a custom agent file selected in the new-task UI.
+		request.worktree || request.agentPath
+			? { worktree: request.worktree || false, agentPath: request.agentPath || undefined }
+			: undefined,
 	)
 	return String.create({ value: taskId || "" })
 }

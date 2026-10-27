@@ -3,6 +3,7 @@ import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
 import { AtSignIcon, PlusIcon } from "lucide-react"
 import { useMemo } from "react"
 import styled from "styled-components"
+import { ConversationAgentPicker } from "@/components/chat/ConversationAgentPicker"
 import { ConversationModelPicker } from "@/components/chat/ConversationModelPicker"
 import ServersToggleModal from "@/components/chat/ServersToggleModal"
 import ClineRulesToggleModal from "@/components/cline-rules/ClineRulesToggleModal"
@@ -89,6 +90,8 @@ interface ModelButtonProps {
 	handleContextButtonClick: () => void
 	shouldDisableFilesAndImages: boolean
 	onSelectFilesAndImages: () => void
+	selectedAgentPath?: string | undefined
+	onSelectedAgentPathChange?: (agentPath: string | undefined) => void
 }
 
 /**
@@ -103,6 +106,8 @@ export function ModelButton({
 	handleContextButtonClick,
 	shouldDisableFilesAndImages,
 	onSelectFilesAndImages,
+	selectedAgentPath,
+	onSelectedAgentPathChange,
 }: ModelButtonProps) {
 	const { apiConfiguration } = useExtensionState()
 	const { selectedProvider, selectedModelId } = useNormalizedApiConfiguration(mode)
@@ -162,6 +167,10 @@ export function ModelButton({
 
 			<ModelContainer>
 				<ConversationModelPicker mode={mode} />
+				<ConversationAgentPicker
+					selectedAgentPath={selectedAgentPath}
+					onSelectedAgentPathChange={onSelectedAgentPathChange}
+				/>
 			</ModelContainer>
 		</ButtonGroup>
 	)
