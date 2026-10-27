@@ -18,7 +18,13 @@ const TaskAgentChip: React.FC<{ agentPath?: string }> = ({ agentPath }) => {
 	const agent = allAgents.find((a) => a.path === agentPath)
 
 	// If we can't find the agent (e.g., it was deleted), show the path
-	const displayName = agent?.name ?? agentPath.split("/").pop()?.replace(/\.(md|yml|yaml)$/, "") ?? "Unknown Agent"
+	const displayName =
+		agent?.name ??
+		agentPath
+			.split("/")
+			.pop()
+			?.replace(/\.(md|yml|yaml)$/, "") ??
+		"Unknown Agent"
 
 	return (
 		<div
