@@ -48,13 +48,7 @@ describe("loadContext", () => {
 			})
 		}
 		const ctx = await loadContext(root)
-		const canonical = (value: string) => {
-			try {
-				return realpathSync(value)
-			} catch {
-				return value
-			}
-		}
-		expect(arePathsEqual(canonical(ctx.root), canonical(root))).toBe(true)
+		const [ctxRoot, diskRoot] = await Promise.all([fs.realpath(ctx.root), fs.realpath(root)])
+		expect(arePathsEqual(ctxRoot, diskRoot)).toBe(true)
 	})
 })
