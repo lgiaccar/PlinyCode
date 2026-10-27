@@ -13,6 +13,8 @@ The Rules panel's toggles apply to all of them. Rules are re-read on every run, 
 
 The panel has Rules, Skills, Agents and Hooks tabs ([agent-tools.md](agent-tools.md) covers the Agents tab). While it is open, the extension watches the rules, skills, hooks and agents folders of the workspace and of the global locations (`customization-watcher.ts`), and the open tab reloads when a file there changes; nothing is rescanned while the panel is closed.
 
+The **All rules** and **All skills** switches at the top of their tabs apply to every listed global and workspace entry. The switch is on while any entries are enabled: switch it off to disable all, then on to enable all. Individual switches remain available afterward. These actions save the same per-file settings as the individual controls; they do not delete files or affect the Agents and Hooks tabs. The controls are temporarily disabled while the changes are saved, and a failed update is reported so you can check the remaining entries and retry.
+
 ## Inlined or listed
 
 The section is resent with every request, so it has a budget:

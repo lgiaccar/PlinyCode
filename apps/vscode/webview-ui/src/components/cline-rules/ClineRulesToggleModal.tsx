@@ -22,6 +22,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { FileServiceClient } from "@/services/grpc-client"
 import AgentsTab from "./AgentsTab"
+import BulkToggleControl from "./BulkToggleControl"
+import { ruleBulkTargets, skillBulkTargets } from "./bulkToggleTargets"
 import HookRow from "./HookRow"
 import NewRuleRow from "./NewRuleRow"
 import RuleRow from "./RuleRow"
@@ -57,6 +59,7 @@ const ClineRulesToggleModal: React.FC = () => {
 	const [globalAgents, setGlobalAgents] = useState<AgentInfo[]>([])
 	const [localAgents, setLocalAgents] = useState<AgentInfo[]>([])
 	const [ruleTokenCounts, setRuleTokenCounts] = useState<Record<string, number>>({})
+	const [bulkToggling, setBulkToggling] = useState(false)
 
 	const [isVisible, setIsVisible] = useState(false)
 	const buttonRef = useRef<HTMLDivElement>(null)
@@ -75,41 +78,45 @@ const ClineRulesToggleModal: React.FC = () => {
 		}
 	}, [currentView, hooksEnabled])
 
-	const refreshRules = useCallback(() => {
-		FileServiceClient.refreshRules({} as EmptyRequest)
-			.then((response: RefreshedRules) => {
-				// Update state with the response data using all available setters
-				if (response.globalClineRulesToggles?.toggles) {
-					setGlobalClineRulesToggles(response.globalClineRulesToggles.toggles)
-				}
-				if (response.localClineRulesToggles?.toggles) {
-					setLocalClineRulesToggles(response.localClineRulesToggles.toggles)
-				}
-				if (response.localCursorRulesToggles?.toggles) {
-					setLocalCursorRulesToggles(response.localCursorRulesToggles.toggles)
-				}
-				if (response.localWindsurfRulesToggles?.toggles) {
-					setLocalWindsurfRulesToggles(response.localWindsurfRulesToggles.toggles)
-				}
-				if (response.localCopilotRulesToggles?.toggles) {
-					setLocalCopilotRulesToggles(response.localCopilotRulesToggles.toggles)
-				}
-				setRuleTokenCounts(response.tokenCounts ?? {})
-				if (response.localAgentsRulesToggles?.toggles) {
-					setLocalAgentsRulesToggles(response.localAgentsRulesToggles.toggles)
-				}
-			})
-			.catch((error) => {
-				console.error("Failed to refresh rules:", error)
-			})
-	}, [
-		setGlobalClineRulesToggles,
-		setLocalClineRulesToggles,
-		setLocalCursorRulesToggles,
-		setLocalWindsurfRulesToggles,
-		setLocalAgentsRulesToggles,
-		setLocalCopilotRulesToggles,
-	])
+	const refreshRules = useCallback(
+		(reportFailure = false) => {
+			return FileServiceClient.refreshRules({} as EmptyRequest)
+				.then((response: RefreshedRules) => {
+					// Update state with the response data using all available setters
+					if (response.globalClineRulesToggles?.toggles) {
+						setGlobalClineRulesToggles(response.globalClineRulesToggles.toggles)
+					}
+					if (response.localClineRulesToggles?.toggles) {
+						setLocalClineRulesToggles(response.localClineRulesToggles.toggles)
+					}
+					if (response.localCursorRulesToggles?.toggles) {
+						setLocalCursorRulesToggles(response.localCursorRulesToggles.toggles)
+					}
+					if (response.localWindsurfRulesToggles?.toggles) {
+						setLocalWindsurfRulesToggles(response.localWindsurfRulesToggles.toggles)
+					}
+					if (response.localCopilotRulesToggles?.toggles) {
+						setLocalCopilotRulesToggles(response.localCopilotRulesToggles.toggles)
+					}
+					setRuleTokenCounts(response.tokenCounts ?? {})
+					if (response.localAgentsRulesToggles?.toggles) {
+						setLocalAgentsRulesToggles(response.localAgentsRulesToggles.toggles)
+					}
+				})
+				.catch((error) => {
+					console.error("Failed to refresh rules:", error)
+					if (reportFailure) throw error
+				})
+		},
+		[
+			setGlobalClineRulesToggles,
+			setLocalClineRulesToggles,
+			setLocalCursorRulesToggles,
+			setLocalWindsurfRulesToggles,
+			setLocalAgentsRulesToggles,
+			setLocalCopilotRulesToggles,
+		],
+	)
 
 	const refreshHooks = useCallback(() => {
 		FileServiceClient.refreshHooks({} as EmptyRequest)
@@ -120,13 +127,16 @@ const ClineRulesToggleModal: React.FC = () => {
 			.catch((error) => console.error("Failed to refresh hooks:", error))
 	}, [])
 
-	const refreshSkills = useCallback(() => {
-		FileServiceClient.refreshSkills({} as EmptyRequest)
+	const refreshSkills = useCallback((reportFailure = false) => {
+		return FileServiceClient.refreshSkills({} as EmptyRequest)
 			.then((response) => {
 				setGlobalSkills(response.globalSkills || [])
 				setLocalSkills(response.localSkills || [])
 			})
-			.catch((error) => console.error("Failed to refresh skills:", error))
+			.catch((error) => {
+				console.error("Failed to refresh skills:", error)
+				if (reportFailure) throw error
+			})
 	}, [])
 
 	const applyAgents = useCallback((response: RefreshedAgents) => {
@@ -415,17 +425,29 @@ const ClineRulesToggleModal: React.FC = () => {
 									borderBottom: "1px solid var(--vscode-panel-border)",
 									flexWrap: "wrap",
 								}}>
-								<TabButton isActive={currentView === "rules"} onClick={() => setCurrentView("rules")}>
+								<TabButton
+									disabled={bulkToggling}
+									isActive={currentView === "rules"}
+									onClick={() => setCurrentView("rules")}>
 									Rules
 								</TabButton>
-								<TabButton isActive={currentView === "skills"} onClick={() => setCurrentView("skills")}>
+								<TabButton
+									disabled={bulkToggling}
+									isActive={currentView === "skills"}
+									onClick={() => setCurrentView("skills")}>
 									Skills
 								</TabButton>
-								<TabButton isActive={currentView === "agents"} onClick={() => setCurrentView("agents")}>
+								<TabButton
+									disabled={bulkToggling}
+									isActive={currentView === "agents"}
+									onClick={() => setCurrentView("agents")}>
 									Agents
 								</TabButton>
 								{hooksEnabled && (
-									<TabButton isActive={currentView === "hooks"} onClick={() => setCurrentView("hooks")}>
+									<TabButton
+										disabled={bulkToggling}
+										isActive={currentView === "hooks"}
+										onClick={() => setCurrentView("hooks")}>
 										Hooks
 									</TabButton>
 								)}
@@ -471,9 +493,25 @@ const ClineRulesToggleModal: React.FC = () => {
 					</div>
 
 					{/* Scrollable content area */}
-					<div className="flex-1 overflow-y-auto px-3 pb-3" style={{ minHeight: 0 }}>
+					<fieldset
+						className="flex-1 min-w-0 overflow-y-auto border-0 m-0 px-3 pb-3 pt-0"
+						disabled={bulkToggling}
+						style={{ minHeight: 0 }}>
 						{currentView === "rules" ? (
 							<>
+								<BulkToggleControl
+									kind="rules"
+									onBusyChange={setBulkToggling}
+									onRefresh={() => refreshRules(true)}
+									targets={ruleBulkTargets({
+										globalClineRulesToggles,
+										localClineRulesToggles,
+										localCursorRulesToggles,
+										localWindsurfRulesToggles,
+										localAgentsRulesToggles,
+										localCopilotRulesToggles,
+									})}
+								/>
 								<ContextBudget
 									detail={`${enabledRuleCount} of ${allFileRules.length} rule files enabled · ~${formatTokenCount(totalRuleTokens)} if all were on`}
 									label="Rules added to every request"
@@ -642,6 +680,12 @@ const ClineRulesToggleModal: React.FC = () => {
 							</>
 						) : currentView === "skills" ? (
 							<>
+								<BulkToggleControl
+									kind="skills"
+									onBusyChange={setBulkToggling}
+									onRefresh={() => refreshSkills(true)}
+									targets={skillBulkTargets(globalSkills, localSkills)}
+								/>
 								<ContextBudget
 									detail={`${enabledSkills.length} of ${allSkills.length} skills enabled · the full SKILL.md (~${formatTokenCount(enabledSkillFileTokens)} in total) loads only when a skill is used`}
 									label="Skill names and descriptions added to every request"
@@ -699,7 +743,7 @@ const ClineRulesToggleModal: React.FC = () => {
 						) : currentView === "agents" ? (
 							<AgentsTab globalAgents={globalAgents} localAgents={localAgents} onAgentsChanged={applyAgents} />
 						) : null}
-					</div>
+					</fieldset>
 				</PopupModalContainer>
 			)}
 		</div>
@@ -739,8 +783,18 @@ const StyledTabButton = styled.button<{ $isActive: boolean }>`
 	}
 `
 
-const TabButton = ({ children, isActive, onClick }: { children: React.ReactNode; isActive: boolean; onClick: () => void }) => (
-	<StyledTabButton $isActive={isActive} aria-pressed={isActive} onClick={onClick}>
+const TabButton = ({
+	children,
+	isActive,
+	onClick,
+	disabled,
+}: {
+	children: React.ReactNode
+	isActive: boolean
+	onClick: () => void
+	disabled?: boolean
+}) => (
+	<StyledTabButton $isActive={isActive} aria-pressed={isActive} disabled={disabled} onClick={onClick}>
 		{children}
 	</StyledTabButton>
 )
