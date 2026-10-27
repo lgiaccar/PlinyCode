@@ -185,7 +185,9 @@ export function extractEditorStateBlock(input?: string): string | undefined {
  *   or undefined when switching back to the generic Cline agent.
  */
 export function formatAgentSwitchNotice(agentName: string | undefined): string {
-	const label = agentName ? `the "${agentName}" agent` : "the generic Cline agent";
+	const label = agentName
+		? `the "${agentName}" agent`
+		: "the generic Cline agent";
 	return `<agent_notice>The user switched to ${label} before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>`;
 }
 
@@ -200,10 +202,7 @@ export function formatAgentSwitchNotice(agentName: string | undefined): string {
 export function stripModeNotices(input?: string): string {
 	if (!input?.trim()) return "";
 	return removeTagElements(
-		removeTagElements(
-			removeTagElements(input, "mode_notice"),
-			"agent_notice",
-		),
+		removeTagElements(removeTagElements(input, "mode_notice"), "agent_notice"),
 		"editor_state",
 	).trim();
 }
