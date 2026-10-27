@@ -739,12 +739,9 @@ describe("useMessageHandlers — send routing", () => {
 		})
 
 		expect(newTask).toHaveBeenCalledTimes(1)
-		expect(newTask).toHaveBeenCalledWith(
-			expect.objectContaining({ agentPath: ".github/agents/reviewer.md" }),
-		)
+		expect(newTask).toHaveBeenCalledWith(expect.objectContaining({ agentPath: ".github/agents/reviewer.md" }))
 		// The agent path must NOT be cleared after newTask succeeds — it stays in
 		// local state until startNewTask resets it for the next conversation.
 		expect(setSelectedAgentPath).not.toHaveBeenCalledWith(undefined)
 	})
-
 })

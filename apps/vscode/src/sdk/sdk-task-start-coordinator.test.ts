@@ -86,7 +86,6 @@ describe("SdkTaskStartCoordinator", () => {
 		)
 	})
 
-
 	it("pins agentPath before the first state push so the picker shows the correct agent immediately", async () => {
 		const { coordinator, options } = makeCoordinator()
 		const pinAgentPath = vi.fn()
