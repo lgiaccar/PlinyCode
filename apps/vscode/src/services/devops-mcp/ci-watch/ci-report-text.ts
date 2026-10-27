@@ -14,7 +14,7 @@ export const stripAnsi = (text: string) => text.replace(ANSI_STYLE, "")
  * zero-width space keeps both literal.
  */
 export const defang = (text: string) =>
-	text.replace(/<(\/?)(user_input|user_command|mode_notice|hook_context)/g, "<​$1$2").replace(/@(?=[\w"/-])/g, "@​")
+	text.replace(/<(\/?)(user_input|user_command|mode_notice|agent_notice|hook_context)/g, "<​$1$2").replace(/@(?=[\w"/-])/g, "@​")
 
 /** Keeps a log from closing the Markdown fence it is shown in. */
 export const unfence = (text: string) => text.replace(/```/g, "``​`")

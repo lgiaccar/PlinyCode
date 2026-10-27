@@ -788,6 +788,46 @@ describe("SdkModeCoordinator", () => {
 			expect(coordinator.consumeModeSwitchNotice("new-session")).toBeNull()
 		})
 	})
+
+	describe("recordAgentSwitchNotice / consumeAgentSwitchNotice", () => {
+		it("records a named agent switch and clears it on consume", () => {
+			const { coordinator } = makeCoordinator({ mode: "act" })
+
+			coordinator.recordAgentSwitchNotice("session-1", "Code Reviewer")
+
+			expect(coordinator.consumeAgentSwitchNotice("session-1")).toBe("Code Reviewer")
+			expect(coordinator.consumeAgentSwitchNotice("session-1")).toBeNull()
+		})
+
+		it("records a generic agent switch (undefined name) as empty string, consumed as empty string", () => {
+			const { coordinator } = makeCoordinator({ mode: "act" })
+
+			coordinator.recordAgentSwitchNotice("session-1", undefined)
+
+			// undefined is stored as "" so consume can distinguish "nothing recorded"
+			// (null) from "recorded a switch to generic agent" ("").
+			expect(coordinator.consumeAgentSwitchNotice("session-1")).toBe("")
+		})
+
+		it("does not deliver the notice to a different session", () => {
+			const { coordinator } = makeCoordinator({ mode: "act" })
+
+			coordinator.recordAgentSwitchNotice("session-1", "Reviewer")
+
+			expect(coordinator.consumeAgentSwitchNotice("session-2")).toBeNull()
+			// The notice is still pending for the correct session.
+			expect(coordinator.consumeAgentSwitchNotice("session-1")).toBe("Reviewer")
+		})
+
+		it("overwrites a stale notice when a new one is recorded", () => {
+			const { coordinator } = makeCoordinator({ mode: "act" })
+
+			coordinator.recordAgentSwitchNotice("session-1", "Agent A")
+			coordinator.recordAgentSwitchNotice("session-1", "Agent B")
+
+			expect(coordinator.consumeAgentSwitchNotice("session-1")).toBe("Agent B")
+		})
+	})
 })
 
 function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
