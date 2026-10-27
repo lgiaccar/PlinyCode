@@ -9,6 +9,7 @@ export {
 	CLINE_WORKSPACES_DIRECTORY_NAME,
 	type CronSpecsScope,
 	discoverPluginModulePaths,
+	EXTERNAL_AGENTS_CONFIG_DIRS,
 	EXTERNAL_SKILLS_CONFIG_DIRS,
 	ensureFileExists,
 	ensureHookLogDir,
