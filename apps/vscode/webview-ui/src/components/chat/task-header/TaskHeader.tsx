@@ -33,6 +33,7 @@ import TaskUsageCounter from "./TaskUsageCounter"
 import { TaskWaitLimit } from "./TaskWaitLimit"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
 import TaskWorktreeChip from "./TaskWorktreeChip"
+import TaskAgentChip from "./TaskAgentChip"
 import TokenUsagePanel from "./TokenUsagePanel"
 
 const IS_DEV = process.env.IS_DEV === "true"
@@ -238,6 +239,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							</div>
 						)}
 						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
+						<TaskAgentChip agentPath={currentTaskItem?.agentPath} />
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
 						{currentTaskItem?.id && (
