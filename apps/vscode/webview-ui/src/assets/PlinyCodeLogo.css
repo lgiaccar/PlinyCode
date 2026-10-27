@@ -1,0 +1,20 @@
+.plinycode-brand-logo {
+	width: 100%;
+	max-width: 440px;
+}
+.plinycode-brand-logo img {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+.plinycode-brand-logo .plinycode-brand-logo-dark {
+	display: none;
+}
+body.vscode-dark .plinycode-brand-logo-light,
+body.vscode-high-contrast .plinycode-brand-logo-light {
+	display: none;
+}
+body.vscode-dark .plinycode-brand-logo-dark,
+body.vscode-high-contrast .plinycode-brand-logo-dark {
+	display: block;
+}
