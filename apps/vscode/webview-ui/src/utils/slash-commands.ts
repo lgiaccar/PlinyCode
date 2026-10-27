@@ -1,6 +1,9 @@
 import type { McpServer } from "@shared/mcp"
+import type { SkillInfo } from "@shared/proto/cline/file"
 import { PLATFORM_CONFIG, PlatformType } from "@/config/platform.config"
 import { BASE_SLASH_COMMANDS, type SlashCommand, VSCODE_ONLY_COMMANDS } from "../../../src/shared/slashCommands.ts"
+
+const RESERVED_SKILL_NAMES = new Set(BASE_SLASH_COMMANDS.map((command) => command.name.toLowerCase()))
 
 export type { SlashCommand }
 
@@ -50,6 +53,31 @@ function getWorkflowCommands(
 		})
 
 	return [...localWorkflows, ...globalWorkflows]
+}
+
+function normalizeSkillCommandName(name: string): string {
+	return name.trim().toLowerCase().replace(/\s+/g, "-")
+}
+
+export function getSkillCommands(skills: SkillInfo[] = []): SlashCommand[] {
+	const seen = new Set<string>()
+	const commands: SlashCommand[] = []
+	for (const skill of skills) {
+		if (!skill.enabled) {
+			continue
+		}
+		const name = normalizeSkillCommandName(skill.name)
+		if (!name || RESERVED_SKILL_NAMES.has(name) || seen.has(name)) {
+			continue
+		}
+		seen.add(name)
+		commands.push({
+			name,
+			description: skill.description || `Skill from ${skill.path}`,
+			section: "skill",
+		})
+	}
+	return commands
 }
 
 /**
@@ -161,10 +189,12 @@ export function getMatchingSlashCommands(
 	localWorkflowToggles: Record<string, boolean> = {},
 	globalWorkflowToggles: Record<string, boolean> = {},
 	mcpServers: McpServer[] = [],
+	skills: SkillInfo[] = [],
 ): SlashCommand[] {
 	const workflowCommands = getWorkflowCommands(localWorkflowToggles, globalWorkflowToggles)
+	const skillCommands = getSkillCommands(skills)
 	const mcpPromptCommands = getMcpPromptCommands(mcpServers)
-	const allCommands = [...DEFAULT_SLASH_COMMANDS, ...workflowCommands, ...mcpPromptCommands]
+	const allCommands = [...DEFAULT_SLASH_COMMANDS, ...skillCommands, ...workflowCommands, ...mcpPromptCommands]
 
 	if (!query) {
 		return allCommands
@@ -192,7 +222,7 @@ export function insertSlashCommand(
 
 	// replace the partial command with the full command
 	const newValue =
-		beforeSlash + commandName + (afterPartialCommand.startsWith(" ") ? afterPartialCommand : " " + afterPartialCommand)
+		beforeSlash + commandName + (afterPartialCommand.startsWith(" ") ? afterPartialCommand : ` ${afterPartialCommand}`)
 
 	return { newValue, commandIndex: slashIndex }
 }
@@ -206,14 +236,16 @@ export function validateSlashCommand(
 	localWorkflowToggles: Record<string, boolean> = {},
 	globalWorkflowToggles: Record<string, boolean> = {},
 	mcpServers: McpServer[] = [],
+	skills: SkillInfo[] = [],
 ): "full" | "partial" | null {
 	if (!command) {
 		return null
 	}
 
 	const workflowCommands = getWorkflowCommands(localWorkflowToggles, globalWorkflowToggles)
+	const skillCommands = getSkillCommands(skills)
 	const mcpPromptCommands = getMcpPromptCommands(mcpServers)
-	const allCommands = [...DEFAULT_SLASH_COMMANDS, ...workflowCommands, ...mcpPromptCommands]
+	const allCommands = [...DEFAULT_SLASH_COMMANDS, ...skillCommands, ...workflowCommands, ...mcpPromptCommands]
 
 	// case insensitive matching
 	const exactMatch = allCommands.some((cmd) => cmd.name.toLowerCase() === command.toLowerCase())

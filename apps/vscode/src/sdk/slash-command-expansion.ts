@@ -16,6 +16,10 @@ const SLASH_COMMAND_TOKEN_REGEX = /(^|\s)(\/[a-zA-Z0-9_.:@-]+)(?=\s|$)/g
  */
 const WORKFLOW_FILE_EXTENSION_REGEX = /\.(md|markdown|txt)$/i
 
+function formatUserInvokedSkillBlock(name: string, instructions: string): string {
+	return `\n<skill name="${name}" invoked_by="user">\nThe user called this skill directly; follow these instructions. Do not load this skill again with the skills tool.\n${instructions}\n</skill>`
+}
+
 /**
  * Canonical form used to compare workflow names across the places they appear:
  * typed slash commands and toggle paths keep the file extension, while SDK
@@ -139,18 +143,11 @@ export function expandSlashCommands(
 				continue
 			}
 		}
-		// Configured skills are not expanded into the prompt: the SDK session
-		// registers the `skills` tool, whose description requires the model to
-		// invoke it when the user references a slash command, so the
-		// instructions arrive as a tool result and the transcript keeps the
-		// typed command. Builtins (e.g. /deep-planning) are declared as kind
-		// "skill" but are not served by that tool, so they keep expanding —
-		// as do workflows.
-		if (command.kind === "skill" && !command.id.startsWith("builtin:")) {
-			continue
-		}
 		const start = (match.index ?? 0) + match[1].length
 		const end = start + token.length
+		if (command.kind === "skill" && !command.id.startsWith("builtin:")) {
+			return text.slice(0, end) + formatUserInvokedSkillBlock(command.name, command.instructions) + text.slice(end)
+		}
 		return text.slice(0, start) + command.instructions + text.slice(end)
 	}
 	return text
@@ -177,7 +174,7 @@ export function pastedCommandBodies(commands: readonly AvailableRuntimeCommand[]
 		}
 		if (command.kind === "workflow") {
 			workflowTexts.push(command.instructions)
-		} else if (command.kind === "skill" && command.id.startsWith("builtin:")) {
+		} else if (command.kind === "skill") {
 			skillTexts.push(command.instructions)
 		}
 	}

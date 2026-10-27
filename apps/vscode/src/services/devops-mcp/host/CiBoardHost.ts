@@ -3,6 +3,7 @@ import { resolveClineDataDir } from "@plinycode/shared/storage"
 import * as vscode from "vscode"
 import { workspaceRefFromWindow } from "@/core/workspace/workspace-identity"
 import { HostProvider } from "@/hosts/host-provider"
+import { workspaceGitDiscoveryPaths } from "@/hosts/vscode/vscode-git-repository-roots"
 import { ShowMessageType } from "@/shared/proto/index.host"
 import { Logger } from "@/shared/services/Logger"
 import { setCiBoard } from "../builtin-mcp-registry"
@@ -139,7 +140,8 @@ export class CiBoardHost implements vscode.Disposable {
 
 	/** The open folder whose `origin` is `remote`. */
 	private async resolveCheckout(remote: Remote): Promise<string | undefined> {
-		for (const folder of (await this.workspacePaths()).paths) {
+		const { paths } = await this.workspacePaths()
+		for (const folder of workspaceGitDiscoveryPaths(paths)) {
 			try {
 				const ctx = await loadContext(folder)
 				if (sameRepository(ctx.remote, remote)) {

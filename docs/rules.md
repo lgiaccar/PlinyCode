@@ -35,7 +35,7 @@ Inlined rules fill the budget in this order: the workspace's `AGENTS.md`, the gl
 
 ## Slash commands
 
-A workflow typed as a slash command pastes its body into the message, cut at 24,000 characters ([agent-tools.md](agent-tools.md), "Slash commands that paste instructions"). Skills are loaded through the `skills` tool instead.
+A workflow typed as a slash command pastes its body into the message, cut at 24,000 characters ([agent-tools.md](agent-tools.md), "Slash commands that paste instructions"). User skills appear in the `/` menu; typing `/skill-name` keeps the token and appends a `<skill>` block with the full instructions. Built-in slash commands such as `/deep-planning` still paste their bodies. Use `@` for context attachments (files, git, URLs), not for skills.
 
 ## Hooks
 

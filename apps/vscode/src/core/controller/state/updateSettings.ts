@@ -6,7 +6,12 @@ import { OpenaiReasoningEffort } from "@shared/storage/types"
 import { ClineEnv } from "@/config"
 import { setPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { setCompactionThreshold } from "@/hosts/vscode/compaction-settings"
-import { setConversationSearchEnabled, setMemoryDistillOfferEnabled, setMemoryMaxTokens } from "@/hosts/vscode/memory-settings"
+import {
+	setConversationSearchEnabled,
+	setMemoryDistillOfferEnabled,
+	setMemoryMaxTokens,
+	setMemoryUseEnabled,
+} from "@/hosts/vscode/memory-settings"
 import { setConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { setMaxWaitMinutesPerTurn } from "@/hosts/vscode/wait-settings"
 import { setWebSearchEnabled } from "@/hosts/vscode/web-search-settings"
@@ -158,6 +163,9 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 		}
 
 		// Stored as plinycode.memory.* VS Code settings; read when the next conversation starts (docs/memory.md)
+		if (request.memoryEnabled !== undefined) {
+			await setMemoryUseEnabled(request.memoryEnabled)
+		}
 		if (request.memoryMaxTokens !== undefined) {
 			await setMemoryMaxTokens(request.memoryMaxTokens)
 		}

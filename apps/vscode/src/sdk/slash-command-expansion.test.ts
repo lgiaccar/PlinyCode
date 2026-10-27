@@ -11,7 +11,7 @@ function skill(name: string, instructions: string): AvailableRuntimeCommand {
 }
 
 describe("pastedCommandBodies", () => {
-	it("lists the workflow and built-in skill bodies, not the skills the skills tool serves", () => {
+	it("lists workflow and skill bodies for the context breakdown", () => {
 		const builtin: AvailableRuntimeCommand = {
 			id: "builtin:deep-planning",
 			name: "deep-planning",
@@ -25,7 +25,10 @@ describe("pastedCommandBodies", () => {
 				skill("debug", "Use the debugging skill."),
 				builtin,
 			]),
-		).toEqual({ skillTexts: ["Plan deeply."], workflowTexts: ["Run the release workflow."] })
+		).toEqual({
+			skillTexts: ["Use the debugging skill.", "Plan deeply."],
+			workflowTexts: ["Run the release workflow."],
+		})
 	})
 })
 
@@ -93,8 +96,10 @@ describe("expandSlashCommands", () => {
 		expect(expandSlashCommands("/newtask use /release", commands)).toBe("/newtask use Run the release workflow.")
 	})
 
-	it("keeps configured skills typed so the skills tool loads them", () => {
-		expect(expandSlashCommands("/debug this failure", commands)).toBe("/debug this failure")
+	it("keeps the slash token and appends the skill block for user skills", () => {
+		expect(expandSlashCommands("/debug this failure", commands)).toBe(
+			`/debug\n<skill name="debug" invoked_by="user">\nThe user called this skill directly; follow these instructions. Do not load this skill again with the skills tool.\nUse the debugging skill.\n</skill> this failure`,
+		)
 	})
 
 	it("still expands builtin pseudo-skills, which the skills tool does not serve", () => {
@@ -120,8 +125,9 @@ describe("expandSlashCommands", () => {
 		const disabled = new Set(["release"])
 		expect(expandSlashCommands("/release", commands, { disabledWorkflowNames: disabled })).toBe("/release")
 		expect(expandSlashCommands("/release.md", commands, { disabledWorkflowNames: disabled })).toBe("/release.md")
-		// Skills stay typed either way; workflow toggles never applied to them.
-		expect(expandSlashCommands("/debug", commands, { disabledWorkflowNames: new Set(["debug"]) })).toBe("/debug")
+		expect(expandSlashCommands("/debug", commands, { disabledWorkflowNames: new Set(["debug"]) })).toContain(
+			'<skill name="debug"',
+		)
 	})
 
 	it("applies workflow toggles to normalized runtime command names", () => {

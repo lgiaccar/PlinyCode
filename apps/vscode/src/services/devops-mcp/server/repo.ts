@@ -177,12 +177,62 @@ export function parseRemote(url: string, provider?: string): Remote {
 	return { kind: "ado", host: "dev.azure.com", owner: org, repo: stripGit(repo), project }
 }
 
-function git(cwd: string, args: string[]): Promise<string | undefined> {
+type GitFailureReason = "git-missing" | "dubious-ownership" | "not-a-repo" | "other"
+
+type GitRunFailure = {
+	ok: false
+	stderr: string
+	reason: GitFailureReason
+}
+
+type GitRunSuccess = { ok: true; stdout: string }
+
+type GitRunResult = GitRunSuccess | GitRunFailure
+
+function classifyGitFailure(stderr: string): GitFailureReason {
+	const lower = stderr.toLowerCase()
+	if (lower.includes("dubious ownership") || lower.includes("safe.directory")) {
+		return "dubious-ownership"
+	}
+	if (lower.includes("not a git repository") || lower.includes("not a git repo")) {
+		return "not-a-repo"
+	}
+	return "other"
+}
+
+function formatGitRepoFailureMessage(start: string, failure: GitRunFailure): string {
+	switch (failure.reason) {
+		case "git-missing":
+			return `Git is not installed or not on PATH (needed to find the repository for ${start}). Install Git and ensure the editor can run it.`
+		case "dubious-ownership":
+			return `Git refused to use the repository at ${start} because of dubious ownership. Add the repository root to safe.directory, for example: git config --global --add safe.directory <path>. Details: ${failure.stderr}`
+		case "not-a-repo":
+			return `${start} is not inside a git repository. Open the repository folder (or a subfolder of it) in the workspace. Details: ${failure.stderr}`
+		default:
+			return `${start} is not inside a git repository (or git failed). ${failure.stderr}`
+	}
+}
+
+function runGit(cwd: string, args: string[]): Promise<GitRunResult> {
 	return new Promise((resolve) => {
-		execFile("git", ["-C", cwd, ...args], { windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout) => {
-			resolve(error ? undefined : stdout.trim())
+		execFile("git", ["-C", cwd, ...args], { windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+			if (!error) {
+				resolve({ ok: true, stdout: stdout.trim() })
+				return
+			}
+			const err = error as NodeJS.ErrnoException
+			const stderrText = String(stderr).trim() || err.message
+			if (err.code === "ENOENT") {
+				resolve({ ok: false, stderr: stderrText, reason: "git-missing" })
+				return
+			}
+			resolve({ ok: false, stderr: stderrText, reason: classifyGitFailure(stderrText) })
 		})
 	})
+}
+
+function git(cwd: string, args: string[]): Promise<string | undefined> {
+	return runGit(cwd, args).then((result) => (result.ok ? result.stdout : undefined))
 }
 
 function resolveWorkspace(workspace?: string): string {
@@ -196,12 +246,13 @@ function resolveWorkspace(workspace?: string): string {
 
 export async function loadContext(workspace?: string): Promise<RepoContext> {
 	const start = resolveWorkspace(workspace)
-	const root = await git(start, ["rev-parse", "--show-toplevel"])
-	if (!root) {
+	const rootResult = await runGit(start, ["rev-parse", "--show-toplevel"])
+	if (!rootResult.ok) {
 		throw new DevOpsError(
-			`${start} is not inside a git repository (or git is not installed). Pass \`workspace\` with the absolute path of the repository.`,
+			`${formatGitRepoFailureMessage(start, rootResult)} Pass \`workspace\` with the absolute path of the repository when needed.`,
 		)
 	}
+	const root = rootResult.stdout
 	const remoteName = process.env.DEVOPS_MCP_REMOTE || "origin"
 	const url = await git(root, ["remote", "get-url", remoteName])
 	if (!url) {
@@ -217,7 +268,11 @@ export async function loadContext(workspace?: string): Promise<RepoContext> {
  * with (GitHub, Azure DevOps, or any host when DEVOPS_MCP_PROVIDER is set).
  */
 export async function hasSupportedRemote(cwd: string): Promise<boolean> {
-	const remotes = await git(cwd, ["remote", "-v"])
+	const root = await git(cwd, ["rev-parse", "--show-toplevel"])
+	if (!root) {
+		return false
+	}
+	const remotes = await git(root, ["remote", "-v"])
 	if (!remotes) {
 		return false
 	}

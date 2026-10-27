@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.5-test.4",
+	"version": "0.2.5-test.6",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -650,6 +650,11 @@
 					"minimum": 1,
 					"maximum": 10,
 					"description": "How many results a web search returns when the model does not ask for a number."
+				},
+				"plinycode.memory.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Load repository and personal memory into conversations and offer the save_memory tool. When off, memory files can still be edited in Settings."
 				},
 				"plinycode.memory.maxTokens": {
 					"type": [

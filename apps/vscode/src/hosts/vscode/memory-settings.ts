@@ -32,8 +32,20 @@ export function getMemoryBudget(): string | number {
 	return read<string | number>("maxTokens", DEFAULT_MEMORY_MAX_TOKENS)
 }
 
+/** `plinycode.memory.enabled`: master switch for repository memory in the prompt and memory tools. */
+export function isMemoryUseEnabled(): boolean {
+	return read<boolean>("enabled", true) !== false
+}
+
 export function getMemoryMaxTokens(contextWindow = 100_000): number {
+	if (!isMemoryUseEnabled()) {
+		return 0
+	}
 	return memoryBudgetTokens(getMemoryBudget(), contextWindow)
+}
+
+export async function setMemoryUseEnabled(enabled: boolean): Promise<void> {
+	await write("enabled", enabled)
 }
 
 export async function setMemoryBudget(value: string | number): Promise<void> {

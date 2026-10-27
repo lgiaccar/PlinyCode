@@ -6,7 +6,9 @@ import MemorySettings from "./MemorySettings"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), update: vi.fn(), open: vi.fn(async () => ({})) }))
 vi.mock("@/services/memory-client", () => ({ memoryRequest: mocks.request }))
-vi.mock("@/context/ExtensionStateContext", () => ({ useExtensionState: () => ({ memoryConversationSearchEnabled: true }) }))
+vi.mock("@/context/ExtensionStateContext", () => ({
+	useExtensionState: () => ({ memoryEnabled: true, memoryConversationSearchEnabled: true }),
+}))
 vi.mock("./utils/settingsHandlers", () => ({ updateSetting: mocks.update }))
 vi.mock("@/services/grpc-client", () => ({
 	FileServiceClient: { openFile: mocks.open },

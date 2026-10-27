@@ -13,7 +13,12 @@ import { HostProvider } from "@/hosts/host-provider"
 import { readAgentFileLocations } from "@/hosts/vscode/agent-file-locations"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
 import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
-import { getMemoryMaxTokens, isConversationSearchEnabled, isMemoryDistillOfferEnabled } from "@/hosts/vscode/memory-settings"
+import {
+	getMemoryMaxTokens,
+	isConversationSearchEnabled,
+	isMemoryDistillOfferEnabled,
+	isMemoryUseEnabled,
+} from "@/hosts/vscode/memory-settings"
 import { getPlanExecutionChoice } from "@/hosts/vscode/plan-settings"
 import { getConversationSpendingLimit } from "@/hosts/vscode/spending-settings"
 import { getMaxWaitMinutesPerTurn } from "@/hosts/vscode/wait-settings"
@@ -69,6 +74,7 @@ export async function getStateToPostToWebview(controller: {
 	const prereleaseUpdatesEnabled = isPrereleaseChannelEnabled()
 	const conversationSpendingLimit = getConversationSpendingLimit()
 	const maxWaitMinutesPerTurn = getMaxWaitMinutesPerTurn()
+	const memoryEnabled = isMemoryUseEnabled()
 	const memoryMaxTokens = getMemoryMaxTokens()
 	const memoryDistillEnabled = isMemoryDistillOfferEnabled()
 	const memoryConversationSearchEnabled = isConversationSearchEnabled()
@@ -175,6 +181,7 @@ export async function getStateToPostToWebview(controller: {
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,
 		maxWaitMinutesPerTurn,
+		memoryEnabled,
 		memoryMaxTokens,
 		memoryDistillEnabled,
 		memoryConversationSearchEnabled,

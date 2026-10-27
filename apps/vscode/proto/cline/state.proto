@@ -569,6 +569,8 @@ message UpdateSettingsRequest {
   optional double compaction_threshold = 53;
   // plinycode.wait.maxMinutesPerTurn: cumulative wait minutes per agent turn; 0 means unlimited
   optional double max_wait_minutes_per_turn = 54;
+  // plinycode.memory.enabled: load memory into the prompt and offer memory tools
+  optional bool memory_enabled = 55;
 }
 
 message UpdateTerminalConnectionTimeoutRequest {

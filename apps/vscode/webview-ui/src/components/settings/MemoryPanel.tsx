@@ -118,7 +118,13 @@ export function MemorySelectionView({ state }: { state: MemoryPanelState }) {
 	)
 }
 
-export default function MemoryPanel({ inboxOnly = false }: { inboxOnly?: boolean }) {
+export default function MemoryPanel({
+	inboxOnly = false,
+	memoryDisabled = false,
+}: {
+	inboxOnly?: boolean
+	memoryDisabled?: boolean
+}) {
 	const { memoryConfigurationVersion } = useExtensionState()
 	const [state, setState] = useState<MemoryPanelState>()
 	const [error, setError] = useState("")
@@ -207,7 +213,7 @@ export default function MemoryPanel({ inboxOnly = false }: { inboxOnly?: boolean
 							<label htmlFor="memory-distill-mode">After a conversation</label>
 							<select
 								className={fieldClass}
-								disabled={busy || state.budget === 0 || state.budget === "0"}
+								disabled={busy || memoryDisabled || state.budget === 0 || state.budget === "0"}
 								id="memory-distill-mode"
 								onChange={(event) => void run({ action: "settings", distill: event.target.value })}
 								value={state.distill}>
