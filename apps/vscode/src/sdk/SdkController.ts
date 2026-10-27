@@ -2298,7 +2298,16 @@ export class Controller {
 			return await mergeTaskHistoryIntoState({
 				baseState,
 				taskHistory: this.taskHistory,
-				task: this.task,
+				task: this.task
+					? {
+							...this.task,
+							// Thread the pinned agentPath into the task so the fallback synthetic
+							// HistoryItem (built before the history record is persisted) already
+							// carries the correct agentPath. Without this the picker shows
+							// "Generic Agent" during the fire-and-forget first state push.
+							agentPath: this.sessionConfigBuilder.pinnedAgentPath(this.task.taskId),
+						}
+					: undefined,
 				getWorkspaceRoot: () => this.getWorkspaceRoot(),
 				getWindowWorkspace: () => this.getWindowWorkspace(),
 				activeTaskWorkspace: this.activeTaskWorkspace,

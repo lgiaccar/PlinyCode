@@ -211,6 +211,18 @@ export class SdkTaskStartCoordinator {
 			}
 			this.warnIfFolderShared(cwd)
 
+			// Pin the agentPath and modelId now, before the first state push, so the
+			// fire-and-forget postStateToWebview() below already sees the correct values
+			// in the fallback synthetic HistoryItem (built before the history record is
+			// persisted). Without this early pin the picker shows "Generic Agent" during
+			// the window between task creation and startNewSession completing.
+			if (startOptions?.agentPath) {
+				this.options.sessionConfigBuilder.pinAgentPath(taskSessionId, startOptions.agentPath)
+			}
+			if (startOptions?.modelId) {
+				this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
+			}
+
 			// The turn phase was already set to "streaming" (in SdkController.initTask), but the
 			// webview only learns the phase through a full state post. Ship one now, in parallel
 			// with the potentially slow session startup below, so the chat shows the thinking
@@ -237,12 +249,20 @@ export class SdkTaskStartCoordinator {
 				boundWorkspace,
 			)
 			if (startOptions?.modelId) {
-				this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
+				// Already pinned early (before the first state push); re-pin here only if
+				// the SDK returned a different session id than the one we requested.
+				if (taskSessionId !== configWithSessionId.sessionId) {
+					this.options.sessionConfigBuilder.pinModel(taskSessionId, startOptions.modelId)
+				}
 				newHistoryItem.pinnedModelId = startOptions.modelId
 			}
 			if (startOptions?.agentPath) {
 				Logger.log(`[TaskStart] Saving agentPath to history: ${startOptions.agentPath}`)
-				this.options.sessionConfigBuilder.pinAgentPath(taskSessionId, startOptions.agentPath)
+				// Already pinned early (before the first state push); re-pin here only if
+				// the SDK returned a different session id than the one we requested.
+				if (taskSessionId !== configWithSessionId.sessionId) {
+					this.options.sessionConfigBuilder.pinAgentPath(taskSessionId, startOptions.agentPath)
+				}
 				newHistoryItem.agentPath = startOptions.agentPath
 			} else {
 				Logger.log("[TaskStart] No agentPath in startOptions")

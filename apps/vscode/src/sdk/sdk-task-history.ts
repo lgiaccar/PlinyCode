@@ -1220,6 +1220,8 @@ type TaskProxyLike = {
 	taskId: string
 	api?: { getModel?: () => { id: string } }
 	messageStateHandler: { getClineMessages(): ClineMessage[] }
+	/** The custom agent path pinned for this task, if any. */
+	agentPath?: string
 }
 
 interface MergeTaskHistoryIntoStateOptions {
@@ -1291,6 +1293,9 @@ export async function mergeTaskHistoryIntoState(options: MergeTaskHistoryIntoSta
 				cacheReads: 0,
 				totalCost: 0,
 				modelId: task.api?.getModel?.().id,
+				// Include agentPath so the picker shows the correct agent immediately
+				// from the first state push, before the history record is persisted.
+				...(task.agentPath ? { agentPath: task.agentPath } : {}),
 				cwdOnTaskInitialization: await options.getWorkspaceRoot(),
 				...(options.activeTaskWorkspace?.workspace
 					? {
