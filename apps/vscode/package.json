@@ -50,7 +50,7 @@
 		],
 		"icons": {
 			"cline-icon": {
-				"description": "cline",
+				"description": "PlinyCode circuit brain",
 				"default": {
 					"fontPath": "assets/icons/cline-bot.woff",
 					"fontCharacter": "\\e900"
