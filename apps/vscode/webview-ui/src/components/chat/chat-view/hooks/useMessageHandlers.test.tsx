@@ -720,4 +720,31 @@ describe("useMessageHandlers — send routing", () => {
 		expect(newTask).toHaveBeenCalledWith(expect.objectContaining({ text: "should be sent", images: [], files: [] }))
 		expect(askResponse).not.toHaveBeenCalled()
 	})
+
+	it("forwards the selectedAgentPath to newTask so the extension picks up the chosen agent", async () => {
+		mockTurnState = { phase: "idle", seq: 1 }
+		const setSelectedAgentPath = vi.fn()
+		const { result } = renderHook(() =>
+			useMessageHandlers(
+				[],
+				makeChatState([], {
+					selectedAgentPath: ".github/agents/reviewer.md",
+					setSelectedAgentPath,
+				}),
+			),
+		)
+
+		await act(async () => {
+			await result.current.handleSendMessage("review my PR", [], [])
+		})
+
+		expect(newTask).toHaveBeenCalledTimes(1)
+		expect(newTask).toHaveBeenCalledWith(
+			expect.objectContaining({ agentPath: ".github/agents/reviewer.md" }),
+		)
+		// The agent path must NOT be cleared after newTask succeeds — it stays in
+		// local state until startNewTask resets it for the next conversation.
+		expect(setSelectedAgentPath).not.toHaveBeenCalledWith(undefined)
+	})
+
 })

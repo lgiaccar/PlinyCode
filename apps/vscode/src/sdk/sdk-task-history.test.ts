@@ -1544,3 +1544,99 @@ describe("historyItemToSessionFields", () => {
 		expect(result.modelId).toBeUndefined()
 	})
 })
+
+describe("mergeTaskHistoryIntoState — agentPath in fallback HistoryItem", () => {
+	it("includes agentPath in the fallback synthetic HistoryItem when the task has a pinned agent", async () => {
+		// Import the function under test. It is exported from sdk-task-history.
+		const { mergeTaskHistoryIntoState } = await import("./sdk-task-history")
+
+		// A minimal SdkTaskHistory stub that returns an empty list (simulating the
+		// race window where the new task has not been written to storage yet).
+		const emptyTaskHistory = {
+			listHistory: vi.fn().mockResolvedValue([]),
+		}
+
+		const taskMessage: ClineMessage = {
+			ts: 1700000000000,
+			type: "say",
+			say: "task",
+			text: "Hello from a custom agent",
+			partial: false,
+		}
+
+		const task = {
+			taskId: "new-task-id",
+			agentPath: ".github/agents/reviewer.md",
+			api: undefined,
+			messageStateHandler: {
+				getClineMessages: () => [taskMessage],
+			},
+		}
+
+		const baseState = { taskHistory: [] } as unknown as import("@shared/ExtensionMessage").ExtensionState
+
+		const result = await mergeTaskHistoryIntoState({
+			baseState,
+			taskHistory: emptyTaskHistory as unknown as import("./sdk-task-history").SdkTaskHistory,
+			task,
+			getWorkspaceRoot: async () => "/workspace",
+			getWindowWorkspace: async () => undefined,
+			activeTaskWorkspace: undefined,
+			turnState: undefined,
+			queuedPrompts: [],
+			backgroundTasks: [],
+			activeSession: undefined,
+			stateVersion: 1,
+			epoch: 0,
+		})
+
+		// The fallback HistoryItem must carry the agentPath so the picker shows the
+		// correct agent from the very first state push.
+		expect(result.currentTaskItem?.agentPath).toBe(".github/agents/reviewer.md")
+		expect(result.taskHistory[0]?.agentPath).toBe(".github/agents/reviewer.md")
+	})
+
+	it("leaves agentPath absent in the fallback HistoryItem when no agent is pinned", async () => {
+		const { mergeTaskHistoryIntoState } = await import("./sdk-task-history")
+
+		const emptyTaskHistory = {
+			listHistory: vi.fn().mockResolvedValue([]),
+		}
+
+		const taskMessage: ClineMessage = {
+			ts: 1700000000001,
+			type: "say",
+			say: "task",
+			text: "Generic task",
+			partial: false,
+		}
+
+		const task = {
+			taskId: "generic-task-id",
+			// agentPath intentionally undefined (generic agent)
+			api: undefined,
+			messageStateHandler: {
+				getClineMessages: () => [taskMessage],
+			},
+		}
+
+		const baseState = { taskHistory: [] } as unknown as import("@shared/ExtensionMessage").ExtensionState
+
+		const result = await mergeTaskHistoryIntoState({
+			baseState,
+			taskHistory: emptyTaskHistory as unknown as import("./sdk-task-history").SdkTaskHistory,
+			task,
+			getWorkspaceRoot: async () => "/workspace",
+			getWindowWorkspace: async () => undefined,
+			activeTaskWorkspace: undefined,
+			turnState: undefined,
+			queuedPrompts: [],
+			backgroundTasks: [],
+			activeSession: undefined,
+			stateVersion: 1,
+			epoch: 0,
+		})
+
+		expect(result.currentTaskItem?.agentPath).toBeUndefined()
+	})
+})

@@ -86,6 +86,37 @@ describe("SdkTaskStartCoordinator", () => {
 		)
 	})
 
+
+	it("pins agentPath before the first state push so the picker shows the correct agent immediately", async () => {
+		const { coordinator, options } = makeCoordinator()
+		const pinAgentPath = vi.fn()
+		Object.assign(options.sessionConfigBuilder, { pinAgentPath })
+
+		// Track invocation order to assert pin happens before the first state push.
+		const order: string[] = []
+		pinAgentPath.mockImplementation(() => {
+			order.push("pinAgentPath")
+		})
+		options.postStateToWebview.mockImplementation(async () => {
+			order.push("postStateToWebview")
+		})
+
+		const sessionId = await coordinator.initTask("start task", [], [], undefined, undefined, undefined, {
+			agentPath: ".github/agents/reviewer.md",
+		})
+
+		expect(pinAgentPath).toHaveBeenCalledWith(sessionId, ".github/agents/reviewer.md")
+		// The pin must happen before the first state push so the fire-and-forget
+		// postStateToWebview() already sees the correct agentPath.
+		const pinIdx = order.indexOf("pinAgentPath")
+		const firstPostIdx = order.indexOf("postStateToWebview")
+		expect(pinIdx).toBeLessThan(firstPostIdx)
+		// agentPath is persisted to the history item as well.
+		expect(options.taskHistory.updateTaskHistoryItem).toHaveBeenCalledWith(
+			expect.objectContaining({ agentPath: ".github/agents/reviewer.md" }),
+		)
+	})
+
 	it("pins a task's model and titles its history entry", async () => {
 		const { coordinator, options } = makeCoordinator()
 		const pinModel = vi.fn()
