@@ -176,17 +176,33 @@ export function extractEditorStateBlock(input?: string): string | undefined {
 }
 
 /**
+ * Formats a notice to prepend to the next user message when the user switches
+ * agents mid-conversation. The notice tells the model to adopt its new
+ * identity (injected via the updated system prompt) and is stripped from
+ * every display surface so users never see the XML.
+ *
+ * @param agentName Human-readable name of the new agent (e.g. "Code Reviewer"),
+ *   or undefined when switching back to the generic Cline agent.
+ */
+export function formatAgentSwitchNotice(agentName: string | undefined): string {
+	const label = agentName
+		? `the "${agentName}" agent`
+		: "the generic Cline agent";
+	return `<agent_notice>The user switched to ${label} before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>`;
+}
+
+/**
  * Removes the elements the runtime and the host add to a user message for the
- * model only -- <mode_notice> and <editor_state> -- content included: they are
- * not user-typed text and must not render as such. Deliberately NOT part
- * of normalizeUserInput -- that function also sanitizes outbound prompts
- * before the host wraps them (prepareTurnInput), and stripping there deletes
- * the notice before the model ever sees it.
+ * model only -- <mode_notice>, <agent_notice> and <editor_state> -- content
+ * included: they are not user-typed text and must not render as such.
+ * Deliberately NOT part of normalizeUserInput -- that function also sanitizes
+ * outbound prompts before the host wraps them (prepareTurnInput), and stripping
+ * there deletes the notice before the model ever sees it.
  */
 export function stripModeNotices(input?: string): string {
 	if (!input?.trim()) return "";
 	return removeTagElements(
-		removeTagElements(input, "mode_notice"),
+		removeTagElements(removeTagElements(input, "mode_notice"), "agent_notice"),
 		"editor_state",
 	).trim();
 }

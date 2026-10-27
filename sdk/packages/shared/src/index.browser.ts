@@ -296,6 +296,7 @@ export type {
 export {
 	createModeSwitchNoticeTracker,
 	extractEditorStateBlock,
+	formatAgentSwitchNotice,
 	formatDisplayUserInput,
 	formatEditorStateBlock,
 	formatFileContentBlock,

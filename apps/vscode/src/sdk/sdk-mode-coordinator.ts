@@ -72,6 +72,14 @@ export class SdkModeCoordinator {
 	 */
 	private modeSwitchNoticeTracker: ModeSwitchNoticeTracker = createModeSwitchNoticeTracker()
 	private modeSwitchNoticeSessionId: string | null = null
+	/**
+	 * Pending user-initiated agent switch, stamped as an <agent_notice> onto the
+	 * next outbound message by SdkSessionLifecycle.fireAndForgetSend. Scoped to
+	 * the session it was recorded for so a notice for task A never leaks onto
+	 * task B.
+	 */
+	private agentSwitchNoticePending: string | undefined = undefined
+	private agentSwitchNoticeSessionId: string | null = null
 
 	constructor(private readonly options: SdkModeCoordinatorOptions) {}
 
@@ -103,6 +111,37 @@ export class SdkModeCoordinator {
 		}
 		this.modeSwitchNoticeSessionId = sessionId
 		this.modeSwitchNoticeTracker.record(from, to)
+	}
+
+	/**
+	 * Records a pending agent-switch notice for the given session. Consumed once
+	 * by fireAndForgetSend when the next non-off-the-record message is sent to
+	 * that session.
+	 *
+	 * @param sessionId Session that received the new agent.
+	 * @param agentName Human-readable agent name (from frontmatter), or undefined
+	 *   for the generic Cline agent.
+	 */
+	recordAgentSwitchNotice(sessionId: string, agentName: string | undefined): void {
+		this.agentSwitchNoticeSessionId = sessionId
+		this.agentSwitchNoticePending = agentName ?? ""
+	}
+
+	/**
+	 * Returns (and clears) the pending agent-switch notice when the outbound
+	 * message targets the recorded session; otherwise null.
+	 *
+	 * @returns The agent name string (may be empty string for generic agent),
+	 *   or null if no notice is pending for this session.
+	 */
+	consumeAgentSwitchNotice(sessionId: string): string | null {
+		if (this.agentSwitchNoticeSessionId !== sessionId) {
+			return null
+		}
+		const pending = this.agentSwitchNoticePending
+		this.agentSwitchNoticePending = undefined
+		this.agentSwitchNoticeSessionId = null
+		return pending ?? null
 	}
 
 	/**

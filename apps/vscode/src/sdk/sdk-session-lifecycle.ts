@@ -1,5 +1,5 @@
 import type { CoreSessionEvent, RestoreInput, RestoreResult, StartSessionResult } from "@plinycode/core"
-import { formatModeSwitchNotice, type ModeSwitchNotice } from "@plinycode/shared"
+import { formatAgentSwitchNotice, formatModeSwitchNotice, type ModeSwitchNotice } from "@plinycode/shared"
 import { StateManager } from "@/core/storage/StateManager"
 import type { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalManager"
 import { McpHub } from "@/services/mcp/McpHub"
@@ -60,6 +60,14 @@ interface SdkSessionLifecycleOptions {
 	 * message. Consumed exactly once; null when no switch is pending.
 	 */
 	consumeModeSwitchNotice?: (sessionId: string) => ModeSwitchNotice | null
+	/**
+	 * Returns (and clears) a pending user-initiated agent switch recorded by
+	 * SdkModeCoordinator for this session, so fireAndForgetSend can stamp an
+	 * <agent_notice> onto the next message. The value is the agent name string
+	 * (empty string means the generic Cline agent). Null when no switch is
+	 * pending.
+	 */
+	consumeAgentSwitchNotice?: (sessionId: string) => string | null
 	onDidBecomeIdle?: () => void
 	/** A foreground run ended after `elapsedMs`; feeds the task's accumulated running time. */
 	onRunElapsed?: (sessionId: string, elapsedMs: number) => void
@@ -526,8 +534,18 @@ export class SdkSessionLifecycle {
 		// stripModeNotices.
 		// An off-the-record turn is left out of later requests, so it must not use
 		// up the notice: the next message on the record carries it instead.
-		const notice = offTheRecord ? undefined : this.options.consumeModeSwitchNotice?.(sessionId)
-		const noticedPrompt = notice ? `${formatModeSwitchNotice(notice.from, notice.to)}\n${prompt}` : prompt
+		const modeNotice = offTheRecord ? undefined : this.options.consumeModeSwitchNotice?.(sessionId)
+		// Similarly, stamp an agent-switch notice when the user changed agents
+		// before this message. consumeAgentSwitchNotice returns "" for the generic
+		// agent and a name string for a custom one; both produce a notice.
+		const agentNoticeName = offTheRecord ? undefined : this.options.consumeAgentSwitchNotice?.(sessionId)
+		let noticedPrompt = prompt
+		if (modeNotice) {
+			noticedPrompt = `${formatModeSwitchNotice(modeNotice.from, modeNotice.to)}\n${noticedPrompt}`
+		}
+		if (agentNoticeName !== undefined && agentNoticeName !== null) {
+			noticedPrompt = `${formatAgentSwitchNotice(agentNoticeName || undefined)}\n${noticedPrompt}`
+		}
 		this.options.onSendStart?.(sessionId)
 		const offTheRecordTurn = offTheRecord ? {} : undefined
 		if (delivery === undefined) {

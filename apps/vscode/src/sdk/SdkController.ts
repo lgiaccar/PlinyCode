@@ -5,8 +5,14 @@
 // cancelTask, …) to the Cline SDK (@plinycode/core) and bridges SDK events to
 // the webview's gRPC streams.
 import * as fs from "node:fs/promises"
+import { readFileSync } from "node:fs"
 import * as path from "node:path"
-import { createRestoredCheckpointMetadata, resolveDefaultMcpSettingsPath, retainCheckpointRefs } from "@plinycode/core"
+import {
+	createRestoredCheckpointMetadata,
+	parseConfiguredAgentConfig,
+	resolveDefaultMcpSettingsPath,
+	retainCheckpointRefs,
+} from "@plinycode/core"
 import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
 import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
@@ -597,6 +603,7 @@ export class Controller {
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
 			consumeModeSwitchNotice: (sessionId) => this.mode.consumeModeSwitchNotice(sessionId),
+			consumeAgentSwitchNotice: (sessionId) => this.mode.consumeAgentSwitchNotice(sessionId),
 			getSessionStartMetadata: (sessionId) => this.conversationContext.sessionStartMetadata(sessionId),
 			editorState: this.conversationContext.editorState,
 			onSendComplete: async (sessionId) => {
@@ -2156,6 +2163,13 @@ export class Controller {
 		await this.mode.rebuildSessionForMode(currentMode)
 		Logger.log(`[updateAgentPath] Session rebuilt`)
 
+		// Derive the human-readable agent name to stamp on the next message, so the
+		// model knows it is now operating under a new identity.
+		const agentName = agentPath ? deriveAgentName(agentPath) : undefined
+		const newSessionId = this.sessions.getActiveSession()?.sessionId ?? sessionId
+		this.mode.recordAgentSwitchNotice(newSessionId, agentName)
+		Logger.log(`[updateAgentPath] Recorded agent switch notice for session ${newSessionId}: ${agentName ?? "(generic)"}`)
+
 		// Post updated state to webview so the picker reflects the change immediately
 		await this.postStateToWebview()
 		Logger.log("[updateAgentPath] Posted state to webview")
@@ -2298,7 +2312,16 @@ export class Controller {
 			return await mergeTaskHistoryIntoState({
 				baseState,
 				taskHistory: this.taskHistory,
-				task: this.task,
+				task: this.task
+					? {
+							...this.task,
+							// Thread the pinned agentPath into the task so the fallback synthetic
+							// HistoryItem (built before the history record is persisted) already
+							// carries the correct agentPath. Without this the picker shows
+							// "Generic Agent" during the fire-and-forget first state push.
+							agentPath: this.sessionConfigBuilder.pinnedAgentPath(this.task.taskId),
+						}
+					: undefined,
 				getWorkspaceRoot: () => this.getWorkspaceRoot(),
 				getWindowWorkspace: () => this.getWindowWorkspace(),
 				activeTaskWorkspace: this.activeTaskWorkspace,
@@ -2358,4 +2381,22 @@ export class Controller {
 	async ensureWorkspaceManager(): Promise<WorkspaceRootManager | undefined> {
 		return this.workspaceRootResolver.ensureWorkspaceManager(this.lastKnownWorkspaceRoot)
 	}
+}
+
+/**
+ * Derives a human-readable agent name from an agent file path.
+ * Reads the file's frontmatter `name` field if available; falls back to the
+ * file's basename without extension (e.g. "reviewer.md" → "reviewer").
+ */
+function deriveAgentName(agentPath: string): string {
+	try {
+		const raw = readFileSync(agentPath, "utf-8")
+		const config = parseConfiguredAgentConfig(raw, { path: agentPath })
+		if (config.name?.trim()) {
+			return config.name.trim()
+		}
+	} catch {
+		// File unreadable or parse error — fall through to basename fallback
+	}
+	return path.basename(agentPath, path.extname(agentPath))
 }
