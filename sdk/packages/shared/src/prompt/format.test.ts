@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	createModeSwitchNoticeTracker,
 	extractEditorStateBlock,
+	formatAgentSwitchNotice,
 	formatDisplayUserInput,
 	formatEditorStateBlock,
 	formatModeSwitchNotice,
@@ -202,5 +203,39 @@ describe("createModeSwitchNoticeTracker", () => {
 		tracker.record("plan", "plan");
 
 		expect(tracker.consume()).toBeNull();
+	});
+});
+
+describe("formatAgentSwitchNotice", () => {
+	it("formats a named agent switch notice", () => {
+		expect(formatAgentSwitchNotice("Code Reviewer")).toBe(
+			'<agent_notice>The user switched to the "Code Reviewer" agent before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>',
+		);
+	});
+
+	it("formats a switch back to the generic agent (undefined name)", () => {
+		expect(formatAgentSwitchNotice(undefined)).toBe(
+			"<agent_notice>The user switched to the generic Cline agent before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>",
+		);
+	});
+});
+
+describe("stripModeNotices — agent_notice stripping", () => {
+	it("strips an <agent_notice> block from a user message", () => {
+		const raw =
+			'<agent_notice>The user switched to the "Code Reviewer" agent before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>\nwhat can you do?';
+		expect(stripModeNotices(raw)).toBe("what can you do?");
+	});
+
+	it("strips both <mode_notice> and <agent_notice> when both are present", () => {
+		const raw =
+			"<mode_notice>The user switched from act mode to plan mode before sending this message.</mode_notice>\n" +
+			'<agent_notice>The user switched to the "Code Reviewer" agent before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>\n' +
+			"review this code";
+		expect(stripModeNotices(raw)).toBe("review this code");
+	});
+
+	it("leaves text without any notice tags unchanged", () => {
+		expect(stripModeNotices("hello world")).toBe("hello world");
 	});
 });

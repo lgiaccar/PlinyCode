@@ -626,6 +626,76 @@ describe("SdkSessionLifecycle", () => {
 		expect(send).toHaveBeenCalledWith(expect.objectContaining({ prompt: "hello" }))
 	})
 
+	it("stamps a pending agent-switch notice onto the outbound prompt", async () => {
+		const send = vi.fn().mockResolvedValue(undefined)
+		const sdkHost = makeSdkHost({ send })
+		mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+		let pending: string | null = "Code Reviewer"
+		const consumeAgentSwitchNotice = vi.fn((sessionId: string) => {
+			if (sessionId !== "session-123") return null
+			const name = pending
+			pending = null
+			return name
+		})
+		const lifecycle = makeLifecycle({ consumeAgentSwitchNotice })
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		await lifecycle.startNewSession({} as any)
+
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "what can you do?")
+		await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+		expect(send).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionId: "session-123",
+				prompt: '<agent_notice>The user switched to the "Code Reviewer" agent before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>\nwhat can you do?',
+			}),
+		)
+
+		// The notice was consumed; subsequent sends go out untouched.
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "tell me more")
+		await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2))
+		expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: "tell me more" }))
+	})
+
+	it("stamps a generic-agent notice when the name is an empty string", async () => {
+		const send = vi.fn().mockResolvedValue(undefined)
+		const sdkHost = makeSdkHost({ send })
+		mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+		// "" means "switched to generic agent"
+		const consumeAgentSwitchNotice = vi.fn(() => "")
+		const lifecycle = makeLifecycle({ consumeAgentSwitchNotice })
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		await lifecycle.startNewSession({} as any)
+
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "hi")
+		await vi.waitFor(() => expect(send).toHaveBeenCalled())
+		expect(send).toHaveBeenCalledWith(
+			expect.objectContaining({
+				prompt: "<agent_notice>The user switched to the generic Cline agent before sending this message. Adopt the identity and instructions in the system prompt above for all subsequent replies.</agent_notice>\nhi",
+			}),
+		)
+	})
+
+	it("does not stamp an agent notice on off-the-record turns", async () => {
+		const send = vi.fn().mockResolvedValue(undefined)
+		const sdkHost = makeSdkHost({ send })
+		mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+		const consumeAgentSwitchNotice = vi.fn(() => "Reviewer")
+		const lifecycle = makeLifecycle({ consumeAgentSwitchNotice })
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		await lifecycle.startNewSession({} as any)
+
+		// biome-ignore lint/suspicious/noExplicitAny: focused fake for lifecycle unit test
+		lifecycle.fireAndForgetSend(sdkHost as any, "session-123", "side q", undefined, undefined, undefined, {
+			offTheRecord: true,
+		})
+		await vi.waitFor(() => expect(send).toHaveBeenCalled())
+		expect(consumeAgentSwitchNotice).not.toHaveBeenCalled()
+		expect(send).toHaveBeenCalledWith(expect.objectContaining({ prompt: "side q" }))
+	})
+
 	describe("side questions", () => {
 		it("sends the flag, leaves the mode-switch notice for the next message and reads the editor without remembering", async () => {
 			const send = vi.fn().mockResolvedValue(undefined)
