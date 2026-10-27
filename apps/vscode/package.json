@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.5-test.6",
+	"version": "0.2.5-test.7",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -50,7 +50,7 @@
 		],
 		"icons": {
 			"cline-icon": {
-				"description": "cline",
+				"description": "PlinyCode circuit brain",
 				"default": {
 					"fontPath": "assets/icons/cline-bot.woff",
 					"fontCharacter": "\\e900"
