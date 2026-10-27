@@ -3,7 +3,7 @@ import type { Environment } from "../../../src/shared/config-types"
 import { getEnvironmentColor } from "../utils/environmentColors"
 import PlinyCodeMark from "./PlinyCodeMark"
 
-/** Seasonal PlinyCode circuit-brain mark with theme and environment colors. */
+/** Seasonal PlinyCode robot mark with theme and environment colors. */
 const ClineLogoSanta = (props: SVGProps<SVGSVGElement> & { environment?: Environment }) => {
 	const { environment, ...svgProps } = props
 
