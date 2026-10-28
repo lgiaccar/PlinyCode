@@ -6,8 +6,11 @@ import YAML from "yaml";
 import { z } from "zod";
 
 const ConfiguredAgentFrontmatterSchema = z.object({
-	name: z.string().trim().min(1),
-	description: z.string().trim().min(1),
+	// name is optional: when absent the file's basename (without extension) is
+	// used as the agent's name, matching the GitHub Copilot convention where
+	// "fm-dev.agent.md" is implicitly named "fm-dev".
+	name: z.string().trim().min(1).optional(),
+	description: z.string().trim().min(1).optional(),
 	tools: z.union([z.string(), z.array(z.string())]).optional(),
 	skills: z.union([z.string(), z.array(z.string())]).optional(),
 	providerId: z.string().trim().min(1).optional(),
@@ -111,6 +114,32 @@ function normalizeAgentName(name: string): string {
 }
 
 /**
+ * Converts a file path to an agent name by stripping the directory and all
+ * extensions. For example:
+ *   "fm-dev.agent.md"   → "fm-dev"
+ *   "code-reviewer.md"  → "code-reviewer"
+ *   "reviewer.yml"      → "reviewer"
+ */
+function fileNameToAgentName(filePath: string): string {
+	let name = basename(filePath);
+	// Strip all recognised extensions repeatedly (e.g. ".agent.md" → two passes)
+	let prev = "";
+	while (name !== prev) {
+		prev = name;
+		const ext = extname(name).toLowerCase();
+		if (
+			ext === ".md" ||
+			ext === ".yml" ||
+			ext === ".yaml" ||
+			ext === ".agent"
+		) {
+			name = name.slice(0, -ext.length);
+		}
+	}
+	return name || basename(filePath);
+}
+
+/**
  * An agent file is frontmatter plus a prompt body, so `.md` is the natural
  * extension (and the one the Agents tab creates); `.yml`/`.yaml` still load.
  */
@@ -139,9 +168,17 @@ export function parseConfiguredAgentConfig(
 		throw new Error("Missing system prompt body in agent config file.");
 	}
 
+	// Derive name from frontmatter; fall back to the file's basename without
+	// extension so "fm-dev.agent.md" is implicitly named "fm-dev".
+	const fileBaseName = options.path
+		? fileNameToAgentName(options.path)
+		: undefined;
+	const name = parsed.name ?? fileBaseName ?? "unnamed";
+	const description = parsed.description ?? "";
+
 	return {
-		name: parsed.name,
-		description: parsed.description,
+		name,
+		description,
 		tools: parseStringList(parsed.tools),
 		skills: parseStringList(parsed.skills),
 		providerId: parsed.providerId,
@@ -162,41 +199,7 @@ export function loadConfiguredAgentConfigs(input: {
 	const errors: ConfiguredAgentReadError[] = [];
 
 	for (const directory of searchPaths.filter(Boolean)) {
-		if (!existsSync(directory)) {
-			continue;
-		}
-
-		let entries: Dirent[];
-		try {
-			entries = readdirSync(directory, { withFileTypes: true });
-		} catch (error) {
-			errors.push({
-				path: directory,
-				error: error instanceof Error ? error : new Error(String(error)),
-			});
-			continue;
-		}
-
-		for (const entry of entries) {
-			if (!entry.isFile() || !isConfiguredAgentFileName(entry.name)) {
-				continue;
-			}
-
-			const filePath = join(directory, entry.name);
-			try {
-				const raw = readFileSync(filePath, "utf8");
-				const config = parseConfiguredAgentConfig(raw, { path: filePath });
-				const normalizedName = normalizeAgentName(config.name);
-				if (!configsByName.has(normalizedName)) {
-					configsByName.set(normalizedName, config);
-				}
-			} catch (error) {
-				errors.push({
-					path: filePath,
-					error: error instanceof Error ? error : new Error(String(error)),
-				});
-			}
-		}
+		loadFromDirectory(directory, configsByName, errors);
 	}
 
 	const configs = Array.from(configsByName.values()).sort((a, b) =>
@@ -205,4 +208,61 @@ export function loadConfiguredAgentConfigs(input: {
 		),
 	);
 	return { configs, errors };
+}
+
+/**
+ * Reads all agent files from `directory`, then recurses one level into any
+ * subdirectories it finds. This lets workspaces organise agents under
+ * `.github/agents/fm-agents/` without having to list each subfolder explicitly
+ * in `chat.agentFilesLocations`.
+ */
+function loadFromDirectory(
+	directory: string,
+	configsByName: Map<string, ConfiguredAgentConfig>,
+	errors: ConfiguredAgentReadError[],
+	depth = 0,
+): void {
+	if (!existsSync(directory)) {
+		return;
+	}
+
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(directory, { withFileTypes: true });
+	} catch (error) {
+		errors.push({
+			path: directory,
+			error: error instanceof Error ? error : new Error(String(error)),
+		});
+		return;
+	}
+
+	for (const entry of entries) {
+		if (entry.isDirectory() && depth === 0) {
+			// Recurse exactly one level into subdirectories so that e.g.
+			// `.github/agents/fm-agents/fm-dev.agent.md` is discovered
+			// automatically without requiring an explicit extra search path.
+			loadFromDirectory(join(directory, entry.name), configsByName, errors, 1);
+			continue;
+		}
+
+		if (!entry.isFile() || !isConfiguredAgentFileName(entry.name)) {
+			continue;
+		}
+
+		const filePath = join(directory, entry.name);
+		try {
+			const raw = readFileSync(filePath, "utf8");
+			const config = parseConfiguredAgentConfig(raw, { path: filePath });
+			const normalizedName = normalizeAgentName(config.name);
+			if (!configsByName.has(normalizedName)) {
+				configsByName.set(normalizedName, config);
+			}
+		} catch (error) {
+			errors.push({
+				path: filePath,
+				error: error instanceof Error ? error : new Error(String(error)),
+			});
+		}
+	}
 }
