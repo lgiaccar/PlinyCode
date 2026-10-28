@@ -200,6 +200,21 @@ describe("useScrollBehavior", () => {
 			expect(scrollToIndex).toHaveBeenLastCalledWith({ index: 0, align: "start", behavior: "smooth", offset: 0 })
 		})
 
+		it("restores auto-scroll and clears the previous target when going back to the bottom", () => {
+			const { result, scrollToIndex, scrollTo } = setup()
+			mountList(result, 5 * ROW_HEIGHT)
+			act(() => vi.advanceTimersByTime(1000))
+			act(() => result.current.goToPreviousUserMessage())
+			expect(result.current.disableAutoScrollRef.current).toBe(true)
+
+			act(() => result.current.scrollToBottomSmooth())
+			expect(scrollTo).toHaveBeenCalledWith({ top: Number.MAX_SAFE_INTEGER, behavior: "smooth" })
+			expect(result.current.disableAutoScrollRef.current).toBe(false)
+
+			act(() => result.current.goToPreviousUserMessage())
+			expect(scrollToIndex.mock.calls.map(([arg]) => arg.index)).toEqual([4, 4])
+		})
+
 		it("brings a prompt cut off at the top fully into view first", () => {
 			const { result, scrollToIndex } = setup()
 			mountList(result, 2 * ROW_HEIGHT + 50)

@@ -1,5 +1,51 @@
+import { readFileSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import { expect } from "@playwright/test"
 import { e2e } from "./utils/helpers"
+
+const rightSidebarTest = e2e.extend({
+	userDataDir: async ({ userDataDir }, use) => {
+		const settingsPath = join(userDataDir, "User", "settings.json")
+		const settings = JSON.parse(readFileSync(settingsPath, "utf8"))
+		writeFileSync(settingsPath, JSON.stringify({ ...settings, "workbench.sideBar.location": "right" }))
+		await use(userDataDir)
+	},
+})
+
+rightSidebarTest(
+	"Chat - prompt recall and navigation stay usable in a narrow right sidebar",
+	async ({ helper, sidebar, page, app }) => {
+		await helper.ensureReady(sidebar)
+		await app.evaluate(({ BrowserWindow }) => {
+			BrowserWindow.getAllWindows()[0].setSize(900, 700)
+		})
+		// Startup notifications overlap the right sidebar in this small test window.
+		await page.keyboard.press("Escape")
+		await expect(page.locator(".notifications-toasts")).not.toBeVisible()
+		await expect
+			.poll(async () => {
+				const bounds = await page.locator(".part.sidebar").boundingBox()
+				const width = await page.evaluate(() => window.innerWidth)
+				return !!bounds && bounds.x > width / 2
+			})
+			.toBe(true)
+		const input = sidebar.getByTestId("chat-input")
+		await input.fill("Recall this prompt")
+		await sidebar.getByTestId("send-button").click()
+		await expect(sidebar.getByText("mock Cline API response")).toBeVisible({ timeout: 30_000 })
+
+		for (const name of ["Scroll to top", "Previous user message", "Next user message", "Scroll to bottom"]) {
+			const button = sidebar.getByRole("button", { name, exact: true })
+			await expect(button).toBeInViewport()
+			await button.click()
+		}
+		await input.press("ArrowUp")
+		await expect(input).toHaveValue("Recall this prompt")
+		await input.fill("Keep this draft\nand move the cursor")
+		await input.press("ArrowUp")
+		await expect(input).toHaveValue("Keep this draft\nand move the cursor")
+	},
+)
 
 e2e("Chat - can send messages and switch between modes", async ({ helper, sidebar }) => {
 	// Wait for the extension to be ready (no sign-in needed in Pliny-only mode)

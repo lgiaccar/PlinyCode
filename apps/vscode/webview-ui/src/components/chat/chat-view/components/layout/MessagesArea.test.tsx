@@ -176,11 +176,40 @@ describe("MessagesArea", () => {
 
 		const { rerender } = render(renderAt(true))
 		expect(titles()).toEqual(order)
-		expect(screen.getByTitle("Scroll to bottom")).toHaveClass("invisible")
+		expect(screen.getByRole("button", { name: "Scroll to bottom" })).toBeVisible()
 
 		rerender(renderAt(false))
 		expect(titles()).toEqual(order)
 		expect(screen.getByTitle("Scroll to bottom")).not.toHaveClass("invisible")
+	})
+
+	it.each([true, false])("keeps all four controls visible and working with one prompt (at bottom: %s)", (isAtBottom) => {
+		const task = makeMessage(1, "task", "hello")
+		const behavior = makeScrollBehavior({ isAtBottom })
+		render(
+			<MessagesArea
+				chatState={makeChatState()}
+				groupedMessages={[]}
+				messageHandlers={makeMessageHandlers()}
+				modifiedMessages={[]}
+				scrollBehavior={behavior}
+				task={task}
+			/>,
+		)
+		const controls = [
+			["Scroll to top", behavior.scrollToTopSmooth],
+			["Previous user message", behavior.goToPreviousUserMessage],
+			["Next user message", behavior.goToNextUserMessage],
+			["Scroll to bottom", behavior.scrollToBottomSmooth],
+		] as const
+		for (const [name, handler] of controls) {
+			vi.mocked(handler).mockClear()
+			const button = screen.getByRole("button", { name })
+			expect(button).toBeVisible()
+			fireEvent.click(button)
+			expect(handler).toHaveBeenCalledTimes(1)
+		}
+		expect(screen.getByRole("group", { name: "Conversation navigation" })).toHaveClass("shrink-0")
 	})
 
 	it("renders one marker per user message and hides them below the 3-message threshold", () => {
