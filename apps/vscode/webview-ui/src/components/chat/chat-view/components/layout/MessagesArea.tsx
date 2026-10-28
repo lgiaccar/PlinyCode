@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils"
 import { useThinkingLoaderRow } from "../../hooks/useThinkingLoaderRow"
 import type { ChatState, MessageHandlers, ScrollBehavior } from "../../types/chatTypes"
 import { isActivityGroup } from "../../utils/activityGroups"
-import { isUserTurnStart } from "../../utils/messageUtils"
 import { isPendingResponseUnconfirmed } from "../../utils/pendingResponse"
 import { createMessageRenderer } from "../messages/MessageRenderer"
 
@@ -67,7 +66,6 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		handleLastRowContentChange,
 		goToPreviousUserMessage,
 		goToNextUserMessage,
-		isAtBottom,
 		userMessageIndices,
 		topVisibleIndex = 0,
 	} = scrollBehavior
@@ -102,19 +100,6 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 	)
 	const lastVisibleRow = useMemo(() => groupedMessages.at(-1), [groupedMessages])
 
-	// Determine if there are multiple user messages to enable navigation buttons
-	const hasMultipleUserMessages = useMemo(() => {
-		let count = 0
-		for (const item of groupedMessages) {
-			if (!Array.isArray(item) && isUserTurnStart(item)) {
-				count++
-				if (count >= 2) {
-					return true
-				}
-			}
-		}
-		return false
-	}, [groupedMessages])
 	const lastVisibleMessage = useMemo(() => {
 		const lastRow = lastVisibleRow
 		if (!lastRow) {
@@ -296,7 +281,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 	)
 
 	return (
-		<div className="overflow-hidden flex flex-col h-full relative">
+		<div className="overflow-hidden flex flex-col flex-1 min-h-0 relative">
 			{/* Sticky User Message - positioned absolutely to avoid layout shifts */}
 			<div
 				className={cn(
@@ -310,7 +295,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 				/>
 			</div>
 
-			<div className="grow flex relative" ref={scrollContainerRef}>
+			<div className="flex-1 min-h-0 flex relative" ref={scrollContainerRef}>
 				{/* Empty-list fast path: paint the loader immediately without waiting for the
 				    virtualized list's initial measure/render cycle. Mirrors the in-list row's
 				    markup (MessageRenderer wrapper + ChatRow) so the swap to a real row later
@@ -383,53 +368,42 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 						))}
 					</div>
 				)}
-				{/* Floating scroll navigation buttons. Top to bottom they mirror where they go: very top,
-				    previous prompt, next prompt, very bottom. The bottom button is hidden rather than
-				    unmounted while at the bottom, so the stack never shifts under the cursor and a
-				    repeated click can't land on a different button. */}
-				{hasMultipleUserMessages && (
-					<div className="absolute right-3 bottom-4 flex flex-col gap-1.5 z-20">
-						<NavButton onClick={scrollToTopSmooth} title="Scroll to top">
-							<ArrowUp size={16} />
-						</NavButton>
-						<NavButton onClick={goToPreviousUserMessage} title="Previous user message">
-							<ChevronUp size={16} />
-						</NavButton>
-						<NavButton onClick={goToNextUserMessage} title="Next user message">
-							<ChevronDown size={16} />
-						</NavButton>
-						<NavButton hidden={isAtBottom} onClick={scrollToBottomSmooth} title="Scroll to bottom">
-							<ArrowDown size={16} />
-						</NavButton>
-					</div>
-				)}
+			</div>
+			{/* Reserve space outside the scroller so navigation stays visible in either sidebar,
+			    including narrow panels, short conversations and while the composer grows. */}
+			<div
+				aria-label="Conversation navigation"
+				className="shrink-0 flex justify-end gap-1 px-3 py-1 bg-background border-t border-(--vscode-panel-border)"
+				role="group">
+				<NavButton onClick={scrollToTopSmooth} title="Scroll to top">
+					<ArrowUp size={16} />
+				</NavButton>
+				<NavButton onClick={goToPreviousUserMessage} title="Previous user message">
+					<ChevronUp size={16} />
+				</NavButton>
+				<NavButton onClick={goToNextUserMessage} title="Next user message">
+					<ChevronDown size={16} />
+				</NavButton>
+				<NavButton onClick={scrollToBottomSmooth} title="Scroll to bottom">
+					<ArrowDown size={16} />
+				</NavButton>
 			</div>
 		</div>
 	)
 }
 
-const NavButton: React.FC<{ onClick: () => void; title: string; hidden?: boolean; children: React.ReactNode }> = ({
-	onClick,
-	title,
-	hidden,
-	children,
-}) => (
+const NavButton: React.FC<{ onClick: () => void; title: string; children: React.ReactNode }> = ({ onClick, title, children }) => (
 	<button
-		aria-hidden={hidden || undefined}
+		aria-label={title}
 		className={cn(
-			"flex items-center justify-center w-7 h-7 rounded-full",
-			"cursor-pointer select-none backdrop-blur-sm",
-			"hover:brightness-110 transition-transform hover:scale-110",
-			"shadow-md",
-			"opacity-70 hover:opacity-100",
-			hidden && "invisible",
+			"flex shrink-0 items-center justify-center w-7 h-7 rounded",
+			"cursor-pointer select-none hover:bg-(--vscode-toolbar-hoverBackground)",
+			"focus-visible:outline focus-visible:outline-1 focus-visible:outline-(--vscode-focusBorder)",
 		)}
 		onClick={onClick}
 		style={{
-			backgroundColor: "var(--vscode-badge-background)",
-			color: "var(--vscode-badge-foreground)",
+			color: "var(--vscode-foreground)",
 		}}
-		tabIndex={hidden ? -1 : undefined}
 		title={title}
 		type="button">
 		{children}
