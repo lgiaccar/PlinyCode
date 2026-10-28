@@ -24,6 +24,7 @@ import { getMatchingSlashCommands, removeSlashCommand, slashCommandDeleteRegex }
  */
 export function useComposerKeyboardHandler(params: {
 	inputValue: string
+	lastPrompt?: string
 	setInputValue: (value: string) => void
 	cursorPosition: number
 	setCursorPosition: (position: number) => void
@@ -62,6 +63,7 @@ export function useComposerKeyboardHandler(params: {
 }) {
 	const {
 		inputValue,
+		lastPrompt,
 		setInputValue,
 		cursorPosition,
 		setCursorPosition,
@@ -218,6 +220,22 @@ export function useComposerKeyboardHandler(params: {
 
 			// Safari does not support InputEvent.isComposing (always false), so we need to fallback to keyCode === 229 for it
 			const isComposing = isSafari ? event.nativeEvent.keyCode === 229 : (event.nativeEvent?.isComposing ?? false)
+			if (
+				event.key === "ArrowUp" &&
+				!event.shiftKey &&
+				!event.ctrlKey &&
+				!event.metaKey &&
+				!event.altKey &&
+				!isComposing &&
+				inputValue === "" &&
+				lastPrompt
+			) {
+				event.preventDefault()
+				setInputValue(lastPrompt)
+				setCursorPosition(lastPrompt.length)
+				setIntendedCursorPosition(lastPrompt.length)
+				return
+			}
 			if (event.key === "Enter" && !event.shiftKey && !isComposing) {
 				event.preventDefault()
 
@@ -302,6 +320,7 @@ export function useComposerKeyboardHandler(params: {
 			handleMentionSelect,
 			selectedType,
 			inputValue,
+			lastPrompt,
 			cursorPosition,
 			setInputValue,
 			justDeletedSpaceAfterMention,

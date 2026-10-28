@@ -127,6 +127,8 @@ export function useScrollBehavior(
 		() =>
 			debounce(
 				() => {
+					disableAutoScrollRef.current = false
+					navTargetRef.current = null
 					virtuosoRef.current?.scrollTo({
 						top: Number.MAX_SAFE_INTEGER,
 						behavior: "smooth",

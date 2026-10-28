@@ -3,7 +3,7 @@ import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state
 import type { Mode } from "@shared/storage/types"
 import { TriangleAlertIcon } from "lucide-react"
 import type React from "react"
-import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import DynamicTextArea from "react-textarea-autosize"
 import ContextMenu from "@/components/chat/ContextMenu"
 import SlashCommandMenu from "@/components/chat/SlashCommandMenu"
@@ -36,6 +36,7 @@ import {
 import { useSchedulePicker } from "./chat-textarea/hooks/useSchedulePicker"
 import { useSlashCommandMenu } from "./chat-textarea/hooks/useSlashCommandMenu"
 import { getModeToggleDraftAction } from "./chat-textarea-mode-toggle"
+import { isUserTurnStart } from "./chat-view/utils/messageUtils"
 import ScheduleTimeInput, { ScheduleRepeatInput } from "./ScheduleTimeInput"
 import { defaultScheduleTime, type ScheduleRepeat } from "./scheduleTime"
 import {
@@ -113,6 +114,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			navigateToSettingsModelPicker,
 			mcpServers,
 			chatInputMaxRows: persistedChatInputMaxRows,
+			clineMessages,
 		} = useExtensionState()
 		const composerSkills = useComposerSkills()
 		const [isTextAreaFocused, setIsTextAreaFocused] = useState(false)
@@ -258,8 +260,17 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			selectedFiles,
 		])
 
+		const lastPrompt = useMemo(() => {
+			for (let index = clineMessages.length - 1; index >= 0; index--) {
+				const message = clineMessages[index]
+				if (isUserTurnStart(message) && message.text?.trim()) return message.text
+			}
+			return undefined
+		}, [clineMessages])
+
 		const handleKeyDown = useComposerKeyboardHandler({
 			inputValue,
+			lastPrompt,
 			setInputValue,
 			cursorPosition,
 			setCursorPosition,

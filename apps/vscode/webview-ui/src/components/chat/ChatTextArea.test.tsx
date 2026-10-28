@@ -1,9 +1,11 @@
+import type { ClineMessage } from "@shared/ExtensionMessage"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import ChatTextArea, { getRowHeightPx, rowsFromDrag } from "./ChatTextArea"
 
 const mocks = vi.hoisted(() => ({
+	clineMessages: [] as ClineMessage[],
 	supportsImages: true as boolean | undefined,
 	navigateToSettingsModelPicker: vi.fn(),
 	chatInputMaxRows: 10 as number | undefined,
@@ -14,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({
 		mode: "act",
+		clineMessages: mocks.clineMessages,
 		apiConfiguration: {},
 		platform: "darwin",
 		localWorkflowToggles: {},
@@ -100,6 +103,94 @@ function pasteImage(target: HTMLElement) {
 		},
 	})
 }
+
+describe("ChatTextArea prompt recall", () => {
+	beforeEach(() => {
+		mocks.clineMessages = [
+			{ ts: 1, type: "say", say: "task", text: "Initial prompt" },
+			{ ts: 2, type: "say", say: "user_feedback", text: "Last prompt\nwith another line" },
+			{ ts: 3, type: "say", say: "user_feedback", text: "Tool answer", answersTool: true },
+			{ ts: 4, type: "say", say: "text", text: "Model response" },
+		]
+	})
+
+	afterEach(() => {
+		mocks.clineMessages = []
+	})
+
+	function renderComposer(initialValue = "") {
+		const onSend = vi.fn()
+		function Composer() {
+			const [inputValue, setInputValue] = useState(initialValue)
+			return (
+				<ChatTextArea
+					activeQuote={null}
+					inputValue={inputValue}
+					onSelectFilesAndImages={vi.fn()}
+					onSend={onSend}
+					placeholderText="Type a message"
+					selectedFiles={[]}
+					selectedImages={[]}
+					sendingDisabled={false}
+					setInputValue={setInputValue}
+					setSelectedFiles={vi.fn()}
+					setSelectedImages={vi.fn()}
+					shouldDisableFilesAndImages={false}
+				/>
+			)
+		}
+		render(<Composer />)
+		return { textarea: screen.getByPlaceholderText("Type a message") as HTMLTextAreaElement, onSend }
+	}
+
+	it("recalls the latest prompt into an empty composer without sending, with the cursor at the end", () => {
+		const { textarea, onSend } = renderComposer()
+		fireEvent.keyDown(textarea, { key: "ArrowUp" })
+		expect(textarea).toHaveValue("Last prompt\nwith another line")
+		expect(textarea.selectionStart).toBe(textarea.value.length)
+		expect(textarea.selectionEnd).toBe(textarea.value.length)
+		expect(onSend).not.toHaveBeenCalled()
+	})
+
+	it("recalls the initial task when there are no follow-ups", () => {
+		mocks.clineMessages = mocks.clineMessages.slice(0, 1)
+		const { textarea } = renderComposer()
+		fireEvent.keyDown(textarea, { key: "ArrowUp" })
+		expect(textarea).toHaveValue("Initial prompt")
+	})
+
+	it("preserves a draft and native arrow movement", () => {
+		const { textarea } = renderComposer("Draft\nsecond line")
+		expect(fireEvent.keyDown(textarea, { key: "ArrowUp" })).toBe(true)
+		expect(textarea).toHaveValue("Draft\nsecond line")
+	})
+
+	it("does not consume Up when history is empty", () => {
+		mocks.clineMessages = []
+		const { textarea } = renderComposer()
+		expect(fireEvent.keyDown(textarea, { key: "ArrowUp" })).toBe(true)
+		expect(textarea).toHaveValue("")
+	})
+
+	it.each([
+		{ shiftKey: true },
+		{ ctrlKey: true },
+		{ altKey: true },
+		{ metaKey: true },
+		{ isComposing: true },
+	])("leaves modified arrows and IME input alone: %o", (modifiers) => {
+		const { textarea } = renderComposer()
+		expect(fireEvent.keyDown(textarea, { key: "ArrowUp", ...modifiers })).toBe(true)
+		expect(textarea).toHaveValue("")
+	})
+
+	it("keeps slash-command navigation ahead of prompt recall", () => {
+		const { textarea } = renderComposer()
+		fireEvent.change(textarea, { target: { value: "/", selectionStart: 1 } })
+		fireEvent.keyDown(textarea, { key: "ArrowUp" })
+		expect(textarea).toHaveValue("/")
+	})
+})
 
 describe("ChatTextArea image attachments vs. model capability", () => {
 	beforeEach(() => {
