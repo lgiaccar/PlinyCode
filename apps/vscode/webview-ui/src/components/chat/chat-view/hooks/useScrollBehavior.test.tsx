@@ -1,5 +1,5 @@
 import type { ClineMessage } from "@shared/ExtensionMessage"
-import { act, renderHook } from "@testing-library/react"
+import { act, fireEvent, renderHook } from "@testing-library/react"
 import type { MutableRefObject } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useScrollBehavior } from "./useScrollBehavior"
@@ -87,6 +87,63 @@ describe("useScrollBehavior", () => {
 		})
 
 		expect(scrollTo).not.toHaveBeenCalled()
+	})
+
+	it("pauses automatic scrolling for one minute after a manual wheel movement", () => {
+		const { result, rerender } = renderHook(({ rows }) => useScrollBehavior([], [], rows as ClineMessage[], {}, vi.fn()), {
+			initialProps: { rows: [] as ClineMessage[] },
+		})
+		const container = document.createElement("div")
+		document.body.appendChild(container)
+		;(result.current.scrollContainerRef as MutableRefObject<HTMLDivElement | null>).current = container
+		const scrollTo = vi.fn()
+		;(result.current.virtuosoRef as MutableRefObject<any>).current = { scrollTo }
+
+		act(() => fireEvent.wheel(container, { deltaY: -20 }))
+		expect(result.current.isManualScrollPaused()).toBe(true)
+		// A send or a new turn may reset this legacy flag; the manual pause must still win.
+		result.current.disableAutoScrollRef.current = false
+		rerender({ rows: [commandMessage as ClineMessage] })
+		expect(scrollTo).not.toHaveBeenCalled()
+
+		act(() => vi.advanceTimersByTime(59_999))
+		rerender({ rows: [commandMessage as ClineMessage, { ...commandMessage, ts: 2 } as ClineMessage] })
+		expect(scrollTo).not.toHaveBeenCalled()
+		act(() => vi.advanceTimersByTime(1))
+		expect(result.current.isManualScrollPaused()).toBe(false)
+		rerender({
+			rows: [
+				commandMessage as ClineMessage,
+				{ ...commandMessage, ts: 2 } as ClineMessage,
+				{ ...commandMessage, ts: 3 } as ClineMessage,
+			],
+		})
+		expect(scrollTo).toHaveBeenCalled()
+		container.remove()
+	})
+
+	it("pauses when the scrollbar is dragged and resumes when the user chooses the bottom", () => {
+		const feedback = { ts: 3, type: "say", say: "user_feedback", text: "more" } as ClineMessage
+		const { result, rerender } = renderHook(({ visible }) => useScrollBehavior([], visible, [], {}, vi.fn()), {
+			initialProps: { visible: [] as ClineMessage[] },
+		})
+		const container = document.createElement("div")
+		const scroller = document.createElement("div")
+		scroller.setAttribute("data-virtuoso-scroller", "true")
+		container.appendChild(scroller)
+		;(result.current.scrollContainerRef as MutableRefObject<HTMLDivElement | null>).current = container
+		;(result.current.virtuosoRef as MutableRefObject<any>).current = { scrollTo: vi.fn() }
+		rerender({ visible: [feedback] })
+
+		act(() => {
+			fireEvent.pointerDown(scroller)
+			fireEvent.scroll(scroller)
+			fireEvent.pointerUp(window)
+		})
+		expect(result.current.isManualScrollPaused()).toBe(true)
+		act(() => vi.advanceTimersByTime(11)) // let the initial bottom-scroll debounce finish
+		act(() => result.current.scrollToBottomSmooth())
+		expect(result.current.isManualScrollPaused()).toBe(false)
 	})
 
 	it("disables auto-scroll when a user expands a row", () => {

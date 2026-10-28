@@ -48,6 +48,7 @@ function makeScrollBehavior(overrides: Partial<ScrollBehavior> = {}): ScrollBeha
 		virtuosoRef: { current: null },
 		scrollContainerRef: { current: null },
 		disableAutoScrollRef: { current: false },
+		isManualScrollPaused: () => false,
 		scrollToBottomSmooth: vi.fn(),
 		scrollToBottomAuto: vi.fn(),
 		scrollToTopSmooth: vi.fn(),
