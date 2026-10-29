@@ -12,7 +12,7 @@ const BulkToggleControl = ({
 	onRefresh,
 	onBusyChange,
 }: {
-	kind: "rules" | "skills"
+	kind: "rules" | "skills" | "agents"
 	targets: BulkToggleTarget[]
 	onRefresh: () => Promise<void>
 	onBusyChange: (busy: boolean) => void
