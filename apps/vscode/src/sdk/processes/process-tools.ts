@@ -50,6 +50,9 @@ function oneLine(command: string, max: number): string {
 }
 
 function statusLabel(process: BackgroundProcess): string {
+	if (process.status === "running" && process.stopRequested) {
+		return process.stopError ? "stop-failed" : "stopping"
+	}
 	if (process.status === "exited" && process.exitCode !== undefined) {
 		return `exited(${process.exitCode})`
 	}
@@ -65,6 +68,12 @@ function describeState(process: BackgroundProcess, now: number): string {
 	const elapsed = elapsedOf(process, now)
 	switch (process.status) {
 		case "running":
+			if (process.stopError) {
+				return `${process.id} could not be stopped: ${oneLine(process.stopError, 200)}; termination has not been confirmed`
+			}
+			if (process.stopRequested) {
+				return `${process.id} has a stop request pending; termination has not been confirmed (running for ${elapsed})`
+			}
 			return `${process.id} has been running for ${elapsed}`
 		case "exited":
 			return process.exitCode !== undefined
@@ -73,7 +82,7 @@ function describeState(process: BackgroundProcess, now: number): string {
 		case "killed":
 			return `${process.id} was stopped after ${elapsed}`
 		case "lost":
-			return `${process.id} can no longer be observed (after ${elapsed}); it may still be running in its terminal`
+			return `${process.id} can no longer be observed (after ${elapsed}); it may still be running`
 	}
 }
 
@@ -238,6 +247,9 @@ export function createProcessTools(options: ProcessToolsOptions): AgentTool[] {
 		async execute(rawInput: unknown, context: AgentToolContext): Promise<string> {
 			const input = (rawInput ?? {}) as { id?: unknown }
 			const process = find(input.id, context)
+			if (process.status === "lost") {
+				return `${describeState(process, now())}; check the command in its original environment before restarting it.`
+			}
 			if (process.status !== "running") {
 				return `${describeState(process, now())}; nothing to stop.`
 			}
