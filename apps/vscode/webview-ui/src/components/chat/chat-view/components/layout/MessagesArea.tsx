@@ -57,6 +57,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 		handleRowHeightChange,
 		setIsAtBottom,
 		disableAutoScrollRef,
+		isManualScrollPaused,
 		handleRangeChanged,
 		scrolledPastUserMessage,
 		scrollToMessage,
@@ -161,18 +162,25 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 	}, [displayedGroupedMessages])
 
 	useEffect(() => {
-		if (disableAutoScrollRef.current) {
+		if (disableAutoScrollRef.current || isManualScrollPaused()) {
 			return
 		}
 		scrollToBottomSmooth()
 		// Settle with an instant scroll so late layout shifts can't leave us short of the bottom.
 		// No cleanup: a quick follow-up change would cancel the settle scroll.
 		setTimeout(() => {
-			if (!disableAutoScrollRef.current) {
+			if (!disableAutoScrollRef.current && !isManualScrollPaused()) {
 				scrollToBottomAuto()
 			}
 		}, 50)
-	}, [displayedGroupedMessages.length, lastTailTs, scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef])
+	}, [
+		displayedGroupedMessages.length,
+		lastTailTs,
+		scrollToBottomSmooth,
+		scrollToBottomAuto,
+		disableAutoScrollRef,
+		isManualScrollPaused,
+	])
 
 	// Re-engage auto scroll when a new turn starts streaming. In the old extension every turn start
 	// came from a webview action (send, approve, resume) whose handler reset disableAutoScrollRef;
@@ -182,11 +190,11 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 	useEffect(() => {
 		const prevPhase = prevTurnPhaseRef.current
 		prevTurnPhaseRef.current = turnState?.phase
-		if (turnState?.phase === "streaming" && prevPhase !== "streaming") {
+		if (turnState?.phase === "streaming" && prevPhase !== "streaming" && !isManualScrollPaused()) {
 			disableAutoScrollRef.current = false
 			scrollToBottomSmooth()
 		}
-	}, [turnState?.phase, scrollToBottomSmooth, disableAutoScrollRef])
+	}, [turnState?.phase, scrollToBottomSmooth, disableAutoScrollRef, isManualScrollPaused])
 
 	const itemContent = useMemo(
 		() =>
@@ -321,7 +329,7 @@ export const MessagesArea: React.FC<MessagesAreaProps> = ({
 				<Virtuoso
 					atBottomStateChange={(isAtBottom) => {
 						setIsAtBottom(isAtBottom)
-						if (isAtBottom) {
+						if (isAtBottom && !isManualScrollPaused()) {
 							disableAutoScrollRef.current = false
 						}
 					}}

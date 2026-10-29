@@ -8,6 +8,7 @@ import { isUserTurnStart } from "../utils/messageUtils"
 
 // Height of the sticky user message header (padding + content)
 const STICKY_HEADER_HEIGHT = 32
+const MANUAL_SCROLL_PAUSE_MS = 60_000
 
 /**
  * Custom hook for managing scroll behavior
@@ -34,6 +35,23 @@ export function useScrollBehavior(
 	const virtuosoRef = useRef<VirtuosoHandle>(null)
 	const scrollContainerRef = useRef<HTMLDivElement>(null)
 	const disableAutoScrollRef = useRef(false)
+	const manualScrollPauseUntilRef = useRef(0)
+	const manualScrollPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const pointerScrollingRef = useRef(false)
+	const isManualScrollPaused = useCallback(() => Date.now() < manualScrollPauseUntilRef.current, [])
+	const pauseForManualScroll = useCallback(() => {
+		manualScrollPauseUntilRef.current = Date.now() + MANUAL_SCROLL_PAUSE_MS
+		disableAutoScrollRef.current = true
+		if (manualScrollPauseTimerRef.current !== null) {
+			clearTimeout(manualScrollPauseTimerRef.current)
+		}
+		manualScrollPauseTimerRef.current = setTimeout(() => {
+			manualScrollPauseTimerRef.current = null
+			if (!isManualScrollPaused()) {
+				disableAutoScrollRef.current = false
+			}
+		}, MANUAL_SCROLL_PAUSE_MS)
+	}, [isManualScrollPaused])
 	const layoutSettleScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const visibleRangeRef = useRef<ListRange>({ startIndex: 0, endIndex: 0 })
 
@@ -127,6 +145,7 @@ export function useScrollBehavior(
 		() =>
 			debounce(
 				() => {
+					manualScrollPauseUntilRef.current = 0
 					disableAutoScrollRef.current = false
 					navTargetRef.current = null
 					virtuosoRef.current?.scrollTo({
@@ -270,6 +289,9 @@ export function useScrollBehavior(
 		// running them on every scroll event made smooth navigation janky.
 		let frame: number | null = null
 		const handleScroll = () => {
+			if (pointerScrollingRef.current) {
+				pauseForManualScroll()
+			}
 			if (frame !== null) {
 				return
 			}
@@ -280,6 +302,15 @@ export function useScrollBehavior(
 		}
 
 		scrollableElement.addEventListener("scroll", handleScroll, { passive: true })
+		const handlePointerDown = () => {
+			pointerScrollingRef.current = true
+		}
+		const handlePointerUp = () => {
+			pointerScrollingRef.current = false
+		}
+		scrollableElement.addEventListener("pointerdown", handlePointerDown)
+		window.addEventListener("pointerup", handlePointerUp)
+		window.addEventListener("pointercancel", handlePointerUp)
 
 		sync()
 
@@ -288,8 +319,11 @@ export function useScrollBehavior(
 				cancelAnimationFrame(frame)
 			}
 			scrollableElement.removeEventListener("scroll", handleScroll)
+			scrollableElement.removeEventListener("pointerdown", handlePointerDown)
+			window.removeEventListener("pointerup", handlePointerUp)
+			window.removeEventListener("pointercancel", handlePointerUp)
 		}
-	}, [checkScrolledPastUserMessage, getTopVisibleRow])
+	}, [checkScrolledPastUserMessage, getTopVisibleRow, pauseForManualScroll])
 
 	// Handler for when visible range changes in Virtuoso
 	const handleRangeChanged = useCallback((range: ListRange) => {
@@ -389,13 +423,13 @@ export function useScrollBehavior(
 				disableAutoScrollRef.current = true
 			}
 			// Only scroll on collapse, never on expand - expanding should stay in place
-			if (isCollapsing && isAtBottom) {
+			if (isCollapsing && isAtBottom && !isManualScrollPaused()) {
 				const timer = setTimeout(() => {
 					scrollToBottomAuto()
 				}, 0)
 				return () => clearTimeout(timer)
 			}
-			if (isCollapsing && (isLast || isSecondToLast)) {
+			if (isCollapsing && (isLast || isSecondToLast) && !isManualScrollPaused()) {
 				if (isSecondToLast && !isLastCollapsedApiReq) {
 					return
 				}
@@ -406,7 +440,7 @@ export function useScrollBehavior(
 			}
 			// When expanding, don't scroll - let the element expand in place
 		},
-		[groupedMessages, expandedRows, scrollToBottomAuto, isAtBottom],
+		[groupedMessages, expandedRows, scrollToBottomAuto, isAtBottom, isManualScrollPaused],
 	)
 
 	const clearLayoutSettleScrollTimers = useCallback(() => {
@@ -417,7 +451,7 @@ export function useScrollBehavior(
 	}, [])
 
 	const keepPinnedToBottomAfterLayout = useCallback(() => {
-		if (disableAutoScrollRef.current) {
+		if (disableAutoScrollRef.current || isManualScrollPaused()) {
 			return
 		}
 
@@ -425,12 +459,12 @@ export function useScrollBehavior(
 			clearTimeout(layoutSettleScrollTimerRef.current)
 		}
 		layoutSettleScrollTimerRef.current = setTimeout(() => {
-			if (!disableAutoScrollRef.current) {
+			if (!disableAutoScrollRef.current && !isManualScrollPaused()) {
 				scrollToBottomSmooth()
 			}
 			layoutSettleScrollTimerRef.current = null
 		}, 500)
-	}, [scrollToBottomSmooth])
+	}, [scrollToBottomSmooth, isManualScrollPaused])
 
 	const handleRowHeightChange = useCallback(
 		(_isTaller: boolean) => {
@@ -446,21 +480,21 @@ export function useScrollBehavior(
 	useEffect(() => clearLayoutSettleScrollTimers, [clearLayoutSettleScrollTimers])
 
 	useEffect(() => {
-		if (!disableAutoScrollRef.current) {
+		if (!disableAutoScrollRef.current && !isManualScrollPaused()) {
 			scrollToBottomSmooth()
 			setTimeout(() => {
-				if (!disableAutoScrollRef.current) {
+				if (!disableAutoScrollRef.current && !isManualScrollPaused()) {
 					scrollToBottomAuto()
 				}
 			}, 40)
 			setTimeout(() => {
-				if (!disableAutoScrollRef.current) {
+				if (!disableAutoScrollRef.current && !isManualScrollPaused()) {
 					scrollToBottomAuto()
 				}
 			}, 70)
 			// return () => clearTimeout(timer) // dont cleanup since if visibleMessages.length changes it cancels.
 		}
-	}, [groupedMessages.length, scrollToBottomSmooth, scrollToBottomAuto])
+	}, [groupedMessages.length, scrollToBottomSmooth, scrollToBottomAuto, isManualScrollPaused])
 
 	useEffect(() => {
 		if (pendingScrollToMessage !== null) {
@@ -468,25 +502,37 @@ export function useScrollBehavior(
 		}
 	}, [pendingScrollToMessage, groupedMessages, scrollToMessage])
 
-	const handleWheel = useCallback((event: Event) => {
-		const wheelEvent = event as WheelEvent
-		if (wheelEvent.deltaY && wheelEvent.deltaY < 0) {
-			if (scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
-				// user scrolled up
-				disableAutoScrollRef.current = true
+	const handleWheel = useCallback(
+		(event: Event) => {
+			const wheelEvent = event as WheelEvent
+			if (wheelEvent.deltaY && wheelEvent.deltaY < 0) {
+				if (scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
+					// user scrolled up
+					pauseForManualScroll()
+				}
 			}
-		}
-		// Manual scrolling moves away from the last navigation target.
-		if (wheelEvent.deltaY && scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
-			navTargetRef.current = null
-		}
-	}, [])
+			// Manual scrolling moves away from the last navigation target.
+			if (wheelEvent.deltaY && scrollContainerRef.current?.contains(wheelEvent.target as Node)) {
+				navTargetRef.current = null
+			}
+		},
+		[pauseForManualScroll],
+	)
 	useEvent("wheel", handleWheel, window, { passive: true }) // passive improves scrolling performance
+	useEffect(
+		() => () => {
+			if (manualScrollPauseTimerRef.current !== null) {
+				clearTimeout(manualScrollPauseTimerRef.current)
+			}
+		},
+		[],
+	)
 
 	return {
 		virtuosoRef,
 		scrollContainerRef,
 		disableAutoScrollRef,
+		isManualScrollPaused,
 		scrollToBottomSmooth,
 		scrollToBottomAuto,
 		scrollToTopSmooth,

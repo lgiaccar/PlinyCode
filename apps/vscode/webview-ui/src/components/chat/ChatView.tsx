@@ -395,7 +395,8 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 
 	// Use scroll behavior hook
 	const scrollBehavior = useScrollBehavior(displayMessages, visibleMessages, groupedMessages, expandedRows, setExpandedRows)
-	const { scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef, scrollToMessage } = scrollBehavior
+	const { scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef, isManualScrollPaused, scrollToMessage } =
+		scrollBehavior
 
 	useEffect(() => {
 		if (!editMessageRestartFocus || editMessageRestartFocus.sessionId === lastAppliedEditMessageRestartSessionId.current) {
@@ -429,16 +430,19 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		if (taskTs !== previousTaskTs || queuedPromptCount <= previousCount) {
 			return
 		}
+		if (isManualScrollPaused()) {
+			return
+		}
 		// Queueing is a deliberate send, so re-engage bottom pinning like handleSendMessage does.
 		disableAutoScrollRef.current = false
 		scrollToBottomSmooth()
 		// Settle with an instant scroll once the footer's layout change has landed.
 		setTimeout(() => {
-			if (!disableAutoScrollRef.current) {
+			if (!disableAutoScrollRef.current && !isManualScrollPaused()) {
 				scrollToBottomAuto()
 			}
 		}, 50)
-	}, [queuedPromptCount, taskTs, scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef])
+	}, [queuedPromptCount, taskTs, scrollToBottomSmooth, scrollToBottomAuto, disableAutoScrollRef, isManualScrollPaused])
 
 	const placeholderText = useMemo(() => {
 		const text = task ? "Type a message..." : "Type your task here..."
