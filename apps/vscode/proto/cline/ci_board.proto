@@ -39,6 +39,8 @@ service CiBoardService {
   rpc runCiCustomPrompt(RunCiCustomPromptRequest) returns (String);
   // Requeues one expired Azure DevOps PR build validation policy.
   rpc requeueExpiredCiBuild(RequeueExpiredCiBuildRequest) returns (Empty);
+  // Direct Azure DevOps actions; no model run or local worktree is started.
+  rpc runCiProviderAction(CiProviderActionRequest) returns (Empty);
 }
 
 message CiBoardState {
@@ -141,6 +143,25 @@ message CiItem {
   string run_action_id = 22;
   string run_pipeline = 23;
   repeated CiExpiredBuildPolicy expired_build_policies = 24;
+  string provider = 25;
+  repeated CiBuildPolicy build_policies = 26;
+}
+
+message CiBuildPolicy {
+  string evaluation_id = 1;
+  string name = 2;
+  int64 build_id = 3;
+  bool expired = 4;
+  string status = 5;
+}
+
+message CiProviderActionRequest {
+  Metadata metadata = 1;
+  string target_id = 2;
+  string item_key = 3;
+  // "restart-merge" or "requeue-pipeline".
+  string action = 4;
+  string evaluation_id = 5;
 }
 
 message CiExpiredBuildPolicy {

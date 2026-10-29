@@ -77,6 +77,25 @@ describe("CiBoardPoller", () => {
 		expect(poller.snapshot("t1").items[0].pipelines[0].color).toBe("green")
 	})
 
+	it("refreshes queued build policies before a new pipeline run is visible", async () => {
+		let status = "queued"
+		const provider = Object.assign(new FakeBoardProvider("Azure DevOps"), {
+			listBuildPolicies: async () => [
+				{ evaluationId: "12345678-1234-1234-1234-123456789abc", name: "CI", expired: true, status },
+			],
+		})
+		provider.prs = [boardPr(1)]
+		provider.runs.set(SHA_A, [boardRun(10, "CI", "completed", "success")])
+		const { poller, clock, start } = setup(provider)
+		poller.setVisible(true)
+		start()
+		await clock.advance(0)
+		expect(poller.snapshot("t1").items[0].buildPolicies?.[0].status).toBe("queued")
+		status = "running"
+		await clock.advance(MINUTE)
+		expect(poller.snapshot("t1").items[0].buildPolicies?.[0].status).toBe("running")
+	})
+
 	it("keeps fetching runs that are still going, and reports a pipeline turning red", async () => {
 		const { provider, clock, start, poller, transitions } = setup()
 		provider.prs = [boardPr(1)]

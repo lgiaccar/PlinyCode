@@ -16,6 +16,9 @@ interface CiActionBarProps {
 	onCustomPrompt: () => void
 	onEditActions: () => void
 	onError: (message: string | undefined) => void
+	onRestartMerge?: () => void
+	onRequeuePipeline?: () => void
+	providerBusy?: string
 }
 
 /**
@@ -23,7 +26,18 @@ interface CiActionBarProps {
  * single fix when one thing is wrong, Fix them all when several are, or Open
  * conversation while a run is going), and the rest in the menu beside it.
  */
-export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEditActions, onError }: CiActionBarProps) => {
+export const CiActionBar = ({
+	targetId,
+	item,
+	busy,
+	onRun,
+	onCustomPrompt,
+	onEditActions,
+	onError,
+	onRestartMerge,
+	onRequeuePipeline,
+	providerBusy,
+}: CiActionBarProps) => {
 	const [analyzing, setAnalyzing] = useState(false)
 	const [open, setOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
@@ -149,6 +163,42 @@ export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEdi
 							</button>
 						</CiTip>
 					))}
+					{onRestartMerge && (
+						<CiTip
+							side="left"
+							tip="Recompute Azure DevOps' preview merge against the current target branch to refresh conflict detection. This does not complete the PR.">
+							<button
+								className={menuItem}
+								disabled={!!providerBusy}
+								onClick={() => {
+									setOpen(false)
+									onRestartMerge()
+								}}
+								role="menuitem"
+								type="button">
+								<span className="font-medium">Restart merge</span>
+								<span className="block text-description">
+									Refresh the preview merge against {item.targetBranch || "the target branch"}.
+								</span>
+							</button>
+						</CiTip>
+					)}
+					{onRequeuePipeline && (
+						<button
+							className={menuItem}
+							disabled={!!providerBusy}
+							onClick={() => {
+								setOpen(false)
+								onRequeuePipeline()
+							}}
+							role="menuitem"
+							type="button">
+							<span className="font-medium">Requeue pipeline</span>
+							<span className="block text-description">
+								Choose a build validation to run again, including outdated or expired results.
+							</span>
+						</button>
+					)}
 					<hr className="my-1 border-0 border-t border-menu-border" />
 					<CiTip
 						side="left"

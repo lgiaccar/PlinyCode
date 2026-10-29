@@ -80,6 +80,13 @@ export interface ExpiredBuildPolicy {
 	buildId?: number
 }
 
+/** A PR build-validation policy, including validations that are not marked expired yet. */
+export interface BuildPolicy extends ExpiredBuildPolicy {
+	expired: boolean
+	/** Azure DevOps policy state: approved, rejected, running, queued, etc. */
+	status: string
+}
+
 export interface Provider {
 	readonly kind: string
 	readonly maxBodyLength: number
@@ -96,6 +103,9 @@ export interface Provider {
 	/** Only Azure DevOps exposes build-policy expiration and requeue. */
 	listExpiredBuildPolicies?(pr: PullRequest): Promise<ExpiredBuildPolicy[]>
 	requeueBuildPolicy?(evaluationId: string): Promise<void>
+	listBuildPolicies?(pr: PullRequest): Promise<BuildPolicy[]>
+	/** Recompute the preview merge against the target branch; does not complete the PR. */
+	restartPrMerge?(id: number): Promise<void>
 	/** Open pull requests, most recently updated first; `mine` keeps the signed-in user's. */
 	listOpenPrs(options: { mine: boolean; limit: number }): Promise<PullRequest[]>
 	/** The commit `branch` points at on the server, or undefined when the server has no such branch. */
