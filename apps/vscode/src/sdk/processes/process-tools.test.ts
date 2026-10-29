@@ -149,7 +149,9 @@ describe("process_output", () => {
 describe("process_kill", () => {
 	it("stops a running process through the registry", async () => {
 		const { registry, kill } = setup()
-		const stop = vi.fn(async () => {})
+		const stop = vi.fn(async () => {
+			registry.markExited(process.id, 130)
+		})
 		const process = register(registry, { kill: stop })
 
 		const text = String(await kill.execute({ id: process.id }, context))
@@ -158,6 +160,25 @@ describe("process_kill", () => {
 		expect(text).toContain("p1 was stopped after 0s: npm run dev")
 		expect(registry.get(process.id)?.status).toBe("killed")
 		expect(kill.executionMode).not.toBe("parallel")
+	})
+
+	it("reports unconfirmed and failed stop attempts without claiming success", async () => {
+		const { registry, kill, list, output } = setup()
+		const process = register(registry)
+		expect(String(await kill.execute({ id: process.id }, context))).toContain("termination has not been confirmed")
+		expect(String(await list.execute({}, context))).toContain("p1  stopping")
+		expect(String(await output.execute({ id: process.id }, context))).toContain("stop request pending")
+		const failed = register(registry, {
+			kill: async () => {
+				throw new Error("access denied")
+			},
+		})
+		expect(String(await kill.execute({ id: failed.id }, context))).toContain("could not be stopped: access denied")
+		expect(String(await list.execute({}, context))).toContain("p2  stop-failed")
+		registry.markLost(process.id)
+		const unknown = String(await kill.execute({ id: process.id }, context))
+		expect(unknown).toContain("may still be running")
+		expect(unknown).not.toContain("nothing to stop")
 	})
 
 	it("does nothing to a process that already ended", async () => {
