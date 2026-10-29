@@ -69,10 +69,14 @@ for (const profile of profiles) {
 		})
 		const commandOutput = sidebar.locator("code").filter({ hasText: profile.version })
 		await expect(commandOutput).not.toBeVisible()
-		const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true })
+		// Approval can split activity into multiple groups; command output is in the final group.
+		const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true }).last()
 		await expect(showActivity).toHaveAttribute("aria-expanded", "false")
 		await showActivity.click()
-		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true })).toHaveAttribute("aria-expanded", "true")
+		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true }).last()).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
 		await expect(commandOutput).toBeVisible()
 		for (const expectedPathPart of profile.psHome) {
 			await expect(commandOutput).toContainText(expectedPathPart)
