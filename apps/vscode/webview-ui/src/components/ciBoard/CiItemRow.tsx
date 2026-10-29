@@ -1,4 +1,4 @@
-import { type CiItem, CiItemRequest, RequeueExpiredCiBuildRequest } from "@shared/proto/cline/ci_board"
+import { type CiItem, CiItemRequest, CiProviderActionRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { useCallback, useState } from "react"
 import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
@@ -25,14 +25,17 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 	const [expanded, setExpanded] = useState(false)
 	const [customPrompt, setCustomPrompt] = useState(false)
 	const [error, setError] = useState<string>()
-	const [requeueing, setRequeueing] = useState<string>()
+	const [providerBusy, setProviderBusy] = useState<string>()
+	const [showBuildPolicies, setShowBuildPolicies] = useState(false)
+	const [notice, setNotice] = useState<string>()
+	const adoPr = item.provider === "ado" && item.prId > 0 && item.state === "open"
 	const onError = useCallback((message: string | undefined) => setError(message), [])
 	const { busy, run } = useCiRun(targetId, item.key, onError)
 	const badge = MERGE_BADGES[item.mergeState]
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const failing = isFailing(item)
 	const triage = item.triage
-	const expandable = failing || !!triage || item.pipelines.length > 0 || (item.expiredBuildPolicies?.length ?? 0) > 0
+	const expandable = adoPr || failing || !!triage || item.pipelines.length > 0 || (item.expiredBuildPolicies?.length ?? 0) > 0
 	const severity = triage ? SEVERITY_META[triage.severity] : undefined
 	const branches = `${item.sourceBranch}${item.targetBranch ? ` → ${item.targetBranch}` : ""}${item.author ? ` · ${item.author}` : ""}`
 
@@ -45,19 +48,26 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 			setError(errorText(e)),
 		)
 	}
-	const requeue = async (evaluationId: string) => {
+	const providerAction = async (action: string, evaluationId = "") => {
 		setError(undefined)
-		setRequeueing(evaluationId)
+		setNotice(undefined)
+		setProviderBusy(evaluationId || action)
 		try {
-			await CiBoardServiceClient.requeueExpiredCiBuild(
-				RequeueExpiredCiBuildRequest.create({ targetId, itemKey: item.key, evaluationId }),
+			await CiBoardServiceClient.runCiProviderAction(
+				CiProviderActionRequest.create({ targetId, itemKey: item.key, action, evaluationId }),
+			)
+			setNotice(
+				action === "restart-merge"
+					? "Preview merge restart requested. Azure DevOps will update the merge status."
+					: "Build validation requeue requested. Azure DevOps will update its status.",
 			)
 		} catch (error) {
 			setError(errorText(error))
 		} finally {
-			setRequeueing(undefined)
+			setProviderBusy(undefined)
 		}
 	}
+	const requeue = (evaluationId: string) => providerAction("requeue-pipeline", evaluationId)
 
 	const summary =
 		triage?.status === "pending" && !triage.summary
@@ -162,7 +172,17 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					onCustomPrompt={() => setCustomPrompt(true)}
 					onEditActions={onEditActions}
 					onError={onError}
+					onRequeuePipeline={
+						adoPr
+							? () => {
+									setExpanded(true)
+									setShowBuildPolicies(true)
+								}
+							: undefined
+					}
+					onRestartMerge={adoPr ? () => void providerAction("restart-merge") : undefined}
 					onRun={run}
+					providerBusy={providerBusy}
 					targetId={targetId}
 				/>
 			</div>
@@ -173,15 +193,21 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					onAnalyze={analyze}
 					onRequeue={requeue}
 					onRun={run}
-					requeueing={requeueing}
+					requeueing={providerBusy}
 					runningReason={
 						running
 							? "A run started from the board is still going for this pull request. Open its conversation to follow it."
 							: undefined
 					}
+					showBuildPolicies={showBuildPolicies}
 				/>
 			)}
 			{customPrompt && <CiCustomPromptPanel itemKey={item.key} onDone={() => setCustomPrompt(false)} targetId={targetId} />}
+			{(providerBusy || notice) && (
+				<div className="text-xs text-description pl-5" role="status">
+					{providerBusy ? "Requesting Azure DevOps action…" : notice}
+				</div>
+			)}
 			{(error || item.error) && (
 				<DevOpsErrorText
 					className="text-xs text-error break-words pl-5"

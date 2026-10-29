@@ -106,6 +106,7 @@ export class CiBoard {
 	private attempts: CiAutoAttempt[] = []
 	private readonly checkouts = new Map<string, string | undefined>()
 	private readonly skills = new Map<string, CiSkills>()
+	private readonly providerActions = new Set<string>()
 	private readonly poller: CiBoardPoller
 	private triageService?: CiTriage
 	private readonly changeListeners = new Set<Listener<void>>()
@@ -184,10 +185,44 @@ export class CiBoard {
 		) {
 			throw new DevOpsError("That expired validation changed; refresh the board and try again.")
 		}
-		const provider = this.options.providerFor(remoteOf(target))
-		if (!provider.requeueBuildPolicy) throw new DevOpsError("This Azure DevOps server cannot requeue build policies.")
-		await provider.requeueBuildPolicy(evaluationId)
-		await this.poller.refresh(targetId)
+		await this.runProviderAction(targetId, key, "requeue-pipeline", evaluationId)
+	}
+
+	/** Explicit user actions against Azure DevOps, independent of agent runs and local checkouts. */
+	async runProviderAction(targetId: string, key: string, action: string, evaluationId?: string): Promise<void> {
+		const target = this.target(targetId)
+		const item = this.item(targetId, key)
+		if (!target || target.provider !== "ado" || !item?.pr) {
+			throw new DevOpsError("Select an Azure DevOps pull request and refresh the board.")
+		}
+		if (action !== "restart-merge" && action !== "requeue-pipeline") {
+			throw new DevOpsError("Unknown Azure DevOps board action.")
+		}
+		if (this.providerActions.has(key)) throw new DevOpsError("An Azure DevOps action is already running for this PR.")
+		this.providerActions.add(key)
+		try {
+			const provider = this.options.providerFor(remoteOf(target))
+			const pr = await provider.getPr(item.pr.id)
+			if (pr.state !== "open") throw new DevOpsError("This pull request is no longer open; refresh the board.")
+			if (action === "restart-merge") {
+				if (!provider.restartPrMerge) throw new DevOpsError("This Azure DevOps server cannot restart preview merges.")
+				await provider.restartPrMerge(pr.id)
+			} else {
+				if (!provider.requeueBuildPolicy) throw new DevOpsError("This Azure DevOps server cannot requeue build policies.")
+				const policies = provider.listBuildPolicies
+					? await provider.listBuildPolicies(pr)
+					: ((await provider.listExpiredBuildPolicies?.(pr)) ?? []).map((p) => ({ ...p, status: "unknown" }))
+				const policy = policies.find((p) => p.evaluationId === evaluationId)
+				if (!policy) throw new DevOpsError("That build validation changed; refresh the board and select it again.")
+				if (policy.status === "queued" || policy.status === "running") {
+					throw new DevOpsError("That build validation is already queued or running.")
+				}
+				await provider.requeueBuildPolicy(policy.evaluationId)
+			}
+			await this.poller.refresh(targetId)
+		} finally {
+			this.providerActions.delete(key)
+		}
 	}
 
 	linkFor(key: string): CiLink | undefined {

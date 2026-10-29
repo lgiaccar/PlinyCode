@@ -51,9 +51,16 @@ Each row has:
 - the conversation the last action started, and the action buttons.
 
 Azure DevOps PRs also show **Expired** when a build-validation policy has expired after a target-branch update.
-Expand the row and use **Requeue** beside that validation to ask Azure DevOps to run it again. Expiration is a
+Expand the row and use **Requeue pipeline** beside that validation to ask Azure DevOps to run it again. Expiration is a
 policy state, so an earlier successful build can still have a green run dot. Requeue acts on one policy at a time
 and does not start a code-fixing conversation.
+
+An open Azure DevOps PR also has two direct controls in its **Actions** menu, beside **Fix conflicts** and **Fix build**:
+
+- **Restart merge** asks Azure DevOps to recompute the preview merge against the current target branch, such as `stage`. Use it when an old PR may have new conflicts after the target branch advanced. It does not complete the PR, resolve conflicts, or push changes to the source branch.
+- **Requeue pipeline** opens the PR's build-validation policies so you can choose which one to run again. It includes outdated results that Azure DevOps has not marked expired yet. Queued or running validations cannot be requeued. This re-evaluates the selected PR policy rather than retrying jobs on an old build commit; restart the preview merge first when the target branch has advanced.
+
+Both controls use the configured Azure DevOps credentials, work without a local checkout, and show pending, submitted, or error feedback. The board refreshes after the request. PlinyCode rechecks the PR and policy state before sending it, rejects duplicate in-flight actions, and never starts these actions through auto-watch.
 
 | Color  | Meaning                                                                                                   |
 | ------ | --------------------------------------------------------------------------------------------------------- |

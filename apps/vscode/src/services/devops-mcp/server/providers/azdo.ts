@@ -5,6 +5,7 @@ import { type Auth, adoAuth } from "../auth"
 import { DevOpsError } from "../errors"
 import { adoCollectionUrl, type Remote } from "../repo"
 import {
+	type BuildPolicy,
 	type Check,
 	type ExpiredBuildPolicy,
 	type FailedStep,
@@ -589,19 +590,25 @@ export class AzureDevOpsProvider implements ToolProvider {
 	}
 
 	async listExpiredBuildPolicies(pr: PullRequest): Promise<ExpiredBuildPolicy[]> {
+		return (await this.listBuildPolicies(pr))
+			.filter((policy) => policy.expired)
+			.map(({ evaluationId, name, buildId }) => ({ evaluationId, name, buildId }))
+	}
+
+	async listBuildPolicies(pr: PullRequest): Promise<BuildPolicy[]> {
 		const repo = await this.repo()
 		const artifactId = `vstfs:///CodeReview/CodeReviewId/${repo.project.id}/${pr.id}`
 		const response = await this.api("GET", "policy/evaluations", { artifactId, "api-version": "7.1-preview.1" })
 		return (response.value ?? [])
-			.filter(
-				(ev: any) =>
-					ev.context?.isExpired === true &&
-					Number.isSafeInteger(ev.context?.buildDefinitionId ?? ev.configuration?.settings?.buildDefinitionId),
+			.filter((ev: any) =>
+				Number.isSafeInteger(ev.context?.buildDefinitionId ?? ev.configuration?.settings?.buildDefinitionId),
 			)
 			.map((ev: any) => ({
 				evaluationId: String(ev.evaluationId),
 				name: ev.configuration?.settings?.displayName ?? ev.configuration?.type?.displayName ?? "Build validation",
 				buildId: Number.isSafeInteger(ev.context?.buildId) ? ev.context.buildId : undefined,
+				expired: ev.context?.isExpired === true,
+				status: String(ev.status ?? "unknown"),
 			}))
 			.filter((ev: ExpiredBuildPolicy) => /^[0-9a-f-]{36}$/i.test(ev.evaluationId))
 	}
@@ -609,5 +616,11 @@ export class AzureDevOpsProvider implements ToolProvider {
 	async requeueBuildPolicy(evaluationId: string): Promise<void> {
 		if (!/^[0-9a-f-]{36}$/i.test(evaluationId)) throw new DevOpsError("Invalid policy evaluation ID.")
 		await this.api("PATCH", `policy/evaluations/${evaluationId}`, { "api-version": "7.1-preview.1" }, { status: "queued" })
+	}
+
+	async restartPrMerge(id: number): Promise<void> {
+		if (!Number.isSafeInteger(id) || id <= 0) throw new DevOpsError("Invalid pull request ID.")
+		// Queue the preview merge only. Never set PR status or completion options.
+		await this.api("PATCH", await this.prPath(`/${id}`), {}, { mergeStatus: "queued" })
 	}
 }

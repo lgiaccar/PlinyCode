@@ -69,11 +69,13 @@ for (const profile of profiles) {
 		})
 		const commandOutput = sidebar.locator("code").filter({ hasText: profile.version })
 		await expect(commandOutput).not.toBeVisible()
-		// Approval can split activity into multiple groups; command output is in the final group.
-		const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true }).last()
-		await expect(showActivity).toHaveAttribute("aria-expanded", "false")
-		await showActivity.click()
-		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true }).last()).toHaveAttribute(
+		// Approval and router completion can create separate groups around the command output.
+		const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true })
+		await expect(showActivity.first()).toHaveAttribute("aria-expanded", "false")
+		while ((await showActivity.count()) > 0) {
+			await showActivity.first().click()
+		}
+		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true }).first()).toHaveAttribute(
 			"aria-expanded",
 			"true",
 		)

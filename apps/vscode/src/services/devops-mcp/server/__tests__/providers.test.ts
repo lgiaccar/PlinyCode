@@ -435,6 +435,42 @@ describe("AzureDevOpsProvider", () => {
 		expect(checks[0].url).toEndWith("buildId=7")
 	})
 
+	it("restarts the preview merge without completing or retargeting the PR", async () => {
+		const api = new FakeApi().on("PATCH", `${PRS}/42`, { mergeStatus: "queued" })
+		const provider = azdo(api)
+		await provider.restartPrMerge(42)
+		expect(api.lastJson("PATCH")).toEqual({ mergeStatus: "queued" })
+		await expect(provider.restartPrMerge(0)).rejects.toThrow("Invalid pull request ID")
+		api.on("PATCH", `${PRS}/42`, { message: "not allowed" }, 403)
+		await expect(provider.restartPrMerge(42)).rejects.toThrow()
+	})
+
+	it("lists non-expired build validations but excludes other policies", async () => {
+		const evaluationId = "12345678-1234-1234-1234-123456789abc"
+		const api = new FakeApi().on("GET", `${PROJ}/policy/evaluations`, {
+			value: [
+				{
+					evaluationId,
+					status: "approved",
+					context: { isExpired: false, buildId: 7 },
+					configuration: { settings: { buildDefinitionId: 4, displayName: "CI" } },
+				},
+				{ evaluationId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: "running", context: { buildDefinitionId: 5 } },
+				{
+					evaluationId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+					status: "approved",
+					configuration: { type: { displayName: "Reviewers" } },
+				},
+				{ evaluationId: "bad-id", context: { buildDefinitionId: 6 } },
+			],
+		})
+		const policies = await azdo(api).listBuildPolicies({ id: 42 } as PullRequest)
+		expect(policies).toHaveLength(2)
+		expect(policies[0]).toEqual({ evaluationId, name: "CI", buildId: 7, expired: false, status: "approved" })
+		expect(policies[1].status).toBe("running")
+		expect(api.last("GET").url.searchParams.get("artifactId")).toBe("vstfs:///CodeReview/CodeReviewId/p-1/42")
+	})
+
 	it("detects expired build validations and requeues the selected evaluation", async () => {
 		const evaluationId = "12345678-1234-1234-1234-123456789abc"
 		const api = new FakeApi()

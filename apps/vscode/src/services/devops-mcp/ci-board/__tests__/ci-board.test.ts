@@ -106,6 +106,76 @@ describe("CiBoard", () => {
 		await expect(board.updateTarget(t.id, {})).rejects.toThrow(/no longer exists/)
 	})
 
+	it("runs direct Azure DevOps actions without a checkout and validates fresh policy state", async () => {
+		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
+		provider.prs = [boardPr(12, { url })]
+		const evaluationId = "11111111-1111-4111-8111-111111111111"
+		let policyStatus = "approved"
+		let restartError: Error | undefined
+		const restarted: number[] = []
+		const requeued: string[] = []
+		Object.assign(provider, {
+			listBuildPolicies: async () => [{ evaluationId, name: "CI", expired: false, status: policyStatus }],
+			requeueBuildPolicy: async (id: string) => {
+				requeued.push(id)
+				policyStatus = "queued"
+			},
+			restartPrMerge: async (id: number) => {
+				if (restartError) throw restartError
+				restarted.push(id)
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url })
+		await board.refresh()
+		const item = board.view()[0].items[0]
+		expect(item.buildPolicies).toHaveLength(1)
+		expect(item.expiredBuildPolicies).toEqual([])
+		await board.runProviderAction(target.id, item.key, "restart-merge")
+		expect(restarted).toEqual([12])
+		await expect(board.runProviderAction(target.id, item.key, "requeue-pipeline", "foreign-policy")).rejects.toThrow(
+			/changed/,
+		)
+		await board.runProviderAction(target.id, item.key, "requeue-pipeline", evaluationId)
+		expect(requeued).toEqual([evaluationId])
+		expect(board.view()[0].items[0].buildPolicies?.[0].status).toBe("queued")
+		await expect(board.runProviderAction(target.id, item.key, "requeue-pipeline", evaluationId)).rejects.toThrow(
+			/already queued/,
+		)
+		restartError = new Error("server unavailable")
+		await expect(board.runProviderAction(target.id, item.key, "restart-merge")).rejects.toThrow(/unavailable/)
+		restartError = undefined
+		await board.runProviderAction(target.id, item.key, "restart-merge")
+		provider.prs[0].state = "merged"
+		await expect(board.runProviderAction(target.id, item.key, "restart-merge")).rejects.toThrow(/no longer open/)
+		expect(restarted).toEqual([12, 12])
+		expect(board.linkFor(item.key)).toBeUndefined()
+	})
+
+	it("rejects GitHub items and concurrent provider actions", async () => {
+		const gh = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
+		await board.refresh()
+		await expect(board.runProviderAction(gh.id, board.view()[0].items[0].key, "restart-merge")).rejects.toThrow(
+			/Azure DevOps/,
+		)
+		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
+		provider.prs = [boardPr(12, { url })]
+		let release!: () => void
+		Object.assign(provider, {
+			restartPrMerge: () =>
+				new Promise<void>((resolve) => {
+					release = resolve
+				}),
+		})
+		const target = await board.addTarget({ kind: "pr", url })
+		await board.refresh()
+		const item = board.view().find((v) => v.target.id === target.id)!.items[0]
+		const first = board.runProviderAction(target.id, item.key, "restart-merge")
+		await Promise.resolve()
+		await expect(board.runProviderAction(target.id, item.key, "restart-merge")).rejects.toThrow(/already running/)
+		release()
+		await first
+	})
+
 	it("requeues only a currently expired Azure DevOps validation and refreshes the board", async () => {
 		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
 		provider.prs = [boardPr(12, { url })]
