@@ -50,7 +50,7 @@ describe("ProcessRegistry", () => {
 		expect(listener).toHaveBeenCalledTimes(2)
 	})
 
-	it("marks a process killed once its kill has run, even when the kill saw no exit", async () => {
+	it("keeps an unconfirmed stop running and allows another attempt", async () => {
 		const registry = new ProcessRegistry()
 		const kill = vi.fn(async () => {})
 		const process = registry.register(registration({ kill }))
@@ -58,7 +58,48 @@ describe("ProcessRegistry", () => {
 		await process.kill()
 
 		expect(kill).toHaveBeenCalledOnce()
-		expect(registry.get(process.id)?.status).toBe("killed")
+		expect(registry.get(process.id)).toMatchObject({ status: "running", stopRequested: true })
+		expect(registry.get(process.id)?.endedAt).toBeUndefined()
+		expect(registry.hasRunning("conversation-1")).toBe(true)
+		await process.kill()
+		expect(kill).toHaveBeenCalledTimes(2)
+	})
+
+	it("reports a failed stop without claiming termination, then retries", async () => {
+		const registry = new ProcessRegistry()
+		const stop = vi.fn().mockRejectedValueOnce(new Error("permission denied")).mockResolvedValue(undefined)
+		const process = registry.register(registration({ kill: stop }))
+		await registry.kill(process.id)
+		expect(registry.get(process.id)).toMatchObject({ status: "running", stopError: "permission denied" })
+		await registry.kill(process.id)
+		expect(registry.get(process.id)).toMatchObject({ status: "running", stopError: undefined })
+		expect(stop).toHaveBeenCalledTimes(2)
+	})
+
+	it("handles synchronous stop failures and notifies subscribers", async () => {
+		const registry = new ProcessRegistry()
+		const process = registry.register(
+			registration({
+				kill: () => {
+					throw new Error("cannot interrupt")
+				},
+			}),
+		)
+		const listener = vi.fn()
+		registry.onDidChange(listener)
+		await registry.kill(process.id)
+		expect(registry.get(process.id)).toMatchObject({ status: "running", stopError: "cannot interrupt" })
+		expect(listener).toHaveBeenCalledTimes(2)
+	})
+
+	it("keeps lost observation unknown after a stop, but accepts a late exit", async () => {
+		const registry = new ProcessRegistry(() => 5000)
+		const process = registry.register(registration())
+		await registry.kill(process.id)
+		registry.markLost(process.id)
+		expect(registry.get(process.id)?.status).toBe("lost")
+		registry.markExited(process.id, 130)
+		expect(registry.get(process.id)).toMatchObject({ status: "killed", exitCode: 130, endedAt: 5000 })
 	})
 
 	it("keeps the exit code of a process that ended because of a kill", async () => {
@@ -91,31 +132,38 @@ describe("ProcessRegistry", () => {
 
 		const first = registry.kill(process.id)
 		const second = registry.kill(process.id)
+		await Promise.resolve()
 		finish()
 		await Promise.all([first, second])
 
 		expect(kill).toHaveBeenCalledOnce()
-		expect(registry.get(process.id)?.status).toBe("killed")
+		expect(registry.get(process.id)?.status).toBe("running")
 	})
 
-	it("kills every running process of a conversation and leaves the others", async () => {
+	it("requests stops only for its conversation and counts only confirmed endings", async () => {
 		const registry = new ProcessRegistry()
-		const mine = registry.register(registration())
+		const mine = registry.register(
+			registration({
+				kill: async () => {
+					registry.markExited(mine.id, 130)
+				},
+			}),
+		)
 		const ended = registry.register(registration())
 		registry.markExited(ended.id, 0)
 		const child = registry.register(registration({ source: "child" }))
 		const other = registry.register(registration({ conversationId: "conversation-2" }))
 
-		expect(await registry.killAll("conversation-1")).toBe(2)
+		expect(await registry.killAll("conversation-1")).toBe(1)
 
 		expect(registry.get(mine.id)?.status).toBe("killed")
-		expect(registry.get(child.id)?.status).toBe("killed")
+		expect(registry.get(child.id)).toMatchObject({ status: "running", stopRequested: true })
 		expect(registry.get(ended.id)?.status).toBe("exited")
 		expect(registry.get(other.id)?.status).toBe("running")
 
 		expect(await registry.killAll(undefined, (process) => process.source === "child")).toBe(0)
-		expect(await registry.killAll()).toBe(1)
-		expect(registry.get(other.id)?.status).toBe("killed")
+		expect(await registry.killAll()).toBe(0)
+		expect(registry.get(other.id)).toMatchObject({ status: "running", stopRequested: true })
 	})
 
 	it("forgets the oldest ended processes beyond fifty", () => {
