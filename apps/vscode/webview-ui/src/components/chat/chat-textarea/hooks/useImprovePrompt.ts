@@ -9,6 +9,8 @@ interface UseImprovePromptOptions {
 	setInputValue: (value: string) => void
 	mode: Mode
 	textAreaRef: React.RefObject<HTMLTextAreaElement | null>
+	/** Full draft when the textarea displays collapsed paste labels. */
+	draftRef?: React.RefObject<string>
 	/** Called after the draft was replaced, e.g. to put the cursor at its end. */
 	onReplaced?: (text: string) => void
 }
@@ -19,7 +21,14 @@ interface UseImprovePromptOptions {
  * sent (the user may keep typing while it runs), and can be undone until the
  * user edits it.
  */
-export function useImprovePrompt({ inputValue, setInputValue, mode, textAreaRef, onReplaced }: UseImprovePromptOptions) {
+export function useImprovePrompt({
+	inputValue,
+	setInputValue,
+	mode,
+	textAreaRef,
+	draftRef,
+	onReplaced,
+}: UseImprovePromptOptions) {
 	const [pending, setPending] = useState(false)
 	const [error, setError] = useState<string>()
 	const [replaced, setReplaced] = useState<{ original: string; improved: string }>()
@@ -40,7 +49,7 @@ export function useImprovePrompt({ inputValue, setInputValue, mode, textAreaRef,
 		setReplaced(undefined)
 		try {
 			const result = await TaskServiceClient.improvePrompt(ImprovePromptRequest.create({ text: submitted, mode }))
-			if ((textAreaRef.current?.value ?? submitted) !== submitted) {
+			if ((draftRef?.current ?? textAreaRef.current?.value ?? submitted) !== submitted) {
 				// The user kept typing: their draft wins and the rewrite is dropped.
 				return
 			}
@@ -56,7 +65,7 @@ export function useImprovePrompt({ inputValue, setInputValue, mode, textAreaRef,
 		} finally {
 			setPending(false)
 		}
-	}, [inputValue, pending, mode, textAreaRef, setInputValue, onReplaced])
+	}, [inputValue, pending, mode, textAreaRef, draftRef, setInputValue, onReplaced])
 
 	const undo = useCallback(() => {
 		if (replaced) {

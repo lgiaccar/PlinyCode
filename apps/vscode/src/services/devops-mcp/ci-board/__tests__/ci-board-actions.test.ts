@@ -106,7 +106,7 @@ describe("itemActions", () => {
 		expect(fixes[1].tooltip).toContain("Fixes what breaks win_build")
 		expect(fixes[1].alternatives).toEqual(["recalibrate", "investigate"])
 		expect(fixes[3].tooltip).toContain("tests regression runs")
-		expect(fixes[4].tooltip).toContain("re-run the pipeline")
+		expect(fixes[4].tooltip).toContain("Requeue pipeline")
 		expect(fixes[4].alternatives).toEqual(["fix-build", "recalibrate", "investigate"])
 	})
 

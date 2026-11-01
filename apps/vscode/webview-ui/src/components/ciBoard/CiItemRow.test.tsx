@@ -147,6 +147,33 @@ describe("CiItemRow", () => {
 		expect(mocks.openUrl).toHaveBeenCalledWith(expect.objectContaining({ value: "https://ci/101" }))
 	})
 
+	it("requeues infrastructure failures directly and reports provider errors", async () => {
+		render(
+			row(
+				makeItem({
+					fixes: [fix("win_cpu", { category: "infrastructure", actionId: "", label: "" })],
+					runBlocked: "No checkout",
+				}),
+			),
+		)
+		fireEvent.click(screen.getByTestId("ci-expand"))
+		const button = screen.getByRole("button", { name: "Requeue win_cpu" })
+		expect(screen.getByTestId("ci-primary-action")).toHaveTextContent("Requeue pipeline")
+		expect(screen.queryByRole("button", { name: "Requeue linux_cpu" })).toBeNull()
+		mocks.runCiProviderAction.mockRejectedValueOnce(new Error("Agent pool unavailable"))
+		fireEvent.click(button)
+		expect(button).toBeDisabled()
+		await waitFor(() => expect(screen.getByText(/Agent pool unavailable/)).toBeInTheDocument())
+		expect(button).not.toBeDisabled()
+		fireEvent.click(button)
+		await waitFor(() =>
+			expect(mocks.runCiProviderAction).toHaveBeenLastCalledWith(
+				expect.objectContaining({ action: "rerun-pipeline", runId: 101, itemKey: makeItem().key }),
+			),
+		)
+		expect(mocks.runCiAction).not.toHaveBeenCalled()
+	})
+
 	it("flags merge conflicts", () => {
 		const { rerender } = render(row(makeItem()))
 		expect(screen.queryByTestId("merge-badge")).toBeNull()
@@ -230,7 +257,7 @@ describe("CiItemRow", () => {
 		render(row(makeItem({ provider: "ado" })))
 		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
 		fireEvent.click(screen.getByRole("menuitem", { name: /Restart merge/ }))
-		expect(screen.getByRole("status")).toHaveTextContent("Requesting Azure DevOps action")
+		expect(screen.getByRole("status")).toHaveTextContent("Requesting CI action")
 		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
 		expect(screen.getByRole("menuitem", { name: /Restart merge/ })).toBeDisabled()
 		expect(screen.getByRole("menuitem", { name: /Requeue pipeline/ })).toBeDisabled()

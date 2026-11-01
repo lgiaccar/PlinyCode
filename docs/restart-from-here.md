@@ -10,6 +10,17 @@ The code is `SdkController.editMessageAndRegenerate` (`apps/vscode/src/sdk/`),
 with the mapping in `sdk-user-message-mapping.ts` (`planEditRestart`) and the
 row bookkeeping in `sdk-checkpoints.ts` (`describeEditedRow`).
 
+## Long pasted prompts
+
+Pasting at least 300 words, 2,000 characters or 30 lines into the composer shows a compact **Pasted text** label
+with a word count. You can keep typing before or after it, paste more blocks, or choose **Expand** to edit the
+complete draft. Deleting a label removes that pasted block. Copying or cutting it copies the original text.
+The model, prompt improvement, scheduled messages and saved drafts always receive the full text.
+
+Long messages in the conversation also start collapsed, with a word count and **Show text**. Editing and
+restarting always opens the full original prompt. These controls only change the display; they do not summarize
+or truncate the model's input.
+
 ## What happens
 
 1. The running turn, if any, is cancelled and the conversation's saved history

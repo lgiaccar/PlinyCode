@@ -106,6 +106,64 @@ describe("CiBoard", () => {
 		await expect(board.updateTarget(t.id, {})).rejects.toThrow(/no longer exists/)
 	})
 
+	it("requeues a failed run without a checkout and rejects stale selections", async () => {
+		const reruns: [number, boolean][] = []
+		Object.assign(provider, {
+			rerunRun: async (id: number, failedOnly: boolean) => {
+				reruns.push([id, failedOnly])
+				return { url: "" }
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 999)).rejects.toThrow(/changed/)
+		await board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)
+		expect(reruns).toEqual([[1, false]])
+		provider.runs.set(SHA_A, [boardRun(1, "ci", "in_progress")])
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/no longer failed/)
+		provider.runs.set(SHA_A, [boardRun(1, "ci", "completed", "failure"), boardRun(2, "ci", "queued")])
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/newer run/)
+		provider.prs[0].headSha = "b".repeat(40)
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/head changed/)
+		provider.prs[0].state = "closed"
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/no longer open/)
+		expect(reruns).toHaveLength(1)
+	})
+
+	it("requeues Azure DevOps validation through its policy and releases its lock after an error", async () => {
+		provider = new FakeBoardProvider("Azure DevOps")
+		provider.prs = [boardPr(12, { url: "https://dev.azure.com/acme/P/_git/r/pullrequest/12" })]
+		provider.runs.set(SHA_A, [boardRun(1, "ci", "completed", "failure")])
+		let status = "rejected"
+		let fail = true
+		let reruns = 0
+		const requeued: string[] = []
+		Object.assign(provider, {
+			rerunRun: async () => {
+				reruns++
+				return { url: "" }
+			},
+			listBuildPolicies: async () => [{ evaluationId: "policy-1", name: "ci", buildId: 1, expired: false, status }],
+			requeueBuildPolicy: async (id: string) => {
+				if (fail) throw new Error("Service unavailable")
+				requeued.push(id)
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/unavailable/)
+		fail = false
+		await board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)
+		expect(requeued).toEqual(["policy-1"])
+		expect(reruns).toBe(0)
+		status = "running"
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(
+			/already queued or running/,
+		)
+	})
+
 	it("runs direct Azure DevOps actions without a checkout and validates fresh policy state", async () => {
 		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
 		provider.prs = [boardPr(12, { url })]

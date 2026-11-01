@@ -6,12 +6,14 @@
 import { randomUUID } from "node:crypto"
 import type { Mode } from "@shared/storage/types"
 import { type EnsuredWorktree, ensureWorktree, worktreeRoot } from "@/services/git/worktrees"
+import { runsForHead } from "../ci-watch/ci-watch-source"
 import { DevOpsError } from "../server/errors"
-import type { Provider } from "../server/providers/types"
+import type { PipelineProvider, Provider } from "../server/providers/types"
 import { loadContext, parseRemote, type Remote, type RepoContext, sameRepository } from "../server/repo"
 import { BUILTIN_PROMPTS } from "./builtin-prompts"
 import type { CiAutoState } from "./ci-auto-runner"
 import { CiBoardPoller, type CiBoardPollerOptions, type CiBoardTimings } from "./ci-board-poller"
+import { groupPipelines } from "./ci-board-snapshot"
 import type { CiBoardStore } from "./ci-board-store"
 import { composeCiPrompt, loadPromptText } from "./ci-prompt"
 import { type CiSkill, type CiSkills, detectCiSkills, noSkills } from "./ci-skills"
@@ -188,8 +190,9 @@ export class CiBoard {
 		await this.runProviderAction(targetId, key, "requeue-pipeline", evaluationId)
 	}
 
-	/** Explicit user actions against Azure DevOps, independent of agent runs and local checkouts. */
-	async runProviderAction(targetId: string, key: string, action: string, evaluationId?: string): Promise<void> {
+	/** Explicit user actions, independent of agent runs and local checkouts. */
+	async runProviderAction(targetId: string, key: string, action: string, evaluationId?: string, runId?: number): Promise<void> {
+		if (action === "rerun-pipeline") return this.rerunPipeline(targetId, key, runId)
 		const target = this.target(targetId)
 		const item = this.item(targetId, key)
 		if (!target || target.provider !== "ado" || !item?.pr) {
@@ -218,6 +221,46 @@ export class CiBoard {
 					throw new DevOpsError("That build validation is already queued or running.")
 				}
 				await provider.requeueBuildPolicy(policy.evaluationId)
+			}
+			await this.poller.refresh(targetId)
+		} finally {
+			this.providerActions.delete(key)
+		}
+	}
+
+	private async rerunPipeline(targetId: string, key: string, runId?: number): Promise<void> {
+		const target = this.target(targetId)
+		const item = this.item(targetId, key)
+		const selected = item?.pipelines.find((p) => p.runId === runId && p.color === "red")
+		if (!target || !item || !selected || !runId || !Number.isSafeInteger(runId)) {
+			throw new DevOpsError("That failed pipeline changed; refresh the board and select it again.")
+		}
+		if (this.providerActions.has(key)) throw new DevOpsError("A CI action is already running for this item.")
+		this.providerActions.add(key)
+		try {
+			const provider = this.options.providerFor(remoteOf(target)) as Provider & Partial<PipelineProvider>
+			if (!provider.rerunRun) throw new DevOpsError("This provider cannot requeue pipeline runs.")
+			const pr = item.pr ? await provider.getPr(item.pr.id) : undefined
+			if (pr && pr.state !== "open") throw new DevOpsError("This pull request is no longer open; refresh the board.")
+			const head = pr?.headSha ?? (await provider.branchHead(item.branch))
+			if (!head || head !== item.headSha) throw new DevOpsError("The branch head changed; refresh the board.")
+			const current = groupPipelines(await runsForHead(provider, pr, item.branch, head)).find(
+				(p) => p.name === selected.name,
+			)
+			if (current?.runId !== runId || current.color !== "red") {
+				throw new DevOpsError("That pipeline has a newer run or is no longer failed; refresh the board.")
+			}
+			// A PR policy must be requeued through its evaluation so Azure DevOps records validation.
+			const policies = pr && provider.listBuildPolicies ? await provider.listBuildPolicies(pr) : []
+			const policy = policies.find((p) => p.buildId === runId)
+			if (policy && provider.requeueBuildPolicy) {
+				if (policy.status === "queued" || policy.status === "running") {
+					throw new DevOpsError("That build validation is already queued or running.")
+				}
+				await provider.requeueBuildPolicy(policy.evaluationId)
+			} else {
+				// Requeue the whole pipeline, allowing the provider to allocate another agent.
+				await provider.rerunRun(runId, false)
 			}
 			await this.poller.refresh(targetId)
 		} finally {

@@ -159,9 +159,10 @@ message CiProviderActionRequest {
   Metadata metadata = 1;
   string target_id = 2;
   string item_key = 3;
-  // "restart-merge" or "requeue-pipeline".
+  // "restart-merge", "requeue-pipeline" (a policy), or "rerun-pipeline" (a failed run).
   string action = 4;
   string evaluation_id = 5;
+  int64 run_id = 6;
 }
 
 message CiExpiredBuildPolicy {
