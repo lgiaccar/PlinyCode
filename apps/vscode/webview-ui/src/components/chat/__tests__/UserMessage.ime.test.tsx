@@ -49,6 +49,17 @@ describe("UserMessage – IME composition handling", () => {
 		})
 	})
 
+	it("collapses long saved prompts but expands and edits their full text", () => {
+		const text = "word ".repeat(350)
+		render(<UserMessage messageTs={123} text={text} />)
+		const show = screen.getByRole("button", { name: "Show complete prompt" })
+		expect(screen.queryByText(text.trim())).toBeNull()
+		fireEvent.click(show)
+		expect(screen.queryByRole("textbox")).toBeNull()
+		fireEvent.click(screen.getByRole("button", { name: "Edit and restart from this message" }))
+		expect(screen.getByRole("textbox")).toHaveValue(text)
+	})
+
 	it("does NOT send when IME composition Enter is pressed while editing", () => {
 		const sendMessageFromChatRow = vi.fn()
 

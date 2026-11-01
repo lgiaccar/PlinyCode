@@ -48,18 +48,18 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 			setError(errorText(e)),
 		)
 	}
-	const providerAction = async (action: string, evaluationId = "") => {
+	const providerAction = async (action: string, evaluationId = "", runId = 0) => {
 		setError(undefined)
 		setNotice(undefined)
-		setProviderBusy(evaluationId || action)
+		setProviderBusy(runId ? `run:${runId}` : evaluationId || action)
 		try {
 			await CiBoardServiceClient.runCiProviderAction(
-				CiProviderActionRequest.create({ targetId, itemKey: item.key, action, evaluationId }),
+				CiProviderActionRequest.create({ targetId, itemKey: item.key, action, evaluationId, runId }),
 			)
 			setNotice(
 				action === "restart-merge"
 					? "Preview merge restart requested. Azure DevOps will update the merge status."
-					: "Build validation requeue requested. Azure DevOps will update its status.",
+					: "Pipeline requeue requested. CI will update its status; agent selection is managed by the provider.",
 			)
 		} catch (error) {
 			setError(errorText(error))
@@ -180,6 +180,7 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 								}
 							: undefined
 					}
+					onRerun={(runId) => providerAction("rerun-pipeline", "", runId)}
 					onRestartMerge={adoPr ? () => void providerAction("restart-merge") : undefined}
 					onRun={run}
 					providerBusy={providerBusy}
@@ -192,6 +193,7 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					item={item}
 					onAnalyze={analyze}
 					onRequeue={requeue}
+					onRerun={(runId) => providerAction("rerun-pipeline", "", runId)}
 					onRun={run}
 					requeueing={providerBusy}
 					runningReason={
@@ -205,7 +207,7 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 			{customPrompt && <CiCustomPromptPanel itemKey={item.key} onDone={() => setCustomPrompt(false)} targetId={targetId} />}
 			{(providerBusy || notice) && (
 				<div className="text-xs text-description pl-5" role="status">
-					{providerBusy ? "Requesting Azure DevOps action…" : notice}
+					{providerBusy ? "Requesting CI action…" : notice}
 				</div>
 			)}
 			{(error || item.error) && (

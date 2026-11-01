@@ -18,6 +18,7 @@ interface CiActionBarProps {
 	onError: (message: string | undefined) => void
 	onRestartMerge?: () => void
 	onRequeuePipeline?: () => void
+	onRerun?: (runId: number) => Promise<void>
 	providerBusy?: string
 }
 
@@ -36,6 +37,7 @@ export const CiActionBar = ({
 	onError,
 	onRestartMerge,
 	onRequeuePipeline,
+	onRerun,
 	providerBusy,
 }: CiActionBarProps) => {
 	const [analyzing, setAnalyzing] = useState(false)
@@ -44,6 +46,15 @@ export const CiActionBar = ({
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const primary = item.actions.find((a) => a.role === "primary")
 	const failing = item.mergeState === "conflicts" || item.pipelines.some((p) => p.color === "red")
+	const failed = item.pipelines.filter((p) => p.color === "red")
+	const retry =
+		item.mergeState !== "conflicts" &&
+		failed.length === 1 &&
+		failed[0].runId > 0 &&
+		item.fixes.some((fix) => fix.pipeline === failed[0].name && fix.category === "infrastructure") &&
+		onRerun
+			? failed[0]
+			: undefined
 
 	useEffect(() => {
 		if (!open) return
@@ -89,7 +100,7 @@ export const CiActionBar = ({
 		items[next]?.focus()
 	}
 
-	const menuActions = item.actions.filter((a) => a !== primary || running)
+	const menuActions = item.actions.filter((a) => a !== primary || running || retry)
 	const menuItem =
 		"w-full text-left px-2 py-1 bg-transparent border-0 text-menu-foreground cursor-pointer hover:bg-list-hover focus:bg-list-hover focus:outline-none disabled:opacity-50 disabled:cursor-default"
 
@@ -99,6 +110,17 @@ export const CiActionBar = ({
 				<CiTip tip="A run started from the board is still going for this pull request. Open its conversation to follow it.">
 					<Button className="rounded-r-none" onClick={openConversation} size="sm" variant="secondary">
 						<span className="codicon codicon-comment-discussion" /> Open conversation
+					</Button>
+				</CiTip>
+			) : retry ? (
+				<CiTip tip={`Requeue ${retry.name} after an infrastructure failure. CI may assign another agent.`}>
+					<Button
+						className="rounded-r-none"
+						data-testid="ci-primary-action"
+						disabled={!!providerBusy || (!!item.prId && item.state !== "open")}
+						onClick={() => void onRerun?.(retry.runId)}
+						size="sm">
+						{providerBusy ? "Requeueing…" : "Requeue pipeline"}
 					</Button>
 				</CiTip>
 			) : primary ? (

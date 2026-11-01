@@ -172,10 +172,12 @@ interface PipelineRowProps extends RunProps {
 	pipeline?: CiPipeline
 	fix?: CiPipelineFix
 	triage?: CiPipelineTriage
+	onRerun?: (runId: number) => Promise<void>
+	requeueing?: string
 }
 
 /** One line of the vertical view: a pipeline (or the merge), what is wrong with it, and its fix. */
-const PipelineRow = ({ item, pipeline, fix, triage, ...run }: PipelineRowProps) => {
+const PipelineRow = ({ item, pipeline, fix, triage, onRerun, requeueing, ...run }: PipelineRowProps) => {
 	const name = pipeline?.name ?? `Merge into ${item.targetBranch || "the target branch"}`
 	const status = pipeline ? statusOf(pipeline) : undefined
 	const category = fix ? CATEGORY_META[fix.category] : undefined
@@ -229,6 +231,18 @@ const PipelineRow = ({ item, pipeline, fix, triage, ...run }: PipelineRowProps) 
 						</button>
 					</CiTip>
 				)}
+				{pipeline?.color === "red" && pipeline.runId > 0 && onRerun && (
+					<CiTip tip="Requeue this pipeline after an infrastructure problem. CI may assign another agent; agent selection is managed by the provider.">
+						<Button
+							aria-label={`Requeue ${pipeline.name}`}
+							disabled={!!requeueing || (!!item.prId && item.state !== "open")}
+							onClick={() => void onRerun(pipeline.runId)}
+							size="sm"
+							variant={fix?.category === "infrastructure" ? "default" : "secondary"}>
+							{requeueing === `run:${pipeline.runId}` ? "Requeueing…" : "Requeue pipeline"}
+						</Button>
+					</CiTip>
+				)}
 				{fix && <FixButton fix={fix} item={item} {...run} />}
 			</div>
 			{fix && !fix.actionId && fix.tooltip && <div className="text-description mt-0.5 pl-3.5">{fix.tooltip}</div>}
@@ -244,6 +258,7 @@ interface CiItemDetailsProps extends RunProps {
 	item: CiItem
 	onAnalyze: () => void
 	onRequeue: (evaluationId: string) => Promise<void>
+	onRerun?: (runId: number) => Promise<void>
 	requeueing?: string
 	showBuildPolicies?: boolean
 }
@@ -252,7 +267,15 @@ interface CiItemDetailsProps extends RunProps {
  * An item, pipeline by pipeline: what is wrong with each one and the single
  * fix that fits it, then Fix them all, which works through every problem at once.
  */
-export const CiItemDetails = ({ item, onAnalyze, onRequeue, requeueing, showBuildPolicies, ...run }: CiItemDetailsProps) => {
+export const CiItemDetails = ({
+	item,
+	onAnalyze,
+	onRequeue,
+	onRerun,
+	requeueing,
+	showBuildPolicies,
+	...run
+}: CiItemDetailsProps) => {
 	const policies = showBuildPolicies
 		? (item.buildPolicies ?? [])
 		: (item.expiredBuildPolicies ?? []).map((p) => ({
@@ -306,7 +329,9 @@ export const CiItemDetails = ({ item, onAnalyze, onRequeue, requeueing, showBuil
 					fix={fixes.get(pipeline.name)}
 					item={item}
 					key={pipeline.name}
+					onRerun={onRerun}
 					pipeline={pipeline}
+					requeueing={requeueing}
 					triage={triage?.pipelines.find((t) => t.name === pipeline.name)}
 					{...run}
 				/>

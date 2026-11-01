@@ -231,6 +231,17 @@ closed pull request, or when no folder in the window is a checkout of the reposi
 which. A checkout matches whatever case its remote URL uses, and for Azure DevOps Server whatever host name (old
 or new) it uses, as long as the collection, project and repository are the same.
 
+### Requeue an infrastructure failure
+
+Expand a row and choose **Requeue pipeline** beside a failed pipeline to try it again on GitHub or Azure DevOps.
+For a single failure classified as infrastructure, **Requeue pipeline** is also the row's main action.
+This queues the whole pipeline and may get another agent; CI controls agent selection. It needs no local checkout
+and does not start an agent conversation. Azure DevOps PR build validations are requeued through their policy.
+
+The board rechecks the current branch head and latest run before requeueing. A newer run, a running validation,
+or a closed PR requires refreshing the board instead. Request errors appear in the row, and the buttons stay
+disabled while a request is pending. Auto-watch does not requeue pipelines automatically.
+
 ## Auto-watch
 
 The **Auto-watch** switch on an entry lets the board start fixes by itself:
