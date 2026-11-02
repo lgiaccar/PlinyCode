@@ -98,6 +98,24 @@ While a run the board started is going, the fix buttons are disabled and the pip
 **Open full report** opens the [markdown report](#reports) when the details did not fit; **Analyze again** reads the
 runs again.
 
+## Merging a green pull request
+
+An open PR has a **Merge** option in its Actions menu, and a **Merge** button when no pipeline fails.
+It becomes available when every pipeline is green on the current commit, the PR is ready for review and
+merges cleanly, and its build validations are current and approved. A pending, missing, skipped, cancelled,
+or failed pipeline keeps it disabled; its tooltip explains why. Branch-only entries have no merge action.
+
+Clicking **Merge** rechecks the PR, latest pipeline runs, checks and build policies using the configured GitHub
+or Azure DevOps credentials. A changed source commit or target branch requires refreshing the board first.
+Repository review and branch policies still apply; the board never asks to bypass them. The merge uses a merge
+commit without requesting source-branch deletion (repository settings still apply). Repositories that require a different merge method report that requirement
+as a provider error. The action works without a local checkout and never runs through auto-watch.
+
+The button is disabled while its request or a board conversation is running. Success, pending completion,
+and provider errors appear in the row; the board refreshes after the request. When the provider's run listing
+hits the verification limit (100 recent runs per query), PlinyCode leaves merging to the provider instead of
+assuming that unlisted pipelines passed.
+
 ## Failure triage
 
 When an item fails or conflicts, the board reads the failed runs (`runReport`: the failed jobs and steps, their

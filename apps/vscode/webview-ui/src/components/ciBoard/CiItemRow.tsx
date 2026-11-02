@@ -54,12 +54,22 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 		setProviderBusy(runId ? `run:${runId}` : evaluationId || action)
 		try {
 			await CiBoardServiceClient.runCiProviderAction(
-				CiProviderActionRequest.create({ targetId, itemKey: item.key, action, evaluationId, runId }),
+				CiProviderActionRequest.create({
+					targetId,
+					itemKey: item.key,
+					action,
+					evaluationId,
+					runId,
+					expectedHeadSha: action === "merge-pr" ? item.headSha : "",
+					expectedTargetBranch: action === "merge-pr" ? item.targetBranch : "",
+				}),
 			)
 			setNotice(
-				action === "restart-merge"
-					? "Preview merge restart requested. Azure DevOps will update the merge status."
-					: "Pipeline requeue requested. CI will update its status; agent selection is managed by the provider.",
+				action === "merge-pr"
+					? "Merge request accepted. The board will update when the provider completes the merge."
+					: action === "restart-merge"
+						? "Preview merge restart requested. Azure DevOps will update the merge status."
+						: "Pipeline requeue requested. CI will update its status; agent selection is managed by the provider.",
 			)
 		} catch (error) {
 			setError(errorText(error))
@@ -172,6 +182,7 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					onCustomPrompt={() => setCustomPrompt(true)}
 					onEditActions={onEditActions}
 					onError={onError}
+					onMerge={item.prId > 0 && item.state === "open" ? () => void providerAction("merge-pr") : undefined}
 					onRequeuePipeline={
 						adoPr
 							? () => {

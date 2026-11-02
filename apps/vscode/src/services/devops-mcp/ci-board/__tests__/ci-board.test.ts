@@ -51,6 +51,117 @@ describe("CiBoard", () => {
 		fs.rmSync(dir, { recursive: true, force: true })
 	})
 
+	it("merges a green PR at the selected head without a local checkout", async () => {
+		provider.runs.set(SHA_A, [boardRun(2, "ci", "completed", "success")])
+		const merged: unknown[] = []
+		Object.assign(provider, {
+			mergePr: async (...args: unknown[]) => {
+				merged.push(args)
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		await board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")
+		expect(merged).toEqual([[12, SHA_A]])
+	})
+
+	it.each(["failure", "skipped", "cancelled", "pending", "missing"])("refuses merge when CI is %s", async (result) => {
+		let merged = false
+		Object.assign(provider, {
+			mergePr: async () => {
+				merged = true
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		provider.runs.set(
+			SHA_A,
+			result === "missing" ? [] : [boardRun(2, "ci", result === "pending" ? "in_progress" : "completed", result)],
+		)
+		await expect(board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")).rejects.toThrow(/green/)
+		expect(merged).toBe(false)
+	})
+
+	it("revalidates checks, policies and PR state, and releases the action lock after failures", async () => {
+		provider.runs.set(SHA_A, [boardRun(2, "ci", "completed", "success")])
+		let merges = 0
+		let checks: unknown[] = [{ name: "review", status: "in_progress" }]
+		let policies: unknown[] = []
+		Object.assign(provider, {
+			mergePr: async () => {
+				merges++
+			},
+			prChecks: async () => checks,
+			listBuildPolicies: async () => policies,
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		const merge = () => board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")
+		await expect(merge()).rejects.toThrow(/has not passed/)
+		checks = [{ name: "review", status: "completed", result: "failure" }]
+		await expect(merge()).rejects.toThrow(/has not passed/)
+		checks = []
+		policies = [{ expired: true, status: "approved" }]
+		await expect(merge()).rejects.toThrow(/validations/)
+		policies = []
+		provider.prs[0].draft = true
+		await expect(merge()).rejects.toThrow(/ready for review/)
+		provider.prs[0].draft = false
+		provider.mergeStates.set(12, "conflicts")
+		await expect(merge()).rejects.toThrow(/merge cleanly/)
+		provider.mergeStates.set(12, "clean")
+		provider.prs[0].targetBranch = "other"
+		await expect(merge()).rejects.toThrow(/target branch changed/)
+		provider.prs[0].targetBranch = "main"
+		Object.assign(provider, {
+			prChecks: async () => {
+				provider.prs[0].headSha = "b".repeat(40)
+				return []
+			},
+		})
+		await expect(merge()).rejects.toThrow(/changed while checking CI/)
+		expect(merges).toBe(0)
+		provider.prs[0].headSha = SHA_A
+		Object.assign(provider, { prChecks: async () => [] })
+		await merge()
+		expect(merges).toBe(1)
+	})
+
+	it("rejects truncated run lists and concurrent merge requests", async () => {
+		provider.runs.set(
+			SHA_A,
+			Array.from({ length: 100 }, (_, i) => boardRun(i + 1, "ci", "completed", "success")),
+		)
+		let release!: () => void
+		let entered!: () => void
+		const started = new Promise<void>((resolve) => {
+			entered = resolve
+		})
+		const pending = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		Object.assign(provider, {
+			mergePr: async () => {
+				entered()
+				await pending
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		const merge = () => board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")
+		await expect(merge()).rejects.toThrow(/Too many/)
+		provider.runs.set(SHA_A, [boardRun(101, "ci", "completed", "success")])
+		const first = merge()
+		await started
+		await expect(merge()).rejects.toThrow(/already/)
+		release()
+		await first
+	})
+
 	it("adds a PR link once, and saves it for the window's workspace", async () => {
 		const a = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
 		const b = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12/files" })

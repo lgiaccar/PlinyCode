@@ -26,6 +26,47 @@ const github = (api: FakeApi) =>
 	new GitHubProvider({ kind: "github", host: "github.com", owner: "octo", repo: "hello" }, api.fetch, staticAuth())
 
 describe("GitHubProvider", () => {
+	it("pins merges to the selected head and surfaces server rejection", async () => {
+		const sha = "a".repeat(40)
+		const api = new FakeApi().on("PUT", `${GH}/pulls/7/merge`, { merged: true })
+		api.on("GET", `${GH}/pulls/7`, ghPr({ head: { sha }, draft: false, mergeable_state: "clean" }))
+		const provider = github(api)
+		await provider.mergePr(7, sha)
+		expect(api.lastJson("PUT")).toEqual({ sha, merge_method: "merge" })
+		api.on("PUT", `${GH}/pulls/7/merge`, { merged: false, message: "Required review missing" })
+		await expect(provider.mergePr(7, sha)).rejects.toThrow(/Required review missing/)
+		api.on("PUT", `${GH}/pulls/7/merge`, { message: "Head changed" }, 409)
+		await expect(provider.mergePr(7, sha)).rejects.toThrow(/Head changed/)
+		await expect(provider.mergePr(7, "")).rejects.toThrow(/Invalid/)
+		api.on("GET", `${GH}/pulls/7`, ghPr({ head: { sha }, draft: false, mergeable_state: "blocked" }))
+		const mutations = api.requests.filter((request) => request.method === "PUT").length
+		await expect(provider.mergePr(7, sha)).rejects.toThrow(/review and branch policies/)
+		expect(api.requests.filter((request) => request.method === "PUT")).toHaveLength(mutations)
+	})
+
+	it("includes check runs and statuses beyond the first page", async () => {
+		const pages: string[] = []
+		const fetch: Fetch = async (input) => {
+			const url = new URL(String(input))
+			const first = url.searchParams.get("page") === "1"
+			pages.push(`${url.pathname}?page=${url.searchParams.get("page")}`)
+			const check = url.pathname.endsWith("/check-runs")
+			const entry = check
+				? { name: "check", status: "completed", conclusion: first ? "success" : "failure" }
+				: { context: "status", state: first ? "success" : "failure" }
+			return Response.json({ [check ? "check_runs" : "statuses"]: Array.from({ length: first ? 100 : 1 }, () => entry) })
+		}
+		const provider = new GitHubProvider(
+			{ kind: "github", host: "github.com", owner: "octo", repo: "hello" },
+			fetch,
+			staticAuth(),
+		)
+		const checks = await provider.prChecks({ id: 7, headSha: "a".repeat(40) } as PullRequest)
+		expect(checks).toHaveLength(202)
+		expect(checks.filter((check) => check.result === "failure")).toHaveLength(2)
+		expect(pages).toHaveLength(4)
+	})
+
 	it("discovers dispatch inputs at the selected ref and queues typed values", async () => {
 		const api = new FakeApi()
 			.on("GET", `${GH}/actions/workflows`, {
@@ -233,6 +274,24 @@ const azdo = (api: FakeApi, auth = staticAuth()) => {
 }
 
 describe("AzureDevOpsProvider", () => {
+	it("pins completion to the head, keeps the source branch and never bypasses policy", async () => {
+		const sha = "a".repeat(40)
+		const api = new FakeApi().on("PATCH", `${PRS}/42`, { status: "completed", mergeStatus: "succeeded" })
+		const provider = azdo(api)
+		await provider.mergePr(42, sha)
+		expect(api.lastJson("PATCH")).toEqual({
+			status: "completed",
+			lastMergeSourceCommit: { commitId: sha },
+			completionOptions: { mergeStrategy: "noFastForward", deleteSourceBranch: false, bypassPolicy: false },
+		})
+		api.on("PATCH", `${PRS}/42`, { status: "active", mergeStatus: "queued" })
+		await provider.mergePr(42, sha)
+		api.on("PATCH", `${PRS}/42`, { status: "active", mergeStatus: "rejectedByPolicy", mergeFailureMessage: "Policy failed" })
+		await expect(provider.mergePr(42, sha)).rejects.toThrow(/Policy failed/)
+		api.on("PATCH", `${PRS}/42`, { status: "active", mergeStatus: "succeeded" })
+		await expect(provider.mergePr(42, sha)).rejects.toThrow(/did not confirm/)
+	})
+
 	it("discovers repository YAML parameters and sends templateParameters with the selected ref", async () => {
 		const definition = {
 			id: 4,

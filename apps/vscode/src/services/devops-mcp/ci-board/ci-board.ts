@@ -15,6 +15,7 @@ import type { CiAutoState } from "./ci-auto-runner"
 import { CiBoardPoller, type CiBoardPollerOptions, type CiBoardTimings } from "./ci-board-poller"
 import { groupPipelines } from "./ci-board-snapshot"
 import type { CiBoardStore } from "./ci-board-store"
+import { mergeGreenCiPr } from "./ci-merge"
 import { composeCiPrompt, loadPromptText } from "./ci-prompt"
 import { type CiSkill, type CiSkills, detectCiSkills, noSkills } from "./ci-skills"
 import { CiTriage, type CiTriageMode, type CompleteFn, fingerprintOf } from "./ci-triage"
@@ -191,7 +192,29 @@ export class CiBoard {
 	}
 
 	/** Explicit user actions, independent of agent runs and local checkouts. */
-	async runProviderAction(targetId: string, key: string, action: string, evaluationId?: string, runId?: number): Promise<void> {
+	async runProviderAction(
+		targetId: string,
+		key: string,
+		action: string,
+		evaluationId?: string,
+		runId?: number,
+		expectedHead = "",
+		expectedTarget = "",
+	): Promise<void> {
+		if (action === "merge-pr") {
+			const target = this.target(targetId)
+			const item = this.item(targetId, key)
+			if (!target || !item) throw new DevOpsError("That pull request changed; refresh the board before merging.")
+			if (this.providerActions.has(key)) throw new DevOpsError("A CI action is already running for this item.")
+			this.providerActions.add(key)
+			try {
+				await mergeGreenCiPr(this.options.providerFor(remoteOf(target)), item, expectedHead, expectedTarget)
+				await this.poller.refresh(targetId)
+			} finally {
+				this.providerActions.delete(key)
+			}
+			return
+		}
 		if (action === "rerun-pipeline") return this.rerunPipeline(targetId, key, runId)
 		const target = this.target(targetId)
 		const item = this.item(targetId, key)

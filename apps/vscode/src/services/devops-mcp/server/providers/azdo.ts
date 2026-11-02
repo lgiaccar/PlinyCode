@@ -638,6 +638,34 @@ export class AzureDevOpsProvider implements ToolProvider {
 		await this.api("PATCH", await this.prPath(`/${id}`), {}, { mergeStatus: "queued" })
 	}
 
+	async mergePr(id: number, expectedHeadSha: string): Promise<void> {
+		if (!Number.isSafeInteger(id) || id <= 0 || !/^[0-9a-f]{40,64}$/i.test(expectedHeadSha))
+			throw new DevOpsError("Invalid pull request or expected head commit.")
+		const response = await this.api(
+			"PATCH",
+			await this.prPath(`/${id}`),
+			{},
+			{
+				status: "completed",
+				lastMergeSourceCommit: { commitId: expectedHeadSha },
+				completionOptions: { mergeStrategy: "noFastForward", deleteSourceBranch: false, bypassPolicy: false },
+			},
+		)
+		if (
+			response?.mergeFailureMessage ||
+			response?.mergeStatus === "rejectedByPolicy" ||
+			response?.mergeStatus === "failure" ||
+			response?.mergeStatus === "conflicts"
+		) {
+			throw new DevOpsError(
+				response.mergeFailureMessage || "Azure DevOps rejected the merge. Check its policies and merge status.",
+			)
+		}
+		if (response?.status !== "completed" && response?.mergeStatus !== "queued") {
+			throw new DevOpsError("Azure DevOps did not confirm the merge request. Refresh the board to check its status.")
+		}
+	}
+
 	async listAgents(queueId: number, options: { includeCapabilities?: boolean } = {}): Promise<AgentInfo[]> {
 		const includeCapabilities = options.includeCapabilities ?? false
 		// Agent queues link a project to an org-scoped agent pool; resolve the pool id first.

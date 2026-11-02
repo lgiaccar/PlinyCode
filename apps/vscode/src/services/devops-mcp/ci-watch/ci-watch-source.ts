@@ -80,6 +80,7 @@ export async function runsForHead(
 	branch: string,
 	head: string,
 	limit = RUN_LIMIT,
+	rejectTruncated = false,
 ): Promise<PipelineRun[]> {
 	const queries: Promise<PipelineRun[]>[] = []
 	if (pr) {
@@ -89,6 +90,11 @@ export async function runsForHead(
 		queries.push(provider.listRuns(branch, undefined, limit))
 	}
 	const lists = await Promise.all(queries)
+	if (rejectTruncated && lists.some((list) => list.length >= limit)) {
+		throw new DevOpsError(
+			"Too many recent pipeline runs to verify the complete CI state. Review and merge this PR in the provider.",
+		)
+	}
 	const runs = new Map<number, PipelineRun>()
 	for (const run of lists.flat()) {
 		if ((run.headCommit ?? run.commit) === head) {

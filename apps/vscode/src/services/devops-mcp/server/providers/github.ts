@@ -454,6 +454,23 @@ export class GitHubProvider implements ToolProvider {
 		return this.pr(await this.http.json("POST", `${this.api}/pulls`, { json }))
 	}
 
+	async mergePr(id: number, expectedHeadSha: string): Promise<void> {
+		if (!Number.isSafeInteger(id) || id <= 0 || !/^[0-9a-f]{40,64}$/i.test(expectedHeadSha))
+			throw new DevOpsError("Invalid pull request or expected head commit.")
+		// The board's normalized mergeState describes conflicts only. Respect GitHub's
+		// review/protection gate too, even when the credential could bypass it.
+		const pr = await this.get(`/pulls/${id}`)
+		if (pr.head?.sha !== expectedHeadSha || pr.state !== "open" || pr.draft || pr.mergeable_state !== "clean") {
+			throw new DevOpsError(
+				"GitHub has not cleared this PR for merging. Refresh the board and check its review and branch policies.",
+			)
+		}
+		const response = await this.http.json("PUT", `${this.api}/pulls/${id}/merge`, {
+			json: { sha: expectedHeadSha, merge_method: "merge" },
+		})
+		if (response?.merged !== true) throw new DevOpsError(response?.message || "GitHub did not merge the pull request.")
+	}
+
 	async updatePr(id: number, title: string | undefined, body: string | undefined, draft?: boolean): Promise<PullRequest> {
 		const json: Record<string, string> = {}
 		if (title !== undefined) json.title = title
@@ -548,14 +565,25 @@ export class GitHubProvider implements ToolProvider {
 
 	async prChecks(pr: PullRequest): Promise<Check[]> {
 		const sha = pr.headSha ?? (await this.getPr(pr.id)).headSha
-		const runs: any[] = (await this.get(`/commits/${sha}/check-runs`, { per_page: 100 })).check_runs ?? []
+		const runs: any[] = []
+		for (let page = 1; ; page++) {
+			const batch: any[] =
+				(await this.get(`/commits/${sha}/check-runs`, { per_page: 100, page, filter: "latest" })).check_runs ?? []
+			runs.push(...batch)
+			if (batch.length < 100) break
+		}
 		const checks: Check[] = runs.map((r) => ({
 			name: r.name,
 			status: status(r.status),
 			result: result(r.conclusion),
 			url: r.html_url,
 		}))
-		const statuses: any[] = (await this.get(`/commits/${sha}/status`)).statuses ?? []
+		const statuses: any[] = []
+		for (let page = 1; ; page++) {
+			const batch: any[] = (await this.get(`/commits/${sha}/status`, { per_page: 100, page })).statuses ?? []
+			statuses.push(...batch)
+			if (batch.length < 100) break
+		}
 		for (const s of statuses) {
 			const done = s.state !== "pending"
 			checks.push({
