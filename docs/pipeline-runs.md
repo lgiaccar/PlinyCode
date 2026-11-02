@@ -6,6 +6,9 @@ pipelines connected to repositories in the current workspace. Open it with the
 It is separate from the [CI Board](ci-board.md), which monitors pull requests
 and branches rather than individual launches.
 
+The **Runs** tab contains pipeline launches and history. The **Agents** tab
+provides the [Azure DevOps agent monitor](agent-monitor.md).
+
 ## Launching
 
 Select a repository, pipeline and branch or ref. The view reads the pipeline
