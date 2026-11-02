@@ -169,9 +169,7 @@ export const ConversationAgentPicker: React.FC<ConversationAgentPickerProps> = (
 								key={agent.path}
 								onClick={() => handleSelect(agent.path)}
 								role="option"
-								title={
-									[agent.description, agent.model].filter(Boolean).join(" · ") || undefined
-								}
+								title={[agent.description, agent.model].filter(Boolean).join(" · ") || undefined}
 								type="button">
 								<AgentName>{agent.name}</AgentName>
 							</MenuItem>

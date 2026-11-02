@@ -31,9 +31,7 @@ const TaskAgentChip: React.FC<{ agentPath?: string }> = ({ agentPath }) => {
 	const description = agent?.description
 
 	return (
-		<div
-			className="flex flex-col items-start gap-0.5 select-text shrink-0"
-			data-testid="task-agent-chip">
+		<div className="flex flex-col items-start gap-0.5 select-text shrink-0" data-testid="task-agent-chip">
 			<div
 				className="flex items-center justify-center gap-1 text-xs text-description shrink-0"
 				title={`Agent: ${displayName} (${agentPath})`}>
