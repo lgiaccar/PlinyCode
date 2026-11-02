@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package cline;
+
+import "cline/common.proto";
+
+option go_package = "github.com/cline/grpc-go/cline";
+option java_multiple_files = true;
+option java_package = "bot.cline.proto";
+
+service AgentMonitorService {
+  rpc subscribeToAgents(EmptyRequest) returns (stream AgentMonitorState);
+  rpc configureAgentMonitor(AgentMonitorSettings) returns (Empty);
+  rpc refreshAgentMonitor(EmptyRequest) returns (Empty);
+}
+
+message AgentMonitorSettings {
+  Metadata metadata = 1;
+  string queue_url = 2;
+  repeated string capabilities = 3;
+  string authentication = 4;
+  bool enabled = 5;
+  bool notify = 6;
+}
+
+message AgentMonitorState {
+  AgentMonitorSettings config = 1;
+  string pool_name = 2;
+  repeated MonitoredAgentInfo agents = 3;
+  int32 total = 4;
+  int64 updated = 5;
+  bool refreshing = 6;
+  string error = 7;
+}
+
+message MonitoredAgentInfo {
+  int64 id = 1;
+  string name = 2;
+  string status = 3;
+  bool enabled = 4;
+  bool busy = 5;
+  repeated string capabilities = 6;
+  string url = 7;
+  string job_name = 8;
+  string job_url = 9;
+}
