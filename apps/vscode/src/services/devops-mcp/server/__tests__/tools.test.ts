@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import { BROKER_PATH_ENV, BROKER_SECRET_ENV, type BrokerRequest } from "../../shared/broker-protocol"
 import { requestBrokerToken } from "../auth"
+import { AzureDevOpsProvider } from "../providers/azdo"
 import { GitHubProvider } from "../providers/github"
 import { createTools, type ToolDefinition } from "../tools"
 import { FakeApi, staticAuth } from "./fake-api"
@@ -91,6 +92,72 @@ describe("tools against a temporary checkout", () => {
 		} finally {
 			fs.rmSync(plain, { recursive: true, force: true })
 		}
+	})
+})
+
+describe("ado_agents tool against an Azure DevOps checkout", () => {
+	let workspace: string
+	let tools: Record<string, ToolDefinition>
+
+	beforeEach(() => {
+		workspace = fs.mkdtempSync(path.join(os.tmpdir(), "devops-mcp-ado-"))
+		git(workspace, "init", "-q", "-b", "feature")
+		git(workspace, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "init")
+		git(workspace, "remote", "add", "origin", "https://dev.azure.com/acme/Meshing/_git/web-app")
+		const api = new FakeApi()
+			.on("GET", "/acme/Meshing/_apis/git/repositories/web-app", {
+				id: "r-1",
+				defaultBranch: "refs/heads/main",
+				project: { id: "p-1" },
+			})
+			.on("GET", "/acme/Meshing/_apis/distributedtask/queues/21", { pool: { id: 5 } })
+			.on("GET", "/acme/_apis/distributedtask/pools/5/agents", {
+				value: [
+					{
+						id: 1,
+						name: "build-cpu-01",
+						status: "online",
+						enabled: true,
+						userCapabilities: { BUILD_CPU: "true", BUILD_LIN_CPU: "true" },
+					},
+					{ id: 2, name: "build-gpu-01", status: "offline", enabled: true, userCapabilities: { BUILD_GPU: "true" } },
+					{ id: 3, name: "perf-01", status: "online", enabled: false, userCapabilities: { PERFORMANCE: "true" } },
+				],
+			})
+		const provider = new AzureDevOpsProvider(
+			{ kind: "ado", host: "dev.azure.com", owner: "acme", repo: "web-app", project: "Meshing" },
+			api.fetch,
+			staticAuth(),
+		)
+		tools = Object.fromEntries(createTools(() => provider).map((t) => [t.name, t]))
+	})
+
+	afterEach(() => {
+		fs.rmSync(workspace, { recursive: true, force: true })
+	})
+
+	it("filters agents by capability and reports online/offline status", async () => {
+		const out = await tools.ado_agents.run({
+			queue_id: 21,
+			capabilities: ["BUILD_CPU", "BUILD_LIN_CPU"],
+			workspace,
+		})
+		expect(out).toContain("1 of 3 agent(s) with capabilities: BUILD_CPU, BUILD_LIN_CPU")
+		expect(out).toContain("| build-cpu-01 | online | yes |")
+		expect(out).not.toContain("build-gpu-01")
+	})
+
+	it("lists all agents when no capability filter is given", async () => {
+		const out = await tools.ado_agents.run({ queue_id: 21, workspace })
+		expect(out).toContain("3 of 3 agent(s)")
+		expect(out).toContain("build-gpu-01")
+		expect(out).toContain("offline")
+	})
+
+	it("explains when no agent matches the requested capabilities", async () => {
+		const out = await tools.ado_agents.run({ queue_id: 21, capabilities: ["NONEXISTENT"], workspace })
+		expect(out).toContain("0 of 3 agent(s)")
+		expect(out).toContain("No agent in this queue has all the requested capabilities.")
 	})
 })
 

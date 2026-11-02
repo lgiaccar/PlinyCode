@@ -517,6 +517,43 @@ describe("AzureDevOpsProvider", () => {
 		expect(invalidated).toBe(1)
 		expect(api.requests.map((r) => r.headers.Authorization)).toEqual(["Bearer token-1", "Bearer token-2"])
 	})
+
+	it("resolves an agent queue to its pool and lists agents with capabilities", async () => {
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/distributedtask/queues/21`, { pool: { id: 5 } })
+			.on("GET", "/acme/_apis/distributedtask/pools/5/agents", {
+				value: [
+					{ id: 1, name: "build-cpu-01", status: "online", enabled: true, userCapabilities: { BUILD_CPU: "true" } },
+					{ id: 2, name: "build-gpu-01", status: "offline", enabled: true, userCapabilities: { BUILD_GPU: "true" } },
+					{ id: 3, name: "perf-01", status: "online", enabled: false, userCapabilities: { PERFORMANCE: "true" } },
+				],
+			})
+		const provider = azdo(api)
+		const agents = await provider.listAgents!(21, { includeCapabilities: true })
+		expect(agents.map((a) => [a.name, a.status, a.enabled, a.userCapabilities?.BUILD_CPU])).toEqual([
+			["build-cpu-01", "online", true, "true"],
+			["build-gpu-01", "offline", true, undefined],
+			["perf-01", "online", false, undefined],
+		])
+		// The agents list call hit the org-level pool URL, not the project URL.
+		expect(api.last("GET").url.pathname).toBe("/acme/_apis/distributedtask/pools/5/agents")
+		expect(api.last("GET").url.searchParams.get("includeCapabilities")).toBe("true")
+	})
+
+	it("omits includeCapabilities when not requested", async () => {
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/distributedtask/queues/9`, { pool: { id: 2 } })
+			.on("GET", "/acme/_apis/distributedtask/pools/2/agents", {
+				value: [{ id: 1, name: "a", status: "online", enabled: true }],
+			})
+		await azdo(api).listAgents!(9)
+		expect(api.last("GET").url.searchParams.has("includeCapabilities")).toBe(false)
+	})
+
+	it("throws when the queue has no pool", async () => {
+		const api = new FakeApi().on("GET", `${PROJ}/distributedtask/queues/21`, { id: 21 })
+		await expect(azdo(api).listAgents!(21)).rejects.toThrow("no associated agent pool")
+	})
 })
 
 describe("CI board queries", () => {

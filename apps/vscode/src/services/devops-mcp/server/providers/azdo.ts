@@ -5,6 +5,7 @@ import { type Auth, adoAuth } from "../auth"
 import { DevOpsError } from "../errors"
 import { adoCollectionUrl, type Remote } from "../repo"
 import {
+	type AgentInfo,
 	type BuildPolicy,
 	type Check,
 	type ExpiredBuildPolicy,
@@ -125,6 +126,19 @@ export class AzureDevOpsProvider implements ToolProvider {
 
 	private api<T = any>(method: string, path: string, query: Record<string, string | number | undefined> = {}, json?: unknown) {
 		return this.http.json<T>(method, `${this.projectUrl}/_apis/${path}`, {
+			query: { "api-version": API_VERSION, ...query },
+			json,
+		})
+	}
+
+	/** Org-level distributed-task endpoint (agent pools are organization-scoped, not project-scoped). */
+	private orgApi<T = any>(
+		method: string,
+		path: string,
+		query: Record<string, string | number | undefined> = {},
+		json?: unknown,
+	) {
+		return this.http.json<T>(method, `${this.orgUrl}/_apis/${path}`, {
 			query: { "api-version": API_VERSION, ...query },
 			json,
 		})
@@ -622,5 +636,30 @@ export class AzureDevOpsProvider implements ToolProvider {
 		if (!Number.isSafeInteger(id) || id <= 0) throw new DevOpsError("Invalid pull request ID.")
 		// Queue the preview merge only. Never set PR status or completion options.
 		await this.api("PATCH", await this.prPath(`/${id}`), {}, { mergeStatus: "queued" })
+	}
+
+	async listAgents(queueId: number, options: { includeCapabilities?: boolean } = {}): Promise<AgentInfo[]> {
+		const includeCapabilities = options.includeCapabilities ?? false
+		// Agent queues link a project to an org-scoped agent pool; resolve the pool id first.
+		const queue = await this.api<any>("GET", `distributedtask/queues/${queueId}`)
+		const poolId = queue?.pool?.id
+		if (!Number.isSafeInteger(poolId)) {
+			throw new DevOpsError(`Agent queue ${queueId} has no associated agent pool.`)
+		}
+		const agents = await this.orgApi<{ value?: any[] }>(
+			"GET",
+			`distributedtask/pools/${poolId}/agents`,
+			includeCapabilities ? { includeCapabilities: "true" } : {},
+		)
+		return (agents.value ?? []).map((a: any) => ({
+			id: a.id,
+			name: a.name ?? "",
+			status: a.status ?? "offline",
+			enabled: Boolean(a.enabled),
+			userCapabilities: a.userCapabilities,
+			systemCapabilities: a.systemCapabilities,
+			os: a.osDescription,
+			version: a.version,
+		}))
 	}
 }
