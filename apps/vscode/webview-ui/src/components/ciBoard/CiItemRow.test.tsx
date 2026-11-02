@@ -138,6 +138,47 @@ describe("CiItemRow", () => {
 		mocks.openFile.mockReset().mockResolvedValue({})
 	})
 
+	it("merges green PRs without a checkout, pins the selection and reports provider errors", async () => {
+		const item = makeItem({ pipelines: [makeItem().pipelines[1]], runBlocked: "No local checkout" })
+		render(row(item))
+		const merge = screen.getByTestId("ci-merge")
+		expect(merge).toBeEnabled()
+		mocks.runCiProviderAction.mockRejectedValueOnce(new Error("Branch policy rejected merge"))
+		fireEvent.click(merge)
+		await screen.findByText("Branch policy rejected merge")
+		expect(merge).toBeEnabled()
+		fireEvent.click(merge)
+		await screen.findByText(/Merge request accepted/)
+		expect(mocks.runCiProviderAction).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				targetId: "t1",
+				itemKey: item.key,
+				action: "merge-pr",
+				expectedHeadSha: "abc",
+				expectedTargetBranch: "stage",
+			}),
+		)
+		expect(mocks.runCiAction).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		{ pipelines: [] },
+		{ pipelines: [makeItem().pipelines[2]] },
+		{ draft: true },
+		{ mergeState: "unknown" },
+		{ error: "Unable to refresh" },
+		{ buildPolicies: [{ evaluationId: "1", name: "ci", buildId: 1, expired: true, status: "approved" }] },
+	])("disables merging unsafe or incomplete CI: %j", (overrides) => {
+		render(row(makeItem({ pipelines: [makeItem().pipelines[1]], ...overrides })))
+		expect(screen.getByTestId("ci-merge")).toBeDisabled()
+	})
+
+	it("offers a disabled Merge menu entry while a pipeline is failing", () => {
+		render(row(makeItem()))
+		fireEvent.click(screen.getByTestId("ci-more-actions"))
+		expect(screen.getByRole("menuitem", { name: /Merge/ })).toBeDisabled()
+	})
+
 	it("shows one dot per pipeline in its color, and opens a run from its dot", () => {
 		render(row(makeItem()))
 		const dots = screen.getByTestId("pipeline-dots").querySelectorAll("button")

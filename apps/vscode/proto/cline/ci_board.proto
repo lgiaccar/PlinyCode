@@ -159,10 +159,13 @@ message CiProviderActionRequest {
   Metadata metadata = 1;
   string target_id = 2;
   string item_key = 3;
-  // "restart-merge", "requeue-pipeline" (a policy), or "rerun-pipeline" (a failed run).
+  // "restart-merge", "requeue-pipeline" (a policy), "rerun-pipeline" (a failed run), or "merge-pr".
   string action = 4;
   string evaluation_id = 5;
   int64 run_id = 6;
+  // Required for merging: the head and target displayed when the user clicked Merge.
+  string expected_head_sha = 7;
+  string expected_target_branch = 8;
 }
 
 message CiExpiredBuildPolicy {

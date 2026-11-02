@@ -106,6 +106,8 @@ export interface Provider {
 	listBuildPolicies?(pr: PullRequest): Promise<BuildPolicy[]>
 	/** Recompute the preview merge against the target branch; does not complete the PR. */
 	restartPrMerge?(id: number): Promise<void>
+	/** Complete a PR only if its source commit still matches; never request policy bypass or branch deletion. */
+	mergePr?(id: number, expectedHeadSha: string): Promise<void>
 	/** Only Azure DevOps exposes agent queues/pools. Returns agents in the queue's pool, with capabilities. */
 	listAgents?(queueId: number, options?: { includeCapabilities?: boolean }): Promise<AgentInfo[]>
 	/** Open pull requests, most recently updated first; `mine` keeps the signed-in user's. */

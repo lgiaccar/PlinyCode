@@ -1,3 +1,4 @@
+import { ciMergeDisabledReason } from "@shared/ciMerge"
 import { type CiItem, type CiItemAction, CiItemRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { type KeyboardEvent, useEffect, useRef, useState } from "react"
@@ -19,6 +20,7 @@ interface CiActionBarProps {
 	onRestartMerge?: () => void
 	onRequeuePipeline?: () => void
 	onRerun?: (runId: number) => Promise<void>
+	onMerge?: () => void
 	providerBusy?: string
 }
 
@@ -38,6 +40,7 @@ export const CiActionBar = ({
 	onRestartMerge,
 	onRequeuePipeline,
 	onRerun,
+	onMerge,
 	providerBusy,
 }: CiActionBarProps) => {
 	const [analyzing, setAnalyzing] = useState(false)
@@ -46,6 +49,12 @@ export const CiActionBar = ({
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const primary = item.actions.find((a) => a.role === "primary")
 	const failing = item.mergeState === "conflicts" || item.pipelines.some((p) => p.color === "red")
+	const mergeReason =
+		running || busy ? "Wait for the board's running conversation to finish before merging." : ciMergeDisabledReason(item)
+	const mergePrimary = !!onMerge && !failing
+	const mergeTip =
+		mergeReason ||
+		`Merge PR #${item.prId} into ${item.targetBranch} after rechecking CI. Review and branch policies still apply.`
 	const failed = item.pipelines.filter((p) => p.color === "red")
 	const retry =
 		item.mergeState !== "conflicts" &&
@@ -100,7 +109,7 @@ export const CiActionBar = ({
 		items[next]?.focus()
 	}
 
-	const menuActions = item.actions.filter((a) => a !== primary || running || retry)
+	const menuActions = item.actions.filter((a) => a !== primary || running || retry || mergePrimary)
 	const menuItem =
 		"w-full text-left px-2 py-1 bg-transparent border-0 text-menu-foreground cursor-pointer hover:bg-list-hover focus:bg-list-hover focus:outline-none disabled:opacity-50 disabled:cursor-default"
 
@@ -110,6 +119,19 @@ export const CiActionBar = ({
 				<CiTip tip="A run started from the board is still going for this pull request. Open its conversation to follow it.">
 					<Button className="rounded-r-none" onClick={openConversation} size="sm" variant="secondary">
 						<span className="codicon codicon-comment-discussion" /> Open conversation
+					</Button>
+				</CiTip>
+			) : mergePrimary ? (
+				<CiTip tip={mergeTip} wrap={!!mergeReason}>
+					<Button
+						className="rounded-r-none"
+						data-testid="ci-merge"
+						disabled={!!providerBusy || !!mergeReason}
+						onClick={onMerge}
+						size="sm"
+						variant={mergeReason ? "secondary" : "default"}>
+						<span className="codicon codicon-git-merge" />
+						{providerBusy === "merge-pr" ? "Merging…" : "Merge"}
 					</Button>
 				</CiTip>
 			) : retry ? (
@@ -151,13 +173,15 @@ export const CiActionBar = ({
 					aria-expanded={open}
 					aria-haspopup="menu"
 					aria-label="More actions"
-					className={cn(primary || running ? "rounded-l-none border-l border-l-button-separator px-1" : "")}
+					className={cn(
+						primary || running || mergePrimary ? "rounded-l-none border-l border-l-button-separator px-1" : "",
+					)}
 					data-testid="ci-more-actions"
 					onClick={() => setOpen(!open)}
 					size="sm"
 					variant="secondary">
 					<span className="codicon codicon-chevron-down" />
-					{!primary && !running && "Actions"}
+					{!primary && !running && !mergePrimary && "Actions"}
 				</Button>
 			</CiTip>
 			{open && (
@@ -185,6 +209,24 @@ export const CiActionBar = ({
 							</button>
 						</CiTip>
 					))}
+					{onMerge && (
+						<CiTip side="left" tip={mergeTip}>
+							<button
+								className={menuItem}
+								disabled={!!providerBusy || !!mergeReason}
+								onClick={() => {
+									setOpen(false)
+									onMerge()
+								}}
+								role="menuitem"
+								type="button">
+								<span className="font-medium">Merge</span>
+								<span className="block text-description">
+									{mergeReason || `Merge into ${item.targetBranch} after checking CI.`}
+								</span>
+							</button>
+						</CiTip>
+					)}
 					{onRestartMerge && (
 						<CiTip
 							side="left"
