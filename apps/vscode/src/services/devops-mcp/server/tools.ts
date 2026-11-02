@@ -21,7 +21,9 @@ for GitHub (Actions) and Azure DevOps (Repos + Pipelines); the backend is chosen
 - Pipeline runs take minutes. Do not loop on pipeline_runs; check again later when asked.
 - pr_comments lists review threads newest first, each with the id pr_comment takes as \`reply_to\`.
 - pr_comment, pr_review, pipeline_run, pipeline_rerun and pipeline_cancel act for the user where other
-  people see it: use them when the user asked for that, not on your own initiative.`
+  people see it: use them when the user asked for that, not on your own initiative.
+- ado_agents lists self-hosted Azure DevOps agents in a queue with their online/offline status; pass
+  \`capabilities\` (e.g. ["BUILD_CPU","BUILD_GPU"]) to keep only agents that have all of them. Azure DevOps only.`
 
 type ProviderFactory = (remote: Remote) => ToolProvider
 
@@ -532,6 +534,56 @@ export function createTools(
 					return `${failedOnly ? "Rerunning the failed jobs of" : "Rerunning"} run ${run.id} (${run.name} on ${run.branch}) as a new attempt of the same run: ${dispatch.url}`
 				}
 				return `Queued run ${dispatch.runId} of ${run.pipeline ?? run.name} on ${run.branch} with the same parameters, to rerun ${run.id}: ${dispatch.url}`
+			},
+		},
+		{
+			name: "ado_agents",
+			title: "List Azure DevOps agent queue agents",
+			description:
+				"List the self-hosted Azure DevOps agents in an agent queue (a project's link to an agent pool), with their online/offline status and user-defined capabilities. Azure DevOps only. Pass `capabilities` to keep only agents whose user-defined capabilities include every name listed (e.g. BUILD_CPU, BUILD_GPU). Capabilities are fetched only when needed.",
+			readOnly: true,
+			inputSchema: {
+				queue_id: z.coerce.number().int().positive().describe("Agent queue ID, from the queue's URL (?queueId=...)."),
+				capabilities: z
+					.array(z.string())
+					.optional()
+					.describe("Keep only agents whose user-defined capabilities include every name here (case-sensitive)."),
+				workspace,
+			},
+			run: async (args) => {
+				const [ctx, provider] = await open(args.workspace)
+				if (provider.kind !== "Azure DevOps" || !provider.listAgents) {
+					throw new DevOpsError(
+						`Agent queues are an Azure DevOps feature; this repository's remote is ${provider.kind}.`,
+					)
+				}
+				const want = (args.capabilities as string[] | undefined) ?? []
+				const agents = await provider.listAgents(args.queue_id, { includeCapabilities: want.length > 0 })
+				const matched = want.length
+					? agents.filter((a) => {
+							const caps = a.userCapabilities ?? {}
+							return want.every((name) => Object.hasOwn(caps, name))
+						})
+					: agents
+				const lines = [
+					`Agent queue ${args.queue_id} in ${remoteSlug(ctx.remote)} — ${matched.length} of ${agents.length} agent(s)${
+						want.length ? ` with capabilities: ${want.join(", ")}` : ""
+					}.`,
+					"",
+					"| Agent | Status | Enabled | Capabilities |",
+					"| --- | --- | --- | --- |",
+				]
+				for (const a of matched) {
+					const caps = a.userCapabilities ? Object.keys(a.userCapabilities).sort().join(", ") || "—" : "—"
+					lines.push(`| ${a.name} | ${a.status} | ${a.enabled ? "yes" : "no"} | ${caps} |`)
+				}
+				if (matched.length === 0 && agents.length > 0) {
+					lines.push("", "No agent in this queue has all the requested capabilities.")
+				}
+				if (agents.length === 0) {
+					lines.push("", "This queue's agent pool has no agents.")
+				}
+				return lines.join("\n")
 			},
 		},
 	]
