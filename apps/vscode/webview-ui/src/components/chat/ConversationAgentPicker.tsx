@@ -87,13 +87,6 @@ const AgentName = styled.div`
 	font-weight: 500;
 `
 
-const AgentMeta = styled.div`
-	font-size: 10px;
-	color: var(--vscode-descriptionForeground);
-	display: flex;
-	gap: 8px;
-`
-
 export const ConversationAgentPicker: React.FC<ConversationAgentPickerProps> = ({
 	selectedAgentPath: propsAgentPath,
 	onSelectedAgentPathChange,
@@ -165,9 +158,9 @@ export const ConversationAgentPicker: React.FC<ConversationAgentPickerProps> = (
 							isSelected={!currentAgentPath}
 							onClick={() => handleSelect(undefined)}
 							role="option"
+							title="Default instructions"
 							type="button">
 							<AgentName>Generic Agent</AgentName>
-							<AgentMeta>Default instructions</AgentMeta>
 						</MenuItem>
 
 						{enabledAgents.map((agent) => (
@@ -176,12 +169,9 @@ export const ConversationAgentPicker: React.FC<ConversationAgentPickerProps> = (
 								key={agent.path}
 								onClick={() => handleSelect(agent.path)}
 								role="option"
+								title={[agent.description, agent.model].filter(Boolean).join(" · ") || undefined}
 								type="button">
 								<AgentName>{agent.name}</AgentName>
-								<AgentMeta>
-									{agent.description && <span>{agent.description}</span>}
-									{agent.model && <span>· {agent.model}</span>}
-								</AgentMeta>
 							</MenuItem>
 						))}
 					</DropdownMenu>
