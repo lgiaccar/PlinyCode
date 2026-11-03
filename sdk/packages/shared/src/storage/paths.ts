@@ -516,14 +516,14 @@ function dedupePaths(paths: ReadonlyArray<string>): string[] {
  * follows the same Agent Skills convention, so a workspace set up for GitHub
  * Copilot, Cursor or Claude Code gets its skills without copying them.
  */
-export const EXTERNAL_SKILLS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
+export const EXTERNAL_SKILLS_CONFIG_DIRS = [".github", ".cursor", ".claude", ".ai"];
 
 /**
  * Config roots of other coding agents for custom agent files, so a workspace
- * set up for GitHub Copilot, Cursor or Claude Code discovers agents without
- * copying them to `.cline/agents`.
+ * set up for GitHub Copilot, Cursor, Claude Code or a tool that uses `.ai/`
+ * discovers agents without copying them to `.cline/agents`.
  */
-export const EXTERNAL_AGENTS_CONFIG_DIRS = [".github", ".cursor", ".claude"];
+export const EXTERNAL_AGENTS_CONFIG_DIRS = [".github", ".cursor", ".claude", ".ai"];
 
 /**
  * With an editor set (setInstructionHost), another editor's *rules* are
