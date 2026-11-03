@@ -133,6 +133,9 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
    ```
    This runs the production build (`vscode:prepublish`) and writes
    `apps/vscode/dist/release/<version>/PlinyCode-<version>.vsix`, packaged with `README.marketplace.md`.
+   It checks that the backend registers every declared RPC service and every service requested by the
+   webview. Both packaging and publish preflight inspect the actual VSIX: a fresh webview paired with an
+   older `dist/extension.js` is rejected. Always rebuild both bundles; do not copy a backend from an older release.
 6. **Write the release notes** in `apps/vscode/dist/release/<version>/README.md`. Follow
    `.claude/skills/release/release-notes-template.md`: what changed for users since the last release (from
    `git log release_<previous>..HEAD`), any upgrade steps, and build info. They become the GitHub release

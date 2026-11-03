@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.8-test.3",
+	"version": "0.2.8-test.4",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -762,7 +762,7 @@
 		"watch": "bun run --parallel watch:esbuild watch:tsc",
 		"watch:esbuild": "bun esbuild.mjs --watch",
 		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-		"package": "bun run check-types && bun run build:webview && bun run lint && bun esbuild.mjs --production",
+		"package": "bun run check-types && bun run build:webview && bun run lint && bun esbuild.mjs --production && bun scripts/check-release-package.ts --bundles",
 		"release:package": "bun scripts/release.ts package",
 		"release:publish": "bun scripts/release.ts publish",
 		"protos": "node scripts/build-proto.mjs",
@@ -838,6 +838,7 @@
 		"chai": "^4.3.10",
 		"chalk": "5.6.2",
 		"esbuild": "^0.25.0",
+		"fflate": "0.8.2",
 		"globby": "^14.0.2",
 		"grpc-tools": "^1.13.0",
 		"lint-staged": "^16.1.0",

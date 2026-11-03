@@ -22,6 +22,9 @@ their configured services; extension updates come from GitHub.
 
 ## Features
 
+**0.2.8-test.4 prerelease:** restores **Pipelines > Agents** after the `Unknown service` error in test.3.
+Test builds require **Install pre-releases** in **Settings > About**. Stable remains **0.2.7**.
+
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.
 - **Code and terminal tools:** search and navigate a project, edit files, inspect images, run commands and
   monitor background processes.
