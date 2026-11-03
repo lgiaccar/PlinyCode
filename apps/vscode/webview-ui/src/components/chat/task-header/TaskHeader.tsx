@@ -239,6 +239,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 							</div>
 						)}
 						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
+						<TaskAgentChip agentPath={currentTaskItem?.agentPath} />
 					</div>
 					<div className="inline-flex items-center justify-end select-none shrink-0">
 						{currentTaskItem?.id && (
@@ -273,13 +274,6 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
 					</div>
 				</div>
-
-				{/* Agent chip — shown below the title row so the description has room to wrap */}
-				{currentTaskItem?.agentPath && (
-					<div className="px-1">
-						<TaskAgentChip agentPath={currentTaskItem.agentPath} />
-					</div>
-				)}
 
 				{/* Expand/Collapse Task Details */}
 				{isTaskExpanded && (
