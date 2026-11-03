@@ -4,6 +4,7 @@ import { ClineRulesToggles } from "@shared/cline-rules"
 import { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_MCP_DISPLAY_MODE, McpDisplayMode } from "@shared/McpDisplayMode"
 import { Mode } from "@shared/storage/types"
+import type { AgentMonitorConfig } from "../agent-monitor"
 import type { ModelTuningMap } from "../model-tuning"
 import { coerceToPlinyProvider } from "../pliny"
 import type { RouterTuningMap } from "../router-tuning"
@@ -36,6 +37,8 @@ type FieldDefinition<T> = {
 type FieldDefinitions = Record<string, FieldDefinition<any>>
 
 const GLOBAL_STATE_FIELDS = {
+	agentMonitorConfigs: { default: {} as Record<string, AgentMonitorConfig> },
+	agentMonitorDefaultQueueUrl: { default: "" },
 	clineVersion: { default: undefined as string | undefined },
 	"cline.generatedMachineId": { default: undefined as string | undefined }, // Note, distinctId reads/writes this directly from/to StorageContext before StateManager is initialized.
 	lastShownAnnouncementId: { default: undefined as string | undefined },

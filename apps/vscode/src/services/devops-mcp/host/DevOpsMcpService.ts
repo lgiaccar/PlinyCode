@@ -25,6 +25,7 @@ import { DevOpsError } from "../server/errors"
 import type { ToolProvider } from "../server/providers/types"
 import { adoCollectionUrl, hasSupportedRemote, loadContext } from "../server/repo"
 import { callTool, createTools, type ToolDefinition } from "../server/tools"
+import { AgentMonitorHost } from "./AgentMonitorHost"
 import { AdoServerTokens } from "./ado-server-tokens"
 import { CiBoardHost, type CiBoardUi } from "./CiBoardHost"
 import {
@@ -121,6 +122,11 @@ export class DevOpsMcpService implements vscode.Disposable, DevOpsServerControl 
 		service.disposables.push(new vscode.Disposable(() => setCiWatchRepoOpener(undefined)))
 		service.disposables.push(CiBoardHost.start(service.providers, ciBoardUi))
 		service.disposables.push(PipelineHost.start(service.providers, ciBoardUi?.openPipelines))
+		service.disposables.push(
+			AgentMonitorHost.start((provider, host, interactive, server) =>
+				interactive ? Promise.resolve(undefined) : service.broker.silentToken(provider, host, server),
+			),
+		)
 		service.disposables.push(
 			new vscode.Disposable(unregister),
 			vscode.workspace.onDidChangeConfiguration((event) => {

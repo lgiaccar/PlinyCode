@@ -1,4 +1,4 @@
-import { RuleScope, type SkillInfo } from "@shared/proto/cline/file"
+import { type AgentInfo, RuleScope, type SkillInfo } from "@shared/proto/cline/file"
 import { FileServiceClient } from "@/services/grpc-client"
 import type { BulkToggleTarget } from "./BulkToggleControl"
 
@@ -43,3 +43,11 @@ export const skillBulkTargets = (globalSkills: SkillInfo[], localSkills: SkillIn
 		enabled: skill.enabled,
 		toggle: (enabled) => FileServiceClient.toggleSkill({ metadata: {}, skillPath: skill.path, isGlobal, enabled }),
 	}))
+
+export const agentBulkTargets = (globalAgents: AgentInfo[], localAgents: AgentInfo[]): BulkToggleTarget[] =>
+	[...globalAgents.map((agent) => ({ agent, isGlobal: true })), ...localAgents.map((agent) => ({ agent, isGlobal: false }))]
+		.filter(({ agent }) => !agent.error)
+		.map(({ agent, isGlobal }) => ({
+			enabled: agent.enabled,
+			toggle: (enabled) => FileServiceClient.toggleAgent({ metadata: {}, agentPath: agent.path, isGlobal, enabled }),
+		}))

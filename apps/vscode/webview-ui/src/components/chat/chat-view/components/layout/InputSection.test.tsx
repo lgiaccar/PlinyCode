@@ -60,6 +60,7 @@ function makeChatState(overrides: Partial<ChatState> = {}): ChatState {
 function makeScrollBehavior(): ScrollBehavior {
 	return {
 		isAtBottom: true,
+		isManualScrollPaused: () => false,
 		scrollToBottomAuto: vi.fn(),
 	} as unknown as ScrollBehavior
 }

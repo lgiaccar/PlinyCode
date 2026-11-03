@@ -1,3 +1,4 @@
+import { ciMergeDisabledReason } from "@shared/ciMerge"
 import { type CiItem, type CiItemAction, CiItemRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { type KeyboardEvent, useEffect, useRef, useState } from "react"
@@ -16,6 +17,11 @@ interface CiActionBarProps {
 	onCustomPrompt: () => void
 	onEditActions: () => void
 	onError: (message: string | undefined) => void
+	onRestartMerge?: () => void
+	onRequeuePipeline?: () => void
+	onRerun?: (runId: number) => Promise<void>
+	onMerge?: () => void
+	providerBusy?: string
 }
 
 /**
@@ -23,13 +29,41 @@ interface CiActionBarProps {
  * single fix when one thing is wrong, Fix them all when several are, or Open
  * conversation while a run is going), and the rest in the menu beside it.
  */
-export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEditActions, onError }: CiActionBarProps) => {
+export const CiActionBar = ({
+	targetId,
+	item,
+	busy,
+	onRun,
+	onCustomPrompt,
+	onEditActions,
+	onError,
+	onRestartMerge,
+	onRequeuePipeline,
+	onRerun,
+	onMerge,
+	providerBusy,
+}: CiActionBarProps) => {
 	const [analyzing, setAnalyzing] = useState(false)
 	const [open, setOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const primary = item.actions.find((a) => a.role === "primary")
 	const failing = item.mergeState === "conflicts" || item.pipelines.some((p) => p.color === "red")
+	const mergeReason =
+		running || busy ? "Wait for the board's running conversation to finish before merging." : ciMergeDisabledReason(item)
+	const mergePrimary = !!onMerge && !failing
+	const mergeTip =
+		mergeReason ||
+		`Merge PR #${item.prId} into ${item.targetBranch} after rechecking CI. Review and branch policies still apply.`
+	const failed = item.pipelines.filter((p) => p.color === "red")
+	const retry =
+		item.mergeState !== "conflicts" &&
+		failed.length === 1 &&
+		failed[0].runId > 0 &&
+		item.fixes.some((fix) => fix.pipeline === failed[0].name && fix.category === "infrastructure") &&
+		onRerun
+			? failed[0]
+			: undefined
 
 	useEffect(() => {
 		if (!open) return
@@ -75,7 +109,7 @@ export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEdi
 		items[next]?.focus()
 	}
 
-	const menuActions = item.actions.filter((a) => a !== primary || running)
+	const menuActions = item.actions.filter((a) => a !== primary || running || retry || mergePrimary)
 	const menuItem =
 		"w-full text-left px-2 py-1 bg-transparent border-0 text-menu-foreground cursor-pointer hover:bg-list-hover focus:bg-list-hover focus:outline-none disabled:opacity-50 disabled:cursor-default"
 
@@ -85,6 +119,30 @@ export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEdi
 				<CiTip tip="A run started from the board is still going for this pull request. Open its conversation to follow it.">
 					<Button className="rounded-r-none" onClick={openConversation} size="sm" variant="secondary">
 						<span className="codicon codicon-comment-discussion" /> Open conversation
+					</Button>
+				</CiTip>
+			) : mergePrimary ? (
+				<CiTip tip={mergeTip} wrap={!!mergeReason}>
+					<Button
+						className="rounded-r-none"
+						data-testid="ci-merge"
+						disabled={!!providerBusy || !!mergeReason}
+						onClick={onMerge}
+						size="sm"
+						variant={mergeReason ? "secondary" : "default"}>
+						<span className="codicon codicon-git-merge" />
+						{providerBusy === "merge-pr" ? "Merging…" : "Merge"}
+					</Button>
+				</CiTip>
+			) : retry ? (
+				<CiTip tip={`Requeue ${retry.name} after an infrastructure failure. CI may assign another agent.`}>
+					<Button
+						className="rounded-r-none"
+						data-testid="ci-primary-action"
+						disabled={!!providerBusy || (!!item.prId && item.state !== "open")}
+						onClick={() => void onRerun?.(retry.runId)}
+						size="sm">
+						{providerBusy ? "Requeueing…" : "Requeue pipeline"}
 					</Button>
 				</CiTip>
 			) : primary ? (
@@ -115,13 +173,15 @@ export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEdi
 					aria-expanded={open}
 					aria-haspopup="menu"
 					aria-label="More actions"
-					className={cn(primary || running ? "rounded-l-none border-l border-l-button-separator px-1" : "")}
+					className={cn(
+						primary || running || mergePrimary ? "rounded-l-none border-l border-l-button-separator px-1" : "",
+					)}
 					data-testid="ci-more-actions"
 					onClick={() => setOpen(!open)}
 					size="sm"
 					variant="secondary">
 					<span className="codicon codicon-chevron-down" />
-					{!primary && !running && "Actions"}
+					{!primary && !running && !mergePrimary && "Actions"}
 				</Button>
 			</CiTip>
 			{open && (
@@ -149,6 +209,60 @@ export const CiActionBar = ({ targetId, item, busy, onRun, onCustomPrompt, onEdi
 							</button>
 						</CiTip>
 					))}
+					{onMerge && (
+						<CiTip side="left" tip={mergeTip}>
+							<button
+								className={menuItem}
+								disabled={!!providerBusy || !!mergeReason}
+								onClick={() => {
+									setOpen(false)
+									onMerge()
+								}}
+								role="menuitem"
+								type="button">
+								<span className="font-medium">Merge</span>
+								<span className="block text-description">
+									{mergeReason || `Merge into ${item.targetBranch} after checking CI.`}
+								</span>
+							</button>
+						</CiTip>
+					)}
+					{onRestartMerge && (
+						<CiTip
+							side="left"
+							tip="Recompute Azure DevOps' preview merge against the current target branch to refresh conflict detection. This does not complete the PR.">
+							<button
+								className={menuItem}
+								disabled={!!providerBusy}
+								onClick={() => {
+									setOpen(false)
+									onRestartMerge()
+								}}
+								role="menuitem"
+								type="button">
+								<span className="font-medium">Restart merge</span>
+								<span className="block text-description">
+									Refresh the preview merge against {item.targetBranch || "the target branch"}.
+								</span>
+							</button>
+						</CiTip>
+					)}
+					{onRequeuePipeline && (
+						<button
+							className={menuItem}
+							disabled={!!providerBusy}
+							onClick={() => {
+								setOpen(false)
+								onRequeuePipeline()
+							}}
+							role="menuitem"
+							type="button">
+							<span className="font-medium">Requeue pipeline</span>
+							<span className="block text-description">
+								Choose a build validation to run again, including outdated or expired results.
+							</span>
+						</button>
+					)}
 					<hr className="my-1 border-0 border-t border-menu-border" />
 					<CiTip
 						side="left"

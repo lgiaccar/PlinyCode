@@ -34,6 +34,10 @@ export interface BackgroundProcess {
 	/** The file that receives the command's output. */
 	readonly logPath: string
 	readonly status: BackgroundProcessStatus
+	/** A stop was requested, but only an observed exit confirms termination. */
+	readonly stopRequested: boolean
+	/** The latest stop attempt failed. Cleared when another attempt begins. */
+	readonly stopError?: string
 	/** Set when the command ended with a known exit code. */
 	readonly exitCode?: number
 	readonly endedAt?: number
@@ -49,7 +53,7 @@ interface BackgroundProcessRegistration {
 	logPath: string
 	/**
 	 * Stops the command. It should report the end through `markExited` when it
-	 * sees one; whatever is still running when it resolves is marked killed.
+	 * sees one. Resolving alone does not confirm termination.
 	 */
 	kill: () => Promise<void>
 }
@@ -66,6 +70,7 @@ interface Entry {
 	exitCode?: number
 	endedAt?: number
 	killRequested: boolean
+	stopError?: string
 	killing?: Promise<void>
 	stop: () => Promise<void>
 }
@@ -119,7 +124,7 @@ export class ProcessRegistry {
 	/** The command ended. After a kill was asked for, it counts as killed. */
 	markExited(id: string, exitCode?: number): void {
 		const entry = this.entries.get(id)
-		if (!entry || entry.status !== "running") {
+		if (!entry || (entry.status !== "running" && entry.status !== "lost")) {
 			return
 		}
 		entry.status = entry.killRequested ? "killed" : "exited"
@@ -134,7 +139,7 @@ export class ProcessRegistry {
 		if (!entry || entry.status !== "running") {
 			return
 		}
-		entry.status = entry.killRequested ? "killed" : "lost"
+		entry.status = "lost"
 		entry.endedAt = this.now()
 		this.fireChange()
 	}
@@ -148,29 +153,33 @@ export class ProcessRegistry {
 		if (entry.status === "running") {
 			if (!entry.killing) {
 				entry.killRequested = true
-				entry.killing = entry
-					.stop()
-					.catch(() => {
-						// The status below records that it is still running, if it is.
+				entry.stopError = undefined
+				// Defer invocation until the promise is installed: synchronous throws
+				// and reentrant stop requests must use the same attempt.
+				entry.killing = Promise.resolve()
+					.then(() => entry.stop())
+					.catch((error: unknown) => {
+						entry.stopError = error instanceof Error ? error.message : String(error)
 					})
 					.finally(() => {
-						if (entry.status === "running") {
-							entry.status = "killed"
-							entry.endedAt = this.now()
-							this.fireChange()
-						}
+						entry.killing = undefined
+						this.fireChange()
 					})
+				this.fireChange()
 			}
 			await entry.killing
 		}
 		return this.view(entry)
 	}
 
-	/** Stop every running process of a conversation, or of all conversations. Returns how many. */
+	/** Request stops and return how many processes were confirmed to have ended. */
 	async killAll(conversationId?: string, filter?: (process: BackgroundProcess) => boolean): Promise<number> {
 		const running = this.list(conversationId).filter((process) => process.status === "running" && (filter?.(process) ?? true))
 		await Promise.all(running.map((process) => this.kill(process.id)))
-		return running.length
+		return running.filter((process) => {
+			const status = this.entries.get(process.id)?.status
+			return status === "killed" || status === "exited"
+		}).length
 	}
 
 	/** Called whenever a process is added or changes status. Returns a disposer. */
@@ -189,6 +198,8 @@ export class ProcessRegistry {
 			source: entry.source,
 			logPath: entry.logPath,
 			status: entry.status,
+			stopRequested: entry.killRequested,
+			stopError: entry.stopError,
 			exitCode: entry.exitCode,
 			endedAt: entry.endedAt,
 			kill: async () => {

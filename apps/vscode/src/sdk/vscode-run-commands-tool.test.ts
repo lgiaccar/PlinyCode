@@ -1552,13 +1552,14 @@ describe("background processes", () => {
 		const result = await resultPromise
 
 		const killing = registry.kill("p1")
+		await Promise.resolve()
 		expect(sendInterrupt).toHaveBeenCalledWith(terminalInfo)
 		expect(disposeTerminal).not.toHaveBeenCalled()
 		await vi.advanceTimersByTimeAsync(2000)
 		await killing
 
 		expect(disposeTerminal).toHaveBeenCalledWith(terminalInfo)
-		expect(registry.get("p1")?.status).toBe("killed")
+		expect(registry.get("p1")?.status).toBe("lost")
 		const logFilePath = /redirected to this file[^:]*: (.+)$/m.exec(result)?.[1]?.trim()
 		vi.useRealTimers()
 		fs.rmSync(logFilePath!, { force: true })

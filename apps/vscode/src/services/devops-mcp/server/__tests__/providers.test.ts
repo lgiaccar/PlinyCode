@@ -26,6 +26,47 @@ const github = (api: FakeApi) =>
 	new GitHubProvider({ kind: "github", host: "github.com", owner: "octo", repo: "hello" }, api.fetch, staticAuth())
 
 describe("GitHubProvider", () => {
+	it("pins merges to the selected head and surfaces server rejection", async () => {
+		const sha = "a".repeat(40)
+		const api = new FakeApi().on("PUT", `${GH}/pulls/7/merge`, { merged: true })
+		api.on("GET", `${GH}/pulls/7`, ghPr({ head: { sha }, draft: false, mergeable_state: "clean" }))
+		const provider = github(api)
+		await provider.mergePr(7, sha)
+		expect(api.lastJson("PUT")).toEqual({ sha, merge_method: "merge" })
+		api.on("PUT", `${GH}/pulls/7/merge`, { merged: false, message: "Required review missing" })
+		await expect(provider.mergePr(7, sha)).rejects.toThrow(/Required review missing/)
+		api.on("PUT", `${GH}/pulls/7/merge`, { message: "Head changed" }, 409)
+		await expect(provider.mergePr(7, sha)).rejects.toThrow(/Head changed/)
+		await expect(provider.mergePr(7, "")).rejects.toThrow(/Invalid/)
+		api.on("GET", `${GH}/pulls/7`, ghPr({ head: { sha }, draft: false, mergeable_state: "blocked" }))
+		const mutations = api.requests.filter((request) => request.method === "PUT").length
+		await expect(provider.mergePr(7, sha)).rejects.toThrow(/review and branch policies/)
+		expect(api.requests.filter((request) => request.method === "PUT")).toHaveLength(mutations)
+	})
+
+	it("includes check runs and statuses beyond the first page", async () => {
+		const pages: string[] = []
+		const fetch: Fetch = async (input) => {
+			const url = new URL(String(input))
+			const first = url.searchParams.get("page") === "1"
+			pages.push(`${url.pathname}?page=${url.searchParams.get("page")}`)
+			const check = url.pathname.endsWith("/check-runs")
+			const entry = check
+				? { name: "check", status: "completed", conclusion: first ? "success" : "failure" }
+				: { context: "status", state: first ? "success" : "failure" }
+			return Response.json({ [check ? "check_runs" : "statuses"]: Array.from({ length: first ? 100 : 1 }, () => entry) })
+		}
+		const provider = new GitHubProvider(
+			{ kind: "github", host: "github.com", owner: "octo", repo: "hello" },
+			fetch,
+			staticAuth(),
+		)
+		const checks = await provider.prChecks({ id: 7, headSha: "a".repeat(40) } as PullRequest)
+		expect(checks).toHaveLength(202)
+		expect(checks.filter((check) => check.result === "failure")).toHaveLength(2)
+		expect(pages).toHaveLength(4)
+	})
+
 	it("discovers dispatch inputs at the selected ref and queues typed values", async () => {
 		const api = new FakeApi()
 			.on("GET", `${GH}/actions/workflows`, {
@@ -233,6 +274,24 @@ const azdo = (api: FakeApi, auth = staticAuth()) => {
 }
 
 describe("AzureDevOpsProvider", () => {
+	it("pins completion to the head, keeps the source branch and never bypasses policy", async () => {
+		const sha = "a".repeat(40)
+		const api = new FakeApi().on("PATCH", `${PRS}/42`, { status: "completed", mergeStatus: "succeeded" })
+		const provider = azdo(api)
+		await provider.mergePr(42, sha)
+		expect(api.lastJson("PATCH")).toEqual({
+			status: "completed",
+			lastMergeSourceCommit: { commitId: sha },
+			completionOptions: { mergeStrategy: "noFastForward", deleteSourceBranch: false, bypassPolicy: false },
+		})
+		api.on("PATCH", `${PRS}/42`, { status: "active", mergeStatus: "queued" })
+		await provider.mergePr(42, sha)
+		api.on("PATCH", `${PRS}/42`, { status: "active", mergeStatus: "rejectedByPolicy", mergeFailureMessage: "Policy failed" })
+		await expect(provider.mergePr(42, sha)).rejects.toThrow(/Policy failed/)
+		api.on("PATCH", `${PRS}/42`, { status: "active", mergeStatus: "succeeded" })
+		await expect(provider.mergePr(42, sha)).rejects.toThrow(/did not confirm/)
+	})
+
 	it("discovers repository YAML parameters and sends templateParameters with the selected ref", async () => {
 		const definition = {
 			id: 4,
@@ -435,6 +494,42 @@ describe("AzureDevOpsProvider", () => {
 		expect(checks[0].url).toEndWith("buildId=7")
 	})
 
+	it("restarts the preview merge without completing or retargeting the PR", async () => {
+		const api = new FakeApi().on("PATCH", `${PRS}/42`, { mergeStatus: "queued" })
+		const provider = azdo(api)
+		await provider.restartPrMerge(42)
+		expect(api.lastJson("PATCH")).toEqual({ mergeStatus: "queued" })
+		await expect(provider.restartPrMerge(0)).rejects.toThrow("Invalid pull request ID")
+		api.on("PATCH", `${PRS}/42`, { message: "not allowed" }, 403)
+		await expect(provider.restartPrMerge(42)).rejects.toThrow()
+	})
+
+	it("lists non-expired build validations but excludes other policies", async () => {
+		const evaluationId = "12345678-1234-1234-1234-123456789abc"
+		const api = new FakeApi().on("GET", `${PROJ}/policy/evaluations`, {
+			value: [
+				{
+					evaluationId,
+					status: "approved",
+					context: { isExpired: false, buildId: 7 },
+					configuration: { settings: { buildDefinitionId: 4, displayName: "CI" } },
+				},
+				{ evaluationId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", status: "running", context: { buildDefinitionId: 5 } },
+				{
+					evaluationId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+					status: "approved",
+					configuration: { type: { displayName: "Reviewers" } },
+				},
+				{ evaluationId: "bad-id", context: { buildDefinitionId: 6 } },
+			],
+		})
+		const policies = await azdo(api).listBuildPolicies({ id: 42 } as PullRequest)
+		expect(policies).toHaveLength(2)
+		expect(policies[0]).toEqual({ evaluationId, name: "CI", buildId: 7, expired: false, status: "approved" })
+		expect(policies[1].status).toBe("running")
+		expect(api.last("GET").url.searchParams.get("artifactId")).toBe("vstfs:///CodeReview/CodeReviewId/p-1/42")
+	})
+
 	it("detects expired build validations and requeues the selected evaluation", async () => {
 		const evaluationId = "12345678-1234-1234-1234-123456789abc"
 		const api = new FakeApi()
@@ -480,6 +575,43 @@ describe("AzureDevOpsProvider", () => {
 		await expect(provider.defaultBranch()).rejects.toThrow(/HTTP 401/)
 		expect(invalidated).toBe(1)
 		expect(api.requests.map((r) => r.headers.Authorization)).toEqual(["Bearer token-1", "Bearer token-2"])
+	})
+
+	it("resolves an agent queue to its pool and lists agents with capabilities", async () => {
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/distributedtask/queues/21`, { pool: { id: 5 } })
+			.on("GET", "/acme/_apis/distributedtask/pools/5/agents", {
+				value: [
+					{ id: 1, name: "build-cpu-01", status: "online", enabled: true, userCapabilities: { BUILD_CPU: "true" } },
+					{ id: 2, name: "build-gpu-01", status: "offline", enabled: true, userCapabilities: { BUILD_GPU: "true" } },
+					{ id: 3, name: "perf-01", status: "online", enabled: false, userCapabilities: { PERFORMANCE: "true" } },
+				],
+			})
+		const provider = azdo(api)
+		const agents = await provider.listAgents!(21, { includeCapabilities: true })
+		expect(agents.map((a) => [a.name, a.status, a.enabled, a.userCapabilities?.BUILD_CPU])).toEqual([
+			["build-cpu-01", "online", true, "true"],
+			["build-gpu-01", "offline", true, undefined],
+			["perf-01", "online", false, undefined],
+		])
+		// The agents list call hit the org-level pool URL, not the project URL.
+		expect(api.last("GET").url.pathname).toBe("/acme/_apis/distributedtask/pools/5/agents")
+		expect(api.last("GET").url.searchParams.get("includeCapabilities")).toBe("true")
+	})
+
+	it("omits includeCapabilities when not requested", async () => {
+		const api = new FakeApi()
+			.on("GET", `${PROJ}/distributedtask/queues/9`, { pool: { id: 2 } })
+			.on("GET", "/acme/_apis/distributedtask/pools/2/agents", {
+				value: [{ id: 1, name: "a", status: "online", enabled: true }],
+			})
+		await azdo(api).listAgents!(9)
+		expect(api.last("GET").url.searchParams.has("includeCapabilities")).toBe(false)
+	})
+
+	it("throws when the queue has no pool", async () => {
+		const api = new FakeApi().on("GET", `${PROJ}/distributedtask/queues/21`, { id: 21 })
+		await expect(azdo(api).listAgents!(21)).rejects.toThrow("no associated agent pool")
 	})
 })
 

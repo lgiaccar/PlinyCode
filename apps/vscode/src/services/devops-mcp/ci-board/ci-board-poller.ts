@@ -300,6 +300,7 @@ export class CiBoardPoller {
 		const prev = previous?.item
 		const stale =
 			prev?.mergeState === "pending" ||
+			prev?.buildPolicies?.some((p) => p.status === "queued" || p.status === "running") ||
 			prev?.pipelines.some((p) => p.color === "yellow") ||
 			now - (previous?.detailTs ?? 0) >= this.timings.fullRefreshMs
 		const needed = force || !prev || prev.error !== undefined || prev.headSha !== entry.head || (!lowRate && stale)
@@ -315,8 +316,14 @@ export class CiBoardPoller {
 			}
 			const head = pr?.headSha ?? entry.head
 			const runs = head ? await runsForHead(provider, pr, entry.branch, head) : []
-			const expiredBuildPolicies =
-				pr && provider.listExpiredBuildPolicies ? await provider.listExpiredBuildPolicies(pr) : []
+			const buildPolicies = pr && provider.listBuildPolicies ? await provider.listBuildPolicies(pr) : undefined
+			const expiredBuildPolicies = buildPolicies
+				? buildPolicies
+						.filter((p) => p.expired)
+						.map(({ evaluationId, name, buildId }) => ({ evaluationId, name, buildId }))
+				: pr && provider.listExpiredBuildPolicies
+					? await provider.listExpiredBuildPolicies(pr)
+					: []
 			// Pipelines seen on this item before and missing now show grey.
 			const known = prev?.pipelines.map((p) => p.name) ?? []
 			return {
@@ -328,6 +335,7 @@ export class CiBoardPoller {
 					mergeState: pr?.mergeState,
 					pipelines: groupPipelines(runs, known),
 					expiredBuildPolicies,
+					buildPolicies,
 					fork: pr?.fork ?? false,
 				},
 				detailTs: now,

@@ -4,8 +4,9 @@
 // Controller but delegates session lifecycle (initTask, askResponse,
 // cancelTask, …) to the Cline SDK (@plinycode/core) and bridges SDK events to
 // the webview's gRPC streams.
-import * as fs from "node:fs/promises"
+
 import { readFileSync } from "node:fs"
+import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import {
 	createRestoredCheckpointMetadata,
@@ -1327,7 +1328,7 @@ export class Controller {
 			return
 		}
 		const stopped = await this.processes.killAll(taskId)
-		Logger.log(`[SdkController] cancelBackgroundCommand: stopped ${stopped} background process(es)`)
+		Logger.log(`[SdkController] cancelBackgroundCommand: confirmed ${stopped} background process(es) ended`)
 	}
 
 	/**

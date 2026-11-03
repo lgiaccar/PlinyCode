@@ -6,11 +6,13 @@ import ViewHeader from "@/components/common/ViewHeader"
 import { Button } from "@/components/ui/button"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 import { PipelineServiceClient } from "@/services/grpc-client"
+import { AgentsPanel } from "./AgentsPanel"
 import { PipelineLaunchForm, pipelineError } from "./PipelineLaunchForm"
 import { PipelineRunRow } from "./PipelineRunRow"
 
 export default function PipelinesView({ onDone }: { onDone: () => void }) {
 	const { environment } = useExtensionState()
+	const [tab, setTab] = useState<"runs" | "agents">("runs")
 	const [history, setHistory] = useState<PipelineHistory>()
 	const [error, setError] = useState("")
 	const [refreshing, setRefreshing] = useState(false)
@@ -42,39 +44,63 @@ export default function PipelinesView({ onDone }: { onDone: () => void }) {
 	return (
 		<div className="fixed inset-0 flex flex-col min-w-0">
 			<ViewHeader environment={environment} onDone={onDone} title="Pipelines" />
+			<nav aria-label="Pipeline views" className="flex gap-2 px-5 py-2">
+				<Button
+					aria-pressed={tab === "runs"}
+					onClick={() => setTab("runs")}
+					size="sm"
+					variant={tab === "runs" ? "default" : "secondary"}>
+					Runs
+				</Button>
+				<Button
+					aria-pressed={tab === "agents"}
+					onClick={() => setTab("agents")}
+					size="sm"
+					variant={tab === "agents" ? "default" : "secondary"}>
+					Agents
+				</Button>
+			</nav>
 			<div className="flex-1 overflow-auto px-5 py-3 min-w-0">
-				{history?.unavailable ? (
-					<div className="text-sm text-description break-words">{history.unavailable}</div>
+				{tab === "agents" ? (
+					<AgentsPanel />
 				) : (
-					<PipelineLaunchForm />
-				)}
-				<div className="flex justify-between items-center gap-2 mt-4 mb-1">
-					<h2 className="text-sm font-medium m-0">Run History</h2>
-					<Button
-						aria-label="Refresh run history"
-						className="h-7 w-7 shrink-0"
-						disabled={refreshing}
-						onClick={refresh}
-						size="icon"
-						title="Refresh run history"
-						variant="ghost">
-						<span
-							aria-hidden="true"
-							className={`codicon codicon-refresh ${refreshing ? "codicon-modifier-spin" : ""}`}
-						/>
-					</Button>
-				</div>
-				{error && <DevOpsErrorText className="text-sm text-error break-words" error={error} onSignedIn={refresh} />}
-				{!history ? (
-					<div className="text-sm text-description">Loading...</div>
-				) : history.launches.length === 0 ? (
-					<div className="text-sm text-description">No launches yet.</div>
-				) : (
-					<ul className="list-none m-0 p-0">
-						{history.launches.map((launch) => (
-							<PipelineRunRow key={launch.id} launch={launch} />
-						))}
-					</ul>
+					<>
+						{history?.unavailable ? (
+							<div className="text-sm text-description break-words">{history.unavailable}</div>
+						) : (
+							<PipelineLaunchForm />
+						)}
+						<div className="flex justify-between items-center gap-2 mt-4 mb-1">
+							<h2 className="text-sm font-medium m-0">Run History</h2>
+							<Button
+								aria-label="Refresh run history"
+								className="h-7 w-7 shrink-0"
+								disabled={refreshing}
+								onClick={refresh}
+								size="icon"
+								title="Refresh run history"
+								variant="ghost">
+								<span
+									aria-hidden="true"
+									className={`codicon codicon-refresh ${refreshing ? "codicon-modifier-spin" : ""}`}
+								/>
+							</Button>
+						</div>
+						{error && (
+							<DevOpsErrorText className="text-sm text-error break-words" error={error} onSignedIn={refresh} />
+						)}
+						{!history ? (
+							<div className="text-sm text-description">Loading...</div>
+						) : history.launches.length === 0 ? (
+							<div className="text-sm text-description">No launches yet.</div>
+						) : (
+							<ul className="list-none m-0 p-0">
+								{history.launches.map((launch) => (
+									<PipelineRunRow key={launch.id} launch={launch} />
+								))}
+							</ul>
+						)}
+					</>
 				)}
 			</div>
 		</div>

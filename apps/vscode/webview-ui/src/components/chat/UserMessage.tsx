@@ -5,6 +5,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react"
 import Thumbnails from "@/components/common/Thumbnails"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { CheckpointsServiceClient, TaskServiceClient } from "@/services/grpc-client"
+import { isLongPrompt, wordCount } from "./compactPrompt"
 import ResizablePromptText, { MIN_PROMPT_HEIGHT } from "./ResizablePromptText"
 import { highlightText } from "./task-header/Highlights"
 
@@ -47,7 +48,9 @@ const UserMessage: React.FC<UserMessageProps> = ({
 		{ fileCount: number; totalAdded: number; totalRemoved: number } | undefined
 	>()
 	const [loadingRevertPreview, setLoadingRevertPreview] = useState(false)
-	const highlightedText = useMemo(() => highlightText(text), [text])
+	const [expandedText, setExpandedText] = useState<string>()
+	const compact = !!text && isLongPrompt(text) && expandedText !== text
+	const highlightedText = useMemo(() => highlightText(compact ? undefined : text), [text, compact])
 
 	const resetEditState = () => {
 		setWorkspaceRevertPreview(undefined)
@@ -336,11 +339,25 @@ const UserMessage: React.FC<UserMessageProps> = ({
 							Side question · not in the context
 						</span>
 					)}
-					<ResizablePromptText contentKey={text} defaultMaxHeight={defaultMaxHeight} messageTs={messageTs}>
-						<span className="ph-no-capture text-sm" style={{ display: "block" }}>
-							{highlightedText}
-						</span>
-					</ResizablePromptText>
+					{compact ? (
+						<button
+							aria-label="Show complete prompt"
+							className="bg-transparent border-0 text-inherit cursor-pointer text-sm p-0"
+							onClick={(event) => {
+								event.stopPropagation()
+								setExpandedText(text)
+							}}
+							onKeyDown={(event) => event.stopPropagation()}
+							type="button">
+							Prompt · {wordCount(text ?? "").toLocaleString()} words · Show text
+						</button>
+					) : (
+						<ResizablePromptText contentKey={text} defaultMaxHeight={defaultMaxHeight} messageTs={messageTs}>
+							<span className="ph-no-capture text-sm" style={{ display: "block" }}>
+								{highlightedText}
+							</span>
+						</ResizablePromptText>
+					)}
 				</>
 			)}
 			{!isEditing && ((images && images.length > 0) || (files && files.length > 0)) && (

@@ -5,6 +5,8 @@ import { type Auth, adoAuth } from "../auth"
 import { DevOpsError } from "../errors"
 import { adoCollectionUrl, type Remote } from "../repo"
 import {
+	type AgentInfo,
+	type BuildPolicy,
 	type Check,
 	type ExpiredBuildPolicy,
 	type FailedStep,
@@ -124,6 +126,19 @@ export class AzureDevOpsProvider implements ToolProvider {
 
 	private api<T = any>(method: string, path: string, query: Record<string, string | number | undefined> = {}, json?: unknown) {
 		return this.http.json<T>(method, `${this.projectUrl}/_apis/${path}`, {
+			query: { "api-version": API_VERSION, ...query },
+			json,
+		})
+	}
+
+	/** Org-level distributed-task endpoint (agent pools are organization-scoped, not project-scoped). */
+	private orgApi<T = any>(
+		method: string,
+		path: string,
+		query: Record<string, string | number | undefined> = {},
+		json?: unknown,
+	) {
+		return this.http.json<T>(method, `${this.orgUrl}/_apis/${path}`, {
 			query: { "api-version": API_VERSION, ...query },
 			json,
 		})
@@ -589,19 +604,25 @@ export class AzureDevOpsProvider implements ToolProvider {
 	}
 
 	async listExpiredBuildPolicies(pr: PullRequest): Promise<ExpiredBuildPolicy[]> {
+		return (await this.listBuildPolicies(pr))
+			.filter((policy) => policy.expired)
+			.map(({ evaluationId, name, buildId }) => ({ evaluationId, name, buildId }))
+	}
+
+	async listBuildPolicies(pr: PullRequest): Promise<BuildPolicy[]> {
 		const repo = await this.repo()
 		const artifactId = `vstfs:///CodeReview/CodeReviewId/${repo.project.id}/${pr.id}`
 		const response = await this.api("GET", "policy/evaluations", { artifactId, "api-version": "7.1-preview.1" })
 		return (response.value ?? [])
-			.filter(
-				(ev: any) =>
-					ev.context?.isExpired === true &&
-					Number.isSafeInteger(ev.context?.buildDefinitionId ?? ev.configuration?.settings?.buildDefinitionId),
+			.filter((ev: any) =>
+				Number.isSafeInteger(ev.context?.buildDefinitionId ?? ev.configuration?.settings?.buildDefinitionId),
 			)
 			.map((ev: any) => ({
 				evaluationId: String(ev.evaluationId),
 				name: ev.configuration?.settings?.displayName ?? ev.configuration?.type?.displayName ?? "Build validation",
 				buildId: Number.isSafeInteger(ev.context?.buildId) ? ev.context.buildId : undefined,
+				expired: ev.context?.isExpired === true,
+				status: String(ev.status ?? "unknown"),
 			}))
 			.filter((ev: ExpiredBuildPolicy) => /^[0-9a-f-]{36}$/i.test(ev.evaluationId))
 	}
@@ -609,5 +630,64 @@ export class AzureDevOpsProvider implements ToolProvider {
 	async requeueBuildPolicy(evaluationId: string): Promise<void> {
 		if (!/^[0-9a-f-]{36}$/i.test(evaluationId)) throw new DevOpsError("Invalid policy evaluation ID.")
 		await this.api("PATCH", `policy/evaluations/${evaluationId}`, { "api-version": "7.1-preview.1" }, { status: "queued" })
+	}
+
+	async restartPrMerge(id: number): Promise<void> {
+		if (!Number.isSafeInteger(id) || id <= 0) throw new DevOpsError("Invalid pull request ID.")
+		// Queue the preview merge only. Never set PR status or completion options.
+		await this.api("PATCH", await this.prPath(`/${id}`), {}, { mergeStatus: "queued" })
+	}
+
+	async mergePr(id: number, expectedHeadSha: string): Promise<void> {
+		if (!Number.isSafeInteger(id) || id <= 0 || !/^[0-9a-f]{40,64}$/i.test(expectedHeadSha))
+			throw new DevOpsError("Invalid pull request or expected head commit.")
+		const response = await this.api(
+			"PATCH",
+			await this.prPath(`/${id}`),
+			{},
+			{
+				status: "completed",
+				lastMergeSourceCommit: { commitId: expectedHeadSha },
+				completionOptions: { mergeStrategy: "noFastForward", deleteSourceBranch: false, bypassPolicy: false },
+			},
+		)
+		if (
+			response?.mergeFailureMessage ||
+			response?.mergeStatus === "rejectedByPolicy" ||
+			response?.mergeStatus === "failure" ||
+			response?.mergeStatus === "conflicts"
+		) {
+			throw new DevOpsError(
+				response.mergeFailureMessage || "Azure DevOps rejected the merge. Check its policies and merge status.",
+			)
+		}
+		if (response?.status !== "completed" && response?.mergeStatus !== "queued") {
+			throw new DevOpsError("Azure DevOps did not confirm the merge request. Refresh the board to check its status.")
+		}
+	}
+
+	async listAgents(queueId: number, options: { includeCapabilities?: boolean } = {}): Promise<AgentInfo[]> {
+		const includeCapabilities = options.includeCapabilities ?? false
+		// Agent queues link a project to an org-scoped agent pool; resolve the pool id first.
+		const queue = await this.api<any>("GET", `distributedtask/queues/${queueId}`)
+		const poolId = queue?.pool?.id
+		if (!Number.isSafeInteger(poolId)) {
+			throw new DevOpsError(`Agent queue ${queueId} has no associated agent pool.`)
+		}
+		const agents = await this.orgApi<{ value?: any[] }>(
+			"GET",
+			`distributedtask/pools/${poolId}/agents`,
+			includeCapabilities ? { includeCapabilities: "true" } : {},
+		)
+		return (agents.value ?? []).map((a: any) => ({
+			id: a.id,
+			name: a.name ?? "",
+			status: a.status ?? "offline",
+			enabled: Boolean(a.enabled),
+			userCapabilities: a.userCapabilities,
+			systemCapabilities: a.systemCapabilities,
+			os: a.osDescription,
+			version: a.version,
+		}))
 	}
 }

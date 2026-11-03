@@ -118,7 +118,7 @@ const PIPELINE_ACTIONS: readonly CiBuiltinId[] = ["fix-build", "recalibrate", "i
 
 const NO_FIX: Partial<Record<CiPipelineFix["category"], string>> = {
 	infrastructure:
-		"An infrastructure problem (agent, network, disk or service): re-run the pipeline in CI. There is nothing in the code to fix.",
+		"An infrastructure problem (agent, network, disk or service): use Requeue pipeline to try again. CI may assign another agent. There is nothing in the code to fix.",
 	stale: "This run tested an older commit. Wait for the run on the pull request's head.",
 }
 

@@ -21,6 +21,7 @@ import { ImprovePromptButton } from "./chat-textarea/components/ImprovePromptBut
 import { ModelButton } from "./chat-textarea/components/ModelButton"
 import { ModeSwitch, modeColor, nextMode } from "./chat-textarea/components/ModeSwitch"
 import { SideQuestionToggle } from "./chat-textarea/components/SideQuestionToggle"
+import { useCompactPaste } from "./chat-textarea/hooks/useCompactPaste"
 import { useComposerKeyboardHandler } from "./chat-textarea/hooks/useComposerKeyboardHandler"
 import { useComposerSkills } from "./chat-textarea/hooks/useComposerSkills"
 import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hooks/useContextMenu"
@@ -86,8 +87,8 @@ interface ChatTextAreaProps {
 const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 	(
 		{
-			inputValue,
-			setInputValue,
+			inputValue: fullInputValue,
+			setInputValue: setFullInputValue,
 			sendingDisabled,
 			placeholderText,
 			selectedFiles,
@@ -106,6 +107,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		},
 		ref,
 	) => {
+		const compactPaste = useCompactPaste(fullInputValue, setFullInputValue)
+		const fullInputRef = useRef(fullInputValue)
+		fullInputRef.current = fullInputValue
+		const inputValue = compactPaste.value
+		const setInputValue = compactPaste.setValue
 		const {
 			mode,
 			platform,
@@ -217,10 +223,10 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			setRepeatUnit,
 			confirmSchedule,
 		} = useSchedulePicker(
-			inputValue,
+			fullInputValue,
 			selectedImages,
 			selectedFiles,
-			setInputValue,
+			setFullInputValue,
 			setSelectedImages,
 			setSelectedFiles,
 			onSchedulePrompt,
@@ -481,7 +487,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 				void (async () => {
 					const convertedProtoMode = PROTO_MODES[targetMode]
-					const submittedText = inputValue
+					const submittedText = fullInputValue
 					const submittedImages = selectedImages
 					const submittedFiles = selectedFiles
 					const response = await StateServiceClient.togglePlanActModeProto(
@@ -497,7 +503,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					// Focus the textarea after mode toggle with slight delay
 					setTimeout(() => {
 						const consumedComposerContent = response.value === true
-						const currentText = textAreaRef.current?.value ?? ""
+						const currentText = fullInputRef.current
 						// Reconcile only the submitted draft: the rebuild can take a moment
 						// and the user may have typed new content in the meantime.
 						const draftAction = getModeToggleDraftAction({
@@ -508,10 +514,10 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 						switch (draftAction) {
 							case "clear":
-								setInputValue("")
+								setFullInputValue("")
 								break
 							case "restore":
-								setInputValue(submittedText)
+								setFullInputValue(submittedText)
 								break
 							case "keep":
 								break
@@ -532,7 +538,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					}, 100)
 				})()
 			},
-			[mode, inputValue, selectedImages, selectedFiles, setInputValue, setSelectedImages, setSelectedFiles],
+			[mode, fullInputValue, selectedImages, selectedFiles, setFullInputValue, setSelectedImages, setSelectedFiles],
 		)
 
 		const onPromptReplaced = useCallback(
@@ -542,7 +548,14 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			},
 			[setIntendedCursorPosition],
 		)
-		const promptImprover = useImprovePrompt({ inputValue, setInputValue, mode, textAreaRef, onReplaced: onPromptReplaced })
+		const promptImprover = useImprovePrompt({
+			inputValue: fullInputValue,
+			setInputValue: setFullInputValue,
+			mode,
+			textAreaRef,
+			draftRef: fullInputRef,
+			onReplaced: onPromptReplaced,
+		})
 
 		// The shortcut cycles Plan -> Act -> Ask.
 		const onModeCycle = useCallback(() => onModeSelect(nextMode(mode)), [mode, onModeSelect])
@@ -600,6 +613,21 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 		return (
 			<div>
+				{compactPaste.blocks.length > 0 && (
+					<div className="relative z-10 flex flex-wrap gap-1 px-3 pt-2">
+						{compactPaste.blocks.map((block) => (
+							<button
+								className="rounded border border-input-border bg-button-secondary px-2 py-1 text-xs text-button-secondary-foreground cursor-pointer"
+								key={block.label}
+								onClick={compactPaste.expand}
+								title="Show and edit the complete pasted text. The full text is sent to the model."
+								type="button">
+								{block.label} · Expand
+							</button>
+						))}
+					</div>
+				)}
+
 				<div
 					className="relative flex transition-colors ease-in-out duration-100 px-3.5 py-2.5"
 					onDragEnter={handleDragEnter}
@@ -722,6 +750,24 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							handleInputChange(e)
 							updateHighlights()
 						}}
+						onCopy={(event) => {
+							if (compactPaste.blocks.length === 0) return
+							event.clipboardData.setData(
+								"text/plain",
+								compactPaste.copy(event.currentTarget.selectionStart, event.currentTarget.selectionEnd),
+							)
+							event.preventDefault()
+						}}
+						onCut={(event) => {
+							if (compactPaste.blocks.length === 0) return
+							const { selectionStart, selectionEnd } = event.currentTarget
+							if (selectionStart === selectionEnd) return
+							event.clipboardData.setData("text/plain", compactPaste.copy(selectionStart, selectionEnd))
+							event.preventDefault()
+							const cursor = compactPaste.cut(selectionStart, selectionEnd)
+							setCursorPosition(cursor)
+							setIntendedCursorPosition(cursor)
+						}}
 						onFocus={() => {
 							setIsTextAreaFocused(true)
 							onFocusChange?.(true) // Call prop on focus
@@ -735,7 +781,23 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						onKeyDown={handleKeyDown}
 						onKeyUp={handleKeyUp}
 						onMouseUp={updateCursorPosition}
-						onPaste={handlePaste}
+						onPaste={(event) => {
+							const text = event.clipboardData.getData("text/plain")
+							const cursor = compactPaste.paste(
+								text,
+								event.currentTarget.selectionStart,
+								event.currentTarget.selectionEnd,
+							)
+							if (cursor === undefined) {
+								void handlePaste(event)
+							} else {
+								event.preventDefault()
+								setCursorPosition(cursor)
+								setIntendedCursorPosition(cursor)
+								setShowContextMenu(false)
+								setShowSlashCommandsMenu(false)
+							}
+						}}
 						onScroll={() => updateHighlights()}
 						onSelect={updateCursorPosition}
 						placeholder={showUnsupportedFileError || showDimensionError ? "" : placeholderText}

@@ -31,6 +31,7 @@ The same server is available to:
 | `pipeline_run`    | Queues a GitHub workflow (`workflow_dispatch`) or an Azure Pipelines YAML pipeline on a branch, with typed inputs. |
 | `pipeline_cancel` | Cancels a run that has not finished.                                                          |
 | `pipeline_rerun`  | Runs a finished run again, all of it or only its failed jobs.                                 |
+| `ado_agents`      | Lists self-hosted Azure DevOps agents in an agent queue, with online/offline status and user-defined capabilities (Azure DevOps only). |
 
 The repository comes from the workspace's git remote (`origin`). Every tool also takes a `workspace` argument
 with the repository's absolute path. The PR tools take `pr_id`; without it they use the open pull request of the
@@ -110,6 +111,12 @@ Cursor and other clients queue through the server directly, without a history en
 `pipeline_cancel(run_id)` asks the provider to stop a run; a finished run is refused. `pipeline_rerun(run_id,
 failed_only=false)` runs a finished run again; a run that is still going is refused, and so is `failed_only` on a run
 that succeeded.
+
+`ado_agents(queue_id, capabilities=[])` lists the self-hosted agents in an Azure DevOps agent queue. It resolves the
+queue's agent pool and calls the org-level pools API with `includeCapabilities=true` only when a `capabilities` filter
+is given, then keeps the agents whose user-defined capabilities include every name listed (e.g.
+`["BUILD_CPU","BUILD_GPU","PERFORMANCE","BUILD_LIN_CPU"]`). The result is a Markdown table of agent name, online/offline
+status, enabled flag and capabilities. It is read-only and Azure DevOps only.
 
 | Call                 | GitHub                                   | Azure DevOps                                                                                   |
 | -------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |

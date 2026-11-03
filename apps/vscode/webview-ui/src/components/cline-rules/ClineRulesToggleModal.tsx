@@ -23,7 +23,7 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { FileServiceClient } from "@/services/grpc-client"
 import AgentsTab from "./AgentsTab"
 import BulkToggleControl from "./BulkToggleControl"
-import { ruleBulkTargets, skillBulkTargets } from "./bulkToggleTargets"
+import { agentBulkTargets, ruleBulkTargets, skillBulkTargets } from "./bulkToggleTargets"
 import HookRow from "./HookRow"
 import NewRuleRow from "./NewRuleRow"
 import RuleRow from "./RuleRow"
@@ -144,11 +144,17 @@ const ClineRulesToggleModal: React.FC = () => {
 		setLocalAgents(response.localAgents || [])
 	}, [])
 
-	const refreshAgents = useCallback(() => {
-		FileServiceClient.refreshAgents({} as EmptyRequest)
-			.then(applyAgents)
-			.catch((error) => console.error("Failed to refresh agents:", error))
-	}, [applyAgents])
+	const refreshAgents = useCallback(
+		(reportFailure = false) => {
+			return FileServiceClient.refreshAgents({} as EmptyRequest)
+				.then(applyAgents)
+				.catch((error) => {
+					console.error("Failed to refresh agents:", error)
+					if (reportFailure) throw error
+				})
+		},
+		[applyAgents],
+	)
 
 	// The rules once when the panel opens, and the open tab's list whenever it is shown.
 	useEffect(() => {
@@ -741,7 +747,15 @@ const ClineRulesToggleModal: React.FC = () => {
 								</div>
 							</>
 						) : currentView === "agents" ? (
-							<AgentsTab globalAgents={globalAgents} localAgents={localAgents} onAgentsChanged={applyAgents} />
+							<>
+								<BulkToggleControl
+									kind="agents"
+									onBusyChange={setBulkToggling}
+									onRefresh={() => refreshAgents(true)}
+									targets={agentBulkTargets(globalAgents, localAgents)}
+								/>
+								<AgentsTab globalAgents={globalAgents} localAgents={localAgents} onAgentsChanged={applyAgents} />
+							</>
 						) : null}
 					</fieldset>
 				</PopupModalContainer>

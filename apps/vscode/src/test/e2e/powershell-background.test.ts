@@ -69,10 +69,16 @@ for (const profile of profiles) {
 		})
 		const commandOutput = sidebar.locator("code").filter({ hasText: profile.version })
 		await expect(commandOutput).not.toBeVisible()
+		// Approval and router completion can create separate groups around the command output.
 		const showActivity = sidebar.getByRole("button", { name: "Show activity", exact: true })
-		await expect(showActivity).toHaveAttribute("aria-expanded", "false")
-		await showActivity.click()
-		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true })).toHaveAttribute("aria-expanded", "true")
+		await expect(showActivity.first()).toHaveAttribute("aria-expanded", "false")
+		while ((await showActivity.count()) > 0) {
+			await showActivity.first().click()
+		}
+		await expect(sidebar.getByRole("button", { name: "Hide activity", exact: true }).first()).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
 		await expect(commandOutput).toBeVisible()
 		for (const expectedPathPart of profile.psHome) {
 			await expect(commandOutput).toContainText(expectedPathPart)

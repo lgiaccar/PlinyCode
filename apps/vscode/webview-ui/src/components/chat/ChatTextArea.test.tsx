@@ -127,7 +127,7 @@ describe("ChatTextArea prompt recall", () => {
 					activeQuote={null}
 					inputValue={inputValue}
 					onSelectFilesAndImages={vi.fn()}
-					onSend={onSend}
+					onSend={() => onSend(inputValue)}
 					placeholderText="Type a message"
 					selectedFiles={[]}
 					selectedImages={[]}
@@ -142,6 +142,19 @@ describe("ChatTextArea prompt recall", () => {
 		render(<Composer />)
 		return { textarea: screen.getByPlaceholderText("Type a message") as HTMLTextAreaElement, onSend }
 	}
+
+	it("collapses a long paste, sends the full prompt, and expands it for editing", () => {
+		const { textarea, onSend } = renderComposer("Explain: ")
+		const text = "pasted word ".repeat(200)
+		textarea.setSelectionRange(9, 9)
+		fireEvent.paste(textarea, { clipboardData: { getData: () => text, items: [] } })
+		expect(textarea.value).toContain("400 words")
+		expect(textarea.value).not.toContain("pasted word")
+		fireEvent.keyDown(textarea, { key: "Enter" })
+		expect(onSend).toHaveBeenCalledWith(`Explain: ${text}`)
+		fireEvent.click(screen.getByRole("button", { name: /400 words.*Expand/ }))
+		expect(textarea.value).toBe(`Explain: ${text}`)
+	})
 
 	it("recalls the latest prompt into an empty composer without sending, with the cursor at the end", () => {
 		const { textarea, onSend } = renderComposer()
@@ -421,6 +434,18 @@ describe("ChatTextArea improve prompt", () => {
 		render(<StatefulTextArea initial="  " />)
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 		expect(mocks.improvePrompt).not.toHaveBeenCalled()
+	})
+
+	it("improves the full collapsed paste and restores its original text with Undo", async () => {
+		const text = "please explain ".repeat(200)
+		mocks.improvePrompt.mockResolvedValue({ text: "Explain this clearly.", error: "" })
+		render(<StatefulTextArea initial="" />)
+		fireEvent.paste(input(), { clipboardData: { getData: () => text, items: [] } })
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		await waitFor(() => expect(input().value).toBe("Explain this clearly."))
+		expect(mocks.improvePrompt).toHaveBeenCalledWith(expect.objectContaining({ text }))
+		fireEvent.click(screen.getByTestId("improve-prompt-undo"))
+		expect(input().value).toBe(text)
 	})
 
 	it("replaces the draft with the rewrite, sent with the mode, and offers to undo it", async () => {

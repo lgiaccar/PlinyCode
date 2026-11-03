@@ -80,6 +80,13 @@ export interface ExpiredBuildPolicy {
 	buildId?: number
 }
 
+/** A PR build-validation policy, including validations that are not marked expired yet. */
+export interface BuildPolicy extends ExpiredBuildPolicy {
+	expired: boolean
+	/** Azure DevOps policy state: approved, rejected, running, queued, etc. */
+	status: string
+}
+
 export interface Provider {
 	readonly kind: string
 	readonly maxBodyLength: number
@@ -96,6 +103,13 @@ export interface Provider {
 	/** Only Azure DevOps exposes build-policy expiration and requeue. */
 	listExpiredBuildPolicies?(pr: PullRequest): Promise<ExpiredBuildPolicy[]>
 	requeueBuildPolicy?(evaluationId: string): Promise<void>
+	listBuildPolicies?(pr: PullRequest): Promise<BuildPolicy[]>
+	/** Recompute the preview merge against the target branch; does not complete the PR. */
+	restartPrMerge?(id: number): Promise<void>
+	/** Complete a PR only if its source commit still matches; never request policy bypass or branch deletion. */
+	mergePr?(id: number, expectedHeadSha: string): Promise<void>
+	/** Only Azure DevOps exposes agent queues/pools. Returns agents in the queue's pool, with capabilities. */
+	listAgents?(queueId: number, options?: { includeCapabilities?: boolean }): Promise<AgentInfo[]>
 	/** Open pull requests, most recently updated first; `mine` keeps the signed-in user's. */
 	listOpenPrs(options: { mine: boolean; limit: number }): Promise<PullRequest[]>
 	/** The commit `branch` points at on the server, or undefined when the server has no such branch. */
@@ -108,6 +122,23 @@ export interface PipelineDefinition {
 	id: number
 	name: string
 	url: string
+}
+
+/** A self-hosted Azure DevOps agent in a queue/pool. */
+export interface AgentInfo {
+	id: number
+	name: string
+	/** "online" | "offline" — Azure DevOps reports `status: "online"`/`"offline"`. */
+	status: string
+	enabled: boolean
+	/** User-defined capabilities (demands the agent satisfies). `undefined` when not requested. */
+	userCapabilities?: Record<string, string>
+	/** System-defined capabilities (e.g. Agent.OS). `undefined` when not requested. */
+	systemCapabilities?: Record<string, string>
+	/** OS description, when reported by the agent. */
+	os?: string
+	/** Agent software version, when reported. */
+	version?: string
 }
 
 export interface PipelineDispatch {

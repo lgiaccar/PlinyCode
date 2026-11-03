@@ -51,6 +51,117 @@ describe("CiBoard", () => {
 		fs.rmSync(dir, { recursive: true, force: true })
 	})
 
+	it("merges a green PR at the selected head without a local checkout", async () => {
+		provider.runs.set(SHA_A, [boardRun(2, "ci", "completed", "success")])
+		const merged: unknown[] = []
+		Object.assign(provider, {
+			mergePr: async (...args: unknown[]) => {
+				merged.push(args)
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		await board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")
+		expect(merged).toEqual([[12, SHA_A]])
+	})
+
+	it.each(["failure", "skipped", "cancelled", "pending", "missing"])("refuses merge when CI is %s", async (result) => {
+		let merged = false
+		Object.assign(provider, {
+			mergePr: async () => {
+				merged = true
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		provider.runs.set(
+			SHA_A,
+			result === "missing" ? [] : [boardRun(2, "ci", result === "pending" ? "in_progress" : "completed", result)],
+		)
+		await expect(board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")).rejects.toThrow(/green/)
+		expect(merged).toBe(false)
+	})
+
+	it("revalidates checks, policies and PR state, and releases the action lock after failures", async () => {
+		provider.runs.set(SHA_A, [boardRun(2, "ci", "completed", "success")])
+		let merges = 0
+		let checks: unknown[] = [{ name: "review", status: "in_progress" }]
+		let policies: unknown[] = []
+		Object.assign(provider, {
+			mergePr: async () => {
+				merges++
+			},
+			prChecks: async () => checks,
+			listBuildPolicies: async () => policies,
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		const merge = () => board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")
+		await expect(merge()).rejects.toThrow(/has not passed/)
+		checks = [{ name: "review", status: "completed", result: "failure" }]
+		await expect(merge()).rejects.toThrow(/has not passed/)
+		checks = []
+		policies = [{ expired: true, status: "approved" }]
+		await expect(merge()).rejects.toThrow(/validations/)
+		policies = []
+		provider.prs[0].draft = true
+		await expect(merge()).rejects.toThrow(/ready for review/)
+		provider.prs[0].draft = false
+		provider.mergeStates.set(12, "conflicts")
+		await expect(merge()).rejects.toThrow(/merge cleanly/)
+		provider.mergeStates.set(12, "clean")
+		provider.prs[0].targetBranch = "other"
+		await expect(merge()).rejects.toThrow(/target branch changed/)
+		provider.prs[0].targetBranch = "main"
+		Object.assign(provider, {
+			prChecks: async () => {
+				provider.prs[0].headSha = "b".repeat(40)
+				return []
+			},
+		})
+		await expect(merge()).rejects.toThrow(/changed while checking CI/)
+		expect(merges).toBe(0)
+		provider.prs[0].headSha = SHA_A
+		Object.assign(provider, { prChecks: async () => [] })
+		await merge()
+		expect(merges).toBe(1)
+	})
+
+	it("rejects truncated run lists and concurrent merge requests", async () => {
+		provider.runs.set(
+			SHA_A,
+			Array.from({ length: 100 }, (_, i) => boardRun(i + 1, "ci", "completed", "success")),
+		)
+		let release!: () => void
+		let entered!: () => void
+		const started = new Promise<void>((resolve) => {
+			entered = resolve
+		})
+		const pending = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		Object.assign(provider, {
+			mergePr: async () => {
+				entered()
+				await pending
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		const merge = () => board.runProviderAction(target.id, item.key, "merge-pr", "", 0, SHA_A, "main")
+		await expect(merge()).rejects.toThrow(/Too many/)
+		provider.runs.set(SHA_A, [boardRun(101, "ci", "completed", "success")])
+		const first = merge()
+		await started
+		await expect(merge()).rejects.toThrow(/already/)
+		release()
+		await first
+	})
+
 	it("adds a PR link once, and saves it for the window's workspace", async () => {
 		const a = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
 		const b = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12/files" })
@@ -104,6 +215,134 @@ describe("CiBoard", () => {
 		await board.removeTarget(t.id)
 		expect(board.view()).toEqual([])
 		await expect(board.updateTarget(t.id, {})).rejects.toThrow(/no longer exists/)
+	})
+
+	it("requeues a failed run without a checkout and rejects stale selections", async () => {
+		const reruns: [number, boolean][] = []
+		Object.assign(provider, {
+			rerunRun: async (id: number, failedOnly: boolean) => {
+				reruns.push([id, failedOnly])
+				return { url: "" }
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 999)).rejects.toThrow(/changed/)
+		await board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)
+		expect(reruns).toEqual([[1, false]])
+		provider.runs.set(SHA_A, [boardRun(1, "ci", "in_progress")])
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/no longer failed/)
+		provider.runs.set(SHA_A, [boardRun(1, "ci", "completed", "failure"), boardRun(2, "ci", "queued")])
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/newer run/)
+		provider.prs[0].headSha = "b".repeat(40)
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/head changed/)
+		provider.prs[0].state = "closed"
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/no longer open/)
+		expect(reruns).toHaveLength(1)
+	})
+
+	it("requeues Azure DevOps validation through its policy and releases its lock after an error", async () => {
+		provider = new FakeBoardProvider("Azure DevOps")
+		provider.prs = [boardPr(12, { url: "https://dev.azure.com/acme/P/_git/r/pullrequest/12" })]
+		provider.runs.set(SHA_A, [boardRun(1, "ci", "completed", "failure")])
+		let status = "rejected"
+		let fail = true
+		let reruns = 0
+		const requeued: string[] = []
+		Object.assign(provider, {
+			rerunRun: async () => {
+				reruns++
+				return { url: "" }
+			},
+			listBuildPolicies: async () => [{ evaluationId: "policy-1", name: "ci", buildId: 1, expired: false, status }],
+			requeueBuildPolicy: async (id: string) => {
+				if (fail) throw new Error("Service unavailable")
+				requeued.push(id)
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url: provider.prs[0].url })
+		await board.refresh(target.id)
+		const item = board.view()[0].items[0]
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(/unavailable/)
+		fail = false
+		await board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)
+		expect(requeued).toEqual(["policy-1"])
+		expect(reruns).toBe(0)
+		status = "running"
+		await expect(board.runProviderAction(target.id, item.key, "rerun-pipeline", "", 1)).rejects.toThrow(
+			/already queued or running/,
+		)
+	})
+
+	it("runs direct Azure DevOps actions without a checkout and validates fresh policy state", async () => {
+		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
+		provider.prs = [boardPr(12, { url })]
+		const evaluationId = "11111111-1111-4111-8111-111111111111"
+		let policyStatus = "approved"
+		let restartError: Error | undefined
+		const restarted: number[] = []
+		const requeued: string[] = []
+		Object.assign(provider, {
+			listBuildPolicies: async () => [{ evaluationId, name: "CI", expired: false, status: policyStatus }],
+			requeueBuildPolicy: async (id: string) => {
+				requeued.push(id)
+				policyStatus = "queued"
+			},
+			restartPrMerge: async (id: number) => {
+				if (restartError) throw restartError
+				restarted.push(id)
+			},
+		})
+		const target = await board.addTarget({ kind: "pr", url })
+		await board.refresh()
+		const item = board.view()[0].items[0]
+		expect(item.buildPolicies).toHaveLength(1)
+		expect(item.expiredBuildPolicies).toEqual([])
+		await board.runProviderAction(target.id, item.key, "restart-merge")
+		expect(restarted).toEqual([12])
+		await expect(board.runProviderAction(target.id, item.key, "requeue-pipeline", "foreign-policy")).rejects.toThrow(
+			/changed/,
+		)
+		await board.runProviderAction(target.id, item.key, "requeue-pipeline", evaluationId)
+		expect(requeued).toEqual([evaluationId])
+		expect(board.view()[0].items[0].buildPolicies?.[0].status).toBe("queued")
+		await expect(board.runProviderAction(target.id, item.key, "requeue-pipeline", evaluationId)).rejects.toThrow(
+			/already queued/,
+		)
+		restartError = new Error("server unavailable")
+		await expect(board.runProviderAction(target.id, item.key, "restart-merge")).rejects.toThrow(/unavailable/)
+		restartError = undefined
+		await board.runProviderAction(target.id, item.key, "restart-merge")
+		provider.prs[0].state = "merged"
+		await expect(board.runProviderAction(target.id, item.key, "restart-merge")).rejects.toThrow(/no longer open/)
+		expect(restarted).toEqual([12, 12])
+		expect(board.linkFor(item.key)).toBeUndefined()
+	})
+
+	it("rejects GitHub items and concurrent provider actions", async () => {
+		const gh = await board.addTarget({ kind: "pr", url: "https://github.com/octo/hello/pull/12" })
+		await board.refresh()
+		await expect(board.runProviderAction(gh.id, board.view()[0].items[0].key, "restart-merge")).rejects.toThrow(
+			/Azure DevOps/,
+		)
+		const url = "https://dev.azure.com/acme/P/_git/r/pullrequest/12"
+		provider.prs = [boardPr(12, { url })]
+		let release!: () => void
+		Object.assign(provider, {
+			restartPrMerge: () =>
+				new Promise<void>((resolve) => {
+					release = resolve
+				}),
+		})
+		const target = await board.addTarget({ kind: "pr", url })
+		await board.refresh()
+		const item = board.view().find((v) => v.target.id === target.id)!.items[0]
+		const first = board.runProviderAction(target.id, item.key, "restart-merge")
+		await Promise.resolve()
+		await expect(board.runProviderAction(target.id, item.key, "restart-merge")).rejects.toThrow(/already running/)
+		release()
+		await first
 	})
 
 	it("requeues only a currently expired Azure DevOps validation and refreshes the board", async () => {

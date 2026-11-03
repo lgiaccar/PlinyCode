@@ -1,4 +1,4 @@
-import { RuleScope, SkillInfo } from "@shared/proto/cline/file"
+import { AgentInfo, RuleScope, SkillInfo } from "@shared/proto/cline/file"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import ClineRulesToggleModal from "./ClineRulesToggleModal"
@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 	toggleAgentsRule: vi.fn(),
 	toggleCopilotRule: vi.fn(),
 	toggleSkill: vi.fn(),
+	toggleAgent: vi.fn(),
 	ruleState: {} as Record<string, Record<string, boolean>>,
 	subscribe: vi.fn(),
 	unsubscribe: vi.fn(),
@@ -62,6 +63,7 @@ vi.mock("@/services/grpc-client", () => ({
 		toggleAgentsRule: mocks.toggleAgentsRule,
 		toggleCopilotRule: mocks.toggleCopilotRule,
 		toggleSkill: mocks.toggleSkill,
+		toggleAgent: mocks.toggleAgent,
 		subscribeToCustomizationChanges: mocks.subscribe,
 	},
 }))
@@ -76,6 +78,7 @@ describe("ClineRulesToggleModal", () => {
 			mocks.toggleAgentsRule,
 			mocks.toggleCopilotRule,
 			mocks.toggleSkill,
+			mocks.toggleAgent,
 		]) {
 			toggle.mockReset().mockResolvedValue({})
 		}
@@ -161,6 +164,81 @@ describe("ClineRulesToggleModal", () => {
 		]) {
 			expect(toggle).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ enabled: false }))
 		}
+	})
+
+	it("toggles global and workspace agents, skips unchanged and invalid files, and refreshes the counts", async () => {
+		const globalAgent = AgentInfo.create({ name: "global", path: "/global/agents/reviewer.md", enabled: true })
+		const localAgent = AgentInfo.create({ name: "local", path: "/repo/.cline/agents/reviewer.md", enabled: false })
+		const brokenAgent = AgentInfo.create({
+			name: "broken",
+			path: "/repo/.cline/agents/broken.md",
+			enabled: true,
+			error: "Invalid YAML",
+		})
+		mocks.refreshAgents.mockResolvedValue({ globalAgents: [globalAgent], localAgents: [localAgent, brokenAgent] })
+		mocks.toggleAgent.mockImplementation(async ({ isGlobal, enabled }) => {
+			if (isGlobal) globalAgent.enabled = enabled
+			else localAgent.enabled = enabled
+			return {}
+		})
+		render(<ClineRulesToggleModal />)
+		fireEvent.click(screen.getByRole("button", { name: "Show Customize" }))
+		fireEvent.click(screen.getByRole("button", { name: "Agents" }))
+		await waitFor(() => expect(screen.getByText("1 of 2 enabled")).toBeTruthy())
+		fireEvent.click(screen.getByRole("switch", { name: "Toggle all agents" }))
+		await waitFor(() => expect(mocks.refreshAgents).toHaveBeenCalledTimes(2))
+		expect(mocks.toggleAgent).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ agentPath: globalAgent.path, isGlobal: true, enabled: false }),
+		)
+		await waitFor(() => expect(screen.getByText("0 of 2 enabled")).toBeTruthy())
+		expect(screen.getByRole("switch", { name: "Disable agent broken" })).toBeDisabled()
+		fireEvent.click(screen.getByRole("switch", { name: "Toggle all agents" }))
+		await waitFor(() => expect(mocks.refreshAgents).toHaveBeenCalledTimes(3))
+		expect(
+			mocks.toggleAgent.mock.calls.slice(1).map(([request]) => [request.agentPath, request.isGlobal, request.enabled]),
+		).toEqual([
+			[globalAgent.path, true, true],
+			[localAgent.path, false, true],
+		])
+		expect(screen.getByText("2 of 2 enabled")).toBeTruthy()
+		expect(screen.getByText(/2 of 3 agents offered/)).toBeTruthy()
+	})
+
+	it.each([false, true])("disables the bulk switch when no agents can load (invalid file: %s)", async (invalid) => {
+		mocks.refreshAgents.mockResolvedValue({
+			globalAgents: [],
+			localAgents: invalid ? [AgentInfo.create({ name: "broken", error: "Invalid YAML" })] : [],
+		})
+		render(<ClineRulesToggleModal />)
+		fireEvent.click(screen.getByRole("button", { name: "Show Customize" }))
+		fireEvent.click(screen.getByRole("button", { name: "Agents" }))
+		await waitFor(() => expect(mocks.refreshAgents).toHaveBeenCalledTimes(1))
+		expect(screen.getByRole("switch", { name: "Toggle all agents" })).toBeDisabled()
+		expect(mocks.toggleAgent).not.toHaveBeenCalled()
+	})
+
+	it("locks agent controls during bulk saves and reports a failed refresh", async () => {
+		const log = vi.spyOn(console, "error").mockImplementation(() => {})
+		let finish!: () => void
+		mocks.toggleAgent.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve
+				}),
+		)
+		render(<ClineRulesToggleModal />)
+		fireEvent.click(screen.getByRole("button", { name: "Show Customize" }))
+		fireEvent.click(screen.getByRole("button", { name: "Agents" }))
+		await waitFor(() => expect(screen.getByText("subagent_reviewer")).toBeTruthy())
+		mocks.refreshAgents.mockRejectedValueOnce(new Error("Disconnected"))
+		fireEvent.click(screen.getByRole("switch", { name: "Toggle all agents" }))
+		expect(screen.getByRole("button", { name: "Skills" })).toBeDisabled()
+		expect(screen.getByRole("switch", { name: "Disable agent reviewer" })).toBeDisabled()
+		await act(async () => finish())
+		await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not refresh agents"))
+		expect(screen.getByRole("button", { name: "Skills" })).not.toBeDisabled()
+		expect(screen.getByRole("switch", { name: "Disable agent reviewer" })).not.toBeDisabled()
+		log.mockRestore()
 	})
 
 	it("enables global and workspace skills through the persistent per-skill RPC", async () => {

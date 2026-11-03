@@ -417,6 +417,8 @@ function trackTerminalCommand(
 		if (registry.get(registered.id)?.status === "running" && target.busy) {
 			try {
 				terminalManager.disposeTerminal(target)
+				// Closing a terminal loses observation; it is not an exit event.
+				registry.markLost(registered.id)
 			} catch (error) {
 				Logger.warn(`[VscodeRunCommands] Failed to close the terminal of process ${registered.id}: ${error}`)
 			}
@@ -437,7 +439,7 @@ function trackTerminalCommand(
 		attach: (info, process) => {
 			terminalInfo = info
 			process.once("completed", (details?: TerminalCompletionDetails) => {
-				if (details?.unobservedCommand) {
+				if (details?.unobservedCommand || details?.terminalClosed) {
 					registry.markLost(registered.id)
 				} else {
 					registry.markExited(registered.id, typeof details?.exitCode === "number" ? details.exitCode : undefined)

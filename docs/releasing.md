@@ -110,6 +110,8 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
    clean working tree.
 2. **Bump the version.** Set `version` in `apps/vscode/package.json`, then run `bun install` so the `plinycode-dev`
    entry in `bun.lock` matches. The diff should be two lines.
+   Review and update the [public repository information](#public-repository-information-on-every-release) before
+   tagging. Keep those documentation changes separate from the two-line version bump.
 3. **Build and test.**
    ```sh
    bun install
@@ -150,7 +152,41 @@ Run these from the repo root unless noted. `/release` in Claude Code does the sa
 
    `--force` allows a version that isn't newer, or a tag that isn't `HEAD`.
 9. **Open the PR** for the release branch as usual.
-10. **Verify.** On a machine running the previous version, run **PlinyCode: Check for Updates**.
+10. **Verify.** On a machine running the previous version, run **PlinyCode: Check for Updates**. Complete the public repository information checks below as part of every release.
+
+## Public repository information on every release
+
+Review the GitHub repository information whenever publishing a version, including a pre-release. An official
+release refreshes the stable version and highlights; a pre-release must remain clearly labeled as a test build
+and must not replace the latest stable release in the public overview.
+
+Before committing and tagging the release:
+
+- Review `README.md`: update the release highlights, feature overview, installation and configuration details,
+  requirements, and links against the changes actually shipping. Keep it concise and link to the feature guides.
+- Update `apps/vscode/README.marketplace.md` and keep `apps/vscode/README.md` aligned. The packaging script
+  includes the marketplace README in the VSIX, so these changes must precede packaging and tagging.
+- Use release notes and the source selected for the release as evidence. Describe user-visible behavior; do not advertise
+  unmerged work or turn model routing or configurable approvals into broader guarantees.
+- Run `bun run check:docs` and review the diff. Check the rendered GitHub README after the PR is merged.
+
+After successful publication:
+
+- Confirm the GitHub **About** description, homepage and topics still represent the product; update them when
+  needed. Keep the description independent of patch numbers and point the homepage to
+  `https://github.com/lgiaccar/PlinyCode/releases/latest`.
+- Inspect the current settings with
+  `gh repo view lgiaccar/PlinyCode --json description,homepageUrl,repositoryTopics,defaultBranchRef`.
+  Use `gh repo edit` for description, homepage and topic changes; preserve unrelated topics.
+- Ensure the README changes reach the repository's default branch through the release PR, following the user's
+  merge authorization and repository checks. A published tag alone does not update the repository landing page.
+- Verify the public repository page, its release links and the latest stable manifest. Report any outstanding
+  documentation PR or repository-settings permission failure; do not declare the information refresh complete
+  while it exists only on a local or unmerged branch.
+
+For a pre-release, update the packaged information for that build and review the public stable overview for
+accuracy, while keeping test-only features identified as such. Do not announce the pre-release as the latest
+stable release. A version tick that is not published does not require changing GitHub repository metadata.
 
 ## Testing a release before users get it
 

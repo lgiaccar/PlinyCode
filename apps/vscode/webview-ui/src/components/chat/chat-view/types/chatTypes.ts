@@ -102,6 +102,7 @@ export interface ScrollBehavior {
 	virtuosoRef: React.RefObject<VirtuosoHandle>
 	scrollContainerRef: React.RefObject<HTMLDivElement>
 	disableAutoScrollRef: React.MutableRefObject<boolean>
+	isManualScrollPaused: () => boolean
 	scrollToBottomSmooth: () => void
 	scrollToBottomAuto: () => void
 	scrollToTopSmooth: () => void

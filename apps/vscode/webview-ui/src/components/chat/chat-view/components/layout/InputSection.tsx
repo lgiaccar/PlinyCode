@@ -52,7 +52,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 		clineAsk,
 	} = chatState
 
-	const { isAtBottom, scrollToBottomAuto } = scrollBehavior
+	const { isAtBottom, isManualScrollPaused, scrollToBottomAuto } = scrollBehavior
 	const { turnState, mode, globalAgents, localAgents } = useExtensionState()
 	const legacyTaskRunning =
 		turnState === undefined &&
@@ -88,7 +88,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 				inputValue={inputValue}
 				onFocusChange={handleFocusChange}
 				onHeightChange={() => {
-					if (isAtBottom) {
+					if (isAtBottom && !isManualScrollPaused()) {
 						scrollToBottomAuto()
 					}
 				}}

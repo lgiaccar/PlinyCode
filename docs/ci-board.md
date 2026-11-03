@@ -51,9 +51,16 @@ Each row has:
 - the conversation the last action started, and the action buttons.
 
 Azure DevOps PRs also show **Expired** when a build-validation policy has expired after a target-branch update.
-Expand the row and use **Requeue** beside that validation to ask Azure DevOps to run it again. Expiration is a
+Expand the row and use **Requeue pipeline** beside that validation to ask Azure DevOps to run it again. Expiration is a
 policy state, so an earlier successful build can still have a green run dot. Requeue acts on one policy at a time
 and does not start a code-fixing conversation.
+
+An open Azure DevOps PR also has two direct controls in its **Actions** menu, beside **Fix conflicts** and **Fix build**:
+
+- **Restart merge** asks Azure DevOps to recompute the preview merge against the current target branch, such as `stage`. Use it when an old PR may have new conflicts after the target branch advanced. It does not complete the PR, resolve conflicts, or push changes to the source branch.
+- **Requeue pipeline** opens the PR's build-validation policies so you can choose which one to run again. It includes outdated results that Azure DevOps has not marked expired yet. Queued or running validations cannot be requeued. This re-evaluates the selected PR policy rather than retrying jobs on an old build commit; restart the preview merge first when the target branch has advanced.
+
+Both controls use the configured Azure DevOps credentials, work without a local checkout, and show pending, submitted, or error feedback. The board refreshes after the request. PlinyCode rechecks the PR and policy state before sending it, rejects duplicate in-flight actions, and never starts these actions through auto-watch.
 
 | Color  | Meaning                                                                                                   |
 | ------ | --------------------------------------------------------------------------------------------------------- |
@@ -90,6 +97,24 @@ The chevron at the start of a row expands it from the compact line of dots into 
 While a run the board started is going, the fix buttons are disabled and the pipeline it fixes says **fixing**.
 **Open full report** opens the [markdown report](#reports) when the details did not fit; **Analyze again** reads the
 runs again.
+
+## Merging a green pull request
+
+An open PR has a **Merge** option in its Actions menu, and a **Merge** button when no pipeline fails.
+It becomes available when every pipeline is green on the current commit, the PR is ready for review and
+merges cleanly, and its build validations are current and approved. A pending, missing, skipped, cancelled,
+or failed pipeline keeps it disabled; its tooltip explains why. Branch-only entries have no merge action.
+
+Clicking **Merge** rechecks the PR, latest pipeline runs, checks and build policies using the configured GitHub
+or Azure DevOps credentials. A changed source commit or target branch requires refreshing the board first.
+Repository review and branch policies still apply; the board never asks to bypass them. The merge uses a merge
+commit without requesting source-branch deletion (repository settings still apply). Repositories that require a different merge method report that requirement
+as a provider error. The action works without a local checkout and never runs through auto-watch.
+
+The button is disabled while its request or a board conversation is running. Success, pending completion,
+and provider errors appear in the row; the board refreshes after the request. When the provider's run listing
+hits the verification limit (100 recent runs per query), PlinyCode leaves merging to the provider instead of
+assuming that unlisted pipelines passed.
 
 ## Failure triage
 
@@ -223,6 +248,17 @@ An action cannot run on a pull request from a fork (its branch cannot be pushed 
 closed pull request, or when no folder in the window is a checkout of the repository. The button's tooltip says
 which. A checkout matches whatever case its remote URL uses, and for Azure DevOps Server whatever host name (old
 or new) it uses, as long as the collection, project and repository are the same.
+
+### Requeue an infrastructure failure
+
+Expand a row and choose **Requeue pipeline** beside a failed pipeline to try it again on GitHub or Azure DevOps.
+For a single failure classified as infrastructure, **Requeue pipeline** is also the row's main action.
+This queues the whole pipeline and may get another agent; CI controls agent selection. It needs no local checkout
+and does not start an agent conversation. Azure DevOps PR build validations are requeued through their policy.
+
+The board rechecks the current branch head and latest run before requeueing. A newer run, a running validation,
+or a closed PR requires refreshing the board instead. Request errors appear in the row, and the buttons stay
+disabled while a request is pending. Auto-watch does not requeue pipelines automatically.
 
 ## Auto-watch
 

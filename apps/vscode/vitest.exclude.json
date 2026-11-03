@@ -37,6 +37,7 @@
 	"src/hosts/vscode/terminal/shellPromptHeuristics.test.ts",
 	"src/hosts/vscode/terminal/VscodeTerminalManager.test.ts",
 	"src/hosts/vscode/terminal/VscodeTerminalProcess.test.ts",
+	"src/services/devops-mcp/agents/agent-monitor.test.ts",
 	"src/services/devops-mcp/ci-board/__tests__/ci-auto-runner.test.ts",
 	"src/services/devops-mcp/ci-board/__tests__/ci-board-actions.test.ts",
 	"src/services/devops-mcp/ci-board/__tests__/ci-board-poller.test.ts",

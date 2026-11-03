@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 	openCiConversation: vi.fn(),
 	analyzeCiItem: vi.fn(),
 	runCiCustomPrompt: vi.fn(),
-	requeueExpiredCiBuild: vi.fn(),
+	runCiProviderAction: vi.fn(),
 	openUrl: vi.fn(),
 	openFile: vi.fn(),
 }))
@@ -27,7 +27,7 @@ vi.mock("@/services/grpc-client", () => ({
 		openCiConversation: mocks.openCiConversation,
 		analyzeCiItem: mocks.analyzeCiItem,
 		runCiCustomPrompt: mocks.runCiCustomPrompt,
-		requeueExpiredCiBuild: mocks.requeueExpiredCiBuild,
+		runCiProviderAction: mocks.runCiProviderAction,
 	},
 	UiServiceClient: { openUrl: mocks.openUrl },
 	FileServiceClient: { openFile: mocks.openFile },
@@ -110,6 +110,8 @@ function makeItem(overrides: Partial<CiItem> = {}): CiItem {
 			{ name: "win_cuda", color: "grey", status: "", result: "", runId: 0, url: "" },
 		],
 		expiredBuildPolicies: [],
+		provider: "github",
+		buildPolicies: [],
 		conversationId: "",
 		conversationStatus: "",
 		watching: false,
@@ -131,9 +133,50 @@ describe("CiItemRow", () => {
 		mocks.openCiConversation.mockReset().mockResolvedValue({})
 		mocks.analyzeCiItem.mockReset().mockResolvedValue({})
 		mocks.runCiCustomPrompt.mockReset().mockResolvedValue({ value: "conv-2" })
-		mocks.requeueExpiredCiBuild.mockReset().mockResolvedValue({})
+		mocks.runCiProviderAction.mockReset().mockResolvedValue({})
 		mocks.openUrl.mockReset().mockResolvedValue({})
 		mocks.openFile.mockReset().mockResolvedValue({})
+	})
+
+	it("merges green PRs without a checkout, pins the selection and reports provider errors", async () => {
+		const item = makeItem({ pipelines: [makeItem().pipelines[1]], runBlocked: "No local checkout" })
+		render(row(item))
+		const merge = screen.getByTestId("ci-merge")
+		expect(merge).toBeEnabled()
+		mocks.runCiProviderAction.mockRejectedValueOnce(new Error("Branch policy rejected merge"))
+		fireEvent.click(merge)
+		await screen.findByText("Branch policy rejected merge")
+		expect(merge).toBeEnabled()
+		fireEvent.click(merge)
+		await screen.findByText(/Merge request accepted/)
+		expect(mocks.runCiProviderAction).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				targetId: "t1",
+				itemKey: item.key,
+				action: "merge-pr",
+				expectedHeadSha: "abc",
+				expectedTargetBranch: "stage",
+			}),
+		)
+		expect(mocks.runCiAction).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		{ pipelines: [] },
+		{ pipelines: [makeItem().pipelines[2]] },
+		{ draft: true },
+		{ mergeState: "unknown" },
+		{ error: "Unable to refresh" },
+		{ buildPolicies: [{ evaluationId: "1", name: "ci", buildId: 1, expired: true, status: "approved" }] },
+	])("disables merging unsafe or incomplete CI: %j", (overrides) => {
+		render(row(makeItem({ pipelines: [makeItem().pipelines[1]], ...overrides })))
+		expect(screen.getByTestId("ci-merge")).toBeDisabled()
+	})
+
+	it("offers a disabled Merge menu entry while a pipeline is failing", () => {
+		render(row(makeItem()))
+		fireEvent.click(screen.getByTestId("ci-more-actions"))
+		expect(screen.getByRole("menuitem", { name: /Merge/ })).toBeDisabled()
 	})
 
 	it("shows one dot per pipeline in its color, and opens a run from its dot", () => {
@@ -143,6 +186,33 @@ describe("CiItemRow", () => {
 		expect(dots[2]).toBeDisabled()
 		fireEvent.click(dots[0])
 		expect(mocks.openUrl).toHaveBeenCalledWith(expect.objectContaining({ value: "https://ci/101" }))
+	})
+
+	it("requeues infrastructure failures directly and reports provider errors", async () => {
+		render(
+			row(
+				makeItem({
+					fixes: [fix("win_cpu", { category: "infrastructure", actionId: "", label: "" })],
+					runBlocked: "No checkout",
+				}),
+			),
+		)
+		fireEvent.click(screen.getByTestId("ci-expand"))
+		const button = screen.getByRole("button", { name: "Requeue win_cpu" })
+		expect(screen.getByTestId("ci-primary-action")).toHaveTextContent("Requeue pipeline")
+		expect(screen.queryByRole("button", { name: "Requeue linux_cpu" })).toBeNull()
+		mocks.runCiProviderAction.mockRejectedValueOnce(new Error("Agent pool unavailable"))
+		fireEvent.click(button)
+		expect(button).toBeDisabled()
+		await waitFor(() => expect(screen.getByText(/Agent pool unavailable/)).toBeInTheDocument())
+		expect(button).not.toBeDisabled()
+		fireEvent.click(button)
+		await waitFor(() =>
+			expect(mocks.runCiProviderAction).toHaveBeenLastCalledWith(
+				expect.objectContaining({ action: "rerun-pipeline", runId: 101, itemKey: makeItem().key }),
+			),
+		)
+		expect(mocks.runCiAction).not.toHaveBeenCalled()
 	})
 
 	it("flags merge conflicts", () => {
@@ -166,8 +236,83 @@ describe("CiItemRow", () => {
 		expect(screen.getByTestId("ci-expired-badge")).toHaveTextContent("Expired")
 		fireEvent.click(screen.getByLabelText("Show details"))
 		expect(screen.getByTestId("ci-expired-policy")).toHaveTextContent("PR validation")
-		fireEvent.click(screen.getByRole("button", { name: "Requeue" }))
-		await waitFor(() => expect(mocks.requeueExpiredCiBuild).toHaveBeenCalledWith(expect.objectContaining({ evaluationId })))
+		fireEvent.click(screen.getByRole("button", { name: "Requeue pipeline" }))
+		await waitFor(() =>
+			expect(mocks.runCiProviderAction).toHaveBeenCalledWith(
+				expect.objectContaining({ evaluationId, action: "requeue-pipeline" }),
+			),
+		)
+	})
+
+	it("offers direct Azure DevOps actions even without a checkout and shows restart errors", async () => {
+		const item = makeItem({ provider: "ado", runBlocked: "No local checkout" })
+		render(row(item))
+		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+		fireEvent.click(screen.getByRole("menuitem", { name: /Restart merge/ }))
+		await waitFor(() =>
+			expect(mocks.runCiProviderAction).toHaveBeenCalledWith(
+				expect.objectContaining({ targetId: "t1", itemKey: item.key, action: "restart-merge" }),
+			),
+		)
+		expect(mocks.runCiAction).not.toHaveBeenCalled()
+		await screen.findByText(/Preview merge restart requested/)
+		mocks.runCiProviderAction.mockRejectedValueOnce(new Error("Access denied"))
+		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+		fireEvent.click(screen.getByRole("menuitem", { name: /Restart merge/ }))
+		await screen.findByText(/Access denied/)
+	})
+
+	it("lets the user choose a non-expired validation and disables active policies", async () => {
+		const evaluationId = "11111111-1111-4111-8111-111111111111"
+		render(
+			row(
+				makeItem({
+					provider: "ado",
+					buildPolicies: [
+						{ evaluationId, name: "Older successful build", buildId: 7, expired: false, status: "approved" },
+						{ evaluationId: "running", name: "Active build", buildId: 8, expired: false, status: "running" },
+					],
+				}),
+			),
+		)
+		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+		fireEvent.click(screen.getByRole("menuitem", { name: /Requeue pipeline/ }))
+		expect(screen.getByText("Older successful build")).toBeInTheDocument()
+		const buttons = screen.getAllByRole("button", { name: "Requeue pipeline" })
+		expect(buttons[1]).toBeDisabled()
+		fireEvent.click(buttons[0])
+		await waitFor(() =>
+			expect(mocks.runCiProviderAction).toHaveBeenCalledWith(
+				expect.objectContaining({ action: "requeue-pipeline", evaluationId }),
+			),
+		)
+	})
+
+	it("disables both provider actions while a restart request is pending", async () => {
+		let finish!: (value: object) => void
+		mocks.runCiProviderAction.mockReturnValueOnce(
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+		)
+		render(row(makeItem({ provider: "ado" })))
+		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+		fireEvent.click(screen.getByRole("menuitem", { name: /Restart merge/ }))
+		expect(screen.getByRole("status")).toHaveTextContent("Requesting CI action")
+		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+		expect(screen.getByRole("menuitem", { name: /Restart merge/ })).toBeDisabled()
+		expect(screen.getByRole("menuitem", { name: /Requeue pipeline/ })).toBeDisabled()
+		finish({})
+		await screen.findByText(/Preview merge restart requested/)
+	})
+
+	it("hides Azure DevOps controls for GitHub and closed PRs", () => {
+		const { rerender } = render(row(makeItem()))
+		fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+		expect(screen.queryByRole("menuitem", { name: /Restart merge/ })).not.toBeInTheDocument()
+		expect(screen.queryByRole("menuitem", { name: /Requeue pipeline/ })).not.toBeInTheDocument()
+		rerender(row(makeItem({ provider: "ado", state: "merged" })))
+		expect(screen.queryByRole("menuitem", { name: /Restart merge/ })).not.toBeInTheDocument()
 	})
 
 	it("runs the main action, and shows why when it cannot", async () => {
