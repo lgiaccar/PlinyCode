@@ -498,164 +498,128 @@ const ClineRulesToggleModal: React.FC = () => {
 						</div>
 					</div>
 
-					{/* Scrollable content area */}
-					<fieldset
-						className="flex-1 min-w-0 overflow-y-auto border-0 m-0 px-3 pb-3 pt-0"
-						disabled={bulkToggling}
-						style={{ minHeight: 0 }}>
-						{currentView === "rules" ? (
-							<>
-								<BulkToggleControl
-									kind="rules"
-									onBusyChange={setBulkToggling}
-									onRefresh={() => refreshRules(true)}
-									targets={ruleBulkTargets({
-										globalClineRulesToggles,
-										localClineRulesToggles,
-										localCursorRulesToggles,
-										localWindsurfRulesToggles,
-										localAgentsRulesToggles,
-										localCopilotRulesToggles,
-									})}
-								/>
-								<ContextBudget
-									detail={`${enabledRuleCount} of ${allFileRules.length} rule files enabled · ~${formatTokenCount(totalRuleTokens)} if all were on`}
-									label="Rules added to every request"
-									tokens={enabledRuleTokens}
-								/>
-
-								{/* Global Rules Section */}
-								<div className="mb-3">
-									<div className="text-sm font-normal mb-2">Global Rules</div>
-
-									{/* File-based Global Rules */}
-									<RulesToggleList
-										isGlobal={true}
-										listGap="small"
-										rules={globalRules}
-										ruleType={"cline"}
-										showNewRule={true}
-										showNoRules={false}
-										toggleRule={(rulePath, enabled) => toggleRule(true, rulePath, enabled)}
-										tokenCounts={ruleTokenCounts}
+					{/* Fieldsets do not scroll reliably as flex items in Chromium; let a div own scrolling. */}
+					<div className="flex-1 min-h-0 min-w-0 overflow-y-auto px-3 pb-3 pt-0">
+						<fieldset className="min-w-0 border-0 m-0 p-0" disabled={bulkToggling}>
+							{currentView === "rules" ? (
+								<>
+									<BulkToggleControl
+										kind="rules"
+										onBusyChange={setBulkToggling}
+										onRefresh={() => refreshRules(true)}
+										targets={ruleBulkTargets({
+											globalClineRulesToggles,
+											localClineRulesToggles,
+											localCursorRulesToggles,
+											localWindsurfRulesToggles,
+											localAgentsRulesToggles,
+											localCopilotRulesToggles,
+										})}
 									/>
-								</div>
-
-								{/* Local Rules Section */}
-								<div className="-mb-2.5">
-									<div className="text-sm font-normal mb-2">Workspace Rules</div>
-									<RulesToggleList
-										isGlobal={false}
-										listGap="small"
-										rules={localRules}
-										ruleType={"cline"}
-										showNewRule={false}
-										showNoRules={false}
-										toggleRule={(rulePath, enabled) => toggleRule(false, rulePath, enabled)}
-										tokenCounts={ruleTokenCounts}
+									<ContextBudget
+										detail={`${enabledRuleCount} of ${allFileRules.length} rule files enabled · ~${formatTokenCount(totalRuleTokens)} if all were on`}
+										label="Rules added to every request"
+										tokens={enabledRuleTokens}
 									/>
 
-									<RulesToggleList
-										isGlobal={false}
-										listGap="small"
-										rules={cursorRules}
-										ruleType={"cursor"}
-										showNewRule={false}
-										showNoRules={false}
-										toggleRule={toggleCursorRule}
-										tokenCounts={ruleTokenCounts}
-									/>
-									<RulesToggleList
-										isGlobal={false}
-										listGap="small"
-										rules={copilotRules}
-										ruleType={"copilot"}
-										showNewRule={false}
-										showNoRules={false}
-										toggleRule={toggleCopilotRule}
-										tokenCounts={ruleTokenCounts}
-									/>
-									<RulesToggleList
-										isGlobal={false}
-										listGap="small"
-										rules={windsurfRules}
-										ruleType={"windsurf"}
-										showNewRule={false}
-										showNoRules={false}
-										toggleRule={toggleWindsurfRule}
-										tokenCounts={ruleTokenCounts}
-									/>
-									<RulesToggleList
-										isGlobal={false}
-										listGap="small"
-										rules={agentsRules}
-										ruleType={"agents"}
-										showNewRule={true}
-										showNoRules={false}
-										toggleRule={toggleAgentsRule}
-										tokenCounts={ruleTokenCounts}
-									/>
-								</div>
-							</>
-						) : currentView === "hooks" ? (
-							<>
-								<div className="text-xs text-description mb-4">
-									<p>
-										Hook files run when their event fires. Switch one off to skip it; new hooks start off.{" "}
-										<VSCodeLink
-											className="text-xs"
-											href="https://docs.cline.bot/features/hooks"
-											style={{ display: "inline", fontSize: "inherit" }}>
-											Docs
-										</VSCodeLink>
-									</p>
-								</div>
-								{/* Global Hooks */}
-								<div className="mb-3">
-									<div className="text-sm font-normal mb-2">Global Hooks</div>
-									<div className="flex flex-col gap-0">
-										{globalHooks
-											.sort((a, b) => a.name.localeCompare(b.name))
-											.map((hook) => (
-												<HookRow
-													absolutePath={hook.absolutePath}
-													enabled={hook.enabled}
-													hookName={hook.name}
-													isGlobal={true}
-													key={hook.absolutePath}
-													onDelete={(hooksToggles) => {
-														// Use response data directly, no need to refresh
-														setGlobalHooks(hooksToggles.globalHooks || [])
-														setWorkspaceHooks(hooksToggles.workspaceHooks || [])
-													}}
-													onToggle={(newEnabled: boolean) =>
-														toggleHook(true, hook.name, hook.absolutePath, newEnabled)
-													}
-												/>
-											))}
-										<NewRuleRow
-											existingHooks={globalHooks.map((h) => h.name)}
+									{/* Global Rules Section */}
+									<div className="mb-3">
+										<div className="text-sm font-normal mb-2">Global Rules</div>
+
+										{/* File-based Global Rules */}
+										<RulesToggleList
 											isGlobal={true}
-											ruleType="hook"
+											listGap="small"
+											rules={globalRules}
+											ruleType={"cline"}
+											showNewRule={true}
+											showNoRules={false}
+											toggleRule={(rulePath, enabled) => toggleRule(true, rulePath, enabled)}
+											tokenCounts={ruleTokenCounts}
 										/>
 									</div>
-								</div>
 
-								{/* Workspace Hooks - one section per workspace */}
-								{workspaceHooks.map((workspace, index) => (
-									<div
-										className={index === workspaceHooks.length - 1 ? "-mb-2.5" : "mb-3"}
-										key={workspace.workspaceName}>
-										<div className="text-sm font-normal mb-2">{workspace.workspaceName}</div>
+									{/* Local Rules Section */}
+									<div className="-mb-2.5">
+										<div className="text-sm font-normal mb-2">Workspace Rules</div>
+										<RulesToggleList
+											isGlobal={false}
+											listGap="small"
+											rules={localRules}
+											ruleType={"cline"}
+											showNewRule={false}
+											showNoRules={false}
+											toggleRule={(rulePath, enabled) => toggleRule(false, rulePath, enabled)}
+											tokenCounts={ruleTokenCounts}
+										/>
+
+										<RulesToggleList
+											isGlobal={false}
+											listGap="small"
+											rules={cursorRules}
+											ruleType={"cursor"}
+											showNewRule={false}
+											showNoRules={false}
+											toggleRule={toggleCursorRule}
+											tokenCounts={ruleTokenCounts}
+										/>
+										<RulesToggleList
+											isGlobal={false}
+											listGap="small"
+											rules={copilotRules}
+											ruleType={"copilot"}
+											showNewRule={false}
+											showNoRules={false}
+											toggleRule={toggleCopilotRule}
+											tokenCounts={ruleTokenCounts}
+										/>
+										<RulesToggleList
+											isGlobal={false}
+											listGap="small"
+											rules={windsurfRules}
+											ruleType={"windsurf"}
+											showNewRule={false}
+											showNoRules={false}
+											toggleRule={toggleWindsurfRule}
+											tokenCounts={ruleTokenCounts}
+										/>
+										<RulesToggleList
+											isGlobal={false}
+											listGap="small"
+											rules={agentsRules}
+											ruleType={"agents"}
+											showNewRule={true}
+											showNoRules={false}
+											toggleRule={toggleAgentsRule}
+											tokenCounts={ruleTokenCounts}
+										/>
+									</div>
+								</>
+							) : currentView === "hooks" ? (
+								<>
+									<div className="text-xs text-description mb-4">
+										<p>
+											Hook files run when their event fires. Switch one off to skip it; new hooks start off.{" "}
+											<VSCodeLink
+												className="text-xs"
+												href="https://docs.cline.bot/features/hooks"
+												style={{ display: "inline", fontSize: "inherit" }}>
+												Docs
+											</VSCodeLink>
+										</p>
+									</div>
+									{/* Global Hooks */}
+									<div className="mb-3">
+										<div className="text-sm font-normal mb-2">Global Hooks</div>
 										<div className="flex flex-col gap-0">
-											{workspace.hooks
+											{globalHooks
 												.sort((a, b) => a.name.localeCompare(b.name))
 												.map((hook) => (
 													<HookRow
 														absolutePath={hook.absolutePath}
 														enabled={hook.enabled}
 														hookName={hook.name}
-														isGlobal={false}
+														isGlobal={true}
 														key={hook.absolutePath}
 														onDelete={(hooksToggles) => {
 															// Use response data directly, no need to refresh
@@ -663,101 +627,140 @@ const ClineRulesToggleModal: React.FC = () => {
 															setWorkspaceHooks(hooksToggles.workspaceHooks || [])
 														}}
 														onToggle={(newEnabled: boolean) =>
-															toggleHook(
-																false,
-																hook.name,
-																hook.absolutePath,
-																newEnabled,
-																workspace.workspaceName,
-															)
+															toggleHook(true, hook.name, hook.absolutePath, newEnabled)
 														}
-														workspaceName={workspace.workspaceName}
 													/>
 												))}
 											<NewRuleRow
-												existingHooks={workspace.hooks.map((h) => h.name)}
-												isGlobal={false}
+												existingHooks={globalHooks.map((h) => h.name)}
+												isGlobal={true}
 												ruleType="hook"
-												workspaceName={workspace.workspaceName}
 											/>
 										</div>
 									</div>
-								))}
-							</>
-						) : currentView === "skills" ? (
-							<>
-								<BulkToggleControl
-									kind="skills"
-									onBusyChange={setBulkToggling}
-									onRefresh={() => refreshSkills(true)}
-									targets={skillBulkTargets(globalSkills, localSkills)}
-								/>
-								<ContextBudget
-									detail={`${enabledSkills.length} of ${allSkills.length} skills enabled · the full SKILL.md (~${formatTokenCount(enabledSkillFileTokens)} in total) loads only when a skill is used`}
-									label="Skill names and descriptions added to every request"
-									tokens={enabledSkillListingTokens}
-								/>
 
-								{/* Global Skills Section */}
-								<div className="mb-3">
-									<div className="text-sm font-normal mb-2">Global Skills</div>
-									<div className="flex flex-col gap-0">
-										{globalSkills
-											.sort((a, b) => a.name.localeCompare(b.name))
-											.map((skill) => (
-												<RuleRow
-													enabled={skill.enabled}
-													isGlobal={true}
-													key={skill.path}
-													name={skill.name}
-													rulePath={skill.path}
-													ruleType="skill"
-													toggleRule={(_path, enabled) => toggleSkill(true, skill.path, enabled)}
-													tokens={skill.tokens}
-													tokensTitle={SKILL_TOKENS_TITLE}
-													warnings={skill.warnings}
-												/>
-											))}
-										<NewRuleRow isGlobal={true} ruleType="skill" />
-									</div>
-								</div>
-
-								{/* Workspace Skills Section */}
-								<div className="-mb-2.5">
-									<div className="text-sm font-normal mb-2">Workspace Skills</div>
-									<div className="flex flex-col gap-0">
-										{localSkills
-											.sort((a, b) => a.name.localeCompare(b.name))
-											.map((skill) => (
-												<RuleRow
-													enabled={skill.enabled}
+									{/* Workspace Hooks - one section per workspace */}
+									{workspaceHooks.map((workspace, index) => (
+										<div
+											className={index === workspaceHooks.length - 1 ? "-mb-2.5" : "mb-3"}
+											key={workspace.workspaceName}>
+											<div className="text-sm font-normal mb-2">{workspace.workspaceName}</div>
+											<div className="flex flex-col gap-0">
+												{workspace.hooks
+													.sort((a, b) => a.name.localeCompare(b.name))
+													.map((hook) => (
+														<HookRow
+															absolutePath={hook.absolutePath}
+															enabled={hook.enabled}
+															hookName={hook.name}
+															isGlobal={false}
+															key={hook.absolutePath}
+															onDelete={(hooksToggles) => {
+																// Use response data directly, no need to refresh
+																setGlobalHooks(hooksToggles.globalHooks || [])
+																setWorkspaceHooks(hooksToggles.workspaceHooks || [])
+															}}
+															onToggle={(newEnabled: boolean) =>
+																toggleHook(
+																	false,
+																	hook.name,
+																	hook.absolutePath,
+																	newEnabled,
+																	workspace.workspaceName,
+																)
+															}
+															workspaceName={workspace.workspaceName}
+														/>
+													))}
+												<NewRuleRow
+													existingHooks={workspace.hooks.map((h) => h.name)}
 													isGlobal={false}
-													key={skill.path}
-													name={skill.name}
-													rulePath={skill.path}
-													ruleType="skill"
-													toggleRule={(path, enabled) => toggleSkill(false, path, enabled)}
-													tokens={skill.tokens}
-													tokensTitle={SKILL_TOKENS_TITLE}
-													warnings={skill.warnings}
+													ruleType="hook"
+													workspaceName={workspace.workspaceName}
 												/>
-											))}
-										<NewRuleRow isGlobal={false} ruleType="skill" />
+											</div>
+										</div>
+									))}
+								</>
+							) : currentView === "skills" ? (
+								<>
+									<BulkToggleControl
+										kind="skills"
+										onBusyChange={setBulkToggling}
+										onRefresh={() => refreshSkills(true)}
+										targets={skillBulkTargets(globalSkills, localSkills)}
+									/>
+									<ContextBudget
+										detail={`${enabledSkills.length} of ${allSkills.length} skills enabled · the full SKILL.md (~${formatTokenCount(enabledSkillFileTokens)} in total) loads only when a skill is used`}
+										label="Skill names and descriptions added to every request"
+										tokens={enabledSkillListingTokens}
+									/>
+
+									{/* Global Skills Section */}
+									<div className="mb-3">
+										<div className="text-sm font-normal mb-2">Global Skills</div>
+										<div className="flex flex-col gap-0">
+											{globalSkills
+												.sort((a, b) => a.name.localeCompare(b.name))
+												.map((skill) => (
+													<RuleRow
+														enabled={skill.enabled}
+														isGlobal={true}
+														key={skill.path}
+														name={skill.name}
+														rulePath={skill.path}
+														ruleType="skill"
+														toggleRule={(_path, enabled) => toggleSkill(true, skill.path, enabled)}
+														tokens={skill.tokens}
+														tokensTitle={SKILL_TOKENS_TITLE}
+														warnings={skill.warnings}
+													/>
+												))}
+											<NewRuleRow isGlobal={true} ruleType="skill" />
+										</div>
 									</div>
-								</div>
-							</>
-						) : currentView === "agents" ? (
-							<>
-								<BulkToggleControl
-									kind="agents"
-									onBusyChange={setBulkToggling}
-									onRefresh={() => refreshAgents(true)}
-									targets={agentBulkTargets(globalAgents, localAgents)}
-								/>
-								<AgentsTab globalAgents={globalAgents} localAgents={localAgents} onAgentsChanged={applyAgents} />
-							</>
-						) : null}
-					</fieldset>
+
+									{/* Workspace Skills Section */}
+									<div className="-mb-2.5">
+										<div className="text-sm font-normal mb-2">Workspace Skills</div>
+										<div className="flex flex-col gap-0">
+											{localSkills
+												.sort((a, b) => a.name.localeCompare(b.name))
+												.map((skill) => (
+													<RuleRow
+														enabled={skill.enabled}
+														isGlobal={false}
+														key={skill.path}
+														name={skill.name}
+														rulePath={skill.path}
+														ruleType="skill"
+														toggleRule={(path, enabled) => toggleSkill(false, path, enabled)}
+														tokens={skill.tokens}
+														tokensTitle={SKILL_TOKENS_TITLE}
+														warnings={skill.warnings}
+													/>
+												))}
+											<NewRuleRow isGlobal={false} ruleType="skill" />
+										</div>
+									</div>
+								</>
+							) : currentView === "agents" ? (
+								<>
+									<BulkToggleControl
+										kind="agents"
+										onBusyChange={setBulkToggling}
+										onRefresh={() => refreshAgents(true)}
+										targets={agentBulkTargets(globalAgents, localAgents)}
+									/>
+									<AgentsTab
+										globalAgents={globalAgents}
+										localAgents={localAgents}
+										onAgentsChanged={applyAgents}
+									/>
+								</>
+							) : null}
+						</fieldset>
+					</div>
 				</PopupModalContainer>
 			)}
 		</div>
