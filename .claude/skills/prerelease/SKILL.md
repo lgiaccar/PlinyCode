@@ -44,7 +44,11 @@ step in it**.
 
 1. **Preflight.** `gh auth status` must succeed; if not, ask the user to run `gh auth login`. The working tree
    must be clean, and the version commit must be pushed.
-2. **Tag, then push the tag (confirm first).** `git tag release_<version>` on the version commit (`HEAD`). After
+   Before tagging, review the public and packaged READMEs using the
+   [repository information checklist](../../../docs/releasing.md#public-repository-information-on-every-release).
+   Commit any needed documentation updates separately from the version bump, run `bun run check:docs`, and
+   push them with the PR branch. Keep the public stable version unchanged and label test-only features clearly.
+2. **Tag, then push the tag (confirm first).** `git tag release_<version>` on the prepared release commit (`HEAD`). After
    the user confirms, `git push origin release_<version>`. Push only the tag: the branch goes through its PR.
 3. **Package.** `cd apps/vscode && bun run release:package`. It writes
    `apps/vscode/dist/release/<version>/PlinyCode-<version>.vsix` and prints its sha256.
@@ -62,6 +66,9 @@ step in it**.
    `--prerelease` keeps it off `/releases/latest`, so only editors with `plinycode.updates.prerelease` on get it.
    Never pass `--force` unless the user asks for it. If publishing fails partway, report which step failed; don't
    delete releases or tags yourself.
-6. **Report** the version, the sha256 and `https://github.com/lgiaccar/PlinyCode/releases/tag/release_<version>`.
+6. **Review repository information.** Complete the post-publication checks in the
+   [repository information checklist](../../../docs/releasing.md#public-repository-information-on-every-release).
+   Keep GitHub About current without promoting the test build as the latest stable release.
+7. **Report** the version, the sha256 and `https://github.com/lgiaccar/PlinyCode/releases/tag/release_<version>`.
    Remind the user that testers need **Install pre-releases** on (PlinyCode **Settings → About**) and can run
    **PlinyCode: Check for Updates** to get it straight away.

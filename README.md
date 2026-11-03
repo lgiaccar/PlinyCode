@@ -5,96 +5,136 @@
 <h1 align="center">PlinyCode</h1>
 
 <p align="center">
-Synopsys' AI coding agent for VS Code and Cursor — powered by internal models via the Pliny gateway.
+Synopsys' AI coding agent for VS Code and Cursor, powered by models through the Pliny gateway.
 </p>
 
----
+<p align="center">
+  <a href="https://github.com/lgiaccar/PlinyCode/releases/latest">Download the latest release</a> ·
+  <a href="docs/releasing.md">Install and update</a> ·
+  <a href="REPOMAP.md">Repository guide</a>
+</p>
 
 ## What it is
 
-PlinyCode is a VS Code extension that puts an autonomous coding agent in your editor. It plans, reads your
-codebase, edits files, and runs terminal commands — with you approving each step.
+PlinyCode brings an AI coding agent into VS Code and Cursor. Ask questions about your codebase, prepare a plan,
+implement changes, run commands, and follow pull requests and pipelines from the editor.
 
-It talks **only** to Synopsys internal models through the Pliny gateway. No code or prompt leaves the Synopsys network.
+Model requests go through the Synopsys Pliny gateway. You need gateway access and a Pliny API key to use it.
+Web search, MCP tools and DevOps integrations connect to their configured services; extension updates come from GitHub.
+
+## What's new in 0.2.7
+
+[PlinyCode 0.2.7](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7) is the latest stable release.
+
+- **CI Board actions:** requeue failed pipelines on GitHub and Azure DevOps, refresh Azure DevOps preview merges,
+  rerun build-validation policies, and merge eligible pull requests after current checks and policies are verified.
+- **Azure DevOps agent monitor:** open **Pipelines > Agents** to see connection status, enabled state, job
+  availability and matching capabilities, with optional notifications for status changes.
+- **Compact pasted prompts:** long text appears as an expandable label with a word count; the model still
+  receives the complete prompt. Long messages in the conversation can also be expanded when needed.
+- **Clearer agent and process feedback:** the picker shows agent names with descriptions in the chat header,
+  and background-process stop results distinguish a request from confirmed termination.
+
+See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7) for details.
 
 ## Features
 
-- **Agentic editing** — creates and edits files across your project, reacting to linter and compiler errors as it works.
-- **Plan, Agent & Ask modes** — have the agent draft an approach for your approval before it changes anything.
-- **Terminal execution** — runs commands and reads their output, with per-command approval.
-- **Context folders** — automatically scans `.github`, `.vscode`, `.devcontainer` and `.cursor` to generate
-  project rules in `.cline/rules/` (opt-in per rule).
-- **MCP servers** — extend the agent with Model Context Protocol tools.
-- **Editor integrations** — explain/improve code from the context menu, generate Jupyter cells, and write
-  git commit messages from your staged diff.
-- **Human in the loop** — every file write and command runs only after you approve it.
-
-## Requirements
-
-- VS Code `^1.101.0` (or a compatible Cursor build)
-- Network access to the Synopsys Pliny gateway
-- Node.js >= 22 and Bun 1.3.14 (for building from source only; both pinned in `.tool-versions`)
+- **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
+  project files. [Plan mode](docs/plan-mode.md) · [Ask mode](docs/ask-mode.md)
+- **Code and terminal tools:** search and navigate code, edit files, inspect images, run commands, and monitor
+  background processes. File edits and commands follow your approval settings. [Agent tools](docs/agent-tools.md)
+- **Model routing and tuning:** use FreeAuto or BalanceAuto to route tasks through Pliny models, choose model
+  order, and adjust thinking and context settings. [Router settings](docs/router-settings.md) · [Model tuning](docs/model-tuning.md)
+- **Rules, skills and custom agents:** reuse repository instructions, choose task-specific agents, and control
+  which rules, skills, agents and hooks are enabled. [Rules and customization](docs/rules.md)
+- **Worktree conversations:** start work on a separate branch and checkout, then apply it back or create a pull
+  request. [Run in worktree](docs/task-worktrees.md)
+- **GitHub and Azure DevOps:** review pull requests, launch pipelines, watch CI and investigate failures from
+  the editor. The CI Board can start fix conversations, requeue pipelines and merge eligible pull requests.
+  [CI Board](docs/ci-board.md) · [Pipelines](docs/pipeline-runs.md) · [Agent monitor](docs/agent-monitor.md)
+- **MCP integrations:** connect external tools or use the built-in DevOps MCP server from PlinyCode and
+  compatible editor agents. [DevOps MCP](docs/devops-mcp.md)
+- **Conversation tools:** ask side questions, improve a draft prompt, expand long pasted text, and edit an
+  earlier message to restart from it, optionally reverting files. [Side questions](docs/side-questions.md) ·
+  [Improve prompt](docs/improve-prompt.md) · [Restart from here](docs/restart-from-here.md)
+- **Memory and diagnostics:** retain repository knowledge, search past conversations, inspect request traces
+  and export a diagnostics bundle. [Memory](docs/memory.md) · [Diagnostics](docs/diagnostics-bundle.md)
 
 ## Install
 
-1. Download `PlinyCode-<version>.vsix` from the newest [GitHub release](https://github.com/lgiaccar/PlinyCode/releases).
-2. Install it once: **Extensions → ⋯ → Install from VSIX…** (or `code --install-extension PlinyCode-<version>.vsix`),
-   then reload the window. An old PlinyCode 0.1.0 install is removed automatically; reload again when asked.
-3. Open the PlinyCode icon in the Activity Bar.
-4. Add your Pliny API key under **Settings → API Configuration → Pliny API Keys** (you can store several, each
-   with a name), or set the `PLINY_API_KEY` environment variable before starting VS Code. See
-   [docs/pliny-api-keys.md](docs/pliny-api-keys.md).
+PlinyCode is distributed through **GitHub Releases**, rather than the VS Code Marketplace or Open VSX.
 
-From 0.1.3 on, new releases install themselves: PlinyCode checks GitHub at startup and every 6 hours, then offers
-**Reload Now**. Run **PlinyCode: Check for Updates**, or click **Check for Updates** in PlinyCode's
-**Settings → About**, to check right away. See [docs/releasing.md](docs/releasing.md)
-for details and for how to publish a release.
+1. Download the `.vsix` from the [latest stable release](https://github.com/lgiaccar/PlinyCode/releases/latest).
+2. In VS Code or Cursor, choose **Extensions > ... > Install from VSIX...**, select the file and reload the window.
+3. Open PlinyCode from the Activity Bar.
+4. Add your Pliny API key under **Settings > API Configuration > Pliny API Keys**. You can keep several named
+   keys and select the active one. Alternatively, set `PLINY_API_KEY` before starting the editor.
+   See [API key setup](docs/pliny-api-keys.md).
+
+PlinyCode checks for updates at startup and every six hours, installs newer stable releases, and offers
+**Reload Now**. Use **PlinyCode: Check for Updates** or **Settings > About > Check for Updates** to check immediately.
+Testers can enable **Install pre-releases** in **Settings > About** to receive `-test.N` builds too.
+See [installing, updating and releasing](docs/releasing.md).
+
+## Requirements
+
+- VS Code `^1.101.0` or a compatible Cursor build.
+- Network access to the Synopsys Pliny gateway and a Pliny API key.
+- Git for checkpoints and worktree features.
+- For building from source: Bun **1.3.14** and Node.js **>=22**, with the toolchain pinned in `.tool-versions`.
 
 ## Build from source
 
-The toolchain is **Bun** (package manager + task runner). Do not use npm/yarn/pnpm.
+Use **Bun** as the package manager and task runner; do not use npm, yarn or pnpm.
 
 ```sh
-bun install
-bun run build:sdk        # build the @plinycode/* engine packages first
-bun -F plinycode-dev build  # build the extension
+bun install --frozen-lockfile
+bun run build:sdk
+bun -F plinycode-dev build
 ```
 
-The extension consumes the engine packages through their compiled `dist/`, so `build:sdk` must run after any
-change under `sdk/packages/`. Running processes do not hot-reload engine changes — rebuild and restart.
+The extension imports the engine packages from their compiled `dist/` directories. Rebuild after changing
+`sdk/packages/`, then restart the extension host. `bun run watch:sdk` rebuilds changed engine packages while you work.
 
-### Run the dev host
+Start a development host:
 
 ```sh
 code --extensionDevelopmentPath=./apps/vscode <some-folder>
 ```
 
-### Test
+Run the main checks:
 
 ```sh
-bun -F plinycode-dev test:unit   # bun-based unit tests, no VS Code host needed
-bun run types                 # typecheck all packages
+bun run types
+bun -F plinycode-dev test:unit
+bun run check:docs
 ```
+
+See [AGENTS.md](AGENTS.md) and the [extension guide](apps/vscode/AGENTS.md) for the full build and test workflow.
 
 ## Repository layout
 
-| Path                    | Contents                                                          |
-| ----------------------- | ----------------------------------------------------------------- |
-| `apps/vscode`           | The VS Code extension (`plinycode-dev`) and its webview UI       |
-| `sdk/packages/core`     | Agent engine — tasks, sessions, auth, providers, hooks, runtime   |
-| `sdk/packages/shared`   | Shared types and utilities                                        |
-| `sdk/packages/llms`     | Model catalog and provider gateway                                |
+| Path | Contents |
+| --- | --- |
+| `apps/vscode` | VS Code / Cursor extension and its webview UI |
+| `sdk/packages/core` | Agent engine: tasks, sessions, providers, hooks and runtime |
+| `sdk/packages/shared` | Shared types and utilities |
+| `sdk/packages/llms` | Model catalog and provider gateway |
+| `docs` | Feature guides, configuration and release procedures |
+
+The packages under `sdk/` are the extension's engine, not a separately distributed SDK.
+See [REPOMAP.md](REPOMAP.md) for a detailed directory guide.
 
 ## Configuration
 
-| Setting                                | Default | Description                                                        |
-| -------------------------------------- | ------- | ------------------------------------------------------------------ |
-| `plinycode.devops.enabled`             | `true`  | Run the built-in DevOps MCP server for pull requests and pipelines |
-| `plinycode.devops.registerWithEditor`  | `true`  | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
-| `plinycode.spending.conversationLimit` | `5`     | Budget, in US dollars, that each new conversation starts with      |
-| `plinycode.updates.enabled`            | `true`  | Install new PlinyCode releases from GitHub automatically           |
-| `plinycode.updates.prerelease`         | `false` | Also install pre-releases, for developers and testers              |
-| `plinycode.updates.url`                | GitHub  | URL of the `latest.json` that describes the newest release         |
+| Setting | Default | Description |
+| --- | --- | --- |
+| `plinycode.devops.enabled` | `true` | Run the built-in DevOps MCP server for pull requests and pipelines |
+| `plinycode.devops.registerWithEditor` | `true` | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
+| `plinycode.spending.conversationLimit` | `5` | Budget in US dollars for each new conversation |
+| `plinycode.updates.enabled` | `true` | Install new PlinyCode releases from GitHub automatically |
+| `plinycode.updates.prerelease` | `false` | Also install pre-releases for developers and testers |
+| `plinycode.updates.url` | GitHub | URL of the update manifest |
 
 ## License
 

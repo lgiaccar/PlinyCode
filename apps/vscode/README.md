@@ -1,54 +1,67 @@
 # PlinyCode
 
-Synopsys' AI coding agent for VS Code and Cursor — powered by internal models via the Pliny gateway.
+Synopsys' AI coding agent for VS Code and Cursor, powered by models through the Pliny gateway.
 
-PlinyCode handles complex development tasks step by step. It creates and edits files, explores large
-projects, and runs terminal commands after you grant permission. Every file change and command is shown to
-you for approval first, so you stay in control of what happens in your workspace.
+Ask questions about a codebase, prepare a plan, implement changes, run commands, and follow pull requests and
+pipelines from your editor. File edits and commands follow your approval settings.
 
-All requests go **only** to Synopsys internal models through the Pliny gateway. Your code and prompts do not leave the Synopsys network.
+Model requests go through the Synopsys Pliny gateway. Web search, MCP tools and DevOps integrations connect to
+their configured services; extension updates come from GitHub.
 
-## How it works
+## What's new in 0.2.7
 
-1. Describe your task — you can add images to turn mockups into working UI or to report a visual bug.
-2. PlinyCode analyzes your file structure and source code, runs searches, and reads the relevant files to
-   get up to speed on the project without overwhelming the context window.
-3. Once it has what it needs, it can:
-    - Create and edit files, watching linter and compiler errors and fixing issues like missing imports and
-      syntax errors as it goes.
-    - Execute terminal commands and monitor their output, reacting to failures as they happen.
-    - Ask you to approve each change before it is applied.
-4. When the task is done, PlinyCode presents the result along with any command you need to run.
+- Requeue failed GitHub and Azure DevOps pipelines from the CI Board, refresh Azure DevOps preview merges,
+  rerun build-validation policies, and merge eligible pull requests after current checks and policies are verified.
+- Monitor Azure DevOps agents in **Pipelines > Agents**, with capability filters and optional connection and
+  enabled-state notifications.
+- Keep long pasted prompts compact in the composer and expand them to edit. The model receives the full text.
+- Find agents by name in the picker, see their descriptions in the chat header, and distinguish a process-stop
+  request from confirmed termination.
+
+[Read the 0.2.7 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7).
 
 ## Features
 
-- **Plan, Agent & Ask modes** — let the agent propose a plan for your approval before it touches any code.
-- **Side questions** — tick **Side question** to ask something without adding it to the conversation's
-  context; the agent answers read-only.
-- **Rules from other agents** — reads the rules you already wrote for GitHub Copilot, Cursor and Windsurf,
-  and the workspace `AGENTS.md`, in place. Enable or disable each one in the Rules panel.
-- **MCP servers** — extend the agent with Model Context Protocol tools.
-- **Editor integrations** — explain or improve a selection from the context menu, generate and improve
-  Jupyter cells, and write git commit messages from your staged diff.
-- **Checkpoints** — review and roll back the workspace as a task progresses.
+- **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.
+- **Code and terminal tools:** search and navigate a project, edit files, inspect images, run commands and
+  monitor background processes.
+- **Model routing:** use FreeAuto or BalanceAuto, tune model order and thinking, and manage conversation budgets.
+- **Rules, skills and custom agents:** reuse your repository instructions and choose which customizations to enable.
+- **Worktree conversations:** run a task on its own branch and checkout, then apply it back or create a pull request.
+- **CI Board and pipelines:** watch GitHub and Azure DevOps CI, investigate failures, start fix conversations,
+  requeue pipelines and merge eligible pull requests. Monitor Azure DevOps agent availability alongside runs.
+- **MCP servers:** extend the agent with tools, including the built-in DevOps MCP server.
+- **Conversation controls:** ask read-only side questions, improve drafts, expand long prompts, and restart from
+  an earlier message with optional file reversion.
+- **Memory and diagnostics:** retain repository knowledge, search previous conversations and export diagnostics.
+- **Editor integrations:** explain or improve a selection, work with Jupyter cells and generate commit messages.
 
 ## Getting started
 
-1. Install the extension.
-2. Click the PlinyCode icon in the Activity Bar.
-3. Make sure you are on the Synopsys network so the gateway is reachable.
-4. Enter your first task.
+1. Use VS Code `^1.101.0` or a compatible Cursor build, with access to the Synopsys Pliny gateway.
+2. Download the `.vsix` from the [latest stable GitHub release](https://github.com/lgiaccar/PlinyCode/releases/latest).
+3. Choose **Extensions > ... > Install from VSIX...**, select the file and reload the window.
+4. Open PlinyCode from the Activity Bar.
+5. Add a Pliny API key in **Settings > API Configuration > Pliny API Keys**, or set `PLINY_API_KEY` before
+   starting the editor. You can keep several named keys and choose which one is active.
+6. Select a mode and model, then describe your task.
+
+PlinyCode is distributed through GitHub Releases. It checks for updates at startup and every six hours,
+installs newer stable versions, and offers **Reload Now**. Use **PlinyCode: Check for Updates** to check immediately.
+Enable **Install pre-releases** in **Settings > About** only if you want test builds too.
 
 ## Settings
 
-| Setting                                | Default | Description                                                        |
-| -------------------------------------- | ------- | ------------------------------------------------------------------ |
-| `plinycode.devops.enabled`             | `true`  | Run the built-in DevOps MCP server for pull requests and pipelines |
-| `plinycode.devops.registerWithEditor`  | `true`  | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
-| `plinycode.spending.conversationLimit` | `5`     | Budget, in US dollars, that each new conversation starts with      |
-| `plinycode.updates.enabled`            | `true`  | Install new PlinyCode releases from GitHub automatically           |
-| `plinycode.updates.prerelease`         | `false` | Also install pre-releases, for developers and testers              |
-| `plinycode.updates.url`                | GitHub  | URL of the `latest.json` that describes the newest release         |
+| Setting | Default | Description |
+| --- | --- | --- |
+| `plinycode.devops.enabled` | `true` | Run the built-in DevOps MCP server for pull requests and pipelines |
+| `plinycode.devops.registerWithEditor` | `true` | Also offer the DevOps MCP server to Copilot Chat or Cursor's agent |
+| `plinycode.spending.conversationLimit` | `5` | Budget in US dollars for each new conversation |
+| `plinycode.updates.enabled` | `true` | Install new PlinyCode releases from GitHub automatically |
+| `plinycode.updates.prerelease` | `false` | Also install pre-releases for developers and testers |
+| `plinycode.updates.url` | GitHub | URL of the update manifest |
+
+See the [repository and feature guides](https://github.com/lgiaccar/PlinyCode#features) for configuration details.
 
 ## License
 

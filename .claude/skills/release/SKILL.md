@@ -30,6 +30,9 @@ local and can be redone.
   the user names another base.
 - Set `version` in `apps/vscode/package.json`, run `bun install`, and check that `git diff` only changes that
   `version` and the `plinycode-dev` entry in `bun.lock`.
+- Before tagging, refresh the public and packaged READMEs using the
+  [repository information checklist](../../../docs/releasing.md#public-repository-information-on-every-release).
+  Keep the documentation changes separate from the two-line version bump; include them in the tagged release.
 
 ## 4. Build and test
 
@@ -38,6 +41,7 @@ bun install
 bun run build:sdk
 bun run types
 bun -F plinycode-dev test:unit
+bun run check:docs
 ```
 
 Stop on any failure and report it with the output. Engine tests that fail only because `bash`, `bun` or network
@@ -96,7 +100,10 @@ bun run release:publish
 
 ## 10. Wrap up
 
-- Open the PR for the release branch if the user wants one.
+- Complete the [repository information checklist](../../../docs/releasing.md#public-repository-information-on-every-release):
+  review GitHub About description, homepage and topics, and verify the public README and release links.
+- Open the release PR to `stage` so the version and README updates reach the default branch. Merge only within
+  the user's authorization after required checks pass; otherwise report that the landing-page refresh is pending.
 - Tell the user the version, the sha256, the release URL
   (`https://github.com/lgiaccar/PlinyCode/releases/tag/release_<version>`).
 - Suggest running **PlinyCode: Check for Updates** on a machine with the previous version.
