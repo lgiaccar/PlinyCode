@@ -31,6 +31,7 @@ import {
 	releaseManifestUrl,
 	releaseTag,
 } from "../src/hosts/vscode/auto-update/release-remote"
+import { checkReleasePackage } from "./check-release-package"
 import { restore, swapIn } from "./marketplace-readme.mjs"
 
 const projectRoot = path.resolve(import.meta.dir, "..")
@@ -91,6 +92,7 @@ async function packageRelease(): Promise<void> {
 		}
 	}
 
+	await checkReleasePackage(out, projectRoot)
 	console.log(`\nPackaged ${path.relative(projectRoot, out)}`)
 	console.log(`sha256 ${await sha256File(out)}`)
 	console.log(`Next: write ${path.relative(projectRoot, path.join(stagingDir, "README.md"))}, then run publish.`)
@@ -179,6 +181,7 @@ async function publishRelease(): Promise<void> {
 	if (!(await exists(notes))) {
 		fail(`${path.relative(projectRoot, notes)} is missing; write the release notes first`)
 	}
+	await checkReleasePackage(vsix, projectRoot)
 	const sha256 = await sha256File(vsix)
 	const releasedAt = new Date().toISOString().slice(0, 10)
 

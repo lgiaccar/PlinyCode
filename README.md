@@ -37,6 +37,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7) for details.
 
+The **0.2.8-test.4** prerelease restores the Agents panel after an `Unknown service` error in test.3 and
+adds checks for mismatched extension/webview packages. Enable **Install pre-releases** to receive test builds.
+
 ## Features
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
