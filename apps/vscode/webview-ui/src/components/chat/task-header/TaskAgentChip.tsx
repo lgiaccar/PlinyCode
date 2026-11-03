@@ -31,23 +31,16 @@ const TaskAgentChip: React.FC<{ agentPath?: string }> = ({ agentPath }) => {
 	const description = agent?.description
 
 	return (
-		<div className="flex flex-col items-start gap-0.5 select-text shrink-0" data-testid="task-agent-chip">
-			<div
-				className="flex items-center justify-center gap-1 text-xs text-description shrink-0"
-				title={`Agent: ${displayName} (${agentPath})`}>
-				<UserIcon className="shrink-0" size={11} />
-				<span className="shrink-0">Agent:</span>
-				<code className="overflow-hidden text-ellipsis whitespace-nowrap" title={displayName}>
-					{displayName}
-				</code>
-			</div>
-			{description && (
-				<p
-					className="text-xs m-0 pl-4 leading-tight whitespace-normal"
-					style={{ color: "var(--vscode-descriptionForeground)" }}>
-					{description}
-				</p>
-			)}
+		<div
+			className="flex items-center justify-center gap-1 text-xs text-description select-text shrink-0"
+			data-testid="task-agent-chip">
+			<UserIcon className="shrink-0" size={11} />
+			<span className="shrink-0">Agent:</span>
+			<code
+				className="overflow-hidden text-ellipsis whitespace-nowrap"
+				title={[displayName, description].filter(Boolean).join(" — ")}>
+				{displayName}
+			</code>
 		</div>
 	)
 }
