@@ -25,6 +25,13 @@ export interface MonitoredAgent {
 	url: string
 	jobName: string
 	jobUrl: string
+	pipelineName?: string
+	runName?: string
+}
+
+export interface SavedAgentPool {
+	id: string
+	config: AgentMonitorConfig
 }
 
 export interface AgentMonitorSnapshot {
