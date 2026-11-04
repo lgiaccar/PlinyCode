@@ -328,7 +328,7 @@ function AgentPoolPanel({
 						<div
 							className={`text-sm ${stale ? "text-description" : agent.status === "offline" ? "text-error" : agent.status === "online" ? "text-success" : "text-warning"}`}>
 							{stale ? "Last known: " : ""}
-							{agent.status} · {agent.enabled ? "Enabled" : "Disabled"} ·{" "}
+							{agent.status} · {agent.enabled ? "Enabled" : <span className="text-error">Disabled</span>} ·{" "}
 							{agent.status !== "online" ? "Job status unknown" : agent.busy ? "Busy" : "Idle"}
 						</div>
 						<div className="text-xs text-description break-words">
