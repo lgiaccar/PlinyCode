@@ -29,11 +29,11 @@ import OpenDiskConversationHistoryButton from "./buttons/OpenDiskConversationHis
 import RenameTaskButton from "./buttons/RenameTaskButton"
 import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
+import TaskAgentChip from "./TaskAgentChip"
 import TaskUsageCounter from "./TaskUsageCounter"
 import { TaskWaitLimit } from "./TaskWaitLimit"
 import TaskWorkingDirectoryBadge from "./TaskWorkingDirectoryBadge"
 import TaskWorktreeChip from "./TaskWorktreeChip"
-import TaskAgentChip from "./TaskAgentChip"
 import TokenUsagePanel from "./TokenUsagePanel"
 
 const IS_DEV = process.env.IS_DEV === "true"
@@ -276,6 +276,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 				</div>
 
 				{/* Expand/Collapse Task Details */}
+				<PlinyBudgetIndicator refreshKey={Math.floor(totalCost ?? 0)} />
 				{isTaskExpanded && (
 					<div className="flex flex-col break-words" key={`task-details-${currentTaskItem?.id}`}>
 						<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -284,7 +285,6 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 									Started {formatStartTime(currentTaskItem.startedTs)}
 								</div>
 							) : null}
-							<PlinyBudgetIndicator refreshKey={Math.floor(totalCost ?? 0)} />
 						</div>
 						<div className="mt-1">
 							<UserMessage

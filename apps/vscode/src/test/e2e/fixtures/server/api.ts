@@ -1,4 +1,9 @@
 export const E2E_REGISTERED_MOCK_ENDPOINTS = {
+	"/api/svc/v1/llm-gateway/budgets": {
+		GET: ["/my-usage"],
+		POST: [],
+		PUT: [],
+	},
 	"/api/v1": {
 		GET: ["/generation", "/ai/cline/models", "/ai/cline/recommended-models"],
 		POST: ["/chat/completions"],
