@@ -44,6 +44,10 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
+The **0.2.9-test.1 prerelease** adds a compact utilization bar and colored percentages
+in **Pipelines > Agents**: red below 30%, amber from 30–60%, and green above 60%.
+Enable **Install pre-releases** in **Settings > About** to receive test builds.
+
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
   project files. [Plan mode](docs/plan-mode.md) · [Ask mode](docs/ask-mode.md)
 - **Code and terminal tools:** search and navigate code, edit files, inspect images, run commands, and monitor
