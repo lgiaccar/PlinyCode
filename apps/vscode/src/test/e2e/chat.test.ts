@@ -17,7 +17,9 @@ rightSidebarTest(
 	async ({ helper, sidebar, page, app }) => {
 		await helper.ensureReady(sidebar)
 		await app.evaluate(({ BrowserWindow }) => {
-			BrowserWindow.getAllWindows()[0].setSize(900, 700)
+			// Leave little vertical room: the expanded budget/token header must scroll,
+			// rather than pushing conversation navigation under the composer.
+			BrowserWindow.getAllWindows()[0].setSize(900, 600)
 		})
 		// Startup notifications overlap the right sidebar in this small test window.
 		await page.keyboard.press("Escape")

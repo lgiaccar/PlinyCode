@@ -168,7 +168,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 	const environmentBorderColor = getEnvironmentColor(environment, "border")
 
 	return (
-		<div className="py-2 px-4 flex flex-col gap-2">
+		<div className="py-2 px-4 max-h-[50%] shrink-0 overflow-y-auto">
 			{/* Task Header */}
 			<div
 				className={cn(
