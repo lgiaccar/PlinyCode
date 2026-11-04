@@ -22,8 +22,8 @@ their configured services; extension updates come from GitHub.
 
 ## Features
 
-**0.2.8-test.8 prerelease:** the Pliny budget stays visible on home and conversation headers, with retry,
-automatic recovery, and clearly marked last known balances when the gateway is unavailable.
+**0.2.8-test.9 prerelease:** the Pliny budget stays visible with retry and automatic recovery.
+The agent watcher shows OS icons and sampled busy-time utilization over the last 24 hours, with observed coverage.
 Test builds require **Install pre-releases** in **Settings > About**. Stable remains **0.2.7**.
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.

@@ -37,8 +37,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7) for details.
 
-The **0.2.8-test.8** prerelease restores a visible Pliny budget row with automatic recovery, manual retry,
-and clearly marked last known balances during gateway outages. Enable **Install pre-releases** to receive test builds.
+The **0.2.8-test.9** prerelease restores the Pliny budget row with automatic recovery and manual retry,
+and adds agent OS icons and sampled busy-time utilization over the last 24 hours.
+Enable **Install pre-releases** to receive test builds.
 
 ## Features
 
