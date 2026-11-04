@@ -11,7 +11,7 @@ vi.mock("@/sdk/router/router-rules-store", async () => {
 	return { loadRouterRules: vi.fn(async (options?: { profile?: string }) => defaultRules(options?.profile)) }
 })
 
-const GLM = "snps-provider/GLM-5.2"
+const GLM = "snps-provider-vmodels/glm-5.3"
 const KIMI = "snps-provider/kimi-k2.6"
 
 function makeController(stored: RouterTuningMap) {

@@ -11,6 +11,7 @@
  */
 
 import {
+	canonicalPlinyModelId,
 	isPlinyRouterModelId,
 	isPlinySelfHostedModelId,
 	plinyFreePoolIds,
@@ -129,37 +130,37 @@ const NEMOTRON_ULTRA = "snps-provider/nemotron-3-ultra-550b-a55"
 const NEMOTRON_SUPER = "snps-provider/nvidia-nemotron-3-super-120b-a12"
 const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
 const QWEN_NEXT = "snps-provider/qwen3-next-80b-a3b-instruct-d79b4"
-const GLM = "snps-provider/GLM-5.2"
-const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
-const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
+const GLM = "snps-provider-vmodels/glm-5.3"
+const GLM_FLASH = "snps-provider-vmodels/glm-5-3-flash"
 
 /**
  * Each profile's model order: the list of its main routes (default, coding,
  * plan and ask reasoning) and the head of its pool. These are the orders the
- * routers were tuned to in Settings → Router during the 0.2.4 field runs:
+ * routers were tuned to in Settings → Router during the 0.2.4 field runs,
+ * with retiring GLM pools replaced for November 6:
  *
  * - default: kimi-k2.6 leads (256k, the best throughput and the strongest
  *   agentic coder in the free pool; its habit of ending a reply on an
- *   announced step is what the completion guard exists for). The GLM-5.2
- *   replicas (512k) follow, so a request too large for kimi lands on GLM
+ *   announced step is what the completion guard exists for). The GLM-5.3
+ *   deployments (512k+) follow, so a request too large for kimi lands on GLM
  *   rather than on a smaller model, and the nemotrons are the last resort.
  *   The 128k coder is out: it stops fitting long before compaction.
- * - smart: GLM-5.2 leads, for the strongest reasoning and the 512k window.
+ * - smart: GLM-5.3 leads, replacing GLM-5.2 with a measured 524,288-token window.
  * - fast: the 397B Qwen leads, the coder is the last resort.
  * - balance: Claude Sonnet 4.6 (1M) leads every main route, Sonnet 5 is the
  *   paid backup and kimi the free one.
  */
-const DEFAULT_MODELS = [KIMI, GLM_INTERNAL, GLM_VMODELS, NEMOTRON_ULTRA, NEMOTRON_SUPER]
-const SMART_MODELS = [GLM, GLM_INTERNAL, KIMI, NEMOTRON_ULTRA, NEMOTRON_SUPER]
+const DEFAULT_MODELS = [KIMI, GLM, GLM_FLASH, NEMOTRON_ULTRA, NEMOTRON_SUPER]
+const SMART_MODELS = [GLM, GLM_FLASH, KIMI, NEMOTRON_ULTRA, NEMOTRON_SUPER]
 const FAST_MODELS = [QWEN_397, NEMOTRON_ULTRA, KIMI, CODER]
 
 /**
  * Models tried after a profile's own order. The rest of the pool follows in
  * catalog order, so a catalog refresh can add models without anyone editing
  * this list, and an id retired from the catalog simply disappears. Every model
- * here answered the live probe and really called a tool.
+ * here answered a live probe and really called a tool; see the November 6 update note.
  */
-const PREFERRED_HEAD = [KIMI, GLM_VMODELS, GLM_INTERNAL, GLM, NEMOTRON_ULTRA, NEMOTRON_SUPER, QWEN_397, CODER]
+const PREFERRED_HEAD = [KIMI, GLM, GLM_FLASH, NEMOTRON_ULTRA, NEMOTRON_SUPER, QWEN_397, CODER]
 
 /** The fast profile's head after its model order: the Qwen family first, as latency matters most. */
 const FAST_PREFERRED_HEAD = [QWEN_397, CODER, QWEN_NEXT, NEMOTRON_SUPER, NEMOTRON_ULTRA, KIMI, GLM]
@@ -238,7 +239,7 @@ const HUGE_CONTEXT_ROUTE: RouterRoute = {
 	name: "huge-context",
 	tier: "huge",
 	when: { minEstimatedTokens: 180_000 },
-	use: [GLM_VMODELS, GLM_INTERNAL, GLM],
+	use: [GLM, GLM_FLASH],
 	effort: "quick",
 }
 
@@ -252,7 +253,7 @@ const QUICK_PROMPT = "^(what|how|where|which|is|does|can|list|show)\\b"
  * routes (default, coding, plan and ask reasoning) use the order, the others
  * keep lists of their own. Effort follows the thinking probe: reasoning is
  * switched off for everyday work (it multiplies latency on the models that do
- * it by default, GLM-5.2 above all) and on for planning. It only applies to
+ * it by default) and on for planning. It only applies to
  * models whose switch was measured; every other model keeps its default.
  */
 function freeRoutes(spec: { models: string[]; planModels?: string[]; subagent: string[]; quick: string[] }): RouterRoute[] {
@@ -312,9 +313,8 @@ function freeRoutes(spec: { models: string[]; planModels?: string[]; subagent: s
  */
 const DEFAULT_ROUTES = freeRoutes({
 	models: DEFAULT_MODELS,
-	// Planning starts the GLM replicas the other way round: the load-balanced
-	// vmodels replica answers long reasoning calls faster.
-	planModels: [KIMI, GLM_VMODELS, GLM_INTERNAL, NEMOTRON_ULTRA, NEMOTRON_SUPER],
+	// Planning uses the same GLM-5.3 replacements as coding.
+	planModels: [KIMI, GLM, GLM_FLASH, NEMOTRON_ULTRA, NEMOTRON_SUPER],
 	subagent: [KIMI, NEMOTRON_SUPER],
 	quick: [NEMOTRON_SUPER, KIMI],
 })
@@ -483,7 +483,8 @@ export function sanitizeModelIds(value: unknown, allowPaid: boolean): string[] {
 	const seen = new Set<string>()
 	const ids: string[] = []
 	for (const entry of value) {
-		const id = asString(entry)
+		const text = asString(entry)
+		const id = text ? canonicalPlinyModelId(text) : undefined
 		if (!id || seen.has(id) || !isRoutableModelId(id, allowPaid)) {
 			continue
 		}
@@ -582,7 +583,8 @@ export function normalizeRules(document: unknown, guidance?: string, profile = "
 	const escalation = (raw.escalation ?? {}) as Record<string, unknown>
 
 	const utilityOrDefault = (value: unknown, fallback: string): string => {
-		const id = asString(value)
+		const text = asString(value)
+		const id = text ? canonicalPlinyModelId(text) : undefined
 		return id && isRoutableModelId(id, allowPaid) ? id : fallback
 	}
 

@@ -73,6 +73,9 @@ describe("model id predicates agree with the SDK", () => {
 		"pliny/balance-auto-fast",
 		"snps-provider/kimi-k2.6",
 		"snps-provider-vmodels/glm-5.2",
+		"snps-provider-internal-tests/glm-5-2",
+		"snps-provider-vmodels/glm-5.3",
+		"google-vertex/glm-5.2",
 		"snps-aws-bedrock/global.anthropic.claude-sonnet-5",
 		"azure-openai/gpt-5.2",
 	]

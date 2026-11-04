@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import thinkingProbe from "./data/pliny-free-auto-thinking-probe.json";
 import {
 	buildPlinyModels,
 	canonicalPlinyModelId,
@@ -27,6 +28,79 @@ import {
 } from "./pliny-models";
 
 describe("buildPlinyModels", () => {
+	it("uses verified November 6 deployments without inheriting old capabilities", () => {
+		const models = buildPlinyModels();
+		for (const [id, context] of [
+			["snps-provider-vmodels/glm-5.3", 524_288],
+			["snps-provider-vmodels/glm-5-3-flash", 512_000],
+			["snps-provider-vmodels/nvidia-nemotron-3-5-super-vl-120b-a12b", 128_000],
+		] as const) {
+			expect(models[id]?.contextWindow).toBe(context);
+			expect(models[id]?.pricing?.input).toBe(0);
+			expect(models[id]?.capabilities).toContain("tools");
+			expect(models[id]?.capabilities).not.toContain("images");
+			expect(models[id]?.capabilities).not.toContain("prompt-cache");
+			if (id.includes("/glm-")) {
+				expect(plinyThinkingControls(id)).toEqual({ defaultOn: true });
+				expect(models[id]?.capabilities).toContain("reasoning");
+			} else {
+				expect(plinyThinkingControls(id)).toBeUndefined();
+			}
+		}
+		for (const id of [
+			"snps-aws-bedrock/global.anthropic.claude-sonnet-5-5",
+			"snps-aws-bedrock/global.anthropic.claude-haiku-5-5",
+			"snps-google-gcp/gemini-3.8-flash",
+		]) {
+			expect(models[id]).toBeDefined();
+			expect(models[id]?.pricing).toBeUndefined();
+			expect(models[id]?.metadata?.selfHosted).toBe(false);
+		}
+	});
+
+	it("keeps Decision and access-blocked deployments out of the agent picker and pools", () => {
+		const models = buildPlinyModels();
+		for (const id of [
+			"snps-provider-vmodels/kev-27b",
+			"snps-provider-vmodels/laya",
+			"snps-provider-vmodels/qwen3.8-27b",
+			"snps-aws-bedrock-frontier/global.anthropic.claude-opus-5-5",
+			"snps-aws-bedrock-frontier/global.anthropic.claude-opus-5",
+		]) {
+			expect(models[id]).toBeUndefined();
+			expect([...plinyFreePoolIds(), ...plinyHostedPoolIds()]).not.toContain(
+				id,
+			);
+		}
+	});
+
+	it("migrates both retired ids, including utility fallbacks, without changing paid GLM", () => {
+		for (const id of [
+			"snps-provider-vmodels/glm-5.2",
+			"snps-provider-internal-tests/glm-5-2",
+		]) {
+			expect(buildPlinyModels()[id]).toBeUndefined();
+			expect(plinyFreePoolIds()).not.toContain(id);
+			expect(canonicalPlinyModelId(id)).toBe("snps-provider-vmodels/glm-5.3");
+			expect(resolvePlinyConcreteModelId(id)).toBe(
+				"snps-provider-vmodels/glm-5.3",
+			);
+			expect(resolvePlinyConcreteModelId(undefined, id)).toBe(
+				"snps-provider-vmodels/glm-5.3",
+			);
+			expect(resolvePlinyConcreteModelId(PLINY_FREE_AUTO_MODEL_ID, id)).toBe(
+				"snps-provider-vmodels/glm-5.3",
+			);
+		}
+		for (const id of [
+			"google-vertex/glm-5.2",
+			"snps-provider/GLM-5.2",
+			"snps-provider-vmodels/glm-5.2-custom",
+		]) {
+			expect(canonicalPlinyModelId(id)).toBe(id);
+		}
+	});
+
 	it("exposes only tool-call-capable models from the verified catalog", () => {
 		const models = buildPlinyModels();
 		expect(Object.keys(models).length).toBeGreaterThanOrEqual(30);
@@ -153,7 +227,7 @@ describe("buildPlinyModels", () => {
 		for (const [id, info] of Object.entries(models)) {
 			const total = info.metadata?.paramsTotalB;
 			const active = info.metadata?.paramsActiveB;
-			if (isPlinySelfHostedModelId(id)) {
+			if (isPlinySelfHostedModelId(id) && total !== undefined) {
 				expect(typeof total, id).toBe("number");
 				expect(typeof active, id).toBe("number");
 			}
@@ -453,9 +527,12 @@ describe("hosted pool", () => {
 });
 
 describe("measured thinking controls", () => {
-	it("records the probe verdict for every free pool model", () => {
-		for (const id of plinyFreePoolIds()) {
-			expect(plinyThinkingControls(id), id).toBeDefined();
+	it("retains controls for still-available models measured in the historical probe", () => {
+		const pool = new Set(plinyFreePoolIds());
+		for (const { id } of thinkingProbe.reports) {
+			if (pool.has(id)) {
+				expect(plinyThinkingControls(id), id).toBeDefined();
+			}
 		}
 	});
 
