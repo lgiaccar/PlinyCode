@@ -228,6 +228,8 @@ describe("PAT agent transport", () => {
 									systemCapabilities: { FFI_BUILD_R8: "True", SECRET: "never expose" },
 									userCapabilities: { PERFORMANCE: "True" },
 									assignedRequest: {
+										definition: { name: "Build pipeline" },
+										jobName: "Compile Windows",
 										owner: { name: "build", _links: { web: { href: "https://other.example/job" } } },
 									},
 								},
@@ -244,9 +246,59 @@ describe("PAT agent transport", () => {
 				status: "unknown",
 				busy: true,
 				jobUrl: "",
+				pipelineName: "Build pipeline",
+				runName: "build",
+				jobName: "Compile Windows",
 				capabilities: ["FFI_BUILD_R8", "PERFORMANCE", "SECRET"],
 			})
 			expect(JSON.stringify(result)).not.toContain("never expose")
+		} finally {
+			globalThis.fetch = original
+		}
+	})
+	it("links a build to the request's project and degrades gracefully when metadata is absent", async () => {
+		const original = globalThis.fetch
+		const project = "11111111-2222-3333-4444-555555555555"
+		const responses = [
+			{ pool: { id: 99, name: "pool" } },
+			{
+				value: [
+					{
+						id: 1,
+						status: "online",
+						assignedRequest: {
+							planType: "build",
+							scopeId: project,
+							owner: { id: 123, name: "20261104.1" },
+							definition: { name: "Cross-project build" },
+						},
+					},
+					{ id: 2, status: "online", assignedRequest: {} },
+					{
+						id: 3,
+						status: "online",
+						assignedRequest: {
+							planType: "release",
+							scopeId: project,
+							owner: { id: 456 },
+							definition: { name: "Deploy", _links: { web: { href: "javascript:alert(1)" } } },
+						},
+					},
+					{ id: 4, status: "online" },
+				],
+			},
+		]
+		globalThis.fetch = (async () => Response.json(responses.shift())) as unknown as typeof fetch
+		try {
+			const { agents } = await readAgentPool({ ...config, authentication: "pat" }, async () => "test-token")
+			expect(agents[0]).toMatchObject({
+				pipelineName: "Cross-project build",
+				runName: "20261104.1",
+				jobUrl: `https://server.example/tfs/Collection/${project}/_build/results?buildId=123`,
+			})
+			expect(agents[1]).toMatchObject({ busy: true, pipelineName: "", runName: "", jobUrl: "" })
+			expect(agents[2]).toMatchObject({ pipelineName: "Deploy", jobUrl: "" })
+			expect(agents[3]).toMatchObject({ busy: false, pipelineName: "", jobName: "", jobUrl: "" })
 		} finally {
 			globalThis.fetch = original
 		}

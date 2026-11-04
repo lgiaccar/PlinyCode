@@ -1,10 +1,22 @@
 # Agent monitor
 
-Open **Pipelines → Agents** to monitor one Azure DevOps agent pool per workspace.
+Open **Pipelines → Agents** to monitor multiple Azure DevOps agent pools per workspace.
 Keep the locally saved URL or paste the project's agent-pool settings URL,
 including `queueId`, choose
 authentication, and select **Start monitoring**. The monitor resolves the queue
 to its underlying pool; queue and pool IDs need not be identical.
+
+Use **Add pool** to configure another pool, then **Start monitoring** or **Save pool**
+to keep it stopped. The **Agent pool** selector switches between pools and shows
+which are monitoring, stopped, or have a connection error. Each pool has its own
+URL, authentication, filters, notifications and refresh schedule. Draft edits are
+preserved while switching pools. **Refresh**, **Stop monitoring**, and **Remove pool**
+apply only to the selected pool. Removing a pool stops it and deletes its saved
+configuration; it does not change anything in Azure DevOps.
+
+Existing single-pool configurations migrate automatically, including whether
+monitoring was enabled. Saved pools resume independently after restart. Removing
+every pool leaves the list empty; the old monitor is not recreated.
 
 Starting or saving a monitor stores its URL as the local default for new
 workspaces. Existing workspace settings take precedence. Upgrading an installation
@@ -28,16 +40,22 @@ Capability values are discarded and are not displayed or stored.
 
 The list shows connection status, enabled state, assigned-job availability,
 matching capabilities, and links to Azure DevOps. Busy means Azure DevOps reports
-an assigned request; idle does not guarantee eligibility for a particular
-pipeline's demands. Search narrows the displayed list without changing monitoring.
+an assigned request. Busy agents show the pipeline name and run name, plus the
+job name when supplied by the server. Click the pipeline to open its run (or the
+pipeline page when only that link is available). Shared pools can run pipelines
+from other projects; run links use the request's project. Missing details are
+shown as **Pipeline name unavailable** and do not prevent status monitoring.
+Idle does not guarantee eligibility for a particular pipeline's demands. Search
+matches agent names, pipeline/run/job names, and capabilities without changing monitoring.
 
 Refresh runs approximately every minute while the extension host is running,
 including when this view is closed. Failures back off to five minutes. **Refresh**
 requests an immediate check. Failed requests keep the last successful snapshot
-and mark its values as last known; they do not mark agents offline.
+and mark its values as last known; they do not mark agents offline. A failing or
+slow pool does not block other pools.
 
 Optional VS Code notifications report online/offline and enabled/disabled changes,
-including connection changes on disabled agents. Each alert shows the previous
+including connection changes on disabled agents. Each alert identifies its pool and shows the previous
 and new values; simultaneous changes appear together. The first observation,
 unknown connection statuses, and filter changes do not trigger connection alerts.
 Enabled/disabled changes still notify when the connection status is unknown.
