@@ -58,8 +58,12 @@ slow pool does not block other pools.
 
 Each agent shows **Utilization (24h)**: estimated busy time divided by its observed
 online and enabled time over the last 24 hours. The row shows both busy time and
-observed coverage, for example **25.0% · 15m busy / 1.0h observed**. This is job
-occupancy, not CPU or RAM load. The first sample shows **collecting samples…**.
+observed coverage, for example **25.0% · 15m busy / 1.0h observed**. A compact bar
+and colored percentage show **red below 30%**,
+**amber from 30% through 60%**, and **green above 60%**. Bar length represents
+utilization from 0% to 100%; the number and coverage remain readable alongside it.
+The colors follow the editor theme. This measures job occupancy, not CPU or RAM
+load. The first sample shows **collecting samples…**.
 Samples are taken at successful refreshes; the preceding busy/idle state applies
 to the interval until the next sample. Jobs shorter than the polling interval can
 be missed. Offline or disabled transitions, failed polls, monitoring pauses,

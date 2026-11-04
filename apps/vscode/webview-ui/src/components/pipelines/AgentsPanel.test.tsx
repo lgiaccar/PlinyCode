@@ -61,7 +61,7 @@ describe("Agents panel", () => {
 	it("shows OS icons and sampled busy-time utilization without inventing missing history", async () => {
 		render(<AgentsPanel />)
 		expect(await screen.findByRole("img", { name: "Windows" })).toBeInTheDocument()
-		expect(screen.getByText("Utilization (24h): 25.0% · 15m busy / 1.0h observed")).toBeInTheDocument()
+		expect(screen.getByText("25.0%").parentElement).toHaveTextContent("Utilization (24h): 25.0% · 15m busy / 1.0h observed")
 		const pool = snapshot()
 		pool.agents[0].os = "linux"
 		pool.agents[0].utilization = undefined
