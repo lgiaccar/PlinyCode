@@ -14,8 +14,8 @@ vi.mock("./router-rules-store", async () => {
 
 const NOW = 1_700_000_000_000
 const KIMI = "snps-provider/kimi-k2.6"
-const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
-const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
+const GLM_VMODELS = "snps-provider-vmodels/glm-5.3"
+const GLM_INTERNAL = "snps-provider-vmodels/glm-5-3-flash"
 /** The utility model: classifier at the start of a turn, completion judge at its end. */
 const UTILITY = "snps-provider/qwen3-6-35b-a3b-1-28dd3"
 const STOP: AgentModelEvent = { type: "finish", reason: "stop" }
@@ -175,8 +175,8 @@ describe("installRouter reviewer pass", () => {
 		// the next model of the reasoning route.
 		expect(askedAtEnd).toEqual([UTILITY, GLM_VMODELS])
 		expect(rows).toHaveLength(2)
-		expect(rows[0]).toContain("🔎 **glm-5.2** is reviewing this turn's changes (1 file, +4 −0)")
-		expect(rows[1]).toContain("🔎 **glm-5.2** flagged 1 possible problem (0s) · asked the model to check it")
+		expect(rows[0]).toContain("🔎 **glm-5.3** is reviewing this turn's changes (1 file, +4 −0)")
+		expect(rows[1]).toContain("🔎 **glm-5.3** flagged 1 possible problem (0s) · asked the model to check it")
 
 		await endRun()
 		expect(runs[0]).toMatchObject({
@@ -207,7 +207,7 @@ describe("installRouter reviewer pass", () => {
 		await run()
 		await afterEdit()
 		expect(await finish()).toBeUndefined()
-		expect(rows.at(-1)).toContain("🔎 **glm-5.2** found no problems (0s)")
+		expect(rows.at(-1)).toContain("🔎 **glm-5.3** found no problems (0s)")
 		await endRun()
 		expect(runs[0]?.review).toMatchObject({ outcome: "clean", issues: 0, model: GLM_VMODELS })
 	})
@@ -364,7 +364,7 @@ describe("installRouter reviewer pass", () => {
 			expect(await finish()).toBeUndefined()
 			expect(askedAtEnd).toEqual([UTILITY, GLM_VMODELS])
 		}
-		expect(rows.at(-1)).toContain("The review by **glm-5.2** gave no result (_503 upstream unavailable_)")
+		expect(rows.at(-1)).toContain("The review by **glm-5.3** gave no result (_503 upstream unavailable_)")
 		await endRun()
 		expect(runs[0]?.review).toMatchObject({ outcome: "no-verdict", reason: "503 upstream unavailable", model: GLM_VMODELS })
 		expect(isModelHealthy(GLM_VMODELS, NOW)).toBe(false)

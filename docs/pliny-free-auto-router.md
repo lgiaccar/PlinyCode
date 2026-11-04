@@ -1,5 +1,8 @@
 # Pliny free model probe
 
+The table below is historical. For the current GLM-5.3 replacements and their
+November 4 checks, see [the November 6 model update](model-update-2026-11-06.md).
+
 Measured against the live gateway on 2026-09-22, 1 run(s) per model.
 Regenerate with:
 
@@ -56,8 +59,8 @@ the largest window its model order holds (`plinyRouterBudget` in
 
 kimi-k2.6 leads `auto-free`. With its 64k output reserve and the 1.15 margin
 it takes requests up to about 167k of its own tokens; past that the size
-filter hands the request to the GLM-5.2 replicas (512k) that follow it in the
-order, which take about 388k. `auto-free-smart` leads with GLM-5.2, so a long
+filter hands the request to GLM-5.3 (524,288) or GLM-5.3 Flash (512,000), which
+take about 399k and 388k respectively. `auto-free-smart` leads with GLM-5.3, so a long
 run stays on it. The size filter measures each candidate in its own tokens,
 from the ratio the provider counts taught the token calibration
 ([context-compaction.md](context-compaction.md)): until 0.2.5 it counted three
@@ -89,20 +92,20 @@ The three FreeAuto profiles share one router but lead their routes with
 different models, so that comparing them on real work says something. Each
 profile has one model order, which the main routes (`default`, `coding`,
 `plan-and-reasoning`, `ask-reasoning`) use and which heads its pool. The
-built-in defaults (`router-rules.ts`) are the orders the routers were tuned to
-in Settings → Router during the 0.2.4 field runs:
+built-in defaults (`router-rules.ts`) follow the orders tuned in Settings →
+Router during the 0.2.4 field runs, with GLM-5.3 replacing the retiring GLM pools:
 
 | Profile | Model order | Pool |
 | --- | --- | --- |
-| `auto-free` | kimi-k2.6, GLM-5.2 (internal-tests), GLM-5.2 (vmodels), nemotron ultra, nemotron super; plan mode starts on the vmodels replica | only these routes' models: no fallback to the rest of the catalog |
-| `auto-free-smart` | GLM-5.2, GLM-5.2 (internal-tests), kimi-k2.6, nemotron ultra, nemotron super | the order, then every free model |
+| `auto-free` | kimi-k2.6, GLM-5.3, GLM-5.3 Flash, nemotron ultra, nemotron super | only these routes' models: no fallback to the rest of the catalog |
+| `auto-free-smart` | GLM-5.3, GLM-5.3 Flash, kimi-k2.6, nemotron ultra, nemotron super | the order, then every free model |
 | `auto-free-fast` | qwen3.5-397b, nemotron ultra, kimi-k2.6, qwen3-coder | the order, then every free model |
 
 The other routes keep their own lists:
 
 | Route | `auto-free` | `auto-free-smart` | `auto-free-fast` |
 | --- | --- | --- | --- |
-| `huge-context` (≥ 180k tokens) | GLM-5.2 (vmodels, internal-tests, primary) | the same | the same |
+| `huge-context` (≥ 180k tokens) | GLM-5.3, GLM-5.3 Flash | the same | the same |
 | `subagent` | kimi-k2.6, nemotron super | kimi-k2.6, qwen3-coder, nemotron super | qwen3-coder, qwen3.5-397b, nemotron super |
 | `quick` | nemotron super, kimi-k2.6 | qwen3-next-80b, nemotron super, kimi-k2.6 | qwen3-next-80b, qwen3-coder, nemotron super |
 
@@ -132,7 +135,7 @@ gateway now repairs the name (`resolveMisnamedTool` in
 `sdk/packages/llms`), also covering hyphenated (`run-commands`) and
 namespaced (`tools.`, `default_api.`) variants, so the call runs. When kimi
 still stops early, the completion guard's escalation hands the turn to the
-next model of the default route, a GLM-5.2 replica.
+next model of the default route, GLM-5.3.
 
 ### Kimi and tool-call ids
 

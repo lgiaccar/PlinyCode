@@ -87,6 +87,16 @@ const UNFINISHED_REPLY = {
 }
 
 describe("installRouter turn isolation", () => {
+	it.each([
+		"snps-provider-vmodels/glm-5.2",
+		"snps-provider-internal-tests/glm-5-2",
+	])("migrates a concrete resumed or sub-agent selection %s before creating the model", async (id) => {
+		const { run, createdFor } = setup(id)
+		await run()
+		await run({ parentAgentId: "parent" })
+		expect(createdFor).toEqual(["snps-provider-vmodels/glm-5.3", "snps-provider-vmodels/glm-5.3"])
+	})
+
 	beforeEach(() => {
 		resetHealth()
 		resetSessions()
@@ -213,8 +223,8 @@ describe("installRouter completion guard", () => {
 
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 4 })).toContain("Second reminder")
-		expect(state.stickyModelId).toBe("snps-provider-internal-tests/glm-5-2")
-		expect(rows.some((row) => row.includes("switching to **glm-5-2**"))).toBe(true)
+		expect(state.stickyModelId).toBe("snps-provider-vmodels/glm-5.3")
+		expect(rows.some((row) => row.includes("switching to **glm-5.3**"))).toBe(true)
 		expect(state.run.escalated).toBe(true)
 		expect(state.run.guardRules).toEqual(["announcement", "announcement"])
 		// A third stall in a row is taken at its word, and the chat says so.
@@ -234,7 +244,7 @@ describe("installRouter completion guard", () => {
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
 		state.run.toolCalls += 1
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 5 })).toContain("stopped several times")
-		expect(state.stickyModelId).toBe("snps-provider-internal-tests/glm-5-2")
+		expect(state.stickyModelId).toBe("snps-provider-vmodels/glm-5.3")
 		expect(state.run.escalated).toBe(true)
 		expect(state.run.guardGaveUp).toBeUndefined()
 		expect(rows.at(-2)).toContain("(3/8)")
@@ -315,12 +325,12 @@ describe("installRouter completion guard", () => {
 
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 3 })).toContain("did not call a tool")
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 4 })).toContain("Second reminder")
-		expect(state.stickyModelId).toBe("snps-provider-vmodels/glm-5.2")
-		expect(state.run.escalatedTo).toBe("snps-provider-vmodels/glm-5.2")
+		expect(state.stickyModelId).toBe("snps-provider-vmodels/glm-5.3")
+		expect(state.run.escalatedTo).toBe("snps-provider-vmodels/glm-5.3")
 		expect(state.escalations).toBe(1)
 
 		// GLM acts on the reminder, then stalls again and again: the turn goes to paid Claude.
-		state.calls.push({ modelId: "snps-provider-vmodels/glm-5.2", startedAt: NOW, routeName: "coding" })
+		state.calls.push({ modelId: "snps-provider-vmodels/glm-5.3", startedAt: NOW, routeName: "coding" })
 		state.run.toolCalls += 1
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 6 })).toContain("did not call a tool")
 		state.run.toolCalls += 1
@@ -329,7 +339,7 @@ describe("installRouter completion guard", () => {
 		expect(await config.completionGuard?.({ ...unfinished, iteration: 10 })).toContain("stopped several times")
 		expect(state.stickyModelId).toBe("snps-aws-bedrock/aws-claude-sonnet-4.6")
 		expect(state.escalations).toBe(2)
-		expect(rows.some((row) => row.includes("switching to **glm-5.2**"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **glm-5.3**"))).toBe(true)
 		expect(rows.some((row) => row.includes("switching to **aws-claude-sonnet-4.6**"))).toBe(true)
 	})
 
@@ -397,9 +407,9 @@ describe("installRouter completion guard", () => {
 		await failCommand("c6")
 		expect(state.run.failedCommands).toBe(6)
 		expect(state.run.escalated).toBe(true)
-		expect(state.stickyModelId).toBe("snps-provider-internal-tests/glm-5-2")
+		expect(state.stickyModelId).toBe("snps-provider-vmodels/glm-5.3")
 		expect(rows.some((row) => row.includes("6 commands have failed this turn"))).toBe(true)
-		expect(rows.some((row) => row.includes("switching to **glm-5-2**"))).toBe(true)
+		expect(rows.some((row) => row.includes("switching to **glm-5.3**"))).toBe(true)
 
 		// Later failures do not switch again.
 		const switchRows = rows.filter((row) => row.includes("switching to")).length

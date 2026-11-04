@@ -15,6 +15,7 @@
 
 import type { CoreSessionConfig } from "@plinycode/core"
 import {
+	canonicalPlinyModelId,
 	isPlinyBalanceAutoModelId,
 	isPlinyFreeModelId,
 	isPlinyRouterModelId,
@@ -561,7 +562,8 @@ export function installRouter(config: CoreSessionConfig, deps: RouterInstallDeps
 	config.agentModelFactory = ({ config: agentConfig, createDefault, agentId }) => {
 		createUtilityModel = (modelId) => createDefault({ modelId })
 		if (!isPlinyRouterModelId(agentConfig.modelId)) {
-			return createDefault()
+			const modelId = canonicalPlinyModelId(agentConfig.modelId)
+			return modelId === agentConfig.modelId ? createDefault() : createDefault({ modelId })
 		}
 		const profile = plinyRouterProfile(agentConfig.modelId)
 		const isSubAgent = Boolean(agentConfig.parentAgentId)

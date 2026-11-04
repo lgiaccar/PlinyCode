@@ -22,9 +22,14 @@ const LEGACY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto"
 /**
  * Map a router id from before the `auto-*` rename (`pliny/free-auto[-<profile>]`,
  * `pliny/balance-auto`) onto its current id. Mirrors `canonicalPlinyModelId` in
- * `@plinycode/llms`; every other id is returned unchanged.
+ * `@plinycode/llms`; the retiring self-hosted GLM-5.2 ids also move to GLM-5.3.
  */
 export function canonicalPlinyModelId(modelId: string): string {
+	// Pliny retires these two self-hosted deployments on November 6, 2026.
+	// Keep the paid Vertex GLM-5.2 id unchanged.
+	if (modelId === "snps-provider-vmodels/glm-5.2" || modelId === "snps-provider-internal-tests/glm-5-2") {
+		return "snps-provider-vmodels/glm-5.3"
+	}
 	if (modelId === LEGACY_FREE_AUTO_MODEL_ID) {
 		return PLINY_FREE_AUTO_MODEL_ID
 	}
@@ -96,7 +101,8 @@ export function resolvePlinyConcreteModelId(
 	modelId: string | undefined,
 	fallbackModelId: string = PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 ): string {
-	return modelId && isPlinyRouterModelId(modelId) ? fallbackModelId : (modelId ?? fallbackModelId)
+	const id = canonicalPlinyModelId(modelId ?? fallbackModelId)
+	return isPlinyRouterModelId(id) ? canonicalPlinyModelId(fallbackModelId) : id
 }
 
 export function coerceToPlinyProvider(_providerId: string | undefined | null): ApiProvider {

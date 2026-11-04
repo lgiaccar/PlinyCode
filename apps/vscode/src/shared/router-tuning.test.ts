@@ -10,6 +10,22 @@ import {
 } from "./router-tuning"
 
 describe("normalizeRouterTuning", () => {
+	it("migrates retired model orders, route overrides and utility models", () => {
+		const old = "snps-provider-internal-tests/glm-5-2"
+		const replacement = "snps-provider-vmodels/glm-5.3"
+		expect(
+			normalizeRouterProfileTuning({
+				models: [old, "snps-provider-vmodels/glm-5.2", replacement],
+				routes: { coding: { use: [old, replacement] } },
+				utility: { classifier: old, judge: old, summarizer: old, commit: old },
+			}),
+		).toEqual({
+			models: [replacement],
+			routes: { coding: { use: [replacement] } },
+			utility: { classifier: replacement, judge: replacement, summarizer: replacement, commit: replacement },
+		})
+	})
+
 	it("keeps the known profiles and drops the rest", () => {
 		expect(normalizeRouterTuning({ default: { sticky: false }, turbo: { sticky: false }, balance: {} })).toEqual({
 			default: { sticky: false },

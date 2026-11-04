@@ -1,5 +1,8 @@
 # Pliny free model thinking probe
 
+These are historical measurements for the listed deployments. They are not
+inherited by GLM-5.3; see [the November 6 update](model-update-2026-11-06.md).
+
 Measured against the live gateway on 2026-09-24, 1 run(s) per variant.
 Regenerate with:
 

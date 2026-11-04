@@ -39,7 +39,7 @@ import { getSubAgentLimits } from "@/hosts/vscode/subagent-settings"
 import { ExtensionRegistryInfo } from "@/registry"
 import { getDistinctId } from "@/services/logging/distinctId"
 import { fetch } from "@/shared/net"
-import { coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
+import { canonicalPlinyModelId, coerceToPlinyProvider, PLINY_PROVIDER_ID } from "@/shared/pliny"
 import { getHostIdeName } from "./instruction-sources"
 import { resolveDataDir } from "./legacy-state-reader"
 import { renderSubAgentMemoryExcerpt } from "./memory/memory-section"
@@ -528,12 +528,13 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	const baseUrl = resolveBaseUrl(providerId)
 	// Keep the default aligned with the provider catalog so the UI and session
 	// factory share one source of truth for default models.
-	const modelId =
+	const modelId = canonicalPlinyModelId(
 		input.modelId?.trim() ||
-		((apiConfig ? resolveModelId(mode, apiConfig) : undefined) ??
-			getDefaultModelIdForProvider(providerId) ??
-			getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ??
-			"")
+			((apiConfig ? resolveModelId(mode, apiConfig) : undefined) ??
+				getDefaultModelIdForProvider(providerId) ??
+				getDefaultModelIdForProvider(DEFAULT_PROVIDER_ID) ??
+				""),
+	)
 	Logger.log(
 		`[SessionFactory] Resolved provider=${providerId}, model=${modelId}, keySource=${describeKeySource(providerId, apiKey)}`,
 	)
