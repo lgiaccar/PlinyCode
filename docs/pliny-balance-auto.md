@@ -27,7 +27,7 @@ decide when the classifier gives no verdict.
 
 | Route | When | Models, best first |
 | --- | --- | --- |
-| `huge-context` | request ≥ 180k tokens | free GLM-5.2 (512k: vmodels, internal-tests, primary), then Claude Sonnet 4.6 (1M) |
+| `huge-context` | request ≥ 180k tokens | free GLM-5.3 (524,288) and GLM-5.3 Flash (512,000), then Claude Sonnet 4.6 (1M) |
 | `subagent` | any sub-agent call | free kimi-k2.6, free qwen3-coder, then Haiku 4.5 |
 | `plan-and-reasoning` | tier `reason`, or any plan-mode turn | Claude Sonnet 4.6, Claude Sonnet 5, free kimi-k2.6 (reasoning on, high) |
 | `ask-reasoning` | ask mode with a why/explain/review question | Claude Sonnet 4.6, Claude Sonnet 5, free kimi-k2.6 (reasoning on, medium) |

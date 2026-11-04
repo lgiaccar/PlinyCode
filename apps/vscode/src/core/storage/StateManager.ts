@@ -159,9 +159,10 @@ export class StateManager {
 	}
 
 	/**
-	 * Rewrite a saved router selection from before the `auto-*` rename
+	 * Rewrite a saved selection from before the `auto-*` rename
 	 * (`pliny/free-auto` → `pliny/auto-free`, `pliny/balance-auto` →
 	 * `pliny/auto-paid-balanced`, ...) so the picker shows it as selected.
+	 * Also replaces the two retiring self-hosted GLM-5.2 ids with GLM-5.3.
 	 * Idempotent: current ids map onto themselves, so no flag is needed.
 	 */
 	private migratePlinyRouterModelIds(): void {
@@ -176,11 +177,11 @@ export class StateManager {
 			}
 			if (Object.keys(updates).length > 0) {
 				this.setGlobalStateBatch(updates)
-				Logger.log("[StateManager] Renamed saved router model ids to the auto-* scheme")
+				Logger.log("[StateManager] Migrated saved Pliny model ids to their current replacements")
 			}
 		} catch (error) {
 			// A failed migration must never block activation; the old ids still route.
-			Logger.warn("[StateManager] Router id migration failed: " + String(error))
+			Logger.warn("[StateManager] Pliny model id migration failed: " + String(error))
 		}
 	}
 

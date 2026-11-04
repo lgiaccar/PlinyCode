@@ -20,15 +20,16 @@ The list becomes the `use` list of the main routes: `default` (the catch-all),
 `coding`, `plan-and-reasoning` and `ask-reasoning` (FreeAuto Fast has no ask
 route). It is also put at the front of the pool. The `subagent`, `quick` and
 `huge-context` routes keep their own lists unless you override them under
-**Advanced**. To make FreeAuto start with GLM-5.2 instead of Kimi K2.6, add
-GLM-5.2 and move it to the top.
+**Advanced**. To make FreeAuto start with GLM-5.3 instead of Kimi K2.6, add
+GLM-5.3 and move it to the top.
 
 Until you change it, the list shows the catch-all route's models from the
 rules file. The **Customized** badge marks a router with any setting changed,
 and **Reset to rules file** clears every setting of that router. Since 0.2.5
 the built-in orders are the ones the routers were tuned to here during the
-0.2.4 field runs: FreeAuto kimi-k2.6 then the GLM-5.2 replicas and the
-nemotrons, with its pool limited to them; FreeAuto Smart GLM-5.2 first;
+0.2.4 field runs, with the November 6 GLM replacements: FreeAuto kimi-k2.6
+then GLM-5.3, Flash and the nemotrons, with its pool limited to them;
+FreeAuto Smart GLM-5.3 first;
 FreeAuto Fast the 397B Qwen first; BalanceAuto Claude Sonnet 4.6, Sonnet 5,
 then kimi-k2.6 ([pliny-free-auto-router.md](pliny-free-auto-router.md),
 [pliny-balance-auto.md](pliny-balance-auto.md)). A rules file nobody edited is
@@ -66,7 +67,7 @@ being saved:
 
 - which models of the order hand larger requests on before compaction starts,
   and to whom ("Before that, larger requests move from Kimi K2.6 (~167k) to
-  GLM-5.2"). A model's limit is its window less its output reserve, over the
+  GLM-5.3"). A model's limit is its window less its output reserve, over the
   context margin, in its own tokens;
 - a warning when no model of the order fits the trigger, so requests past the
   largest limit go out anyway and may be rejected;

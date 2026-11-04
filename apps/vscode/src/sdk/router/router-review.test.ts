@@ -17,8 +17,8 @@ import { defaultRules } from "./router-rules"
 const KIMI = "snps-provider/kimi-k2.6"
 const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
 const QWEN_397 = "snps-provider/qwen3.5-397b-fp8"
-const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
-const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
+const GLM_VMODELS = "snps-provider-vmodels/glm-5.3"
+const GLM_INTERNAL = "snps-provider-vmodels/glm-5-3-flash"
 const NEMOTRON_SUPER = "snps-provider/nvidia-nemotron-3-super-120b-a12"
 const SONNET_5 = "snps-aws-bedrock/global.anthropic.claude-sonnet-5"
 
@@ -323,7 +323,7 @@ describe("createReviewPass", () => {
 		expect(nudge).toContain("1. src/stats.ts:12: sort() compares as strings.")
 		// kimi wrote the code, so the next model of the reasoning route reads it.
 		expect(asked).toEqual([GLM_VMODELS])
-		expect(nudge).toContain("another model (glm-5.2)")
+		expect(nudge).toContain("another model (glm-5.3)")
 		const prompt = (requests[0]?.messages[0]?.content[0] as { text: string }).text
 		expect(prompt).toContain("User's request:\nAdd median() to src/stats.ts")
 		expect(prompt).toContain("+\tconst sorted = values.sort()")

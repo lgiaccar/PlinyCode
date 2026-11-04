@@ -161,7 +161,7 @@ function nonNegativeInteger(value: unknown): number | undefined {
 }
 
 function modelId(value: unknown): string | undefined {
-	return typeof value === "string" && value.trim() ? value.trim() : undefined
+	return typeof value === "string" && value.trim() ? canonicalPlinyModelId(value.trim()) : undefined
 }
 
 function modelIds(value: unknown): string[] | undefined {

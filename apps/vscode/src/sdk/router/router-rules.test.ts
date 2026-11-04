@@ -24,7 +24,7 @@ function markdown(yamlBody: string, prose = "Guidance for the classifier."): str
 describe("defaultPool", () => {
 	it("contains only free self-hosted models", () => {
 		const pool = defaultPool()
-		expect(pool.length).toBeGreaterThan(5)
+		expect(pool.length).toBeGreaterThanOrEqual(5)
 		expect(pool.every((id) => id.startsWith("snps-provider"))).toBe(true)
 	})
 
@@ -215,9 +215,30 @@ describe("normalizeRules", () => {
 })
 
 describe("default routes", () => {
-	const GLM = "snps-provider/GLM-5.2"
-	const GLM_INTERNAL = "snps-provider-internal-tests/glm-5-2"
-	const GLM_VMODELS = "snps-provider-vmodels/glm-5.2"
+	it("migrates and deduplicates custom rules without allowing paid models into FreeAuto", () => {
+		const old = "snps-provider-internal-tests/glm-5-2"
+		const replacement = "snps-provider-vmodels/glm-5.3"
+		const ids = [old, "snps-provider-vmodels/glm-5.2", replacement, "google-vertex/glm-5.2"]
+		const rules = normalizeRules({
+			pool: ids,
+			routes: [{ name: "custom", use: ids }],
+			utility: { classifier: old, summarizer: old, commit: old },
+		})
+		expect(rules.pool).toEqual([replacement])
+		expect(rules.routes[0].use).toEqual([replacement])
+		expect(Object.values(rules.utility)).toEqual([replacement, replacement, replacement, replacement])
+		expect(normalizeRules({ pool: ids }, undefined, "balance").pool).toEqual([replacement, "google-vertex/glm-5.2"])
+	})
+
+	it.each(["default", "fast", "smart", "balance"])("does not put the retiring deployments in %s defaults", (profile) => {
+		const rules = defaultRules(profile)
+		const ids = [...rules.pool, ...rules.routes.flatMap((route) => route.use), ...Object.values(rules.utility)]
+		expect(ids).not.toContain("snps-provider-vmodels/glm-5.2")
+		expect(ids).not.toContain("snps-provider-internal-tests/glm-5-2")
+	})
+
+	const GLM_FLASH = "snps-provider-vmodels/glm-5-3-flash"
+	const GLM = "snps-provider-vmodels/glm-5.3"
 	const KIMI = "snps-provider/kimi-k2.6"
 	const CODER = "snps-provider/qwen3-coder-480b-a35b-inst-fp8"
 	const NEMOTRON_ULTRA = "snps-provider/nemotron-3-ultra-550b-a55"
@@ -228,9 +249,9 @@ describe("default routes", () => {
 
 	it("leads the main routes with kimi, then the 512k GLM replicas, then the nemotrons", () => {
 		for (const name of MAIN) {
-			expect(route(name)?.use, name).toEqual([KIMI, GLM_INTERNAL, GLM_VMODELS, NEMOTRON_ULTRA, NEMOTRON_SUPER])
+			expect(route(name)?.use, name).toEqual([KIMI, GLM, GLM_FLASH, NEMOTRON_ULTRA, NEMOTRON_SUPER])
 		}
-		expect(route("plan-and-reasoning")?.use).toEqual([KIMI, GLM_VMODELS, GLM_INTERNAL, NEMOTRON_ULTRA, NEMOTRON_SUPER])
+		expect(route("plan-and-reasoning")?.use).toEqual([KIMI, GLM, GLM_FLASH, NEMOTRON_ULTRA, NEMOTRON_SUPER])
 		expect(route("subagent")?.use[0]).toBe(KIMI)
 		expect(defaultPool()[0]).toBe(KIMI)
 	})
@@ -243,12 +264,12 @@ describe("default routes", () => {
 		expect(rules.pool).not.toContain(CODER)
 	})
 
-	it("leads the smart profile's main routes with GLM-5.2 and keeps the full pool behind them", () => {
+	it("leads the smart profile's main routes with GLM-5.3 and keeps the full pool behind them", () => {
 		const smart = defaultRules("smart")
 		for (const name of [...MAIN, "plan-and-reasoning"]) {
 			expect(smart.routes.find((r) => r.name === name)?.use, name).toEqual([
 				GLM,
-				GLM_INTERNAL,
+				GLM_FLASH,
 				KIMI,
 				NEMOTRON_ULTRA,
 				NEMOTRON_SUPER,

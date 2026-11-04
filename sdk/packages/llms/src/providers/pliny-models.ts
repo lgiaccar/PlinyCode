@@ -32,10 +32,18 @@ const LEGACY_BALANCE_AUTO_MODEL_ID = "pliny/balance-auto";
 /**
  * Map a router id from before the `auto-*` rename (`pliny/free-auto`,
  * `pliny/free-auto-fast`, `pliny/balance-auto`, ...) onto its current id.
- * Every other id is returned unchanged. Saved selections, agent configs and
- * rules files written before the rename keep working through this.
+ * The retiring self-hosted GLM-5.2 ids also move to GLM-5.3. Saved selections,
+ * agent configs and rules files keep working through this.
  */
 export function canonicalPlinyModelId(modelId: string): string {
+	// Pliny retires these two self-hosted deployments on November 6, 2026.
+	// Keep the paid Vertex GLM-5.2 id unchanged.
+	if (
+		modelId === "snps-provider-vmodels/glm-5.2" ||
+		modelId === "snps-provider-internal-tests/glm-5-2"
+	) {
+		return "snps-provider-vmodels/glm-5.3";
+	}
 	if (modelId === LEGACY_FREE_AUTO_MODEL_ID) {
 		return PLINY_FREE_AUTO_MODEL_ID;
 	}
@@ -64,7 +72,7 @@ export const PLINY_ROUTER_PROFILES = [
 		description:
 			"Routes each call to the best free self-hosted Pliny model and fails over automatically",
 		summary:
-			"Free default. Sends each call to the best available free model (GLM-5.2, Kimi K2.6, ...) and fails over when one is down. Only as strong as the free pool: hard tasks go better on Claude.",
+			"Free default. Sends each call to the best available free model (GLM-5.3, Kimi K2.6, ...) and fails over when one is down. Only as strong as the free pool: hard tasks go better on Claude.",
 	},
 	{
 		profile: "fast",
@@ -383,8 +391,8 @@ export function isPlinyFreeModelId(modelId: string): boolean {
 }
 
 /**
- * Map a model id onto one the gateway can actually resolve. Only the virtual
- * router ids are rewritten; every other id is returned unchanged. BalanceAuto
+ * Map virtual router ids to a concrete fallback and retiring self-hosted
+ * GLM-5.2 ids to GLM-5.3. BalanceAuto
  * maps onto the same free fallback: the callers are utility jobs (commit
  * messages) that are simple by nature, so they get the cheap model.
  */
@@ -392,9 +400,8 @@ export function resolvePlinyConcreteModelId(
 	modelId: string | undefined,
 	fallbackModelId: string = PLINY_FREE_AUTO_FALLBACK_MODEL_ID,
 ): string {
-	return modelId && isPlinyRouterModelId(modelId)
-		? fallbackModelId
-		: (modelId ?? fallbackModelId);
+	const id = canonicalPlinyModelId(modelId ?? fallbackModelId);
+	return isPlinyRouterModelId(id) ? canonicalPlinyModelId(fallbackModelId) : id;
 }
 
 /**
@@ -430,8 +437,8 @@ export function plinyHostedPoolIds(): string[] {
  * - default (FreeAuto): 200k, so compaction starts at about 180k. kimi-k2.6
  *   (256k) leads; past about 167k it no longer fits with its 64k output
  *   reserve and the router's 1.15 margin, and the size filter hands the
- *   request to the GLM-5.2 replicas (512k) that follow it in the order.
- * - smart: 300k, about 270k: GLM-5.2 leads, so the whole run stays on it.
+ *   request to the GLM-5.3 deployments (512k+) that follow it in the order.
+ * - smart: 300k, about 270k: GLM-5.3 leads, so the whole run stays on it.
  * - fast: 64k, about 58k. Fast trades depth for latency, and a long history is
  *   the largest cost of every call: a small request answers quickly and stays
  *   on the fast Qwen models, which degrade first as the context grows.
