@@ -18,7 +18,10 @@ e2e("Agent monitor - registered backend supplies the saved configuration", async
 	const first = "https://ado.example/collection/project/_settings/agentqueues?queueId=1&view=agents"
 	const second = first.replace("queueId=1", "queueId=2")
 	await sidebar.getByRole("textbox", { name: "Agent-pool URL" }).fill(first)
-	await sidebar.getByText("Disk space (optional)", { exact: true }).click()
+	await sidebar
+		.locator("summary:visible")
+		.filter({ hasText: /^Disk space \(optional\)$/ })
+		.click()
 	await sidebar.getByRole("textbox", { name: "Disk metrics folder" }).fill(os.tmpdir())
 	await sidebar.getByRole("spinbutton", { name: "Warn below (% free)" }).fill("25")
 	await sidebar.getByRole("spinbutton", { name: "Critical below (% free)" }).fill("12")
@@ -37,7 +40,10 @@ e2e("Agent monitor - registered backend supplies the saved configuration", async
 	await sidebar.getByRole("button", { name: "Agents", exact: true }).click()
 	await expect(picker.locator("option")).toHaveCount(2)
 	await picker.selectOption("default")
-	await sidebar.getByText("Disk space (optional)", { exact: true }).click()
+	await sidebar
+		.locator("summary:visible")
+		.filter({ hasText: /^Disk space \(optional\)$/ })
+		.click()
 	await expect(sidebar.getByRole("textbox", { name: "Disk metrics folder" })).toHaveValue(os.tmpdir())
 	await expect(sidebar.getByRole("spinbutton", { name: "Warn below (% free)" })).toHaveValue("25")
 	await expect(sidebar.getByRole("spinbutton", { name: "Critical below (% free)" })).toHaveValue("12")
