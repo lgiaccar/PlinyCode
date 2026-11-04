@@ -50,6 +50,7 @@ export class AgentMonitorHost implements vscode.Disposable {
 			},
 			pools,
 		)
+		this.monitor.onDidChange(() => this.persistHistory())
 		this.persist()
 		void this.monitor.refresh()
 	}
@@ -75,8 +76,27 @@ export class AgentMonitorHost implements vscode.Disposable {
 		if (!this.monitor) return
 		const state = StateManager.get()
 		state.setGlobalState("agentMonitorPools", {
-			...state.getGlobalStateKey("agentMonitorPools"),
+			...state.reloadGlobalStateKey("agentMonitorPools"),
 			[this.workspaceKey]: this.monitor.configs(),
+		})
+	}
+
+	private persistHistory(): void {
+		if (!this.monitor) return
+		const state = StateManager.get()
+		const saved = state.reloadGlobalStateKey("agentMonitorPools")
+		const current = new Map(this.monitor.configs().map((pool) => [pool.id, pool]))
+		// Polling must not resurrect pools or overwrite settings changed in another window.
+		const pools = saved[this.workspaceKey]
+		if (!pools) return
+		state.setGlobalState("agentMonitorPools", {
+			...saved,
+			[this.workspaceKey]: pools.map((pool) => {
+				const latest = current.get(pool.id)
+				return latest?.config.queueUrl === pool.config.queueUrl
+					? { ...pool, utilizationHistory: latest.utilizationHistory }
+					: pool
+			}),
 		})
 	}
 

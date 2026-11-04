@@ -36,6 +36,42 @@ const monitorWith = (
 }
 
 describe("agent pool monitor", () => {
+	it("keeps utilization across reloads and filters without counting failed or reconfigured intervals", async () => {
+		let now = 60_000
+		let failed = false
+		const read = async () => {
+			if (failed) throw new Error("offline network")
+			return { poolName: "pool", agents: [{ ...agent(1, "online"), busy: true }] }
+		}
+		const monitor = new AgentMonitor({ read, notify: () => {}, now: () => now }, config)
+		monitors.push(monitor)
+		await monitor.refresh()
+		now += 60_000
+		await monitor.refresh()
+		expect(monitor.view().agents[0].utilization).toEqual({ busyMs: 60_000, observedMs: 60_000 })
+		failed = true
+		now += 60_000
+		await monitor.refresh()
+		failed = false
+		now += 60_000
+		await monitor.refresh()
+		expect(monitor.view().agents[0].utilization?.observedMs).toBe(60_000)
+		const restored = new AgentMonitor(
+			{ read, notify: () => {}, now: () => now },
+			config,
+			JSON.parse(JSON.stringify(monitor.utilizationHistory())),
+		)
+		monitors.push(restored)
+		now += 60_000
+		await restored.refresh()
+		expect(restored.view().agents[0].utilization?.observedMs).toBe(60_000)
+		restored.configure({ ...config, capabilities: [] })
+		await restored.refresh()
+		expect(restored.view().agents[0].utilization?.observedMs).toBe(60_000)
+		restored.configure({ ...config, queueUrl: url.replace("queueId=21", "queueId=22") })
+		await restored.refresh()
+		expect(restored.view().agents[0].utilization?.observedMs).toBe(0)
+	})
 	it("offers local defaults for new workspaces without replacing saved workspace settings", () => {
 		const otherUrl = url.replace("queueId=21", "queueId=22")
 		expect(initialAgentMonitorConfig({}, "new", "", "windows").queueUrl).toBe("")
@@ -225,7 +261,7 @@ describe("PAT agent transport", () => {
 									name: "worker",
 									status: "unexpected",
 									enabled: true,
-									systemCapabilities: { FFI_BUILD_R8: "True", SECRET: "never expose" },
+									systemCapabilities: { FFI_BUILD_R8: "True", SECRET: "never expose", "Agent.OS": "Linux" },
 									userCapabilities: { PERFORMANCE: "True" },
 									assignedRequest: {
 										definition: { name: "Build pipeline" },
@@ -249,7 +285,8 @@ describe("PAT agent transport", () => {
 				pipelineName: "Build pipeline",
 				runName: "build",
 				jobName: "Compile Windows",
-				capabilities: ["FFI_BUILD_R8", "PERFORMANCE", "SECRET"],
+				capabilities: ["Agent.OS", "FFI_BUILD_R8", "PERFORMANCE", "SECRET"],
+				os: "linux",
 			})
 			expect(JSON.stringify(result)).not.toContain("never expose")
 		} finally {

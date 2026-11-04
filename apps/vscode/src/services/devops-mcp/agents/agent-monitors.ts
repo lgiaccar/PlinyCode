@@ -28,16 +28,17 @@ export class AgentMonitors {
 		},
 		pools: SavedAgentPool[],
 	) {
-		for (const pool of pools) this.add(pool.id, pool.config)
+		for (const pool of pools) this.add(pool.id, pool.config, pool.utilizationHistory)
 	}
 
-	private add(id: string, config: AgentMonitorConfig) {
+	private add(id: string, config: AgentMonitorConfig, history?: SavedAgentPool["utilizationHistory"]) {
 		const monitor = new AgentMonitor(
 			{
 				read: this.deps.read,
 				notify: (changes) => this.deps.notify(monitor.view().poolName || monitor.view().config.queueUrl, changes),
 			},
 			config,
+			history,
 		)
 		this.monitors.set(id, monitor)
 		monitor.onDidChange(() => this.emit())
@@ -48,7 +49,10 @@ export class AgentMonitors {
 	}
 
 	configs(): SavedAgentPool[] {
-		return [...this.monitors].map(([id, monitor]) => ({ id, config: monitor.view().config }))
+		return [...this.monitors].map(([id, monitor]) => {
+			const history = monitor.utilizationHistory()
+			return { id, config: monitor.view().config, ...(Object.keys(history).length ? { utilizationHistory: history } : {}) }
+		})
 	}
 
 	onDidChange(listener: () => void): () => void {

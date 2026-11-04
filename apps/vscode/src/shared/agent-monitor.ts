@@ -27,11 +27,17 @@ export interface MonitoredAgent {
 	jobUrl: string
 	pipelineName?: string
 	runName?: string
+	os?: "windows" | "linux" | "macos" | "unknown"
+	utilization?: { busyMs: number; observedMs: number }
 }
+
+/** Eligible observed intervals only; no credentials, names or capability values. */
+export type AgentUtilizationHistory = Record<string, { start: number; end: number; busy: boolean }[]>
 
 export interface SavedAgentPool {
 	id: string
 	config: AgentMonitorConfig
+	utilizationHistory?: AgentUtilizationHistory
 }
 
 export interface AgentMonitorSnapshot {
