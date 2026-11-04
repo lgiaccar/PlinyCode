@@ -22,7 +22,7 @@ their configured services; extension updates come from GitHub.
 
 ## Features
 
-**0.2.8-test.7 prerelease:** the Pliny budget stays visible on home and conversation headers, with retry,
+**0.2.8-test.8 prerelease:** the Pliny budget stays visible on home and conversation headers, with retry,
 automatic recovery, and clearly marked last known balances when the gateway is unavailable.
 Test builds require **Install pre-releases** in **Settings > About**. Stable remains **0.2.7**.
 
