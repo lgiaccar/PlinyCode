@@ -27,7 +27,7 @@ export function agentQueueTarget(value: string) {
 	}
 }
 
-/** Only names leave the transport: system capability values can contain environment secrets. */
+/** Only capability names and an allowlisted OS leave the transport; values can contain secrets. */
 interface AgentRecord {
 	id: number
 	name: string
@@ -43,6 +43,7 @@ interface AgentRecord {
 	planType: string
 	scopeId: string
 	ownerId: number
+	os: MonitoredAgent["os"]
 }
 
 export interface AgentPoolSnapshot {
@@ -97,8 +98,10 @@ try {
   if ($null -eq $response.value) { throw 'Invalid agent list' }
   $agents = @($response.value | ForEach-Object {
     $capabilities = @($_.systemCapabilities.PSObject.Properties.Name) + @($_.userCapabilities.PSObject.Properties.Name)
+    $os = switch -Exact ($_.systemCapabilities.'Agent.OS') { 'Windows_NT' { 'windows' }; 'Linux' { 'linux' }; 'Darwin' { 'macos' }; default { 'unknown' } }
     @{
       id = $_.id; name = $_.name; status = $_.status; enabled = [bool]$_.enabled
+      os = $os
       busy = ($null -ne $_.assignedRequest)
       capabilities = @($capabilities | Where-Object { $_ } | Sort-Object -Unique)
       pipelineName = [string]$_.assignedRequest.definition.name
@@ -203,6 +206,14 @@ export async function readAgentPool(config: AgentMonitorConfig, editorToken: Edi
 				status: agent.status,
 				enabled: Boolean(agent.enabled),
 				busy: Boolean(agent.assignedRequest),
+				os:
+					agent.systemCapabilities?.["Agent.OS"] === "Windows_NT"
+						? "windows"
+						: agent.systemCapabilities?.["Agent.OS"] === "Linux"
+							? "linux"
+							: agent.systemCapabilities?.["Agent.OS"] === "Darwin"
+								? "macos"
+								: "unknown",
 				capabilities: Object.keys({ ...agent.systemCapabilities, ...agent.userCapabilities }),
 				pipelineName: agent.assignedRequest?.definition?.name ?? "",
 				runName: agent.assignedRequest?.owner?.name ?? "",

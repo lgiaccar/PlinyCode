@@ -36,7 +36,9 @@ Capability filters match names from both system and user capabilities. Enter
 comma-separated exact names or prefixes ending in `*`; an agent matching any
 filter is included. Matching is case-sensitive. Defaults are `BUILD_*`,
 `PERFORMANCE`, and `FFI_BUILD_*`. An empty filter includes every agent.
-Capability values are discarded and are not displayed or stored.
+Capability values are discarded, except that the system `Agent.OS` value is
+mapped to an allowlisted Windows, Linux or macOS icon. Missing or unrecognized
+values show an unknown-OS marker; agent names are not used to guess the OS.
 
 The list shows connection status, enabled state, assigned-job availability,
 matching capabilities, and links to Azure DevOps. Busy means Azure DevOps reports
@@ -53,6 +55,17 @@ including when this view is closed. Failures back off to five minutes. **Refresh
 requests an immediate check. Failed requests keep the last successful snapshot
 and mark its values as last known; they do not mark agents offline. A failing or
 slow pool does not block other pools.
+
+Each agent shows **Utilization (24h)**: estimated busy time divided by its observed
+online and enabled time over the last 24 hours. The row shows both busy time and
+observed coverage, for example **25.0% · 15m busy / 1.0h observed**. This is job
+occupancy, not CPU or RAM load. The first sample shows **collecting samples…**.
+Samples are taken at successful refreshes; the preceding busy/idle state applies
+to the interval until the next sample. Jobs shorter than the polling interval can
+be missed. Offline or disabled transitions, failed polls, monitoring pauses,
+restarts and gaps longer than two polling intervals do not add observed time.
+History is saved locally per workspace and pool, survives reloads, and expires
+after 24 hours. Changing a pool URL or removing a pool clears its history.
 
 Optional VS Code notifications report online/offline and enabled/disabled changes,
 including connection changes on disabled agents. Each alert identifies its pool and shows the previous

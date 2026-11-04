@@ -12,7 +12,7 @@ function Invoke-RestMethod {
   param($Uri, [switch]$UseDefaultCredentials, $MaximumRedirection, $TimeoutSec)
   if ($Uri -like '*/queues/*') { return @{pool = @{id = 99; name = 'Shared pool'}} }
   return @{value = @(
-    @{id = 1; name = 'worker'; status = 'online'; enabled = $true; systemCapabilities = [pscustomobject]@{BUILD_CPU = 'private-value'}; assignedRequest = @{
+    @{id = 1; name = 'worker'; status = 'online'; enabled = $true; systemCapabilities = [pscustomobject]@{BUILD_CPU = 'private-value'; 'Agent.OS' = 'Windows_NT'}; assignedRequest = @{
       definition = @{name = 'Build pipeline'}; owner = @{id = 123; name = '20261104.1'; _links = @{web = @{href = 'https://server.example/run/123'}}}; jobName = 'Compile'; planType = 'build'; scopeId = '11111111-2222-3333-4444-555555555555'
     }},
     @{id = 2; name = 'idle'; status = 'online'; enabled = $true}
@@ -43,10 +43,12 @@ function Invoke-RestMethod {
 			jobName: "Compile",
 			jobUrl: "https://server.example/run/123",
 			ownerId: 123,
-			capabilities: ["BUILD_CPU"],
+			capabilities: ["Agent.OS", "BUILD_CPU"],
+			os: "windows",
 		})
 		expect(result.agents[1]).toMatchObject({ busy: false, pipelineName: "", runName: "", jobName: "", jobUrl: "" })
 		expect(stdout).not.toContain("private-value")
+		expect(result.agents[1].os).toBe("unknown")
 	},
 	25_000,
 )

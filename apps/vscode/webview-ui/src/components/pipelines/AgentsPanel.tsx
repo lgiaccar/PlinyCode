@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { AgentMonitorServiceClient, UiServiceClient } from "@/services/grpc-client"
+import { AgentOsIcon, AgentUtilizationLabel } from "./AgentMetrics"
 import { fieldClass, pipelineError } from "./PipelineLaunchForm"
 
 export function AgentsPanel() {
@@ -321,6 +322,7 @@ function AgentPoolPanel({
 				{visible.map((agent) => (
 					<li className="border-b border-panel-border py-3 flex flex-col gap-1 min-w-0" key={agent.id}>
 						<button className="text-left text-link break-all" onClick={() => open(agent.url)} type="button">
+							<AgentOsIcon os={agent.os} />
 							{agent.name}
 						</button>
 						<div
@@ -332,6 +334,7 @@ function AgentPoolPanel({
 						<div className="text-xs text-description break-words">
 							{agent.capabilities.join(", ") || "No capabilities reported"}
 						</div>
+						<AgentUtilizationLabel agent={agent} stale={stale} />
 						{agent.busy &&
 							agent.status === "online" &&
 							(agent.jobUrl ? (

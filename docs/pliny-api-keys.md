@@ -99,6 +99,19 @@ that key:
 A session build first waits up to 2 seconds for the keychain read, so a task
 restored at startup does not fall back to `PLINY_API_KEY` by mistake.
 
+## Budget display
+
+The home screen shows your Pliny account budget below **Take a Tour**. Conversations
+show it in the header, even when the header is collapsed. This account balance is
+separate from the conversation's spending limit.
+
+The row remains visible while loading or when the budget service is unavailable.
+It shows the reason and offers **Retry**; it also retries automatically about once
+a minute while visible. **Refresh** checks again immediately. During an outage,
+an already loaded balance remains clearly marked **Last known** with its update time.
+Changing the active API key clears that cached balance before reading the new one.
+No balance is invented when the gateway cannot supply it.
+
 ## Changing the active key
 
 The engine's provider reads its key once, when the session is built. When

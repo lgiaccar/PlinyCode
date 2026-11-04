@@ -54,4 +54,11 @@ message MonitoredAgentInfo {
   string job_url = 9;
   string pipeline_name = 10;
   string run_name = 11;
+  string os = 12;
+  AgentUtilizationInfo utilization = 13;
+}
+
+message AgentUtilizationInfo {
+  int64 busy_ms = 1;
+  int64 observed_ms = 2;
 }

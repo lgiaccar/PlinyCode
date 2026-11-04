@@ -32,6 +32,8 @@ const snapshot = () =>
 				status: "online",
 				enabled: true,
 				busy: true,
+				os: "windows",
+				utilization: { busyMs: 900_000, observedMs: 3_600_000 },
 				capabilities: ["FFI_BUILD_WIN"],
 				url: "https://server/agent",
 				pipelineName: "Build FFI",
@@ -56,6 +58,20 @@ beforeEach(() => {
 	})
 })
 describe("Agents panel", () => {
+	it("shows OS icons and sampled busy-time utilization without inventing missing history", async () => {
+		render(<AgentsPanel />)
+		expect(await screen.findByRole("img", { name: "Windows" })).toBeInTheDocument()
+		expect(screen.getByText("Utilization (24h): 25.0% · 15m busy / 1.0h observed")).toBeInTheDocument()
+		const pool = snapshot()
+		pool.agents[0].os = "linux"
+		pool.agents[0].utilization = undefined
+		act(() => send(pool))
+		expect(screen.getByRole("img", { name: "Linux" })).toBeInTheDocument()
+		expect(screen.getByText(/collecting samples/)).toBeInTheDocument()
+		pool.agents[0].os = "unknown"
+		act(() => send(pool))
+		expect(screen.getByRole("img", { name: "Unknown OS" })).toBeInTheDocument()
+	})
 	it("explains first-time setup and enables monitoring after a pool URL is entered", async () => {
 		mocks.subscribeToAgents.mockImplementation((_request, handlers) => {
 			handlers.onResponse(

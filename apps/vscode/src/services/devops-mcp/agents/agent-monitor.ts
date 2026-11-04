@@ -1,11 +1,13 @@
 import {
 	type AgentMonitorConfig,
 	type AgentMonitorSnapshot,
+	type AgentUtilizationHistory,
 	DEFAULT_AGENT_MONITOR_CONFIG,
 	type MonitoredAgent,
 	matchesAgentCapability,
 } from "@/shared/agent-monitor"
 import { type AgentPoolSnapshot, agentQueueTarget } from "./agent-source"
+import { AgentUtilization } from "./agent-utilization"
 
 export interface AgentStatusChange {
 	before: MonitoredAgent
@@ -78,6 +80,7 @@ export class AgentMonitor {
 	private generation = 0
 	private disposed = false
 	private failures = 0
+	private readonly utilization: AgentUtilization
 	private readonly listeners = new Set<() => void>()
 
 	constructor(
@@ -88,7 +91,9 @@ export class AgentMonitor {
 			pollMs?: number
 		},
 		config: AgentMonitorConfig = DEFAULT_AGENT_MONITOR_CONFIG,
+		history?: AgentUtilizationHistory,
 	) {
+		this.utilization = new AgentUtilization(history)
 		this.state = {
 			config: validateAgentMonitorConfig(config),
 			agents: [],
@@ -103,6 +108,9 @@ export class AgentMonitor {
 	view(): AgentMonitorSnapshot {
 		return this.state
 	}
+	utilizationHistory(): AgentUtilizationHistory {
+		return this.utilization.snapshot()
+	}
 	onDidChange(listener: () => void): () => void {
 		this.listeners.add(listener)
 		return () => this.listeners.delete(listener)
@@ -113,6 +121,8 @@ export class AgentMonitor {
 
 	configure(config: AgentMonitorConfig): void {
 		const valid = validateAgentMonitorConfig(config)
+		if (valid.queueUrl !== this.state.config.queueUrl) this.utilization.clear()
+		else this.utilization.breakContinuity()
 		this.generation++
 		clearTimeout(this.timer)
 		this.failures = 0
@@ -154,7 +164,9 @@ export class AgentMonitor {
 		try {
 			const result = await this.deps.read(config)
 			if (this.disposed || generation !== this.generation) return
-			const agents = result.agents
+			const now = (this.deps.now ?? Date.now)()
+			const observed = this.utilization.observe(result.agents, now, (this.deps.pollMs ?? 60_000) * 2)
+			const agents = observed
 				.map((agent) => ({
 					...agent,
 					capabilities: config.capabilities.length
@@ -177,13 +189,14 @@ export class AgentMonitor {
 				agents,
 				poolName: result.poolName,
 				total: result.agents.length,
-				updated: (this.deps.now ?? Date.now)(),
+				updated: now,
 				refreshing: false,
 				error: "",
 			}
 			if (config.notify && changes.length) this.deps.notify(changes)
 		} catch (error) {
 			if (this.disposed || generation !== this.generation) return
+			this.utilization.breakContinuity()
 			this.failures = Math.min(3, this.failures + 1)
 			this.state = {
 				...this.state,

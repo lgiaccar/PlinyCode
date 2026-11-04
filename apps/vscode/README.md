@@ -22,8 +22,8 @@ their configured services; extension updates come from GitHub.
 
 ## Features
 
-**0.2.8-test.5 prerelease:** monitor multiple pools in **Pipelines > Agents** and see the running pipeline
-and run on busy agents, with links to Azure DevOps.
+**0.2.8-test.10 prerelease:** the Pliny budget stays visible with retry and automatic recovery.
+The agent watcher shows OS icons and sampled busy-time utilization over the last 24 hours, with observed coverage.
 Test builds require **Install pre-releases** in **Settings > About**. Stable remains **0.2.7**.
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.

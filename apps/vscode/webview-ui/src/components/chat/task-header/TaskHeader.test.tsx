@@ -94,6 +94,28 @@ describe("TaskHeader", () => {
 		mocks.editMessageAndRegenerate.mockClear()
 	})
 
+	it("keeps the Pliny budget visible when the conversation header is collapsed", () => {
+		mocks.expandTaskHeader = false
+		const task = makeTask("Build the feature")
+		render(
+			<TaskHeader
+				cacheReads={0}
+				cacheWrites={0}
+				clineMessages={[task]}
+				contextBreakdown={undefined}
+				doesModelSupportPromptCache={true}
+				lastApiReqTotalTokens={0}
+				onClose={vi.fn()}
+				task={task}
+				tokensIn={0}
+				tokensOut={0}
+				totalCost={0}
+			/>,
+		)
+		expect(screen.getByRole("status")).toHaveTextContent("Pliny budget: loading")
+		expect(screen.getByLabelText("Expand task header")).toBeInTheDocument()
+	})
+
 	it("shows edit controls for the opening prompt when expanded", () => {
 		const task = makeTask("Build the feature")
 		render(
