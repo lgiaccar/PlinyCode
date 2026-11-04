@@ -5,6 +5,10 @@ export interface AgentMonitorConfig {
 	authentication: "windows" | "pat"
 	enabled: boolean
 	notify: boolean
+	diskMetricsFolder?: string
+	diskWarningPercent?: number
+	diskCriticalPercent?: number
+	diskNotify?: boolean
 }
 
 export const DEFAULT_AGENT_MONITOR_CONFIG: AgentMonitorConfig = {
@@ -29,6 +33,27 @@ export interface MonitoredAgent {
 	runName?: string
 	os?: "windows" | "linux" | "macos" | "unknown"
 	utilization?: { busyMs: number; observedMs: number }
+	disk?: AgentDiskReading
+	diskError?: string
+}
+
+/** Only the working filesystem and its capacity are collected; no file names or credentials. */
+export interface AgentDiskReading {
+	path: string
+	freeBytes: number
+	totalBytes: number
+	collectedAt: number
+}
+
+const AGENT_DISK_STALE_MS = 5 * 60_000
+
+export function freshAgentDisk(agent: Pick<MonitoredAgent, "disk" | "diskError">, now: number): boolean {
+	return Boolean(
+		agent.disk &&
+			!agent.diskError &&
+			agent.disk.collectedAt <= now + 60_000 &&
+			now - agent.disk.collectedAt <= AGENT_DISK_STALE_MS,
+	)
 }
 
 /** Eligible observed intervals only; no credentials, names or capability values. */

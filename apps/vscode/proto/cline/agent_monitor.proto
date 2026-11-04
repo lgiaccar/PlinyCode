@@ -23,6 +23,10 @@ message AgentMonitorSettings {
   bool enabled = 5;
   bool notify = 6;
   string id = 7;
+  string disk_metrics_folder = 8;
+  int32 disk_warning_percent = 9;
+  int32 disk_critical_percent = 10;
+  bool disk_notify = 11;
 }
 
 message AgentMonitorsState {
@@ -56,6 +60,15 @@ message MonitoredAgentInfo {
   string run_name = 11;
   string os = 12;
   AgentUtilizationInfo utilization = 13;
+  AgentDiskInfo disk = 14;
+  string disk_error = 15;
+}
+
+message AgentDiskInfo {
+  string path = 1;
+  int64 free_bytes = 2;
+  int64 total_bytes = 3;
+  int64 collected_at = 4;
 }
 
 message AgentUtilizationInfo {

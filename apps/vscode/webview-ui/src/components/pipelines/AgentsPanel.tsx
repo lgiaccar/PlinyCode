@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { AgentMonitorServiceClient, UiServiceClient } from "@/services/grpc-client"
+import { AgentDiskLabel } from "./AgentDiskLabel"
 import { AgentOsIcon, AgentUtilizationLabel } from "./AgentMetrics"
 import { fieldClass, pipelineError } from "./PipelineLaunchForm"
 
@@ -137,6 +138,12 @@ function AgentPoolPanel({
 	const [error, setError] = useState("")
 	const [saving, setSaving] = useState(false)
 	const [search, setSearch] = useState("")
+	const [now, setNow] = useState(Date.now)
+	useEffect(() => {
+		if (!state.config?.diskMetricsFolder) return
+		const timer = setInterval(() => setNow(Date.now()), 30_000)
+		return () => clearInterval(timer)
+	}, [state.config?.diskMetricsFolder])
 	const refresh = async () => {
 		setError("")
 		try {
@@ -217,6 +224,68 @@ function AgentPoolPanel({
 						Comma-separated names or prefixes ending in *. Matches any filter. Leave empty for all agents. Names are
 						case-sensitive.
 					</p>
+					<details className="text-sm">
+						<summary className="cursor-pointer">Disk space (optional)</summary>
+						<div className="flex flex-col gap-2 mt-2">
+							<label className="flex flex-col gap-1">
+								Disk metrics folder
+								<input
+									className={fieldClass}
+									onChange={(event) => setDraft({ ...draft, diskMetricsFolder: event.target.value })}
+									placeholder="Shared folder accessible from this editor"
+									value={draft.diskMetricsFolder}
+								/>
+							</label>
+							<p className="text-xs text-description m-0">
+								Run the collector on each agent and point it at this shared folder. Leave empty to turn off disk
+								monitoring.
+							</p>
+							<button
+								className="text-left text-link text-xs"
+								onClick={() =>
+									open("https://github.com/lgiaccar/PlinyCode/blob/stage/docs/agent-disk-monitor.md")
+								}
+								type="button">
+								Collector setup instructions
+							</button>
+							<div className="flex flex-wrap gap-2">
+								<label className="flex flex-col gap-1">
+									Warn below (% free)
+									<input
+										className={`${fieldClass} w-24`}
+										max={90}
+										min={2}
+										onChange={(event) =>
+											setDraft({ ...draft, diskWarningPercent: Number(event.target.value) })
+										}
+										type="number"
+										value={draft.diskWarningPercent || 20}
+									/>
+								</label>
+								<label className="flex flex-col gap-1">
+									Critical below (% free)
+									<input
+										className={`${fieldClass} w-24`}
+										max={89}
+										min={1}
+										onChange={(event) =>
+											setDraft({ ...draft, diskCriticalPercent: Number(event.target.value) })
+										}
+										type="number"
+										value={draft.diskCriticalPercent || 10}
+									/>
+								</label>
+							</div>
+							<label className="flex gap-2 items-center">
+								<input
+									checked={draft.diskNotify}
+									onChange={(event) => setDraft({ ...draft, diskNotify: event.target.checked })}
+									type="checkbox"
+								/>
+								Notify when free space crosses the warning threshold
+							</label>
+						</div>
+					</details>
 					<label className="text-sm flex gap-2 items-center">
 						<input
 							checked={draft.notify}
@@ -335,6 +404,15 @@ function AgentPoolPanel({
 							{agent.capabilities.join(", ") || "No capabilities reported"}
 						</div>
 						<AgentUtilizationLabel agent={agent} stale={stale} />
+						{state.config?.diskMetricsFolder && (
+							<AgentDiskLabel
+								agent={agent}
+								critical={state.config.diskCriticalPercent || 10}
+								now={now}
+								stale={stale}
+								warning={state.config.diskWarningPercent || 20}
+							/>
+						)}
 						{agent.busy &&
 							agent.status === "online" &&
 							(agent.jobUrl ? (

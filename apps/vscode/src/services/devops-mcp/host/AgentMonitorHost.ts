@@ -5,6 +5,7 @@ import { HostProvider } from "@/hosts/host-provider"
 import type { AgentMonitorConfig } from "@/shared/agent-monitor"
 import { ShowMessageType } from "@/shared/proto/host/window"
 import { Logger } from "@/shared/services/Logger"
+import { AgentDiskReader } from "../agents/agent-disks"
 import { describeAgentStatusChange, validateAgentMonitorConfig } from "../agents/agent-monitor"
 import { AgentMonitors, initialAgentPools } from "../agents/agent-monitors"
 import { readAgentPool } from "../agents/agent-source"
@@ -15,6 +16,7 @@ export class AgentMonitorHost implements vscode.Disposable {
 	monitor?: AgentMonitors
 	private workspaceKey = ""
 	private disposed = false
+	private readonly disks = new AgentDiskReader()
 	private constructor(private readonly token: EditorTokenSource) {}
 
 	static start(token: EditorTokenSource): AgentMonitorHost {
@@ -37,9 +39,9 @@ export class AgentMonitorHost implements vscode.Disposable {
 		)
 		this.monitor = new AgentMonitors(
 			{
-				read: (settings) => {
+				read: async (settings) => {
 					if (!vscode.workspace.isTrusted) throw new Error("Trust this workspace before connecting to an agent pool.")
-					return readAgentPool(settings, this.token)
+					return this.disks.enrich(await readAgentPool(settings, this.token), settings)
 				},
 				notify: (pool, agents) => {
 					const text = agents.map(describeAgentStatusChange).join("; ")

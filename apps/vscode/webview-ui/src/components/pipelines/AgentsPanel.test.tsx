@@ -58,6 +58,31 @@ beforeEach(() => {
 	})
 })
 describe("Agents panel", () => {
+	it("shows working-disk capacity and ages readings into a neutral last-known state without a new server update", async () => {
+		vi.useFakeTimers()
+		try {
+			render(<AgentsPanel />)
+			const pool = snapshot()
+			pool.config!.diskMetricsFolder = "/metrics"
+			pool.config!.diskWarningPercent = 20
+			pool.config!.diskCriticalPercent = 10
+			pool.agents[0].disk = {
+				path: "/agent/_work",
+				freeBytes: 15 * 1073741824,
+				totalBytes: 100 * 1073741824,
+				collectedAt: Date.now(),
+			}
+			act(() => send(pool))
+			expect(screen.getByText("15.0 GiB free")).toHaveClass("text-warning")
+			expect(screen.getByRole("meter", { name: "work disk free space" })).toHaveAttribute("aria-valuenow", "15")
+			act(() => vi.advanceTimersByTime(330_000))
+			expect(screen.getByText("15.0 GiB free")).toHaveClass("text-description")
+			expect(screen.getByRole("meter", { name: "Last known work disk free space" })).toBeInTheDocument()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	it("shows OS icons and sampled busy-time utilization without inventing missing history", async () => {
 		render(<AgentsPanel />)
 		expect(await screen.findByRole("img", { name: "Windows" })).toBeInTheDocument()

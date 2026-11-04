@@ -44,8 +44,10 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.1 prerelease** adds a compact utilization bar and colored percentages
-in **Pipelines > Agents**: red below 30%, amber from 30–60%, and green above 60%.
+The **0.2.9-test.2 prerelease** adds optional [agent disk monitoring](docs/agent-disk-monitor.md):
+a small collector reports working-disk free space through a shared folder, with
+colored bars, stale-reading indicators and optional low-space/recovery alerts.
+It also includes the colored agent-utilization meters from test.1.
 Enable **Install pre-releases** in **Settings > About** to receive test builds.
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing

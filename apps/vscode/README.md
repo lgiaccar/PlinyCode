@@ -25,9 +25,11 @@ Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thi
 
 ## Features
 
-**0.2.9-test.1 prerelease:** agent utilization has a compact bar and colored percentages:
-red below 30%, amber from 30–60%, and green above 60%. Enable **Install pre-releases**
-in **Settings > About** to receive test builds. Stable remains **0.2.8**.
+**0.2.9-test.2 prerelease:** optional agent disk monitoring shows working-disk free
+space, colored bars, stale readings and low-space/recovery alerts. Set up the small
+collector and shared folder using the instructions in **Pipelines > Agents > Disk space**.
+Includes test.1's colored utilization meters. Enable **Install pre-releases** in
+**Settings > About** to receive test builds. Stable remains **0.2.8**.
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.
 - **Code and terminal tools:** search and navigate a project, edit files, inspect images, run commands and

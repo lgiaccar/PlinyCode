@@ -48,6 +48,7 @@ interface AgentRecord {
 
 export interface AgentPoolSnapshot {
 	poolName: string
+	poolId?: number
 	agents: MonitoredAgent[]
 }
 
@@ -60,10 +61,11 @@ function safeJobUrl(value: string, queueUrl: string): string {
 	}
 }
 
-function normalizePool(pool: { poolName: string; agents: AgentRecord[] }, queueUrl: string): AgentPoolSnapshot {
+function normalizePool(pool: { poolName: string; poolId: number; agents: AgentRecord[] }, queueUrl: string): AgentPoolSnapshot {
 	if (!Array.isArray(pool.agents)) throw new Error("Azure DevOps returned an invalid agent list.")
 	return {
 		poolName: pool.poolName,
+		poolId: pool.poolId,
 		agents: pool.agents.map((agent) => {
 			const { definitionUrl, planType, scopeId, ownerId, ...details } = agent
 			// A shared pool can run jobs from another project: use the request's scope, not the queue's project.
@@ -114,7 +116,7 @@ try {
       ownerId = [long]$_.assignedRequest.owner.id
     }
   })
-  @{poolName = [string]$queue.pool.name; agents = $agents} | ConvertTo-Json -Depth 8 -Compress
+  @{poolName = [string]$queue.pool.name; poolId = $poolId; agents = $agents} | ConvertTo-Json -Depth 8 -Compress
 } catch {
   $status = 0
   if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
@@ -200,6 +202,7 @@ export async function readAgentPool(config: AgentMonitorConfig, editorToken: Edi
 	return normalizePool(
 		{
 			poolName: queue.pool.name ?? queue.name,
+			poolId: queue.pool.id,
 			agents: response.value.map((agent: any) => ({
 				id: agent.id,
 				name: agent.name,

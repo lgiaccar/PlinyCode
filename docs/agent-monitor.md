@@ -1,6 +1,8 @@
 # Agent monitor
 
 Open **Pipelines → Agents** to monitor multiple Azure DevOps agent pools per workspace.
+Optional [working-disk monitoring](agent-disk-monitor.md) adds continuous free-space
+readings, colored bars, and low-space/recovery alerts using a small collector.
 Keep the locally saved URL or paste the project's agent-pool settings URL,
 including `queueId`, choose
 authentication, and select **Start monitoring**. The monitor resolves the queue

@@ -1,8 +1,10 @@
+import path from "node:path"
 import {
 	type AgentMonitorConfig,
 	type AgentMonitorSnapshot,
 	type AgentUtilizationHistory,
 	DEFAULT_AGENT_MONITOR_CONFIG,
+	freshAgentDisk,
 	type MonitoredAgent,
 	matchesAgentCapability,
 } from "@/shared/agent-monitor"
@@ -12,15 +14,22 @@ import { AgentUtilization } from "./agent-utilization"
 export interface AgentStatusChange {
 	before: MonitoredAgent
 	after: MonitoredAgent
+	diskStatus?: "low" | "recovered"
+	includeStatus?: boolean
 }
 
-export function describeAgentStatusChange({ before, after }: AgentStatusChange): string {
+export function describeAgentStatusChange({ before, after, diskStatus, includeStatus = true }: AgentStatusChange): string {
 	const changes: string[] = []
-	if (before.status !== "unknown" && after.status !== "unknown" && before.status !== after.status) {
+	if (includeStatus && before.status !== "unknown" && after.status !== "unknown" && before.status !== after.status) {
 		changes.push(`${before.status} → ${after.status}`)
 	}
-	if (before.enabled !== after.enabled) {
+	if (includeStatus && before.enabled !== after.enabled) {
 		changes.push(`${before.enabled ? "enabled" : "disabled"} → ${after.enabled ? "enabled" : "disabled"}`)
+	}
+	if (diskStatus && after.disk) {
+		changes.push(
+			`work disk ${diskStatus === "low" ? "space low" : "recovered"}: ${((100 * after.disk.freeBytes) / after.disk.totalBytes).toFixed(1)}% free (${(after.disk.freeBytes / 1073741824).toFixed(1)} GiB)`,
+		)
 	}
 	return `${after.name}: ${changes.join(", ")}`
 }
@@ -36,12 +45,34 @@ export function validateAgentMonitorConfig(config: AgentMonitorConfig): AgentMon
 	}
 	const queueUrl = config.queueUrl.trim() ? agentQueueTarget(config.queueUrl).queueUrl : ""
 	if (config.enabled && !queueUrl) throw new Error("Enter an agent-pool URL before starting monitoring.")
+	const diskMetricsFolder = config.diskMetricsFolder?.trim() ?? ""
+	const diskWarningPercent = config.diskWarningPercent || 20
+	const diskCriticalPercent = config.diskCriticalPercent || 10
+	if (
+		diskMetricsFolder &&
+		(!path.isAbsolute(diskMetricsFolder) || diskMetricsFolder.length > 1024 || /[\u0000-\u001f]/.test(diskMetricsFolder))
+	) {
+		throw new Error("Use an absolute disk metrics folder accessible from this extension host.")
+	}
+	if (
+		diskMetricsFolder &&
+		(!Number.isInteger(diskWarningPercent) ||
+			!Number.isInteger(diskCriticalPercent) ||
+			diskCriticalPercent < 1 ||
+			diskWarningPercent > 90 ||
+			diskCriticalPercent >= diskWarningPercent)
+	) {
+		throw new Error("Disk thresholds must be whole percentages: 1 <= critical < warning <= 90.")
+	}
 	return {
 		queueUrl,
 		capabilities,
 		authentication: config.authentication,
 		enabled: Boolean(config.enabled),
 		notify: Boolean(config.notify),
+		...(diskMetricsFolder
+			? { diskMetricsFolder, diskWarningPercent, diskCriticalPercent, diskNotify: Boolean(config.diskNotify) }
+			: {}),
 	}
 }
 
@@ -176,12 +207,31 @@ export class AgentMonitor {
 				.filter((agent) => !config.capabilities.length || agent.capabilities.length)
 				.sort((a, b) => a.name.localeCompare(b.name))
 			const previous = new Map(this.state.agents.map((agent) => [agent.id, agent]))
+			// Retain the last successful measurement, but never present a failed read as fresh.
+			for (const agent of agents) {
+				if (agent.diskError && !agent.disk) agent.disk = previous.get(agent.id)?.disk
+			}
 			const changes: AgentStatusChange[] = agents.flatMap((agent) => {
 				const before = previous.get(agent.id)
 				if (!before) return []
 				const connectionChanged =
 					before.status !== "unknown" && agent.status !== "unknown" && before.status !== agent.status
-				return connectionChanged || before.enabled !== agent.enabled ? [{ before, after: agent }] : []
+				let diskStatus: AgentStatusChange["diskStatus"]
+				if (
+					config.diskMetricsFolder &&
+					config.diskNotify &&
+					freshAgentDisk(before, now) &&
+					freshAgentDisk(agent, now) &&
+					agent.disk!.collectedAt > before.disk!.collectedAt
+				) {
+					const threshold = config.diskWarningPercent || 20
+					const wasLow = (100 * before.disk!.freeBytes) / before.disk!.totalBytes < threshold
+					const isLow = (100 * agent.disk!.freeBytes) / agent.disk!.totalBytes < threshold
+					if (wasLow !== isLow) diskStatus = isLow ? "low" : "recovered"
+				}
+				return (config.notify && (connectionChanged || before.enabled !== agent.enabled)) || diskStatus
+					? [{ before, after: agent, ...(diskStatus ? { diskStatus, includeStatus: config.notify } : {}) }]
+					: []
 			})
 			this.failures = 0
 			this.state = {
@@ -193,7 +243,7 @@ export class AgentMonitor {
 				refreshing: false,
 				error: "",
 			}
-			if (config.notify && changes.length) this.deps.notify(changes)
+			if (changes.length) this.deps.notify(changes)
 		} catch (error) {
 			if (this.disposed || generation !== this.generation) return
 			this.utilization.breakContinuity()
