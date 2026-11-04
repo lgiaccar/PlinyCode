@@ -8,23 +8,22 @@ pipelines from your editor. File edits and commands follow your approval setting
 Model requests go through the Synopsys Pliny gateway. Web search, MCP tools and DevOps integrations connect to
 their configured services; extension updates come from GitHub.
 
-## What's new in 0.2.7
+## What's new in 0.2.8
 
-- Requeue failed GitHub and Azure DevOps pipelines from the CI Board, refresh Azure DevOps preview merges,
-  rerun build-validation policies, and merge eligible pull requests after current checks and policies are verified.
-- Monitor Azure DevOps agents in **Pipelines > Agents**, with capability filters and optional connection and
-  enabled-state notifications.
-- Keep long pasted prompts compact in the composer and expand them to edit. The model receives the full text.
-- Find agents by name in the picker, see their descriptions in the chat header, and distinguish a process-stop
-  request from confirmed termination.
+- Monitor several Azure DevOps agent pools independently, with running pipeline, run and job details and links.
+  Existing single-pool settings migrate automatically.
+- See agent OS icons and sampled busy-time utilization over the last 24 hours, with observed coverage.
+  Utilization measures job occupancy, not CPU or memory usage.
+- Keep the Pliny budget visible during loading and outages, with **Retry**, automatic refresh and clearly
+  marked last known balances. Expanded conversation headers scroll to keep conversation controls accessible.
+- Use updated FreeAuto routes with GLM-5.3 and GLM-5.3 Flash. Saved selections and router rules for the two
+  retiring GLM-5.2 replica IDs resolve to GLM-5.3 as soon as this version is installed.
+- Discover custom agents and skills under `.ai/`. Hover over an agent name for its description in a compact header.
 
-[Read the 0.2.7 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7).
+[Read the 0.2.8 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.8).
+Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thinking and context settings if needed.
 
 ## Features
-
-**0.2.8-test.10 prerelease:** the Pliny budget stays visible with retry and automatic recovery.
-The agent watcher shows OS icons and sampled busy-time utilization over the last 24 hours, with observed coverage.
-Test builds require **Install pre-releases** in **Settings > About**. Stable remains **0.2.7**.
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.
 - **Code and terminal tools:** search and navigate a project, edit files, inspect images, run commands and
@@ -33,7 +32,7 @@ Test builds require **Install pre-releases** in **Settings > About**. Stable rem
 - **Rules, skills and custom agents:** reuse your repository instructions and choose which customizations to enable.
 - **Worktree conversations:** run a task on its own branch and checkout, then apply it back or create a pull request.
 - **CI Board and pipelines:** watch GitHub and Azure DevOps CI, investigate failures, start fix conversations,
-  requeue pipelines and merge eligible pull requests. Monitor Azure DevOps agent availability alongside runs.
+  requeue pipelines and merge eligible pull requests. Monitor multiple Azure DevOps pools, running jobs, OS types and observed utilization.
 - **MCP servers:** extend the agent with tools, including the built-in DevOps MCP server.
 - **Conversation controls:** ask read-only side questions, improve drafts, expand long prompts, and restart from
   an earlier message with optional file reversion.

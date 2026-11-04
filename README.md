@@ -22,24 +22,25 @@ implement changes, run commands, and follow pull requests and pipelines from the
 Model requests go through the Synopsys Pliny gateway. You need gateway access and a Pliny API key to use it.
 Web search, MCP tools and DevOps integrations connect to their configured services; extension updates come from GitHub.
 
-## What's new in 0.2.7
+## What's new in 0.2.8
 
-[PlinyCode 0.2.7](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7) is the latest stable release.
+[PlinyCode 0.2.8](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.8) is the latest stable release.
 
-- **CI Board actions:** requeue failed pipelines on GitHub and Azure DevOps, refresh Azure DevOps preview merges,
-  rerun build-validation policies, and merge eligible pull requests after current checks and policies are verified.
-- **Azure DevOps agent monitor:** open **Pipelines > Agents** to see connection status, enabled state, job
-  availability and matching capabilities, with optional notifications for status changes.
-- **Compact pasted prompts:** long text appears as an expandable label with a word count; the model still
-  receives the complete prompt. Long messages in the conversation can also be expanded when needed.
-- **Clearer agent and process feedback:** the picker shows agent names with descriptions in the chat header,
-  and background-process stop results distinguish a request from confirmed termination.
+- **Multiple agent pools:** monitor several Azure DevOps pools independently in **Pipelines > Agents**. Busy
+  agents show their pipeline, run and job details with links, and existing single-pool settings migrate automatically.
+- **Agent OS and utilization:** see Windows, Linux or macOS icons and sampled busy-time utilization over the
+  last 24 hours, alongside observed coverage. This measures job occupancy, not CPU or memory usage.
+- **Budget visibility and recovery:** the Pliny budget row stays visible while loading or during service outages,
+  with **Retry**, automatic refresh and clearly marked last known balances. Expanded conversation headers scroll
+  so the prompt and conversation controls remain accessible.
+- **Updated model routing:** FreeAuto routes include GLM-5.3 and GLM-5.3 Flash. Saved selections and router rules
+  for the two retiring GLM-5.2 replica IDs resolve to GLM-5.3. The migration takes effect when this version is installed.
+- **Custom-agent improvements:** discover agents and skills under `.ai/`, and hover over an agent name to see
+  its description without expanding the chat header.
 
-See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.7) for details.
-
-The **0.2.8-test.10** prerelease restores the Pliny budget row with automatic recovery and manual retry,
-and adds agent OS icons and sampled busy-time utilization over the last 24 hours.
-Enable **Install pre-releases** to receive test builds.
+See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.8) and
+[model migration details](docs/model-update-2026-11-06.md). Existing per-model tuning for a retired ID is not
+copied to GLM-5.3; review its thinking and context settings if you customized the old model.
 
 ## Features
 
@@ -50,11 +51,12 @@ Enable **Install pre-releases** to receive test builds.
 - **Model routing and tuning:** use FreeAuto or BalanceAuto to route tasks through Pliny models, choose model
   order, and adjust thinking and context settings. [Router settings](docs/router-settings.md) · [Model tuning](docs/model-tuning.md)
 - **Rules, skills and custom agents:** reuse repository instructions, choose task-specific agents, and control
-  which rules, skills, agents and hooks are enabled. [Rules and customization](docs/rules.md)
+  which rules, skills, agents and hooks are enabled, including agents and skills discovered under `.ai/`. [Rules and customization](docs/rules.md)
 - **Worktree conversations:** start work on a separate branch and checkout, then apply it back or create a pull
   request. [Run in worktree](docs/task-worktrees.md)
 - **GitHub and Azure DevOps:** review pull requests, launch pipelines, watch CI and investigate failures from
   the editor. The CI Board can start fix conversations, requeue pipelines and merge eligible pull requests.
+  Monitor multiple agent pools, running jobs, OS types and observed busy-time utilization.
   [CI Board](docs/ci-board.md) · [Pipelines](docs/pipeline-runs.md) · [Agent monitor](docs/agent-monitor.md)
 - **MCP integrations:** connect external tools or use the built-in DevOps MCP server from PlinyCode and
   compatible editor agents. [DevOps MCP](docs/devops-mcp.md)
