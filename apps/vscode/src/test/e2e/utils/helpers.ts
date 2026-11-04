@@ -419,13 +419,17 @@ export const e2e = test
 					path.join(settingsDir, "providers.json"),
 					JSON.stringify(
 						{
+							version: 1,
+							modes: {},
 							providers: {
 								pliny: {
-									provider: "pliny",
-									// A non-empty dummy key; the mock server accepts any Bearer token.
-									apiKey: "e2e-mock-pliny-key",
-									baseUrl: plinyMockBaseUrl,
-									lastUsed: true,
+									settings: {
+										provider: "pliny",
+										apiKey: "e2e-mock-pliny-key",
+										baseUrl: plinyMockBaseUrl,
+									},
+									updatedAt: new Date().toISOString(),
+									tokenSource: "manual",
 								},
 							},
 							lastUsedProvider: "pliny",
@@ -451,6 +455,8 @@ export const e2e = test
 						// 2. apps/vscode/src/sdk/cline-session-factory.ts (resolveBaseUrl short-circuit)
 						// Belt-and-suspenders with the providers.json pre-seeding above.
 						PLINY_BASE_URL: `${MOCK_CLINE_API_SERVER_URL}/api/llm`,
+						// Never inherit a developer's real key; also exercise the providers.json seed.
+						PLINY_API_KEY: "",
 						// IS_DEV: "true",
 						// DEV_WORKSPACE_FOLDER: E2ETestHelper.CODEBASE_ROOT_DIR,
 					},

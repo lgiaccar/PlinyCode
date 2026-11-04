@@ -28,6 +28,7 @@ export class ClineApiServerMock {
 	static globalSockets: Set<Socket> = new Set()
 
 	public generationCounter = 0
+	public budgetStatus = 200
 
 	constructor(public readonly server: Server) {}
 
@@ -151,6 +152,18 @@ export class ClineApiServerMock {
 
 				const { baseRoute, endpoint } = routeMatch
 				const controller = ClineApiServerMock.globalSharedServer!
+				if (baseRoute === "/api/svc/v1/llm-gateway/budgets") {
+					return controller.budgetStatus === 200
+						? sendJson({
+								matched: [
+									{
+										mode: "enforce",
+										entities: [{ periods: { cost_per_month: { limit: 200, used: 120, percentage: 60 } } }],
+									},
+								],
+							})
+						: sendJson({ error: "Budget service unavailable" }, controller.budgetStatus)
+				}
 
 				// Health check endpoints
 				if (baseRoute === "/health") {
