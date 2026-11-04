@@ -1,41 +1,145 @@
-import { AgentMonitorSettings, type AgentMonitorState } from "@shared/proto/cline/agent_monitor"
+import { DEFAULT_AGENT_MONITOR_CONFIG } from "@shared/agent-monitor"
+import { AgentMonitorSettings, AgentMonitorState, type AgentMonitorsState } from "@shared/proto/cline/agent_monitor"
 import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { AgentMonitorServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { fieldClass, pipelineError } from "./PipelineLaunchForm"
 
 export function AgentsPanel() {
-	const [state, setState] = useState<AgentMonitorState>()
-	const [draft, setDraft] = useState<AgentMonitorSettings>()
-	const [filters, setFilters] = useState("")
+	const [state, setState] = useState<AgentMonitorsState>()
+	const [selected, setSelected] = useState("")
+	const [adding, setAdding] = useState(false)
 	const [error, setError] = useState("")
-	const [saving, setSaving] = useState(false)
 	const [connection, setConnection] = useState(0)
-	const [search, setSearch] = useState("")
-	const initialized = useRef(false)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Retry connection intentionally recreates the subscription.
 	useEffect(
 		() =>
 			AgentMonitorServiceClient.subscribeToAgents(EmptyRequest.create({}), {
 				onResponse: (response) => {
 					setState(response)
 					setError("")
-					if (!initialized.current && response.config) {
-						initialized.current = true
-						setDraft(response.config)
-						setFilters(response.config.capabilities.join(", "))
-					}
+					setSelected((current) =>
+						response.pools.some((pool) => pool.id === current) ? current : (response.pools[0]?.id ?? ""),
+					)
 				},
 				onError: (failure) => setError(pipelineError(failure)),
 				onComplete: () => {},
 			}),
 		[connection],
 	)
+	const pools = state?.pools ?? []
+	const saved = (id: string) => {
+		setSelected(id)
+		setAdding(false)
+	}
+	return (
+		<section aria-label="Agent monitors" className="flex flex-col gap-3 min-w-0">
+			<p className="text-sm text-description m-0">
+				Monitor Azure DevOps agent pools. Saved for this workspace; each enabled pool refreshes every minute, even when
+				this view is closed.
+			</p>
+			{(error || state?.error) && (
+				<DevOpsErrorText
+					error={error || state?.error || ""}
+					onSignedIn={async () => setConnection((value) => value + 1)}
+				/>
+			)}
+			{error && state && !state.error && (
+				<Button onClick={() => setConnection((value) => value + 1)}>Retry connection</Button>
+			)}
+			{!state || state.error ? (
+				error || state?.error ? (
+					<Button onClick={() => setConnection((value) => value + 1)}>Retry connection</Button>
+				) : (
+					<p>Loading agent monitors...</p>
+				)
+			) : (
+				<>
+					<div className="flex flex-wrap items-end gap-2">
+						{pools.length > 0 && (
+							<label className="text-sm flex flex-col gap-1 flex-1 min-w-0">
+								Agent pool
+								<select
+									className={fieldClass}
+									onChange={(event) => {
+										setSelected(event.target.value)
+										setAdding(false)
+									}}
+									value={adding ? "" : selected}>
+									{adding && <option value="">New pool</option>}
+									{pools.map((pool, index) => (
+										<option key={pool.id} value={pool.id}>
+											{pool.poolName || `Pool ${index + 1}`} -{" "}
+											{pool.error ? "Connection error" : pool.config?.enabled ? "Monitoring" : "Stopped"}
+										</option>
+									))}
+								</select>
+							</label>
+						)}
+						<Button
+							disabled={adding || pools.length === 0}
+							onClick={() => setAdding(true)}
+							size="sm"
+							variant="secondary">
+							Add pool
+						</Button>
+					</div>
+					{pools.map((pool) => (
+						<AgentPoolPanel
+							connectionError={error}
+							hidden={adding || pool.id !== selected}
+							key={pool.id}
+							onSaved={saved}
+							state={pool}
+						/>
+					))}
+					{(adding || pools.length === 0) && (
+						<>
+							<AgentPoolPanel
+								key="new"
+								onSaved={saved}
+								state={AgentMonitorState.create({
+									config: {
+										...DEFAULT_AGENT_MONITOR_CONFIG,
+										authentication: state.defaultAuthentication || pools[0]?.config?.authentication || "pat",
+									},
+								})}
+							/>
+							{pools.length > 0 && (
+								<Button onClick={() => setAdding(false)} variant="secondary">
+									Cancel adding pool
+								</Button>
+							)}
+						</>
+					)}
+				</>
+			)}
+		</section>
+	)
+}
+
+function AgentPoolPanel({
+	state,
+	hidden = false,
+	onSaved,
+	connectionError = "",
+}: {
+	state: AgentMonitorState
+	hidden?: boolean
+	onSaved: (id: string) => void
+	connectionError?: string
+}) {
+	const [draft, setDraft] = useState(state.config)
+	const [filters, setFilters] = useState(state.config?.capabilities.join(", ") ?? "")
+	const [error, setError] = useState("")
+	const [saving, setSaving] = useState(false)
+	const [search, setSearch] = useState("")
 	const refresh = async () => {
-		setConnection((value) => value + 1)
+		setError("")
 		try {
-			await AgentMonitorServiceClient.refreshAgentMonitor(EmptyRequest.create({}))
+			await AgentMonitorServiceClient.refreshAgentMonitor(StringRequest.create({ value: state.id }))
 		} catch (failure) {
 			setError(pipelineError(failure))
 		}
@@ -45,9 +149,10 @@ export function AgentsPanel() {
 		setSaving(true)
 		setError("")
 		try {
-			await AgentMonitorServiceClient.configureAgentMonitor(
+			const response = await AgentMonitorServiceClient.configureAgentMonitor(
 				AgentMonitorSettings.create({
 					...draft,
+					id: state.id,
 					enabled,
 					capabilities: filters
 						.split(",")
@@ -55,6 +160,7 @@ export function AgentsPanel() {
 						.filter(Boolean),
 				}),
 			)
+			onSaved(response.value)
 		} catch (failure) {
 			setError(pipelineError(failure))
 		} finally {
@@ -63,30 +169,31 @@ export function AgentsPanel() {
 	}
 	const open = (url: string) =>
 		void UiServiceClient.openUrl(StringRequest.create({ value: url })).catch((failure) => setError(pipelineError(failure)))
-	const stale = Boolean(error || state?.error || !state?.config?.enabled)
+	const stale = Boolean(error || connectionError || state?.error || !state?.config?.enabled)
 	const agents = state?.agents ?? []
 	const visible = agents.filter((agent) =>
-		`${agent.name} ${agent.capabilities.join(" ")}`.toLowerCase().includes(search.toLowerCase()),
+		`${agent.name} ${agent.pipelineName} ${agent.runName} ${agent.jobName} ${agent.capabilities.join(" ")}`
+			.toLowerCase()
+			.includes(search.toLowerCase()),
 	)
 	return (
-		<section aria-label="Agent monitor" className="flex flex-col gap-3 min-w-0">
-			<p className="text-sm text-description m-0">
-				Monitor an Azure DevOps agent pool. Saved for this workspace; refreshes every minute while monitoring is enabled,
-				even when this view is closed.
-			</p>
+		<section
+			aria-label={state.poolName || "Agent monitor"}
+			className={hidden ? "hidden" : "flex flex-col gap-3 min-w-0"}
+			hidden={hidden}>
 			{draft ? (
 				<>
 					<label className="text-sm flex flex-col gap-1">
 						Agent-pool URL
 						<input
-							aria-describedby="agent-pool-url-help"
+							aria-describedby={`agent-pool-url-help-${state.id || "new"}`}
 							className={fieldClass}
 							onChange={(event) => setDraft({ ...draft, queueUrl: event.target.value })}
 							placeholder="Paste your Azure DevOps agent-pool URL"
 							value={draft.queueUrl}
 						/>
 					</label>
-					<p className="text-xs text-description m-0" id="agent-pool-url-help">
+					<p className="text-xs text-description m-0" id={`agent-pool-url-help-${state.id || "new"}`}>
 						{draft.queueUrl.trim()
 							? "Use the address from Project settings → Agent pools, including queueId. Starting or saving reuses this URL as your local default for new workspaces."
 							: "Paste your agent-pool URL to enable Start monitoring. Copy it from Project settings → Agent pools."}
@@ -121,13 +228,22 @@ export function AgentsPanel() {
 						<Button disabled={saving || !draft.queueUrl.trim()} onClick={() => void save(true)} size="sm">
 							{state?.config?.enabled ? "Save monitor" : "Start monitoring"}
 						</Button>
+						{!state.config?.enabled && (
+							<Button
+								disabled={saving || !draft.queueUrl.trim()}
+								onClick={() => void save(false)}
+								size="sm"
+								variant="secondary">
+								Save pool
+							</Button>
+						)}
 						{state?.config?.enabled && (
 							<Button
 								disabled={saving}
 								onClick={() => {
 									setSaving(true)
 									void AgentMonitorServiceClient.configureAgentMonitor(
-										AgentMonitorSettings.create({ ...state.config, enabled: false }),
+										AgentMonitorSettings.create({ ...state.config, id: state.id, enabled: false }),
 									)
 										.catch((failure) => setError(pipelineError(failure)))
 										.finally(() => setSaving(false))
@@ -144,6 +260,20 @@ export function AgentsPanel() {
 							variant="secondary">
 							{state?.refreshing ? "Refreshing…" : "Refresh"}
 						</Button>
+						{state.id && (
+							<Button
+								disabled={saving}
+								onClick={() => {
+									setSaving(true)
+									void AgentMonitorServiceClient.removeAgentMonitor(StringRequest.create({ value: state.id }))
+										.catch((failure) => setError(pipelineError(failure)))
+										.finally(() => setSaving(false))
+								}}
+								size="sm"
+								variant="secondary">
+								Remove pool
+							</Button>
+						)}
 					</div>
 				</>
 			) : !state?.error && !error ? (
@@ -180,7 +310,7 @@ export function AgentsPanel() {
 			</div>
 			{agents.length > 0 && (
 				<label className="text-sm flex flex-col gap-1">
-					Search matching agents
+					Search agents or pipelines
 					<input className={fieldClass} onChange={(event) => setSearch(event.target.value)} value={search} />
 				</label>
 			)}
@@ -190,7 +320,7 @@ export function AgentsPanel() {
 			<ul className="list-none m-0 p-0">
 				{visible.map((agent) => (
 					<li className="border-b border-panel-border py-3 flex flex-col gap-1 min-w-0" key={agent.id}>
-						<button className="text-left text-link break-all" onClick={() => open(agent.url)}>
+						<button className="text-left text-link break-all" onClick={() => open(agent.url)} type="button">
 							{agent.name}
 						</button>
 						<div
@@ -203,13 +333,24 @@ export function AgentsPanel() {
 							{agent.capabilities.join(", ") || "No capabilities reported"}
 						</div>
 						{agent.busy &&
+							agent.status === "online" &&
 							(agent.jobUrl ? (
-								<button className="text-left text-link text-xs" onClick={() => open(agent.jobUrl)}>
-									{agent.jobName || "Current job"}
+								<button
+									className="text-left text-link text-xs break-words"
+									onClick={() => open(agent.jobUrl)}
+									type="button">
+									{agent.pipelineName || "Pipeline name unavailable"}
 								</button>
 							) : (
-								<span className="text-xs">{agent.jobName || "Job assigned"}</span>
+								<span className="text-xs break-words">{agent.pipelineName || "Pipeline name unavailable"}</span>
 							))}
+						{agent.busy && agent.status === "online" && (agent.runName || agent.jobName) && (
+							<div className="text-xs text-description break-words">
+								{[agent.runName && `Run: ${agent.runName}`, agent.jobName && `Job: ${agent.jobName}`]
+									.filter(Boolean)
+									.join(" · ")}
+							</div>
+						)}
 					</li>
 				))}
 			</ul>

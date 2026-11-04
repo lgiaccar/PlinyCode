@@ -22,7 +22,8 @@ their configured services; extension updates come from GitHub.
 
 ## Features
 
-**0.2.8-test.4 prerelease:** restores **Pipelines > Agents** after the `Unknown service` error in test.3.
+**0.2.8-test.5 prerelease:** monitor multiple pools in **Pipelines > Agents** and see the running pipeline
+and run on busy agents, with links to Azure DevOps.
 Test builds require **Install pre-releases** in **Settings > About**. Stable remains **0.2.7**.
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.

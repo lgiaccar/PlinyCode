@@ -37,6 +37,12 @@ interface AgentRecord {
 	capabilities: string[]
 	jobName: string
 	jobUrl: string
+	pipelineName: string
+	runName: string
+	definitionUrl: string
+	planType: string
+	scopeId: string
+	ownerId: number
 }
 
 export interface AgentPoolSnapshot {
@@ -57,19 +63,27 @@ function normalizePool(pool: { poolName: string; agents: AgentRecord[] }, queueU
 	if (!Array.isArray(pool.agents)) throw new Error("Azure DevOps returned an invalid agent list.")
 	return {
 		poolName: pool.poolName,
-		agents: pool.agents.map((agent) => ({
-			...agent,
-			status: agent.status === "online" || agent.status === "offline" ? agent.status : "unknown",
-			capabilities: [...new Set(agent.capabilities)].sort(),
-			url: `${queueUrl}&agentId=${agent.id}`,
-			jobUrl: safeJobUrl(agent.jobUrl, queueUrl),
-		})),
+		agents: pool.agents.map((agent) => {
+			const { definitionUrl, planType, scopeId, ownerId, ...details } = agent
+			// A shared pool can run jobs from another project: use the request's scope, not the queue's project.
+			const runUrl =
+				planType === "build" && /^[0-9a-f-]{36}$/i.test(scopeId) && Number.isSafeInteger(ownerId) && ownerId > 0
+					? `${agentQueueTarget(queueUrl).collectionUrl}/${scopeId}/_build/results?buildId=${ownerId}`
+					: ""
+			return {
+				...details,
+				status: agent.status === "online" || agent.status === "offline" ? agent.status : "unknown",
+				capabilities: [...new Set(agent.capabilities)].sort(),
+				url: `${queueUrl}&agentId=${agent.id}`,
+				jobUrl: safeJobUrl(agent.jobUrl, queueUrl) || runUrl || safeJobUrl(definitionUrl, queueUrl),
+			}
+		}),
 	}
 }
 
 // Fixed program, not a shell command assembled from URLs. Input is JSON on stdin.
 // Windows PowerShell ships with Windows; no browser cookies or passwords are read.
-const WINDOWS_QUERY = `
+export const WINDOWS_QUERY = `
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = New-Object System.Text.UTF8Encoding
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
@@ -87,8 +101,14 @@ try {
       id = $_.id; name = $_.name; status = $_.status; enabled = [bool]$_.enabled
       busy = ($null -ne $_.assignedRequest)
       capabilities = @($capabilities | Where-Object { $_ } | Sort-Object -Unique)
-      jobName = [string]$_.assignedRequest.owner.name
+      pipelineName = [string]$_.assignedRequest.definition.name
+      runName = [string]$_.assignedRequest.owner.name
+      jobName = [string]$_.assignedRequest.jobName
       jobUrl = [string]$_.assignedRequest.owner._links.web.href
+      definitionUrl = [string]$_.assignedRequest.definition._links.web.href
+      planType = [string]$_.assignedRequest.planType
+      scopeId = [string]$_.assignedRequest.scopeId
+      ownerId = [long]$_.assignedRequest.owner.id
     }
   })
   @{poolName = [string]$queue.pool.name; agents = $agents} | ConvertTo-Json -Depth 8 -Compress
@@ -184,8 +204,14 @@ export async function readAgentPool(config: AgentMonitorConfig, editorToken: Edi
 				enabled: Boolean(agent.enabled),
 				busy: Boolean(agent.assignedRequest),
 				capabilities: Object.keys({ ...agent.systemCapabilities, ...agent.userCapabilities }),
-				jobName: agent.assignedRequest?.owner?.name ?? "",
+				pipelineName: agent.assignedRequest?.definition?.name ?? "",
+				runName: agent.assignedRequest?.owner?.name ?? "",
+				jobName: agent.assignedRequest?.jobName ?? "",
 				jobUrl: agent.assignedRequest?.owner?._links?.web?.href ?? "",
+				definitionUrl: agent.assignedRequest?.definition?._links?.web?.href ?? "",
+				planType: agent.assignedRequest?.planType ?? "",
+				scopeId: agent.assignedRequest?.scopeId ?? "",
+				ownerId: Number(agent.assignedRequest?.owner?.id),
 			})),
 		},
 		target.queueUrl,

@@ -9,9 +9,10 @@ option java_multiple_files = true;
 option java_package = "bot.cline.proto";
 
 service AgentMonitorService {
-  rpc subscribeToAgents(EmptyRequest) returns (stream AgentMonitorState);
-  rpc configureAgentMonitor(AgentMonitorSettings) returns (Empty);
-  rpc refreshAgentMonitor(EmptyRequest) returns (Empty);
+  rpc subscribeToAgents(EmptyRequest) returns (stream AgentMonitorsState);
+  rpc configureAgentMonitor(AgentMonitorSettings) returns (String);
+  rpc refreshAgentMonitor(StringRequest) returns (Empty);
+  rpc removeAgentMonitor(StringRequest) returns (Empty);
 }
 
 message AgentMonitorSettings {
@@ -21,6 +22,13 @@ message AgentMonitorSettings {
   string authentication = 4;
   bool enabled = 5;
   bool notify = 6;
+  string id = 7;
+}
+
+message AgentMonitorsState {
+  repeated AgentMonitorState pools = 1;
+  string error = 2;
+  string default_authentication = 3;
 }
 
 message AgentMonitorState {
@@ -31,6 +39,7 @@ message AgentMonitorState {
   int64 updated = 5;
   bool refreshing = 6;
   string error = 7;
+  string id = 8;
 }
 
 message MonitoredAgentInfo {
@@ -43,4 +52,6 @@ message MonitoredAgentInfo {
   string url = 7;
   string job_name = 8;
   string job_url = 9;
+  string pipeline_name = 10;
+  string run_name = 11;
 }
