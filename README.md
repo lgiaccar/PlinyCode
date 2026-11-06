@@ -44,7 +44,7 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.6 prerelease** simplifies [Grafana machine metrics](docs/grafana-machine-metrics.md)
+The **0.2.9-test.7 prerelease** simplifies [Grafana machine metrics](docs/grafana-machine-metrics.md)
 in **Pipelines > Agents**: enter a token for the saved server, and dashboard, host-variable and panel
 selection are discovered and saved automatically. Opening an agent's machine metrics loads readings
 from its ADO computer name immediately. Manual setup remains under **Advanced setup** for exceptions.
