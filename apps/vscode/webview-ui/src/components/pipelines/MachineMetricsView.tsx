@@ -184,7 +184,7 @@ function SeriesView({
 								{valueText(summary.peak, series.unit)} · P95 {valueText(summary.p95, series.unit)}
 							</span>
 							<span className="text-description">
-								{(summary.coverage * 100).toFixed(0)}% query sample coverage ·{" "}
+								{(summary.coverage * 100).toFixed(1)}% query sample coverage ·{" "}
 								{Math.round((series.stepMs ?? data.stepMs) / 1000)}s resolution · Last sample{" "}
 								{new Date(summary.updated).toLocaleString()}
 							</span>
@@ -198,16 +198,28 @@ function SeriesView({
 
 function LoadChart({ series, data }: { series: MachineSeries; data: MachineMetrics }) {
 	const paths: string[] = []
+	const isolated: { x: number; y: number }[] = []
+	const points = series.points.filter((p) => p.time >= data.from && p.time <= data.to)
+	const minimum = points.reduce((value, p) => Math.min(value, p.value ?? 0), 0)
+	const maximum = points.reduce((value, p) => Math.max(value, p.value ?? 0), 100)
+	const gap = (series.stepMs ?? data.stepMs) * 1.5
 	let path = ""
 	let previous = 0
-	for (const point of series.points) {
-		if (point.value === null || point.time - previous > (series.stepMs ?? data.stepMs) * 1.5) {
+	for (const [index, point] of points.entries()) {
+		if (point.value === null || point.time - previous > gap) {
 			if (path) paths.push(path)
 			path = ""
 		}
 		if (point.value !== null) {
-			const x = (320 * (point.time - data.from)) / (data.to - data.from)
-			const y = 75 - (70 * Math.min(100, Math.max(0, point.value))) / 100
+			const x = 2 + (316 * (point.time - data.from)) / (data.to - data.from)
+			const y = 75 - (70 * (point.value - minimum)) / (maximum - minimum)
+			const before = points[index - 1]
+			const after = points[index + 1]
+			if (
+				!(before && before.value !== null && point.time - before.time <= gap) &&
+				!(after && after.value !== null && after.time - point.time <= gap)
+			)
+				isolated.push({ x, y })
 			path += `${path ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)} `
 		}
 		previous = point.time
@@ -215,17 +227,22 @@ function LoadChart({ series, data }: { series: MachineSeries; data: MachineMetri
 	if (path) paths.push(path)
 	return (
 		<svg
-			aria-label={`${series.name} load over the selected time range, 0 to 100 percent`}
+			aria-label={`${series.name} load over the selected time range, ${minimum} to ${maximum} percent`}
 			className="w-full max-w-xl text-link"
 			role="img"
 			viewBox="0 0 320 85">
-			<title>{series.name}: 0–100% load; gaps indicate missing samples</title>
+			<title>
+				{series.name}: {minimum}–{maximum}% load; gaps indicate missing samples
+			</title>
 			<path d="M0 5H320 M0 75H320" opacity="0.2" stroke="currentColor" />
 			<g fill="none" stroke="currentColor" strokeWidth="1.5">
 				{paths.map((d, i) => (
 					<path d={d} key={i} />
 				))}
 			</g>
+			{isolated.map((point, index) => (
+				<circle cx={point.x} cy={point.y} fill="currentColor" key={index} r="2" />
+			))}
 		</svg>
 	)
 }

@@ -63,6 +63,7 @@ describe("Machine metrics", () => {
 		await screen.findByText("Sample average 35.0% · Peak 70.0% · P95 70.0%")
 		expect(mocks.queryAgentMetrics).toHaveBeenCalledWith(expect.objectContaining({ host: "build-01", range: "24h" }))
 		expect(screen.getByText(/No data returned for this host/)).toBeInTheDocument()
+		expect(screen.getByRole("img", { name: /CPU load over/ }).querySelectorAll("circle")).toHaveLength(2)
 		fireEvent.change(screen.getByRole("combobox"), { target: { value: "30d" } })
 		await waitFor(() => expect(mocks.queryAgentMetrics).toHaveBeenLastCalledWith(expect.objectContaining({ range: "30d" })))
 	})
