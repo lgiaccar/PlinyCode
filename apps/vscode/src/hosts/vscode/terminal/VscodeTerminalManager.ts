@@ -223,25 +223,13 @@ export class VscodeTerminalManager {
 		})
 	}
 
-	/**
-	 * @param options.reveal Show the terminal panel (without taking focus).
-	 * False for commands of a task running in the background.
-	 */
-	runCommand(terminalInfo: ITerminalInfo, command: string, options?: { reveal?: boolean }): ITerminalProcessResultPromise {
+	runCommand(terminalInfo: ITerminalInfo, command: string): ITerminalProcessResultPromise {
 		// Cast to VSCode-specific TerminalInfo for internal use
 		// Using unknown as intermediate cast due to structural differences between ITerminal and vscode.Terminal
 		const vscodeTerminalInfo = terminalInfo as unknown as TerminalInfo
 		Logger.log(`[TerminalManager] Running command on terminal ${vscodeTerminalInfo.id}: "${command}"`)
 		Logger.log(`[TerminalManager] Terminal ${vscodeTerminalInfo.id} busy state before: ${vscodeTerminalInfo.busy}`)
 
-		try {
-			if (options?.reveal !== false) {
-				vscodeTerminalInfo.terminal.show(true)
-			}
-		} catch (error) {
-			vscodeTerminalInfo.busy = false
-			throw error
-		}
 		vscodeTerminalInfo.busy = true
 		vscodeTerminalInfo.lastCommand = command
 		const process = new VscodeTerminalProcess()
@@ -363,7 +351,7 @@ export class VscodeTerminalManager {
 	 * earlier (e.g. when the model request was built) pass it here so a
 	 * settings change does not switch shells under an in-flight tool call.
 	 * The returned terminal is reserved until runCommand() takes ownership.
-	 * @param location Where a new terminal opens; only a terminal already
+	 * @param location Where a new terminal is placed when revealed; only a terminal already
 	 * there is reused (plinycode.terminal.location).
 	 */
 	async getOrCreateTerminal(
@@ -434,10 +422,6 @@ export class VscodeTerminalManager {
 						availableTerminal.pendingCwdChange = cwd
 						availableTerminal.cwdResolved = { resolve, reject }
 					})
-					// Showing the reused terminal gives VS Code a chance to initialize shell integration.
-					// runCommand() below waits up to shellIntegrationTimeout for executeCommand before falling back.
-					availableTerminal.terminal.show(true)
-
 					let cwdChangeResult: CwdChangeResult | undefined
 					try {
 						cwdChangeResult = await this.runCwdChangeCommand(availableTerminal, cwd)

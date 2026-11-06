@@ -18,6 +18,22 @@ vi.mock("@/utils/fs", () => ({
 }))
 
 describe("SdkTaskStartCoordinator", () => {
+	it("keeps the original request for Resume when cancelled during startup", async () => {
+		const { coordinator, options } = makeCoordinator()
+		options.resolveContextMentions.mockImplementation(async () => {
+			vi.mocked(options.sessions.getCancellationVersion).mockReturnValue(1)
+			return "resolved original request"
+		})
+		await coordinator.initTask("original request", ["image"], ["file"])
+		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
+		expect(options.sessions.rememberUnsentRequest).toHaveBeenCalledWith(
+			expect.any(String),
+			"original request",
+			["image"],
+			["file"],
+		)
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.mocked(isDirectory).mockResolvedValue(false)
@@ -568,6 +584,10 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 			getGlobalSettingsKey: vi.fn(() => input.mode ?? "act"),
 		} as unknown as StateManager,
 		sessions: {
+			getCancellationVersion: vi.fn(() => 0),
+			getUnsentRequest: vi.fn(),
+			rememberUnsentRequest: vi.fn(),
+			waitForCancellation: vi.fn().mockResolvedValue(undefined),
 			startNewSession: vi.fn((startInput?: { config?: { sessionId?: string } }) => ({
 				startResult: { sessionId: startInput?.config?.sessionId ?? "session-123" },
 				sdkHost,

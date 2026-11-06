@@ -81,6 +81,8 @@ export class SdkFollowupCoordinator {
 		options?: FollowUpOptions,
 	): Promise<void> {
 		// A side question needs text to ask; a bare resume is never one.
+		const cancellationVersion = this.options.sessions.getCancellationVersion()
+		const wasCancelled = () => this.options.sessions.getCancellationVersion() !== cancellationVersion
 		const offTheRecord = options?.offTheRecord === true && !!prompt?.trim()
 		if (this.options.interactions.resolvePendingToolApproval(prompt, askResponse, images, files)) {
 			return
@@ -101,8 +103,10 @@ export class SdkFollowupCoordinator {
 		// Rebuilds replace idle sessions. Wait before acquiring the shared
 		// prepare/start boundary so this follow-up cannot target a replaced host.
 		await this.options.waitForPendingRebuilds()
+		if (wasCancelled()) return
 
 		await this.options.runExclusive(async () => {
+			if (wasCancelled()) return
 			// Task navigation does not use the rebuild scheduler. Do not deliver a
 			// prompt submitted from one task into a task selected while we waited.
 			// Compare by taskId: reloading the same task allocates a new TaskProxy,
@@ -155,7 +159,9 @@ export class SdkFollowupCoordinator {
 		)
 
 		this.options.sessions.setRunning(true)
+		const cancellationVersion = this.options.sessions.getCancellationVersion()
 		const resolvedPrompt = prompt ? await this.options.resolveContextMentions(prompt) : ""
+		if (this.options.sessions.getCancellationVersion() !== cancellationVersion) return
 		this.options.sessions.fireAndForgetSend(sdkHost, sessionId, resolvedPrompt, images, files, delivery ?? "queue")
 	}
 
@@ -164,8 +170,7 @@ export class SdkFollowupCoordinator {
 	 * rebuilding it from task history. A bare resume (no user content) sends
 	 * the synthetic resumption prompt without echoing a user bubble;
 	 * user-provided content is echoed and sent as-is. If the session's abort
-	 * is still settling, the runtime auto-queues the send and drains it once
-	 * the abort completes.
+	 * is still settling, wait for its transcript and cleanup before resuming.
 	 */
 	private async continueIdleSession(
 		activeSession: NonNullable<ReturnType<SdkSessionLifecycle["getActiveSession"]>>,
@@ -176,6 +181,13 @@ export class SdkFollowupCoordinator {
 	): Promise<void> {
 		const { sdkHost, sessionId } = activeSession
 		Logger.log(`[SdkController] Continuing idle session for follow-up: ${sessionId}`)
+		const cancellationVersion = this.options.sessions.getCancellationVersion()
+		await this.options.sessions.waitForCancellation(sessionId)
+		if (
+			this.options.sessions.getCancellationVersion() !== cancellationVersion ||
+			this.options.sessions.getActiveSession() !== activeSession
+		)
+			return
 
 		this.options.sessions.setRunning(true)
 		if (prompt?.trim() || images?.length || files?.length) {
@@ -183,9 +195,13 @@ export class SdkFollowupCoordinator {
 		}
 		this.options.resetMessageTranslator()
 
-		const effectivePrompt = prompt?.trim() || TASK_RESUMPTION_PROMPT
+		// A cancel during startup/editor reads never delivered the original input.
+		// A bare Resume must deliver it once, including its attachments.
+		const unsent = !prompt?.trim() ? this.options.sessions.getUnsentRequest(sessionId) : undefined
+		const effectivePrompt = prompt?.trim() || unsent?.prompt || TASK_RESUMPTION_PROMPT
 		const resolvedPrompt = await this.options.resolveContextMentions(effectivePrompt)
-		this.sendTurn(sdkHost, sessionId, resolvedPrompt, images, files, offTheRecord)
+		if (this.options.sessions.getCancellationVersion() !== cancellationVersion) return
+		this.sendTurn(sdkHost, sessionId, resolvedPrompt, images ?? unsent?.images, files ?? unsent?.files, offTheRecord)
 	}
 
 	private async tryResumeSessionFromTask(
@@ -232,6 +248,7 @@ export class SdkFollowupCoordinator {
 		offTheRecord = false,
 	): Promise<void> {
 		const taskId = task.taskId
+		const cancellationVersion = this.options.sessions.getCancellationVersion()
 		Logger.log(`[SdkController] Resuming session from task: ${taskId}`)
 
 		const historyItem = await this.options.taskHistory.findHistoryItem(taskId)
@@ -239,7 +256,7 @@ export class SdkFollowupCoordinator {
 		// Targeting checks below compare by taskId (logical identity): reloading
 		// the same task allocates a new TaskProxy and must not cancel the
 		// follow-up. Cleanup (endStartedResume) uses object identity instead.
-		if (this.options.getTask()?.taskId !== taskId) {
+		if (this.options.getTask()?.taskId !== taskId || this.options.sessions.getCancellationVersion() !== cancellationVersion) {
 			await this.abandonFollowUp(`Task changed before resume start for ${taskId}; cancelling follow-up`)
 			return
 		}
@@ -250,6 +267,10 @@ export class SdkFollowupCoordinator {
 			...resumeStart,
 			interactive: true,
 		})
+		if (this.options.sessions.getCancellationVersion() !== cancellationVersion) {
+			this.options.sessions.setRunning(false)
+			return
+		}
 
 		if (this.options.getTask()?.taskId !== taskId) {
 			await this.endStartedResume(sdkHost, startResult.sessionId)
@@ -300,6 +321,10 @@ export class SdkFollowupCoordinator {
 				return
 			}
 
+			if (this.options.sessions.getCancellationVersion() !== cancellationVersion) {
+				this.options.sessions.setRunning(false)
+				return
+			}
 			this.sendTurn(sdkHost, startResult.sessionId, resolvedPrompt, images, files, offTheRecord)
 		} catch (error) {
 			await this.endStartedResume(sdkHost, startResult.sessionId)

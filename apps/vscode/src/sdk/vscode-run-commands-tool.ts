@@ -4,8 +4,8 @@
  * This is an IDE-level feature built on top of the SDK, NOT part of the SDK.
  * It supports two execution modes, switchable dynamically per invocation:
  *
- *   - **Foreground (vscodeTerminal):** Uses VscodeTerminalManager for visible
- *     VS Code terminals with shell integration.
+ *   - **VS Code terminal (vscodeTerminal):** Uses VscodeTerminalManager for
+ *     hidden, revealable VS Code terminals with shell integration.
  *
  *   - **Background (backgroundExec):** Delegates to the SDK's createShellExecutor()
  *     for headless child_process.spawn execution.
@@ -540,10 +540,10 @@ export async function executeForeground(
 		},
 		sessionId,
 	)
-	// A task running in the background must not pop its terminal into view,
-	// nor open one as an editor tab.
-	const reveal = foregroundCommands?.isForegroundSession(sessionId) ?? true
-	const location: TerminalLocation = reveal ? readTerminalLocation() : "panel"
+	// Background tasks stay in the panel location; all agent terminals remain
+	// hidden until the user explicitly reveals one.
+	const isForegroundSession = foregroundCommands?.isForegroundSession(sessionId) ?? true
+	const location: TerminalLocation = isForegroundSession ? readTerminalLocation() : "panel"
 	const autoProceedTimer = setTimeout(() => requestDetach("timeout"), FOREGROUND_COMMAND_AUTO_PROCEED_MS)
 	// A steering message detaches the command like "Proceed While Running", so
 	// the agent reads the message now instead of when the command ends.
@@ -570,7 +570,7 @@ export async function executeForeground(
 		const terminalPromise = terminalManager.getOrCreateTerminal(cwd, terminalProfileId, location)
 		const startDetached = (terminalInfo: Awaited<typeof terminalPromise>, log: DetachedCommandLog): void => {
 			try {
-				const process = terminalManager.runCommand(terminalInfo, terminalCommand, { reveal })
+				const process = terminalManager.runCommand(terminalInfo, terminalCommand)
 				log.attach(process)
 				tracked?.attach(terminalInfo, process)
 				void process.catch((error) => log.fail(error))
@@ -642,7 +642,7 @@ export async function executeForeground(
 		state.phase = "started"
 		const { terminalInfo } = firstOutcome
 
-		const process = terminalManager.runCommand(terminalInfo, terminalCommand, { reveal })
+		const process = terminalManager.runCommand(terminalInfo, terminalCommand)
 		const outputLines: string[] = []
 		let droppedLines = 0
 

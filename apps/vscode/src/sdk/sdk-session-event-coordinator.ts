@@ -103,6 +103,15 @@ export class SdkSessionEventCoordinator {
 		}
 
 		const result = this.translateSessionEvent(event, this.options.messageTranslatorState)
+		const cancelling = this.options.sessions.isCancelling(activeSession.sessionId)
+		if (cancelling) {
+			// Suppress late content, but finish accounting and existing compaction UI.
+			result.messages = result.messages.filter(
+				(message) =>
+					message.type === "say" &&
+					["api_req_started", "api_req_finished", "subagent_usage", "compaction"].includes(message.say ?? ""),
+			)
+		}
 		if (event.type === "pending_prompt_submitted") {
 			this.options.messageTranslatorState.clearTurnOutcome()
 			this.options.sessions.setRunning(true)
@@ -119,7 +128,7 @@ export class SdkSessionEventCoordinator {
 		}
 
 		if (activeSession) {
-			if (result.sessionEnded || result.turnComplete) {
+			if (!cancelling && (result.sessionEnded || result.turnComplete)) {
 				// Authoritative UI phase at turn end. If the completion tool was used this turn
 				// the phase is "completed" (green box + Start New Task); otherwise the agent
 				// simply stopped and is waiting for the user ("awaiting_followup"). Error turns

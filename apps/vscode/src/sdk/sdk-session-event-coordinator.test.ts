@@ -14,6 +14,34 @@ vi.mock("@/shared/services/Logger", () => ({
 }))
 
 describe("SdkSessionEventCoordinator", () => {
+	it("keeps usage accounting while suppressing cancelled output", async () => {
+		const usage: ClineMessage = { ts: 2, type: "say", say: "api_req_started", text: '{"cost":0.01}', partial: false }
+		const { coordinator, options, event } = makeCoordinator({
+			translation: {
+				messages: [{ ts: 1, type: "say", say: "text", text: "late content" }, usage],
+				turnComplete: false,
+				sessionEnded: false,
+			},
+		})
+		vi.mocked(options.sessions.isCancelling).mockReturnValue(true)
+		await coordinator.handleSessionEvent(event)
+		expect(options.messages.appendAndEmit).toHaveBeenCalledWith([usage], event)
+	})
+	it("does not overwrite a resumed phase with the cancelled turn's late completion", async () => {
+		const { coordinator, options, event } = makeCoordinator({
+			activeSession: makeActiveSession({ isRunning: false }),
+			turnPhase: "streaming",
+			translation: {
+				messages: [{ ts: 1, type: "say", say: "text", text: "late output" }],
+				turnComplete: true,
+				sessionEnded: false,
+			},
+		})
+		vi.mocked(options.sessions.isCancelling).mockReturnValue(true)
+		await coordinator.handleSessionEvent(event)
+		expect(options.setTurnPhase).not.toHaveBeenCalled()
+		expect(options.messages.appendAndEmit).not.toHaveBeenCalled()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
@@ -357,6 +385,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 	const options = {
 		messageTranslatorState: new MessageTranslatorState(),
 		sessions: {
+			isCancelling: vi.fn(() => false),
 			getActiveSession: vi.fn(() => activeSession),
 			setRunning: vi.fn(),
 		},

@@ -135,6 +135,7 @@ export class SdkTaskStartCoordinator {
 		startOptions?: TaskStartOptions,
 	): Promise<string | undefined> {
 		Logger.log(`[SdkController] initTask called: "${prompt?.substring(0, 50)}"`)
+		const cancellationVersion = this.options.sessions.getCancellationVersion()
 		let taskSessionId: string | undefined
 		try {
 			await this.options.clearTask({ detachRunning: true })
@@ -205,6 +206,7 @@ export class SdkTaskStartCoordinator {
 			}
 
 			const task = this.createAndSetTask(taskSessionId)
+			this.options.sessions.rememberUnsentRequest(taskSessionId, prompt ?? "", images, files)
 			this.emitInitialTaskMessage(taskSessionId, prompt ?? "", images, files)
 			if (worktree) {
 				this.announceWorktree(worktree, worktreeNotes)
@@ -271,6 +273,10 @@ export class SdkTaskStartCoordinator {
 			if (worktree) newHistoryItem.worktree = worktree
 			await this.options.taskHistory.updateTaskHistoryItem(newHistoryItem)
 			await this.options.postStateToWebview()
+			if (this.options.sessions.getCancellationVersion() !== cancellationVersion) {
+				this.options.sessions.setRunning(false)
+				return taskSessionId
+			}
 			if (!startOptions?.title && prompt?.trim()) {
 				this.nameConversation(taskSessionId, prompt, cwd)
 			}
@@ -278,6 +284,7 @@ export class SdkTaskStartCoordinator {
 			if (prompt?.trim() || images?.length || files?.length) {
 				Logger.log(`[SdkController] Sending prompt to session: ${taskSessionId}`)
 				const resolvedTask = await this.options.resolveContextMentions(prompt || "")
+				if (this.options.sessions.getCancellationVersion() !== cancellationVersion) return taskSessionId
 				this.options.sessions.fireAndForgetSend(sdkHost, taskSessionId, resolvedTask, images, files)
 			}
 

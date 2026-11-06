@@ -776,6 +776,7 @@ describe("LocalRuntimeHost", () => {
 			expect.stringContaining("hello"),
 			undefined,
 			undefined,
+			expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
 		);
 	});
 
@@ -2609,6 +2610,7 @@ describe("LocalRuntimeHost", () => {
 			'<user_input mode="act">async result</user_input>',
 			undefined,
 			undefined,
+			expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
 		);
 	});
 
@@ -2765,7 +2767,7 @@ describe("LocalRuntimeHost", () => {
 		expect(consumed).toBe('<user_input mode="plan">steer this</user_input>');
 	});
 
-	it("preserves pending prompts through an interactive abort and drains them in order", async () => {
+	it("holds queued and steered prompts after cancellation until an explicit resume", async () => {
 		const sessionId = "sess-abort-preserves-prompts";
 		const manifest = createManifest(sessionId);
 		const sessionService = {
@@ -2888,11 +2890,21 @@ describe("LocalRuntimeHost", () => {
 				}),
 			}),
 		);
-		// The abort must not eat the prompts the user queued: they drain once
-		// the abort settles, steered prompt first.
+		// Cancellation preserves input, but editing it cannot restart execution.
+		expect(drainedPrompts).toEqual([]);
+		const pending = await manager.pendingPrompts.list({ sessionId });
+		await manager.pendingPrompts.update({
+			sessionId,
+			promptId: pending[0].id,
+			prompt: "edited steer",
+		});
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(drainedPrompts).toEqual([]);
+		await manager.runTurn({ sessionId, prompt: "resume" });
 		await vi.waitFor(async () => {
 			expect(drainedPrompts).toEqual([
-				'<user_input mode="act">steered prompt</user_input>',
+				'<user_input mode="act">resume</user_input>',
+				'<user_input mode="act">edited steer</user_input>',
 				'<user_input mode="act">queued prompt</user_input>',
 			]);
 			expect(await manager.pendingPrompts.list({ sessionId })).toEqual([]);
@@ -3002,7 +3014,7 @@ describe("LocalRuntimeHost", () => {
 		});
 	});
 
-	it("keeps queued prompts through a user-initiated abort and drains them after it settles", async () => {
+	it("holds queued prompts when the cancelled runtime resolves normally", async () => {
 		const sessionId = "sess-user-abort-keeps-prompts";
 		const manifest = createManifest(sessionId);
 		const sessionService = {
@@ -3038,10 +3050,10 @@ describe("LocalRuntimeHost", () => {
 			sentPrompts.push(prompt);
 			activeRun = true;
 			markRunStarted?.();
-			return new Promise<AgentResult>((_resolve, reject) => {
-				rejectRun = (error: Error) => {
+			return new Promise<AgentResult>((resolve) => {
+				rejectRun = (_error: Error) => {
 					activeRun = false;
-					reject(error);
+					resolve(createResult({ finishReason: "aborted" }));
 				};
 			});
 		});
@@ -3098,18 +3110,21 @@ describe("LocalRuntimeHost", () => {
 			finishReason: "aborted",
 		});
 
-		// The queued prompt must survive the abort and run once it settles —
-		// aborting only stops the in-flight turn, it must never eat input the
-		// user already typed and queued.
+		expect(sentPrompts).toHaveLength(1);
+		expect(
+			(await manager.pendingPrompts.list({ sessionId })).map((p) => p.prompt),
+		).toEqual(["queued survivor"]);
+		await manager.runTurn({ sessionId, prompt: "resume" });
 		await vi.waitFor(async () => {
 			expect(sentPrompts.slice(1)).toEqual([
+				'<user_input mode="act">resume</user_input>',
 				'<user_input mode="act">queued survivor</user_input>',
 			]);
 			expect(await manager.pendingPrompts.list({ sessionId })).toEqual([]);
 		});
 	});
 
-	it("clears the remaining queue when a queue-initiated turn is aborted", async () => {
+	it("pauses remaining queued work when a queue-initiated turn is cancelled", async () => {
 		const sessionId = "sess-second-abort-clears-queue";
 		const manifest = createManifest(sessionId);
 		const sessionService = {
@@ -3152,7 +3167,7 @@ describe("LocalRuntimeHost", () => {
 		);
 		const agent = {
 			run,
-			continue: vi.fn().mockResolvedValue(createResult()),
+			continue: run,
 			abort: vi.fn(() => {
 				rejectors.shift()?.(new Error("user cancelled"));
 			}),
@@ -3192,33 +3207,19 @@ describe("LocalRuntimeHost", () => {
 			delivery: "queue",
 		});
 
-		// First abort: the user-initiated turn stops, the queue survives, and
-		// the drain starts running "queued one".
 		await manager.abort(sessionId, new Error("first abort"));
-		await expect(firstTurn).resolves.toMatchObject({
-			finishReason: "aborted",
-		});
-		await vi.waitFor(() => {
-			expect(run).toHaveBeenCalledTimes(2);
-		});
+		await expect(firstTurn).resolves.toMatchObject({ finishReason: "aborted" });
+		expect(run).toHaveBeenCalledTimes(1);
+		run.mockResolvedValueOnce(createResult());
+		await manager.runTurn({ sessionId, prompt: "resume" });
+		await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(3));
 		expect(sentPrompts[1]).toContain("queued one");
-		expect(
-			(await manager.pendingPrompts.list({ sessionId })).map(
-				(prompt) => prompt.prompt,
-			),
-		).toEqual(["queued two"]);
-
-		// Second abort lands on a queue-initiated turn: that means "stop the
-		// queued work too" — the remainder is dropped so repeated aborts
-		// reliably bring the session to a full stop instead of consuming one
-		// queued prompt (and one provider call) per abort.
 		await manager.abort(sessionId, new Error("second abort"));
-		await vi.waitFor(async () => {
-			expect(await manager.pendingPrompts.list({ sessionId })).toEqual([]);
-		});
 		await new Promise((resolve) => setTimeout(resolve, 20));
-		expect(run).toHaveBeenCalledTimes(2);
-		expect(sentPrompts).toHaveLength(2);
+		expect(
+			(await manager.pendingPrompts.list({ sessionId })).map((p) => p.prompt),
+		).toEqual(["queued two"]);
+		expect(run).toHaveBeenCalledTimes(3);
 	});
 
 	it("does not drain queued prompts after a turn that finishes with error", async () => {
@@ -4005,11 +4006,13 @@ describe("LocalRuntimeHost", () => {
 			'<user_input mode="act">first</user_input>',
 			undefined,
 			undefined,
+			expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
 		);
 		expect(continueFn).toHaveBeenCalledWith(
 			'<user_input mode="plan">second</user_input>',
 			undefined,
 			undefined,
+			expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
 		);
 		// An off-the-record question is answered under ask mode's rules,
 		// whatever mode it was sent in.
@@ -4017,7 +4020,10 @@ describe("LocalRuntimeHost", () => {
 			'<user_input mode="ask">side question</user_input>',
 			undefined,
 			undefined,
-			{ offTheRecord: true },
+			expect.objectContaining({
+				offTheRecord: true,
+				abortSignal: expect.any(AbortSignal),
+			}),
 		);
 		expect(sessionService.persistSessionMessages).toHaveBeenCalledTimes(3);
 	});
@@ -6345,6 +6351,7 @@ describe("LocalRuntimeHost", () => {
 				'<user_input mode="act">explain @src/app.ts</user_input>',
 				undefined,
 				expect.arrayContaining([mentionPath, explicitPath]),
+				expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
 			);
 		} finally {
 			rmSync(tempCwd, { recursive: true, force: true });

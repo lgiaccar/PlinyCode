@@ -1,5 +1,5 @@
 import type * as LlmsProviders from "@plinycode/llms";
-import type { AgentFinishReason } from "@plinycode/shared";
+import type { AgentFinishReason, AgentResult } from "@plinycode/shared";
 import type { SessionAccumulatedUsage } from "../runtime/host/runtime-host";
 import type { BuiltRuntime } from "../runtime/orchestration/session-runtime";
 import type { SessionRuntime } from "../runtime/orchestration/session-runtime-orchestrator";
@@ -25,6 +25,11 @@ export type ActiveSession = {
 	agent: SessionRuntime;
 	started: boolean;
 	aborting: boolean;
+	/** User cancellation holds queued work until an explicit new turn. */
+	pendingPromptsPaused?: boolean;
+	/** Includes input preparation, recovery and persistence, not just model execution. */
+	activeTurn?: Promise<AgentResult>;
+	turnAbortController?: AbortController;
 	interactive: boolean;
 	persistedMessages?: LlmsProviders.MessageWithMetadata[];
 	compactionState?: SessionCompactionState;

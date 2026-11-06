@@ -9,12 +9,16 @@ const askResponse = vi.fn().mockResolvedValue(undefined)
 const clearTask = vi.fn().mockResolvedValue(undefined)
 const condense = vi.fn().mockResolvedValue(undefined)
 const trackIntent = vi.fn().mockResolvedValue(undefined)
+const cancelTask = vi.fn().mockResolvedValue(undefined)
+const cancelBackgroundCommand = vi.fn().mockResolvedValue(undefined)
 
 vi.mock("@/services/grpc-client", () => ({
 	TaskServiceClient: {
 		newTask: (req: unknown) => newTask(req),
 		askResponse: (req: unknown) => askResponse(req),
 		clearTask: (req: unknown) => clearTask(req),
+		cancelTask: (req: unknown) => cancelTask(req),
+		cancelBackgroundCommand: (req: unknown) => cancelBackgroundCommand(req),
 	},
 	SlashServiceClient: {
 		condense: (req: unknown) => condense(req),
@@ -40,9 +44,10 @@ vi.mock("@shared/proto/cline/common", () => ({
 
 // useExtensionState supplies turnState (+ backgroundCommandRunning) to the hook.
 let mockTurnState: TurnState | undefined
+let mockBackgroundCommandRunning = false
 vi.mock("@/context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({
-		backgroundCommandRunning: false,
+		backgroundCommandRunning: mockBackgroundCommandRunning,
 		turnState: mockTurnState,
 	}),
 }))
@@ -114,6 +119,31 @@ describe("useMessageHandlers — send routing", () => {
 		trackIntent.mockReset()
 		trackIntent.mockResolvedValue(undefined)
 		mockTurnState = undefined
+		mockBackgroundCommandRunning = false
+		cancelTask.mockReset().mockResolvedValue(undefined)
+		cancelBackgroundCommand.mockReset().mockResolvedValue(undefined)
+	})
+
+	it("cancels the request without waiting for background command cleanup", async () => {
+		mockTurnState = { phase: "streaming", seq: 1 }
+		mockBackgroundCommandRunning = true
+		let finishCleanup!: () => void
+		cancelBackgroundCommand.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finishCleanup = resolve
+				}),
+		)
+		const { result } = renderHook(() => useMessageHandlers(completedConversation, makeChatState(completedConversation)))
+		await act(async () => {
+			const pending = result.current.handleSendMessage("new request", [], [], "interrupt")
+			expect(cancelTask).toHaveBeenCalledOnce()
+			expect(cancelBackgroundCommand).toHaveBeenCalledOnce()
+			expect(askResponse).not.toHaveBeenCalled()
+			finishCleanup()
+			await pending
+		})
+		expect(askResponse).toHaveBeenCalledOnce()
 	})
 
 	it("routes /compact to the condense RPC instead of sending it as a message", async () => {

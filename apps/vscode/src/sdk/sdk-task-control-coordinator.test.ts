@@ -16,6 +16,26 @@ vi.mock("@/shared/services/Logger", () => ({
 }))
 
 describe("SdkTaskControlCoordinator", () => {
+	it("posts Request Cancelled immediately while the engine drains", async () => {
+		const activeSession = makeActiveSession()
+		let finishCancel!: () => void
+		activeSession.sdkHost.abort.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finishCancel = resolve
+				}),
+		)
+		const { coordinator, options } = makeCoordinator({ activeSession })
+		const pending = coordinator.cancelTask()
+		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
+			[expect.objectContaining({ text: "Request Cancelled", ask: "resume_task" })],
+			expect.anything(),
+		)
+		expect(options.postStateToWebview).toHaveBeenCalledOnce()
+		finishCancel()
+		await pending
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
@@ -30,7 +50,7 @@ describe("SdkTaskControlCoordinator", () => {
 		expect(activeSession.sdkHost.abort).toHaveBeenCalledWith("session-123", "user_cancel")
 		expect(options.sessions.setRunning).toHaveBeenCalledWith(false)
 		expect(options.messages.appendAndEmit).toHaveBeenCalledWith(
-			[expect.objectContaining({ type: "ask", ask: "resume_task" })],
+			[expect.objectContaining({ type: "ask", ask: "resume_task", text: "Request Cancelled" })],
 			{ type: "status", payload: { sessionId: "session-123", status: "cancelled" } },
 		)
 		expect(options.postStateToWebview).toHaveBeenCalledOnce()
@@ -551,6 +571,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 	const options = {
 		sessions: {
 			getActiveSession: vi.fn(() => input.activeSession),
+			cancelActiveTurn: vi.fn(() => input.activeSession?.sdkHost.abort("session-123", "user_cancel") ?? Promise.resolve()),
 			endActiveSession: vi.fn().mockResolvedValue(input.activeSession),
 			setRunning: vi.fn(),
 		},

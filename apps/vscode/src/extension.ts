@@ -56,6 +56,7 @@ import {
 	disposeVscodeCommentReviewController,
 	getVscodeCommentReviewController,
 } from "./hosts/vscode/review/VscodeCommentReviewController"
+import { showAgentTerminal } from "./hosts/vscode/terminal/show-agent-terminal"
 import { DIFF_VIEW_URI_SCHEME, diffContentProvider } from "./hosts/vscode/VscodeDiffContentProvider"
 import { EDIT_PREVIEW_URI_SCHEME, editPreviewContentProvider, VscodeEditPreview } from "./hosts/vscode/VscodeEditPreview"
 import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
@@ -254,6 +255,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				event.affectsConfiguration("plinycode.memory") ||
 				event.affectsConfiguration("plinycode.compaction") ||
 				event.affectsConfiguration("plinycode.webSearch.enabled") ||
+				event.affectsConfiguration("plinycode.chat.fontSize") ||
 				event.affectsConfiguration(PLAN_EXECUTE_WITH_SETTING_ID)
 			) {
 				void WebviewProvider.getInstance()?.controller.postStateToWebview()
@@ -376,6 +378,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	context.subscriptions.push(
+		vscode.commands.registerCommand(commands.ShowAgentTerminal, showAgentTerminal),
 		vscode.commands.registerCommand(commands.TerminalOutput, async () => {
 			const terminal = vscode.window.activeTerminal
 			if (!terminal) {

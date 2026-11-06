@@ -1399,6 +1399,12 @@ const ChatRowContent = memo(
 				}
 			case "ask":
 				switch (message.ask) {
+					case "resume_task":
+						return (
+							<div className="py-2 text-description text-sm" role="status">
+								{message.text}
+							</div>
+						)
 					case "mistake_limit_reached":
 						return <ErrorRow errorType="mistake_limit_reached" message={message} />
 					case "completion_result":

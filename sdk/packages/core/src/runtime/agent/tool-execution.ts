@@ -74,11 +74,13 @@ export async function executeToolCalls(
 	ctx.pendingHookContexts = [];
 	const prepared: PreparedToolExecution[] = [];
 	for (const toolCall of toolCalls) {
+		ctx.throwIfAborted();
 		prepared.push(await prepareToolExecution(ctx, toolCall));
 	}
 
 	const results: AgentMessage[] = [];
 	for (let index = 0; index < prepared.length; ) {
+		ctx.throwIfAborted();
 		const execution = prepared[index];
 		const mode = execution.tool?.executionMode ?? ctx.config.toolExecution;
 		if (mode === "sequential") {
@@ -169,6 +171,7 @@ async function prepareToolExecution(
 	let policyOverride: ToolPolicy | undefined;
 	if (tool && !skipReason) {
 		for (const hook of ctx.hooks.beforeTool) {
+			ctx.throwIfAborted();
 			const result = (await hook({
 				snapshot: ctx.snapshot(),
 				tool,
@@ -199,6 +202,7 @@ async function prepareToolExecution(
 	}
 
 	if (tool && !skipReason) {
+		ctx.throwIfAborted();
 		const policy = {
 			...resolveToolPolicy(toolCall.toolName, ctx.config.toolPolicies),
 			...policyOverride,
@@ -267,6 +271,7 @@ async function executePreparedTool(
 	ctx: AgentLoopContext,
 	prepared: PreparedToolExecution,
 ): Promise<AgentMessage> {
+	ctx.throwIfAborted();
 	const startedAt = new Date();
 	await ctx.emit({
 		type: "tool-started",
@@ -274,6 +279,7 @@ async function executePreparedTool(
 		iteration: ctx.state.iteration,
 		toolCall: prepared.toolCall,
 	});
+	ctx.throwIfAborted();
 
 	let result: AgentToolResult;
 	if (prepared.skipReason) {
@@ -325,6 +331,7 @@ async function executePreparedTool(
 
 	if (prepared.tool) {
 		for (const hook of ctx.hooks.afterTool) {
+			ctx.throwIfAborted();
 			const after = (await hook({
 				snapshot: ctx.snapshot(),
 				tool: prepared.tool,

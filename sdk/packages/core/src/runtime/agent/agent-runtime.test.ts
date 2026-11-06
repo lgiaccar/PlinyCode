@@ -66,6 +66,61 @@ const createEchoTool = (): AgentTool<{ text: string }, { echoed: string }> => ({
 });
 
 describe("AgentRuntime", () => {
+	it.each([
+		"beforeTool",
+		"betweenTools",
+		"toolStarted",
+	] as const)("does not start tools after cancellation at %s", async (boundary) => {
+		const entered = withResolvers<void>();
+		const release = withResolvers<void>();
+		const execute = vi.fn(async (input: { text: string }) => {
+			if (boundary === "betweenTools" && input.text === "first") {
+				entered.resolve();
+				await release.promise;
+			}
+			return input;
+		});
+		const model = new ScriptedModel([
+			() => [
+				...["first", "second"].map((id) => ({
+					type: "tool-call-delta" as const,
+					toolCallId: id,
+					toolName: "echo",
+					inputText: JSON.stringify({ text: id }),
+				})),
+				{ type: "finish", reason: "tool-calls" },
+			],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			toolExecution: "sequential",
+			tools: [{ ...createEchoTool(), execute }],
+			hooks: {
+				beforeTool: async () => {
+					if (boundary === "beforeTool") {
+						entered.resolve();
+						await release.promise;
+					}
+					return undefined;
+				},
+				onEvent: async (event) => {
+					if (boundary === "toolStarted" && event.type === "tool-started") {
+						entered.resolve();
+						await release.promise;
+					}
+				},
+			},
+		});
+
+		const pending = runtime.run("Use both tools");
+		await entered.promise;
+		runtime.abort("user_cancel");
+		release.resolve();
+		expect((await pending).status).toBe("aborted");
+		expect(execute).toHaveBeenCalledTimes(boundary === "betweenTools" ? 1 : 0);
+		expect(model.requests).toHaveLength(1);
+	});
+
 	it("completes a simple turn without tools", async () => {
 		const model = new ScriptedModel([
 			() => [

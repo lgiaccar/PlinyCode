@@ -46,6 +46,9 @@ export class TerminalRegistry {
 		const terminalOptions: vscode.TerminalOptions = {
 			cwd,
 			name: "PlinyCode",
+			// Keep the shell and shell integration running without opening the
+			// terminal panel or an editor tab. The user can reveal it on demand.
+			hideFromUser: true,
 			// Agent terminals are not restored after a window reload: the new
 			// extension host could never reuse or clean them up.
 			isTransient: true,

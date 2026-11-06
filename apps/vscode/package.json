@@ -182,6 +182,11 @@
 				"category": "PlinyCode"
 			},
 			{
+				"command": "cline.showAgentTerminal",
+				"title": "Show Agent Terminal",
+				"category": "PlinyCode"
+			},
+			{
 				"command": "cline.focusChatInput",
 				"title": "Jump to Chat Input",
 				"category": "PlinyCode"
@@ -454,6 +459,13 @@
 					"maximum": 0.95,
 					"markdownDescription": "Where auto-condense compacts the conversation, as a share of the model's input limit: `0.9` compacts at 90%. A lower value keeps requests smaller and cheaper, a higher one keeps more of the conversation verbatim. Clicking the context bar in the task header sets it at that point. Read before every model call, so a change applies to the running conversation."
 				},
+				"plinycode.chat.fontSize": {
+					"type": "integer",
+					"default": 13,
+					"minimum": 10,
+					"maximum": 24,
+					"description": "Font size in pixels for the PlinyCode chat panel (message bodies, code blocks). Does not affect toolbar buttons and model-picker UI. Applies immediately without reloading."
+				},
 				"plinycode.devops.enabled": {
 					"type": "boolean",
 					"default": true,
@@ -590,7 +602,7 @@
 						"Open PlinyCode's terminals as tabs in the editor area, which is usually as wide as the window."
 					],
 					"default": "panel",
-					"markdownDescription": "Where PlinyCode opens the terminals it runs commands in. Programs lay their output out to the terminal's width before the model reads it, so in a narrow panel (one docked beside the editor, for example) tables lose columns and long lines and error messages are broken up. `editor` opens them as editor tabs instead, without taking focus. Terminals of a background task stay in the panel."
+					"markdownDescription": "Where PlinyCode shows command terminals when you run **PlinyCode: Show Agent Terminal**. Commands start with their terminals hidden. Programs lay output out to the terminal's width before the model reads it, so in a narrow panel (one docked beside the editor, for example) tables lose columns and long lines and error messages are broken up. `editor` reveals them as editor tabs. Terminals of a background task stay in the panel."
 				},
 				"plinycode.terminal.wideOutput": {
 					"type": "boolean",

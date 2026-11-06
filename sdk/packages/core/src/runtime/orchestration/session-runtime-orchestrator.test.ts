@@ -2977,6 +2977,32 @@ describe("SessionRuntime agentModelFactory", () => {
 });
 
 describe("SessionRuntime onRunError recovery", () => {
+	it("retains a prompt cancelled during host preparation and resumes it without an overlapping run", async () => {
+		const controller = new AbortController();
+		controller.abort("user_cancel");
+		const stream = vi.fn(async () =>
+			(async function* () {
+				yield { type: "text-delta" as const, text: "resumed" };
+				yield { type: "finish" as const, reason: "stop" as const };
+			})(),
+		);
+		const session = new SessionRuntime(makeAgentConfig(), {
+			createAgentRuntimeImpl: (config) =>
+				createAgentRuntime({ ...config, model: { stream } }),
+		});
+		expect(
+			(
+				await session.run("original request", undefined, undefined, {
+					abortSignal: controller.signal,
+				})
+			).finishReason,
+		).toBe("aborted");
+		expect(stream).not.toHaveBeenCalled();
+		expect(JSON.stringify(session.getMessages())).toContain("original request");
+		expect((await session.continue("resume")).finishReason).toBe("completed");
+		expect(stream).toHaveBeenCalledOnce();
+	});
+
 	const streamFailure: Partial<AgentRunResult> = {
 		status: "failed",
 		error: new Error(
@@ -3013,6 +3039,36 @@ describe("SessionRuntime onRunError recovery", () => {
 		expect(createdCount()).toBe(2);
 		expect(result.finishReason).toBe("completed");
 		expect(result.text).toBe("recovered");
+	});
+
+	it("does not restart when cancelled while a recovery hook is waiting", async () => {
+		let finishRecovery!: (decision: {
+			retry: true;
+			continuationPrompt: string;
+		}) => void;
+		const onRunError = vi.fn(
+			() =>
+				new Promise<{ retry: true; continuationPrompt: string }>((resolve) => {
+					finishRecovery = resolve;
+				}),
+		);
+		const { deps, createdCount } = withRecoveryRuntimes([
+			{ result: streamFailure },
+			{ result: { outputText: "must not run" } },
+		]);
+		const session = new SessionRuntime(makeAgentConfig({ onRunError }), deps);
+		const pending = session.run("go");
+		await vi.waitFor(() => expect(onRunError).toHaveBeenCalledOnce());
+		expect(session.canStartRun()).toBe(false);
+		await expect(session.continue("overlap")).rejects.toThrow(/running/);
+		session.abort("user_cancel");
+		finishRecovery({ retry: true, continuationPrompt: "hidden retry prompt" });
+		expect((await pending).finishReason).toBe("aborted");
+		expect(createdCount()).toBe(1);
+		expect(JSON.stringify(session.getMessages())).not.toContain(
+			"hidden retry prompt",
+		);
+		expect(session.canStartRun()).toBe(true);
 	});
 
 	it("passes the failure details to the host", async () => {
