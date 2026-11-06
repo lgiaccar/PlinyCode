@@ -61,6 +61,15 @@ describe("Grafana credentials", () => {
 		expect((await grafanaSettings()).hasToken).toBe(true)
 		expect((await removeGrafanaCredential()).hasToken).toBe(false)
 	})
+	it("accepts a saved server before dashboard discovery and preserves token cancellation", async () => {
+		await configureGrafanaMetrics({ ...initial(), dashboardUid: "" })
+		mocks.prompt.mockResolvedValue(undefined)
+		const cancelled = await promptGrafanaToken()
+		expect(cancelled.cancelled).toBe(true)
+		expect(cancelled.hasToken).toBe(false)
+		mocks.prompt.mockResolvedValue("fixture-only-credential")
+		expect((await promptGrafanaToken()).hasToken).toBe(true)
+	})
 	it("does not prompt, save or query in an untrusted workspace", async () => {
 		mocks.workspace.isTrusted = false
 		await expect(promptGrafanaToken()).rejects.toThrow("Trust this workspace")

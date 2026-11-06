@@ -30,6 +30,7 @@ export interface GrafanaPanelChoice {
 	problem: string
 }
 export interface GrafanaSetup {
+	cancelled?: boolean
 	config: GrafanaConfig
 	hasToken: boolean
 	panels: GrafanaPanelChoice[]

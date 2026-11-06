@@ -34,14 +34,14 @@ export async function grafanaSettings(): Promise<GrafanaSetup> {
 }
 export async function configureGrafanaMetrics(value: GrafanaConfig): Promise<GrafanaSetup> {
 	trusted()
-	StateManager.get().setGlobalState("grafanaMetrics", validateGrafanaConfig(value))
+	StateManager.get().setGlobalState("grafanaMetrics", validateGrafanaConfig(value, true))
 	cache.clear()
 	return grafanaSettings()
 }
 /** The credential never passes through the webview, RPC arguments or ordinary settings. */
 export async function promptGrafanaToken(): Promise<GrafanaSetup> {
 	trusted()
-	const saved = validateGrafanaConfig(config())
+	const saved = validateGrafanaConfig(config(), true)
 	const token = await vscode.window.showInputBox({
 		title: "PlinyCode: Grafana read/query token",
 		prompt: `Token for ${saved.url}${saved.url.startsWith("http:") ? " — this server uses unencrypted HTTP" : ""}`,
@@ -49,10 +49,9 @@ export async function promptGrafanaToken(): Promise<GrafanaSetup> {
 		ignoreFocusOut: true,
 		validateInput: (value) => (!value.trim() || /\s/.test(value.trim()) ? "Enter a token without whitespace." : undefined),
 	})
-	if (token !== undefined) {
-		await store().store(secretKey(saved.url), token.trim())
-		cache.clear()
-	}
+	if (token === undefined) return { ...(await grafanaSettings()), cancelled: true }
+	await store().store(secretKey(saved.url), token.trim())
+	cache.clear()
 	return grafanaSettings()
 }
 export async function removeGrafanaCredential(): Promise<GrafanaSetup> {
@@ -61,9 +60,9 @@ export async function removeGrafanaCredential(): Promise<GrafanaSetup> {
 	cache.clear()
 	return grafanaSettings()
 }
-async function client() {
+async function client(allowDiscovery = false) {
 	trusted()
-	const saved = validateGrafanaConfig(config())
+	const saved = validateGrafanaConfig(config(), allowDiscovery)
 	const token = await store().get(secretKey(saved.url))
 	if (!token) throw new Error("Add a Grafana read/query token first. Browser sign-in is separate.")
 	return { saved, identity: createHash("sha256").update(token).digest("hex"), connection: new GrafanaClient(saved, token) }
@@ -71,6 +70,15 @@ async function client() {
 export async function inspectGrafanaDashboard(): Promise<GrafanaSetup> {
 	const { saved, connection } = await client()
 	return { config: saved, hasToken: true, panels: await connection.panels() }
+}
+export async function discoverGrafanaMetrics(): Promise<GrafanaSetup> {
+	const { saved, connection } = await client(true)
+	const result = await connection.discover()
+	if (JSON.stringify(config()) !== JSON.stringify(saved))
+		throw new Error("Grafana settings changed during discovery. Try again.")
+	StateManager.get().setGlobalState("grafanaMetrics", validateGrafanaConfig(result.config))
+	cache.clear()
+	return result
 }
 const cache = new Map<string, { expires: number; value: Promise<MachineMetrics> }>()
 export async function readGrafanaMetrics(host: string, range: string): Promise<MachineMetrics> {

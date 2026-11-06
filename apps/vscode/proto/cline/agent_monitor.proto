@@ -18,6 +18,7 @@ service AgentMonitorService {
   rpc setGrafanaToken(EmptyRequest) returns (String);
   rpc removeGrafanaToken(EmptyRequest) returns (String);
   rpc inspectGrafana(EmptyRequest) returns (String);
+  rpc discoverGrafana(EmptyRequest) returns (String);
   rpc queryAgentMetrics(AgentMetricsRequest) returns (String);
 }
 
