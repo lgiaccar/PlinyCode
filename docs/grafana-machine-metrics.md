@@ -13,8 +13,9 @@ you how much CPU or GPU the machine uses.
    The saved server address is reused; a fresh installation asks for that address
    once because a token does not identify its server.
 3. PlinyCode discovers and saves the dashboard, host variable and supported metric
-   panels. Open **Machine metrics** under an agent: readings load immediately using
-   its ADO computer name (or agent name when the computer name is unavailable).
+   panels. Each visible agent row shows a **Machine load** summary automatically,
+   using its ADO computer name (or agent name when the computer name is unavailable).
+   The summary sits beside agent status in wide panels and stacks below it in narrow ones.
 
 There is no separate Save step in automatic setup. **Replace token…** also
 reconnects automatically. The token needs permission to read dashboards and
@@ -29,7 +30,7 @@ are enabled; missing GPU panels do not produce GPU readings.
 
 **Advanced setup** retains manual server, dashboard UID, host-variable and panel
 selection for ambiguous or customized dashboards. Choose a dashboard there and
-connect again to limit discovery to it. **Change host** under an agent is an
+connect again to limit discovery to it. **Change host** inside an agent's **Details & charts** is an
 optional override if its Grafana name differs from its ADO computer name.
 
 Settings are local to the editor and shared by the agent pools. Tokens are stored
@@ -41,7 +42,12 @@ settings are omitted from diagnostics bundles. No private server URL is built in
 
 ## Readings and time ranges
 
-CPU and GPU load show a graph and the average, peak and 95th percentile of returned
+The summary shows CPU/GPU sample averages, latest values and sample coverage, plus
+current free disk space for each volume. Choose the summary period without opening
+anything. Missing metrics show **Unavailable**, never a fabricated zero.
+**Details & charts** opens hardware information and full charts.
+
+CPU and GPU details show a graph and the average, peak and 95th percentile of returned
 query samples. Choose **1 hour, 3 hours, 24 hours, 1 week or 30 days**. A month means
 a rolling 30-day window. Queries target approximately 600 points per series;
 coarser datasource scrape intervals can reduce this. Peaks between samples may
@@ -56,9 +62,11 @@ details appear only if the existing source collects them. Multiple GPU devices
 and disk volumes remain separate series. No GPU result means unavailable data,
 not proof that the machine has no GPU.
 
-The selected machine refreshes once a minute while its view is open and visible.
-A short cache shares queries for agents on the same host. Switching agent pools
-or closing the view stops its refresh timer. Retention limits may mean the source
+Visible summaries refresh once a minute; offscreen rows, hidden pools and hidden
+editor documents do not start automatic queries. At most three summary requests
+run at once, and queued requests for rows that have left the view are discarded.
+A short backend cache shares queries for agents on the same host.
+Refresh failures mark retained readings as previous results. Retention limits may mean the source
 has less than 30 days of data. Query timestamps show returned evaluation times;
 they do not prove the upstream exporter is fresh. An older query sample is marked
 when its timestamp falls behind the query end.

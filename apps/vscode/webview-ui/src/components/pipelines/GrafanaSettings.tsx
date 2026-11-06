@@ -6,19 +6,19 @@ import { AgentMonitorServiceClient as client } from "@/services/grpc-client"
 import { MachineMetricsView } from "./MachineMetricsView"
 import { fieldClass, pipelineError } from "./PipelineLaunchForm"
 
-export function GrafanaSettings() {
+export function GrafanaSettings({ onChanged }: { onChanged?: () => void }) {
 	const [open, setOpen] = useState(false)
 	return (
 		<div>
 			<Button onClick={() => setOpen(!open)} size="sm" variant="secondary">
 				{open ? "Close Grafana setup" : "Grafana machine metrics…"}
 			</Button>
-			{open && <ConnectionForm />}
+			{open && <ConnectionForm onChanged={onChanged} />}
 		</div>
 	)
 }
 
-function ConnectionForm() {
+function ConnectionForm({ onChanged }: { onChanged?: () => void }) {
 	const [testMachine, setTestMachine] = useState(false)
 	const [advanced, setAdvanced] = useState(false)
 	const [needsServer, setNeedsServer] = useState(false)
@@ -88,6 +88,7 @@ function ConnectionForm() {
 		} catch (failure) {
 			setError(pipelineError(failure))
 		} finally {
+			onChanged?.()
 			setBusy(false)
 		}
 	}
@@ -133,7 +134,7 @@ function ConnectionForm() {
 					{MACHINE_METRICS.filter((kind) => setup.config.panels[kind])
 						.map((kind) => METRIC_LABELS[kind])
 						.join(", ")}
-					. Open Machine metrics under an agent to see live readings.
+					. Live summaries appear beside agent status automatically.
 				</p>
 			)}
 			<Button aria-expanded={advanced} onClick={() => setAdvanced(!advanced)} size="sm" variant="secondary">

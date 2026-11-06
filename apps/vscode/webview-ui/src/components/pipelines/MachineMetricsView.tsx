@@ -12,11 +12,11 @@ const rangeLabels: Record<MetricRange, string> = {
 	"1w": "Last week",
 	"30d": "Last 30 days",
 }
-export function MachineMetricsView({ hostname }: { hostname: string }) {
+export function MachineMetricsView({ hostname, initialRange = "24h" }: { hostname: string; initialRange?: MetricRange }) {
 	const [draft, setDraft] = useState(hostname)
 	const [host, setHost] = useState(hostname)
 	const [editHost, setEditHost] = useState(!hostname)
-	const [range, setRange] = useState<MetricRange>("24h")
+	const [range, setRange] = useState<MetricRange>(initialRange)
 	const [refresh, setRefresh] = useState(0)
 	const [data, setData] = useState<MachineMetrics>()
 	const [busy, setBusy] = useState(false)
@@ -142,7 +142,7 @@ export function MachineMetricsView({ hostname }: { hostname: string }) {
 	)
 }
 
-function valueText(value: number, unit: string): string {
+export function valueText(value: number, unit: string): string {
 	if (unit === "percent") return `${value.toFixed(1)}%`
 	if (unit === "bytes" || unit === "decbytes") {
 		const base = unit === "bytes" ? 1024 : 1000

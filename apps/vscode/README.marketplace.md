@@ -25,9 +25,9 @@ Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thi
 
 ## Features
 
-**0.2.9-test.7 prerelease:** Grafana setup now discovers and saves the dashboard, host variable and
-metric panels after token entry. It reuses your saved server and loads each agent's machine metrics
-from its ADO computer name automatically. Manual fields are under **Advanced setup** for exceptions.
+**0.2.9-test.9 prerelease:** Grafana setup now discovers and saves the dashboard, host variable and
+metric panels after token entry. Each visible agent row shows CPU/GPU averages and free disk space
+beside its status, with optional **Details & charts**. Readings use the ADO computer name automatically. Manual fields are under **Advanced setup** for exceptions.
 A fresh installation needs the server address once; no private endpoint is built in.
 CPU/GPU history, current disk space and hardware details remain available when your source collects them.
 [Setup and supported dashboards](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/grafana-machine-metrics.md).

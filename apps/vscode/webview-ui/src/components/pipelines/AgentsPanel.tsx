@@ -1,4 +1,5 @@
 import { DEFAULT_AGENT_MONITOR_CONFIG } from "@shared/agent-monitor"
+import type { GrafanaSetup } from "@shared/grafana-metrics"
 import { AgentMonitorSettings, AgentMonitorState, type AgentMonitorsState } from "@shared/proto/cline/agent_monitor"
 import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
 import { useEffect, useState } from "react"
@@ -7,11 +8,32 @@ import { Button } from "@/components/ui/button"
 import { AgentMonitorServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { AgentOsIcon, AgentUtilizationLabel } from "./AgentMetrics"
 import { GrafanaSettings } from "./GrafanaSettings"
-import { MachineMetricsView } from "./MachineMetricsView"
+import { MachineMetricsSummary } from "./MachineMetricsSummary"
 import { fieldClass, pipelineError } from "./PipelineLaunchForm"
 
 export function AgentsPanel() {
 	const [state, setState] = useState<AgentMonitorsState>()
+	const [grafanaRevision, setGrafanaRevision] = useState(0)
+	const [grafanaReady, setGrafanaReady] = useState(false)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: settings changes invalidate readiness and row readings.
+	useEffect(() => {
+		let active = true
+		setGrafanaReady(false)
+		void AgentMonitorServiceClient.getGrafanaSettings(EmptyRequest.create({}))
+			.then((response) => {
+				const setup = JSON.parse(response.value) as GrafanaSetup
+				if (active)
+					setGrafanaReady(
+						Boolean(setup.hasToken && setup.config.dashboardUid && Object.keys(setup.config.panels).length),
+					)
+			})
+			.catch(() => {
+				if (active) setGrafanaReady(false)
+			})
+		return () => {
+			active = false
+		}
+	}, [grafanaRevision])
 	const [selected, setSelected] = useState("")
 	const [adding, setAdding] = useState(false)
 	const [error, setError] = useState("")
@@ -39,7 +61,7 @@ export function AgentsPanel() {
 	}
 	return (
 		<section aria-label="Agent monitors" className="flex flex-col gap-3 min-w-0">
-			<GrafanaSettings />
+			<GrafanaSettings onChanged={() => setGrafanaRevision((value) => value + 1)} />
 			<p className="text-sm text-description m-0">
 				Monitor Azure DevOps agent pools. Saved for this workspace; each enabled pool refreshes every minute, even when
 				this view is closed.
@@ -93,6 +115,8 @@ export function AgentsPanel() {
 					{pools.map((pool) => (
 						<AgentPoolPanel
 							connectionError={error}
+							grafanaReady={grafanaReady}
+							grafanaRevision={grafanaRevision}
 							hidden={adding || pool.id !== selected}
 							key={pool.id}
 							onSaved={saved}
@@ -129,18 +153,21 @@ function AgentPoolPanel({
 	hidden = false,
 	onSaved,
 	connectionError = "",
+	grafanaReady = false,
+	grafanaRevision = 0,
 }: {
 	state: AgentMonitorState
 	hidden?: boolean
 	onSaved: (id: string) => void
 	connectionError?: string
+	grafanaReady?: boolean
+	grafanaRevision?: number
 }) {
 	const [draft, setDraft] = useState(state.config)
 	const [filters, setFilters] = useState(state.config?.capabilities.join(", ") ?? "")
 	const [error, setError] = useState("")
 	const [saving, setSaving] = useState(false)
 	const [search, setSearch] = useState("")
-	const [metricsAgent, setMetricsAgent] = useState<number>()
 	const refresh = async () => {
 		setError("")
 		try {
@@ -324,49 +351,50 @@ function AgentPoolPanel({
 			)}
 			<ul className="list-none m-0 p-0">
 				{visible.map((agent) => (
-					<li className="border-b border-panel-border py-3 flex flex-col gap-1 min-w-0" key={agent.id}>
-						<button className="text-left text-link break-all" onClick={() => open(agent.url)} type="button">
-							<AgentOsIcon os={agent.os} />
-							{agent.name}
-						</button>
-						<div
-							className={`text-sm ${stale ? "text-description" : agent.status === "offline" ? "text-error" : agent.status === "online" ? "text-success" : "text-warning"}`}>
-							{stale ? "Last known: " : ""}
-							{agent.status} · {agent.enabled ? "Enabled" : <span className="text-error">Disabled</span>} ·{" "}
-							{agent.status !== "online" ? "Job status unknown" : agent.busy ? "Busy" : "Idle"}
-						</div>
-						<div className="text-xs text-description break-words">
-							{agent.capabilities.join(", ") || "No capabilities reported"}
-						</div>
-						<AgentUtilizationLabel agent={agent} stale={stale} />
-						<Button
-							className="self-start"
-							onClick={() => setMetricsAgent(metricsAgent === agent.id ? undefined : agent.id)}
-							size="sm"
-							variant="secondary">
-							{metricsAgent === agent.id ? "Close machine metrics" : "Machine metrics"}
-						</Button>
-						{!hidden && metricsAgent === agent.id && (
-							<MachineMetricsView hostname={agent.hostname || agent.name} key={agent.id} />
-						)}
-						{agent.busy &&
-							agent.status === "online" &&
-							(agent.jobUrl ? (
-								<button
-									className="text-left text-link text-xs break-words"
-									onClick={() => open(agent.jobUrl)}
-									type="button">
-									{agent.pipelineName || "Pipeline name unavailable"}
-								</button>
-							) : (
-								<span className="text-xs break-words">{agent.pipelineName || "Pipeline name unavailable"}</span>
-							))}
-						{agent.busy && agent.status === "online" && (agent.runName || agent.jobName) && (
-							<div className="text-xs text-description break-words">
-								{[agent.runName && `Run: ${agent.runName}`, agent.jobName && `Job: ${agent.jobName}`]
-									.filter(Boolean)
-									.join(" · ")}
+					<li className="border-b border-panel-border py-3 flex flex-wrap items-start gap-4 min-w-0" key={agent.id}>
+						<div className="flex flex-col gap-1 min-w-0" style={{ flex: "1 1 280px" }}>
+							<button className="text-left text-link break-all" onClick={() => open(agent.url)} type="button">
+								<AgentOsIcon os={agent.os} />
+								{agent.name}
+							</button>
+							<div
+								className={`text-sm ${stale ? "text-description" : agent.status === "offline" ? "text-error" : agent.status === "online" ? "text-success" : "text-warning"}`}>
+								{stale ? "Last known: " : ""}
+								{agent.status} · {agent.enabled ? "Enabled" : <span className="text-error">Disabled</span>} ·{" "}
+								{agent.status !== "online" ? "Job status unknown" : agent.busy ? "Busy" : "Idle"}
 							</div>
+							<div className="text-xs text-description break-words">
+								{agent.capabilities.join(", ") || "No capabilities reported"}
+							</div>
+							<AgentUtilizationLabel agent={agent} stale={stale} />
+							{agent.busy &&
+								agent.status === "online" &&
+								(agent.jobUrl ? (
+									<button
+										className="text-left text-link text-xs break-words"
+										onClick={() => open(agent.jobUrl)}
+										type="button">
+										{agent.pipelineName || "Pipeline name unavailable"}
+									</button>
+								) : (
+									<span className="text-xs break-words">
+										{agent.pipelineName || "Pipeline name unavailable"}
+									</span>
+								))}
+							{agent.busy && agent.status === "online" && (agent.runName || agent.jobName) && (
+								<div className="text-xs text-description break-words">
+									{[agent.runName && `Run: ${agent.runName}`, agent.jobName && `Job: ${agent.jobName}`]
+										.filter(Boolean)
+										.join(" · ")}
+								</div>
+							)}
+						</div>
+						{!hidden && (
+							<MachineMetricsSummary
+								hostname={agent.hostname || agent.name}
+								key={`${agent.id}-${grafanaRevision}`}
+								ready={grafanaReady}
+							/>
 						)}
 					</li>
 				))}
