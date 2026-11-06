@@ -44,10 +44,10 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.7 prerelease** simplifies [Grafana machine metrics](docs/grafana-machine-metrics.md)
+The **0.2.9-test.8 prerelease** simplifies [Grafana machine metrics](docs/grafana-machine-metrics.md)
 in **Pipelines > Agents**: enter a token for the saved server, and dashboard, host-variable and panel
-selection are discovered and saved automatically. Opening an agent's machine metrics loads readings
-from its ADO computer name immediately. Manual setup remains under **Advanced setup** for exceptions.
+selection are discovered and saved automatically. Each visible agent row shows CPU/GPU averages and
+free disk space in a summary beside its status, with optional **Details & charts**. Manual setup remains under **Advanced setup** for exceptions.
 CPU/GPU history still supports 1h, 3h, 24h, 1 week and 30 days, with current available disk space and
 hardware details when collected. A fresh installation needs the server address once; no private endpoint
 is built in. No collector or shared folder is required.
