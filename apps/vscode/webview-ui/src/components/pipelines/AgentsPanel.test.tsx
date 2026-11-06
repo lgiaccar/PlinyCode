@@ -5,6 +5,7 @@ import { AgentsPanel } from "./AgentsPanel"
 
 const mocks = vi.hoisted(() => ({
 	subscribeToAgents: vi.fn(),
+	getGrafanaSettings: vi.fn(),
 	configureAgentMonitor: vi.fn(),
 	refreshAgentMonitor: vi.fn(),
 	removeAgentMonitor: vi.fn(),
@@ -47,6 +48,7 @@ let receive: (state: AgentMonitorsState) => void
 const send = (...pools: AgentMonitorState[]) => receive(AgentMonitorsState.create({ pools }))
 beforeEach(() => {
 	vi.resetAllMocks()
+	mocks.getGrafanaSettings.mockResolvedValue({ value: JSON.stringify({ hasToken: false, config: { panels: {} } }) })
 	mocks.configureAgentMonitor.mockResolvedValue({ value: "one" })
 	mocks.refreshAgentMonitor.mockResolvedValue({})
 	mocks.removeAgentMonitor.mockResolvedValue({})
