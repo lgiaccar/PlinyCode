@@ -7,7 +7,8 @@ It is separate from the [CI Board](ci-board.md), which monitors pull requests
 and branches rather than individual launches.
 
 The **Runs** tab contains pipeline launches and history. The **Agents** tab
-provides the [Azure DevOps agent monitor](agent-monitor.md).
+provides the [Azure DevOps agent monitor](agent-monitor.md), with optional
+[machine metrics from Grafana](grafana-machine-metrics.md).
 
 ## Launching
 

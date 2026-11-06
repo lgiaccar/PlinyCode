@@ -13,6 +13,12 @@ service AgentMonitorService {
   rpc configureAgentMonitor(AgentMonitorSettings) returns (String);
   rpc refreshAgentMonitor(StringRequest) returns (Empty);
   rpc removeAgentMonitor(StringRequest) returns (Empty);
+  rpc getGrafanaSettings(EmptyRequest) returns (String);
+  rpc configureGrafana(StringRequest) returns (String);
+  rpc setGrafanaToken(EmptyRequest) returns (String);
+  rpc removeGrafanaToken(EmptyRequest) returns (String);
+  rpc inspectGrafana(EmptyRequest) returns (String);
+  rpc queryAgentMetrics(AgentMetricsRequest) returns (String);
 }
 
 message AgentMonitorSettings {
@@ -56,6 +62,13 @@ message MonitoredAgentInfo {
   string run_name = 11;
   string os = 12;
   AgentUtilizationInfo utilization = 13;
+  string hostname = 14;
+}
+
+message AgentMetricsRequest {
+  Metadata metadata = 1;
+  string host = 2;
+  string range = 3;
 }
 
 message AgentUtilizationInfo {

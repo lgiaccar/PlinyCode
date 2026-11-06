@@ -16,6 +16,7 @@ export const DEFAULT_AGENT_MONITOR_CONFIG: AgentMonitorConfig = {
 }
 
 export interface MonitoredAgent {
+	hostname?: string
 	id: number
 	name: string
 	status: "online" | "offline" | "unknown"
