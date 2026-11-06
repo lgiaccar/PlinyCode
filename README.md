@@ -44,7 +44,8 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.3 prerelease** retains a compact utilization bar and colored percentages
+The **0.2.9-test.4 prerelease** restores scrolling in the **Rules**, **Skills**, **Agents**, and **Hooks** tabs.
+It also retains a compact utilization bar and colored percentages
 in **Pipelines > Agents**: red below 30%, amber from 30–60%, and green above 60%.
 Collector-based disk monitoring from test.2 has been withdrawn; no collector or shared folder is required.
 Enable **Install pre-releases** in **Settings > About** to receive test builds.
