@@ -25,7 +25,8 @@ Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thi
 
 ## Features
 
-**0.2.9-test.3 prerelease:** agent utilization has a compact bar and colored percentages:
+**0.2.9-test.4 prerelease:** scrolling is restored in **Rules**, **Skills**, **Agents**, and **Hooks**.
+Agent utilization retains its compact bar and colored percentages:
 red below 30%, amber from 30–60%, and green above 60%. Enable **Install pre-releases**
 in **Settings > About** to receive test builds. Stable remains **0.2.8**.
 Collector-based disk monitoring from test.2 has been withdrawn; no collector or shared folder is required.
