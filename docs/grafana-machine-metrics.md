@@ -53,7 +53,9 @@ when its timestamp falls behind the query end.
 ## Supported dashboards
 
 This first integration supports Prometheus-backed Grafana panels with explicit
-datasource UIDs (including a single selected datasource variable). It reads the
+datasource UIDs (including a single selected datasource variable), or the server's
+default Prometheus datasource. Default references require permission to list
+datasource metadata. It reads the
 panel expressions through Grafana's dashboard API and evaluates them through
 `POST /api/ds/query`; it does not contact the datasource directly or modify Grafana.
 

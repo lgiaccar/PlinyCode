@@ -465,6 +465,9 @@ export const e2e = test
 					},
 					args: [
 						"--no-sandbox",
+						// Headless Linux CI has no unlocked OS keyring. Only this disposable
+						// fixture profile uses basic storage; production launches are untouched.
+						...(process.platform === "linux" && process.env.CI ? ["--password-store=basic"] : []),
 						// Without this, Electron spawns a chrome_crashpad_handler
 						// that inherits the Playwright<->Electron stdio pipes and can
 						// outlive a cleanly exited VS Code, leaving app.close()

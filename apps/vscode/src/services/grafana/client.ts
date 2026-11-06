@@ -10,26 +10,26 @@ import {
 } from "@shared/grafana-metrics"
 import { z } from "zod"
 
-const sourceSchema = z.union([z.string(), z.object({ uid: z.string(), type: z.string().optional() })])
+const sourceSchema = z.union([z.string(), z.object({ uid: z.string().nullish(), type: z.string().optional() })])
 const targetSchema = z.object({
 	expr: z.string().optional(),
 	refId: z.string().default("A"),
 	hide: z.boolean().optional(),
-	datasource: sourceSchema.optional(),
+	datasource: sourceSchema.nullish(),
 	legendFormat: z.string().optional(),
 	interval: z.string().optional(),
 })
 const panelSchema = z.object({
 	id: z.number().int(),
 	title: z.string().default("Untitled panel"),
-	datasource: sourceSchema.optional(),
+	datasource: sourceSchema.nullish(),
 	targets: z.array(targetSchema).default([]),
 	transformations: z.array(z.unknown()).optional(),
 	fieldConfig: z
 		.object({ defaults: z.object({ unit: z.string().optional() }).optional(), overrides: z.array(z.unknown()).optional() })
 		.optional(),
 })
-type Panel = z.infer<typeof panelSchema>
+type Panel = z.infer<typeof panelSchema> & { parseProblem?: string }
 const dashboardSchema = z.object({
 	dashboard: z.object({
 		panels: z.array(z.unknown()),
@@ -143,13 +143,23 @@ function flattenPanels(values: unknown[]): Panel[] {
 	for (const value of values) {
 		const parsed = panelSchema.safeParse(value)
 		if (parsed.success && parsed.data.targets.length) result.push(parsed.data)
+		if (!parsed.success) {
+			const identity = z.object({ id: z.number().int(), title: z.string(), targets: z.array(z.unknown()) }).safeParse(value)
+			if (identity.success && identity.data.targets.length)
+				result.push({
+					id: identity.data.id,
+					title: identity.data.title,
+					targets: [],
+					parseProblem: "Unsupported dashboard panel format.",
+				})
+		}
 		if (value && typeof value === "object" && "panels" in value && Array.isArray(value.panels))
 			result.push(...flattenPanels(value.panels))
 	}
 	return result
 }
-
 function panelProblem(panel: Panel): string {
+	if (panel.parseProblem) return panel.parseProblem
 	if (panel.transformations?.length) return "Panel transformations are not supported; select an untransformed source panel."
 	if (panel.fieldConfig?.overrides?.length) return "Panel field overrides are not supported; select a panel with a common unit."
 	if (!panel.targets.some((target) => !target.hide && target.expr)) return "This panel has no Prometheus query."
@@ -228,8 +238,25 @@ export class GrafanaClient {
 			problem: panelProblem(p),
 		}))
 	}
-	private sourceUid(source: z.infer<typeof sourceSchema> | undefined, dashboard: Dashboard): string {
+	private defaultSource: Promise<string> | undefined
+	private async sourceUid(source: z.infer<typeof sourceSchema> | null | undefined, dashboard: Dashboard): Promise<string> {
+		if (source && typeof source === "object" && source.type && source.type !== "prometheus")
+			throw new Error("This integration currently supports Prometheus datasources only.")
 		let uid = typeof source === "string" ? source : source?.uid
+		if (!uid) {
+			this.defaultSource ??= this.json("/api/datasources").then((value) => {
+				const parsed = z
+					.array(z.object({ uid: z.string(), type: z.string(), isDefault: z.boolean().optional() }))
+					.safeParse(value)
+				const defaults = parsed.success ? parsed.data.filter((entry) => entry.isDefault) : []
+				if (defaults.length !== 1 || defaults[0].type !== "prometheus")
+					throw new Error(
+						"This panel requires a default Prometheus datasource and permission to read datasource metadata.",
+					)
+				return defaults[0].uid
+			})
+			uid = await this.defaultSource
+		}
 		const variable = /^\$(\w+)$|^\$\{(\w+)\}$/.exec(uid ?? "")
 		if (variable) {
 			const entry = dashboard.templating?.list.find(
@@ -271,7 +298,7 @@ export class GrafanaClient {
 							.filter((t) => !t.hide)
 							.map(async (target, index) => {
 								if (!target.expr) throw new Error("Only Prometheus expression queries are supported.")
-								const uid = this.sourceUid(target.datasource ?? panel.datasource, dashboard)
+								const uid = await this.sourceUid(target.datasource ?? panel.datasource, dashboard)
 								if (!sources.has(uid))
 									sources.set(
 										uid,

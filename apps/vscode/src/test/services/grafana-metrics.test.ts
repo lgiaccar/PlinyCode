@@ -83,6 +83,39 @@ describe("Grafana metric queries", () => {
 			}
 		}
 	})
+	it("resolves inherited default datasources and preserves unsupported panel choices", async () => {
+		const inherited = structuredClone(dashboard)
+		Object.assign(inherited.dashboard.panels[0], { datasource: { type: "prometheus" } })
+		Object.assign(inherited.dashboard.panels[1], { datasource: null })
+		Object.assign(inherited.dashboard.panels[2], { datasource: 42 })
+		let defaultReads = 0
+		const client = new GrafanaClient(config, "fixture", (async (url) => {
+			if (String(url).includes("/dashboards/")) return json(inherited)
+			if (String(url).endsWith("/api/datasources")) {
+				defaultReads++
+				return json([{ uid: "metrics", type: "prometheus", isDefault: true }])
+			}
+			if (String(url).includes("/datasources/")) return json({ type: "prometheus" })
+			return json({ results: { Q0: { frames: [frame([0.1, null, 0.5])] } } })
+		}) as typeof fetch)
+		const panels = await client.panels()
+		expect(panels).toHaveLength(3)
+		expect(panels[2].problem).toContain("Unsupported")
+		const result = await client.metrics("build", "1h")
+		expect(result.results[0].error).toBe("")
+		expect(result.results[2].error).toBe("")
+		expect(defaultReads).toBe(1)
+	})
+	it("refuses a non-Prometheus default datasource", async () => {
+		const inherited = structuredClone(dashboard)
+		Object.assign(inherited.dashboard.panels[0], { datasource: { type: "prometheus" } })
+		const client = new GrafanaClient(config, "fixture", (async (url) =>
+			String(url).includes("/dashboards/")
+				? json(inherited)
+				: json([{ uid: "other", type: "influxdb", isDefault: true }])) as typeof fetch)
+		const result = await client.metrics("build", "1h")
+		expect(result.results[0].error).toContain("default Prometheus")
+	})
 	it("reports auth failures without echoing server bodies", async () => {
 		const client = new GrafanaClient(config, "fixture", (async () =>
 			json({ error: "secret body" }, 403)) as unknown as typeof fetch)

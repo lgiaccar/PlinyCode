@@ -135,7 +135,7 @@ function valueText(value: number, unit: string): string {
 		const index = Math.min(4, Math.max(0, Math.floor(Math.log(Math.max(1, value)) / Math.log(base))))
 		return `${(value / base ** index).toFixed(1)} ${(unit === "bytes" ? ["B", "KiB", "MiB", "GiB", "TiB"] : ["B", "kB", "MB", "GB", "TB"])[index]}`
 	}
-	return `${Number(value.toPrecision(5))}${unit && unit !== "none" ? ` ${unit}` : ""}`
+	return `${Number(value.toPrecision(5))}${unit && !["none", "short"].includes(unit) ? ` ${unit}` : ""}`
 }
 function SeriesView({
 	series,

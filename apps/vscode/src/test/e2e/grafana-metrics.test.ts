@@ -21,7 +21,7 @@ e2e("Grafana - secure setup and machine queries through the packaged backend", a
 							{
 								id: 1,
 								title: "CPU percent",
-								datasource: { uid: "metrics" },
+								datasource: { type: "prometheus" },
 								fieldConfig: { defaults: { unit: "percent" } },
 								targets: [{ expr: 'cpu_load{host="$host"}' }],
 							},
@@ -29,6 +29,8 @@ e2e("Grafana - secure setup and machine queries through the packaged backend", a
 					},
 				}),
 			)
+		} else if (request.url === "/api/datasources") {
+			response.end(JSON.stringify([{ uid: "metrics", type: "prometheus", isDefault: true }]))
 		} else if (request.url === "/api/datasources/uid/metrics") {
 			response.end(JSON.stringify({ type: "prometheus" }))
 		} else if (request.url === "/api/ds/query" && request.method === "POST") {
@@ -81,7 +83,8 @@ e2e("Grafana - secure setup and machine queries through the packaged backend", a
 		const password = page.locator('.quick-input-widget input[type="password"]')
 		await expect(password).toBeVisible()
 		await password.fill("grafana-e2e-fixture")
-		await page.keyboard.press("Enter")
+		await password.press("Enter")
+		await expect(password).toBeHidden()
 		await expect(sidebar.getByText(/A token is stored for the saved server/)).toBeVisible()
 		await sidebar.getByRole("button", { name: "Load dashboard panels" }).click()
 		await expect(sidebar.getByText(/Dashboard loaded/)).toBeVisible()
