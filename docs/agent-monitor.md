@@ -1,5 +1,8 @@
 # Agent monitor
 
+For CPU/GPU load, available disk space and hardware details from an existing
+monitoring system, see [Machine metrics from Grafana](grafana-machine-metrics.md).
+
 Open **Pipelines → Agents** to monitor multiple Azure DevOps agent pools per workspace.
 Keep the locally saved URL or paste the project's agent-pool settings URL,
 including `queueId`, choose

@@ -27,8 +27,9 @@ export function agentQueueTarget(value: string) {
 	}
 }
 
-/** Only capability names and an allowlisted OS leave the transport; values can contain secrets. */
+/** Only capability names and allowlisted OS/hostname leave the transport; other values can contain secrets. */
 interface AgentRecord {
+	hostname?: string
 	id: number
 	name: string
 	status: string
@@ -102,6 +103,7 @@ try {
     @{
       id = $_.id; name = $_.name; status = $_.status; enabled = [bool]$_.enabled
       os = $os
+      hostname = [string]$_.systemCapabilities.'Agent.ComputerName'
       busy = ($null -ne $_.assignedRequest)
       capabilities = @($capabilities | Where-Object { $_ } | Sort-Object -Unique)
       pipelineName = [string]$_.assignedRequest.definition.name
@@ -201,6 +203,10 @@ export async function readAgentPool(config: AgentMonitorConfig, editorToken: Edi
 		{
 			poolName: queue.pool.name ?? queue.name,
 			agents: response.value.map((agent: any) => ({
+				hostname:
+					typeof agent.systemCapabilities?.["Agent.ComputerName"] === "string"
+						? agent.systemCapabilities["Agent.ComputerName"]
+						: "",
 				id: agent.id,
 				name: agent.name,
 				status: agent.status,

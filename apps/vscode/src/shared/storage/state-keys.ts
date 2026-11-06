@@ -5,6 +5,7 @@ import { HistoryItem } from "@shared/HistoryItem"
 import { DEFAULT_MCP_DISPLAY_MODE, McpDisplayMode } from "@shared/McpDisplayMode"
 import { Mode } from "@shared/storage/types"
 import type { AgentMonitorConfig, SavedAgentPool } from "../agent-monitor"
+import { DEFAULT_GRAFANA_CONFIG, type GrafanaConfig } from "../grafana-metrics"
 import type { ModelTuningMap } from "../model-tuning"
 import { coerceToPlinyProvider } from "../pliny"
 import type { RouterTuningMap } from "../router-tuning"
@@ -37,6 +38,7 @@ type FieldDefinition<T> = {
 type FieldDefinitions = Record<string, FieldDefinition<any>>
 
 const GLOBAL_STATE_FIELDS = {
+	grafanaMetrics: { default: DEFAULT_GRAFANA_CONFIG as GrafanaConfig },
 	agentMonitorConfigs: { default: {} as Record<string, AgentMonitorConfig> },
 	agentMonitorPools: { default: {} as Record<string, SavedAgentPool[]> },
 	agentMonitorDefaultQueueUrl: { default: "" },

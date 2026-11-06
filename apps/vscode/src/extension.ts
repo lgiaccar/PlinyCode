@@ -48,6 +48,7 @@ import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./h
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
 import { installCustomizationWatcher } from "./hosts/vscode/customization-watcher"
 import { exportDiagnosticsBundle } from "./hosts/vscode/diagnostics-bundle"
+import { setGrafanaSecrets } from "./hosts/vscode/grafana-metrics"
 import { registerClineOutputChannel } from "./hosts/vscode/hostbridge/env/debugLog"
 import { PLAN_EXECUTE_WITH_SETTING_ID } from "./hosts/vscode/plan-settings"
 import { PlinyApiKeys, setPlinyApiKeys } from "./hosts/vscode/pliny-api-keys"
@@ -114,6 +115,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	// (docs/pliny-api-keys.md). Not awaited: session builds wait for it, briefly.
 	const plinyApiKeys = new PlinyApiKeys(context.secrets)
 	setPlinyApiKeys(plinyApiKeys)
+	setGrafanaSecrets(context.secrets)
+	context.subscriptions.push({ dispose: () => setGrafanaSecrets(undefined) })
 	setPlinyApiKeySource(plinyApiKeys)
 	context.subscriptions.push(plinyApiKeys)
 

@@ -6,6 +6,8 @@ import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { AgentMonitorServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { AgentOsIcon, AgentUtilizationLabel } from "./AgentMetrics"
+import { GrafanaSettings } from "./GrafanaSettings"
+import { MachineMetricsView } from "./MachineMetricsView"
 import { fieldClass, pipelineError } from "./PipelineLaunchForm"
 
 export function AgentsPanel() {
@@ -37,6 +39,7 @@ export function AgentsPanel() {
 	}
 	return (
 		<section aria-label="Agent monitors" className="flex flex-col gap-3 min-w-0">
+			<GrafanaSettings />
 			<p className="text-sm text-description m-0">
 				Monitor Azure DevOps agent pools. Saved for this workspace; each enabled pool refreshes every minute, even when
 				this view is closed.
@@ -137,6 +140,7 @@ function AgentPoolPanel({
 	const [error, setError] = useState("")
 	const [saving, setSaving] = useState(false)
 	const [search, setSearch] = useState("")
+	const [metricsAgent, setMetricsAgent] = useState<number>()
 	const refresh = async () => {
 		setError("")
 		try {
@@ -335,6 +339,16 @@ function AgentPoolPanel({
 							{agent.capabilities.join(", ") || "No capabilities reported"}
 						</div>
 						<AgentUtilizationLabel agent={agent} stale={stale} />
+						<Button
+							className="self-start"
+							onClick={() => setMetricsAgent(metricsAgent === agent.id ? undefined : agent.id)}
+							size="sm"
+							variant="secondary">
+							{metricsAgent === agent.id ? "Close machine metrics" : "Machine metrics"}
+						</Button>
+						{!hidden && metricsAgent === agent.id && (
+							<MachineMetricsView hostname={agent.hostname || agent.name} key={agent.id} />
+						)}
 						{agent.busy &&
 							agent.status === "online" &&
 							(agent.jobUrl ? (

@@ -31,7 +31,7 @@ export async function exportDiagnosticsBundle(
 			versions: collectVersions(),
 			editorSettings: collectEditorSettings(context),
 			...collectState(),
-			excludedStateKeys: [...SecretKeys, "taskHistory"],
+			excludedStateKeys: [...SecretKeys, "taskHistory", "grafanaMetrics"],
 			sessionId,
 			lastModelRequest: sessionId ? formatLastModelRequest(sessionId) : undefined,
 			renderConversation:
