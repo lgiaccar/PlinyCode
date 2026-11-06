@@ -44,10 +44,12 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.4 prerelease** restores scrolling in the **Rules**, **Skills**, **Agents**, and **Hooks** tabs.
-It also retains a compact utilization bar and colored percentages
-in **Pipelines > Agents**: red below 30%, amber from 30–60%, and green above 60%.
-Collector-based disk monitoring from test.2 has been withdrawn; no collector or shared folder is required.
+The **0.2.9-test.5 prerelease** adds optional [Grafana machine metrics](docs/grafana-machine-metrics.md)
+in **Pipelines > Agents**: CPU/GPU load over 1h, 3h, 24h, 1 week or 30 days, available disk space,
+and hardware details supplied by your monitoring source. Connect your own server and read/query token;
+Prometheus-backed dashboard panels are supported. Missing metrics and partial history remain explicit.
+It also includes cancellation and chat-control improvements, while retaining the restored customization-tab
+scrolling and colored agent busy-time utilization. No collector or shared folder is required.
 Enable **Install pre-releases** in **Settings > About** to receive test builds.
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing

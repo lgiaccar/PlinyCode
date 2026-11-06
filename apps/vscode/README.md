@@ -25,11 +25,14 @@ Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thi
 
 ## Features
 
-**0.2.9-test.4 prerelease:** scrolling is restored in **Rules**, **Skills**, **Agents**, and **Hooks**.
-Agent utilization retains its compact bar and colored percentages:
-red below 30%, amber from 30–60%, and green above 60%. Enable **Install pre-releases**
-in **Settings > About** to receive test builds. Stable remains **0.2.8**.
-Collector-based disk monitoring from test.2 has been withdrawn; no collector or shared folder is required.
+**0.2.9-test.5 prerelease:** optional Grafana machine metrics in **Pipelines > Agents** show CPU/GPU
+load across 1h, 3h, 24h, 1 week and 30 days, available disk space and hardware details when collected.
+Connect your own Grafana server and read/query token, then map Prometheus-backed dashboard panels.
+Missing data and partial history are explicit; no collector or shared folder is required.
+[Setup and supported dashboards](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/grafana-machine-metrics.md).
+This build also includes cancellation and chat-control improvements, and retains customization-tab scrolling
+and colored agent busy-time utilization. Enable **Install pre-releases** in **Settings > About**.
+Stable remains **0.2.8**.
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.
 - **Code and terminal tools:** search and navigate a project, edit files, inspect images, run commands and
