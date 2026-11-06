@@ -116,6 +116,73 @@ describe("Grafana metric queries", () => {
 		const result = await client.metrics("build", "1h")
 		expect(result.results[0].error).toContain("default Prometheus")
 	})
+	it("discovers a dashboard, host variable and free-space panels without user mappings", async () => {
+		const automatic = structuredClone(dashboard)
+		Object.assign(automatic.dashboard.panels[0], { type: "timeseries" })
+		const current = { ...automatic.dashboard.panels[0], id: 4, title: "CPU Now", type: "stat" }
+		automatic.dashboard.panels.push(current)
+		automatic.dashboard.panels.push({ ...automatic.dashboard.panels[1], id: 5, title: "Used disk" })
+		const calls: string[] = []
+		const client = new GrafanaClient({ ...config, dashboardUid: "", panels: {} }, "fixture", (async (url) => {
+			calls.push(String(url))
+			return String(url).includes("/api/search")
+				? json([{ uid: "discovered", title: "Machine resources" }])
+				: json(automatic)
+		}) as typeof fetch)
+		const result = await client.discover()
+		expect(result.config).toMatchObject({
+			dashboardUid: "discovered",
+			hostVariable: "host",
+			panels: { cpu: 1, disk: 2, gpuInfo: 3 },
+		})
+		expect(result.config.panels.gpu).toBeUndefined()
+		expect(calls).toHaveLength(2)
+	})
+	it("prefers a configured dashboard without requesting a global dashboard search", async () => {
+		const client = new GrafanaClient(config, "fixture", (async (url) => {
+			expect(String(url)).toContain("/dashboards/uid/machines")
+			return json(dashboard)
+		}) as typeof fetch)
+		expect((await client.discover()).config.panels.cpu).toBe(1)
+	})
+	it("does not treat a region selector as a machine selector", async () => {
+		const regional = structuredClone(dashboard)
+		regional.dashboard.panels = [{ ...regional.dashboard.panels[0], targets: [{ expr: 'cpu_load{region="$region"}' }] }]
+		const client = new GrafanaClient(config, "fixture", (async (url) =>
+			String(url).includes("/api/search") ? json([]) : json(regional)) as typeof fetch)
+		await expect(client.discover()).rejects.toThrow("No matching machine panels")
+	})
+	it("does not guess between equally matching dashboards", async () => {
+		const client = new GrafanaClient({ ...config, dashboardUid: "" }, "fixture", (async (url) =>
+			String(url).includes("/api/search")
+				? json([
+						{ uid: "one", title: "Machine A" },
+						{ uid: "two", title: "Machine B" },
+					])
+				: json(dashboard)) as typeof fetch)
+		await expect(client.discover()).rejects.toThrow("More than one dashboard")
+	})
+	it("ignores ambiguous load panels, used-space panels and unscoped queries", async () => {
+		const ambiguous = structuredClone(dashboard)
+		ambiguous.dashboard.panels = [
+			ambiguous.dashboard.panels[0],
+			{ ...ambiguous.dashboard.panels[0], id: 4 },
+			{ ...ambiguous.dashboard.panels[1], title: "Used disk" },
+			{ ...ambiguous.dashboard.panels[2], targets: [{ expr: "gpu_info" }] },
+		]
+		const client = new GrafanaClient(config, "fixture", (async (url) =>
+			String(url).includes("/api/search") ? json([]) : json(ambiguous)) as typeof fetch)
+		await expect(client.discover()).rejects.toThrow("No matching machine panels")
+	})
+	it("can discover after a saved dashboard was removed but does not hide auth failures", async () => {
+		const client = new GrafanaClient(config, "fixture", (async (url) => {
+			if (String(url).endsWith("/machines")) return json({}, 404)
+			return String(url).includes("/api/search") ? json([{ uid: "new", title: "Agent resources" }]) : json(dashboard)
+		}) as typeof fetch)
+		expect((await client.discover()).config.dashboardUid).toBe("new")
+		const denied = new GrafanaClient(config, "fixture", (async () => json({}, 403)) as unknown as typeof fetch)
+		await expect(denied.discover()).rejects.toThrow("HTTP 403")
+	})
 	it("reports auth failures without echoing server bodies", async () => {
 		const client = new GrafanaClient(config, "fixture", (async () =>
 			json({ error: "secret body" }, 403)) as unknown as typeof fetch)

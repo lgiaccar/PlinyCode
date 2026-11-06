@@ -14,13 +14,19 @@ const rangeLabels: Record<MetricRange, string> = {
 }
 export function MachineMetricsView({ hostname }: { hostname: string }) {
 	const [draft, setDraft] = useState(hostname)
-	const [host, setHost] = useState("")
+	const [host, setHost] = useState(hostname)
+	const [editHost, setEditHost] = useState(!hostname)
 	const [range, setRange] = useState<MetricRange>("24h")
 	const [refresh, setRefresh] = useState(0)
 	const [data, setData] = useState<MachineMetrics>()
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState("")
-	// Refresh only an explicitly selected host while the view remains visible.
+	useEffect(() => {
+		setHost(hostname)
+		setDraft(hostname)
+		setEditHost(!hostname)
+	}, [hostname])
+	// Opening an agent uses its ADO machine name immediately; manual override is optional.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: refresh is an explicit retry signal.
 	useEffect(() => {
 		if (!host) return
@@ -55,13 +61,21 @@ export function MachineMetricsView({ hostname }: { hostname: string }) {
 		<section
 			aria-label={`Machine metrics for ${hostname}`}
 			className="border border-panel-border rounded p-3 mt-2 flex flex-col gap-2 min-w-0">
-			<p className="m-0 text-xs text-description">
-				Machine load from Grafana, separate from agent busy time. Confirm the exact host/instance used by the dashboard.
-			</p>
-			<label className="text-sm flex flex-col gap-1">
-				Grafana host
-				<input className={fieldClass} onChange={(e) => setDraft(e.target.value)} value={draft} />
-			</label>
+			<p className="m-0 text-xs text-description">Machine load from Grafana, separate from agent busy time.</p>
+			{hostname && (
+				<div className="flex flex-wrap items-center gap-2 text-xs">
+					<span>{host}</span>
+					<Button onClick={() => setEditHost(!editHost)} size="sm" variant="secondary">
+						{editHost ? "Hide host override" : "Change host"}
+					</Button>
+				</div>
+			)}
+			{editHost && (
+				<label className="text-sm flex flex-col gap-1">
+					Grafana host
+					<input className={fieldClass} onChange={(e) => setDraft(e.target.value)} value={draft} />
+				</label>
+			)}
 			<div className="flex flex-wrap gap-2 items-center">
 				<label className="text-sm">
 					Time range{" "}
@@ -80,7 +94,7 @@ export function MachineMetricsView({ hostname }: { hostname: string }) {
 						setRefresh((n) => n + 1)
 					}}
 					size="sm">
-					{busy ? "Loading…" : "Load metrics"}
+					{busy ? "Loading…" : editHost ? "Load metrics" : "Refresh"}
 				</Button>
 			</div>
 			{error && (

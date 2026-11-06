@@ -13,7 +13,9 @@ e2e("Grafana - secure setup and machine queries through the packaged backend", a
 			response.end("{}")
 			return
 		}
-		if (request.url === "/api/dashboards/uid/machines") {
+		if (request.url?.startsWith("/api/search?")) {
+			response.end(JSON.stringify([{ uid: "machines", title: "Machine resources" }]))
+		} else if (request.url === "/api/dashboards/uid/machines") {
 			response.end(
 				JSON.stringify({
 					dashboard: {
@@ -78,19 +80,17 @@ e2e("Grafana - secure setup and machine queries through the packaged backend", a
 		await sidebar.getByRole("button", { name: "Grafana machine metrics…" }).click()
 		await expect(sidebar.getByLabel("Grafana server URL")).toHaveValue("")
 		await sidebar.getByLabel("Grafana server URL").fill(`http://127.0.0.1:${address.port}`)
-		await sidebar.getByLabel("Dashboard UID").fill("machines")
-		await sidebar.getByRole("button", { name: "Enter token…" }).click()
+		await expect(sidebar.getByLabel("Dashboard UID")).toBeHidden()
+		await sidebar.getByRole("button", { name: "Enter token and connect…" }).click()
 		const password = page.locator('.quick-input-widget input[type="password"]')
 		await expect(password).toBeVisible()
 		await password.fill("grafana-e2e-fixture")
 		await password.press("Enter")
 		await expect(password).toBeHidden()
 		await expect(sidebar.getByText(/A token is stored for the saved server/)).toBeVisible()
-		await sidebar.getByRole("button", { name: "Load dashboard panels" }).click()
-		await expect(sidebar.getByText(/Dashboard loaded/)).toBeVisible()
-		await sidebar.getByRole("combobox", { name: /^CPU load panel/ }).selectOption("1")
-		await sidebar.getByRole("button", { name: "Save Grafana settings" }).click()
-		await expect(sidebar.getByText("Grafana settings saved.", { exact: true })).toBeVisible()
+		await expect(sidebar.getByText(/Connected. Dashboard and metric panels/)).toBeVisible()
+		await expect(sidebar.getByText(/Available: CPU load/)).toBeVisible()
+		await sidebar.getByRole("button", { name: "Advanced setup", exact: true }).click()
 		await sidebar.getByRole("button", { name: "Test a machine" }).click()
 		await sidebar.getByLabel("Grafana host", { exact: true }).fill("build-01")
 		await sidebar.getByRole("button", { name: "Load metrics", exact: true }).click()

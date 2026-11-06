@@ -8,16 +8,29 @@ you how much CPU or GPU the machine uses.
 ## Connect
 
 1. Open **Grafana machine metrics…** above the agent pools.
-2. Enter your Grafana server URL (including a deployment subpath if needed), the
-   dashboard UID from `/d/UID/dashboard-name`, and its host variable name.
-3. Choose **Enter token…**. Enter a service-account token in the editor's masked
-   prompt. It needs permission to read the dashboard and datasource metadata and
-   query the datasource. Your browser's sign-in session is separate.
-4. Choose **Load dashboard panels** and select the panels for CPU load, GPU load,
-   available disk space, CPU characteristics and GPU characteristics. Select an
-   **available/free space** panel, not a used-space panel. Save the settings.
-5. Under an agent, open **Machine metrics**, confirm its exact Grafana host or
-   instance (including the port if the dashboard uses one), and load metrics.
+2. Choose **Enter token and connect…** and enter a service-account token in the
+   editor's masked prompt. If a token is already saved, choose **Connect automatically**.
+   The saved server address is reused; a fresh installation asks for that address
+   once because a token does not identify its server.
+3. PlinyCode discovers and saves the dashboard, host variable and supported metric
+   panels. Open **Machine metrics** under an agent: readings load immediately using
+   its ADO computer name (or agent name when the computer name is unavailable).
+
+There is no separate Save step in automatic setup. **Replace token…** also
+reconnects automatically. The token needs permission to read dashboards and
+source metadata, search dashboards when none is already selected, and query the
+source. Browser sign-in is separate.
+
+Discovery prefers the saved dashboard, then searches accessible machine/resource
+dashboards. It matches supported panel titles, units and a single host filter,
+preferring load-history panels over current-value cards. It never selects used
+space as free space, or guesses between equal matches. Only detected categories
+are enabled; missing GPU panels do not produce GPU readings.
+
+**Advanced setup** retains manual server, dashboard UID, host-variable and panel
+selection for ambiguous or customized dashboards. Choose a dashboard there and
+connect again to limit discovery to it. **Change host** under an agent is an
+optional override if its Grafana name differs from its ADO computer name.
 
 Settings are local to the editor and shared by the agent pools. Tokens are stored
 in the editor's SecretStorage, bound to the exact server URL, and never returned

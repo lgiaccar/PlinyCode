@@ -1,7 +1,9 @@
 import {
 	type GrafanaConfig,
 	type GrafanaPanelChoice,
+	type GrafanaSetup,
 	MACHINE_METRICS,
+	type MachineMetric,
 	type MachineMetrics,
 	type MachineSeries,
 	METRIC_LABELS,
@@ -22,6 +24,7 @@ const targetSchema = z.object({
 const panelSchema = z.object({
 	id: z.number().int(),
 	title: z.string().default("Untitled panel"),
+	type: z.string().optional(),
 	datasource: sourceSchema.nullish(),
 	targets: z.array(targetSchema).default([]),
 	transformations: z.array(z.unknown()).optional(),
@@ -61,7 +64,7 @@ const querySchema = z.object({
 	),
 })
 
-export function validateGrafanaConfig(input: GrafanaConfig): GrafanaConfig {
+export function validateGrafanaConfig(input: GrafanaConfig, allowDiscovery = false): GrafanaConfig {
 	if (
 		!input ||
 		typeof input.url !== "string" ||
@@ -77,7 +80,8 @@ export function validateGrafanaConfig(input: GrafanaConfig): GrafanaConfig {
 	}
 	if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
 		throw new Error("Use an HTTP(S) Grafana server URL without credentials, query parameters or a fragment.")
-	if (!/^[\w-]{1,128}$/.test(input.dashboardUid)) throw new Error("Enter the dashboard UID from its /d/UID/ URL.")
+	if (!(allowDiscovery && !input.dashboardUid) && !/^[\w-]{1,128}$/.test(input.dashboardUid))
+		throw new Error("Enter the dashboard UID from its /d/UID/ URL.")
 	if (!/^[a-zA-Z][\w]{0,63}$/.test(input.hostVariable)) throw new Error("Enter the dashboard's host variable name.")
 	const panels: GrafanaConfig["panels"] = {}
 	for (const kind of MACHINE_METRICS) {
@@ -167,6 +171,85 @@ function panelProblem(panel: Panel): string {
 	return ""
 }
 
+/** Select by panel semantics and units; never turn used disk space into free space. */
+function discoverMapping(panels: Panel[]): Pick<GrafanaConfig, "panels" | "hostVariable"> | undefined {
+	const candidates: { kind: MachineMetric; panel: Panel; variable: string; score: number }[] = []
+	for (const panel of panels) {
+		if (panelProblem(panel)) continue
+		const targets = panel.targets.filter((target) => !target.hide)
+		if (
+			targets.some((target) => {
+				const source = target.datasource ?? panel.datasource
+				return source && typeof source === "object" && source.type && source.type !== "prometheus"
+			})
+		)
+			continue
+		const variables = new Set<string>()
+		for (const target of targets) {
+			for (const match of (target.expr ?? "").matchAll(
+				/\b([a-zA-Z_]\w*)\s*(?:=~|=)\s*"(?:\$(\w+)|\$\{(\w+)(?::regex)?\})"/g,
+			)) {
+				const variable = match[2] ?? match[3]
+				const hostName =
+					/^(?:exported_)?(?:host|hostname|instance|computer|machine|node|nodename|server|agent)(?:_name)?$/i
+				if (hostName.test(match[1]) || hostName.test(variable)) variables.add(variable)
+			}
+		}
+		if (variables.size !== 1) continue
+		const variable = [...variables][0]
+		if (!/^[a-zA-Z][\w]{0,63}$/.test(variable)) continue
+		try {
+			for (const target of targets) interpolatePromQuery(target.expr ?? "", variable, "discovery-host", 3600000, 15000)
+		} catch {
+			continue
+		}
+		const title = panel.title.toLowerCase()
+		const unit = panel.fieldConfig?.defaults?.unit ?? ""
+		const gpu = /\bgpu\b|graphics|cuda|nvidia/.test(title)
+		const cpu = !gpu && /\bcpu\b|processor/.test(title)
+		let kind: MachineMetric | undefined
+		if (["percent", "percentunit"].includes(unit) && !/memory|ram|temperature|power|disk/.test(title)) {
+			if (cpu) kind = "cpu"
+			if (gpu) kind = "gpu"
+		} else if (
+			["bytes", "decbytes"].includes(unit) &&
+			/disk|filesystem|volume|storage/.test(title) &&
+			/free|avail/.test(title) &&
+			!/\bused\b/.test(title)
+		) {
+			kind = "disk"
+		} else if (!/percent|celsius|fahrenheit|watt/.test(unit)) {
+			if (gpu && /info|model|device|characteristic|vram|driver/.test(title)) kind = "gpuInfo"
+			if (
+				(cpu && /info|model|characteristic|cores|threads|sockets/.test(title)) ||
+				/^(cores|threads|sockets)$/.test(title.trim())
+			)
+				kind = "cpuInfo"
+		}
+		if (!kind) continue
+		const score =
+			10 +
+			(panel.type === "timeseries" && (kind === "cpu" || kind === "gpu") ? 4 : 0) -
+			(/\bnow\b|current/.test(title) && (kind === "cpu" || kind === "gpu") ? 2 : 0)
+		candidates.push({ kind, panel, variable, score })
+	}
+	const groups = new Map<string, GrafanaConfig["panels"]>()
+	for (const variable of new Set(candidates.map((item) => item.variable))) {
+		const selected: GrafanaConfig["panels"] = {}
+		for (const kind of MACHINE_METRICS) {
+			const matches = candidates
+				.filter((item) => item.variable === variable && item.kind === kind)
+				.sort((a, b) => b.score - a.score)
+			if (matches.length && (matches.length === 1 || matches[0].score > matches[1].score))
+				selected[kind] = matches[0].panel.id
+		}
+		if (selected.cpu || selected.gpu || selected.disk) groups.set(variable, selected)
+	}
+	if (groups.size !== 1) return undefined
+	const [hostVariable, selected] = [...groups][0]
+	return { hostVariable, panels: selected }
+}
+
 /** No browser cookies, datasource credentials or remote error bodies enter the webview/logs. */
 export class GrafanaClient {
 	constructor(
@@ -223,10 +306,8 @@ export class GrafanaClient {
 			reader.releaseLock()
 		}
 	}
-	private async dashboard(): Promise<Dashboard> {
-		const result = dashboardSchema.safeParse(
-			await this.json(`/api/dashboards/uid/${encodeURIComponent(this.config.dashboardUid)}`),
-		)
+	private async dashboard(uid = this.config.dashboardUid): Promise<Dashboard> {
+		const result = dashboardSchema.safeParse(await this.json(`/api/dashboards/uid/${encodeURIComponent(uid)}`))
 		if (!result.success) throw new Error("Grafana returned an unsupported dashboard format.")
 		return result.data.dashboard
 	}
@@ -237,6 +318,55 @@ export class GrafanaClient {
 			unit: p.fieldConfig?.defaults?.unit ?? "",
 			problem: panelProblem(p),
 		}))
+	}
+	/** Discover only supported, host-scoped panels. Ties require an explicit choice. */
+	async discover(): Promise<GrafanaSetup> {
+		const candidate = async (uid: string) => {
+			const dashboard = await this.dashboard(uid)
+			const panels = flattenPanels(dashboard.panels)
+			const mapping = discoverMapping(panels)
+			if (!mapping) return undefined
+			return {
+				config: { ...this.config, dashboardUid: uid, hostVariable: mapping.hostVariable, panels: mapping.panels },
+				hasToken: true,
+				panels: panels.map((p) => ({
+					id: p.id,
+					title: p.title,
+					unit: p.fieldConfig?.defaults?.unit ?? "",
+					problem: panelProblem(p),
+				})),
+				score: Object.keys(mapping.panels).length,
+			}
+		}
+		// An already selected dashboard takes precedence over unrelated fleet dashboards.
+		if (this.config.dashboardUid) {
+			try {
+				const saved = await candidate(this.config.dashboardUid)
+				if (saved) return saved
+			} catch (error) {
+				if (!(error instanceof Error) || !error.message.includes("HTTP 404")) throw error
+			}
+		}
+		const search = z
+			.array(z.object({ uid: z.string(), title: z.string() }))
+			.safeParse(await this.json("/api/search?type=dash-db&limit=100"))
+		if (!search.success) throw new Error("Grafana returned an unsupported dashboard list. Use Advanced setup.")
+		const possible = search.data.filter((item) => /^[\w-]{1,128}$/.test(item.uid) && item.uid !== this.config.dashboardUid)
+		const named = possible.filter((item) => /agent|machine|host|resource|node/i.test(item.title))
+		const shortlist = named.length ? named : possible
+		if (shortlist.length > 12 || search.data.length >= 100)
+			throw new Error("Several dashboards are available. Select a dashboard in Advanced setup, then discover again.")
+		const candidates: NonNullable<Awaited<ReturnType<typeof candidate>>>[] = []
+		for (const item of shortlist) {
+			const found = await candidate(item.uid)
+			if (found) candidates.push(found)
+		}
+		candidates.sort((a, b) => b.score - a.score)
+		if (!candidates.length)
+			throw new Error("No matching machine panels found. Use Advanced setup to select your source panels.")
+		if (candidates.length > 1 && candidates[0].score === candidates[1].score)
+			throw new Error("More than one dashboard matches. Select a dashboard in Advanced setup, then discover again.")
+		return candidates[0]
 	}
 	private defaultSource: Promise<string> | undefined
 	private async sourceUid(source: z.infer<typeof sourceSchema> | null | undefined, dashboard: Dashboard): Promise<string> {
