@@ -134,7 +134,7 @@ function ConnectionForm({ onChanged }: { onChanged?: () => void }) {
 					{MACHINE_METRICS.filter((kind) => setup.config.panels[kind])
 						.map((kind) => METRIC_LABELS[kind])
 						.join(", ")}
-					. Open Machine metrics under an agent to see live readings.
+					. Live summaries appear beside agent status automatically.
 				</p>
 			)}
 			<Button aria-expanded={advanced} onClick={() => setAdvanced(!advanced)} size="sm" variant="secondary">
