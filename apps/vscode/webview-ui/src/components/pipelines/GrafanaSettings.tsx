@@ -134,7 +134,7 @@ function ConnectionForm({ onChanged }: { onChanged?: () => void }) {
 					{MACHINE_METRICS.filter((kind) => setup.config.panels[kind])
 						.map((kind) => METRIC_LABELS[kind])
 						.join(", ")}
-					. Live summaries appear beside agent status automatically.
+					. Free disk space appears beside agent status automatically. Other metrics are under Details.
 				</p>
 			)}
 			<Button aria-expanded={advanced} onClick={() => setAdvanced(!advanced)} size="sm" variant="secondary">

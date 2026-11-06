@@ -397,7 +397,7 @@ export class GrafanaClient {
 		if (!uid || !/^[\w-]{1,128}$/.test(uid)) throw new Error("This panel needs an explicit Prometheus datasource UID.")
 		return uid
 	}
-	async metrics(host: string, range: MetricRange, now = Date.now()): Promise<MachineMetrics> {
+	async metrics(host: string, range: MetricRange, now = Date.now(), diskOnly = false): Promise<MachineMetrics> {
 		validateMetricHost(host)
 		const duration = METRIC_RANGES[range]
 		if (!duration) throw new Error("Choose a supported time range.")
@@ -406,7 +406,7 @@ export class GrafanaClient {
 		const panels = flattenPanels(dashboard.panels)
 		const sources = new Map<string, Promise<number>>()
 		const results = await Promise.all(
-			MACHINE_METRICS.map(async (kind) => {
+			MACHINE_METRICS.filter((kind) => !diskOnly || kind === "disk").map(async (kind) => {
 				const panel = panels.find((p) => p.id === this.config.panels[kind])
 				const result = {
 					kind,

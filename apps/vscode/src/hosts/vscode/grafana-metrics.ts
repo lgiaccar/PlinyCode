@@ -81,17 +81,17 @@ export async function discoverGrafanaMetrics(): Promise<GrafanaSetup> {
 	return result
 }
 const cache = new Map<string, { expires: number; value: Promise<MachineMetrics> }>()
-export async function readGrafanaMetrics(host: string, range: string): Promise<MachineMetrics> {
+export async function readGrafanaMetrics(host: string, range: string, diskOnly = false): Promise<MachineMetrics> {
 	trusted()
 	validateMetricHost(host)
 	if (!Object.hasOwn(METRIC_RANGES, range)) throw new Error("Choose a supported time range.")
 	const { saved, identity, connection } = await client()
-	const key = JSON.stringify([saved, identity, host, range])
+	const key = JSON.stringify([saved, identity, host, range, diskOnly])
 	const cached = cache.get(key)
 	if (cached && cached.expires > Date.now()) return cached.value
 	// A small bounded cache shares results for multiple agents on the same machine.
 	if (cache.size >= 20) cache.delete(cache.keys().next().value as string)
-	const value = connection.metrics(host, range as MetricRange)
+	const value = connection.metrics(host, range as MetricRange, undefined, diskOnly)
 	cache.set(key, { expires: Date.now() + 30_000, value })
 	try {
 		return await value

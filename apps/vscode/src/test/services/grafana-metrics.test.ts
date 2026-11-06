@@ -83,6 +83,20 @@ describe("Grafana metric queries", () => {
 			}
 		}
 	})
+	it("queries only free disk space for collapsed agent summaries", async () => {
+		const expressions: { expr: string; instant: boolean; range: boolean }[] = []
+		const client = new GrafanaClient(config, "fixture", (async (url, init) => {
+			if (String(url).includes("/dashboards/")) return json(dashboard)
+			if (String(url).includes("/datasources/")) return json({ type: "prometheus" })
+			expressions.push(...JSON.parse(String(init?.body)).queries)
+			return json({ results: { Q0: { frames: [frame([1, 2, 3])] } } })
+		}) as typeof fetch)
+		const result = await client.metrics("build-01", "24h", 3000, true)
+		expect(result.results.map((result) => result.kind)).toEqual(["disk"])
+		expect(expressions).toEqual([
+			expect.objectContaining({ expr: 'disk_free{host="build-01"}', instant: true, range: false }),
+		])
+	})
 	it("resolves inherited default datasources and preserves unsupported panel choices", async () => {
 		const inherited = structuredClone(dashboard)
 		Object.assign(inherited.dashboard.panels[0], { datasource: { type: "prometheus" } })
