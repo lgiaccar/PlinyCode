@@ -31,11 +31,14 @@ function isCompletion(item: ChatListItem): boolean {
 
 function mustStayVisible(item: ChatListItem): boolean {
 	if (Array.isArray(item)) return false
+	// filterVisibleMessages keeps request rows only for errors/cancellations
+	// (or malformed payloads). Keep their diagnostic content outside activity.
+	if (item.type === "say" && item.say === "api_req_started") return true
 	return (
 		(item.type === "say" &&
 			(["error", "diff_error", "clineignore_error", "memory_proposal", "hook_status"].includes(item.say ?? "") ||
 				(item.say === "command" && item.commandCompleted !== true))) ||
-		(item.type === "ask" && ["mistake_limit_reached", "tool"].includes(item.ask ?? ""))
+		(item.type === "ask" && ["mistake_limit_reached", "tool", "resume_task"].includes(item.ask ?? ""))
 	)
 }
 

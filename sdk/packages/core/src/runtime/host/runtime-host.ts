@@ -389,6 +389,7 @@ export interface RuntimeHost {
 	startSession(input: StartSessionInput): Promise<StartSessionResult>;
 	runTurn(input: SendSessionInput): Promise<AgentResult | undefined>;
 	restoreSession(input: RestoreSessionInput): Promise<RestoreSessionResult>;
+	/** Signal cancellation immediately, pause queued input, and resolve after the active turn drains. */
 	abort(sessionId: string, reason?: unknown): Promise<void>;
 	stopSession(sessionId: string): Promise<void>;
 	dispose(reason?: string): Promise<void>;

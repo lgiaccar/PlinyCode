@@ -114,6 +114,8 @@ export interface ExtensionState {
 	compactionStrategy?: string
 	/** `plinycode.compaction.threshold`: auto-condense runs at this share of the model's input limit (0.1 to 0.95). */
 	compactionThreshold?: number
+	/** `plinycode.chat.fontSize`: font size in pixels for the chat panel (10–24). Default 13. */
+	chatFontSize?: number
 	webSearchEnabled?: boolean
 	/** `plinycode.updates.prerelease`: the auto-updater also installs pre-releases. */
 	prereleaseUpdatesEnabled?: boolean

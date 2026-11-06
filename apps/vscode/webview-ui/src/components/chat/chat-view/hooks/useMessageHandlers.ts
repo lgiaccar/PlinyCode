@@ -48,12 +48,13 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 			// ignores the flag on approvals, answers to a pending question and queued messages.
 			const sideQuestion = options?.offTheRecord ? { offTheRecord: true } : {}
 			if (requestedDelivery === "interrupt" && turnState?.phase === "streaming") {
-				if (backgroundCommandRunning) {
-					await TaskServiceClient.cancelBackgroundCommand(EmptyRequest.create({})).catch((err) =>
-						console.error("Failed to cancel background command:", err),
-					)
-				}
-				await TaskServiceClient.cancelTask(EmptyRequest.create({}))
+				await Promise.all([
+					TaskServiceClient.cancelTask(EmptyRequest.create({})),
+					backgroundCommandRunning &&
+						TaskServiceClient.cancelBackgroundCommand(EmptyRequest.create({})).catch((err) =>
+							console.error("Failed to cancel background command:", err),
+						),
+				])
 			}
 
 			let messageToSend = text.trim()
@@ -514,12 +515,13 @@ export function useMessageHandlers(messages: ClineMessage[], chatState: ChatStat
 					setSendingDisabled(true)
 					setEnableButtons(false)
 					try {
-						if (backgroundCommandRunning) {
-							await TaskServiceClient.cancelBackgroundCommand(EmptyRequest.create({})).catch((err) =>
-								console.error("Failed to cancel background command:", err),
-							)
-						}
-						await TaskServiceClient.cancelTask(EmptyRequest.create({}))
+						await Promise.all([
+							TaskServiceClient.cancelTask(EmptyRequest.create({})),
+							backgroundCommandRunning &&
+								TaskServiceClient.cancelBackgroundCommand(EmptyRequest.create({})).catch((err) =>
+									console.error("Failed to cancel background command:", err),
+								),
+						])
 					} finally {
 						cancelInFlightRef.current = false
 						// Clear any pending state that might interfere with resume

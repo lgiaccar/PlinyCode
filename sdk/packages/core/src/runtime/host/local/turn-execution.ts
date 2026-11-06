@@ -111,7 +111,10 @@ export async function executeTurn(
 			prompt,
 			preparedInput.userImages,
 			preparedInput.userFiles,
-			input.offTheRecord ? { offTheRecord: true } : undefined,
+			{
+				...(input.offTheRecord ? { offTheRecord: true } : {}),
+				abortSignal: session.turnAbortController?.signal,
+			},
 		);
 	} finally {
 		await host.refreshActiveSessionGitMetadata(session);
@@ -192,13 +195,6 @@ export async function completeAbortedInteractiveTurn(
 		usage,
 	});
 	await completeInteractiveTurn(host, session, "aborted");
-	// The abort is fully settled (aborting flag reset above), so prompts
-	// the user queued behind the stopped turn can run now. This mirrors
-	// the drain in runTurn() for turns that resolve with an "aborted"
-	// finish; this path handles turns that end by throwing instead.
-	queueMicrotask(() => {
-		void host.pendingPromptsController.drain(session.sessionId);
-	});
 	return {
 		text: "",
 		usage,
@@ -240,8 +236,8 @@ async function executeAgentTurn(
 	session.turnSettledAgents = new Set<string>();
 
 	try {
-		// Options are passed only when there are any, so an ordinary turn calls
-		// run/continue exactly as before they existed.
+		// The host's signal retains a cancel received during input preparation;
+		// the runtime records that input, then stops before calling the model.
 		const optionArgs: [SessionRunOptions] | [] = runOptions ? [runOptions] : [];
 		const runFn = shouldContinue
 			? () =>
@@ -428,8 +424,17 @@ async function runWithAuthRetry(
 			throw error;
 		}
 		await host.syncOAuthCredentials(session, { forceRefresh: true });
+		throwIfTurnCancelled(session);
 		session.agent.restore(baselineMessages);
 		return run();
+	}
+}
+
+function throwIfTurnCancelled(session: ActiveSession): void {
+	if (session.aborting) {
+		const error = new Error("Request cancelled");
+		error.name = "AbortError";
+		throw error;
 	}
 }
 

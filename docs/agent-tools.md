@@ -2,6 +2,14 @@
 
 How the tools the model works with behave, where that differs from what a model would assume. The definitions are in `sdk/packages/core/src/extensions/tools/` (engine) and `apps/vscode/src/sdk/` (tools the extension adds).
 
+## Cancelling and resuming a request
+
+**Cancel** signals the running request immediately and shows **Request Cancelled** with **Resume Task**. The model request and background-command cleanup are requested together. A tool that has already started receives its abort signal; no later tool in the batch may start. Cancellation does not undo completed edits or external actions.
+
+Queued and steered messages remain visible and editable after cancellation, but do not run automatically. **Resume Task**, or a new ordinary follow-up, waits for the cancelled turn's transcript and cleanup to settle, then continues the same session. Queued messages may run after that continuation. Cancelling a queue-initiated turn also pauses the remaining queue rather than discarding typed input.
+
+The engine tracks the whole turn, including input preparation, retries and persistence. Cancellation survives those asynchronous boundaries; recovery cannot start another model call after Cancel. The extension also invalidates prepared sends and ignores their late completion callbacks. A request cancelled before it was sent remains available for a bare Resume, including its attachments.
+
 ## Editing (`editor`)
 
 `old_text` has to identify one place in the file. Matching is in `executors/text-replace.ts` (`replaceTextInContent`), which both the executor and the VS Code diff preview call, so the preview shows what will be written.
@@ -115,6 +123,11 @@ With Terminal Execution Mode set to VS Code Terminal (the default), commands
 run in a PlinyCode terminal, and the output is read through shell integration
 (`VscodeTerminalProcess`).
 
+PlinyCode starts command terminals hidden, so running a command does not open
+the terminal panel or an editor tab. To watch one, run **PlinyCode: Show Agent
+Terminal** from the Command Palette and select the terminal if several are
+running. Revealing it does not interrupt the command or its output stream.
+
 - **The `commands` argument must be an array.** A list written as a string
   (`"['git status']"`, the Python shape some models fall into) is repaired
   into an array when it parses as one, and otherwise refused with
@@ -217,10 +230,10 @@ run in a PlinyCode terminal, and the output is read through shell integration
     narrow in the editor area gets a warning of its own, which suggests
     widening the editor group or Background Exec.
   - **`plinycode.terminal.location`.** `panel` (the default) or `editor`.
-    With `editor`, PlinyCode's terminals open as tabs in the active editor
-    group, without taking focus: not beside it, since a split halves the
-    width. Only a terminal in the chosen location is reused. A background
-    task's terminals stay in the panel, so they never open a tab.
+    With `editor`, revealing a PlinyCode terminal opens it as a tab in the
+    active editor group: not beside it, since a split halves the width. Only
+    a terminal in the chosen location is reused. A background task's
+    terminals stay in the panel.
   - **Nothing happens on its own.** A command is never re-run, and never moved
     out of the terminal, because the terminal is narrow. Running it without a
     terminal would change its shell profile, its environment (other

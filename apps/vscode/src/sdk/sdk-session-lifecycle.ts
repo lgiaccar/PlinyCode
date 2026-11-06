@@ -106,6 +106,47 @@ export class SdkSessionLifecycle {
 	private readonly pendingStops = new Map<string, Promise<void>>()
 	/** Orders the sends that wait on the editor state; see fireAndForgetSend. */
 	private outboundSends: Promise<void> = Promise.resolve()
+	private cancellationVersion = 0
+	private readonly pendingCancellations = new Map<string, Promise<void>>()
+	private readonly sendVersions = new WeakMap<ActiveSession, number>()
+	private readonly unsentRequests = new Map<string, { prompt: string; images?: string[]; files?: string[] }>()
+
+	rememberUnsentRequest(sessionId: string, prompt: string, images?: string[], files?: string[]): void {
+		this.unsentRequests.set(sessionId, { prompt, images, files })
+	}
+
+	getUnsentRequest(sessionId: string): { prompt: string; images?: string[]; files?: string[] } | undefined {
+		return this.unsentRequests.get(sessionId)
+	}
+
+	getCancellationVersion(): number {
+		return this.cancellationVersion
+	}
+
+	/** Invalidate prepared sends synchronously; the host drains the actual turn. */
+	cancelActiveTurn(): Promise<void> {
+		this.cancellationVersion++
+		const session = this.activeSession
+		if (!session) return Promise.resolve()
+		this.sendVersions.set(session, (this.sendVersions.get(session) ?? 0) + 1)
+		const pending = this.pendingCancellations.get(session.sessionId)
+		if (pending) return pending
+		const cancelled = session.sdkHost.abort(session.sessionId, "user_cancel").finally(() => {
+			if (this.pendingCancellations.get(session.sessionId) === cancelled) {
+				this.pendingCancellations.delete(session.sessionId)
+			}
+		})
+		this.pendingCancellations.set(session.sessionId, cancelled)
+		return cancelled
+	}
+
+	async waitForCancellation(sessionId: string): Promise<void> {
+		await this.pendingCancellations.get(sessionId)
+	}
+
+	isCancelling(sessionId: string): boolean {
+		return this.pendingCancellations.has(sessionId)
+	}
 	/**
 	 * Sessions whose running turn answers an off-the-record side question,
 	 * each with its send's own token. Keyed by session id: a background task's
@@ -195,6 +236,7 @@ export class SdkSessionLifecycle {
 		}
 
 		this.safeUnsubscribe(activeSession, reason)
+		this.unsentRequests.delete(activeSession.sessionId)
 		this.flushRunTime(activeSession)
 		// Drop the router's per-session state (call log, sticky model, failover
 		// budget). Model health is process-wide and deliberately survives.
@@ -510,6 +552,7 @@ export class SdkSessionLifecycle {
 		// A side question starts a turn of its own; a queued or steering message
 		// joins someone else's turn, so the flag does not apply to it.
 		const offTheRecord = options.offTheRecord === true && delivery === undefined
+		if (delivery === undefined && !isSyntheticUserPrompt(prompt)) this.rememberUnsentRequest(sessionId, prompt, images, files)
 		// Captured by object identity, not sessionId: rebuilds (mode change) reuse
 		// the same sessionId for the replacement session, so only reference
 		// equality can tell this send's session apart from a successor. If the
@@ -518,7 +561,10 @@ export class SdkSessionLifecycle {
 		// auto-continued run to isRunning=false, which makes the event coordinator
 		// treat the new turn's completion as a cancelled-turn straggler).
 		const sessionAtSend = this.activeSession
+		const sendVersion = sessionAtSend ? (this.sendVersions.get(sessionAtSend) ?? 0) : 0
+		const wasCancelled = () => !!sessionAtSend && (this.sendVersions.get(sessionAtSend) ?? 0) !== sendVersion
 		const isSuperseded = (label: string, error?: unknown): boolean => {
+			if (wasCancelled()) return true
 			if (this.activeSession === sessionAtSend) {
 				return false
 			}
@@ -556,6 +602,8 @@ export class SdkSessionLifecycle {
 			}
 		}
 		const send = (outboundPrompt: string): void => {
+			if (wasCancelled()) return
+			if (delivery === undefined) this.unsentRequests.delete(sessionId)
 			sdkHost
 				.send({
 					sessionId,
@@ -608,6 +656,7 @@ export class SdkSessionLifecycle {
 		const userTyped = prompt.trim().length > 0 && !isSyntheticUserPrompt(prompt)
 		this.outboundSends = this.outboundSends
 			.then(async () => {
+				if (wasCancelled()) return
 				// A side question sees the editor too, but is not remembered as having been
 				// told: the next message on the record still gets any change.
 				const read = () =>

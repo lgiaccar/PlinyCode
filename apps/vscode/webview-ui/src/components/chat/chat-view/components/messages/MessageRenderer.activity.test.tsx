@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { groupActivityRows } from "../../utils/activityGroups"
+import { filterVisibleMessages } from "../../utils/messageUtils"
 import { createMessageRenderer } from "./MessageRenderer"
 
 vi.mock("@/context/ExtensionStateContext", () => ({
@@ -26,6 +27,61 @@ const say = (ts: number, kind: ClineMessage["say"], text: string): ClineMessage 
 })
 
 describe("activity disclosure", () => {
+	it("keeps cancellation visible after a follow-up while hiding empty resume controls", () => {
+		const messages: ClineMessage[] = [
+			say(1, "reasoning", "Private thinking"),
+			{ ts: 2, type: "ask", ask: "resume_task", text: "Request cancelled" },
+			{ ts: 3, type: "ask", ask: "resume_task", text: "" },
+			say(4, "user_feedback", "Continue"),
+			say(5, "text", "Resumed answer"),
+		]
+		const visible = filterVisibleMessages(messages)
+		expect(visible.map((message) => message.ts)).not.toContain(3)
+		const rows = groupActivityRows(visible)
+		const renderItem = createMessageRenderer(rows, messages, {}, vi.fn(), vi.fn(), vi.fn(), vi.fn(), "", {} as never, false, {
+			isExpanded: () => false,
+			onToggle: vi.fn(),
+		})
+		render(<div>{rows.map((row, index) => renderItem(index, row))}</div>)
+		expect(screen.getByText("Request cancelled")).toBeInTheDocument()
+		expect(screen.getByText("Resumed answer")).toBeInTheDocument()
+		expect(screen.queryByText("Private thinking")).toBeNull()
+	})
+
+	it("shows request failures while activity stays collapsed, including after recovery", () => {
+		const failure = say(2, "api_req_started", JSON.stringify({ streamingFailedMessage: "Gateway unavailable" }))
+		const rows = groupActivityRows([
+			say(1, "reasoning", "Private thinking"),
+			failure,
+			say(3, "reasoning", "Retrying"),
+			say(4, "completion_result", "Recovered"),
+		])
+		const renderItem = createMessageRenderer(
+			rows,
+			rows.flat(),
+			{},
+			vi.fn(),
+			vi.fn(),
+			vi.fn(),
+			vi.fn(),
+			"",
+			{} as never,
+			false,
+			{
+				isExpanded: () => false,
+				onToggle: vi.fn(),
+			},
+		)
+		render(<div>{rows.map((row, index) => renderItem(index, row))}</div>)
+		expect(screen.getByText(/Gateway unavailable/)).toBeInTheDocument()
+		expect(screen.getByText("Recovered")).toBeInTheDocument()
+		expect(screen.queryByText("Private thinking")).toBeNull()
+		expect(screen.queryByText("Retrying")).toBeNull()
+		for (const disclosure of screen.getAllByRole("button", { name: "Show activity" })) {
+			expect(disclosure).toHaveAttribute("aria-expanded", "false")
+		}
+	})
+
 	it("shows only the answer until the user expands the activity", async () => {
 		const editRecord = JSON.stringify({ tool: "editedExistingFile", path: "test.ts", content: "updated content" })
 		const commandRecord = "git grep example\n[Command exited with code 1]\nThe term 'head' is not recognized"

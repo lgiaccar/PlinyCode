@@ -21,6 +21,7 @@ const ClineCommands = {
 	CiBoardButton: prefix + ".ciBoardButtonClicked",
 	PipelinesButton: prefix + ".pipelinesButtonClicked",
 	TerminalOutput: prefix + ".addTerminalOutputToChat",
+	ShowAgentTerminal: prefix + ".showAgentTerminal",
 	AddToChat: prefix + ".addToChat",
 	FixWithCline: prefix + ".fixWithCline",
 	ExplainCode: prefix + ".explainCode",

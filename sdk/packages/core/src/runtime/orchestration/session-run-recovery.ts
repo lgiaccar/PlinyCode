@@ -18,6 +18,7 @@ import type { RuntimeEventAdapter } from "./runtime-event-adapter";
 const MAX_RUN_RECOVERY_ATTEMPTS = 3;
 
 interface SessionRunInput {
+	abortSignal?: AbortSignal;
 	userMessage?: string;
 	userImages?: string[];
 	userFiles?: string[];
@@ -142,7 +143,9 @@ export class SessionRunRecovery {
 				errorClass,
 				attempt,
 			});
-			if (!recovered) {
+			// Recovery hooks can wait for backoff or credentials. Cancellation
+			// during that wait must not start a fresh runtime afterward.
+			if (!recovered || this.abortRequested || this.shutdownCalled) {
 				break;
 			}
 
@@ -152,6 +155,10 @@ export class SessionRunRecovery {
 
 		// Whatever the outcome, a failure that was never recovered must still be
 		// reported to listeners exactly as it would be without recovery.
+		if (this.abortRequested) {
+			this.discardDeferredRunFailure();
+			return { ...result, finishReason: "aborted" };
+		}
 		if (result.finishReason === "error") {
 			this.replayDeferredRunFailure();
 		} else {
@@ -199,7 +206,12 @@ export class SessionRunRecovery {
 				return false as const;
 			});
 
-		if (!decision || decision.retry !== true) {
+		if (
+			this.abortRequested ||
+			this.shutdownCalled ||
+			!decision ||
+			decision.retry !== true
+		) {
 			return undefined;
 		}
 

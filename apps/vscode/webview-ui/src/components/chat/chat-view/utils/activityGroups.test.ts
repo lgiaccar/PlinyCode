@@ -140,4 +140,14 @@ describe("groupActivityRows", () => {
 		const result = groupActivityRows([say(1, "reasoning"), error, memory])
 		expect(result.slice(1)).toEqual([error, memory])
 	})
+
+	it("keeps a failed request visible after work resumes", () => {
+		const failure = say(2, "api_req_started", JSON.stringify({ streamingFailedMessage: "Gateway unavailable" }))
+		const answer = say(4, "completion_result", "Recovered")
+		const result = groupActivityRows([say(1, "reasoning"), failure, say(3, "reasoning"), answer])
+		expect(result[1]).toBe(failure)
+		expect(isActivityGroup(result[0])).toBe(true)
+		expect(isActivityGroup(result[2])).toBe(true)
+		expect(result[3]).toBe(answer)
+	})
 })

@@ -378,6 +378,31 @@ describe("SdkDiffEditCoordinator", () => {
 		})
 	})
 
+	it.each(["editor", "apply_patch"])("does not write when cancelled while opening the %s preview", async (tool) => {
+		await writeFile("a.ts", "old content\n")
+		const controller = new AbortController()
+		previewTweak = (preview) => {
+			const open = preview.open.bind(preview)
+			preview.open = async (content) => {
+				await open(content)
+				controller.abort(new Error("Request Cancelled"))
+			}
+		}
+		const context = makeContext("tc-cancel", controller.signal)
+		const pending =
+			tool === "editor"
+				? coordinator.executeEditorTool({ path: "a.ts", old_text: "old", new_text: "new" }, tempDir, context)
+				: coordinator.executeApplyPatchTool(
+						{ input: "*** Begin Patch\n*** Update File: a.ts\n@@\n-old content\n+new content\n*** End Patch" },
+						tempDir,
+						context,
+					)
+		await expect(pending).rejects.toThrow("Request Cancelled")
+		expect(fallbackEditor).not.toHaveBeenCalled()
+		expect(fallbackApplyPatch).not.toHaveBeenCalled()
+		expect(previews[0].closed).toBe(1)
+	})
+
 	it("opens a preview for a multi-line edit in a CRLF file (issue #13296)", async () => {
 		await writeFile("crlf.ts", "line1\r\nline2\r\nline3")
 		await coordinator.openForApproval("tc1", "editor", {

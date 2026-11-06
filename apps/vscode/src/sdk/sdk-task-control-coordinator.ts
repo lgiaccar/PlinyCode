@@ -76,31 +76,15 @@ export class SdkTaskControlCoordinator {
 	constructor(private readonly options: SdkTaskControlCoordinatorOptions) {}
 
 	async cancelTask(): Promise<void> {
-		this.options.interactions.clearPending("Task cancelled")
-
 		const activeSession = this.options.sessions.getActiveSession()
-		if (!activeSession) {
+		this.options.raiseCancelFence?.()
+		const cancellation = this.options.sessions.cancelActiveTurn()
+		this.options.interactions.clearPending("Task cancelled")
+		const sessionId = activeSession?.sessionId ?? this.options.getTask()?.taskId
+		if (!sessionId) {
+			await cancellation
 			Logger.warn("[SdkController] cancelTask: No active session")
 			return
-		}
-
-		const { sdkHost, sessionId } = activeSession
-
-		// FENCE FIRST: raise the cancel fence synchronously BEFORE awaiting the abort. Any event
-		// the SDK emits after this point carries the old epoch (dropped by the webview) and is
-		// marked cancelled (display suppressed by the session-event coordinator; usage still
-		// accounted). Order matters — aborting first would leave a window where a straggler gets
-		// the new epoch.
-		this.options.raiseCancelFence?.()
-
-		try {
-			await sdkHost.abort(sessionId, "user_cancel")
-		} catch (error) {
-			if (!isAbortError(error)) {
-				Logger.error("[SdkController] Failed to abort session:", error)
-			} else {
-				Logger.debug(`[SdkController] AbortError during cancelTask (expected): ${sessionId}`)
-			}
 		}
 
 		this.options.sessions.setRunning(false)
@@ -109,12 +93,18 @@ export class SdkTaskControlCoordinator {
 			ts: Date.now(),
 			type: "ask",
 			ask: "resume_task",
-			text: "",
+			text: "Request Cancelled",
 			partial: false,
 		}
 		this.options.messages.appendAndEmit([resumeMessage], { type: "status", payload: { sessionId, status: "cancelled" } })
 
-		await this.options.postStateToWebview()
+		// Feedback is immediate; Resume waits on cancellation before starting work.
+		await Promise.all([
+			this.options.postStateToWebview(),
+			cancellation.catch((error) => {
+				if (!isAbortError(error)) Logger.error("[SdkController] Failed to abort session:", error)
+			}),
+		])
 		Logger.log(`[SdkController] Task cancelled: ${sessionId}`)
 	}
 

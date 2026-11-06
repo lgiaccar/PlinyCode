@@ -205,11 +205,6 @@ export class PendingPromptService {
 		state.pendingPrompts.unshift(entry);
 		return snapshotPrompts(state);
 	}
-
-	clear(state: PendingPromptQueueState): SessionPendingPrompt[] {
-		state.pendingPrompts.length = 0;
-		return [];
-	}
 }
 
 export class PendingPromptsController {
@@ -242,7 +237,8 @@ export class PendingPromptsController {
 		if (
 			result.updated &&
 			result.prompt?.delivery === "steer" &&
-			!session.aborting
+			!session.aborting &&
+			!session.pendingPromptsPaused
 		) {
 			session.agent.notifyPendingUserMessage();
 		}
@@ -276,13 +272,16 @@ export class PendingPromptsController {
 		if (!session) return;
 		// The queue survives aborts and is visible while one settles, so
 		// queue operations must keep working during the abort window: a
-		// prompt typed right after Escape joins the queue instead of being
-		// silently dropped, and queued prompts stay editable/deletable before
-		// they auto-run. scheduleDrain/drain still refuse to run while the
-		// abort is settling.
+		// prompt typed right after Cancel joins the queue instead of being
+		// silently dropped. Editing/deleting it does not release the hold;
+		// only an explicit new turn allows the queue to drain again.
 		this.service.enqueue(session, entry);
 		this.emitPrompts(session);
-		if (entry.delivery === "steer" && !session.aborting) {
+		if (
+			entry.delivery === "steer" &&
+			!session.aborting &&
+			!session.pendingPromptsPaused
+		) {
 			session.agent.notifyPendingUserMessage();
 		}
 		this.scheduleDrain(sessionId, session);
@@ -290,23 +289,13 @@ export class PendingPromptsController {
 
 	consumeSteer(sessionId: string): PendingPromptEntry | undefined {
 		const session = this.deps.getSession(sessionId);
-		if (!session) return undefined;
+		if (!session || session.aborting || session.pendingPromptsPaused)
+			return undefined;
 		const { entry: steer } = this.service.consumeSteer(session);
 		if (!steer) return undefined;
 		this.emitPrompts(session);
 		this.emitSubmitted(session, steer);
 		return steer;
-	}
-
-	/**
-	 * Drops every queued prompt. Only called when the user aborts a
-	 * queue-initiated turn — that gesture means "stop the queued work", not
-	 * just "stop this response", so the remainder must not auto-run.
-	 */
-	discardQueue(session: ActiveSession): void {
-		if (session.pendingPrompts.length === 0) return;
-		this.service.clear(session);
-		this.emitPrompts(session);
 	}
 
 	emitPrompts(session: ActiveSession): void {
@@ -322,6 +311,8 @@ export class PendingPromptsController {
 	scheduleDrain(sessionId: string, session: ActiveSession): void {
 		if (
 			session.pendingPrompts.length === 0 ||
+			session.pendingPromptsPaused ||
+			session.activeTurn ||
 			session.aborting ||
 			session.drainingPendingPrompts ||
 			!session.agent.canStartRun()
@@ -336,7 +327,12 @@ export class PendingPromptsController {
 	async drain(sessionId: string): Promise<void> {
 		const session = this.deps.getSession(sessionId);
 		if (!session) return;
-		if (session.aborting || session.drainingPendingPrompts) {
+		if (
+			session.aborting ||
+			session.pendingPromptsPaused ||
+			session.activeTurn ||
+			session.drainingPendingPrompts
+		) {
 			return;
 		}
 		if (!session.agent.canStartRun()) {

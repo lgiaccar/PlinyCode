@@ -137,6 +137,8 @@ export interface SessionRuntimeOrchestratorDeps {
 
 /** Per-run options for `SessionRuntime.run` / `continue`. */
 export interface SessionRunOptions {
+	/** Cancels preparation as well as execution without dropping the user's input. */
+	readonly abortSignal?: AbortSignal;
 	/**
 	 * Ask this message off the record: the turn it starts is answered without
 	 * changing any file, and later requests leave it out (see
@@ -339,7 +341,7 @@ export class SessionRuntime {
 
 	/** True when no run is currently active and the session is not shut down. */
 	canStartRun(): boolean {
-		return !this.running && !this.shutdownCalled;
+		return !this.running && !this.activeRunPromise && !this.shutdownCalled;
 	}
 
 	/**
@@ -508,7 +510,7 @@ export class SessionRuntime {
 
 	/** Shut the session down after any active run drains. */
 	async shutdown(_reason?: string, _timeoutMs?: number): Promise<void> {
-		if (this.running) {
+		if (this.running || this.activeRunPromise) {
 			if (!this.abortRequested || !this.activeRunPromise) {
 				throw new SessionRunInProgressError(this.agentId);
 			}
@@ -538,6 +540,7 @@ export class SessionRuntime {
 			userFiles,
 			isContinue: false,
 			offTheRecord: options?.offTheRecord,
+			abortSignal: options?.abortSignal,
 		});
 	}
 
@@ -553,6 +556,7 @@ export class SessionRuntime {
 			userFiles,
 			isContinue: true,
 			offTheRecord: options?.offTheRecord,
+			abortSignal: options?.abortSignal,
 		});
 	}
 
@@ -583,12 +587,22 @@ export class SessionRuntime {
 	}
 
 	private executeRun(input: {
+		abortSignal?: AbortSignal;
 		userMessage?: string;
 		userImages?: string[];
 		userFiles?: string[];
 		isContinue: boolean;
 		offTheRecord?: boolean;
 	}): Promise<AgentResult> {
+		if (this.activeRunPromise) {
+			return Promise.reject(
+				new Error(
+					`SessionRuntime state is "running"; call canStartRun() first (agentId=${this.agentId})`,
+				),
+			);
+		}
+		this.abortRequested = false;
+		this.abortReason = undefined;
 		let activePromise!: Promise<AgentResult>;
 		activePromise = this.runRecovery
 			.executeRunWithRecovery(input)
@@ -602,6 +616,7 @@ export class SessionRuntime {
 	}
 
 	private async executeRunInternal(input: {
+		abortSignal?: AbortSignal;
 		userMessage?: string;
 		userImages?: string[];
 		userFiles?: string[];
@@ -619,8 +634,6 @@ export class SessionRuntime {
 			);
 		}
 		this.running = true;
-		this.abortRequested = false;
-		this.abortReason = undefined;
 		this.activeRunId = `run_${Date.now()}_${Math.random()
 			.toString(36)
 			.slice(2, 8)}`;
@@ -768,6 +781,10 @@ export class SessionRuntime {
 		});
 		const runtime = this.createAgentRuntimeImpl(runtimeConfig);
 		this.activeRuntime = runtime;
+		const abortTurn = () => this.abort(input.abortSignal?.reason);
+		if (input.abortSignal?.aborted) abortTurn();
+		else
+			input.abortSignal?.addEventListener("abort", abortTurn, { once: true });
 
 		// Subscribe to runtime events; fan out legacy events to listeners
 		// and keep private book-keeping for tool-call records / usage.
@@ -808,6 +825,7 @@ export class SessionRuntime {
 			thrownError = error instanceof Error ? error : new Error(String(error));
 		} finally {
 			unsubscribe();
+			input.abortSignal?.removeEventListener("abort", abortTurn);
 			this.config.abortSignal?.removeEventListener(
 				"abort",
 				this.handleExternalAbort,
@@ -826,8 +844,6 @@ export class SessionRuntime {
 			this.activeRuntime = null;
 			this.running = false;
 			this.activeRunOffTheRecord = false;
-			this.abortRequested = false;
-			this.abortReason = undefined;
 		}
 
 		// Persist the runtime's message trail back into the conversation

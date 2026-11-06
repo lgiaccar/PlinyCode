@@ -11,6 +11,60 @@ vi.mock("@/shared/services/Logger", () => ({
 }))
 
 describe("SdkFollowupCoordinator", () => {
+	it("resumes an unsent original request with its attachments exactly once", async () => {
+		const { coordinator, options } = makeCoordinator({ activeSession: makeActiveSession() })
+		vi.mocked(options.sessions.getUnsentRequest).mockReturnValue({
+			prompt: "original request",
+			images: ["image"],
+			files: ["file"],
+		})
+		await coordinator.askResponse(undefined, undefined, undefined, "yesButtonClicked", "resumable")
+		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledWith(
+			expect.anything(),
+			"session-123",
+			"resolved: original request",
+			["image"],
+			["file"],
+		)
+		expect(options.messages.appendAndEmit).not.toHaveBeenCalled()
+	})
+
+	it("waits for cancellation cleanup before resuming the live session", async () => {
+		const activeSession = makeActiveSession()
+		const { coordinator, options } = makeCoordinator({ activeSession })
+		let finishCancel!: () => void
+		vi.mocked(options.sessions.waitForCancellation).mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finishCancel = resolve
+				}),
+		)
+		const pending = coordinator.askResponse(undefined, undefined, undefined, "yesButtonClicked", "resumable")
+		await vi.waitFor(() => expect(options.sessions.waitForCancellation).toHaveBeenCalledOnce())
+		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
+		expect(options.resetMessageTranslator).not.toHaveBeenCalled()
+		finishCancel()
+		await pending
+		expect(options.sessions.fireAndForgetSend).toHaveBeenCalledOnce()
+	})
+
+	it("does not send a follow-up cancelled while resolving mentions", async () => {
+		const { coordinator, options } = makeCoordinator({ activeSession: makeActiveSession() })
+		let finishMentions!: (value: string) => void
+		options.resolveContextMentions.mockImplementation(
+			() =>
+				new Promise<string>((resolve) => {
+					finishMentions = resolve
+				}),
+		)
+		const pending = coordinator.askResponse("continue", undefined, undefined, "messageResponse", "resumable")
+		await vi.waitFor(() => expect(options.resolveContextMentions).toHaveBeenCalledOnce())
+		vi.mocked(options.sessions.getCancellationVersion).mockReturnValue(1)
+		finishMentions("continue")
+		await pending
+		expect(options.sessions.fireAndForgetSend).not.toHaveBeenCalled()
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
@@ -665,6 +719,10 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 			resolvePendingAskQuestion: vi.fn(() => false),
 		},
 		sessions: {
+			getCancellationVersion: vi.fn(() => 0),
+			getUnsentRequest: vi.fn(),
+			rememberUnsentRequest: vi.fn(),
+			waitForCancellation: vi.fn().mockResolvedValue(undefined),
 			getActiveSession: vi.fn(() => input.activeSession),
 			setRunning: vi.fn(),
 			fireAndForgetSend: vi.fn(),

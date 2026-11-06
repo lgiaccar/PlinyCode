@@ -23,6 +23,49 @@ vi.mock("./vscode-session-host", () => ({
 }))
 
 describe("SdkSessionLifecycle", () => {
+	it("drops a send cancelled while editor context is being read", async () => {
+		let finishRead!: (value: string) => void
+		const nextBlock = vi.fn(
+			() =>
+				new Promise<string>((resolve) => {
+					finishRead = resolve
+				}),
+		)
+		const sdkHost = makeSdkHost()
+		mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+		const lifecycle = makeLifecycle({ editorState: { nextBlock, syncWithTranscript: vi.fn() } })
+		const { sdkHost: host } = await lifecycle.startNewSession({} as StartInput)
+		lifecycle.fireAndForgetSend(host, "session-123", "original request")
+		await vi.waitFor(() => expect(nextBlock).toHaveBeenCalledOnce())
+		await lifecycle.cancelActiveTurn()
+		finishRead("editor context")
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(sdkHost.send).not.toHaveBeenCalled()
+	})
+
+	it("ignores a cancelled send's late completion after a new turn starts", async () => {
+		let finishSend!: () => void
+		const sdkHost = makeSdkHost({
+			send: vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						finishSend = resolve
+					}),
+			),
+		})
+		mockCreateSessionHost.mockResolvedValueOnce(sdkHost)
+		const onSendComplete = vi.fn()
+		const lifecycle = makeLifecycle({ onSendComplete })
+		const { sdkHost: host } = await lifecycle.startNewSession({} as StartInput)
+		lifecycle.fireAndForgetSend(host, "session-123", "original request")
+		await lifecycle.cancelActiveTurn()
+		lifecycle.setRunning(true)
+		finishSend()
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(onSendComplete).not.toHaveBeenCalled()
+		expect(lifecycle.getActiveSession()?.isRunning).toBe(true)
+	})
+
 	beforeEach(() => {
 		mockCreateSessionHost.mockReset()
 	})
@@ -1015,6 +1058,7 @@ function makeSdkHost(overrides: Record<string, unknown> = {}) {
 			startResult,
 			checkpoint: { ref: "abc", createdAt: 1, runCount: 1 },
 		}),
+		abort: vi.fn().mockResolvedValue(undefined),
 		stop: vi.fn().mockResolvedValue(undefined),
 		dispose: vi.fn().mockResolvedValue(undefined),
 		...overrides,

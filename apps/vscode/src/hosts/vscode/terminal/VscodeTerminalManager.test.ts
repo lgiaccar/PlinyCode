@@ -128,26 +128,7 @@ describe("VscodeTerminalManager", () => {
 		assert.equal(terminalInfo.busy, true)
 		assert.equal(terminalInfo.pendingCwdChange, undefined)
 		assert.equal(terminalInfo.cwdResolved, undefined)
-	})
-
-	it("releases a reused terminal reservation when showing it fails", async () => {
-		const terminalInfo: TerminalInfo = {
-			id: 1,
-			busy: false,
-			lastCommand: "",
-			lastActive: Date.now(),
-			terminal: {
-				shellIntegration: { cwd: vscode.Uri.file("/tmp/cline-original") },
-				show: sandbox.stub().throws(new Error("terminal closed")),
-			} as unknown as vscode.Terminal,
-		}
-		sandbox.stub(TerminalRegistry, "getAllTerminals").returns([terminalInfo])
-
-		await assert.rejects(manager.getOrCreateTerminal("/tmp/cline-target"), /terminal closed/)
-
-		assert.equal(terminalInfo.busy, false)
-		assert.equal(terminalInfo.pendingCwdChange, undefined)
-		assert.equal(terminalInfo.cwdResolved, undefined)
+		assert.equal((terminalInfo.terminal.show as sinon.SinonStub).called, false)
 	})
 
 	it("creates a fresh terminal when the reused-terminal cwd command cannot start", async () => {
@@ -502,13 +483,14 @@ describe("VscodeTerminalManager", () => {
 		try {
 			const options = terminalInfo.terminal.creationOptions as vscode.TerminalOptions
 			assert.equal(options.isTransient, true)
+			assert.equal(options.hideFromUser, true)
 		} finally {
 			terminalInfo.terminal.dispose()
 			TerminalRegistry.removeTerminal(terminalInfo.id)
 		}
 	})
 
-	it("reveals the terminal without taking focus when running a command", () => {
+	it("runs a command without revealing the terminal", () => {
 		const show = sandbox.stub()
 		const terminalInfo: TerminalInfo = {
 			id: 1,
@@ -525,7 +507,7 @@ describe("VscodeTerminalManager", () => {
 			.runCommand(terminalInfo as unknown as Parameters<VscodeTerminalManager["runCommand"]>[0], "echo hi")
 			.catch(() => {})
 
-		assert.equal(show.calledOnceWith(true), true)
+		assert.equal(show.called, false)
 	})
 
 	it("closes a terminal whose cwd setup failed at the next acquisition", async () => {

@@ -868,41 +868,14 @@ export class LocalRuntimeHost implements RuntimeHost {
 		}
 		this.emitStatus(sessionId, active.status);
 
-		let result: AgentResult | undefined;
-		try {
-			if (startInput.prompt?.trim()) {
-				result = await executeTurn(this.turnHost, active, {
+		const result = startInput.prompt?.trim()
+			? await this.startTurn(active, {
+					sessionId,
 					prompt: startInput.prompt,
 					userImages: startInput.userImages,
 					userFiles: startInput.userFiles,
-				});
-				if (!active.interactive) {
-					await this.finalizeSingleRun(active, result.finishReason);
-				} else {
-					await completeInteractiveTurn(
-						this.turnHost,
-						active,
-						result.finishReason,
-					);
-				}
-			}
-		} catch (error) {
-			if (active.interactive && active.aborting) {
-				result = await completeAbortedInteractiveTurn(this.turnHost, active);
-			} else {
-				try {
-					await this.failSession(active);
-				} catch (cleanupError) {
-					// Never let cleanup failures mask the error that actually
-					// killed the turn; that one is what callers must see.
-					active.config.logger?.error?.("Session failure cleanup threw", {
-						sessionId: active.sessionId,
-						error: cleanupError,
-					});
-				}
-				throw error;
-			}
-		}
+				})
+			: undefined;
 
 		return {
 			sessionId,
@@ -948,7 +921,12 @@ export class LocalRuntimeHost implements RuntimeHost {
 
 	async runTurn(input: SendSessionInput): Promise<AgentResult | undefined> {
 		const session = this.getSessionOrThrow(input.sessionId);
-		const canStartRun = session.agent.canStartRun();
+		// A deliberate resume waits for the cancelled turn's transcript/cleanup.
+		// Queue edits never release the cancellation hold.
+		if (input.delivery === undefined && session.aborting) {
+			await session.activeTurn?.catch(() => undefined);
+		}
+		const canStartRun = !session.activeTurn && session.agent.canStartRun();
 		const delivery =
 			input.delivery ??
 			(session.interactive && !canStartRun ? ("queue" as const) : undefined);
@@ -963,6 +941,37 @@ export class LocalRuntimeHost implements RuntimeHost {
 			});
 			return undefined;
 		}
+		return this.startTurn(session, input);
+	}
+
+	private async startTurn(
+		session: ActiveSession,
+		input: SendSessionInput,
+	): Promise<AgentResult> {
+		session.pendingPromptsPaused = false;
+		session.aborting = false;
+		session.turnAbortController = new AbortController();
+		const turn = this.runSessionTurn(session, input);
+		session.activeTurn = turn;
+		let drain = false;
+		try {
+			const result = await turn;
+			drain = result.finishReason !== "error";
+			return result;
+		} finally {
+			if (session.activeTurn === turn) {
+				session.activeTurn = undefined;
+				session.turnAbortController = undefined;
+			}
+			if (drain)
+				this.pendingPromptsController.scheduleDrain(input.sessionId, session);
+		}
+	}
+
+	private async runSessionTurn(
+		session: ActiveSession,
+		input: SendSessionInput,
+	): Promise<AgentResult> {
 		try {
 			const result = await executeTurn(this.turnHost, session, {
 				prompt: input.prompt,
@@ -980,24 +989,19 @@ export class LocalRuntimeHost implements RuntimeHost {
 					result.finishReason,
 				);
 			}
-			// Drain after "aborted" finishes too: both internal stops (loop
-			// detector / mistake limit) and user-initiated aborts keep the
-			// queue intact, so without a drain here the user-queued prompts
-			// would be stranded forever. "error" finishes deliberately do NOT
-			// drain — auto-running queued prompts into a failing provider
-			// would consume them; they stay queued and drain on the next
-			// enqueue/update or successful turn.
-			if (result.finishReason !== "error") {
-				queueMicrotask(() => {
-					void this.pendingPromptsController.drain(input.sessionId);
-				});
-			}
 			return result;
 		} catch (error) {
 			if (session.interactive && session.aborting) {
 				return await completeAbortedInteractiveTurn(this.turnHost, session);
 			}
-			await this.failSession(session);
+			try {
+				await this.failSession(session);
+			} catch (cleanupError) {
+				session.config.logger?.error?.("Session failure cleanup threw", {
+					sessionId: session.sessionId,
+					error: cleanupError,
+				});
+			}
 			throw error;
 		}
 	}
@@ -1015,19 +1019,13 @@ export class LocalRuntimeHost implements RuntimeHost {
 	async abort(sessionId: string, reason?: unknown): Promise<void> {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
-		// Aborting a user-initiated turn leaves pendingPrompts untouched:
-		// clearing here would silently destroy prompts the user already typed
-		// and queued — they drain once the abort completes. Aborting a
-		// queue-initiated turn (drainingPendingPrompts) is the opposite
-		// gesture: the user is cancelling the queued work itself, so drop the
-		// remainder — otherwise every Escape would consume one queued prompt
-		// and start a fresh provider call, and the session could never be
-		// brought to a full stop.
+		// Keep typed input, but stop every automatic path that could start it.
+		// The hold survives cleanup and is released only by an explicit turn.
 		session.aborting = true;
-		if (session.drainingPendingPrompts) {
-			this.pendingPromptsController.discardQueue(session);
-		}
+		session.pendingPromptsPaused = true;
+		session.turnAbortController?.abort(reason);
 		session.agent.abort(reason);
+		await session.activeTurn?.catch(() => undefined);
 	}
 
 	async proceedWhileRunning(

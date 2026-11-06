@@ -166,7 +166,9 @@ export function filterVisibleMessages(messages: ClineMessage[]): ClineMessage[] 
 				}
 				break
 			case "api_req_failed": // this message is used to update the latest api_req_started that the request failed
+				return false
 			case "resume_task":
+				return !!message.text?.trim()
 			case "resume_completed_task":
 				return false
 			case "use_subagents":

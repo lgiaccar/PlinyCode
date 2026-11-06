@@ -178,6 +178,7 @@ export class SdkDiffEditCoordinator {
 					Logger.warn(`[SdkDiffEditCoordinator] Failed to show auto-approve preview: ${error}`)
 				}
 			}
+			context.signal?.throwIfAborted()
 			const result = await this.fallbackEditorExecutor(input, cwd, context)
 			problems?.written()
 			if (!hadPreApprovalPreview && this.sessions.get(toolCallId)?.preview) {
@@ -233,6 +234,7 @@ export class SdkDiffEditCoordinator {
 				}
 			}
 
+			context.signal?.throwIfAborted()
 			const result = await this.fallbackApplyPatchExecutor(input, cwd, context)
 			problems?.written()
 			if (!hadPreApprovalPreview && this.sessions.get(toolCallId)?.preview) {

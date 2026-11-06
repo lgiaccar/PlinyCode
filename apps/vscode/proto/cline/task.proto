@@ -310,4 +310,3 @@ message UpdateAgentPathRequest {
   // New agent path; empty means generic agent (no custom agent)
   string agent_path = 2;
 }
-
