@@ -44,12 +44,13 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.5 prerelease** adds optional [Grafana machine metrics](docs/grafana-machine-metrics.md)
-in **Pipelines > Agents**: CPU/GPU load over 1h, 3h, 24h, 1 week or 30 days, available disk space,
-and hardware details supplied by your monitoring source. Connect your own server and read/query token;
-Prometheus-backed dashboard panels are supported. Missing metrics and partial history remain explicit.
-It also includes cancellation and chat-control improvements, while retaining the restored customization-tab
-scrolling and colored agent busy-time utilization. No collector or shared folder is required.
+The **0.2.9-test.6 prerelease** simplifies [Grafana machine metrics](docs/grafana-machine-metrics.md)
+in **Pipelines > Agents**: enter a token for the saved server, and dashboard, host-variable and panel
+selection are discovered and saved automatically. Opening an agent's machine metrics loads readings
+from its ADO computer name immediately. Manual setup remains under **Advanced setup** for exceptions.
+CPU/GPU history still supports 1h, 3h, 24h, 1 week and 30 days, with current available disk space and
+hardware details when collected. A fresh installation needs the server address once; no private endpoint
+is built in. No collector or shared folder is required.
 Enable **Install pre-releases** in **Settings > About** to receive test builds.
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
