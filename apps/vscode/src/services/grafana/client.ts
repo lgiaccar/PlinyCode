@@ -186,8 +186,14 @@ function discoverMapping(panels: Panel[]): Pick<GrafanaConfig, "panels" | "hostV
 			continue
 		const variables = new Set<string>()
 		for (const target of targets) {
-			for (const match of (target.expr ?? "").matchAll(/(?<!!)(?:=~|=)\s*"(?:\$(\w+)|\$\{(\w+)(?::regex)?\})"/g))
-				variables.add(match[1] ?? match[2])
+			for (const match of (target.expr ?? "").matchAll(
+				/\b([a-zA-Z_]\w*)\s*(?:=~|=)\s*"(?:\$(\w+)|\$\{(\w+)(?::regex)?\})"/g,
+			)) {
+				const variable = match[2] ?? match[3]
+				const hostName =
+					/^(?:exported_)?(?:host|hostname|instance|computer|machine|node|nodename|server|agent)(?:_name)?$/i
+				if (hostName.test(match[1]) || hostName.test(variable)) variables.add(variable)
+			}
 		}
 		if (variables.size !== 1) continue
 		const variable = [...variables][0]

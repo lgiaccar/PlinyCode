@@ -145,6 +145,13 @@ describe("Grafana metric queries", () => {
 		}) as typeof fetch)
 		expect((await client.discover()).config.panels.cpu).toBe(1)
 	})
+	it("does not treat a region selector as a machine selector", async () => {
+		const regional = structuredClone(dashboard)
+		regional.dashboard.panels = [{ ...regional.dashboard.panels[0], targets: [{ expr: 'cpu_load{region="$region"}' }] }]
+		const client = new GrafanaClient(config, "fixture", (async (url) =>
+			String(url).includes("/api/search") ? json([]) : json(regional)) as typeof fetch)
+		await expect(client.discover()).rejects.toThrow("No matching machine panels")
+	})
 	it("does not guess between equally matching dashboards", async () => {
 		const client = new GrafanaClient({ ...config, dashboardUid: "" }, "fixture", (async (url) =>
 			String(url).includes("/api/search")
