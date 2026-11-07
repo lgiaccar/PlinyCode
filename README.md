@@ -22,36 +22,27 @@ implement changes, run commands, and follow pull requests and pipelines from the
 Model requests go through the Synopsys Pliny gateway. You need gateway access and a Pliny API key to use it.
 Web search, MCP tools and DevOps integrations connect to their configured services; extension updates come from GitHub.
 
-## What's new in 0.2.8
+## What's new in 0.2.9
 
-[PlinyCode 0.2.8](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.8) is the latest stable release.
+[PlinyCode 0.2.9](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) is the latest stable release.
 
-- **Multiple agent pools:** monitor several Azure DevOps pools independently in **Pipelines > Agents**. Busy
-  agents show their pipeline, run and job details with links, and existing single-pool settings migrate automatically.
-- **Agent OS and utilization:** see Windows, Linux or macOS icons and sampled busy-time utilization over the
-  last 24 hours, alongside observed coverage. This measures job occupancy, not CPU or memory usage.
-- **Budget visibility and recovery:** the Pliny budget row stays visible while loading or during service outages,
-  with **Retry**, automatic refresh and clearly marked last known balances. Expanded conversation headers scroll
-  so the prompt and conversation controls remain accessible.
-- **Updated model routing:** FreeAuto routes include GLM-5.3 and GLM-5.3 Flash. Saved selections and router rules
-  for the two retiring GLM-5.2 replica IDs resolve to GLM-5.3. The migration takes effect when this version is installed.
-- **Custom-agent improvements:** discover agents and skills under `.ai/`, and hover over an agent name to see
-  its description without expanding the chat header.
+- **Cancel and resume reliably:** cancellation stops the current turn and keeps queued messages editable.
+  Use **Resume Task** or send a new message to continue after cleanup. Completed edits are not undone.
+- **Chat controls:** adjust `plinycode.chat.fontSize` from 10 to 24 pixels (default 13). Agent command terminals
+  stay hidden until opened with **PlinyCode: Show Agent Terminal**. Customization tabs scroll correctly again.
+- **Grafana machine metrics:** connect a Grafana server in **Pipelines > Agents > Grafana machine metrics...**.
+  Agent rows show compact free-disk readings; **Details** opens CPU/GPU history and hardware information.
+  History defaults to 30 days, subject to the data available in your Grafana datasource.
+- **Low-disk warnings:** fresh readings below 50 GB turn red and trigger a deduplicated editor notification.
+  Visible rows refresh automatically; this is not a background disk watcher.
+- **Clearer agent status:** colored utilization meters and red labels for disabled agents make the agent list
+  easier to scan. Utilization still measures observed job occupancy, not CPU or memory usage.
 
-See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.8) and
-[model migration details](docs/model-update-2026-11-06.md). Existing per-model tuning for a retired ID is not
-copied to GLM-5.3; review its thinking and context settings if you customized the old model.
+See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) and
+[Grafana setup guide](docs/grafana-machine-metrics.md). Grafana is optional and requires your server address and a token with dashboard and query access.
+The token is kept in the editor's secret storage; no collector or shared folder is required.
 
 ## Features
-
-The **0.2.9-test.12 pre-release** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
-in **Pipelines > Agents** compact: rows show only free disk space by default.
-CPU/GPU history and hardware information remain under **Details**. Visible rows refresh disk
-readings automatically; full telemetry is queried only when details are open. Automatic token
-setup and manual **Advanced setup** remain available. No collector or shared folder is required.
-History defaults to 30 days. Disk readings stay current; volumes below 50 GB turn red and trigger a deduplicated warning while the view is querying.
-Get the [test.12 pre-release](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9-test.12) by enabling **Install pre-releases** in
-**Settings > About**, then running **PlinyCode: Check for Updates**. Stable remains **0.2.8**.
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
   project files. [Plan mode](docs/plan-mode.md) · [Ask mode](docs/ask-mode.md)
@@ -67,6 +58,7 @@ Get the [test.12 pre-release](https://github.com/lgiaccar/PlinyCode/releases/tag
   the editor. The CI Board can start fix conversations, requeue pipelines and merge eligible pull requests.
   Monitor multiple agent pools, running jobs, OS types and observed busy-time utilization.
   [CI Board](docs/ci-board.md) · [Pipelines](docs/pipeline-runs.md) · [Agent monitor](docs/agent-monitor.md)
+- **Grafana machine metrics:** view free disk space, low-disk warnings and optional CPU/GPU histories for agents.
 - **MCP integrations:** connect external tools or use the built-in DevOps MCP server from PlinyCode and
   compatible editor agents. [DevOps MCP](docs/devops-mcp.md)
 - **Conversation tools:** ask side questions, improve a draft prompt, expand long pasted text, and edit an
