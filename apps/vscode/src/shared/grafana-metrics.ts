@@ -69,7 +69,7 @@ export function metricSummary(series: MachineSeries, from: number, to: number, s
 	)
 	if (!points.length) return undefined
 	const values = points.map((p) => p.value).sort((a, b) => a - b)
-	const last = points[points.length - 1]
+	const last = points.reduce((latest, point) => (point.time > latest.time ? point : latest))
 	return {
 		latest: last.value,
 		updated: last.time,
@@ -79,4 +79,19 @@ export function metricSummary(series: MachineSeries, from: number, to: number, s
 		coverage: Math.min(1, points.length / (Math.floor((to - from) / stepMs) + 1)),
 		stale: to - last.time > Math.max(300_000, 2 * stepMs),
 	}
+}
+
+/** Decimal GB, regardless of whether the display formats bytes as GB or GiB. */
+const LOW_DISK_BYTES = 50_000_000_000
+export function isLowDiskSpace(value: number, unit: string): boolean {
+	return ["bytes", "decbytes"].includes(unit) && Number.isFinite(value) && value >= 0 && value < LOW_DISK_BYTES
+}
+/** Disk freshness must not inherit the coarse step of a month-long load chart. */
+export function diskReading(series: MachineSeries, now: number) {
+	const points = series.points.filter(
+		(point) => point.value !== null && Number.isFinite(point.value) && point.value >= 0 && point.time <= now,
+	)
+	if (!points.length) return undefined
+	const latest = points.reduce((a, b) => (a.time > b.time ? a : b))
+	return { latest: latest.value as number, updated: latest.time, stale: now - latest.time > 300_000 }
 }

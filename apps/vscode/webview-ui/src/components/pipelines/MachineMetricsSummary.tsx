@@ -1,4 +1,4 @@
-import { type MachineMetrics, metricSummary } from "@shared/grafana-metrics"
+import { diskReading, isLowDiskSpace, type MachineMetrics } from "@shared/grafana-metrics"
 import { HardDrive } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -56,7 +56,7 @@ export function MachineMetricsSummary({ hostname, ready }: { hostname: string; r
 	const readings = disk?.error
 		? []
 		: (disk?.series.flatMap((series) => {
-				const summary = data && metricSummary(series, data.from, data.to, data.stepMs)
+				const summary = data && diskReading(series, data.to)
 				return summary ? [{ series, summary }] : []
 			}) ?? [])
 	const problem = error || disk?.error || "No disk samples returned for this machine."
@@ -84,7 +84,13 @@ export function MachineMetricsSummary({ hostname, ready }: { hostname: string; r
 								key={`${series.name}-${index}`}
 								title={`${series.name} · ${JSON.stringify(series.labels)} · Last sample ${new Date(summary.updated).toLocaleString()}`}>
 								{volume && <span className="text-description">{volume} </span>}
-								<strong>{valueText(summary.latest, series.unit)}</strong>
+								<strong
+									className={isLowDiskSpace(summary.latest, series.unit) ? "text-error" : undefined}
+									title={
+										isLowDiskSpace(summary.latest, series.unit) ? "Low disk space: below 50 GB" : undefined
+									}>
+									{valueText(summary.latest, series.unit)}
+								</strong>
 								{summary.stale && <span className="text-warning"> · Older sample</span>}
 							</span>
 						)

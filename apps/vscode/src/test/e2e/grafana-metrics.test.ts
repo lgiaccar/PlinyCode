@@ -96,7 +96,8 @@ e2e("Grafana - secure setup and machine queries through the packaged backend", a
 		await sidebar.getByRole("button", { name: "Load metrics", exact: true }).click()
 		await expect(sidebar.getByText("Sample average 40.0% · Peak 60.0% · P95 60.0%")).toBeVisible({ timeout: 15000 })
 		expect(queries[0]).toMatchObject({ expr: 'cpu_load{host="build-01"}', range: true })
-		await sidebar.getByRole("combobox", { name: /^Time range/ }).selectOption("30d")
+		await expect(sidebar.getByRole("combobox", { name: /^Time range/ })).toHaveValue("30d")
+		await sidebar.getByRole("combobox", { name: /^Time range/ }).selectOption("1w")
 		await expect(sidebar.getByRole("button", { name: "Load metrics", exact: true })).toBeEnabled()
 		await expect.poll(() => queries.length).toBe(2)
 		await sidebar

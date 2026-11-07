@@ -25,11 +25,12 @@ Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thi
 
 ## Features
 
-**0.2.9-test.10 preview:** Agent rows show only compact free-disk readings by default.
+**0.2.9-test.12 preview:** Agent rows show only compact free-disk readings by default.
 CPU/GPU histories, time ranges and hardware information remain under **Details**.
 Collapsed rows query only disk data and refresh while visible. Automatic Grafana setup remains
 available; no collector or shared folder is required.
 [Setup and supported dashboards](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/grafana-machine-metrics.md).
+History defaults to 30 days. Disk readings stay current; volumes below 50 GB turn red and trigger a deduplicated warning while the view is querying.
 This preview is available from its PR build and has not been published to the updater.
 Stable remains **0.2.8**.
 
