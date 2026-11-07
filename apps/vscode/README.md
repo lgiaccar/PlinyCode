@@ -25,7 +25,7 @@ Per-model tuning from a retiring GLM ID is not copied to GLM-5.3; review its thi
 
 ## Features
 
-**0.2.9-test.11 preview:** Agent rows show only compact free-disk readings by default.
+**0.2.9-test.12 preview:** Agent rows show only compact free-disk readings by default.
 CPU/GPU histories, time ranges and hardware information remain under **Details**.
 Collapsed rows query only disk data and refresh while visible. Automatic Grafana setup remains
 available; no collector or shared folder is required.

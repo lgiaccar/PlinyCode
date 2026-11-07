@@ -44,7 +44,7 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.11 preview** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
+The **0.2.9-test.12 preview** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
 in **Pipelines > Agents** compact: rows show only free disk space by default.
 CPU/GPU history and hardware information remain under **Details**. Visible rows refresh disk
 readings automatically; full telemetry is queried only when details are open. Automatic token

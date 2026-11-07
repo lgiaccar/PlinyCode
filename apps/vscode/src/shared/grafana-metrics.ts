@@ -82,7 +82,7 @@ export function metricSummary(series: MachineSeries, from: number, to: number, s
 }
 
 /** Decimal GB, regardless of whether the display formats bytes as GB or GiB. */
-export const LOW_DISK_BYTES = 50_000_000_000
+const LOW_DISK_BYTES = 50_000_000_000
 export function isLowDiskSpace(value: number, unit: string): boolean {
 	return ["bytes", "decbytes"].includes(unit) && Number.isFinite(value) && value >= 0 && value < LOW_DISK_BYTES
 }
