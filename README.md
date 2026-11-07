@@ -44,14 +44,13 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.9 prerelease** simplifies [Grafana machine metrics](docs/grafana-machine-metrics.md)
-in **Pipelines > Agents**: enter a token for the saved server, and dashboard, host-variable and panel
-selection are discovered and saved automatically. Each visible agent row shows CPU/GPU averages and
-free disk space in a summary beside its status, with optional **Details & charts**. Manual setup remains under **Advanced setup** for exceptions.
-CPU/GPU history still supports 1h, 3h, 24h, 1 week and 30 days, with current available disk space and
-hardware details when collected. A fresh installation needs the server address once; no private endpoint
-is built in. No collector or shared folder is required.
-Enable **Install pre-releases** in **Settings > About** to receive test builds.
+The **0.2.9-test.10 preview** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
+in **Pipelines > Agents** compact: rows show only free disk space by default.
+CPU/GPU history and hardware information remain under **Details**. Visible rows refresh disk
+readings automatically; full telemetry is queried only when details are open. Automatic token
+setup and manual **Advanced setup** remain available. No collector or shared folder is required.
+This preview is [available from its PR build](docs/releasing.md#installing-a-pull-requests-build);
+it has not been published to the updater. Stable remains **0.2.8**.
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
   project files. [Plan mode](docs/plan-mode.md) · [Ask mode](docs/ask-mode.md)

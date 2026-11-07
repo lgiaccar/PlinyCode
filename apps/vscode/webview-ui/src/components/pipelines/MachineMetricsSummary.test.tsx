@@ -65,33 +65,35 @@ afterEach(() => {
 })
 
 describe("Automatic machine summary", () => {
-	it("shows averages, real zero samples, coverage and separate disk volumes without clicking", async () => {
+	it("shows only compact disk volumes by default and requests no load history", async () => {
 		render(<MachineMetricsSummary hostname="build-01" ready />)
 		expect(mocks.queryAgentMetrics).not.toHaveBeenCalled()
 		visible()
-		expect(await screen.findByText("35.0%")).toBeVisible()
-		expect(screen.getByText("Latest 70.0% · 67% coverage")).toBeVisible()
+		await screen.findByText("1.0 GiB")
+		expect(screen.queryByText("CPU average")).toBeNull()
+		expect(screen.queryByText("GPU average")).toBeNull()
+		expect(screen.queryByText("Machine load")).toBeNull()
+		expect(screen.queryByRole("combobox")).toBeNull()
+		expect(mocks.queryAgentMetrics).toHaveBeenCalledWith(expect.objectContaining({ host: "build-01", diskOnly: true }))
 		expect(screen.getByText("1.0 GiB")).toBeVisible()
 		expect(screen.getByText("2.0 GiB")).toBeVisible()
 		expect(screen.getByText("C:")).toBeVisible()
 		expect(screen.getByText("D:")).toBeVisible()
-		expect(screen.getByText("Unavailable")).toHaveAttribute("title", "No GPU panel configured")
 		expect(screen.queryByRole("button", { name: "Machine metrics", exact: true })).toBeNull()
-		fireEvent.change(screen.getByRole("combobox"), { target: { value: "1w" } })
-		await waitFor(() =>
-			expect(mocks.queryAgentMetrics).toHaveBeenLastCalledWith(expect.objectContaining({ host: "build-01", range: "1w" })),
-		)
 	})
 	it("makes no queries before setup and opens details only on request", async () => {
 		const { rerender } = render(<MachineMetricsSummary hostname="build-01" ready={false} />)
-		expect(screen.getByText(/Connect Grafana above/)).toBeVisible()
+		expect(screen.queryByRole("region")).toBeNull()
 		expect(mocks.queryAgentMetrics).not.toHaveBeenCalled()
 		rerender(<MachineMetricsSummary hostname="build-01" ready />)
 		visible()
-		await screen.findByText("35.0%")
+		await screen.findByText("1.0 GiB")
 		expect(screen.queryByRole("region", { name: "Machine metrics for build-01" })).toBeNull()
-		fireEvent.click(screen.getByRole("button", { name: "Details & charts" }))
+		fireEvent.click(screen.getByRole("button", { name: "Details" }))
 		expect(await screen.findByRole("region", { name: "Machine metrics for build-01" })).toBeVisible()
+		await waitFor(() =>
+			expect(mocks.queryAgentMetrics).toHaveBeenLastCalledWith(expect.objectContaining({ diskOnly: false })),
+		)
 	})
 	it("polls visible rows, stops offscreen, and marks previous readings after failure", async () => {
 		vi.useFakeTimers()
@@ -100,8 +102,8 @@ describe("Automatic machine summary", () => {
 		expect(mocks.queryAgentMetrics).toHaveBeenCalledTimes(1)
 		mocks.queryAgentMetrics.mockRejectedValue(new Error("Grafana unavailable"))
 		await act(async () => vi.advanceTimersByTimeAsync(60_000))
-		expect(screen.getByRole("status")).toHaveTextContent("Refresh failed — previous readings")
-		expect(screen.getByText("35.0%")).toBeVisible()
+		expect(screen.getByRole("status")).toHaveTextContent("Previous reading")
+		expect(screen.getByText("1.0 GiB")).toBeVisible()
 		visible(false)
 		await act(async () => vi.advanceTimersByTimeAsync(120_000))
 		expect(mocks.queryAgentMetrics).toHaveBeenCalledTimes(2)
@@ -117,9 +119,29 @@ describe("Automatic machine summary", () => {
 		const { rerender } = render(<MachineMetricsSummary hostname="old" ready />)
 		visible()
 		rerender(<MachineMetricsSummary hostname="new" ready />)
-		await screen.findByText("35.0%")
+		await screen.findByText("1.0 GiB")
 		await act(async () => resolve({ value: JSON.stringify({ ...readings("old"), results: [] }) }))
-		expect(screen.getByText("35.0%")).toBeVisible()
+		expect(screen.getByText("1.0 GiB")).toBeVisible()
+	})
+	it("omits generic Value labels and reports missing disk readings without inventing zero", async () => {
+		const sample = readings()
+		sample.results = [
+			{
+				kind: "disk",
+				title: "Disk",
+				error: "",
+				series: [{ name: "Value", unit: "bytes", labels: {}, points: [{ time: 3000, value: 0 }] }],
+			},
+		]
+		mocks.queryAgentMetrics.mockResolvedValue({ value: JSON.stringify(sample) })
+		const { rerender } = render(<MachineMetricsSummary hostname="build-01" ready />)
+		visible()
+		expect(await screen.findByText("0.0 B")).toBeVisible()
+		expect(screen.queryByText("Value")).toBeNull()
+		mocks.queryAgentMetrics.mockResolvedValue({ value: JSON.stringify({ ...sample, results: [] }) })
+		rerender(<MachineMetricsSummary hostname="empty" ready />)
+		expect(await screen.findByText("Unavailable")).toBeVisible()
+		expect(screen.queryByText("0.0 B")).toBeNull()
 	})
 	it("limits automatic queries to three and drops obsolete queued rows", async () => {
 		const releases: (() => void)[] = []
@@ -127,7 +149,7 @@ describe("Automatic machine summary", () => {
 			({ host }) => new Promise((resolve) => releases.push(() => resolve({ value: JSON.stringify(readings(host)) }))),
 		)
 		let active = true
-		const pending = [0, 1, 2, 3, 4].map((i) => queryMachineSummary(String(i), "24h", () => i !== 3 || active))
+		const pending = [0, 1, 2, 3, 4].map((i) => queryMachineSummary(String(i), () => i !== 3 || active))
 		expect(mocks.queryAgentMetrics).toHaveBeenCalledTimes(3)
 		active = false
 		releases[0]()

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SecretStorage } from "vscode"
+import { GrafanaClient } from "@/services/grafana/client"
 import {
 	configureGrafanaMetrics,
 	grafanaSettings,
 	promptGrafanaToken,
+	readGrafanaMetrics,
 	removeGrafanaCredential,
 	setGrafanaSecrets,
 } from "./grafana-metrics"
@@ -77,4 +79,24 @@ describe("Grafana credentials", () => {
 		expect(mocks.prompt).not.toHaveBeenCalled()
 		expect(mocks.set).not.toHaveBeenCalled()
 	})
+})
+
+it("keeps disk-only and detailed results in separate cache entries", async () => {
+	mocks.prompt.mockResolvedValue("fixture-only-credential")
+	await promptGrafanaToken()
+	const metrics = vi.spyOn(GrafanaClient.prototype, "metrics").mockImplementation(async (host, _range, _now, diskOnly) => ({
+		host,
+		from: 0,
+		to: 1,
+		stepMs: 1,
+		results: [{ kind: diskOnly ? "disk" : "cpu", title: "Fixture", series: [], error: "" }],
+	}))
+	try {
+		expect((await readGrafanaMetrics("build", "24h", true)).results[0].kind).toBe("disk")
+		expect((await readGrafanaMetrics("build", "24h")).results[0].kind).toBe("cpu")
+		await readGrafanaMetrics("build", "24h", true)
+		expect(metrics).toHaveBeenCalledTimes(2)
+	} finally {
+		metrics.mockRestore()
+	}
 })
