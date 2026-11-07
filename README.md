@@ -44,14 +44,14 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.12 preview** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
+The **0.2.9-test.12 pre-release** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
 in **Pipelines > Agents** compact: rows show only free disk space by default.
 CPU/GPU history and hardware information remain under **Details**. Visible rows refresh disk
 readings automatically; full telemetry is queried only when details are open. Automatic token
 setup and manual **Advanced setup** remain available. No collector or shared folder is required.
 History defaults to 30 days. Disk readings stay current; volumes below 50 GB turn red and trigger a deduplicated warning while the view is querying.
-This preview is [available from its PR build](docs/releasing.md#installing-a-pull-requests-build);
-it has not been published to the updater. Stable remains **0.2.8**.
+Get the [test.12 pre-release](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9-test.12) by enabling **Install pre-releases** in
+**Settings > About**, then running **PlinyCode: Check for Updates**. Stable remains **0.2.8**.
 
 - **Plan, Agent and Ask modes:** prepare a plan, let the agent implement it, or ask questions without editing
   project files. [Plan mode](docs/plan-mode.md) · [Ask mode](docs/ask-mode.md)
