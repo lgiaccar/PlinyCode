@@ -10,11 +10,20 @@ import {
 	setGrafanaSecrets,
 } from "./grafana-metrics"
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), prompt: vi.fn(), workspace: { isTrusted: true } }))
+const mocks = vi.hoisted(() => ({
+	get: vi.fn(),
+	set: vi.fn(),
+	prompt: vi.fn(),
+	warning: vi.fn(),
+	workspace: { isTrusted: true },
+}))
 vi.mock("@/core/storage/StateManager", () => ({
 	StateManager: { get: () => ({ getGlobalStateKey: mocks.get, setGlobalState: mocks.set }) },
 }))
-vi.mock("vscode", () => ({ workspace: mocks.workspace, window: { showInputBox: mocks.prompt } }))
+vi.mock("vscode", () => ({
+	workspace: mocks.workspace,
+	window: { showInputBox: mocks.prompt, showWarningMessage: mocks.warning },
+}))
 const initial = () => ({ url: "https://grafana.example.com", dashboardUid: "machines", hostVariable: "host", panels: {} })
 let saved = initial()
 const values = new Map<string, string>()
@@ -95,7 +104,44 @@ it("keeps disk-only and detailed results in separate cache entries", async () =>
 		expect((await readGrafanaMetrics("build", "24h", true)).results[0].kind).toBe("disk")
 		expect((await readGrafanaMetrics("build", "24h")).results[0].kind).toBe("cpu")
 		await readGrafanaMetrics("build", "24h", true)
-		expect(metrics).toHaveBeenCalledTimes(2)
+		expect(metrics).toHaveBeenCalledTimes(3)
+	} finally {
+		metrics.mockRestore()
+	}
+})
+
+it("coalesces in-flight disk requests, refreshes afterward, and emits a native warning", async () => {
+	mocks.prompt.mockResolvedValue("fixture-only-credential")
+	await promptGrafanaToken()
+	let finish!: (value: import("@shared/grafana-metrics").MachineMetrics) => void
+	const metrics = vi.spyOn(GrafanaClient.prototype, "metrics").mockImplementation(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve
+			}),
+	)
+	try {
+		const first = readGrafanaMetrics("low-disk", "24h", true)
+		const second = readGrafanaMetrics("low-disk", "24h", true)
+		await vi.waitFor(() => expect(metrics).toHaveBeenCalledTimes(1))
+		const now = Date.now()
+		finish({
+			host: "low-disk",
+			from: now - 300_000,
+			to: now,
+			stepMs: 15_000,
+			results: [
+				{
+					kind: "disk",
+					title: "Disk",
+					error: "",
+					series: [{ name: "Free", unit: "bytes", labels: { volume: "C:" }, points: [{ time: now, value: 1e9 }] }],
+				},
+			],
+		})
+		await Promise.all([first, second])
+		expect(mocks.warning).toHaveBeenCalledTimes(1)
+		expect(mocks.warning).toHaveBeenCalledWith(expect.stringContaining("below 50 GB"))
 	} finally {
 		metrics.mockRestore()
 	}

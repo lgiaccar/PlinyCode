@@ -1,4 +1,12 @@
-import { type MachineMetrics, type MachineSeries, METRIC_RANGES, type MetricRange, metricSummary } from "@shared/grafana-metrics"
+import {
+	diskReading,
+	isLowDiskSpace,
+	type MachineMetrics,
+	type MachineSeries,
+	METRIC_RANGES,
+	type MetricRange,
+	metricSummary,
+} from "@shared/grafana-metrics"
 import { AgentMetricsRequest } from "@shared/proto/cline/agent_monitor"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -12,7 +20,7 @@ const rangeLabels: Record<MetricRange, string> = {
 	"1w": "Last week",
 	"30d": "Last 30 days",
 }
-export function MachineMetricsView({ hostname, initialRange = "24h" }: { hostname: string; initialRange?: MetricRange }) {
+export function MachineMetricsView({ hostname, initialRange = "30d" }: { hostname: string; initialRange?: MetricRange }) {
 	const [draft, setDraft] = useState(hostname)
 	const [host, setHost] = useState(hostname)
 	const [editHost, setEditHost] = useState(!hostname)
@@ -123,6 +131,7 @@ export function MachineMetricsView({ hostname, initialRange = "24h" }: { hostnam
 									<SeriesView
 										chart={result.kind === "cpu" || result.kind === "gpu"}
 										data={data}
+										disk={result.kind === "disk"}
 										hardware={result.kind === "cpuInfo" || result.kind === "gpuInfo"}
 										key={`${index}-${series.name}`}
 										series={series}
@@ -155,14 +164,17 @@ function SeriesView({
 	series,
 	data,
 	chart,
+	disk,
 	hardware,
 }: {
 	series: MachineSeries
 	data: MachineMetrics
 	chart: boolean
+	disk: boolean
 	hardware: boolean
 }) {
 	const summary = metricSummary(series, data.from, data.to, data.stepMs)
+	const currentDisk = disk ? diskReading(series, data.to) : undefined
 	const labels = Object.entries(series.labels).filter(([key]) => key !== "__name__")
 	return (
 		<div className="text-xs flex flex-col gap-1 mt-2 break-words">
@@ -185,10 +197,10 @@ function SeriesView({
 				<span className="text-description">No numeric samples available.</span>
 			) : (
 				<>
-					<strong>
+					<strong className={currentDisk && isLowDiskSpace(currentDisk.latest, series.unit) ? "text-error" : undefined}>
 						{hardware ? "Value: " : ""}
 						{valueText(summary.latest, series.unit)}
-						{summary.stale ? " · Older query sample" : ""}
+						{(disk ? currentDisk?.stale : summary.stale) ? " · Older query sample" : ""}
 					</strong>
 					{chart && (
 						<>

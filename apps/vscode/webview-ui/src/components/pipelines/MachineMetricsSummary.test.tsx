@@ -75,12 +75,30 @@ describe("Automatic machine summary", () => {
 		expect(screen.queryByText("Machine load")).toBeNull()
 		expect(screen.queryByRole("combobox")).toBeNull()
 		expect(mocks.queryAgentMetrics).toHaveBeenCalledWith(expect.objectContaining({ host: "build-01", diskOnly: true }))
-		expect(screen.getByText("1.0 GiB")).toBeVisible()
+		expect(screen.getByText("1.0 GiB")).toHaveClass("text-error")
 		expect(screen.getByText("2.0 GiB")).toBeVisible()
 		expect(screen.getByText("C:")).toBeVisible()
 		expect(screen.getByText("D:")).toBeVisible()
 		expect(screen.queryByRole("button", { name: "Machine metrics", exact: true })).toBeNull()
 	})
+	it("uses the latest disk sample and marks the exact 50 GB boundary correctly", async () => {
+		const sample = readings()
+		const disk = sample.results.find((result) => result.kind === "disk")!
+		disk.series[0].unit = "decbytes"
+		disk.series[0].points = [
+			{ time: 3000, value: 49e9 },
+			{ time: 1000, value: 90e9 },
+		]
+		disk.series[1].unit = "decbytes"
+		disk.series[1].points = [{ time: 3000, value: 50e9 }]
+		mocks.queryAgentMetrics.mockResolvedValue({ value: JSON.stringify(sample) })
+		render(<MachineMetricsSummary hostname="build-01" ready />)
+		visible()
+		expect(await screen.findByText("49.0 GB")).toHaveClass("text-error")
+		expect(screen.getByText("50.0 GB")).not.toHaveClass("text-error")
+		expect(screen.queryByText("90.0 GB")).toBeNull()
+	})
+
 	it("makes no queries before setup and opens details only on request", async () => {
 		const { rerender } = render(<MachineMetricsSummary hostname="build-01" ready={false} />)
 		expect(screen.queryByRole("region")).toBeNull()

@@ -76,6 +76,8 @@ describe("Grafana metric queries", () => {
 			expect(queries).toHaveLength(3)
 			expect(queries[0]).toMatchObject({ from: String(to - METRIC_RANGES[range]), to: String(to) })
 			expect(queries.map((q) => q.queries[0].instant)).toEqual([false, true, true])
+			expect(queries[1]).toMatchObject({ from: String(to - 300_000), to: String(to) })
+			expect(queries[1].queries[0].intervalMs).toBe(15_000)
 			expect(calls.filter((c) => c.url.includes("/datasources/"))).toHaveLength(1)
 			for (const call of calls) {
 				expect(call.init?.redirect).toBe("error")

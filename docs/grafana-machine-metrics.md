@@ -51,11 +51,22 @@ series labels such as `Value` are omitted. Hover a reading for its last sample t
 
 CPU and GPU details show a graph and the average, peak and 95th percentile of returned
 query samples. Choose **1 hour, 3 hours, 24 hours, 1 week or 30 days**. A month means
-a rolling 30-day window. Queries target approximately 600 points per series;
+a rolling 30-day window, selected by default. Queries target approximately 600 points per series;
 coarser datasource scrape intervals can reduce this. Peaks between samples may
 be missed. Missing history is not zero and is not extrapolated to the full range.
 Sample coverage compares returned numeric samples to the requested query grid;
 it does not establish exporter uptime or recording retention.
+
+Disk results use an instant query at the current time, independent of the CPU/GPU
+history range. Completed disk-summary queries are not cached; concurrent requests
+for the same host share one query. The newest numeric sample is displayed.
+Values below **50 GB** (50,000,000,000 bytes, approximately 46.6 GiB) are red.
+A native editor warning names the machine and volume on its first fresh low reading,
+then again only after a fresh recovery to at least 50 GB and another drop. Warnings
+are deduplicated across agent rows and history ranges within the editor session.
+Missing, failed or older-than-five-minute query samples neither alert nor rearm
+warnings. Alerts run when metrics are queried in the visible view; this is not a
+background disk watcher. Upstream scrape freshness still depends on the source.
 
 Disk results show current available bytes for each returned filesystem/volume.
 Hardware panels show the source's labels and values, which can include CPU model,

@@ -10,6 +10,9 @@ import * as vscode from "vscode"
 import { StateManager } from "@/core/storage/StateManager"
 import { GrafanaClient, validateGrafanaConfig, validateMetricHost } from "@/services/grafana/client"
 
+import { GrafanaDiskAlerts } from "./grafana-disk-alerts"
+
+const diskAlerts = new GrafanaDiskAlerts()
 let secrets: vscode.SecretStorage | undefined
 export function setGrafanaSecrets(value: vscode.SecretStorage | undefined): void {
 	secrets = value
@@ -92,11 +95,19 @@ export async function readGrafanaMetrics(host: string, range: string, diskOnly =
 	// A small bounded cache shares results for multiple agents on the same machine.
 	if (cache.size >= 20) cache.delete(cache.keys().next().value as string)
 	const value = connection.metrics(host, range as MetricRange, undefined, diskOnly)
-	cache.set(key, { expires: Date.now() + 30_000, value })
+	cache.set(key, { expires: diskOnly ? Number.POSITIVE_INFINITY : Date.now() + 30_000, value })
 	try {
-		return await value
+		const result = await value
+		// Ignore queries completed after the connection was changed.
+		if (JSON.stringify(config()) === JSON.stringify(saved)) {
+			for (const warning of diskAlerts.check(JSON.stringify(saved), result)) void vscode.window.showWarningMessage(warning)
+		}
+		return result
 	} catch (error) {
 		if (cache.get(key)?.value === value) cache.delete(key)
 		throw error
+	} finally {
+		// Share concurrent disk queries, but refresh from Grafana on every subsequent request.
+		if (diskOnly && cache.get(key)?.value === value) cache.delete(key)
 	}
 }

@@ -44,11 +44,12 @@ copied to GLM-5.3; review its thinking and context settings if you customized th
 
 ## Features
 
-The **0.2.9-test.10 preview** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
+The **0.2.9-test.11 preview** makes [Grafana machine metrics](docs/grafana-machine-metrics.md)
 in **Pipelines > Agents** compact: rows show only free disk space by default.
 CPU/GPU history and hardware information remain under **Details**. Visible rows refresh disk
 readings automatically; full telemetry is queried only when details are open. Automatic token
 setup and manual **Advanced setup** remain available. No collector or shared folder is required.
+History defaults to 30 days. Disk readings stay current; volumes below 50 GB turn red and trigger a deduplicated warning while the view is querying.
 This preview is [available from its PR build](docs/releasing.md#installing-a-pull-requests-build);
 it has not been published to the updater. Stable remains **0.2.8**.
 

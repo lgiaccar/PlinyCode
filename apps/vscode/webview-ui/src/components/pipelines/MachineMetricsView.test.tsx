@@ -67,11 +67,11 @@ describe("Machine metrics", () => {
 		render(<MachineMetricsView hostname="build-01" />)
 		expect(screen.getAllByRole("option")).toHaveLength(5)
 		await screen.findByText("Sample average 35.0% · Peak 70.0% · P95 70.0%")
-		expect(mocks.queryAgentMetrics).toHaveBeenCalledWith(expect.objectContaining({ host: "build-01", range: "24h" }))
+		expect(mocks.queryAgentMetrics).toHaveBeenCalledWith(expect.objectContaining({ host: "build-01", range: "30d" }))
 		expect(screen.getByText(/No data returned for this host/)).toBeInTheDocument()
 		expect(screen.getByRole("img", { name: /CPU load over/ }).querySelectorAll("circle")).toHaveLength(2)
-		fireEvent.change(screen.getByRole("combobox"), { target: { value: "30d" } })
-		await waitFor(() => expect(mocks.queryAgentMetrics).toHaveBeenLastCalledWith(expect.objectContaining({ range: "30d" })))
+		fireEvent.change(screen.getByRole("combobox"), { target: { value: "24h" } })
+		await waitFor(() => expect(mocks.queryAgentMetrics).toHaveBeenLastCalledWith(expect.objectContaining({ range: "24h" })))
 	})
 	it("ignores a slow result from a previously selected range", async () => {
 		let finish!: (response: { value: string }) => void

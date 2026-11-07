@@ -423,6 +423,8 @@ export class GrafanaClient {
 						throw new Error("Select a load panel with percent (0–100) or percent (0–1) units.")
 					if (kind === "disk" && !["bytes", "decbytes"].includes(unit))
 						throw new Error("Select a free/available disk-space panel with byte units.")
+					// Instant disk values use a fixed short window, independent of load history.
+					const queryDuration = kind === "disk" ? 300_000 : duration
 					const queries = await Promise.all(
 						panel.targets
 							.filter((t) => !t.hide)
@@ -455,7 +457,7 @@ export class GrafanaClient {
 									target.interval && target.interval !== "$__interval"
 										? intervalMs(target.interval)
 										: (sourceInterval ?? 15_000)
-								const queryStep = Math.max(stepMs, scrapeMs)
+								const queryStep = Math.max(kind === "disk" ? 15_000 : stepMs, scrapeMs)
 								return {
 									refId: `Q${index}`,
 									datasource: { uid, type: "prometheus" },
@@ -463,7 +465,7 @@ export class GrafanaClient {
 										target.expr,
 										this.config.hostVariable,
 										host,
-										duration,
+										queryDuration,
 										queryStep,
 										scrapeMs,
 									),
@@ -476,7 +478,7 @@ export class GrafanaClient {
 							}),
 					)
 					const parsed = querySchema.safeParse(
-						await this.json("/api/ds/query", { from: String(now - duration), to: String(now), queries }),
+						await this.json("/api/ds/query", { from: String(now - queryDuration), to: String(now), queries }),
 					)
 					if (!parsed.success) throw new Error("Grafana returned unsupported query data.")
 					for (const query of queries) {
