@@ -60,6 +60,30 @@ beforeEach(() => {
 	})
 })
 describe("Agents panel", () => {
+	it("allows copying agent and pipeline labels without navigating, while preserving keyboard activation", async () => {
+		render(<AgentsPanel />)
+		const name = await screen.findByRole("button", { name: /build-01/ })
+		const pipeline = screen.getByRole("button", { name: "Build FFI" })
+		const selection = window.getSelection()
+		if (!selection) throw new Error("Missing browser selection")
+		const range = document.createRange()
+		range.selectNodeContents(name)
+		selection.removeAllRanges()
+		selection.addRange(range)
+		try {
+			fireEvent.click(name, { detail: 1 })
+			fireEvent.click(pipeline, { detail: 1 })
+			expect(mocks.openUrl).not.toHaveBeenCalled()
+			fireEvent.click(name, { detail: 0 })
+			expect(mocks.openUrl).toHaveBeenCalledWith(expect.objectContaining({ value: "https://server/agent" }))
+			selection.removeAllRanges()
+			fireEvent.click(pipeline, { detail: 1 })
+			expect(mocks.openUrl).toHaveBeenLastCalledWith(expect.objectContaining({ value: "https://server/build" }))
+		} finally {
+			selection.removeAllRanges()
+		}
+	})
+
 	it("shows OS icons and sampled busy-time utilization without inventing missing history", async () => {
 		render(<AgentsPanel />)
 		expect(await screen.findByRole("img", { name: "Windows" })).toBeInTheDocument()
