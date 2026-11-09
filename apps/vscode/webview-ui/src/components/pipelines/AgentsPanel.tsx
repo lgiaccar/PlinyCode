@@ -2,7 +2,7 @@ import { DEFAULT_AGENT_MONITOR_CONFIG } from "@shared/agent-monitor"
 import type { GrafanaSetup } from "@shared/grafana-metrics"
 import { AgentMonitorSettings, AgentMonitorState, type AgentMonitorsState } from "@shared/proto/cline/agent_monitor"
 import { EmptyRequest, StringRequest } from "@shared/proto/cline/common"
-import { useEffect, useState } from "react"
+import { type MouseEvent, useEffect, useState } from "react"
 import { DevOpsErrorText } from "@/components/common/DevOpsErrorText"
 import { Button } from "@/components/ui/button"
 import { AgentMonitorServiceClient, UiServiceClient } from "@/services/grpc-client"
@@ -60,7 +60,7 @@ export function AgentsPanel() {
 		setAdding(false)
 	}
 	return (
-		<section aria-label="Agent monitors" className="flex flex-col gap-3 min-w-0">
+		<section aria-label="Agent monitors" className="flex flex-col gap-3 min-w-0 select-text">
 			<GrafanaSettings onChanged={() => setGrafanaRevision((value) => value + 1)} />
 			<p className="text-sm text-description m-0">
 				Monitor Azure DevOps agent pools. Saved for this workspace; each enabled pool refreshes every minute, even when
@@ -199,8 +199,11 @@ function AgentPoolPanel({
 			setSaving(false)
 		}
 	}
-	const open = (url: string) =>
+	const open = (event: MouseEvent<HTMLButtonElement>, url: string) => {
+		// A mouse drag selects the label for copying; keyboard activation still opens it.
+		if (event.detail > 0 && window.getSelection()?.isCollapsed === false) return
 		void UiServiceClient.openUrl(StringRequest.create({ value: url })).catch((failure) => setError(pipelineError(failure)))
+	}
 	const stale = Boolean(error || connectionError || state?.error || !state?.config?.enabled)
 	const agents = state?.agents ?? []
 	const visible = agents.filter((agent) =>
@@ -353,7 +356,10 @@ function AgentPoolPanel({
 				{visible.map((agent) => (
 					<li className="border-b border-panel-border py-3 flex flex-wrap items-start gap-4 min-w-0" key={agent.id}>
 						<div className="flex flex-col gap-1 min-w-0" style={{ flex: "1 1 280px" }}>
-							<button className="text-left text-link break-all" onClick={() => open(agent.url)} type="button">
+							<button
+								className="text-left text-link break-all select-text"
+								onClick={(event) => open(event, agent.url)}
+								type="button">
 								<AgentOsIcon os={agent.os} />
 								{agent.name}
 							</button>
@@ -371,8 +377,8 @@ function AgentPoolPanel({
 								agent.status === "online" &&
 								(agent.jobUrl ? (
 									<button
-										className="text-left text-link text-xs break-words"
-										onClick={() => open(agent.jobUrl)}
+										className="text-left text-link text-xs break-words select-text"
+										onClick={(event) => open(event, agent.jobUrl)}
 										type="button">
 										{agent.pipelineName || "Pipeline name unavailable"}
 									</button>
