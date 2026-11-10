@@ -10,6 +10,7 @@ import { StateServiceClient } from "@/services/grpc-client"
 import { Tab, TabContent, TabList, TabTrigger } from "../common/Tab"
 import ViewHeader from "../common/ViewHeader"
 import SectionHeader from "./SectionHeader"
+import { SettingsSearch } from "./SettingsSearch"
 import AboutSection from "./sections/AboutSection"
 import ApiConfigurationSection from "./sections/ApiConfigurationSection"
 import DebugSection from "./sections/DebugSection"
@@ -108,6 +109,7 @@ const renderSectionHeader = (tabId: string) => {
 }
 
 const SettingsView = ({ onDone, targetSection }: SettingsViewProps) => {
+	const [searching, setSearching] = useState(false)
 	// Memoize to avoid recreation
 	const TAB_CONTENT_MAP: Record<SettingsTabID, React.FC<any>> = useMemo(
 		() => ({
@@ -234,8 +236,9 @@ const SettingsView = ({ onDone, targetSection }: SettingsViewProps) => {
 	return (
 		<Tab>
 			<ViewHeader environment={environment} onDone={onDone} title="Settings" />
+			<SettingsSearch onNavigate={setActiveTab} onSearchingChange={setSearching} />
 
-			<div className="flex flex-1 overflow-hidden">
+			<div className={searching ? "hidden" : "flex flex-1 overflow-hidden"}>
 				<TabList
 					className="shrink-0 flex flex-col overflow-y-auto border-r border-sidebar-background"
 					onValueChange={setActiveTab}
