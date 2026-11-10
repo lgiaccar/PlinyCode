@@ -22,15 +22,21 @@ implement changes, run commands, and follow pull requests and pipelines from the
 Model requests go through the Synopsys Pliny gateway. You need gateway access and a Pliny API key to use it.
 Web search, MCP tools and DevOps integrations connect to their configured services; extension updates come from GitHub.
 
+## Available in pre-releases
+
+The compact chat header and cleaner composer are available in **0.2.10 test builds**. Enable **Install
+pre-releases** in **Settings > About**, then run **PlinyCode: Check for Updates**.
+
+The header keeps the task and workspace visible; **Details** shows usage and limits. **More message options**
+groups send behavior and secondary controls. See [Chat controls](docs/chat-controls.md).
+
 ## What's new in 0.2.9
 
 [PlinyCode 0.2.9](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) is the latest stable release.
 
 - **Cancel and resume reliably:** cancellation stops the current turn and keeps queued messages editable.
   Use **Resume Task** or send a new message to continue after cleanup. Completed edits are not undone.
-- **Chat controls:** a compact header keeps the task and workspace visible; **Details** shows usage and limits.
-  **More message options** groups send behavior and secondary controls. See [Chat controls](docs/chat-controls.md).
-  Adjust `plinycode.chat.fontSize` from 10 to 24 pixels (default 13). Agent command terminals
+- **Chat controls:** adjust `plinycode.chat.fontSize` from 10 to 24 pixels (default 13). Agent command terminals
   stay hidden until opened with **PlinyCode: Show Agent Terminal**. Customization tabs scroll correctly again.
 - **Grafana machine metrics:** connect a Grafana server in **Pipelines > Agents > Grafana machine metrics...**.
   Agent rows show compact free-disk readings; **Details** opens CPU/GPU history and hardware information.
