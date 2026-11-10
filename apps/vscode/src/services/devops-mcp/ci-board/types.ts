@@ -77,6 +77,8 @@ export interface CiBoardItem {
 	pr?: PullRequest
 	branch: string
 	headSha?: string
+	/** Last successful fetch of this item's CI details, in epoch milliseconds. Cached polls and errors keep it unchanged. */
+	checkedTs?: number
 	mergeState?: MergeState
 	pipelines: CiPipelineStatus[]
 	expiredBuildPolicies?: ExpiredBuildPolicy[]

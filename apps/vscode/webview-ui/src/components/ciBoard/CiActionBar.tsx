@@ -1,4 +1,3 @@
-import { ciMergeDisabledReason } from "@shared/ciMerge"
 import { type CiItem, type CiItemAction, CiItemRequest } from "@shared/proto/cline/ci_board"
 import { StringRequest } from "@shared/proto/cline/common"
 import { type KeyboardEvent, useEffect, useRef, useState } from "react"
@@ -6,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CiBoardServiceClient, UiServiceClient } from "@/services/grpc-client"
 import { CiTip } from "./CiTip"
+import { ciBoardMergeDisabledReason } from "./ciBoardFilters"
 import { errorText, runKey } from "./useCiBoard"
 
 interface CiActionBarProps {
@@ -49,8 +49,7 @@ export const CiActionBar = ({
 	const running = item.conversationStatus === "running" || item.conversationStatus === "background"
 	const primary = item.actions.find((a) => a.role === "primary")
 	const failing = item.mergeState === "conflicts" || item.pipelines.some((p) => p.color === "red")
-	const mergeReason =
-		running || busy ? "Wait for the board's running conversation to finish before merging." : ciMergeDisabledReason(item)
+	const mergeReason = ciBoardMergeDisabledReason(item, !!busy)
 	const mergePrimary = !!onMerge && !failing
 	const mergeTip =
 		mergeReason ||

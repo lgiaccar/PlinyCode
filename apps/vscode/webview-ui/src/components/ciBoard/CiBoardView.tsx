@@ -1,15 +1,13 @@
 import { StringRequest } from "@shared/proto/cline/common"
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useState } from "react"
 import { useExtensionState } from "@/context/ExtensionStateContext"
-import { cn } from "@/lib/utils"
 import { CiBoardServiceClient } from "@/services/grpc-client"
 import ViewHeader from "../common/ViewHeader"
 import { AddCiTargetForm } from "./AddCiTargetForm"
+import { CiBoardOverview } from "./CiBoardOverview"
 import { CiTargetSection } from "./CiTargetSection"
-import { CiTip } from "./CiTip"
-import { isFailing } from "./ciBoardUtils"
-import { useCiBoard } from "./useCiBoard"
+import type { CiBoardFilter } from "./ciBoardFilters"
+import { errorText, useCiBoard } from "./useCiBoard"
 
 /**
  * The CI board: pull requests and branches watched together, one dot per
@@ -20,24 +18,26 @@ const CiBoardView = ({ onDone }: { onDone: () => void }) => {
 	const { environment } = useExtensionState()
 	const board = useCiBoard()
 	const [refreshing, setRefreshing] = useState(false)
-	const [failingOnly, setFailingOnly] = useState(false)
+	const [filter, setFilter] = useState<CiBoardFilter>("all")
+	const [query, setQuery] = useState("")
+	const [error, setError] = useState<string>()
+	const [now, setNow] = useState(Date.now)
+	useEffect(() => {
+		const timer = setInterval(() => setNow(Date.now()), 60_000)
+		return () => clearInterval(timer)
+	}, [])
 
 	const refreshAll = async () => {
+		setError(undefined)
 		setRefreshing(true)
 		try {
 			await CiBoardServiceClient.refreshCiBoard(StringRequest.create({ value: "" }))
+		} catch (error) {
+			setError(errorText(error))
 		} finally {
 			setRefreshing(false)
 		}
 	}
-
-	const items = board?.targets.flatMap((t) => t.items) ?? []
-	const conflicts = items.filter((i) => i.mergeState === "conflicts").length
-	const failing = items.filter((i) => i.pipelines.some((p) => p.color === "red")).length
-	const running = items.filter((i) => i.pipelines.some((p) => p.color === "yellow")).length
-	const green = items.filter(
-		(i) => !isFailing(i) && i.pipelines.length > 0 && i.pipelines.every((p) => p.color === "green"),
-	).length
 
 	return (
 		<div className="fixed inset-0 flex flex-col">
@@ -81,52 +81,22 @@ const CiBoardView = ({ onDone }: { onDone: () => void }) => {
 							</div>
 						) : (
 							<>
-								<div className="flex flex-wrap items-center gap-2 mb-1 text-xs" data-testid="ci-board-summary">
-									<CiTip tip="Pull requests whose pipelines failed on their latest commit">
-										<span className={cn(failing ? "text-error" : "text-description")}>{failing} failing</span>
-									</CiTip>
-									<span className="text-description">·</span>
-									<CiTip tip="Pull requests that do not merge cleanly into their target branch">
-										<span className={cn(conflicts ? "text-error" : "text-description")}>
-											{conflicts} conflict{conflicts === 1 ? "" : "s"}
-										</span>
-									</CiTip>
-									<span className="text-description">·</span>
-									<CiTip tip="Pull requests with pipelines still running">
-										<span className="text-description">{running} running</span>
-									</CiTip>
-									<span className="text-description">·</span>
-									<CiTip tip="Pull requests whose every pipeline passed">
-										<span className="text-description">{green} green</span>
-									</CiTip>
-									<span className="flex-1" />
-									<CiTip tip="Show only the pull requests that fail or conflict">
-										<label className="inline-flex items-center gap-1 text-description cursor-pointer">
-											<input
-												aria-label="Failing only"
-												checked={failingOnly}
-												onChange={(e) => setFailingOnly(e.target.checked)}
-												type="checkbox"
-											/>
-											Failing only
-										</label>
-									</CiTip>
-									<CiTip tip="Check every entry now">
-										<Button
-											aria-label="Refresh all"
-											disabled={refreshing}
-											onClick={refreshAll}
-											size="xs"
-											variant="ghost">
-											<span
-												className={cn("codicon codicon-refresh", refreshing && "codicon-modifier-spin")}
-											/>{" "}
-											Refresh
-										</Button>
-									</CiTip>
-								</div>
+								<CiBoardOverview
+									filter={filter}
+									onFilter={setFilter}
+									onQuery={setQuery}
+									onRefresh={refreshAll}
+									query={query}
+									refreshing={refreshing}
+									targets={board.targets}
+								/>
+								{error && (
+									<div className="text-xs text-error mb-2" role="alert">
+										{error}
+									</div>
+								)}
 								{board.targets.map((target) => (
-									<CiTargetSection failingOnly={failingOnly} key={target.id} target={target} />
+									<CiTargetSection filter={filter} key={target.id} now={now} query={query} target={target} />
 								))}
 							</>
 						)}

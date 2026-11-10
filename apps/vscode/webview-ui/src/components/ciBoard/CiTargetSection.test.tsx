@@ -115,7 +115,7 @@ describe("CiTargetSection", () => {
 			expect.stringContaining("broken"),
 			expect.stringContaining("green"),
 		])
-		rerender(<CiTargetSection failingOnly target={makeTarget()} />)
+		rerender(<CiTargetSection filter="attention" target={makeTarget()} />)
 		expect(screen.getAllByTestId("ci-item")).toHaveLength(1)
 	})
 

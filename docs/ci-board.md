@@ -37,8 +37,19 @@ The board belongs to the window's workspace: each window shows, polls and notifi
 
 ## Reading it
 
-The top line counts the pull requests that fail, conflict, are running and are green. **Failing only** hides the
-rest. Within an entry, the worst pull requests come first.
+Search by repository, PR number or title, branch, author, commit, or pipeline name. Search words match across
+those fields, without case sensitivity. Combine the search with **Needs attention**, **Failed**, **Conflicts**,
+**Expired**, **Running**, or **CI ready**. **Clear filters** restores the full board. Within a watched target,
+the worst pull requests come first.
+
+Filter counts reflect the search and count watched entries: a PR watched both individually and through a
+repository appears twice. Categories can overlap, for example an expired build validation that is being requeued.
+Repository refresh errors and initial loading states remain visible even when no rows match the filters.
+
+**CI ready** uses the same check as the Merge button: an open, non-draft PR with a known head, a clean merge,
+all pipelines green, current, approved build validations, and no running board conversation. A failed refresh excludes cached green rows.
+It does not claim that all review requirements are met: the provider enforces reviews and repository protections,
+and merge requests still recheck the head and CI before merging.
 
 Each row has:
 
@@ -49,6 +60,12 @@ Each row has:
 - an **auto-watch** badge when auto-watch is doing something about it;
 - a second line with the triage's one-line summary, or the branches and author when nothing fails;
 - the conversation the last action started, and the action buttons.
+
+Open PRs also show why merging is blocked, or that their reported CI is ready. The head commit and **CI checked**
+time identify the snapshot. This is the last successful fetch of the item's CI details, not the last background
+poll: cached polls and failed refreshes keep the timestamp unchanged. Hover for the exact time. Unknown check
+times are labeled explicitly; failed refreshes mark the displayed data as last known. The board does not infer
+the target branch's current commit or approval state from a successful pipeline.
 
 Azure DevOps PRs also show **Expired** when a build-validation policy has expired after a target-branch update.
 Expand the row and use **Requeue pipeline** beside that validation to ask Azure DevOps to run it again. Expiration is a

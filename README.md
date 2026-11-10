@@ -30,6 +30,9 @@ pre-releases** in **Settings > About**, then run **PlinyCode: Check for Updates*
 The header keeps the task and workspace visible; **Details** shows usage and limits. **More message options**
 groups send behavior and secondary controls. See [Chat controls](docs/chat-controls.md).
 
+The latest test build also adds [CI Board](docs/ci-board.md) search and status filters, visible merge blockers,
+and the last successful CI check time. Reviews and repository protections still apply to **CI ready** entries.
+
 ## What's new in 0.2.9
 
 [PlinyCode 0.2.9](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) is the latest stable release.
