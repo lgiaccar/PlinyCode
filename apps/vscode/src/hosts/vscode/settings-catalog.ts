@@ -14,11 +14,6 @@ interface Schema {
 }
 const configurations = Array.isArray(contributes.configuration) ? contributes.configuration : [contributes.configuration]
 const schemas: Record<string, Schema> = Object.assign({}, ...configurations.map((section) => section.properties))
-const targets: Record<SettingScope, vscode.ConfigurationTarget> = {
-	user: vscode.ConfigurationTarget.Global,
-	workspace: vscode.ConfigurationTarget.Workspace,
-	folder: vscode.ConfigurationTarget.WorkspaceFolder,
-}
 
 export async function manageSettingsCatalog(input: Record<string, unknown>): Promise<SettingsCatalog> {
 	const resource = vscode.window.activeTextEditor?.document.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri
@@ -32,6 +27,11 @@ export async function manageSettingsCatalog(input: Record<string, unknown>): Pro
 		if (input.op === "open") {
 			await vscode.commands.executeCommand("workbench.action.openSettings", `@id:${key}`)
 		} else {
+			const targets: Record<SettingScope, vscode.ConfigurationTarget> = {
+				user: vscode.ConfigurationTarget.Global,
+				workspace: vscode.ConfigurationTarget.Workspace,
+				folder: vscode.ConfigurationTarget.WorkspaceFolder,
+			}
 			if (input.resourceId !== resource?.toString())
 				throw new Error("The active settings resource changed. Refresh before editing.")
 			const scope = input.scope as SettingScope
