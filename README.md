@@ -24,6 +24,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 ## Available in pre-releases
 
+[Settings search](docs/settings-search.md) finds editor settings by name or description, filters modified
+values, shows their effective source, and resets individual User, Workspace or Folder overrides.
+
 The [needs-attention inbox](docs/attention-inbox.md) collects approvals, questions, failed runs, completed
 work to review and watched CI issues. Review acknowledgements reset when a conversation changes.
 

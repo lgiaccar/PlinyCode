@@ -232,6 +232,8 @@ message IntentEvent {
 
 // UiService provides methods for managing UI interactions
 service UiService {
+  // Search and inspect declared PlinyCode editor settings; reset a specific scope.
+  rpc manageSettingsCatalog(StringRequest) returns (String);
   // Sets the terminal execution mode (vscodeTerminal or backgroundExec)
   rpc setTerminalExecutionMode(BooleanRequest) returns (KeyValuePair);
 
