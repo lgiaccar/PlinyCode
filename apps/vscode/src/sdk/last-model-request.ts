@@ -1,5 +1,6 @@
 import type { CoreSessionConfig } from "@plinycode/core"
 import type { AgentModelRequest } from "@plinycode/shared"
+import { captureContextRequest } from "./context-inspector"
 
 /**
  * The last request each conversation's agent sent to its model, for the
@@ -46,7 +47,9 @@ export function installLastRequestCapture(config: CoreSessionConfig, now: () => 
 			stream: (request) => {
 				const sessionId = config.sessionId?.trim()
 				if (sessionId) {
-					remember({ sessionId, modelId: input.config.modelId, at: now(), request })
+					const at = now()
+					remember({ sessionId, modelId: input.config.modelId, at, request })
+					captureContextRequest(sessionId, input.config.modelId, at, request)
 				}
 				return model.stream(request)
 			},

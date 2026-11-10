@@ -10,6 +10,9 @@ their configured services; extension updates come from GitHub.
 
 ## Available in pre-releases
 
+The context inspector lets you select and search recent captured model requests, inspect their source text,
+and see estimated token usage with explicit preview limits.
+
 Settings search finds editor settings by name or description, filters modified values, shows their effective
 source, and resets individual User, Workspace or Folder overrides.
 
