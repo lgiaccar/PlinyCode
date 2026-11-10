@@ -93,6 +93,8 @@ export interface Provider {
 	readonly repoUrl: string
 	defaultBranch(): Promise<string>
 	findOpenPr(branch: string): Promise<PullRequest | undefined>
+	/** Latest PR for a branch, including merged/closed ones, for delivery inspection. */
+	findLatestPr?(branch: string): Promise<PullRequest | undefined>
 	getPr(id: number): Promise<PullRequest>
 	createPr(title: string, body: string, source: string, target: string, draft: boolean): Promise<PullRequest>
 	/** Changes only the fields given. `draft` false publishes a draft PR (ready for review); true makes it a draft again. */

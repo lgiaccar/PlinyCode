@@ -24,6 +24,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 ## Available in pre-releases
 
+Completed responses include a [delivery card](docs/delivery-card.md) with recorded tool evidence, current
+branch PR/check status, and a follow-up action to verify delivery. Missing publication evidence stays explicit.
+
 The compact chat header and cleaner composer are available in **0.2.10 test builds**. Enable **Install
 pre-releases** in **Settings > About**, then run **PlinyCode: Check for Updates**.
 

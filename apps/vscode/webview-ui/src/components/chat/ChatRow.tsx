@@ -1275,6 +1275,9 @@ const ChatRowContent = memo(
 						return (
 							<CompletionOutputRow
 								handleQuoteClick={handleQuoteClick}
+								onVerifyDelivery={
+									sendMessageFromChatRow ? (text) => sendMessageFromChatRow(text, [], []) : undefined
+								}
 								quoteButtonState={quoteButtonState}
 								showCheckpointsEnablePrompt={showCompletionFooter && !enableCheckpointsSetting}
 								showViewChanges={showCompletionFooter && enableCheckpointsSetting}

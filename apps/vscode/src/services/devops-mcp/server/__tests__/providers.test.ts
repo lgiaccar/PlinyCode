@@ -26,6 +26,12 @@ const github = (api: FakeApi) =>
 	new GitHubProvider({ kind: "github", host: "github.com", owner: "octo", repo: "hello" }, api.fetch, staticAuth())
 
 describe("GitHubProvider", () => {
+	it("finds a branch's latest PR including a merged PR", async () => {
+		const api = new FakeApi().on("GET", `${GH}/pulls`, [ghPr()])
+		api.on("GET", `${GH}/pulls/7`, ghPr({ state: "closed", merged_at: "2026-01-01" }))
+		expect(await github(api).findLatestPr("feature")).toMatchObject({ id: 7, state: "merged" })
+		expect(api.requests[0].url.searchParams.get("state")).toBe("all")
+	})
 	it("pins merges to the selected head and surfaces server rejection", async () => {
 		const sha = "a".repeat(40)
 		const api = new FakeApi().on("PUT", `${GH}/pulls/7/merge`, { merged: true })

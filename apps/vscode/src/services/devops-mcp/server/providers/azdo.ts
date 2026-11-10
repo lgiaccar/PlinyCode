@@ -428,6 +428,15 @@ export class AzureDevOpsProvider implements ToolProvider {
 		return this.pr(await this.api("GET", await this.prPath(`/${id}`)))
 	}
 
+	async findLatestPr(branch: string): Promise<PullRequest | undefined> {
+		const data = await this.api("GET", await this.prPath(), {
+			"searchCriteria.sourceRefName": `refs/heads/${branch}`,
+			"searchCriteria.status": "all",
+			$top: 1,
+		})
+		return data.value?.length ? this.getPr(data.value[0].pullRequestId) : undefined
+	}
+
 	async listOpenPrs({ mine, limit }: { mine: boolean; limit: number }): Promise<PullRequest[]> {
 		const data = await this.api("GET", await this.prPath(), {
 			"searchCriteria.status": "active",
