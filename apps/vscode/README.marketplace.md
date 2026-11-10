@@ -10,6 +10,9 @@ their configured services; extension updates come from GitHub.
 
 ## Available in pre-releases
 
+The needs-attention inbox collects approvals, questions, failed runs, completed work to review and watched
+CI issues. Review acknowledgements reset when a conversation changes.
+
 Completed responses include a delivery card with recorded tool evidence, current branch PR/check status,
 and an action to verify delivery. Missing publication evidence stays explicit.
 

@@ -24,6 +24,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 ## Available in pre-releases
 
+The [needs-attention inbox](docs/attention-inbox.md) collects approvals, questions, failed runs, completed
+work to review and watched CI issues. Review acknowledgements reset when a conversation changes.
+
 Completed responses include a [delivery card](docs/delivery-card.md) with recorded tool evidence, current
 branch PR/check status, and a follow-up action to verify delivery. Missing publication evidence stays explicit.
 
