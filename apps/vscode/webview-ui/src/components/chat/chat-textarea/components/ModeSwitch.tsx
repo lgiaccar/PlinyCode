@@ -59,6 +59,7 @@ interface ModeSwitchProps {
 	mode: Mode
 	onModeSelect: (mode: Mode) => void
 	togglePlanActKeys: string
+	compact?: boolean
 }
 
 /**
@@ -68,8 +69,24 @@ interface ModeSwitchProps {
  * hovering, purely to decide the tooltip's copy — it's local to this component
  * since nothing outside it needs that value.
  */
-export function ModeSwitch({ mode, onModeSelect, togglePlanActKeys }: ModeSwitchProps) {
+export function ModeSwitch({ mode, onModeSelect, togglePlanActKeys, compact = false }: ModeSwitchProps) {
 	const [shownTooltipMode, setShownTooltipMode] = useState<Mode | null>(null)
+	if (compact) {
+		return (
+			<select
+				aria-label="Conversation mode"
+				className="shrink-0 rounded border border-editor-group-border bg-input-background px-1 py-0.5 text-xs text-foreground"
+				onChange={(event) => onModeSelect(event.target.value as Mode)}
+				title={`Switch mode (${togglePlanActKeys})`}
+				value={mode}>
+				{MODES.map((value) => (
+					<option key={value} value={value}>
+						{MODE_DETAILS[value].label}
+					</option>
+				))}
+			</select>
+		)
+	}
 
 	return (
 		<Tooltip>

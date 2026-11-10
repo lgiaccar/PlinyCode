@@ -932,7 +932,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						/>
 					</div>
 					{/* Tooltip for the mode switch remains outside the conditional rendering */}
-					<ModeSwitch mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
+					<ModeSwitch compact mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
 					<button
 						aria-controls="composer-message-options"
 						aria-expanded={showMessageOptions}
@@ -1018,11 +1018,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<div
 						className="mx-3 mb-2 flex flex-wrap items-center gap-3 rounded border border-editor-group-border bg-input-background p-2"
 						id="composer-message-options">
-						<label className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs">
+						<label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs">
 							Send behavior
 							<select
 								aria-label="Send mode"
-								className="min-w-0 max-w-full rounded border border-editor-group-border bg-input-background text-foreground"
+								className="w-full min-w-0 rounded border border-editor-group-border bg-input-background text-foreground"
 								data-testid="send-mode-select"
 								onChange={(event) => {
 									const next = event.target.value as SendMode
