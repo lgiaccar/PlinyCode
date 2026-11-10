@@ -8,6 +8,18 @@ const DEFAULT_CHAT_FONT_SIZE = 13
 const MIN_CHAT_FONT_SIZE = 10
 const MAX_CHAT_FONT_SIZE = 24
 
+/** Read at the same resource as the settings catalog, including folder overrides. */
+export function getUiDensity(): "comfortable" | "compact" {
+	try {
+		const resource = vscode.window.activeTextEditor?.document.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri
+		return vscode.workspace.getConfiguration("plinycode.ui", resource).get("density") === "compact"
+			? "compact"
+			: "comfortable"
+	} catch {
+		return "comfortable"
+	}
+}
+
 /**
  * `plinycode.chat.fontSize`: the font size in pixels for the chat panel.
  * Read when building ExtensionState, so a change in VS Code settings

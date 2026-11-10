@@ -44,6 +44,7 @@ import { listSavedPlans, workspacePlanFolder } from "./core/workspace/plan-folde
 import { createClineAPI } from "./exports"
 import { registerAutoUpdater } from "./hosts/vscode/auto-update/AutoUpdater"
 import { removeLegacyExtension } from "./hosts/vscode/auto-update/legacy-extension"
+import { getUiDensity } from "./hosts/vscode/chat-settings"
 import { findMatchingNotebookCell, getContextForCommand, showWebview } from "./hosts/vscode/commandUtils"
 import { abortCommitGeneration, generateCommitMsg } from "./hosts/vscode/commit-message-generator"
 import { installCustomizationWatcher } from "./hosts/vscode/customization-watcher"
@@ -248,6 +249,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerAutoUpdater(context)
 	// web_search: its API key command, and the engine's native flag kept in step with the setting.
 	registerWebSearchSettings(context, commands.SetWebSearchApiKey)
+	let activeDensity = getUiDensity()
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((event) => {
 			// Keep the Settings view's pre-release, memory and web search settings, the context bar's
@@ -259,8 +261,21 @@ export async function activate(context: vscode.ExtensionContext) {
 				event.affectsConfiguration("plinycode.compaction") ||
 				event.affectsConfiguration("plinycode.webSearch.enabled") ||
 				event.affectsConfiguration("plinycode.chat.fontSize") ||
+				event.affectsConfiguration("plinycode.ui.density") ||
 				event.affectsConfiguration(PLAN_EXECUTE_WITH_SETTING_ID)
 			) {
+				activeDensity = getUiDensity()
+				void WebviewProvider.getInstance()?.controller.postStateToWebview()
+			}
+		}),
+	)
+
+	context.subscriptions.push(
+		vscode.window.onDidChangeActiveTextEditor(() => {
+			// A folder-scoped appearance preference follows the active settings resource.
+			const next = getUiDensity()
+			if (next !== activeDensity) {
+				activeDensity = next
 				void WebviewProvider.getInstance()?.controller.postStateToWebview()
 			}
 		}),

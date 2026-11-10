@@ -96,7 +96,7 @@ export const CiItemRow = ({ targetId, item, onEditActions, snapshotError, now = 
 	return (
 		<div
 			className={cn(
-				"flex flex-col gap-1 my-1 pl-2 pr-1 py-1.5 rounded border border-border-panel border-l-2 hover:bg-list-hover/40",
+				"pc-ci-row flex flex-col gap-1 my-1 pl-2 pr-1 py-1.5 rounded border border-border-panel border-l-2 hover:bg-list-hover/40",
 				!severity && "border-l-border-panel",
 			)}
 			data-testid="ci-item"

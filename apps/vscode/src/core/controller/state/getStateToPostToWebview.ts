@@ -12,7 +12,7 @@ import { ClineEnv } from "@/config"
 import { HostProvider } from "@/hosts/host-provider"
 import { readAgentFileLocations } from "@/hosts/vscode/agent-file-locations"
 import { isPrereleaseChannelEnabled } from "@/hosts/vscode/auto-update/update-settings"
-import { getChatFontSize } from "@/hosts/vscode/chat-settings"
+import { getChatFontSize, getUiDensity } from "@/hosts/vscode/chat-settings"
 import { getCompactionThreshold } from "@/hosts/vscode/compaction-settings"
 import {
 	getMemoryMaxTokens,
@@ -180,6 +180,7 @@ export async function getStateToPostToWebview(controller: {
 		compactionStrategy,
 		compactionThreshold,
 		chatFontSize,
+		uiDensity: getUiDensity(),
 		webSearchEnabled,
 		prereleaseUpdatesEnabled,
 		conversationSpendingLimit,

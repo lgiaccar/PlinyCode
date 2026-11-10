@@ -10,6 +10,9 @@ their configured services; extension updates come from GitHub.
 
 ## Available in pre-releases
 
+Interface density offers Comfortable and Compact spacing across chat, CI Board, settings and inspection
+panels, with consistent theme-aware controls and keyboard focus. Choose it in Settings > General.
+
 The compact chat header and cleaner composer are available in **0.2.10 test builds**. Enable **Install
 pre-releases** in **Settings > About**, then run **PlinyCode: Check for Updates**.
 

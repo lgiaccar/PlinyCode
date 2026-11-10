@@ -1,3 +1,4 @@
+import { DensitySetting } from "../DensitySetting"
 import PreferredLanguageSetting from "../PreferredLanguageSetting"
 import Section from "../Section"
 import SpendingLimitSetting from "../SpendingLimitSetting"
@@ -12,6 +13,7 @@ const GeneralSettingsSection = ({ renderSectionHeader }: GeneralSettingsSectionP
 		<div>
 			{renderSectionHeader("general")}
 			<Section>
+				<DensitySetting />
 				<PreferredLanguageSetting />
 
 				<SpendingLimitSetting />

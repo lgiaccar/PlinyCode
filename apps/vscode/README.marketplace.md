@@ -10,6 +10,9 @@ their configured services; extension updates come from GitHub.
 
 ## Available in pre-releases
 
+Interface density offers Comfortable and Compact spacing across chat, CI Board, settings and inspection
+panels, with consistent theme-aware controls and keyboard focus. Choose it in Settings > General.
+
 The context inspector lets you select and search recent captured model requests, inspect their source text,
 and see estimated token usage with explicit preview limits.
 

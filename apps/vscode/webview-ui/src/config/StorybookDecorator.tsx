@@ -14,7 +14,14 @@ import {
 import { StorybookThemes } from "../../.storybook/themes"
 
 // Component that handles theme switching
-const ThemeHandler: React.FC<{ children: React.ReactNode; theme?: string }> = ({ children, theme }) => {
+const ThemeHandler: React.FC<{ children: React.ReactNode; theme?: string; density?: string }> = ({
+	children,
+	theme,
+	density,
+}) => {
+	React.useEffect(() => {
+		document.documentElement.dataset.pcDensity = density === "compact" ? "compact" : "comfortable"
+	}, [density])
 	React.useEffect(() => {
 		const styles = theme?.includes("light") ? StorybookThemes.light : StorybookThemes.dark
 
@@ -44,7 +51,9 @@ function StorybookDecoratorProvider(className = "relative"): Decorator {
 		return (
 			<div className={className}>
 				<ExtensionStateContextProvider>
-					<ThemeHandler theme={parameters?.globals?.theme}>{React.createElement(story)}</ThemeHandler>
+					<ThemeHandler density={parameters?.globals?.density} theme={parameters?.globals?.theme}>
+						{React.createElement(story)}
+					</ThemeHandler>
 				</ExtensionStateContextProvider>
 			</div>
 		)

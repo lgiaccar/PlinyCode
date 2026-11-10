@@ -39,7 +39,7 @@ export function ContextInspector({ taskId, onClose }: { taskId: string; onClose:
 	return (
 		<dialog
 			aria-label="Context inspector"
-			className="pc-surface fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-sidebar-background text-foreground p-4 overflow-auto"
+			className="pc-surface pc-controls fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-sidebar-background text-foreground p-4 overflow-auto"
 			onCancel={onClose}
 			ref={dialog}>
 			<div className="flex justify-between items-center gap-2">

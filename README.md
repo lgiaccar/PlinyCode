@@ -24,6 +24,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 ## Available in pre-releases
 
+[Interface density](docs/interface-density.md) offers Comfortable and Compact spacing across chat, CI Board,
+settings and inspection panels, with consistent theme-aware controls and keyboard focus.
+
 The [context inspector](docs/context-inspector.md) lets you select and search recent captured model requests,
 inspect their source text and see estimated token usage with explicit preview limits.
 
