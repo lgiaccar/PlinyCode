@@ -172,7 +172,7 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 			{/* Task Header */}
 			<div
 				className={cn(
-					"relative overflow-hidden cursor-pointer rounded-sm flex flex-col gap-1.5 z-10 pt-2 pb-2 px-2 hover:opacity-100 bg-(--vscode-toolbar-hoverBackground)/65",
+					"relative overflow-hidden rounded-sm flex flex-col gap-1.5 z-10 pt-2 pb-2 px-2 hover:opacity-100 bg-(--vscode-toolbar-hoverBackground)/65",
 					{
 						"opacity-100 border-1": isTaskExpanded, // No hover effects when expanded, add border
 						"hover:bg-toolbar-hover border-1": !isTaskExpanded, // Hover effects only when collapsed
@@ -181,37 +181,8 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 				style={{
 					borderColor: environmentBorderColor,
 				}}>
-				{/* Task Title */}
-				<div
-					aria-label={isTaskExpanded ? "Collapse task header" : "Expand task header"}
-					className="flex justify-between items-center cursor-pointer"
-					onClick={toggleTaskExpanded}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault()
-							e.stopPropagation()
-							toggleTaskExpanded()
-						}
-					}}>
-					<div className="flex justify-between items-center">
-						{isTaskExpanded ? <ChevronDownIcon size="16" /> : <ChevronRightIcon size="16" />}
-						{isTaskExpanded && (
-							<div className="mt-1 flex justify-end cursor-pointer opacity-80 gap-2 mx-2">
-								<CopyTaskButton className={BUTTON_CLASS} taskText={task.text} />
-								<DeleteTaskButton
-									className={BUTTON_CLASS}
-									taskId={currentTaskItem?.id}
-									taskSize={currentTaskItem?.size}
-								/>
-								{/* Only visible in development mode */}
-								{IS_DEV && (
-									<OpenDiskConversationHistoryButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
-								)}
-							</div>
-						)}
-					</div>
-					{/* Conversation title, with the workspace name underneath, centred between the button groups */}
-					<div className="flex flex-col items-center justify-center select-none grow min-w-0 px-2 text-center">
+				<div className="flex items-start gap-2">
+					<div className="min-w-0 flex-1">
 						{isRenaming ? (
 							<TaskTitleInput
 								initialTitle={titleText ?? ""}
@@ -219,66 +190,95 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 								onDone={() => setIsRenaming(false)}
 							/>
 						) : (
-							<div className="whitespace-nowrap overflow-hidden text-ellipsis w-full min-w-0" title={titleText}>
-								<span className="ph-no-capture text-base">{isTaskExpanded ? titleText : highlightedText}</span>
+							<div className="truncate text-sm font-medium" title={titleText}>
+								<span className="ph-no-capture">{highlightedText}</span>
 							</div>
 						)}
-						{workspaceLabel && (
-							<div
-								className="whitespace-nowrap overflow-hidden text-ellipsis w-full min-w-0 text-xs text-description"
-								title={workspacePath}>
-								{workspaceLabel}
-							</div>
-						)}
-						{currentTaskItem?.id && (
-							<div
-								className="select-text text-xs text-description font-mono"
-								data-testid="task-ref"
-								title="Conversation reference">
-								#{conversationRef(currentTaskItem.id)}
-							</div>
-						)}
+						<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-description">
+							{workspaceLabel && (
+								<span className="min-w-0 truncate" title={workspacePath}>
+									{workspaceLabel}
+								</span>
+							)}
+							{currentTaskItem?.runningSinceTs !== undefined && <span>Running</span>}
+							{!currentTaskItem?.worktree && (
+								<TaskWorkingDirectoryBadge
+									platform={platform}
+									taskCwd={currentTaskItem?.cwdOnTaskInitialization}
+									workspaceRoots={workspaceRoots}
+								/>
+							)}
+						</div>
 						<TaskWorktreeChip taskId={currentTaskItem?.id} worktree={currentTaskItem?.worktree} />
-						<TaskAgentChip agentPath={currentTaskItem?.agentPath} />
 					</div>
-					<div className="inline-flex items-center justify-end select-none shrink-0">
-						{currentTaskItem?.id && (
-							<TaskWaitLimit
-								minutes={currentTaskItem.waitMinutesPerTurn ?? maxWaitMinutesPerTurn ?? 60}
-								taskId={currentTaskItem.id}
-							/>
-						)}
-						<TaskUsageCounter
-							activeMs={currentTaskItem?.activeMs}
-							budget={budget}
-							cacheReads={cacheReads}
-							cacheWrites={cacheWrites}
-							hasEstimatedUsage={hasEstimatedUsage}
-							onBudgetChange={currentTaskItem?.id ? setBudget : undefined}
-							runningSinceTs={currentTaskItem?.runningSinceTs}
-							startedTs={currentTaskItem?.startedTs}
-							tokensIn={tokensIn}
-							tokensOut={tokensOut}
-							totalCost={isCostAvailable ? (totalCost ?? 0) : undefined}
-						/>
-						{/* A worktree conversation works outside the window's folders by design; its chip says where. */}
-						{!currentTaskItem?.worktree && (
-							<TaskWorkingDirectoryBadge
-								platform={platform}
-								taskCwd={currentTaskItem?.cwdOnTaskInitialization}
-								workspaceRoots={workspaceRoots}
-							/>
-						)}
-						{currentTaskItem?.id && <RenameTaskButton className={BUTTON_CLASS} onClick={() => setIsRenaming(true)} />}
-						<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
-						<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
-					</div>
+					<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
 				</div>
+				<button
+					aria-controls="task-header-details"
+					aria-expanded={isTaskExpanded}
+					aria-label={isTaskExpanded ? "Collapse task header" : "Expand task header"}
+					className="flex w-fit items-center gap-1 border-0 bg-transparent p-0 text-xs text-description cursor-pointer hover:text-foreground"
+					onClick={toggleTaskExpanded}
+					type="button">
+					{isTaskExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+					Details
+				</button>
 
 				{/* Expand/Collapse Task Details */}
 				<PlinyBudgetIndicator refreshKey={Math.floor(totalCost ?? 0)} />
 				{isTaskExpanded && (
-					<div className="flex flex-col break-words" key={`task-details-${currentTaskItem?.id}`}>
+					<div
+						className="flex flex-col break-words"
+						id="task-header-details"
+						key={`task-details-${currentTaskItem?.id}`}>
+						<div aria-label="Conversation actions" className="flex flex-wrap items-center gap-2 py-1" role="group">
+							<CopyTaskButton className={BUTTON_CLASS} taskText={task.text} />
+							{currentTaskItem?.id && (
+								<RenameTaskButton className={BUTTON_CLASS} onClick={() => setIsRenaming(true)} />
+							)}
+							<ExportMarkdownButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
+							<DeleteTaskButton
+								className={BUTTON_CLASS}
+								taskId={currentTaskItem?.id}
+								taskSize={currentTaskItem?.size}
+							/>
+							{IS_DEV && (
+								<OpenDiskConversationHistoryButton className={BUTTON_CLASS} taskId={currentTaskItem?.id} />
+							)}
+							{currentTaskItem?.id && (
+								<span
+									className="select-text text-xs text-description font-mono"
+									data-testid="task-ref"
+									title="Conversation reference">
+									#{conversationRef(currentTaskItem.id)}
+								</span>
+							)}
+							<TaskAgentChip agentPath={currentTaskItem?.agentPath} />
+						</div>
+						<div
+							aria-label="Conversation usage and limits"
+							className="flex flex-wrap items-center gap-2 py-1"
+							role="group">
+							<TaskUsageCounter
+								activeMs={currentTaskItem?.activeMs}
+								budget={budget}
+								cacheReads={cacheReads}
+								cacheWrites={cacheWrites}
+								hasEstimatedUsage={hasEstimatedUsage}
+								onBudgetChange={currentTaskItem?.id ? setBudget : undefined}
+								runningSinceTs={currentTaskItem?.runningSinceTs}
+								startedTs={currentTaskItem?.startedTs}
+								tokensIn={tokensIn}
+								tokensOut={tokensOut}
+								totalCost={isCostAvailable ? (totalCost ?? 0) : undefined}
+							/>
+							{currentTaskItem?.id && (
+								<TaskWaitLimit
+									minutes={currentTaskItem.waitMinutesPerTurn ?? maxWaitMinutesPerTurn ?? 60}
+									taskId={currentTaskItem.id}
+								/>
+							)}
+						</div>
 						<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
 							{currentTaskItem?.startedTs ? (
 								<div className="text-xs text-description">

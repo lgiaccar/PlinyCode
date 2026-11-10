@@ -28,7 +28,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 - **Cancel and resume reliably:** cancellation stops the current turn and keeps queued messages editable.
   Use **Resume Task** or send a new message to continue after cleanup. Completed edits are not undone.
-- **Chat controls:** adjust `plinycode.chat.fontSize` from 10 to 24 pixels (default 13). Agent command terminals
+- **Chat controls:** a compact header keeps the task and workspace visible; **Details** shows usage and limits.
+  **More message options** groups send behavior and secondary controls. See [Chat controls](docs/chat-controls.md).
+  Adjust `plinycode.chat.fontSize` from 10 to 24 pixels (default 13). Agent command terminals
   stay hidden until opened with **PlinyCode: Show Agent Terminal**. Customization tabs scroll correctly again.
 - **Grafana machine metrics:** connect a Grafana server in **Pipelines > Agents > Grafana machine metrics...**.
   Agent rows show compact free-disk readings; **Details** opens CPU/GPU history and hardware information.

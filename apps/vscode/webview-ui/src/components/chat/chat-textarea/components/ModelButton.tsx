@@ -95,20 +95,10 @@ interface ModelButtonProps {
 }
 
 /**
- * The toolbar row below the textarea: add-context and add-files-and-images
- * buttons, the MCP servers and workspace rules toggles, the model tuning
- * button and the model picker.
- * Always rendered (visibility is controlled by the parent's CSS), so it has
- * no state of its own beyond what it's given.
+ * The model and agent pickers stay visible below the textarea. Secondary
+ * context and tool controls are rendered separately in More message options.
  */
-export function ModelButton({
-	mode,
-	handleContextButtonClick,
-	shouldDisableFilesAndImages,
-	onSelectFilesAndImages,
-	selectedAgentPath,
-	onSelectedAgentPathChange,
-}: ModelButtonProps) {
+export function ModelButton({ mode, selectedAgentPath, onSelectedAgentPathChange }: ModelButtonProps) {
 	const { apiConfiguration } = useExtensionState()
 	const { selectedProvider, selectedModelId } = useNormalizedApiConfiguration(mode)
 
@@ -122,6 +112,26 @@ export function ModelButton({
 
 	return (
 		<ButtonGroup className="absolute top-0 left-0 right-0 ease-in-out w-full h-5 z-10 flex items-center">
+			<ModelContainer>
+				<ConversationModelPicker mode={mode} />
+				<ConversationAgentPicker
+					onSelectedAgentPathChange={onSelectedAgentPathChange}
+					selectedAgentPath={selectedAgentPath}
+				/>
+			</ModelContainer>
+		</ButtonGroup>
+	)
+}
+
+/** Secondary composer controls, revealed by More message options. */
+export function ComposerContextControls({
+	mode,
+	handleContextButtonClick,
+	onSelectFilesAndImages,
+	shouldDisableFilesAndImages,
+}: Pick<ModelButtonProps, "mode" | "handleContextButtonClick" | "onSelectFilesAndImages" | "shouldDisableFilesAndImages">) {
+	return (
+		<div aria-label="Context and tools" className="flex flex-wrap items-center gap-2" role="group">
 			<Tooltip>
 				<TooltipContent>Add Context</TooltipContent>
 				<TooltipTrigger>
@@ -137,7 +147,6 @@ export function ModelButton({
 					</VSCodeButton>
 				</TooltipTrigger>
 			</Tooltip>
-
 			<Tooltip>
 				<TooltipContent>Add Files & Images</TooltipContent>
 				<TooltipTrigger>
@@ -158,20 +167,9 @@ export function ModelButton({
 					</VSCodeButton>
 				</TooltipTrigger>
 			</Tooltip>
-
 			<ServersToggleModal />
-
 			<ClineRulesToggleModal />
-
 			<ModelTuningButton mode={mode} />
-
-			<ModelContainer>
-				<ConversationModelPicker mode={mode} />
-				<ConversationAgentPicker
-					selectedAgentPath={selectedAgentPath}
-					onSelectedAgentPathChange={onSelectedAgentPathChange}
-				/>
-			</ModelContainer>
-		</ButtonGroup>
+		</div>
 	)
 }

@@ -255,7 +255,7 @@ export const ExtensionStateContextProvider: React.FC<{
 		isMultiRootWorkspace: false,
 		hooksEnabled: false,
 	})
-	const [expandTaskHeader, setExpandTaskHeader] = useState(true)
+	const [expandTaskHeader, setExpandTaskHeader] = useState(false)
 	const [didHydrateState, setDidHydrateState] = useState(false)
 
 	const [showWelcome, setShowWelcome] = useState(false)
