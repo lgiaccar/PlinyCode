@@ -9,9 +9,9 @@ import { e2e } from "./utils/helpers"
 
 /** Sends `plan_request` in plan mode and waits for the plan row; returns the plan file's path. */
 async function presentPlan(sidebar: Frame, workspaceDir: string): Promise<string> {
-	const planSwitch = sidebar.getByRole("switch", { name: "Plan" })
-	await planSwitch.click()
-	await expect(planSwitch).toHaveAttribute("aria-checked", "true")
+	const mode = sidebar.getByRole("combobox", { name: "Conversation mode" })
+	await mode.selectOption("plan")
+	await expect(mode).toHaveValue("plan")
 
 	const inputbox = sidebar.getByTestId("chat-input")
 	await inputbox.fill("plan_request")
@@ -36,8 +36,7 @@ e2e(
 	"Plan - Execute plan runs on the model picked from the button's menu",
 	async ({ helper, sidebar, workspaceDir, userDataDir }) => {
 		const modelPicker = sidebar.getByTitle(/^Select model/)
-		const planSwitch = sidebar.getByRole("switch", { name: "Plan" })
-		const actSwitch = sidebar.getByRole("switch", { name: "Agent" })
+		const mode = sidebar.getByRole("combobox", { name: "Conversation mode" })
 
 		await helper.ensureReady(sidebar)
 
@@ -61,7 +60,7 @@ e2e(
 		await rows.filter({ hasText: "FreeAuto" }).click()
 
 		// The plan is executed in act mode, in the same conversation.
-		await expect(actSwitch).toHaveAttribute("aria-checked", "true", { timeout: 30_000 })
+		await expect(mode).toHaveValue("act", { timeout: 30_000 })
 		// .first(): the sticky "Scroll to your message" header repeats the text once the message scrolls away.
 		await expect(sidebar.getByText(/^execute the plan in .*e2e-plan\/PLAN\.md$/).first()).toBeVisible({ timeout: 30_000 })
 		await expect(sidebar.getByText("The mock plan has been executed.")).toBeVisible({ timeout: 30_000 })
@@ -73,14 +72,14 @@ e2e(
 			.toMatch(/"plinycode\.plan\.executeWith":\s*"freeAuto"/)
 
 		// The planner keeps its model.
-		await planSwitch.click()
-		await expect(planSwitch).toHaveAttribute("aria-checked", "true")
+		await mode.selectOption("plan")
+		await expect(mode).toHaveValue("plan")
 		await expect(modelPicker).toContainText("auto-free-fast")
 	},
 )
 
 e2e("Plan - switching to Agent mode does not run the plan", async ({ helper, sidebar, workspaceDir }) => {
-	const actSwitch = sidebar.getByRole("switch", { name: "Agent" })
+	const mode = sidebar.getByRole("combobox", { name: "Conversation mode" })
 
 	await helper.ensureReady(sidebar)
 	const planFile = await presentPlan(sidebar, workspaceDir)
@@ -88,8 +87,8 @@ e2e("Plan - switching to Agent mode does not run the plan", async ({ helper, sid
 	// A draft in the prompt box is not an instruction to execute.
 	const inputbox = sidebar.getByTestId("chat-input")
 	await inputbox.fill("a draft")
-	await actSwitch.click()
-	await expect(actSwitch).toHaveAttribute("aria-checked", "true", { timeout: 30_000 })
+	await mode.selectOption("act")
+	await expect(mode).toHaveValue("act", { timeout: 30_000 })
 	await expect(inputbox).toHaveValue("a draft")
 	// Give a continuation that should not happen the time to show up.
 	await sidebar.waitForTimeout(3_000)
