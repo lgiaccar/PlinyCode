@@ -114,6 +114,12 @@ describe("TaskHeader", () => {
 		)
 		expect(screen.getByRole("status")).toHaveTextContent("Pliny budget: loading")
 		expect(screen.getByLabelText("Expand task header")).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "Expand task header" })).toHaveAttribute("aria-expanded", "false")
+		expect(screen.getByText("Build the feature")).toBeVisible()
+		expect(screen.getByText("workspace")).toBeVisible()
+		expect(screen.getByRole("button", { name: "New Task" })).toBeVisible()
+		expect(screen.queryByTestId("task-usage-counter")).not.toBeInTheDocument()
+		expect(screen.queryByLabelText(/Cumulative wait per agent turn/)).not.toBeInTheDocument()
 	})
 
 	it("shows edit controls for the opening prompt when expanded", () => {
@@ -135,6 +141,8 @@ describe("TaskHeader", () => {
 		)
 
 		expect(screen.getByLabelText("Edit and restart from this message")).toBeDefined()
+		expect(screen.getByTestId("task-usage-counter")).toBeVisible()
+		expect(screen.getByRole("button", { name: /Cumulative wait per agent turn/ })).toBeVisible()
 	})
 
 	it("calls editMessageAndRegenerate with the task timestamp when saving", async () => {

@@ -302,6 +302,7 @@ describe("ChatTextArea sticky send mode", () => {
 				sideQuestionAvailable={sideQuestionAvailable}
 			/>,
 		)
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
 		return { onSend, button: screen.getByTestId("send-button"), select: screen.getByTestId("send-mode-select") }
 	}
 
@@ -317,6 +318,19 @@ describe("ChatTextArea sticky send mode", () => {
 
 		fireEvent.click(button)
 		expect(onSend).toHaveBeenLastCalledWith(undefined)
+	})
+
+	it("keeps the active side-question and send behavior visible after closing options", () => {
+		const { onSend, button, select } = renderWithSend(true)
+		fireEvent.click(screen.getByRole("checkbox", { name: "Side question" }))
+		fireEvent.change(select, { target: { value: "steer" } })
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
+		expect(screen.queryByRole("checkbox", { name: "Side question" })).not.toBeInTheDocument()
+		expect(screen.getByText("Side question · off the record")).toBeVisible()
+		expect(screen.getByText("Steer (without interrupting)")).toBeVisible()
+		expect(onSend).not.toHaveBeenCalled()
+		fireEvent.click(button)
+		expect(onSend).toHaveBeenCalledWith("steer", { offTheRecord: true })
 	})
 
 	it("disables the side-question box when a side question cannot be sent", () => {
@@ -432,6 +446,7 @@ describe("ChatTextArea improve prompt", () => {
 
 	it("does nothing while the draft is empty", () => {
 		render(<StatefulTextArea initial="  " />)
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 		expect(mocks.improvePrompt).not.toHaveBeenCalled()
 	})
@@ -441,6 +456,7 @@ describe("ChatTextArea improve prompt", () => {
 		mocks.improvePrompt.mockResolvedValue({ text: "Explain this clearly.", error: "" })
 		render(<StatefulTextArea initial="" />)
 		fireEvent.paste(input(), { clipboardData: { getData: () => text, items: [] } })
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 		await waitFor(() => expect(input().value).toBe("Explain this clearly."))
 		expect(mocks.improvePrompt).toHaveBeenCalledWith(expect.objectContaining({ text }))
@@ -452,6 +468,7 @@ describe("ChatTextArea improve prompt", () => {
 		mocks.improvePrompt.mockResolvedValue({ text: "Fix the login redirect.", error: "" })
 		render(<StatefulTextArea initial="fix login pls" />)
 
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 
 		await waitFor(() => expect(input().value).toBe("Fix the login redirect."))
@@ -466,6 +483,7 @@ describe("ChatTextArea improve prompt", () => {
 		mocks.improvePrompt.mockReturnValue(new Promise((resolve) => (answer = resolve)))
 		render(<StatefulTextArea initial="fix login" />)
 
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 		fireEvent.change(input(), { target: { value: "fix login and logout", selectionStart: 20 } })
 		await act(async () => answer({ text: "Fix the login.", error: "" }))
@@ -478,6 +496,7 @@ describe("ChatTextArea improve prompt", () => {
 		mocks.improvePrompt.mockResolvedValue({ text: "", error: "The model returned no text." })
 		render(<StatefulTextArea initial="fix login" />)
 
+		fireEvent.click(screen.getByRole("button", { name: "More message options" }))
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 
 		await waitFor(() => expect(screen.getByTestId("improve-prompt-status").textContent).toContain("no text"))

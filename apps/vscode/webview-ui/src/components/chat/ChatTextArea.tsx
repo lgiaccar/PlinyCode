@@ -18,7 +18,7 @@ import { shouldShowContextMenu } from "@/utils/context-mentions"
 import { useMetaKeyDetection, useShortcut } from "@/utils/hooks"
 import { shouldShowSlashCommandsMenu, slashCommandRegexGlobal, validateSlashCommand } from "@/utils/slash-commands"
 import { ImprovePromptButton } from "./chat-textarea/components/ImprovePromptButton"
-import { ModelButton } from "./chat-textarea/components/ModelButton"
+import { ComposerContextControls, ModelButton } from "./chat-textarea/components/ModelButton"
 import { ModeSwitch, modeColor, nextMode } from "./chat-textarea/components/ModeSwitch"
 import { SideQuestionToggle } from "./chat-textarea/components/SideQuestionToggle"
 import { useCompactPaste } from "./chat-textarea/hooks/useCompactPaste"
@@ -126,12 +126,12 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [isTextAreaFocused, setIsTextAreaFocused] = useState(false)
 
 		const [thumbnailsHeight, setThumbnailsHeight] = useState(0)
-		const [textAreaBaseHeight, setTextAreaBaseHeight] = useState<number | undefined>(undefined)
 		const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 		const [isMouseDownOnMenu, setIsMouseDownOnMenu] = useState(false)
 		const highlightLayerRef = useRef<HTMLDivElement>(null)
 		const [justDeletedSpaceAfterSlashCommand, setJustDeletedSpaceAfterSlashCommand] = useState(false)
 
+		const [showMessageOptions, setShowMessageOptions] = useState(false)
 		const [sendMode, setSendMode] = useState<SendMode>(loadSendMode)
 		// The "Side question" checkbox. It applies to one message and clears after it is sent.
 		const [sideQuestionChecked, setSideQuestionChecked] = useState(false)
@@ -773,9 +773,6 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							onFocusChange?.(true) // Call prop on focus
 						}}
 						onHeightChange={(height) => {
-							if (textAreaBaseHeight === undefined || height < textAreaBaseHeight) {
-								setTextAreaBaseHeight(height)
-							}
 							onHeightChange?.(height)
 						}}
 						onKeyDown={handleKeyDown}
@@ -873,104 +870,6 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							}}
 						/>
 					)}
-					<div
-						className="absolute flex items-end bottom-4.5 right-5 z-10 h-8 text-xs"
-						style={{ height: textAreaBaseHeight }}>
-						<div className="relative flex flex-row items-center gap-1">
-							<div
-								aria-label={SEND_MODE_META[sendMode].label}
-								className={cn(
-									"input-icon-button",
-									{ disabled: sendingDisabled },
-									"codicon",
-									SEND_MODE_META[sendMode].icon,
-									"text-sm",
-								)}
-								data-send-mode={sendMode}
-								data-testid="send-button"
-								onClick={() => {
-									if (!sendingDisabled) {
-										triggerSend()
-									}
-								}}
-								title={SEND_MODE_META[sendMode].tooltip}
-							/>
-							{!showSchedulePicker && (
-								<div className="relative flex h-5 w-4 items-center justify-center" title="Choose send mode">
-									<span
-										aria-hidden="true"
-										className="codicon codicon-chevron-down text-[10px] pointer-events-none"
-									/>
-									{/* Invisible native select over the chevron keeps keyboard and
-										    screen-reader support. Choosing an option only changes the
-										    sticky send mode; it never sends. */}
-									<select
-										aria-label="Send mode"
-										className="absolute inset-0 cursor-pointer opacity-0"
-										data-testid="send-mode-select"
-										onChange={(e) => {
-											const mode = e.target.value as SendMode
-											setSendMode(mode)
-											saveSendMode(mode)
-										}}
-										style={{
-											backgroundColor:
-												"var(--vscode-dropdown-background, var(--vscode-input-background, var(--vscode-sideBar-background)))",
-											color: "var(--vscode-dropdown-foreground, var(--vscode-input-foreground, var(--vscode-foreground)))",
-										}}
-										value={sendMode}>
-										{SEND_MODES.map((mode) => (
-											<option key={mode} value={mode}>
-												{mode === sendMode ? "✓ " : " "}
-												{SEND_MODE_META[mode].label}
-											</option>
-										))}
-									</select>
-								</div>
-							)}
-							{showSchedulePicker && (
-								<div
-									className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-2 rounded-[3px] border border-editor-group-border p-3 shadow-md"
-									style={{
-										backgroundColor:
-											"var(--vscode-editorWidget-background, var(--vscode-sideBar-background))",
-									}}>
-									<div className="flex flex-wrap items-center gap-2">
-										<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
-									</div>
-									<div className="flex flex-wrap items-center gap-2">
-										<ScheduleRepeatInput
-											count={repeatCount}
-											every={repeatEvery}
-											onCountChange={setRepeatCount}
-											onEveryChange={setRepeatEvery}
-											onUnitChange={setRepeatUnit}
-											unit={repeatUnit}
-										/>
-									</div>
-									<div className="flex justify-end gap-2">
-										<button
-											className="flex h-7 items-center rounded-[3px] border border-editor-group-border px-3 text-xs text-description hover:text-foreground"
-											onClick={() => {
-												setShowSchedulePicker(false)
-												setScheduleTime("")
-												setRepeatCount(1)
-											}}
-											type="button">
-											Cancel
-										</button>
-										<button
-											className="flex h-7 items-center rounded-[3px] bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50"
-											disabled={!scheduleTime || sendingDisabled}
-											onClick={confirmSchedule}
-											type="button">
-											Schedule
-										</button>
-									</div>
-								</div>
-							)}
-						</div>
-					</div>
 				</div>
 				{unsupportedImagesAttached && (
 					<div
@@ -1032,19 +931,130 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
 						/>
 					</div>
-					<ImprovePromptButton
-						disabled={!inputValue.trim()}
-						onClick={() => void promptImprover.improve()}
-						pending={promptImprover.pending}
-					/>
-					<SideQuestionToggle
-						available={sideQuestionAvailable}
-						checked={sideQuestionChecked}
-						onChange={setSideQuestionChecked}
-					/>
 					{/* Tooltip for the mode switch remains outside the conditional rendering */}
-					<ModeSwitch mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
+					<ModeSwitch compact mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
+					<button
+						aria-controls="composer-message-options"
+						aria-expanded={showMessageOptions}
+						aria-label="More message options"
+						className="ml-1 shrink-0 rounded border-0 bg-transparent px-1.5 text-description hover:text-foreground"
+						onClick={() => setShowMessageOptions((value) => !value)}
+						type="button">
+						<span aria-hidden="true" className="codicon codicon-ellipsis" />
+					</button>
+					<div className="relative flex shrink-0 items-center text-xs">
+						<div className="relative flex flex-row items-center gap-1">
+							<button
+								aria-label={SEND_MODE_META[sendMode].label}
+								className={cn(
+									"input-icon-button border-0 bg-transparent",
+									{ disabled: sendingDisabled },
+									"codicon",
+									SEND_MODE_META[sendMode].icon,
+									"text-sm",
+								)}
+								data-send-mode={sendMode}
+								data-testid="send-button"
+								disabled={sendingDisabled}
+								onClick={() => {
+									if (!sendingDisabled) {
+										triggerSend()
+									}
+								}}
+								title={SEND_MODE_META[sendMode].tooltip}
+								type="button"
+							/>
+							{showSchedulePicker && (
+								<div
+									className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-2 rounded-[3px] border border-editor-group-border p-3 shadow-md"
+									style={{
+										backgroundColor:
+											"var(--vscode-editorWidget-background, var(--vscode-sideBar-background))",
+									}}>
+									<div className="flex flex-wrap items-center gap-2">
+										<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
+									</div>
+									<div className="flex flex-wrap items-center gap-2">
+										<ScheduleRepeatInput
+											count={repeatCount}
+											every={repeatEvery}
+											onCountChange={setRepeatCount}
+											onEveryChange={setRepeatEvery}
+											onUnitChange={setRepeatUnit}
+											unit={repeatUnit}
+										/>
+									</div>
+									<div className="flex justify-end gap-2">
+										<button
+											className="flex h-7 items-center rounded-[3px] border border-editor-group-border px-3 text-xs text-description hover:text-foreground"
+											onClick={() => {
+												setShowSchedulePicker(false)
+												setScheduleTime("")
+												setRepeatCount(1)
+											}}
+											type="button">
+											Cancel
+										</button>
+										<button
+											className="flex h-7 items-center rounded-[3px] bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50"
+											disabled={!scheduleTime || sendingDisabled}
+											onClick={confirmSchedule}
+											type="button">
+											Schedule
+										</button>
+									</div>
+								</div>
+							)}
+						</div>
+					</div>
 				</div>
+				{(sideQuestion || sendMode !== "queue") && (
+					<div className="flex flex-wrap gap-x-2 px-4 pb-2 text-xs text-description" role="status">
+						{sideQuestion && <span>Side question · off the record</span>}
+						{sendMode !== "queue" && <span>{SEND_MODE_META[sendMode].label}</span>}
+					</div>
+				)}
+				{showMessageOptions && (
+					<div
+						className="mx-3 mb-2 flex flex-wrap items-center gap-3 rounded border border-editor-group-border bg-input-background p-2"
+						id="composer-message-options">
+						<label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs">
+							Send behavior
+							<select
+								aria-label="Send mode"
+								className="w-full min-w-0 rounded border border-editor-group-border bg-input-background text-foreground"
+								data-testid="send-mode-select"
+								onChange={(event) => {
+									const next = event.target.value as SendMode
+									setSendMode(next)
+									saveSendMode(next)
+								}}
+								value={sendMode}>
+								{SEND_MODES.map((value) => (
+									<option key={value} value={value}>
+										{SEND_MODE_META[value].label}
+									</option>
+								))}
+							</select>
+						</label>
+						<ComposerContextControls
+							handleContextButtonClick={handleContextButtonClick}
+							mode={mode}
+							onSelectFilesAndImages={onSelectFilesAndImages}
+							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
+						/>
+						<ImprovePromptButton
+							disabled={!inputValue.trim()}
+							onClick={() => void promptImprover.improve()}
+							pending={promptImprover.pending}
+						/>
+						<SideQuestionToggle
+							available={sideQuestionAvailable}
+							checked={sideQuestionChecked}
+							onChange={setSideQuestionChecked}
+						/>
+					</div>
+				)}
 			</div>
 		)
 	},
