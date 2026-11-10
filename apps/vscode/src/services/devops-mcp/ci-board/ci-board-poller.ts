@@ -332,6 +332,7 @@ export class CiBoardPoller {
 					pr,
 					branch: entry.branch,
 					headSha: head,
+					checkedTs: this.clock.now(),
 					mergeState: pr?.mergeState,
 					pipelines: groupPipelines(runs, known),
 					expiredBuildPolicies,

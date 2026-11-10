@@ -9,6 +9,7 @@ import { CiActionsEditor } from "./CiActionsEditor"
 import { CiAutoWatchToggle } from "./CiAutoWatchToggle"
 import { CiItemRow } from "./CiItemRow"
 import { CiTip } from "./CiTip"
+import { type CiBoardFilter, filteredCiItems } from "./ciBoardFilters"
 import { isFailing, itemRank } from "./ciBoardUtils"
 import { errorText } from "./useCiBoard"
 
@@ -19,7 +20,17 @@ const KIND_ICONS: Record<string, { icon: string; tip: string }> = {
 }
 
 /** A target of the board: its header (auto-watch, actions, refresh, remove) and its pull requests, worst first. */
-export const CiTargetSection = ({ target, failingOnly = false }: { target: CiTargetView; failingOnly?: boolean }) => {
+export const CiTargetSection = ({
+	target,
+	filter = "all",
+	query = "",
+	now = Date.now(),
+}: {
+	target: CiTargetView
+	filter?: CiBoardFilter
+	query?: string
+	now?: number
+}) => {
 	const [editing, setEditing] = useState(false)
 	const [refreshing, setRefreshing] = useState(false)
 	const [confirmRemove, setConfirmRemove] = useState(false)
@@ -46,16 +57,18 @@ export const CiTargetSection = ({ target, failingOnly = false }: { target: CiTar
 		CiBoardServiceClient.removeCiTarget(StringRequest.create({ value: target.id })).catch((e) => setError(errorText(e)))
 
 	const failing = target.items.filter(isFailing).length
-	const items = [...target.items].filter((item) => !failingOnly || isFailing(item)).sort((a, b) => itemRank(b) - itemRank(a))
+	const items = filteredCiItems(target, filter, query).sort((a, b) => itemRank(b) - itemRank(a))
+	if ((filter !== "all" || query.trim()) && items.length === 0 && !target.loading && !target.error && !error && !editing)
+		return null
 
 	return (
 		<section className="mb-4" data-testid="ci-target">
-			<div className="sticky top-0 z-10 flex items-center gap-1.5 min-w-0 py-1 bg-sidebar-background">
+			<div className="sticky top-0 z-10 flex flex-wrap items-center gap-1.5 min-w-0 py-1 bg-sidebar-background">
 				<CiTip tip={kind.tip}>
 					<span className={cn("codicon", kind.icon)} />
 				</CiTip>
 				<CiTip tip={target.remoteUrl}>
-					<span className="font-medium truncate flex-1 min-w-0">{target.label}</span>
+					<span className="font-medium truncate flex-1 min-w-[120px]">{target.label}</span>
 				</CiTip>
 				{failing > 0 && (
 					<CiTip tip={`${failing} of ${target.items.length} failing or conflicting`}>
@@ -139,12 +152,16 @@ export const CiTargetSection = ({ target, failingOnly = false }: { target: CiTar
 					{target.kind === "repo" ? "No open pull requests." : "Nothing to show yet."}
 				</div>
 			)}
-			{failingOnly && items.length === 0 && target.items.length > 0 && (
-				<div className="text-xs text-description mt-1">Nothing failing here.</div>
-			)}
 			<div>
 				{items.map((item) => (
-					<CiItemRow item={item} key={item.key} onEditActions={() => setEditing(true)} targetId={target.id} />
+					<CiItemRow
+						item={item}
+						key={item.key}
+						now={now}
+						onEditActions={() => setEditing(true)}
+						snapshotError={target.error}
+						targetId={target.id}
+					/>
 				))}
 			</div>
 		</section>

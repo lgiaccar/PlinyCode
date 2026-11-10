@@ -17,6 +17,9 @@ The header keeps the task and workspace visible; **Details** shows usage and lim
 groups send behavior and secondary controls. Active side questions and non-default send behavior stay labeled
 when the options are closed.
 
+The latest test build also adds CI Board search and status filters, visible merge blockers, and the last
+successful CI check time. Reviews and repository protections still apply to **CI ready** entries.
+
 ## What's new in 0.2.9
 
 [PlinyCode 0.2.9](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) is the latest stable release.

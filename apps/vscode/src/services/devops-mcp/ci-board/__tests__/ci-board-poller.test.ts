@@ -23,6 +23,33 @@ function setup(provider = new FakeBoardProvider(), targets: CiTarget[] = [boardT
 }
 
 describe("CiBoardPoller", () => {
+	it("keeps the successful CI check time on cached polls and failed refreshes", async () => {
+		const { provider, poller, clock, start } = setup()
+		provider.prs = [boardPr(1)]
+		provider.runs.set(SHA_A, [boardRun(10, "CI", "completed", "success")])
+		poller.setVisible(true)
+		start()
+		await clock.advance(0)
+		expect(poller.snapshot("t1").items[0].checkedTs).toBe(0)
+		await clock.advance(5 * MINUTE)
+		expect(poller.snapshot("t1").items[0].checkedTs).toBe(0)
+		const listRuns = provider.listRuns.bind(provider)
+		provider.listRuns = async () => {
+			throw new Error("CI unavailable")
+		}
+		await poller.refresh()
+		expect(poller.snapshot("t1").items[0].error).toBe("CI unavailable")
+		expect(poller.snapshot("t1").items[0].checkedTs).toBe(0)
+		provider.listRuns = listRuns
+		await poller.refresh()
+		expect(poller.snapshot("t1").items[0].checkedTs).toBe(5 * MINUTE)
+		provider.failList = true
+		await clock.advance(MINUTE)
+		expect(poller.snapshot("t1").error).toBeDefined()
+		expect(poller.snapshot("t1").items[0].checkedTs).toBe(5 * MINUTE)
+		poller.dispose()
+	})
+
 	it("lists the open PRs and shows each one's pipelines and merge state", async () => {
 		const { provider, poller, clock, start, updates } = setup()
 		provider.prs = [boardPr(1), boardPr(2, { author: "someone" }), boardPr(3, { headSha: SHA_B })]

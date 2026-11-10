@@ -145,6 +145,8 @@ message CiItem {
   repeated CiExpiredBuildPolicy expired_build_policies = 24;
   string provider = 25;
   repeated CiBuildPolicy build_policies = 26;
+  // Last successful CI detail fetch, in epoch milliseconds. Unchanged by cached polls or failed refreshes.
+  optional int64 checked_ts = 27;
 }
 
 message CiBuildPolicy {

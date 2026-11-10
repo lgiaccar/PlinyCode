@@ -135,6 +135,7 @@ function toProtoItem(controller: Controller, board: CiBoard, view: CiTargetView,
 		draft: pr?.draft ?? false,
 		state: pr?.state ?? "",
 		headSha: item.headSha ?? "",
+		checkedTs: item.checkedTs,
 		mergeState: item.mergeState ?? "",
 		pipelines: item.pipelines.map((p) => ({
 			name: p.name,

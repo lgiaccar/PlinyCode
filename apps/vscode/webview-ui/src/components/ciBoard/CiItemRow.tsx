@@ -8,6 +8,7 @@ import { CiActionBar } from "./CiActionBar"
 import { CiAutoBadge } from "./CiAutoBadge"
 import { CiCustomPromptPanel } from "./CiCustomPromptPanel"
 import { CiItemDetails } from "./CiItemDetails"
+import { CiItemStatus } from "./CiItemStatus"
 import { CiSeverityChip } from "./CiSeverityChip"
 import { CiTip } from "./CiTip"
 import { CONVERSATION_LABELS, isFailing, MERGE_BADGES, SEVERITY_META } from "./ciBoardUtils"
@@ -18,10 +19,13 @@ interface CiItemRowProps {
 	targetId: string
 	item: CiItem
 	onEditActions: () => void
+	snapshotError?: string
+	now?: number
 }
 
 /** One pull request or branch: its pipelines, what failed and how badly, its conversation and its actions. */
-export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => {
+export const CiItemRow = ({ targetId, item, onEditActions, snapshotError, now = Date.now() }: CiItemRowProps) => {
+	const actionItem = snapshotError ? { ...item, error: item.error || snapshotError } : item
 	const [expanded, setExpanded] = useState(false)
 	const [customPrompt, setCustomPrompt] = useState(false)
 	const [error, setError] = useState<string>()
@@ -178,7 +182,7 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 				)}
 				<CiActionBar
 					busy={busy}
-					item={item}
+					item={actionItem}
 					onCustomPrompt={() => setCustomPrompt(true)}
 					onEditActions={onEditActions}
 					onError={onError}
@@ -198,6 +202,7 @@ export const CiItemRow = ({ targetId, item, onEditActions }: CiItemRowProps) => 
 					targetId={targetId}
 				/>
 			</div>
+			<CiItemStatus item={actionItem} now={now} />
 			{expanded && (
 				<CiItemDetails
 					busy={busy}
