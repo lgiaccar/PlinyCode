@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import ChatView from "./components/chat/ChatView"
 import CiBoardView from "./components/ciBoard/CiBoardView"
 import HistoryView from "./components/history/HistoryView"
@@ -19,6 +20,7 @@ const AppContent = () => {
 		showHistory,
 		showCiBoard,
 		showPipelines,
+		uiDensity = "comfortable",
 		closeMcpView,
 		navigateToHistory,
 		hideSettings,
@@ -26,6 +28,9 @@ const AppContent = () => {
 		hideCiBoard,
 		hidePipelines,
 	} = useExtensionState()
+	useEffect(() => {
+		document.documentElement.dataset.pcDensity = uiDensity
+	}, [uiDensity])
 
 	if (!didHydrateState) {
 		return null

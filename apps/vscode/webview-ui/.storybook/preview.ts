@@ -33,6 +33,17 @@ const preview: Preview = {
 	},
 	decorators: [StorybookWebview],
 	globalTypes: {
+		density: {
+			description: "Interface spacing",
+			defaultValue: "comfortable",
+			toolbar: {
+				dynamicTitle: true,
+				items: [
+					{ value: "comfortable", title: "Comfortable" },
+					{ value: "compact", title: "Compact" },
+				],
+			},
+		},
 		theme: {
 			description: "Color Themes",
 			defaultValue: "vs_dark",

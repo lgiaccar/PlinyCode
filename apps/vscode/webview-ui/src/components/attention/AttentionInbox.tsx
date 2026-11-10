@@ -86,7 +86,7 @@ export function AttentionInbox({ onClose }: { onClose: () => void }) {
 	return (
 		<dialog
 			aria-label="Needs attention"
-			className="fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-sidebar-background text-foreground p-4 overflow-auto"
+			className="pc-surface pc-controls fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-sidebar-background text-foreground p-4 overflow-auto"
 			onCancel={onClose}
 			ref={dialog}>
 			<div className="flex justify-between items-center gap-2">
@@ -103,7 +103,7 @@ export function AttentionInbox({ onClose }: { onClose: () => void }) {
 				{allWorkspaces ? "Conversations across workspaces" : "Conversations in this workspace"}. Open a conversation to
 				inspect and answer its live request.
 			</p>
-			<div aria-label="Attention filters" className="flex flex-wrap gap-2 my-3">
+			<div aria-label="Attention filters" className="flex flex-wrap gap-2 my-3" role="group">
 				{(["attention", "running", "reviewed"] as const).map((value) => (
 					<button aria-pressed={tab === value} key={value} onClick={() => setTab(value)} type="button">
 						{value === "attention" ? "Attention" : value === "running" ? "Running" : "Reviewed"} (

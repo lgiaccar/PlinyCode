@@ -34,7 +34,7 @@ export function DeliveryCard({ onContinue }: { onContinue?: (text: string) => vo
 	}, [taskId, revision])
 	if (!taskId) return null
 	return (
-		<section aria-label="Delivery" className="pc-panel mt-2 border border-border rounded-sm p-2 text-xs">
+		<section aria-label="Delivery" className="pc-panel pc-controls mt-2 border border-border rounded-sm p-2 text-xs">
 			<div className="flex items-center justify-between gap-2">
 				<strong>Delivery</strong>
 				<button onClick={() => setRevision((value) => value + 1)} type="button">

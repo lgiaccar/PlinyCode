@@ -1,7 +1,7 @@
 {
 	"name": "plinycode-dev",
 	"displayName": "PlinyCode",
-	"version": "0.2.10-test.9",
+	"version": "0.2.10-test.10",
 	"description": "Synopsys Pliny coding agent for VS Code / Cursor — internal models only via the Pliny gateway.",
 	"icon": "assets/icons/icon.png",
 	"engines": {
@@ -458,6 +458,16 @@
 					"minimum": 0.1,
 					"maximum": 0.95,
 					"markdownDescription": "Where auto-condense compacts the conversation, as a share of the model's input limit: `0.9` compacts at 90%. A lower value keeps requests smaller and cheaper, a higher one keeps more of the conversation verbatim. Clicking the context bar in the task header sets it at that point. Read before every model call, so a change applies to the running conversation."
+				},
+				"plinycode.ui.density": {
+					"type": "string",
+					"enum": [
+						"comfortable",
+						"compact"
+					],
+					"default": "comfortable",
+					"scope": "resource",
+					"description": "Spacing in PlinyCode chat, CI Board, settings and inspection cards. Compact fits more content without reducing text size."
 				},
 				"plinycode.chat.fontSize": {
 					"type": "integer",

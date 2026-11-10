@@ -53,7 +53,7 @@ export function SettingsSearch({
 	}
 	const matches = catalog?.settings.filter((setting) => matchesSetting(setting, query, modified)) ?? []
 	return (
-		<div className={`px-4 pt-3 ${active ? "flex-1 min-h-0 flex flex-col" : ""}`}>
+		<div className={`pc-controls px-4 pt-3 ${active ? "flex-1 min-h-0 flex flex-col" : ""}`}>
 			<div className="flex flex-wrap gap-2 items-center">
 				<input
 					aria-label="Search settings"

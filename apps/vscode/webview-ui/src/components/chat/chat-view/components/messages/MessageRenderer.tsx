@@ -39,7 +39,7 @@ const ActivityGroupRenderer: React.FC<{ group: ActivityGroup; props: MessageRend
 	const { turnState } = useExtensionState()
 	const working = props.index === props.groupedMessages.length - 1 && turnState?.phase === "streaming"
 	return (
-		<div className="px-4 pt-2.5" data-message-ts={group[0]?.ts}>
+		<div className="pc-chat-row px-4 pt-2.5" data-message-ts={group[0]?.ts}>
 			<button
 				aria-controls={expanded ? contentId : undefined}
 				aria-expanded={expanded}

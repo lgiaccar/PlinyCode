@@ -1,0 +1,90 @@
+/* Shared spacing only: density never changes text size or hides actions. */
+:root {
+	--pc-panel-padding: 12px;
+	--pc-row-padding: 8px;
+	--pc-control-height: 30px;
+	--pc-section-gap: 12px;
+	--pc-chat-gap: 10px;
+	--pc-ci-padding: 8px;
+	--pc-surface-padding: 16px;
+}
+
+:root[data-pc-density="compact"] {
+	--pc-panel-padding: 8px;
+	--pc-row-padding: 5px;
+	--pc-control-height: 26px;
+	--pc-section-gap: 8px;
+	--pc-chat-gap: 6px;
+	--pc-ci-padding: 4px;
+	--pc-surface-padding: 12px;
+}
+
+.pc-panel {
+	padding: var(--pc-panel-padding);
+	border-radius: 6px;
+	border-color: var(--vscode-panel-border, var(--vscode-editorGroup-border, #80808066));
+}
+
+.pc-surface {
+	padding: var(--pc-surface-padding);
+}
+
+.pc-row {
+	padding-block: var(--pc-row-padding);
+	border-color: var(--vscode-panel-border, var(--vscode-editorGroup-border, #80808066));
+}
+
+.pc-settings-section {
+	gap: var(--pc-section-gap);
+	padding-block: var(--pc-row-padding);
+}
+
+.pc-chat-row {
+	padding-top: var(--pc-chat-gap);
+}
+
+.pc-task-header {
+	padding-block: var(--pc-row-padding);
+}
+
+.pc-ci-row {
+	padding-block: var(--pc-ci-padding);
+	border-radius: 6px;
+}
+
+.pc-controls :is(button, select, input:not([type="checkbox"]):not([type="radio"])) {
+	min-height: var(--pc-control-height);
+	max-width: 100%;
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, #80808066));
+	border-radius: 4px;
+	padding: 3px 7px;
+	font: inherit;
+	color: var(--vscode-input-foreground, inherit);
+	background: var(--vscode-input-background, transparent);
+}
+
+.pc-controls button {
+	cursor: pointer;
+}
+
+.pc-controls button:hover:not(:disabled),
+.pc-controls button[aria-pressed="true"] {
+	background: var(--vscode-list-hoverBackground, #80808033);
+}
+
+.pc-controls :is(button, select, input):disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.pc-controls :is(button, select, input, summary, a):focus-visible {
+	outline: 2px solid var(--vscode-focusBorder, #007fd4);
+	outline-offset: 2px;
+}
+
+.pc-controls p {
+	display: block;
+	-webkit-line-clamp: unset;
+	overflow: visible;
+	margin-block: var(--pc-row-padding);
+}
