@@ -38,6 +38,7 @@ type FieldDefinition<T> = {
 type FieldDefinitions = Record<string, FieldDefinition<any>>
 
 const GLOBAL_STATE_FIELDS = {
+	attentionReviewed: { default: {} as Record<string, number> },
 	grafanaMetrics: { default: DEFAULT_GRAFANA_CONFIG as GrafanaConfig },
 	agentMonitorConfigs: { default: {} as Record<string, AgentMonitorConfig> },
 	agentMonitorPools: { default: {} as Record<string, SavedAgentPool[]> },

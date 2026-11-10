@@ -1821,6 +1821,54 @@ export class Controller {
 		return { ...snapshot, ...(await inspectDeliveryRemote(item)) }
 	}
 
+	async manageAttention(input: Record<string, unknown>): Promise<import("@shared/attention").AttentionSnapshot> {
+		const { attentionStatus } = await import("./attention-status")
+		const workspace = (await this.getWindowWorkspace())?.path ?? (await this.getNoWorkspaceFallback())
+		const { records } = queryTaskHistoryWithContent(
+			await this.taskHistory.listHistory({ hydrate: false }),
+			{
+				workspacePath: input.allWorkspaces === true ? undefined : workspace,
+				sortBy: "newest",
+			},
+			[],
+		)
+		const reviewed = this.stateManager.getGlobalStateKey("attentionReviewed")
+		const backgrounds = new Map(this.background.list().map((item) => [item.id, item.status]))
+		const tasks = records.slice(0, 200).flatMap((record) => {
+			const updatedAt = sessionRecordLastActiveTs(record)
+			const status = attentionStatus({
+				phase: this.task?.taskId === record.sessionId ? this.turnStateTracker.currentPhase : undefined,
+				background: backgrounds.get(record.sessionId),
+				persisted: record.status,
+				updatedAt,
+				reviewedAt: reviewed[record.sessionId],
+			})
+			return status
+				? [{ id: record.sessionId, title: formatDisplayUserInput(sessionRecordTitle(record)), updatedAt, status }]
+				: []
+		})
+		if (input.reviewId !== undefined) {
+			const task = tasks.find((entry) => entry.id === input.reviewId)
+			if (
+				!task ||
+				task.status !== "review" ||
+				task.updatedAt !== input.updatedAt ||
+				this.conversationActivity(task.id) !== "idle"
+			)
+				throw new Error("Conversation changed; review it again")
+			const fresh = await this.taskHistory.findHistoryItem(task.id)
+			if (fresh?.ts !== task.updatedAt) throw new Error("Conversation changed; review it again")
+			const next = Object.fromEntries(
+				Object.entries({ ...reviewed, [task.id]: task.updatedAt })
+					.sort((a, b) => b[1] - a[1])
+					.slice(0, 1000),
+			)
+			this.stateManager.setGlobalState("attentionReviewed", next)
+			task.status = "reviewed"
+		}
+		return { tasks, omitted: Math.max(0, records.length - 200), workspace }
+	}
+
 	async getTaskHistory(request: GetTaskHistoryRequest): Promise<TaskHistoryArray> {
 		const { currentWorkspaceOnly } = request
 		const limit = request.limit > 0 ? Math.min(request.limit, 100) : 50

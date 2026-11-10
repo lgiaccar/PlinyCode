@@ -9,6 +9,7 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { useShowNavbar } from "@/context/PlatformContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
 import { FileServiceClient, UiServiceClient } from "@/services/grpc-client"
+import { AttentionButton } from "../attention/AttentionButton"
 import { Navbar } from "../menu/Navbar"
 import AutoApproveBar from "./auto-approve-menu/AutoApproveBar"
 // Import utilities and hooks from the new structure
@@ -453,6 +454,11 @@ const ChatView = ({ isHidden, showHistoryView }: ChatViewProps) => {
 		<ChatLayout isHidden={isHidden}>
 			<div className="flex flex-col flex-1 overflow-hidden">
 				{showNavbar && <Navbar />}
+				{!showNavbar && !isHidden && (
+					<div className="flex justify-end px-2">
+						<AttentionButton />
+					</div>
+				)}
 				<MemoryInboxBanner />
 				{task ? (
 					<TaskSection

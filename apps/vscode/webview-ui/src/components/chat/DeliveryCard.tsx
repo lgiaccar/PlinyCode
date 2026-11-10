@@ -5,8 +5,8 @@ import { TaskServiceClient } from "@/services/grpc-client"
 
 const categories: [DeliveryCategory, string][] = [
 	["checks", "Tests and checks"],
-	["pullRequest", "Pull request"],
-	["ci", "CI"],
+	["pullRequest", "Recorded PR commands"],
+	["ci", "Recorded CI commands"],
 	["release", "Publication"],
 ]
 
@@ -94,7 +94,9 @@ export function DeliveryCard({ onContinue }: { onContinue?: (text: string) => vo
 									<strong>{label}</strong> ·{" "}
 									{entries.length
 										? `${entries.length} recorded result${entries.length === 1 ? "" : "s"}`
-										: "Not confirmed"}
+										: category === "pullRequest" || category === "ci"
+											? "None"
+											: "Not confirmed"}
 								</summary>
 								{entries.length === 0 ? (
 									<p>
