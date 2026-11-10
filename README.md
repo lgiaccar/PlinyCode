@@ -24,6 +24,9 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 ## Available in pre-releases
 
+The [context inspector](docs/context-inspector.md) lets you select and search recent captured model requests,
+inspect their source text and see estimated token usage with explicit preview limits.
+
 [Settings search](docs/settings-search.md) finds editor settings by name or description, filters modified
 values, shows their effective source, and resets individual User, Workspace or Folder overrides.
 

@@ -27,6 +27,7 @@ import ExportMarkdownButton from "./buttons/ExportMarkdownButton"
 import NewTaskButton from "./buttons/NewTaskButton"
 import OpenDiskConversationHistoryButton from "./buttons/OpenDiskConversationHistoryButton"
 import RenameTaskButton from "./buttons/RenameTaskButton"
+import { ContextInspectorButton } from "./ContextInspectorButton"
 import ContextWindow from "./ContextWindow"
 import { highlightText } from "./Highlights"
 import TaskAgentChip from "./TaskAgentChip"
@@ -213,16 +214,19 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({
 					</div>
 					<NewTaskButton className={BUTTON_CLASS} onClick={onClose} />
 				</div>
-				<button
-					aria-controls="task-header-details"
-					aria-expanded={isTaskExpanded}
-					aria-label={isTaskExpanded ? "Collapse task header" : "Expand task header"}
-					className="flex w-fit items-center gap-1 border-0 bg-transparent p-0 text-xs text-description cursor-pointer hover:text-foreground"
-					onClick={toggleTaskExpanded}
-					type="button">
-					{isTaskExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-					Details
-				</button>
+				<div className="flex items-center justify-between gap-2">
+					<button
+						aria-controls="task-header-details"
+						aria-expanded={isTaskExpanded}
+						aria-label={isTaskExpanded ? "Collapse task header" : "Expand task header"}
+						className="flex w-fit items-center gap-1 border-0 bg-transparent p-0 text-xs text-description cursor-pointer hover:text-foreground"
+						onClick={toggleTaskExpanded}
+						type="button">
+						{isTaskExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+						Details
+					</button>
+					<ContextInspectorButton />
+				</div>
 
 				{/* Expand/Collapse Task Details */}
 				<PlinyBudgetIndicator refreshKey={Math.floor(totalCost ?? 0)} />
