@@ -3,6 +3,7 @@ import { CopyButton } from "../common/CopyButton"
 import { ChangedFilesSummary } from "./ChangedFilesSummary"
 import type { QuoteButtonState } from "./ChatRow"
 import { CheckpointsEnablePrompt } from "./CheckpointsEnablePrompt"
+import { DeliveryCard } from "./DeliveryCard"
 import { MarkdownRow } from "./MarkdownRow"
 import QuoteButton from "./QuoteButton"
 
@@ -18,6 +19,7 @@ interface CompletionOutputRowProps {
 	showViewChanges?: boolean
 	/** When checkpoints are disabled, offer an inline toggle on the completion card. */
 	showCheckpointsEnablePrompt?: boolean
+	onVerifyDelivery?: (text: string) => void
 }
 
 /**
@@ -28,7 +30,14 @@ interface CompletionOutputRowProps {
  * rather than a definitive task completion.
  */
 export const CompletionOutputRow = memo(
-	({ text, quoteButtonState, handleQuoteClick, showViewChanges, showCheckpointsEnablePrompt }: CompletionOutputRowProps) => {
+	({
+		text,
+		quoteButtonState,
+		handleQuoteClick,
+		showViewChanges,
+		showCheckpointsEnablePrompt,
+		onVerifyDelivery,
+	}: CompletionOutputRowProps) => {
 		return (
 			<div className="rounded-sm border border-success/20 overflow-visible bg-success/10">
 				<div className="flex items-center justify-between gap-2 pl-2 pr-1 pt-1 -mb-1.5">
@@ -45,6 +54,7 @@ export const CompletionOutputRow = memo(
 					<div className="px-2 pb-2 flex flex-col gap-2">
 						{showCheckpointsEnablePrompt && <CheckpointsEnablePrompt />}
 						{showViewChanges && <ChangedFilesSummary />}
+						<DeliveryCard onContinue={onVerifyDelivery} />
 					</div>
 				)}
 			</div>

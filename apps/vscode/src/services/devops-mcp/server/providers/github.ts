@@ -415,6 +415,17 @@ export class GitHubProvider implements ToolProvider {
 		return this.pr(await this.get(`/pulls/${id}`))
 	}
 
+	async findLatestPr(branch: string): Promise<PullRequest | undefined> {
+		const prs = await this.get<any[]>("/pulls", {
+			head: `${this.remote.owner}:${branch}`,
+			state: "all",
+			sort: "created",
+			direction: "desc",
+			per_page: 1,
+		})
+		return prs.length ? this.getPr(prs[0].number) : undefined
+	}
+
 	async listOpenPrs({ mine, limit }: { mine: boolean; limit: number }): Promise<PullRequest[]> {
 		const prs = await this.get<any[]>("/pulls", {
 			state: "open",

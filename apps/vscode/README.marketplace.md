@@ -10,6 +10,9 @@ their configured services; extension updates come from GitHub.
 
 ## Available in pre-releases
 
+Completed responses include a delivery card with recorded tool evidence, current branch PR/check status,
+and an action to verify delivery. Missing publication evidence stays explicit.
+
 The compact chat header and cleaner composer are available in **0.2.10 test builds**. Enable **Install
 pre-releases** in **Settings > About**, then run **PlinyCode: Check for Updates**.
 

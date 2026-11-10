@@ -1812,6 +1812,15 @@ export class Controller {
 		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent, options)
 	}
 
+	async getDeliveryEvidence(taskId: string) {
+		const item = taskId ? await this.taskHistory.findHistoryItem(taskId) : undefined
+		if (!item) throw new Error("Conversation not found")
+		const { collectDeliveryEvidence } = await import("./delivery-evidence")
+		const snapshot = collectDeliveryEvidence(await this.taskHistory.readSessionMessages(taskId))
+		const { inspectDeliveryRemote } = await import("./delivery-remote")
+		return { ...snapshot, ...(await inspectDeliveryRemote(item)) }
+	}
+
 	async getTaskHistory(request: GetTaskHistoryRequest): Promise<TaskHistoryArray> {
 		const { currentWorkspaceOnly } = request
 		const limit = request.limit > 0 ? Math.min(request.limit, 100) : 50
