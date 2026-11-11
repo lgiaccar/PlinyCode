@@ -24,6 +24,8 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 ## Available in pre-releases
 
+**Improve prompt** and **Side question** are directly accessible on the right below the prompt box.
+
 [Interface density](docs/interface-density.md) offers Comfortable and Compact spacing across chat, CI Board,
 settings and inspection panels, with consistent theme-aware controls and keyboard focus.
 

@@ -1,6 +1,6 @@
 # Improve prompt
 
-The wand button in **More message options** (`…`) rewrites the draft prompt so it is clearer. It fixes spelling and grammar, makes the request explicit, and splits run-on requests into short sentences. A small free Pliny model does the rewrite, so it costs nothing and does not count against the conversation budget.
+The wand button on the right below the prompt box rewrites the draft prompt so it is clearer. It fixes spelling and grammar, makes the request explicit, and splits run-on requests into short sentences. A small free Pliny model does the rewrite, so it costs nothing and does not count against the conversation budget.
 
 The rewrite replaces the draft. A "Prompt improved. Undo" line then appears under the prompt box; Undo puts the original back. The line goes away as soon as the draft is edited or sent. A failure, such as a gateway error, an empty reply, or a draft that is too long, is shown on the same line and leaves the draft untouched.
 
