@@ -10,6 +10,8 @@ their configured services; extension updates come from GitHub.
 
 ## Available in pre-releases
 
+**Improve prompt** and **Side question** are directly accessible on the right below the prompt box.
+
 Interface density offers Comfortable and Compact spacing across chat, CI Board, settings and inspection
 panels, with consistent theme-aware controls and keyboard focus. Choose it in Settings > General.
 

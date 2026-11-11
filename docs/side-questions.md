@@ -1,6 +1,6 @@
 # Side questions
 
-A side question is a message the user asks without adding it to the conversation's context. The **Side question** checkbox in **More message options** (`…`) marks the next message as one. Its active state stays visible below the composer when options are closed. The agent answers it like any other message, but later requests to the model leave out the question, the answer, and every tool call and result made while answering. The chat still shows the exchange.
+A side question is a message the user asks without adding it to the conversation's context. The **Side question** checkbox on the right below the prompt box marks the next message as one. It is always visible beside **Improve prompt**, including when More message options is closed. The agent answers it like any other message, but later requests to the model leave out the question, the answer, and every tool call and result made while answering. The chat still shows the exchange.
 
 Use it for a quick question ("what does this function return?") in the middle of a long task, without the answer steering the task or taking up its context window.
 

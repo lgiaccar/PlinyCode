@@ -919,9 +919,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						)}
 					</div>
 				)}
-				<div className="flex justify-between items-center -mt-[2px] px-3 pb-2">
+				<div className="flex flex-wrap justify-between items-center gap-y-1 -mt-[2px] px-3 pb-2">
 					{/* Always render both components, but control visibility with CSS */}
-					<div className="relative flex-1 min-w-0 h-5">
+					<div className="relative flex-1 min-w-[120px] h-5">
 						<ModelButton
 							handleContextButtonClick={handleContextButtonClick}
 							mode={mode}
@@ -931,80 +931,92 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
 						/>
 					</div>
-					{/* Tooltip for the mode switch remains outside the conditional rendering */}
-					<ModeSwitch compact mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
-					<button
-						aria-controls="composer-message-options"
-						aria-expanded={showMessageOptions}
-						aria-label="More message options"
-						className="ml-1 shrink-0 rounded border-0 bg-transparent px-1.5 text-description hover:text-foreground"
-						onClick={() => setShowMessageOptions((value) => !value)}
-						type="button">
-						<span aria-hidden="true" className="codicon codicon-ellipsis" />
-					</button>
-					<div className="relative flex shrink-0 items-center text-xs">
-						<div className="relative flex flex-row items-center gap-1">
-							<button
-								aria-label={SEND_MODE_META[sendMode].label}
-								className={cn(
-									"input-icon-button border-0 bg-transparent",
-									{ disabled: sendingDisabled },
-									"codicon",
-									SEND_MODE_META[sendMode].icon,
-									"text-sm",
+					<div className="ml-auto flex shrink-0 items-center" data-testid="composer-right-actions">
+						<ImprovePromptButton
+							disabled={!inputValue.trim()}
+							onClick={() => void promptImprover.improve()}
+							pending={promptImprover.pending}
+						/>
+						<SideQuestionToggle
+							available={sideQuestionAvailable}
+							checked={sideQuestionChecked}
+							onChange={setSideQuestionChecked}
+						/>
+						{/* Tooltip for the mode switch remains outside the conditional rendering */}
+						<ModeSwitch compact mode={mode} onModeSelect={onModeSelect} togglePlanActKeys={togglePlanActKeys} />
+						<button
+							aria-controls="composer-message-options"
+							aria-expanded={showMessageOptions}
+							aria-label="More message options"
+							className="ml-1 shrink-0 rounded border-0 bg-transparent px-1.5 text-description hover:text-foreground"
+							onClick={() => setShowMessageOptions((value) => !value)}
+							type="button">
+							<span aria-hidden="true" className="codicon codicon-ellipsis" />
+						</button>
+						<div className="relative flex shrink-0 items-center text-xs">
+							<div className="relative flex flex-row items-center gap-1">
+								<button
+									aria-label={SEND_MODE_META[sendMode].label}
+									className={cn(
+										"input-icon-button border-0 bg-transparent",
+										{ disabled: sendingDisabled },
+										"codicon",
+										SEND_MODE_META[sendMode].icon,
+										"text-sm",
+									)}
+									data-send-mode={sendMode}
+									data-testid="send-button"
+									disabled={sendingDisabled}
+									onClick={() => {
+										if (!sendingDisabled) {
+											triggerSend()
+										}
+									}}
+									title={SEND_MODE_META[sendMode].tooltip}
+									type="button"
+								/>
+								{showSchedulePicker && (
+									<div
+										className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-2 rounded-[3px] border border-editor-group-border p-3 shadow-md"
+										style={{
+											backgroundColor:
+												"var(--vscode-editorWidget-background, var(--vscode-sideBar-background))",
+										}}>
+										<div className="flex flex-wrap items-center gap-2">
+											<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
+										</div>
+										<div className="flex flex-wrap items-center gap-2">
+											<ScheduleRepeatInput
+												count={repeatCount}
+												every={repeatEvery}
+												onCountChange={setRepeatCount}
+												onEveryChange={setRepeatEvery}
+												onUnitChange={setRepeatUnit}
+												unit={repeatUnit}
+											/>
+										</div>
+										<div className="flex justify-end gap-2">
+											<button
+												className="flex h-7 items-center rounded-[3px] border border-editor-group-border px-3 text-xs text-description hover:text-foreground"
+												onClick={() => {
+													setShowSchedulePicker(false)
+													setScheduleTime("")
+													setRepeatCount(1)
+												}}
+												type="button">
+												Cancel
+											</button>
+											<button
+												className="flex h-7 items-center rounded-[3px] bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50"
+												disabled={!scheduleTime || sendingDisabled}
+												onClick={confirmSchedule}
+												type="button">
+												Schedule
+											</button>
+										</div>
+									</div>
 								)}
-								data-send-mode={sendMode}
-								data-testid="send-button"
-								disabled={sendingDisabled}
-								onClick={() => {
-									if (!sendingDisabled) {
-										triggerSend()
-									}
-								}}
-								title={SEND_MODE_META[sendMode].tooltip}
-								type="button"
-							/>
-							{showSchedulePicker && (
-								<div
-									className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-2 rounded-[3px] border border-editor-group-border p-3 shadow-md"
-									style={{
-										backgroundColor:
-											"var(--vscode-editorWidget-background, var(--vscode-sideBar-background))",
-									}}>
-									<div className="flex flex-wrap items-center gap-2">
-										<ScheduleTimeInput onChange={setScheduleTime} value={scheduleTime} />
-									</div>
-									<div className="flex flex-wrap items-center gap-2">
-										<ScheduleRepeatInput
-											count={repeatCount}
-											every={repeatEvery}
-											onCountChange={setRepeatCount}
-											onEveryChange={setRepeatEvery}
-											onUnitChange={setRepeatUnit}
-											unit={repeatUnit}
-										/>
-									</div>
-									<div className="flex justify-end gap-2">
-										<button
-											className="flex h-7 items-center rounded-[3px] border border-editor-group-border px-3 text-xs text-description hover:text-foreground"
-											onClick={() => {
-												setShowSchedulePicker(false)
-												setScheduleTime("")
-												setRepeatCount(1)
-											}}
-											type="button">
-											Cancel
-										</button>
-										<button
-											className="flex h-7 items-center rounded-[3px] bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50"
-											disabled={!scheduleTime || sendingDisabled}
-											onClick={confirmSchedule}
-											type="button">
-											Schedule
-										</button>
-									</div>
-								</div>
-							)}
+							</div>
 						</div>
 					</div>
 				</div>
@@ -1042,16 +1054,6 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							mode={mode}
 							onSelectFilesAndImages={onSelectFilesAndImages}
 							shouldDisableFilesAndImages={shouldDisableFilesAndImages}
-						/>
-						<ImprovePromptButton
-							disabled={!inputValue.trim()}
-							onClick={() => void promptImprover.improve()}
-							pending={promptImprover.pending}
-						/>
-						<SideQuestionToggle
-							available={sideQuestionAvailable}
-							checked={sideQuestionChecked}
-							onChange={setSideQuestionChecked}
 						/>
 					</div>
 				)}
