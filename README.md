@@ -22,53 +22,29 @@ implement changes, run commands, and follow pull requests and pipelines from the
 Model requests go through the Synopsys Pliny gateway. You need gateway access and a Pliny API key to use it.
 Web search, MCP tools and DevOps integrations connect to their configured services; extension updates come from GitHub.
 
-## Available in pre-releases
+## What's new in 0.2.10
 
-**Improve prompt** and **Side question** are directly accessible on the right below the prompt box.
+[PlinyCode 0.2.10](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.10) is the latest stable release.
 
-[Interface density](docs/interface-density.md) offers Comfortable and Compact spacing across chat, CI Board,
-settings and inspection panels, with consistent theme-aware controls and keyboard focus.
+- **Clearer chat controls:** the compact header keeps the task and workspace visible, with usage and limits under
+  **Details**. **Improve prompt** and **Side question** sit on the right below the prompt box; secondary controls
+  are in **More message options**. [Chat controls](docs/chat-controls.md)
+- **Comfortable or Compact spacing:** choose **Settings > General > Interface density** to adjust spacing across
+  chat, CI Board, settings and inspection panels without changing text size. [Interface density](docs/interface-density.md)
+- **Searchable settings:** find settings by name or description, filter modified values, see their effective source,
+  and edit or reset individual User, Workspace or Folder overrides. [Settings search](docs/settings-search.md)
+- **Captured context inspector:** open **Context** in the task header to search recent captured model requests and
+  inspect source text and estimated token usage. Preview limits are explicit; captures are retained only until
+  the extension restarts. [Context inspector](docs/context-inspector.md)
+- **Delivery evidence:** completed Agent responses show recorded tool results and branch PR/check status, with
+  a follow-up action to verify delivery. Missing evidence stays **Not confirmed**. [Delivery card](docs/delivery-card.md)
+- **Needs-attention inbox:** find approvals, questions, failed runs and completed conversations to review, alongside
+  watched CI issues. Review acknowledgements reset with new activity. [Attention inbox](docs/attention-inbox.md)
+- **CI Board search and filters:** find watched items, filter by status, and see merge blockers and the last
+  successful CI check time. **CI ready** still respects repository protections and reviews. [CI Board](docs/ci-board.md)
+- **Copy monitoring details:** select and copy agent names and monitoring values from the Agents panel.
 
-The [context inspector](docs/context-inspector.md) lets you select and search recent captured model requests,
-inspect their source text and see estimated token usage with explicit preview limits.
-
-[Settings search](docs/settings-search.md) finds editor settings by name or description, filters modified
-values, shows their effective source, and resets individual User, Workspace or Folder overrides.
-
-The [needs-attention inbox](docs/attention-inbox.md) collects approvals, questions, failed runs, completed
-work to review and watched CI issues. Review acknowledgements reset when a conversation changes.
-
-Completed responses include a [delivery card](docs/delivery-card.md) with recorded tool evidence, current
-branch PR/check status, and a follow-up action to verify delivery. Missing publication evidence stays explicit.
-
-The compact chat header and cleaner composer are available in **0.2.10 test builds**. Enable **Install
-pre-releases** in **Settings > About**, then run **PlinyCode: Check for Updates**.
-
-The header keeps the task and workspace visible; **Details** shows usage and limits. **More message options**
-groups send behavior and secondary controls. See [Chat controls](docs/chat-controls.md).
-
-The latest test build also adds [CI Board](docs/ci-board.md) search and status filters, visible merge blockers,
-and the last successful CI check time. Reviews and repository protections still apply to **CI ready** entries.
-
-## What's new in 0.2.9
-
-[PlinyCode 0.2.9](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) is the latest stable release.
-
-- **Cancel and resume reliably:** cancellation stops the current turn and keeps queued messages editable.
-  Use **Resume Task** or send a new message to continue after cleanup. Completed edits are not undone.
-- **Chat controls:** adjust `plinycode.chat.fontSize` from 10 to 24 pixels (default 13). Agent command terminals
-  stay hidden until opened with **PlinyCode: Show Agent Terminal**. Customization tabs scroll correctly again.
-- **Grafana machine metrics:** connect a Grafana server in **Pipelines > Agents > Grafana machine metrics...**.
-  Agent rows show compact free-disk readings; **Details** opens CPU/GPU history and hardware information.
-  History defaults to 30 days, subject to the data available in your Grafana datasource.
-- **Low-disk warnings:** fresh readings below 50 GB turn red and trigger a deduplicated editor notification.
-  Visible rows refresh automatically; this is not a background disk watcher.
-- **Clearer agent status:** colored utilization meters and red labels for disabled agents make the agent list
-  easier to scan. Utilization still measures observed job occupancy, not CPU or memory usage.
-
-See the [release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.9) and
-[Grafana setup guide](docs/grafana-machine-metrics.md). Grafana is optional and requires your server address and a token with dashboard and query access.
-The token is kept in the editor's secret storage; no collector or shared folder is required.
+See the [0.2.10 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.10).
 
 ## Features
 
@@ -92,6 +68,9 @@ The token is kept in the editor's secret storage; no collector or shared folder 
 - **Conversation tools:** ask side questions, improve a draft prompt, expand long pasted text, and edit an
   earlier message to restart from it, optionally reverting files. [Side questions](docs/side-questions.md) ·
   [Improve prompt](docs/improve-prompt.md) · [Restart from here](docs/restart-from-here.md)
+- **Inspection and review:** inspect captured context and delivery evidence, and use the attention inbox to find
+  conversations and watched CI needing action.
+- **Search and layout:** search editor settings, reset scoped overrides, and choose Comfortable or Compact spacing.
 - **Memory and diagnostics:** retain repository knowledge, search past conversations, inspect request traces
   and export a diagnostics bundle. [Memory](docs/memory.md) · [Diagnostics](docs/diagnostics-bundle.md)
 

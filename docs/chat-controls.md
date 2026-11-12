@@ -4,9 +4,10 @@ The conversation header starts compact, with the task title, workspace, worktree
 status. **Details** expands the header to show conversation actions, usage, the spending budget, wait limit,
 opening prompt, and context information. The Pliny account budget remains visible while the header is collapsed.
 
-The composer keeps the model, agent picker, Plan/Agent/Ask switch, and Send button available. Open
-**More message options** (`…`) for send behavior, side questions, attachments, context, tools, rules, model tuning,
-and Improve prompt. Changing send behavior does not send a message. The chosen behavior persists, and any
+The composer keeps the model, agent picker, Plan/Agent/Ask switch, and Send button available. **Improve prompt**
+and **Side question** are directly accessible on the right below the prompt box. Open
+**More message options** (`…`) for send behavior, attachments, context, tools, rules and model tuning.
+Changing send behavior does not send a message. The chosen behavior persists, and any
 non-default behavior remains labeled below the composer even when options are closed. An enabled side question
 also stays labeled until sent.
 
