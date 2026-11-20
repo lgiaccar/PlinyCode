@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/icons/icon.png" width="80" alt="PlinyCode" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/vscode/webview-ui/src/assets/plinycode-logo-dark.png" />
+    <img src="apps/vscode/webview-ui/src/assets/plinycode-logo-light.png" width="640" alt="PlinyCode — AI, Code &amp; Rock ‘n’ Roll" />
+  </picture>
 </p>
 
 <h1 align="center">PlinyCode</h1>
