@@ -191,6 +191,26 @@ bun -F @plinycode/cli typecheck
 bun -F @plinycode/cli test
 bun -F @plinycode/cli lint
 bun -F @plinycode/cli format
+bun -F @plinycode/cli package
+bun apps/cli/scripts/verify-package.ts
+```
+
+The `cli-test` GitHub workflow builds and tests Windows/Linux x64 packages.
+Separate `Portable E2E` jobs download those archives without checking out the
+repository or installing dependencies. A Python standard-library harness relocates
+the package into a path containing spaces and Unicode, verifies checksums, and
+removes installed Bun/Node from the child process's PATH. It exercises pipeline
+analysis, the Python example, artifact generation, denied edits/commands/MCP
+discovery, schema repair, credential redaction across stream chunks, invalid
+inputs, timeouts, gateway rejection, and concurrent independent processes.
+Linux also checks multiline chat, conversation history and cancellation in a PTY.
+The source suite covers all three MCP transports and Windows credential storage.
+
+To run the portable acceptance tests locally after packaging:
+
+```sh
+python apps/cli/tests/e2e.py --package apps/cli/dist/plinycode-linux-x64
+# Windows: py apps/cli/tests/e2e.py --package apps/cli/dist/plinycode-windows-x64
 ```
 
 Tests use local mock gateways and MCP fixtures; they do not use a real Pliny key
