@@ -89,10 +89,12 @@ async function main() {
 			"terminal_required",
 			"chat requires a terminal. Use run --stdin for pipelines.",
 		);
+	// Consume pipeline input before loading the engine and its dependencies.
+	const stdin = options.stdin ? await readStdin() : "";
 	const { buildPrompt, Runner } = await import("./runner");
 	const firstPrompt =
 		options.command === "run" || options.prompt || options.files.length
-			? await buildPrompt(options, options.stdin ? await readStdin() : "")
+			? await buildPrompt(options, stdin)
 			: undefined;
 	const { getApiKey } = await import("./credentials");
 	const key = await getApiKey();

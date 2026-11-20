@@ -60,12 +60,23 @@ export class Terminal {
 export async function readStdin(maxBytes = 8 * 1024 * 1024): Promise<string> {
 	let size = 0;
 	const chunks: Buffer[] = [];
-	for await (const chunk of process.stdin) {
-		const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-		size += bytes.length;
-		if (size > maxBytes)
-			throw new CliError("input_too_large", `Input exceeds ${maxBytes} bytes.`);
-		chunks.push(bytes);
+	// Use the runtime's fd stream so an already-closed pipe is drained on Linux.
+	const reader = Bun.stdin.stream().getReader();
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			const bytes = Buffer.from(value);
+			size += bytes.length;
+			if (size > maxBytes)
+				throw new CliError(
+					"input_too_large",
+					`Input exceeds ${maxBytes} bytes.`,
+				);
+			chunks.push(bytes);
+		}
+	} finally {
+		reader.releaseLock();
 	}
 	return Buffer.concat(chunks).toString("utf8");
 }

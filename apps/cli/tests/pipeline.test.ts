@@ -115,11 +115,15 @@ async function run(
 					PLINY_API_KEY: "test-cli-secret",
 					PLINY_BASE_URL: `http://127.0.0.1:${mock.server.port}/api/llm`,
 				},
-				stdin: input === undefined ? "ignore" : new Blob([input]),
+				stdin: input === undefined ? "ignore" : "pipe",
 				stdout: "pipe",
 				stderr: "pipe",
 			},
 		);
+		if (input !== undefined && child.stdin) {
+			child.stdin.write(input);
+			child.stdin.end();
+		}
 		const timer = setTimeout(() => child.kill(), 25000);
 		try {
 			const [stdout, stderr, exit] = await Promise.all([
