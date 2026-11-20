@@ -198,6 +198,22 @@ class PortableAcceptance(unittest.TestCase):
         self.assertFalse(marker.exists())
         self.assertEqual(requests, [])
 
+    def test_authorized_shell_command_returns_real_evidence(self):
+        child, requests = self.invoke(["--prompt", "Run a command", "--allow-tools", "--json"],
+                                      [{"name": "run_commands", "input": {"commands": ["echo cli-command-evidence"]}},
+                                       "Command completed"])
+        tool_results = [message for message in requests[1]["messages"] if message["role"] == "tool"]
+        self.assertIn("cli-command-evidence", json.dumps(tool_results))
+        self.assertEqual(json.loads(child.stdout)["status"], "succeeded")
+
+    def test_stdin_size_limit_and_empty_input(self):
+        child, requests = self.invoke(["--stdin", "--json"], ["Unused"], expected=2, stdin="")
+        self.assertEqual(json.loads(child.stdout)["error"]["code"], "missing_prompt")
+        self.assertEqual(requests, [])
+        child, requests = self.invoke(["--stdin", "--json"], ["Unused"], expected=2, stdin="x" * (8 * 1024 * 1024 + 1))
+        self.assertEqual(json.loads(child.stdout)["error"]["code"], "input_too_large")
+        self.assertEqual(requests, [])
+
     def test_schema_repair_and_unrecoverable_output(self):
         for repaired, code in [(json.dumps(RESULT), 0), ('{"judgement":"maybe"}', 4)]:
             with self.subTest(code=code):
