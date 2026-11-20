@@ -132,7 +132,8 @@ const baseConfig = {
 	format: "cjs",
 	sourcesContent: false,
 	platform: "node",
-	target: "node22.15",
+	// VS Code 1.94 embeds Node 20.16; build tooling still runs on Node 22+.
+	target: "node20.16",
 	banner: {
 		js: "const _importMetaUrl=require('url').pathToFileURL(__filename)",
 	},

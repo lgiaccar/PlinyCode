@@ -29,7 +29,26 @@ tsConfigPaths.register({
 // Redirect some requires in the integration tests, which are compiled to
 // CommonJS, to shims (see each branch below).
 const originalRequire = Module.prototype.require
+const esmDependencies = new Map()
+
+// VS Code 1.94's Node runtime cannot require ESM packages. The shipped extension
+// bundles them, but these tests intentionally keep source modules separate for
+// Sinon stubs. The runner awaits mochaGlobalSetup before loading test files, so
+// preload the real ESM implementations without replacing them with test doubles.
+exports.mochaGlobalSetup = async () => {
+	await Promise.all(
+		["execa", "get-folder-size", "open", "p-wait-for", "serialize-error"].map(async (id) => {
+			const namespace = await import(id)
+			esmDependencies.set(id, { ...namespace, __esModule: true })
+		}),
+	)
+}
+
 Module.prototype.require = function (id) {
+	if (esmDependencies.has(id)) {
+		return esmDependencies.get(id)
+	}
+
 	// Serve `mocha` imports from the runner's own interface. The runner
 	// (@vscode/test-cli) constructs its Mocha instance from its own copy of
 	// the package; a test file that `require("mocha")`s a second copy gets an

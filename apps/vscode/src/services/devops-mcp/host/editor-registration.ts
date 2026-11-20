@@ -19,6 +19,33 @@ interface CursorMcpApi {
 	unregisterServer(name: string): void
 }
 
+// MCP registration was added after our VS Code 1.94 minimum. Keep the optional
+// surface local so the rest of the extension is checked against the 1.94 API.
+interface VscodeMcpApi {
+	lm: {
+		registerMcpServerDefinitionProvider(
+			id: string,
+			provider: { onDidChangeMcpServerDefinitions: vscode.Event<void>; provideMcpServerDefinitions(): unknown[] },
+		): vscode.Disposable
+	}
+	McpStdioServerDefinition: new (
+		label: string,
+		command: string,
+		args: string[],
+		env: Record<string, string>,
+		version: string,
+	) => unknown
+}
+
+function vscodeMcpApi(): VscodeMcpApi | undefined {
+	const api = vscode as unknown as { lm?: Partial<VscodeMcpApi["lm"]> } & Partial<
+		Pick<VscodeMcpApi, "McpStdioServerDefinition">
+	>
+	return typeof api.lm?.registerMcpServerDefinitionProvider === "function" && typeof api.McpStdioServerDefinition === "function"
+		? (api as VscodeMcpApi)
+		: undefined
+}
+
 function cursorMcpApi(): CursorMcpApi | undefined {
 	const api = (vscode as unknown as { cursor?: { mcp?: Partial<CursorMcpApi> } }).cursor?.mcp
 	return typeof api?.registerServer === "function" && typeof api.unregisterServer === "function"
@@ -32,7 +59,7 @@ export function detectEditorIntegration(): EditorIntegration {
 	}
 	// Cursor may carry the VS Code API without honouring it, so only trust it outside Cursor.
 	const isCursor = vscode.env.appName.toLowerCase().includes("cursor")
-	if (!isCursor && typeof vscode.lm?.registerMcpServerDefinitionProvider === "function") {
+	if (!isCursor && vscodeMcpApi()) {
 		return "vscode"
 	}
 	return "none"
@@ -56,11 +83,15 @@ export function registerWithEditor(integration: EditorIntegration, spec: LaunchS
 		})
 	}
 	if (integration === "vscode") {
+		const api = vscodeMcpApi()
+		if (!api) {
+			return new vscode.Disposable(() => {})
+		}
 		const changed = new vscode.EventEmitter<void>()
-		const registration = vscode.lm.registerMcpServerDefinitionProvider(VSCODE_PROVIDER_ID, {
+		const registration = api.lm.registerMcpServerDefinitionProvider(VSCODE_PROVIDER_ID, {
 			onDidChangeMcpServerDefinitions: changed.event,
 			provideMcpServerDefinitions: () => [
-				new vscode.McpStdioServerDefinition(LABEL, spec.command, spec.args, spec.env, version),
+				new api.McpStdioServerDefinition(LABEL, spec.command, spec.args, spec.env, version),
 			],
 		})
 		return vscode.Disposable.from(registration, changed)

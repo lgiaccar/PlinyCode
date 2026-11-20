@@ -11,7 +11,8 @@ The same server is available to:
   DevOps remote. Elsewhere its tools are left out, since their schemas would be sent with every request for
   nothing.
 - **Copilot Chat** (agent mode) in VS Code, and **Cursor's agent**. PlinyCode registers the server with the
-  editor when it starts.
+  editor when it starts, if the editor exposes its MCP registration API. Older hosts such as VS Code 1.94
+  can still use the server through PlinyCode's own agent.
 - **Any other MCP client**, through a config copied from the PlinyCode GUI.
 
 ## Tools

@@ -400,7 +400,7 @@ export const e2e = test
 	.extend<{ openVSCode: (workspacePath: string) => Promise<ElectronApplication> }>({
 		openVSCode: async ({ userDataDir, channel }, use, testInfo) => {
 			const executablePath = E2ETestHelper.resolveVSCodeExecutablePath(
-				await downloadAndUnzipVSCode(channel, undefined, new SilentReporter()),
+				await downloadAndUnzipVSCode(process.env.VSCODE_TEST_VERSION || channel, undefined, new SilentReporter()),
 			)
 
 			await use(async (workspacePath: string) => {

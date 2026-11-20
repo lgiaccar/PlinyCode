@@ -54,7 +54,7 @@ See the [0.2.10 release notes](https://github.com/lgiaccar/PlinyCode/releases/ta
 
 ## Getting started
 
-1. Use VS Code `^1.101.0` or a compatible Cursor build, with access to the Synopsys Pliny gateway.
+1. Use VS Code `^1.94.0` or a compatible editor build (including Autopilot and Cursor), with access to the Synopsys Pliny gateway.
 2. Download the `.vsix` from the [latest stable GitHub release](https://github.com/lgiaccar/PlinyCode/releases/latest).
 3. Choose **Extensions > ... > Install from VSIX...**, select the file and reload the window.
 4. Open PlinyCode from the Activity Bar.

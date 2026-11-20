@@ -98,7 +98,7 @@ See [installing, updating and releasing](docs/releasing.md).
 
 ## Requirements
 
-- VS Code `^1.101.0` or a compatible Cursor build.
+- VS Code `^1.94.0` or a compatible editor build (including Autopilot and Cursor).
 - Network access to the Synopsys Pliny gateway and a Pliny API key.
 - Git for checkpoints and worktree features.
 - For building from source: Bun **1.3.14** and Node.js **>=22**, with the toolchain pinned in `.tool-versions`.
