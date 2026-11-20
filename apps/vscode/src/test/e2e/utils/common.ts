@@ -27,10 +27,9 @@ export const addSelectedCodeToClineWebview = async (_page: Page) => {
 export const toggleNotifications = async (_page: Page) => {
 	await _page.waitForLoadState("domcontentloaded")
 	await _page.keyboard.press("ControlOrMeta+Shift+p")
-	const editorSearchBar = _page.getByRole("textbox")
-	if (!editorSearchBar.isVisible()) {
-		await _page.keyboard.press("ControlOrMeta+Shift+p")
-	}
+	// Older VS Code hosts expose this input as a combobox, newer hosts as a
+	// textbox. Scope to the command palette instead of relying on its ARIA role.
+	const editorSearchBar = _page.locator('.quick-input-widget input[type="text"]')
 	await editorSearchBar.click({ delay: 100 }) // Ensure focus
 	await editorSearchBar.fill("> Toggle Do Not Disturb Mode")
 	await _page.keyboard.press("Enter")
