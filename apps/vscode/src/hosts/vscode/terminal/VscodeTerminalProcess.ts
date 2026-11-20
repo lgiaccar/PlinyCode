@@ -141,10 +141,13 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			// has shell integration present but may never trigger this event for that
 			// execution. That case is bounded by the exit-code race below, not by
 			// feature-detecting the event itself.
-			const resolveExecutionEnd = Promise.withResolvers<number | undefined>()
+			let resolveExecutionEnd!: (exitCode: number | undefined) => void
+			const executionEndPromise = new Promise<number | undefined>((resolve) => {
+				resolveExecutionEnd = resolve
+			})
 			const endEventDisposable = vscode.window.onDidEndTerminalShellExecution((e) => {
 				if (e.terminal === terminal && e.execution === execution) {
-					resolveExecutionEnd.resolve(e.exitCode)
+					resolveExecutionEnd(e.exitCode)
 				}
 			})
 			this.activeEndEventDisposable = endEventDisposable
@@ -181,7 +184,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 						(result): StreamReadOutcome =>
 							result.done ? { kind: "streamEnd" } : { kind: "data", data: result.value },
 					),
-					resolveExecutionEnd.promise.then((): StreamReadOutcome => ({ kind: "executionEnd" })),
+					executionEndPromise.then((): StreamReadOutcome => ({ kind: "executionEnd" })),
 					terminalClosedPromise.then((): StreamReadOutcome => ({ kind: "terminalClosed" })),
 				]
 				if (idleTimeoutMs !== undefined) {
@@ -414,7 +417,7 @@ export class VscodeTerminalProcess extends EventEmitter<TerminalProcessEvents> i
 			// ssh session), not because the API is unavailable.
 			let exitCodeEventTimedOut = false
 			const eventExitCode = await Promise.race([
-				resolveExecutionEnd.promise,
+				executionEndPromise,
 				new Promise<undefined>((resolve) => {
 					setTimeout(() => {
 						exitCodeEventTimedOut = true

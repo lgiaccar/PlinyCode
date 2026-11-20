@@ -87,6 +87,8 @@ jobs:
         needs: [detect-changes, matrix_prep]
         env:
             RUN_E2E: ${{ needs.detect-changes.outputs.e2e }}
+            # Exercise the minimum host on Linux and current stable on Windows/macOS.
+            VSCODE_TEST_VERSION: ${{ matrix.runner == 'ubuntu' && '1.94.0' || 'stable' }}
         strategy:
             fail-fast: false
             matrix:
@@ -125,7 +127,7 @@ jobs:
               id: vscode-cache
               with:
                   path: apps/vscode/.vscode-test
-                  key: vscode-${{ runner.os }}-stable-${{ hashFiles('apps/vscode/.vscode-test.mjs', 'apps/vscode/package.json') }}
+                  key: vscode-${{ runner.os }}-${{ env.VSCODE_TEST_VERSION }}-${{ hashFiles('apps/vscode/.vscode-test.mjs', 'apps/vscode/package.json') }}
 
             # Cache Playwright browsers
             - name: Cache Playwright browsers

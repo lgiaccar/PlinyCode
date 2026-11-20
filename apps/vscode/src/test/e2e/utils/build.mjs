@@ -8,7 +8,7 @@ const TIMEOUT_MINUTE = 1
 const INSTALL_TIMEOUT_MS = TIMEOUT_MINUTE * 60 * 1000
 
 async function installVSCode() {
-	const VSCODE_APP_TYPE = "stable"
+	const VSCODE_APP_TYPE = process.env.VSCODE_TEST_VERSION || "stable"
 	console.log("Downloading VS Code...")
 	return await downloadAndUnzipVSCode(VSCODE_APP_TYPE, undefined, new SilentReporter())
 }
@@ -16,7 +16,7 @@ async function installVSCode() {
 async function installChromium() {
 	console.log("Installing Playwright Chromium...")
 	try {
-		await execa("npm", ["exec", "playwright", "install", "chromium"], {
+		await execa("bun", ["x", "playwright", "install", "chromium"], {
 			stdio: "inherit",
 		})
 		console.log("Playwright Chromium installation completed successfully")

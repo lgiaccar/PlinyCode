@@ -129,7 +129,8 @@ export function canUseWideOutput(terminal: vscode.Terminal): boolean {
 	if (!options?.env?.[WIDE_OUTPUT_ENV_VAR]) {
 		return false
 	}
-	const detected = terminal.state?.shell
+	// Older hosts (including VS Code 1.94) do not expose the detected shell.
+	const detected = (terminal.state as (vscode.TerminalState & { shell?: string }) | undefined)?.shell
 	if (detected !== undefined) {
 		return detected === "pwsh"
 	}
