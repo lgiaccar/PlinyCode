@@ -5,7 +5,13 @@
 <h1 align="center">PlinyCode</h1>
 
 <p align="center">
-Synopsys' AI coding agent for VS Code and Cursor, powered by models through the Pliny gateway.
+<strong>🎸 AI, Code and rock and roll</strong>
+</p>
+
+<p align="center">
+Synopsys AI coding agent for VS Code and Cursor, powered by Pliny: Plan/Agent/Ask modes,
+smart model routing, worktrees, GitHub/Azure DevOps CI, Grafana monitoring,
+context inspection, delivery evidence and an attention inbox.
 </p>
 
 <p align="center">
