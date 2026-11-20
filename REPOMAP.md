@@ -10,7 +10,7 @@ This is a directory map. Commands, workflows and rules are in the `AGENTS.md` fi
 |-----|------|
 | `.github/` | Issue and PR templates, CODEOWNERS, Dependabot, the `setup-toolchain` and `sdk-dist` composite actions (`actions/`) and the CI workflows (`workflows/`) |
 | `.vscode/` | Workspace settings, launch configs, tasks |
-| `apps/` | Applications (currently the VS Code extension) |
+| `apps/` | Applications: the VS Code extension and standalone CLI |
 | `sdk/` | Internal engine packages |
 | `docs/` | Design and operations docs (releasing, FreeAuto/BalanceAuto routing, DevOps MCP) |
 | `assets/` | Shared product icons |
@@ -77,6 +77,11 @@ Protobuf schemas for the gRPC-like protocol over VS Code message passing.
 Run `bun run protos` after any `.proto` edit to regenerate `src/generated/` and the webview grpc client.
 
 ## Engine SDK (`sdk/packages/*`)
+
+The standalone application is in `apps/cli`: `src/` implements commands and the
+engine adapter, `scripts/` builds and verifies portable packages, `tests/` holds
+offline gateway/MCP fixtures, and `examples/` has pipeline integration examples.
+See [CLI usage](docs/cli.md). Its Windows/Linux CI is `.github/workflows/cli-test.yml`.
 
 Not published externally; consumed by the extension through compiled `dist/`.
 

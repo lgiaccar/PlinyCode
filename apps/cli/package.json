@@ -1,0 +1,22 @@
+{
+	"name": "@plinycode/cli",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun --use-system-ca src/main.ts",
+		"build": "bun scripts/build.ts",
+		"package": "bun scripts/package.ts",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test",
+		"lint": "bun biome lint .",
+		"format": "bun biome check --linter-enabled=false ."
+	},
+	"dependencies": {
+		"@plinycode/core": "workspace:*",
+		"@plinycode/llms": "workspace:*",
+		"@plinycode/shared": "workspace:*",
+		"ajv": "8.20.0",
+		"ajv-formats": "3.0.1"
+	}
+}

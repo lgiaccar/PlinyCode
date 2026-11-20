@@ -17,6 +17,17 @@
         "typescript": "^5.9.3",
       },
     },
+    "apps/cli": {
+      "name": "@plinycode/cli",
+      "version": "0.1.0",
+      "dependencies": {
+        "@plinycode/core": "workspace:*",
+        "@plinycode/llms": "workspace:*",
+        "@plinycode/shared": "workspace:*",
+        "ajv": "8.20.0",
+        "ajv-formats": "3.0.1",
+      },
+    },
     "apps/vscode": {
       "name": "plinycode-dev",
       "version": "0.2.10",
@@ -684,6 +695,8 @@
     "@pkgjs/parseargs": ["@pkgjs/parseargs@0.11.0", "", {}, "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="],
 
     "@playwright/test": ["@playwright/test@1.62.1", "", { "dependencies": { "playwright": "1.62.1" }, "bin": { "playwright": "cli.js" } }, "sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ=="],
+
+    "@plinycode/cli": ["@plinycode/cli@workspace:apps/cli"],
 
     "@plinycode/core": ["@plinycode/core@workspace:sdk/packages/core"],
 

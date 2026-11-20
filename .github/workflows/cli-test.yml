@@ -1,0 +1,85 @@
+name: cli-test
+
+on:
+    push:
+        branches: [stage, master]
+        paths: ['apps/cli/**', 'apps/biome.json', 'sdk/**', 'bun.lock', 'package.json', '.tool-versions', '.github/actions/**', '.github/workflows/cli-test.yml', 'docs/cli.md']
+    pull_request:
+        paths: ['apps/cli/**', 'apps/biome.json', 'sdk/**', 'bun.lock', 'package.json', '.tool-versions', '.github/actions/**', '.github/workflows/cli-test.yml', 'docs/cli.md']
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: cli-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+    cli:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-toolchain
+            - run: bun run build:sdk
+            - run: bun -F @plinycode/cli typecheck
+            - run: bun -F @plinycode/cli lint
+            - run: bun -F @plinycode/cli format
+            - run: bun -F @plinycode/cli test
+            - run: bun -F @plinycode/cli package
+            - run: bun apps/cli/scripts/verify-package.ts
+            - name: Archive portable package preserving Linux permissions
+              shell: bash
+              working-directory: apps/cli/dist
+              run: tar -czf "$RUNNER_TEMP/PlinyCode-CLI-$RUNNER_OS-x64.tar.gz" plinycode-*-x64
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: PlinyCode-CLI-${{ runner.os }}-x64
+                  path: |
+                      ${{ runner.temp }}/PlinyCode-CLI-${{ runner.os }}-x64.tar.gz
+                  retention-days: 14
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: CLI-e2e-harness-${{ runner.os }}
+                  path: apps/cli/tests/e2e.py
+                  retention-days: 14
+
+    portable-e2e:
+        name: Portable E2E (${{ matrix.os }})
+        needs: cli
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 15
+        steps:
+            # Deliberately no checkout, dependency install, or Bun/Node setup.
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: '3.13'
+            - uses: actions/download-artifact@v4
+              with:
+                  name: PlinyCode-CLI-${{ runner.os }}-x64
+                  path: ${{ runner.temp }}/cli-acceptance
+            - uses: actions/download-artifact@v4
+              with:
+                  name: CLI-e2e-harness-${{ runner.os }}
+                  path: ${{ runner.temp }}/cli-acceptance
+            - name: Test the downloaded package as a pipeline consumer
+              shell: bash
+              working-directory: ${{ runner.temp }}/cli-acceptance
+              run: |
+                  set -eo pipefail
+                  tar -xzf "PlinyCode-CLI-$RUNNER_OS-x64.tar.gz"
+                  python e2e.py --package "$(echo plinycode-*-x64)" 2>&1 | tee e2e-results.log
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: CLI-e2e-results-${{ runner.os }}
+                  path: ${{ runner.temp }}/cli-acceptance/e2e-results.log
