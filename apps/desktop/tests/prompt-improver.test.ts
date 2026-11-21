@@ -46,6 +46,36 @@ describe("desktop prompt improvement", () => {
 			expect((await f.improver.improve(draft, key)).error).toBeDefined();
 		expect(f.configs).toHaveLength(0);
 	});
+	test("keeps the draft when a provider truncates an otherwise successful response", async () => {
+		const improver = new PromptImprover(
+			async () =>
+				({
+					getMessages: () => [],
+					getModel: () => {
+						throw new Error("Not used by prompt improvement");
+					},
+					createMessage: async function* () {
+						yield {
+							type: "text",
+							text: "Only part of the request",
+							id: "fixture",
+						};
+						yield {
+							type: "done",
+							success: true,
+							incompleteReason: "max_tokens",
+							id: "fixture",
+						};
+					},
+				}) as ApiHandler,
+		);
+		const result = await improver.improve(
+			"Rewrite this entire request, keeping every requirement.",
+			"key",
+		);
+		expect(result.text).toBeUndefined();
+		expect(result.error).toBeDefined();
+	});
 	test("rejects empty or inflated responses", async () => {
 		for (const reply of ["", "a".repeat(201), "a".repeat(24001)])
 			expect(

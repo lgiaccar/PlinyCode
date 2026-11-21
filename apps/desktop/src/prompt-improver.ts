@@ -68,7 +68,7 @@ export class PromptImprover {
 					apiKey,
 					abortSignal: controller.signal,
 					timeoutMs: this.timeoutMs,
-					maxOutputTokens: 2048,
+					maxOutputTokens: 8192,
 					thinking: false,
 				});
 				if (controller.signal.aborted) {
@@ -84,7 +84,8 @@ export class PromptImprover {
 					if (chunk.type === "text") reply += chunk.text;
 					if (
 						reply.length > 24_000 ||
-						(chunk.type === "done" && !chunk.success)
+						(chunk.type === "done" &&
+							(!chunk.success || chunk.incompleteReason))
 					)
 						throw new Error("Invalid response");
 				}
