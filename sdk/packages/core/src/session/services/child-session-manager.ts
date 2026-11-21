@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type * as LlmsProviders from "@plinycode/llms";
 import type { AgentResult } from "@plinycode/shared";
 import { resolveRootSessionId } from "@plinycode/shared";
+import { serializeArtifact } from "@plinycode/shared/node";
 import { ensureHookLogDir } from "@plinycode/shared/storage";
 import { z } from "zod";
 import type {
@@ -300,7 +301,7 @@ export class ChildSessionManager {
 		const logPath = envPath ?? join(ensureHookLogDir(), "hooks.jsonl");
 		appendFileSync(
 			logPath,
-			`${JSON.stringify({ ts: nowIso(), ...event })}\n`,
+			`${serializeArtifact({ ts: nowIso(), ...event })}\n`,
 			"utf8",
 		);
 	}

@@ -62,54 +62,7 @@ export async function readSchema(path?: string) {
 	}
 }
 
-export function redact(text: string, secrets: string[]): string {
-	let result = text;
-	for (const secret of secrets
-		.filter(Boolean)
-		.sort((a, b) => b.length - a.length))
-		result = result.split(secret).join("[REDACTED]");
-	return result.replace(/(Bearer\s+)[\w.+/-]+/gi, "$1[REDACTED]");
-}
-
-export function serialize(
-	value: unknown,
-	secrets: string[],
-	indent?: number,
-): string {
-	return JSON.stringify(
-		value,
-		(_key, entry) =>
-			typeof entry === "string" ? redact(entry, secrets) : entry,
-		indent,
-	);
-}
-
-/** Keep enough trailing text to redact credentials split across model chunks. */
-export class StreamRedactor {
-	private pending = "";
-	constructor(private secrets: string[]) {}
-	push(chunk: string): string {
-		this.pending += chunk;
-		const keep =
-			Math.max(1, ...this.secrets.map((secret) => secret.length)) - 1;
-		let end = Math.max(0, this.pending.length - keep);
-		for (const secret of this.secrets.filter(Boolean)) {
-			let start = this.pending.indexOf(secret);
-			while (start >= 0) {
-				if (start < end && start + secret.length > end) end = start;
-				start = this.pending.indexOf(secret, start + secret.length);
-			}
-		}
-		const output = redact(this.pending.slice(0, end), this.secrets);
-		this.pending = this.pending.slice(end);
-		return output;
-	}
-	flush(): string {
-		const output = redact(this.pending, this.secrets);
-		this.pending = "";
-		return output;
-	}
-}
+export { redact, StreamRedactor, serialize } from "@plinycode/shared/node";
 
 export async function snapshotArtifacts(
 	root?: string,

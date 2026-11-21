@@ -10,6 +10,7 @@ import {
 	type SqliteDb,
 	toBoolInt,
 } from "@plinycode/shared/db";
+import { redactArtifactText } from "@plinycode/shared/node";
 import { resolveDbDataDir } from "@plinycode/shared/storage";
 import {
 	isNonTerminalSessionStatus,
@@ -64,7 +65,11 @@ export class SqliteSessionStore implements SessionStore {
 	run(sql: string, params: unknown[] = []): { changes?: number } {
 		return this.getRawDb()
 			.prepare(sql)
-			.run(...params);
+			.run(
+				...params.map((value) =>
+					typeof value === "string" ? redactArtifactText(value) : value,
+				),
+			);
 	}
 
 	queryOne<T>(sql: string, params: unknown[] = []): T | undefined {

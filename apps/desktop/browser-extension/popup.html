@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>PlinyCode Browser Companion</title>
+<body style="font:14px system-ui;width:350px;padding:12px">
+<h2>PlinyCode</h2><p id="identity"></p>
+<label>Desktop address <input id="address" style="width:100%" placeholder="ws://127.0.0.1:…/bridge"></label>
+<label>Pairing token <input id="token" type="password" style="width:100%"></label>
+<p><button type="button" id="connect">Connect</button> <button type="button" id="disconnect">Disconnect</button></p>
+<p>Sharing allows the task to read and interact with this tab, including its signed-in session. Other origins require sharing again.</p>
+<button type="button" id="share">Share current tab</button> <button type="button" id="revoke">Stop sharing current tab</button>
+<p id="status" role="status"></p><script src="popup.js"></script></body></html>

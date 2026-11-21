@@ -1,0 +1,140 @@
+{
+	"name": "@plinycode/desktop",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "dist/main.cjs",
+	"description": "PlinyCode desktop workspace",
+	"author": "PlinyCode",
+	"scripts": {
+		"build": "bun scripts/build.ts",
+		"dev": "bun run setup && bun run build && electron .",
+		"start": "electron .",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test tests && bun run test:protocol",
+		"test:protocol": "bun build src/browser.ts --target=node --format=cjs --outfile=../../ai_output/browser-fixture.cjs && bun build src/integrations.ts --target=node --format=cjs --outfile=../../ai_output/integrations-fixture.cjs && node --experimental-strip-types --test tests/browser-protocol.ts",
+		"test:e2e": "node --experimental-strip-types tests/e2e.ts",
+		"test:browser": "bun build src/browser.ts --target=node --format=cjs --outfile=../../ai_output/browser-fixture.cjs && node --experimental-strip-types tests/browser-e2e.ts",
+		"package": "bun run package:windows",
+		"setup": "node node_modules/electron/install.js",
+		"package:windows": "bun scripts/package.ts win32",
+		"package:linux": "bun scripts/package.ts linux"
+	},
+	"dependencies": {
+		"@plinycode/core": "workspace:*",
+		"@plinycode/llms": "workspace:*",
+		"@plinycode/shared": "workspace:*",
+		"react": "18.3.1",
+		"react-dom": "18.3.1",
+		"react-markdown": "10.1.0",
+		"ws": "8.21.3",
+		"zod": "4.3.6"
+	},
+	"devDependencies": {
+		"@types/react": "18.3.20",
+		"@types/react-dom": "18.3.6",
+		"@types/ws": "^8.18.2",
+		"electron": "45.4.1",
+		"electron-builder": "26.18.0",
+		"playwright": "1.65.1"
+	},
+	"build": {
+		"appId": "com.plinycode.desktop",
+		"productName": "PlinyCode Desktop",
+		"artifactName": "PlinyCode-Desktop-Setup-${version}-${arch}.${ext}",
+		"npmRebuild": false,
+		"directories": {
+			"output": "release"
+		},
+		"files": [
+			"dist/**/*",
+			"!dist/runtime/**/*",
+			"!dist/worker.js",
+			"!dist/probe.js",
+			"!dist/command-worker.js",
+			"!node_modules/**/*",
+			"package.json"
+		],
+		"extraResources": [
+			{
+				"from": "dist/licenses",
+				"to": "licenses"
+			},
+			{
+				"from": "dist/browser-extension",
+				"to": "browser-extension"
+			},
+			{
+				"from": "dist/probe.js",
+				"to": "probe.js"
+			},
+			{
+				"from": "dist/command-worker.js",
+				"to": "command-worker.js"
+			},
+			{
+				"from": "dist/worker.js",
+				"to": "worker.js"
+			},
+			{
+				"from": "dist/runtime",
+				"to": "runtime"
+			}
+		],
+		"asar": true,
+		"win": {
+			"target": [
+				"nsis"
+			],
+			"icon": "../vscode/assets/icons/icon.png",
+			"signExecutable": false
+		},
+		"nsis": {
+			"oneClick": true,
+			"perMachine": false,
+			"allowElevation": false,
+			"createDesktopShortcut": true,
+			"createStartMenuShortcut": true,
+			"runAfterFinish": true,
+			"deleteAppDataOnUninstall": false
+		},
+		"publish": null,
+		"linux": {
+			"target": [
+				"deb",
+				"AppImage"
+			],
+			"executableName": "plinycode-desktop",
+			"category": "Development",
+			"icon": "../vscode/assets/icons/icon.png",
+			"maintainer": "PlinyCode",
+			"artifactName": "PlinyCode-Desktop-${version}-x64.${ext}",
+			"syncDesktopName": true
+		},
+		"deb": {
+			"depends": [
+				"libgtk-3-0",
+				"libnotify4",
+				"libnss3",
+				"libxss1",
+				"libxtst6",
+				"xdg-utils",
+				"libatspi2.0-0",
+				"libsecret-1-0",
+				"libsecret-tools",
+				"gnome-keyring",
+				"libgbm1",
+				"libasound2t64 | libasound2"
+			],
+			"packageName": "plinycode-desktop"
+		},
+		"appImage": {
+			"executableArgs": []
+		},
+		"toolsets": {
+			"appimage": "1.0.3"
+		}
+	},
+	"homepage": "https://github.com/lgiaccar/PlinyCode",
+	"desktopName": "plinycode-desktop.desktop"
+}

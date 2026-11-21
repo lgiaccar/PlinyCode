@@ -12,6 +12,17 @@ Node-only filesystem path resolvers live under the storage subpath export:
 It also exports cross-client logging contracts, including `BasicLogger`, so
 runtime, SDK, and host applications can share a single logger type.
 
+The `@plinycode/shared/node` entry point also provides Pliny credential storage
+and output redaction for the CLI and Desktop. Windows credentials use DPAPI;
+Linux uses Secret Service. Known secrets are removed from streamed output even
+when split across chunks.
+
+Isolated hosts can opt in to engine artifact redaction with
+`configureArtifactRedaction(secrets)`. `serializeArtifact` and
+`redactArtifactText` apply that process-local policy across bundled copies of the
+shared package. With no configured secrets, persistence is unchanged. The policy
+does not rewrite older artifacts or sanitize arbitrary document contents.
+
 Session config primitives are also centralized here so hosts/runtimes can
 compose one base shape instead of redefining similar fields repeatedly:
 

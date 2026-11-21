@@ -13,6 +13,7 @@ import type {
 	WorkspaceInfo,
 } from "@plinycode/shared";
 import { augmentNodeCommandForDebug } from "@plinycode/shared";
+import { serializeArtifact } from "@plinycode/shared/node";
 import { ensureHookLogDir } from "@plinycode/shared/storage";
 import { createAgentHooksExtension } from "./hook-extension";
 import { listHookConfigFiles } from "./hook-file-config";
@@ -834,7 +835,7 @@ export function createHookAuditHooks(options: {
 	};
 
 	const append = (payload: HookEventPayload): void => {
-		const line = `${JSON.stringify({
+		const line = `${serializeArtifact({
 			ts: new Date().toISOString(),
 			...payload,
 		})}\n`;
