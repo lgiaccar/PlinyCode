@@ -3,14 +3,14 @@ on:
   pull_request:
     paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
   push:
-    branches: [stage, master]
+    branches: [stage, master, "lgiaccar/desktop-*"]
     paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref_name != 'stage' && github.ref_name != 'master' }}
 jobs:
   ubuntu-desktop:
     strategy:
