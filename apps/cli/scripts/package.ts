@@ -13,6 +13,9 @@ import { dirname, join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const repo = resolve(root, "../..");
+const { version } = JSON.parse(
+	await readFile(join(root, "package.json"), "utf8"),
+);
 const pin = (await readFile(join(repo, ".tool-versions"), "utf8")).match(
 	/^bun\s+(\S+)/m,
 )?.[1];
@@ -37,10 +40,15 @@ await copyFile(
 );
 await writeFile(
 	join(destination, "README.md"),
-	(await readFile(join(repo, "docs/cli.md"), "utf8")).replaceAll(
-		"../apps/cli/examples/",
-		"examples/",
-	),
+	(await readFile(join(repo, "docs/cli.md"), "utf8"))
+		.replaceAll("(cli-install.md)", "(INSTALL.md)")
+		.replaceAll("../apps/cli/examples/", "examples/"),
+);
+await writeFile(
+	join(destination, "INSTALL.md"),
+	(await readFile(join(repo, "docs/cli-install.md"), "utf8"))
+		.replaceAll("0.1.0", version)
+		.replaceAll("(cli.md)", "(README.md)"),
 );
 await cp(join(root, "examples"), join(destination, "examples"), {
 	recursive: true,
@@ -109,6 +117,7 @@ const files = [
 	launcher,
 	`runtime/${platform === "windows" ? "bun.exe" : "bun"}`,
 	"README.md",
+	"INSTALL.md",
 	"LICENSE",
 	"BUN-LICENSE.txt",
 	"THIRD-PARTY-NOTICES.txt",

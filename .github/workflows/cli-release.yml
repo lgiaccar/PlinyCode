@@ -1,0 +1,40 @@
+name: cli-release
+on:
+  push:
+    tags: ['cli-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          install: "false"
+      - run: bun apps/cli/scripts/release.ts --preflight
+  test-and-package:
+    needs: preflight
+    uses: ./.github/workflows/cli-test.yml
+  publish:
+    needs: test-and-package
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          install: "false"
+      - uses: actions/download-artifact@v4
+        with:
+          name: CLI-release-assets
+          path: ai_output/cli-release
+      - name: Publish verified CLI downloads without changing the extension latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun apps/cli/scripts/release.ts --publish ai_output/cli-release

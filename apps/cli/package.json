@@ -10,7 +10,8 @@
 		"typecheck": "tsc --noEmit",
 		"test": "bun test",
 		"lint": "bun biome lint .",
-		"format": "bun biome check --linter-enabled=false ."
+		"format": "bun biome check --linter-enabled=false .",
+		"archive": "bun scripts/archive.ts"
 	},
 	"dependencies": {
 		"@plinycode/core": "workspace:*",
