@@ -46,6 +46,9 @@
 			],
 			"@plinycode/shared/*": [
 				"./node_modules/@plinycode/shared/dist/*"
+			],
+			"@plinycode/core/pliny-router": [
+				"./node_modules/@plinycode/core/dist/pliny-router/index.d.ts"
 			]
 		},
 		"types": [

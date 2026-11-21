@@ -37,7 +37,7 @@ const esmDependencies = new Map()
 // preload the real ESM implementations without replacing them with test doubles.
 exports.mochaGlobalSetup = async () => {
 	await Promise.all(
-		["execa", "get-folder-size", "open", "p-wait-for", "serialize-error"].map(async (id) => {
+		["execa", "get-folder-size", "open", "p-wait-for", "serialize-error", "@plinycode/core/pliny-router"].map(async (id) => {
 			const namespace = await import(id)
 			esmDependencies.set(id, { ...namespace, __esModule: true })
 		}),
