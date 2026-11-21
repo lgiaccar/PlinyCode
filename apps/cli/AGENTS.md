@@ -1,10 +1,10 @@
 # PlinyCode CLI
 
 Read the root AGENTS.md. Use Bun pinned in `.tool-versions`, never npm/yarn/pnpm.
-This is the minimal standalone CLI: no YAML job parser, server, routers, memory
+This is the minimal standalone CLI: no YAML job parser, server, extension memory
 integration, persistent resume, or extension imports.
 
-- All inference uses the Pliny provider and an explicitly selected concrete model.
+- All inference uses Pliny. Omitted --model selects default FreeAuto; explicit concrete models remain supported. FreeAuto must never delegate to paid models.
 - Pipeline JSON stdout is a public contract; send diagnostic logs to stderr.
 - Default unattended execution must not run edits, shell commands or MCP servers.
   MCP discovery can launch programs and therefore needs approval too.

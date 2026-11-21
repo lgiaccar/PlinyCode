@@ -21,6 +21,7 @@ npm install @plinycode/core
 ## Entry Points
 
 - `@plinycode/core`: core contracts, shared utilities, and Node/server helpers for building hosts and runtimes
+- `@plinycode/core/pliny-router`: shared Pliny routing policy, built-in defaults and stream guards. Standalone hosts can use `createFreeAutoModelFactory` for the default free-only profile without importing extension settings or editor services; see the [CLI guide](../../../docs/cli.md).
 
 ## Typical Usage
 

@@ -37,6 +37,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
+			"@plinycode/core/pliny-router": path.resolve(__dirname, "node_modules/@plinycode/core/dist/pliny-router/index.js"),
 			"@plinycode/core": path.resolve(__dirname, "src/test/cline-core-vitest-stub.ts"),
 			"@plinycode/llms": path.resolve(__dirname, "node_modules/@plinycode/llms/dist/index.js"),
 			// Map @plinycode/shared subpath exports explicitly. The bare "@plinycode/shared"

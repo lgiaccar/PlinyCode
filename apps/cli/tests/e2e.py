@@ -125,15 +125,51 @@ class PortableAcceptance(unittest.TestCase):
         self.schema.write_text(json.dumps({"type": "object", "required": ["judgement"],
                                          "properties": {"judgement": {"enum": ["pass", "fail"]}}}), encoding="utf-8")
 
-    def invoke(self, args, turns, expected=0, stdin=None):
+    def invoke(self, args, turns, expected=0, stdin=None, model=MODEL):
         with gateway(turns) as (url, requests):
-            child = subprocess.run(self.command + ["run", "--model", MODEL, "--cwd", str(self.workspace),
+            child = subprocess.run(self.command + ["run"] + (["--model", model] if model else []) + ["--cwd", str(self.workspace),
                                    "--timeout", "15"] + args,
                                    env={**self.env, "PLINY_BASE_URL": url}, cwd=self.workspace,
                                    input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=40)
         self.assertEqual(child.returncode, expected, child.stdout + child.stderr)
         self.assertNotIn(SECRET, child.stdout + child.stderr)
         return child, requests
+
+    def test_default_free_auto_and_explicit_model_override(self):
+        child, requests = self.invoke(["--prompt", "Analyse the failing pipeline", "--output-schema", str(self.schema), "--stream"],
+                                      [json.dumps(RESULT)], model=None)
+        events = [json.loads(line) for line in child.stdout.splitlines()]
+        self.assertTrue(any(event["type"] == "routing" for event in events))
+        self.assertEqual(events[-1]["result"], RESULT)
+        self.assertEqual(requests[0]["model"], "snps-provider/kimi-k2.6")
+        _, requests = self.invoke(["--prompt", "Analyse", "--json"], ["Done"])
+        self.assertEqual(requests[0]["model"], MODEL)
+
+    def test_free_auto_failover_and_schema_repair(self):
+        child, requests = self.invoke(["--prompt", "Analyse pipeline logs", "--output-schema", str(self.schema), "--json"],
+                                      [{"http_error": 400}, "not JSON", json.dumps(RESULT)], model=None)
+        self.assertEqual(json.loads(child.stdout)["result"], RESULT)
+        self.assertEqual(requests[0]["model"], "snps-provider/kimi-k2.6")
+        self.assertNotEqual(requests[0]["model"], requests[1]["model"])
+        self.assertFalse(requests[-1].get("tools"))
+        self.assertNotEqual(requests[-1]["model"], requests[-2]["model"])
+        self.assertTrue(all(request["model"].startswith("snps-provider") for request in requests))
+
+    def test_free_auto_auth_failure_and_exhaustion(self):
+        for status, limit in [(401, 1), (400, 4)]:
+            with self.subTest(status=status):
+                child, requests = self.invoke(["--prompt", "Analyse", "--json"], [{"http_error": status}], expected=1, model=None)
+                self.assertEqual(json.loads(child.stdout)["status"], "failed")
+                self.assertEqual(len(requests), limit)
+
+    def test_free_auto_keeps_tool_approvals_and_timeout(self):
+        target = self.workspace / "denied.txt"
+        child, _ = self.invoke(["--prompt", "Write a file", "--json"],
+                               [{"name": "editor", "input": {"path": str(target), "new_text": "denied"}}], expected=3, model=None)
+        self.assertFalse(target.exists())
+        self.assertEqual(json.loads(child.stdout)["status"], "needs_input")
+        child, _ = self.invoke(["--prompt", "Wait", "--json", "--timeout", "1"], ["HANG"], expected=124, model=None)
+        self.assertEqual(json.loads(child.stdout)["error"]["code"], "timeout")
 
     def test_archive_hashes_and_launchers(self):
         for line in (self.package / "SHA256SUMS").read_text().splitlines():
@@ -161,7 +197,7 @@ class PortableAcceptance(unittest.TestCase):
         self.assertIn("metrics: 1 failed", json.dumps(requests[0]))
         with gateway([json.dumps(RESULT)]) as (url, _):
             result = subprocess.run([sys.executable, str(self.package / "examples/analyse.py"), str(log)],
-                                    env={**self.env, "PLINY_BASE_URL": url, "PLINY_MODEL": MODEL}, cwd=self.workspace,
+                                    env={**self.env, "PLINY_BASE_URL": url}, cwd=self.workspace,
                                     capture_output=True, text=True, encoding="utf-8", timeout=40)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)["result"], RESULT)
@@ -283,7 +319,7 @@ class PortableAcceptance(unittest.TestCase):
 
         try:
             with gateway(["Ready", "ORBIT", "HANG"]) as (url, requests):
-                child = subprocess.Popen(self.command + ["chat", "--model", MODEL, "--cwd", str(self.workspace)],
+                child = subprocess.Popen(self.command + ["chat", "--cwd", str(self.workspace)],
                                          env={**self.env, "PLINY_BASE_URL": url}, stdin=slave, stdout=slave, stderr=slave,
                                          start_new_session=True)
                 os.close(slave)

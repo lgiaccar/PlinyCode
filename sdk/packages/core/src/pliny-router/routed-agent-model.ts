@@ -1,0 +1,662 @@
+/**
+ * The `AgentModel` that makes FreeAuto and BalanceAuto work.
+ *
+ * Every call it receives is routed to a concrete Pliny model chosen by the
+ * policy, and delegated to the model the SDK would otherwise have built. When a
+ * delegate misbehaves *before producing any output*, the next candidate takes
+ * over silently — the consumer never learns the first attempt happened.
+ *
+ * The rule that shapes everything here: **once content has been forwarded, we
+ * can no longer switch models inside the call**. Those deltas are already on
+ * screen and there is no event that retracts them, so a second attempt would
+ * duplicate text. A post-content failure is therefore reported as a normal
+ * `finish{reason:"error"}` and recovery is left to the run-level hook, which
+ * continues from the persisted partial rather than replaying it.
+ *
+ * For the same reason this never rethrows after content: a thrown error would
+ * escape the agent loop before the partial assistant message is built, losing
+ * it from the transcript and guaranteeing duplication on the retry.
+ */
+
+import {
+	classifyProviderError,
+	getTokenCalibration,
+	isPlinySelfHostedModelId,
+	type ModelInfo,
+	type PlinyThinkingControls,
+} from "@plinycode/llms";
+import {
+	type AgentModel,
+	type AgentModelEvent,
+	type AgentModelRequest,
+	type AgentUsage,
+	CHARS_PER_TOKEN,
+} from "@plinycode/shared";
+import { looksDegenerate } from "./degenerate-output";
+import {
+	effortOptions,
+	type RouterTokenScale,
+	selectCandidates,
+	supportsImages,
+} from "./router-policy";
+import { withRouterAddendum } from "./router-prompt";
+import type {
+	RouterCallShape,
+	RouterCallTiming,
+	RouterCallUsage,
+	RouterClassification,
+	RouterDecision,
+	RouterEffort,
+	RouterImagePlan,
+	RouterRequestFeatures,
+	RouterRules,
+} from "./router-types";
+
+/**
+ * The size filter's view of each candidate: the request estimate in that
+ * model's own tokens, from the ratio providers reported on earlier calls
+ * (tokenCalibration, shared with the engine). Kimi packs about 3.9 characters
+ * into a token, so the flat three-character estimate had it drop out at about
+ * three quarters of its real limit; nemotron super packs about 2.4, so it now
+ * drops out earlier, before the gateway would reject the call.
+ */
+const calibratedTokenScale: RouterTokenScale = (modelId) =>
+	CHARS_PER_TOKEN / getTokenCalibration().charsPerToken(modelId);
+
+/** What the router reports back to the host so it can show rows and keep state. */
+export interface RouterObserver {
+	/** A call is about to start on `modelId`; `effort` is set when the router changed its reasoning. */
+	onCallStart(info: {
+		modelId: string;
+		decision: RouterDecision;
+		features: RouterRequestFeatures;
+		effort?: RouterEffort;
+	}): void;
+	/**
+	 * A candidate failed before producing output; `nextModelId` takes over.
+	 * `usage` is set on each of these callbacks when the call reported any.
+	 */
+	onFailover(info: {
+		modelId: string;
+		nextModelId: string | undefined;
+		error: string;
+		benched: boolean;
+		timing: RouterCallTiming;
+		usage?: RouterCallUsage;
+	}): void;
+	/** A call produced output and finished without a routing-level error. */
+	onCallSuccess(info: {
+		modelId: string;
+		timing: RouterCallTiming;
+		shape: RouterCallShape;
+		usage?: RouterCallUsage;
+	}): void;
+	/** A call failed after producing output; the run-level hook decides next. */
+	onCallError(info: {
+		modelId: string;
+		error: string;
+		timing: RouterCallTiming;
+		shape: RouterCallShape;
+		usage?: RouterCallUsage;
+	}): void;
+}
+
+/** Add one usage event's counts to a call's running total. */
+function addUsage(
+	total: RouterCallUsage | undefined,
+	usage: Partial<AgentUsage>,
+): RouterCallUsage {
+	const sum = (a: number | undefined, b: number | undefined) =>
+		a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+	const reasoningTokens = sum(
+		total?.reasoningTokens,
+		usage.reasoningTokenCount,
+	);
+	const costUsd = sum(total?.costUsd, usage.totalCost);
+	const estimated = total?.estimated === true || usage.estimated === true;
+	return {
+		inputTokens: (total?.inputTokens ?? 0) + (usage.inputTokens ?? 0),
+		outputTokens: (total?.outputTokens ?? 0) + (usage.outputTokens ?? 0),
+		cacheReadTokens:
+			(total?.cacheReadTokens ?? 0) + (usage.cacheReadTokens ?? 0),
+		cacheWriteTokens:
+			(total?.cacheWriteTokens ?? 0) + (usage.cacheWriteTokens ?? 0),
+		...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+		...(costUsd !== undefined ? { costUsd } : {}),
+		...(estimated ? { estimated } : {}),
+	};
+}
+
+export interface RoutedAgentModelDeps {
+	logWarning?: (message: string) => void;
+	/** Optional host-wide failover budget, checked before each attempt. */
+	canAttempt?: () => boolean;
+	/** Hosts without run recovery must not replay a partially delivered reply. */
+	retryPartialOutput?: boolean;
+	/** Router name used in user-facing errors; defaults to FreeAuto. */
+	label?: string;
+	rules: () => RouterRules;
+	/**
+	 * Resolves once the rules file has been read for the first time, so the
+	 * turn's first call follows the user's file rather than the built-in
+	 * defaults. Never rejects; a slow or missing file resolves to the defaults.
+	 */
+	awaitRules?: () => Promise<void>;
+	features: (request: AgentModelRequest) => RouterRequestFeatures;
+	knownModels: () => Record<string, ModelInfo> | undefined;
+	isHealthy: (modelId: string) => boolean;
+	createDelegate: (modelId: string) => AgentModel;
+	observer: RouterObserver;
+	/** Measured reasoning switches per model; models without one keep their default. */
+	thinkingControls?: (modelId: string) => PlinyThinkingControls | undefined;
+	/** Classifier verdict for the call, when the host runs one. Never throws. */
+	classify?: (
+		request: AgentModelRequest,
+		features: RouterRequestFeatures,
+		rules: RouterRules,
+	) => Promise<RouterClassification | undefined>;
+	/**
+	 * How a call that carries images is handled (`router-images.ts`). Without
+	 * it, such a call may only go to a candidate that accepts images. Never throws.
+	 */
+	planImages?: (
+		request: AgentModelRequest,
+	) => Promise<RouterImagePlan | undefined>;
+	/** Injectable for tests. */
+	now?: () => number;
+}
+
+/** Event types that mean the model actually produced something. */
+function isContentEvent(event: AgentModelEvent): boolean {
+	return (
+		event.type === "text-delta" ||
+		event.type === "media" ||
+		event.type === "reasoning-delta" ||
+		event.type === "tool-call-delta" ||
+		event.type === "tool-result"
+	);
+}
+
+function errorText(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return typeof error === "string" ? error : String(error);
+}
+
+/**
+ * True for failures that swapping models cannot fix. Auth is a credential
+ * problem every model shares; an abort is the user's decision.
+ */
+function isNonRoutableFailure(error: unknown, aborted: boolean): boolean {
+	if (aborted) {
+		return true;
+	}
+	return classifyProviderError(error) === "auth";
+}
+
+const DEGENERATE_OUTPUT_PREFIX = "Degenerate output";
+
+/** True for the error a call reports when its text collapsed into repetition. */
+export function isDegenerateOutputError(error: string): boolean {
+	return error.startsWith(DEGENERATE_OUTPUT_PREFIX);
+}
+
+/**
+ * Wrap a stream so that text collapsing into repetition (" .   .   .", "]]]]",
+ * or the same sentence hundreds of times) ends the call as an error instead of
+ * being accepted as the answer or running on to the output-token cap. The
+ * reply text and the reasoning are checked separately, every ~1 000 characters
+ * once each is long enough for repetition to be unambiguous.
+ */
+async function* withDegenerateOutputDetector(
+	source: AsyncIterable<AgentModelEvent>,
+	options: { modelId: string; onDetect: (chars: number) => void },
+): AsyncGenerator<AgentModelEvent> {
+	const streams = {
+		"text-delta": { text: "", nextCheckAt: 2000, label: "repeated text" },
+		"reasoning-delta": {
+			text: "",
+			nextCheckAt: 2000,
+			label: "repeated reasoning",
+		},
+	};
+	for await (const event of source) {
+		if (event.type === "text-delta" || event.type === "reasoning-delta") {
+			const stream = streams[event.type];
+			stream.text += event.text;
+			if (stream.text.length >= stream.nextCheckAt) {
+				stream.nextCheckAt = stream.text.length + 1000;
+				if (looksDegenerate(stream.text)) {
+					options.onDetect(stream.text.length);
+					throw new Error(
+						`${DEGENERATE_OUTPUT_PREFIX} (${stream.label}) from ${options.modelId} after ${stream.text.length} characters`,
+					);
+				}
+			}
+		}
+		yield event;
+	}
+}
+
+/**
+ * Wrap an async iterable so that a gap longer than `timeoutMs` between events
+ * aborts it. Pliny's own request timeout is 5 minutes and only fires for the
+ * whole request, which is far too coarse for a stream that has gone quiet.
+ */
+async function* withStallWatchdog(
+	source: AsyncIterable<AgentModelEvent>,
+	options: {
+		firstTokenTimeoutMs: number;
+		stallTimeoutMs: number;
+		onStall: (ms: number) => void;
+	},
+): AsyncGenerator<AgentModelEvent> {
+	const iterator = source[Symbol.asyncIterator]();
+	let sawEvent = false;
+	// A stalled delegate is, by definition, stuck: its generator is parked on an
+	// await that may never settle, so `return()` on it can hang forever too.
+	// Abandon it instead of awaiting the cleanup — the underlying request is
+	// cancelled by the caller's abort signal.
+	const abandon = () => {
+		void Promise.resolve(iterator.return?.(undefined)).catch(() => undefined);
+	};
+	let stalledOut = false;
+	try {
+		for (;;) {
+			const budget = sawEvent
+				? options.stallTimeoutMs
+				: options.firstTokenTimeoutMs;
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			const stalled = new Promise<"stalled">((resolve) => {
+				timer = setTimeout(() => resolve("stalled"), budget);
+			});
+			let settled: IteratorResult<AgentModelEvent> | "stalled";
+			try {
+				settled = await Promise.race([iterator.next(), stalled]);
+			} finally {
+				if (timer) {
+					clearTimeout(timer);
+				}
+			}
+			if (settled === "stalled") {
+				stalledOut = true;
+				options.onStall(budget);
+				abandon();
+				throw new Error(
+					sawEvent
+						? `Stream stalled: no output for ${Math.round(budget / 1000)}s`
+						: `Stream produced no output within ${Math.round(budget / 1000)}s`,
+				);
+			}
+			if (settled.done) {
+				return;
+			}
+			sawEvent = true;
+			yield settled.value;
+		}
+	} finally {
+		if (!stalledOut) {
+			abandon();
+		}
+	}
+}
+
+/**
+ * Build the FreeAuto `AgentModel`.
+ *
+ * Delegates are cached per model id for the lifetime of the returned model, so
+ * a turn that keeps choosing the same model does not rebuild its gateway.
+ */
+export function createRoutedAgentModel(deps: RoutedAgentModelDeps): AgentModel {
+	const now = deps.now ?? (() => Date.now());
+	const label = deps.label ?? "FreeAuto";
+	const delegates = new Map<string, AgentModel>();
+
+	const delegateFor = (modelId: string): AgentModel => {
+		let delegate = delegates.get(modelId);
+		if (!delegate) {
+			delegate = deps.createDelegate(modelId);
+			delegates.set(modelId, delegate);
+		}
+		return delegate;
+	};
+
+	return {
+		async *stream(request: AgentModelRequest): AsyncGenerator<AgentModelEvent> {
+			await deps.awaitRules?.();
+			const rules = deps.rules();
+			const features = deps.features(request);
+			// With images handled, the call is routed as if it had none: a
+			// candidate that cannot see them gets them as text instead.
+			const imagePlan = features.hasImages
+				? await deps.planImages?.(request)
+				: undefined;
+			const routing: RouterRequestFeatures = imagePlan
+				? { ...features, hasImages: false }
+				: features;
+			const classification = routing.hasImages
+				? undefined
+				: await deps.classify?.(request, routing, rules);
+			const knownModels = deps.knownModels();
+			const routed = selectCandidates({
+				rules,
+				features: routing,
+				knownModels,
+				isHealthy: deps.isHealthy,
+				classification,
+				tokenScale: calibratedTokenScale,
+			});
+			const lead = imagePlan?.leadCandidates ?? [];
+			const decision: RouterDecision =
+				lead.length > 0
+					? {
+							...routed,
+							candidates: [
+								...lead,
+								...routed.candidates.filter((id) => !lead.includes(id)),
+							],
+							routeName: "images",
+						}
+					: routed;
+
+			const candidates = decision.candidates;
+			if (candidates.length === 0) {
+				yield {
+					type: "finish",
+					reason: "error",
+					error:
+						features.hasImages && decision.excludedNoImages.length > 0
+							? `${label} has no model that accepts images among its candidates. ` +
+								"Pick a vision-capable model or remove the image."
+							: `${label} has no Pliny models available to route to.`,
+					errorRetryable: false,
+				};
+				return;
+			}
+
+			let lastError = `${label} exhausted every candidate model.`;
+
+			for (let index = 0; index < candidates.length; index += 1) {
+				if (deps.canAttempt && !deps.canAttempt()) {
+					lastError = "FreeAuto failover limit reached.";
+					break;
+				}
+				const modelId = candidates[index];
+				const nextModelId = candidates[index + 1];
+				// Describing images can take a while; it happens before the call's clock starts.
+				const baseRequest =
+					imagePlan && !supportsImages(modelId, knownModels)
+						? await imagePlan.textOnlyRequest()
+						: request;
+				if (request.signal?.aborted) {
+					yield { type: "finish", reason: "aborted" };
+					return;
+				}
+				const startedAt = now();
+				const reasoning = effortOptions(
+					decision.effort,
+					decision.reasoningEffort,
+					deps.thinkingControls?.(modelId),
+				);
+				// The free models get the extra "how your turn ends" instructions;
+				// a paid candidate (BalanceAuto) is sent the prompt untouched.
+				const systemPrompt = isPlinySelfHostedModelId(modelId)
+					? withRouterAddendum(request.systemPrompt)
+					: request.systemPrompt;
+				const delegateRequest: AgentModelRequest = {
+					...baseRequest,
+					...(systemPrompt !== undefined ? { systemPrompt } : {}),
+					...(reasoning
+						? { options: { ...request.options, ...reasoning } }
+						: {}),
+				};
+				deps.observer.onCallStart({
+					modelId,
+					decision,
+					features,
+					...(reasoning && decision.effort ? { effort: decision.effort } : {}),
+				});
+
+				let producedContent = false;
+				let firstContentAt: number | undefined;
+				let finished = false;
+				let failure:
+					| {
+							error: string;
+							raw: unknown;
+							errorClass?: ReturnType<typeof classifyProviderError>;
+					  }
+					| undefined;
+				const timing = (): RouterCallTiming => ({
+					startedAt,
+					...(firstContentAt !== undefined ? { firstContentAt } : {}),
+					endedAt: now(),
+				});
+				let finishReason: string | undefined;
+				let textChars = 0;
+				let reasoningChars = 0;
+				const toolCallIds = new Set<string>();
+				let anonymousToolCall = false;
+				let usage: RouterCallUsage | undefined;
+				const reported = (): { usage?: RouterCallUsage } =>
+					usage ? { usage } : {};
+				const shape = (): RouterCallShape => ({
+					...(finishReason !== undefined ? { finishReason } : {}),
+					textChars,
+					reasoningChars,
+					toolCalls: toolCallIds.size + (anonymousToolCall ? 1 : 0),
+				});
+				const observe = (event: AgentModelEvent): void => {
+					if (event.type === "text-delta") {
+						textChars += event.text.length;
+					} else if (event.type === "reasoning-delta") {
+						reasoningChars += event.text.length;
+					} else if (event.type === "tool-call-delta") {
+						if (event.toolCallId) {
+							toolCallIds.add(event.toolCallId);
+						} else if (event.index === undefined) {
+							anonymousToolCall = true;
+						} else {
+							toolCallIds.add(`#${event.index}`);
+						}
+					} else if (event.type === "finish") {
+						finishReason = event.reason;
+					} else if (event.type === "usage") {
+						usage = addUsage(usage, event.usage);
+					}
+				};
+
+				try {
+					const delegate = delegateFor(modelId);
+					const source = await delegate.stream(delegateRequest);
+					const guarded = withDegenerateOutputDetector(
+						withStallWatchdog(source, {
+							firstTokenTimeoutMs: rules.health.firstTokenTimeoutMs,
+							stallTimeoutMs: rules.health.stallTimeoutMs,
+							onStall: (ms) =>
+								deps.logWarning?.(
+									`[FreeAuto] ${modelId} stalled after ${ms}ms (call started ${startedAt})`,
+								),
+						}),
+						{
+							modelId,
+							onDetect: (chars) =>
+								deps.logWarning?.(
+									`[FreeAuto] ${modelId} degenerated into repetition after ${chars} characters`,
+								),
+						},
+					);
+
+					for await (const event of guarded) {
+						observe(event);
+						if (event.type === "finish") {
+							finished = true;
+							if (event.reason === "error") {
+								failure = {
+									error: event.error ?? "Model stream failed",
+									raw: event.error,
+									errorClass: event.errorClass,
+								};
+								// Do not forward a failing finish yet: if nothing was
+								// produced we can still switch models invisibly.
+								if (producedContent) {
+									yield deps.retryPartialOutput === false
+										? { ...event, errorRetryable: false }
+										: event;
+								}
+								break;
+							}
+							// A turn that finishes cleanly having produced nothing is
+							// the "empty response" failure mode; treat it as a failure
+							// so another model gets a chance.
+							if (!producedContent && event.reason === "stop") {
+								failure = {
+									error: "Model returned an empty response",
+									raw: undefined,
+								};
+								break;
+							}
+							yield event;
+							break;
+						}
+						if (isContentEvent(event) && !producedContent) {
+							producedContent = true;
+							firstContentAt = now();
+						}
+						// Tag usage with the model that served it, so the per-call token panel
+						// and the saved message metrics name the routed model, not the router.
+						yield event.type === "usage" && !event.usage.modelId
+							? { ...event, usage: { ...event.usage, modelId } }
+							: event;
+					}
+
+					// A stream that ended without any finish event looks like a clean
+					// stop to the agent loop, which would silently accept a truncated
+					// answer. Name it instead.
+					if (!finished && !failure) {
+						if (producedContent) {
+							yield {
+								type: "finish",
+								reason: "error",
+								error: `Response stream from ${modelId} ended without a finish reason`,
+								errorRetryable: deps.retryPartialOutput !== false,
+							};
+							deps.observer.onCallError({
+								modelId,
+								error: "Response stream ended without a finish reason",
+								timing: timing(),
+								shape: shape(),
+								...reported(),
+							});
+							return;
+						}
+						failure = {
+							error: `Response stream from ${modelId} ended without a finish reason`,
+							raw: undefined,
+						};
+					}
+				} catch (error) {
+					const aborted = request.signal?.aborted === true;
+					if (aborted) {
+						// The user cancelled. Report it as an abort and stop; never
+						// retry, never bench the model.
+						yield { type: "finish", reason: "aborted" };
+						return;
+					}
+					failure = { error: errorText(error), raw: error };
+
+					if (producedContent) {
+						// Cannot re-stream: convert to a finish so the agent loop keeps
+						// the partial message it has already assembled, and let the
+						// run-level hook continue with another model.
+						yield {
+							type: "finish",
+							reason: "error",
+							error: failure.error,
+							errorClass: classifyProviderError(error),
+							errorRetryable: deps.retryPartialOutput !== false,
+						};
+						deps.observer.onCallError({
+							modelId,
+							error: failure.error,
+							timing: timing(),
+							shape: shape(),
+							...reported(),
+						});
+						return;
+					}
+				}
+
+				if (!failure) {
+					deps.observer.onCallSuccess({
+						modelId,
+						timing: timing(),
+						shape: shape(),
+						...reported(),
+					});
+					return;
+				}
+
+				lastError = failure.error;
+
+				if (producedContent) {
+					// Already forwarded the failing finish above.
+					deps.observer.onCallError({
+						modelId,
+						error: failure.error,
+						timing: timing(),
+						shape: shape(),
+						...reported(),
+					});
+					return;
+				}
+
+				if (
+					failure.errorClass === "auth" ||
+					isNonRoutableFailure(failure.raw, request.signal?.aborted === true)
+				) {
+					// Auth failures are identical on every model; forward unchanged.
+					yield {
+						type: "finish",
+						reason: "error",
+						error: failure.error,
+						errorClass:
+							failure.errorClass ?? classifyProviderError(failure.raw),
+						errorRetryable: false,
+					};
+					deps.observer.onCallError({
+						modelId,
+						error: failure.error,
+						timing: timing(),
+						shape: shape(),
+						...reported(),
+					});
+					return;
+				}
+
+				deps.logWarning?.(
+					`[FreeAuto] ${modelId} failed before producing output: ${failure.error}`,
+				);
+				deps.observer.onFailover({
+					modelId,
+					nextModelId,
+					error: failure.error,
+					benched: false,
+					timing: timing(),
+					...reported(),
+				});
+			}
+
+			// Every candidate failed without producing anything. Report it as a
+			// non-retryable error: the agent loop's own retry would only re-run the
+			// same exhausted rotation.
+			yield {
+				type: "finish",
+				reason: "error",
+				error: `${label} could not complete the request. Last error: ${lastError}`,
+				errorRetryable: false,
+			};
+		},
+	};
+}

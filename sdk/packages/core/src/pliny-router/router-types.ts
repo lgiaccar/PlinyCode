@@ -1,0 +1,248 @@
+/**
+ * Shared contracts for the Pliny FreeAuto router.
+ *
+ * The router picks a concrete free Pliny model for every LLM call and fails
+ * over to a backup when one misbehaves. Types live here so the pure policy,
+ * the health registry, and the `AgentModel` wrapper can all refer to them
+ * without importing each other.
+ */
+
+import type { AgentModelRequest } from "@plinycode/shared";
+
+/**
+ * The mode a call is routed under. Ask mode, and a side question in any mode,
+ * route as `ask`: they read and answer like plan mode, but a quick question
+ * should not take the plan route's thinking models.
+ */
+export type RouterMode = "plan" | "act" | "ask";
+
+export const ROUTER_MODES: readonly RouterMode[] = ["plan", "act", "ask"];
+
+/** A route's matching conditions. All present conditions must hold. */
+export interface RouterRouteCondition {
+	/** Restrict the route to plan, act or ask mode. */
+	mode?: RouterMode;
+	/** Lower bound on the estimated request size, in tokens. */
+	minEstimatedTokens?: number;
+	/** Upper bound on the estimated request size, in tokens. */
+	maxEstimatedTokens?: number;
+	/** Upper bound on the length of the latest user prompt, in characters. */
+	maxPromptChars?: number;
+	/** Case-insensitive regular expression matched against the latest user prompt. */
+	promptRegex?: string;
+	/** Restrict the route to sub-agent runs (true) or to the main agent (false). */
+	subAgent?: boolean;
+}
+
+/**
+ * How much the chosen model should reason. `quick` switches reasoning off and
+ * `think` switches it on, but only on models whose switch was measured; any
+ * other model is left at its default.
+ */
+export type RouterEffort = "quick" | "think";
+
+export type RouterReasoningEffort = "low" | "medium" | "high";
+
+/** Tiers the classifier can pick. Each maps to the first route tagged with it. */
+export const ROUTER_TIERS = ["quick", "code", "reason", "huge"] as const;
+export type RouterTier = (typeof ROUTER_TIERS)[number];
+
+export interface RouterRoute {
+	/** Shown in the routing row so the user can tell which rule fired. */
+	name: string;
+	when?: RouterRouteCondition;
+	/** Candidate models, best first. Ids outside the free pool are dropped. */
+	use: string[];
+	/** Reasoning for calls on this route; unset leaves each model's default. */
+	effort?: RouterEffort;
+	/** Effort level sent when this route turns reasoning on. */
+	reasoningEffort?: RouterReasoningEffort;
+	/** Classifier tier this route serves. */
+	tier?: RouterTier;
+}
+
+export interface RouterHealthSettings {
+	/** How long a model stays benched after it trips the failure threshold. */
+	cooldownMs: number;
+	/** Consecutive failures before a model is benched. */
+	failuresBeforeCooldown: number;
+	/** Upper bound on failovers within a single user turn. */
+	maxFailoversPerTurn: number;
+	/**
+	 * Calls a turn may make on paid (hosted) models before the rest of it moves
+	 * to a free model; 0 turns the cap off. Only profiles that allow paid
+	 * models (BalanceAuto) ever reach it.
+	 */
+	maxPaidCallsPerTurn: number;
+	/** No output at all for this long aborts the call. */
+	firstTokenTimeoutMs: number;
+	/** A stream that stops producing for this long aborts the call. */
+	stallTimeoutMs: number;
+}
+
+export interface RouterClassifierSettings {
+	/** Off by default: heuristics decide unless the user opts in. */
+	enabled: boolean;
+	timeoutMs: number;
+	maxPromptChars: number;
+}
+
+export interface RouterUtilityModels {
+	/** Model asked to classify the prompt when the classifier is enabled. */
+	classifier: string;
+	/** Model asked whether the task is done when a run is about to end on a tool-free reply. */
+	judge: string;
+	/** Model used for conversation compaction summaries. */
+	summarizer: string;
+	/** Model used for commit message generation. */
+	commit: string;
+}
+
+/** The completion guard's knobs; its pattern rules are always on. */
+export interface RouterGuardSettings {
+	/** Ask the judge model whether the task is done before accepting a tool-free reply. */
+	judge: boolean;
+	judgeTimeoutMs: number;
+}
+
+/**
+ * When the completion guard gives up on a stalling model and how often it may
+ * remind one: the knobs behind the "asked the model to continue" rows.
+ */
+export interface RouterEscalationSettings {
+	/** Stalls in one run before the turn moves to a stronger model. */
+	afterStalls: number;
+	/** Failed commands in one run before the turn moves to a stronger model. */
+	afterFailedCommands: number;
+	/** Reminders the guard may send in one run. */
+	maxNudgesPerRun: number;
+}
+
+export interface RouterRules {
+	version: number;
+	/** Ordered fallback pool; every candidate list is filtered against it. */
+	pool: string[];
+	utility: RouterUtilityModels;
+	classifier: RouterClassifierSettings;
+	guard: RouterGuardSettings;
+	health: RouterHealthSettings;
+	escalation: RouterEscalationSettings;
+	/** Multiplier applied to the estimate when checking a context window. */
+	contextMarginRatio: number;
+	/** Keep a turn's first choice for later iterations when still viable. */
+	sticky: boolean;
+	routes: RouterRoute[];
+	/** Prose outside the YAML block, handed to the classifier as guidance. */
+	guidance?: string;
+}
+
+/** The classifier's verdict for a turn. */
+export interface RouterClassification {
+	tier: RouterTier;
+	think: boolean;
+}
+
+/** Everything the policy knows about the call it is routing. */
+export interface RouterRequestFeatures {
+	/** Estimated size of the whole request, in tokens. */
+	estimatedTokens: number;
+	mode: RouterMode;
+	/** Latest user prompt, used for keyword matching. */
+	prompt: string;
+	/** True when the request carries images, as parts or inside tool results (no free model accepts them). */
+	hasImages: boolean;
+	/** True when the call comes from a spawned sub-agent rather than the main agent. */
+	isSubAgent: boolean;
+	/** 1-based index of this call within the turn. */
+	callIndex: number;
+	/** Model this turn already settled on, when sticky routing applies. */
+	stickyModelId?: string;
+}
+
+export interface RouterDecision {
+	/** Candidates in preference order; the first is tried first. */
+	candidates: string[];
+	/** Name of the route that matched, for the routing row. */
+	routeName: string;
+	/** Reasoning the route asks for, after any classifier override. */
+	effort?: RouterEffort;
+	reasoningEffort?: RouterReasoningEffort;
+	/** The classifier verdict that picked the route, when it did. */
+	classification?: RouterClassification;
+	/** Models excluded because they are benched, for diagnostics. */
+	excludedUnhealthy: string[];
+	/** Models excluded because their context window is too small. */
+	excludedTooSmall: string[];
+	/** Models excluded because the request carries images they cannot accept. */
+	excludedNoImages: string[];
+}
+
+/**
+ * How a call that carries images is handled (`router-images.ts`). A candidate
+ * that accepts images gets the request as it is; any other gets
+ * `textOnlyRequest()`, in which each image is replaced by its description or
+ * by a note that it was not shown.
+ */
+export interface RouterImagePlan {
+	/** Image-capable models that take the call ahead of the route's candidates (`vision-model`), best first. */
+	leadCandidates?: string[];
+	/** The request for a candidate that cannot see images. Computed once, on first use; never rejects. */
+	textOnlyRequest: () => Promise<AgentModelRequest>;
+}
+
+/** One LLM call, as recorded for the end-of-turn summary and the call log. */
+export interface RouterCallRecord {
+	modelId: string;
+	startedAt: number;
+	routeName: string;
+	/** Reasoning actually requested from this model, when the router set it. */
+	effort?: RouterEffort;
+	estimatedTokens?: number;
+	classification?: RouterClassification;
+	/** Set when the call failed and the router moved on. */
+	failure?: string;
+	/** Tokens and cost the call reported, once it ended with a usage event. */
+	usage?: RouterCallUsage;
+}
+
+/**
+ * Token usage and cost of one delegate call, summed over its usage events
+ * (each one is a delta, as the agent loop treats them).
+ */
+export interface RouterCallUsage {
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	/** Hidden reasoning tokens, when the provider reported them. */
+	reasoningTokens?: number;
+	/** USD the gateway reported or priced from the catalog; absent when no usage event carried a cost. */
+	costUsd?: number;
+	/** The counts are a character-based estimate: the provider reported none. */
+	estimated?: boolean;
+}
+
+/** Wall-clock timing of one delegate call, reported to the observer. */
+export interface RouterCallTiming {
+	startedAt: number;
+	/** When the first content event arrived; absent if none did. */
+	firstContentAt?: number;
+	endedAt: number;
+}
+
+/**
+ * What one delegate call produced, reported next to its timing. This is what
+ * tells a stall apart from a stop in the call log: a reply of text only, ended
+ * by "stop", with nothing in the reasoning channel, is a model that thought in
+ * its content and never acted.
+ */
+export interface RouterCallShape {
+	/** The stream's finish reason; absent when the stream ended without one. */
+	finishReason?: string;
+	/** Visible text characters. */
+	textChars: number;
+	/** Characters on the reasoning channel. */
+	reasoningChars: number;
+	/** Distinct tool calls the reply made. */
+	toolCalls: number;
+}

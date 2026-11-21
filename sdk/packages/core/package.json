@@ -18,6 +18,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./pliny-router": {
+			"types": "./dist/pliny-router/index.d.ts",
+			"import": "./dist/pliny-router/index.js"
 		}
 	},
 	"scripts": {

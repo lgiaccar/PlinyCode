@@ -4,6 +4,15 @@ import { redact, StreamRedactor, serialize } from "../src/output";
 import { toolPolicies } from "../src/runner";
 
 describe("CLI contract", () => {
+	test("defaults chat and pipeline runs to FreeAuto while preserving explicit models", () => {
+		expect(parseOptions([]).model).toBe("pliny/auto-free");
+		expect(parseOptions(["run", "--prompt", "Analyse"]).model).toBe(
+			"pliny/auto-free",
+		);
+		expect(
+			parseOptions(["run", "--model", "snps-provider-vmodels/glm-5.3"]).model,
+		).toBe("snps-provider-vmodels/glm-5.3");
+	});
 	test("pipeline execution denies actions unless explicitly allowed", () => {
 		const options = parseOptions([
 			"run",

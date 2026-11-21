@@ -26,7 +26,7 @@ This file covers the whole repo. Read the guide nearest to the code you're chang
 
 Design and operations notes are in `docs/`:
 
-- [docs/cli.md](docs/cli.md): the standalone CLI, pipeline invocation, concrete models, approvals, MCP transports, structured output and portable packages. It has no YAML job parser or API server.
+- [docs/cli.md](docs/cli.md): the standalone CLI, pipeline invocation, default FreeAuto and concrete models, approvals, MCP transports, structured output and portable packages. It has no YAML job parser or API server.
 
 - [docs/releasing.md](docs/releasing.md): releases, `-test.N` pre-releases, the auto-updater and the required public repository information review on every published version. Read it before any version or release work.
 - [docs/pliny-free-auto-router.md](docs/pliny-free-auto-router.md), [docs/pliny-free-auto-thinking.md](docs/pliny-free-auto-thinking.md) and [docs/pliny-balance-auto.md](docs/pliny-balance-auto.md): how the FreeAuto and BalanceAuto models route, keep runs going, and hand images to models that cannot see them (`plinycode.router.images`).

@@ -44,12 +44,28 @@ No editor credentials are imported.
 
 ```sh
 plinycode models
-plinycode chat --model snps-provider-vmodels/glm-5.3 --export transcript.md
+plinycode chat --export transcript.md
 ```
 
 `models` lists the bundled Pliny chat-model catalog, not a live availability
-probe. Select a concrete model explicitly. FreeAuto and BalanceAuto are not
-supported. Selecting a paid model explicitly can incur charges.
+probe. Omitting `--model` selects **FreeAuto** (`pliny/auto-free`), including for
+chat, pipeline runs, and schema-repair calls. A schema-repair call tries a
+different free model from the one that produced invalid output, with tools
+disabled and the existing single-repair limit. Use `--model <id>` to select a
+concrete model instead. Selecting a paid model explicitly can incur charges.
+
+FreeAuto shares its built-in model order, context filtering, reasoning controls,
+stream guards and failover implementation with the extension. It uses free
+models only, tries at most three fallback switches per run, and retains a
+successful model through that run. Authentication errors and cancellation stop
+immediately. After partial output, the CLI reports failure instead of replaying
+output or completed tools. Routing notices go to stderr; `--stream` adds
+`routing` events, leaving the final JSON result contract unchanged.
+
+This CLI supports the default FreeAuto profile. Smart/Fast profiles, BalanceAuto,
+extension router settings/rules import, completion-judge/reviewer passes and
+image-description routing remain outside this first integration. Context
+compaction keeps the CLI's basic strategy with FreeAuto's built-in input budget.
 
 Chat streams responses, asks simple approval questions and accepts follow-ups
 while the process is running. End a line with `\` for multiline input. `/exit`

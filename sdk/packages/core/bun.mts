@@ -32,6 +32,11 @@ const buildConfig = {
 } as const;
 
 const builds: Parameters<typeof Bun.build>[0][] = [
+	{
+		entrypoints: ["./src/pliny-router/index.ts"],
+		outdir: "./dist/pliny-router",
+		...buildConfig,
+	},
 	// Build main exports separately to avoid Bun bundler output path conflicts
 	{
 		entrypoints: ["./src/index.ts"],

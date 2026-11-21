@@ -17,10 +17,12 @@ if os.name == "nt" and executable.lower().endswith(".cmd"):
     launcher = [str(package / "runtime" / "bun.exe"), "--use-system-ca", str(package / "plinycode.js")]
 
 command = launcher + [
-    "run", "--model", os.environ.get("PLINY_MODEL", "snps-provider-vmodels/glm-5.3"),
+    "run",
     "--prompt", "Analyse the test results. Cite evidence for the judgement.",
     "--output-schema", str(Path(__file__).with_name("judgement.schema.json")), "--json",
 ]
+if os.environ.get("PLINY_MODEL"):
+    command.extend(["--model", os.environ["PLINY_MODEL"]])
 for filename in sys.argv[1:]:
     command.extend(["--file", filename])
 if not sys.argv[1:]:

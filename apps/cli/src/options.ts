@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { PLINY_FREE_AUTO_MODEL_ID } from "@plinycode/llms";
 
 export class CliError extends Error {
 	constructor(
@@ -110,7 +111,7 @@ export function parseOptions(args: string[]): Options {
 	return {
 		command: command as Options["command"],
 		authAction: parsed.positionals[1],
-		model: str("model"),
+		model: str("model") ?? PLINY_FREE_AUTO_MODEL_ID,
 		prompt: str("prompt"),
 		files: ((v.file ?? []) as string[]).map((p) => resolve(cwd, p)),
 		stdin: v.stdin === true,
@@ -131,8 +132,8 @@ export function parseOptions(args: string[]): Options {
 
 export const HELP = `PlinyCode CLI
 
-  plinycode chat --model <id> [--export transcript.md]
-  plinycode run --model <id> --prompt <text> [--file <path> ...] [--stdin]
+  plinycode chat [--model <id>] [--export transcript.md]
+  plinycode run [--model <id>] --prompt <text> [--file <path> ...] [--stdin]
   plinycode models [--json]
   plinycode doctor [--json]
   plinycode auth login [--stdin] | logout
@@ -149,7 +150,8 @@ Run options:
   --timeout <seconds>     Turn timeout, including model and tool calls (default 900)
   --max-iterations <n>    Agent iteration limit (default 40)
 
-Models must be concrete Pliny model IDs; routers are not supported.
+Omitting --model selects FreeAuto (pliny/auto-free), which uses free models only.
+Use --model <id> for a concrete Pliny model. Other router profiles are not supported.
 PLINY_API_KEY overrides securely stored credentials. No YAML job parser or server.
 Chat: /exit ends the session; end a line with \\ to continue on another line.
 Exit codes: 0 success, 1 execution failure, 2 invalid input, 3 needs input,

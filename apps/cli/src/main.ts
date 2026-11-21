@@ -39,13 +39,17 @@ async function main() {
 		return;
 	}
 	if (options.command === "models") {
-		const { getModelsForProvider, isPlinyRouterModelId } = await import(
-			"@plinycode/llms"
-		);
+		const {
+			getModelsForProvider,
+			isPlinyRouterModelId,
+			PLINY_FREE_AUTO_MODEL_ID,
+		} = await import("@plinycode/llms");
 		const models = Object.entries(
 			await getModelsForProvider("pliny", { filter: "chat" }),
 		)
-			.filter(([id]) => !isPlinyRouterModelId(id))
+			.filter(
+				([id]) => !isPlinyRouterModelId(id) || id === PLINY_FREE_AUTO_MODEL_ID,
+			)
 			.map(([id, info]) => ({ id, name: info.name }));
 		process.stdout.write(
 			options.json
