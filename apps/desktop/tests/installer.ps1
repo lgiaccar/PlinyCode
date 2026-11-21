@@ -57,6 +57,18 @@ try {
                 if ([DateTime]::UtcNow -gt $deadline) { throw 'Self-update installer did not finish.' }
                 Start-Sleep -Milliseconds 500
             }
+            # NSIS restarts the updated app. Verify that window, then close only this
+            # isolated installation before Playwright opens the same saved profile.
+            $deadline = [DateTime]::UtcNow.AddSeconds(60)
+            do {
+                $restarted = @(Get-Process -Name 'PlinyCode Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $env:PLINY_DESKTOP_EXECUTABLE -and $_.MainWindowHandle -ne 0 })
+                if ($restarted.Count -gt 0) { break }
+                if ([DateTime]::UtcNow -gt $deadline) { throw 'Updated application did not restart.' }
+                Start-Sleep -Milliseconds 500
+            } while ($true)
+            if ($restarted.Count -ne 1) { throw 'Expected exactly one restarted application window.' }
+            if (-not $restarted[0].CloseMainWindow() -or -not $restarted[0].WaitForExit(30000)) { throw 'Restarted test application did not close cleanly.' }
+            Write-Output 'PASS: self-update restarted the updated application; isolated test window closed cleanly.'
         } else {
             & node --experimental-strip-types (Join-Path $PSScriptRoot 'upgrade.ts') seed
             if ($LASTEXITCODE -ne 0) { throw 'Old-version conversation setup failed.' }

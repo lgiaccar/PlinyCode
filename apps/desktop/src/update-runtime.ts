@@ -36,8 +36,6 @@ export function createDesktopUpdate(
 			: undefined;
 	if (transport) {
 		transport.logger = null;
-		// CI owns the next launch so it can verify the installed version and old history.
-		if (__PLINY_UPDATE_TEST_BUILD__) transport.autoRunAppAfterInstall = false;
 	}
 	return new DesktopUpdate(
 		transport,
