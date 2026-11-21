@@ -8,8 +8,19 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { _electron } from "playwright";
+import { _electron, type Page } from "playwright";
 import { WebSocket } from "ws";
+
+// Wait for the new turn to render before checking status: the previous turn may
+// still show "completed" while React is awaiting the send IPC response.
+async function sendPrompt(page: Page) {
+	const before = await page.locator(".message.user").count();
+	await page.getByRole("button", { name: /^Send/ }).click();
+	await page.waitForFunction(
+		(count) => document.querySelectorAll(".message.user").length === count + 1,
+		before,
+	);
+}
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scratch = resolve(root, "../../ai_output");
@@ -173,7 +184,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Remember ORBIT and say ready.");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 			undefined,
@@ -191,7 +202,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("What marker did I give you?");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -210,7 +221,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Change result.txt");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.getByRole("button", { name: "Deny", exact: true }).click();
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
@@ -229,7 +240,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Now change result.txt");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -280,7 +291,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("List the browser tabs I shared.");
-		await page.getByRole("button", { name: /^Send/ }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -296,7 +307,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("List shared tabs again.");
-		await page.getByRole("button", { name: /^Send/ }).click();
+		await sendPrompt(page);
 		await page.getByRole("button", { name: "Deny", exact: true }).click();
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
@@ -342,7 +353,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Test redaction");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -370,7 +381,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Start a background build");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -387,7 +398,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Keep chatting while the command runs");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -409,7 +420,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Delegate a report");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -476,7 +487,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Use the MCP echo tool");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "completed",
 		);
@@ -499,7 +510,7 @@ try {
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Request an unapproved connection");
-		await page.getByRole("button", { name: "Send ↑" }).click();
+		await sendPrompt(page);
 		await page.getByRole("button", { name: "Deny", exact: true }).click();
 		await page.waitForFunction(
 			() => document.querySelector(".badge")?.textContent === "failed",
@@ -656,7 +667,7 @@ try {
 	await page
 		.getByRole("textbox", { name: "Message PlinyCode" })
 		.fill("Prepare a task for PR review.");
-	await page.getByRole("button", { name: /^Send/ }).click();
+	await sendPrompt(page);
 	await page.waitForFunction(
 		() => document.querySelector(".badge")?.textContent === "completed",
 		undefined,
