@@ -186,6 +186,7 @@ try {
 	);
 	if (!process.env.PLINY_DESKTOP_E2E_PR_ONLY) {
 		await page.getByRole("button", { name: "Choose a project folder" }).click();
+		await page.getByRole("textbox", { name: "Message PlinyCode" }).waitFor();
 		const conversationId = await page.evaluate(
 			async () =>
 				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks[0].id,
