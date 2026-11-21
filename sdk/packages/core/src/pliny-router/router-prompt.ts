@@ -19,13 +19,13 @@ const ROUTER_MODEL_ADDENDUM = `
 - Make tool calls only through the tool-calling interface. Never write a tool call into your reply as text (XML such as \`<invoke>\` or \`<tool_call>\`, or JSON): text is only shown to the user, and nothing runs.
 - Reply in the language the user writes in, even when files, tool output or earlier replies are in another language.
 - Before your final reply, reread the user's request and confirm every action it asked for was actually performed, not just prepared.
-`.trim()
+`.trim();
 
 /** The system prompt with the addendum appended once. */
 export function withRouterAddendum(systemPrompt: string | undefined): string {
-	const base = systemPrompt?.trimEnd() ?? ""
+	const base = systemPrompt?.trimEnd() ?? "";
 	if (base.includes(ROUTER_MODEL_ADDENDUM)) {
-		return base
+		return base;
 	}
-	return base ? `${base}\n\n${ROUTER_MODEL_ADDENDUM}` : ROUTER_MODEL_ADDENDUM
+	return base ? `${base}\n\n${ROUTER_MODEL_ADDENDUM}` : ROUTER_MODEL_ADDENDUM;
 }

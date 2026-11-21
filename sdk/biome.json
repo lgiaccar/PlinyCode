@@ -46,6 +46,7 @@
 								"group": [
 									"@plinycode/llms/*",
 									"@plinycode/core/*",
+									"!@plinycode/core/pliny-router",
 									"@plinycode/shared/*",
 									"**/llms/src/**",
 									"**/core/src/**",
