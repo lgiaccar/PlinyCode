@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   ubuntu-desktop:
     strategy:
@@ -42,7 +45,9 @@ jobs:
           cd apps/desktop
           bun x playwright install chromium
       - name: Electron acceptance tests with isolated keyring
-        run: bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
+        run: |
+          bash apps/desktop/tests/linux/session.sh bun apps/desktop/tests/linux/credentials.ts
+          bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
       - name: Signed-in browser companion acceptance tests
         run: bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:browser
       - name: Build Ubuntu x64 packages

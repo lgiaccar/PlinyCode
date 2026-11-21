@@ -17,6 +17,7 @@ bun -F @plinycode/desktop setup
 bun -F @plinycode/desktop build
 export PLAYWRIGHT_BROWSERS_PATH="$PWD/ai_output/playwright"
 (cd apps/desktop && bun x playwright install chromium)
+bash apps/desktop/tests/linux/session.sh bun apps/desktop/tests/linux/credentials.ts
 bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
 bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:browser
 bun -F @plinycode/desktop package:linux
