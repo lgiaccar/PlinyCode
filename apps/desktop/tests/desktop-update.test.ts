@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import {
 	DesktopUpdate,
+	discoverRelease,
 	newer,
 	selectRelease,
 	validateUpdate,
@@ -16,6 +17,37 @@ const info = {
 		},
 	],
 };
+test("release discovery uses the public Desktop channel without forwarding credentials", async () => {
+	const result = await discoverRelease(
+		"0.1.1",
+		"win32",
+		async (url, options) => {
+			expect(url).toBe(
+				"https://api.github.com/repos/lgiaccar/PlinyCode/releases?per_page=100&page=1",
+			);
+			expect(new Headers(options?.headers).has("Authorization")).toBe(false);
+			return Response.json([
+				{
+					tag_name: "desktop-v0.1.2",
+					draft: false,
+					prerelease: false,
+					assets: [{ name: "latest.yml" }],
+				},
+			]);
+		},
+	);
+	expect(result).toEqual({
+		version: "0.1.2",
+		url: "https://github.com/lgiaccar/PlinyCode/releases/download/desktop-v0.1.2/",
+	});
+	await expect(
+		discoverRelease(
+			"0.1.1",
+			"win32",
+			async () => new Response("rate limited", { status: 403 }),
+		),
+	).rejects.toThrow();
+});
 class Transport extends EventEmitter {
 	autoDownload = true;
 	autoInstallOnAppQuit = true;

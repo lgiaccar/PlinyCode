@@ -68,7 +68,7 @@ export function selectRelease(
 export async function discoverRelease(
 	current: string,
 	platform: string,
-	fetcher = fetch,
+	fetcher: (url: string, options?: RequestInit) => Promise<Response> = fetch,
 ) {
 	const releases: Release[] = [];
 	// Desktop is a separate release channel; never use the editor's /releases/latest feed.
@@ -236,7 +236,8 @@ export class DesktopUpdate {
 		if (!this.transport || this.busy || this.status.phase !== "ready") return;
 		if (this.hasWork()) {
 			this.publish({
-				message: "Stop running tasks and commands before installing.",
+				message:
+					"Stop running tasks and commands, and wait for PR operations, before installing.",
 			});
 			return;
 		}

@@ -1,4 +1,4 @@
-import { app } from "electron";
+import { app, net } from "electron";
 import electronUpdater from "electron-updater";
 import {
 	DesktopUpdate,
@@ -13,7 +13,11 @@ export function createDesktopUpdate(
 	hasWork: () => boolean,
 	prepare: () => Promise<void>,
 ) {
-	let discover = () => discoverRelease(app.getVersion(), process.platform);
+	// Use Chromium's network stack so discovery and installer downloads share OS proxy settings.
+	let discover = () =>
+		discoverRelease(app.getVersion(), process.platform, (url, options) =>
+			net.fetch(url, options),
+		);
 	// Only the separately compiled, unpublished CI baseline accepts a loopback fixture.
 	if (__PLINY_UPDATE_TEST_BUILD__) {
 		const url = new URL(process.env.PLINY_DESKTOP_UPDATE_FIXTURE ?? "");
