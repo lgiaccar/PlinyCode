@@ -6,6 +6,11 @@ pipelines can invoke. It does **not** parse YAML jobs or run an HTTP service.
 
 ## Build and installation
 
+For ready-to-run Windows ZIP and Linux tar.gz downloads, follow the
+[download and installation guide](cli-install.md). The archives include the runtime,
+installation instructions and checksums. No build tools are required for users.
+The commands below are for building from source.
+
 From the repository root, using the Bun version in `.tool-versions`:
 
 ```sh
@@ -20,7 +25,8 @@ directory is `apps/cli/dist/plinycode-windows-x64` or
 `runtime/`, then put it on PATH. Windows uses `plinycode.cmd`; Linux uses
 `plinycode`. Both launch the included Bun runtime; Node/Bun need not be installed.
 `SHA256SUMS` records the packaged files. CI builds both platform packages as
-workflow artifacts; this does not publish an official release.
+workflow artifacts. CLI tags (`cli-v<version>`) run the same tests and publish
+versioned archives in GitHub Releases, independently of the extension auto-updater.
 
 `plinycode doctor` reports the runtime and optional dependencies without making
 a gateway request. Git, ripgrep, Python and external stdio MCP server programs
