@@ -13,6 +13,7 @@ import {
 import { BrowserSettings, PrSettings } from "./integration-settings";
 import { McpSettings } from "./mcp-settings";
 import { PrDialog } from "./pr-dialog";
+import { UpdateControls } from "./update-controls";
 import { usePromptDraft } from "./use-prompt-draft";
 
 const labels: Record<keyof Permissions, string> = {
@@ -210,6 +211,7 @@ function App() {
 						Settings
 					</button>
 				</footer>
+				<UpdateControls />
 			</aside>
 			<main>
 				{task ? (
@@ -558,6 +560,23 @@ function App() {
 				<div className="modal-backdrop">
 					<section className="modal">
 						<h2>App settings</h2>
+						<label>
+							<input
+								type="checkbox"
+								checked={settings.autoCheckUpdates}
+								onChange={(event) =>
+									setSettings({
+										...settings,
+										autoCheckUpdates: event.target.checked,
+									})
+								}
+							/>{" "}
+							Check for Desktop updates automatically
+						</label>
+						<p>
+							Updates download and install only when you choose. DEB updates may
+							request your administrator password.
+						</p>
 						<p>
 							New tasks inherit these defaults. Existing tasks keep their own
 							permissions.

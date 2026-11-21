@@ -7,18 +7,19 @@ described in the [implementation plan](desktop-plan.md).
 
 ## Windows one-click installer
 
-Download `PlinyCode-Desktop-Setup-0.1.1-x64.exe` from the
-[Desktop 0.1.1 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.1) and open it.
+Download `PlinyCode-Desktop-Setup-0.1.2-x64.exe` from the
+[Desktop 0.1.2 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.2) and open it.
 It installs for the current user without administrator rights, creates desktop
 and Start menu shortcuts, and launches PlinyCode when installation finishes.
 Electron and Bun are bundled; users do not need to install Node or Bun.
 
 This preview is unsigned, so Windows may display an unknown-publisher or
-SmartScreen warning. Desktop does **not** automatically check for or install updates.
-To upgrade, close Desktop and run the newer installer using the same Windows account.
-It replaces the application while preserving saved conversations, settings and credentials.
-Do not uninstall or delete application data before upgrading. The extension's updater
-does not update Desktop. See the [download and upgrade guide](desktop-install.md).
+SmartScreen warning. Desktop 0.1.2 checks for updates automatically and offers
+**Download** and **Install and restart** in the sidebar. Installation waits until
+running tasks, background commands and PR operations have stopped. Checks can be
+disabled in Settings. Versions 0.1.0 and 0.1.1 need one manual upgrade to receive
+the updater. The [download and upgrade guide](desktop-install.md) explains the
+Windows, DEB and AppImage flows and how saved data is preserved.
 On first launch, configure a Pliny API key in Settings (or reuse CLI credentials).
 Git is still required for Git worktrees and PR publishing. Browser automation
 still requires the separate companion setup described below.
@@ -66,7 +67,7 @@ provider and MCP secrets use Electron's OS-backed encryption. Environment-inject
 
 See the [Ubuntu test environment](../apps/desktop/tests/linux/README.md) for the
 repeatable VM setup, isolated keyring, acceptance matrix and package lifecycle
-checks. Packages are preview CI artifacts, not a signed or auto-updating release.
+checks. Published preview packages support in-app updates; the packages are not code-signed.
 Native Wayland and managed-browser deployment require further manual acceptance.
 
 ## Run from source
@@ -209,12 +210,12 @@ and [Azure PR API](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/p
 ## Remaining release work
 
 Managed-browser deployment, explicitly authorized live-provider acceptance,
-image upload/preview, worktree cleanup and production updating are tracked in the
+image upload/preview, worktree cleanup and production signing are tracked in the
 [plan](desktop-plan.md). Browser and provider fixtures do not establish compatibility
 with a company's browser policies, Git authentication or Azure Server installation.
 
 Desktop packages are published on GitHub Releases under separate `desktop-v*` tags.
-There is no updater or update feed. The one-click installer remains a preview without production signing.
+The updater discovers stable Desktop tags and verifies platform update metadata before installation. The one-click installer remains a preview without production signing.
 PDF, Word, Excel and dedicated data processing are deferred.
 
 ## Improve prompt

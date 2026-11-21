@@ -11,6 +11,27 @@ async function scratch() {
 	await mkdir(scratchRoot, { recursive: true });
 	return mkdtemp(join(scratchRoot, "desktop-test-"));
 }
+test("existing installations enable update checks once and retain an explicit opt-out", async () => {
+	const dir = await scratch();
+	const file = join(dir, "state.json");
+	const original = new DesktopStore(file).state;
+	await writeFile(
+		file,
+		JSON.stringify({
+			...original,
+			settings: {
+				model: original.settings.model,
+				permissions: original.settings.permissions,
+				subagents: original.settings.subagents,
+			},
+		}),
+	);
+	const migrated = new DesktopStore(file);
+	expect(migrated.state.settings.autoCheckUpdates).toBe(true);
+	migrated.state.settings.autoCheckUpdates = false;
+	migrated.save();
+	expect(new DesktopStore(file).state.settings.autoCheckUpdates).toBe(false);
+});
 test("task defaults are copied; running tasks reopen as interrupted without replay", async () => {
 	const dir = await scratch();
 	try {

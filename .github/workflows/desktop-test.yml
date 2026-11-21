@@ -68,6 +68,7 @@ jobs:
           path: |
             apps/desktop/release/*-x64.deb
             apps/desktop/release/*-x64.AppImage
+            apps/desktop/release/latest-linux.yml
             ai_output/linux-package-sha256.txt
       - name: Upload Ubuntu test evidence
         if: always()
@@ -125,11 +126,23 @@ jobs:
           } else {
             ./apps/desktop/tests/installer.ps1 -Installer $installer.FullName
           }
+      - name: Build unpublished self-update baseline
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: bun apps/desktop/scripts/update-baseline.ts
+      - name: Test actual self-update with corrupt download recovery and saved history
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/release/PlinyCode-Desktop-Setup-*-x64.exe | Select-Object -First 1
+          $baseline = Get-ChildItem ai_output/updater-baseline/PlinyCode-Desktop-Setup-0.0.0-x64.exe
+          ./apps/desktop/tests/installer.ps1 -Installer $installer.FullName -PreviousInstaller $baseline.FullName -SelfUpdate
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: PlinyCode-Desktop-Windows-x64
-          path: apps/desktop/release/PlinyCode-Desktop-Setup-*-x64.exe
+          path: |
+            apps/desktop/release/PlinyCode-Desktop-Setup-*-x64.exe
+            apps/desktop/release/latest.yml
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4

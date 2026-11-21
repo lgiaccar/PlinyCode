@@ -24,6 +24,7 @@ export class DesktopStore {
 					"Unsupported desktop history. The original file has been preserved.",
 				);
 		} else this.state = freshState();
+		this.state.settings.autoCheckUpdates ??= true;
 		for (const task of this.state.tasks) {
 			if (task.pullRequest?.status === "creating")
 				task.pullRequest = {

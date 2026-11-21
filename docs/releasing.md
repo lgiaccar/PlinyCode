@@ -329,14 +329,25 @@ and the same upgrade check on a clean CI runner; normal PR checks do not depend 
 Download `PlinyCode-Desktop-Windows-x64` and `PlinyCode-Desktop-ubuntu-22.04-x64`
 from that successful run. Publish the EXE, DEB and AppImage, generate `SHA256SUMS`
 over those exact files, and attach `docs/desktop-install.md` as `INSTALL.md`.
+Also publish `latest.yml` from the Windows artifact and `latest-linux.yml` from the
+Ubuntu 22.04 artifact unchanged. They contain the version, filenames and SHA-512
+hashes consumed by the updater. Never pair metadata from one build with binaries
+from another. Verify every referenced hash and file before making the draft public.
 Tag the tested commit as `desktop-v<version>`. Create a draft GitHub release with
 the corresponding `apps/desktop/releases/<version>.md`, `--verify-tag` and
 `--latest=false`; validate its assets before publishing it, keeping `--latest=false`.
 Verify the editor's latest stable release remains unchanged. Follow the public
 repository information review above, including download links and About metadata.
 
-Desktop has no updater or update feed. Releases are manual installs; the extension
-auto-updater must not receive Desktop artifacts or update metadata.
+Desktop 0.1.2+ discovers stable `desktop-v*` releases independently of the editor latest
+release. It checks automatically, downloads only on request, verifies SHA-512, and
+installs only on explicit action while idle. Do not publish Desktop update metadata
+on the extension release. Users on 0.1.0/0.1.1 need one manual installation.
+
+Windows CI additionally builds an unpublished `0.0.0` baseline with a compile-time
+loopback feed for the real updater test. It rejects a corrupt download, downloads
+the real candidate, invokes NSIS from the application and checks the saved
+conversation after replacement. That baseline and its metadata must never be published.
 
 ## Troubleshooting
 

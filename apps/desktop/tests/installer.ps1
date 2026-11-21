@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Installer, [string]$PreviousInstaller)
+param([Parameter(Mandatory=$true)][string]$Installer, [string]$PreviousInstaller, [switch]$SelfUpdate)
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $scratch = Join-Path $repo 'ai_output'
@@ -24,6 +24,8 @@ New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 $previousExecutable = $env:PLINY_DESKTOP_EXECUTABLE
 $previousPrOnly = $env:PLINY_DESKTOP_E2E_PR_ONLY
 $previousUpgradeData = $env:PLINY_DESKTOP_UPGRADE_DATA
+$previousUpdateTarget = $env:PLINY_DESKTOP_UPDATE_TARGET
+$targetVersion = (Get-Content (Join-Path $PSScriptRoot '../package.json') -Raw | ConvertFrom-Json).version
 $installed = $false
 try {
     # NSIS consumes /D as the final argument, including any spaces in the path.
@@ -46,10 +48,21 @@ try {
     Remove-Item Env:PLINY_DESKTOP_E2E_PR_ONLY -ErrorAction SilentlyContinue
     if ($PreviousInstaller) {
         $env:PLINY_DESKTOP_UPGRADE_DATA = Join-Path $scratch ('desktop-upgrade-' + [guid]::NewGuid().ToString('N'))
-        & node --experimental-strip-types (Join-Path $PSScriptRoot 'upgrade.ts') seed
-        if ($LASTEXITCODE -ne 0) { throw 'Old-version conversation setup failed.' }
-        $process = Start-Process -FilePath $installerPath -ArgumentList "/S /D=$installRoot" -WindowStyle Hidden -PassThru
-        if (-not $process.WaitForExit(180000) -or $process.ExitCode -ne 0) { throw 'Upgrade installer failed.' }
+        if ($SelfUpdate) {
+            $env:PLINY_DESKTOP_UPDATE_TARGET = $installerPath
+            & node --experimental-strip-types (Join-Path $PSScriptRoot 'self-update.ts')
+            if ($LASTEXITCODE -ne 0) { throw 'Self-update UI/download/installer handoff failed.' }
+            $deadline = [DateTime]::UtcNow.AddSeconds(180)
+            while (@(Get-PlinyInstall | Where-Object DisplayVersion -EQ $targetVersion).Count -ne 1) {
+                if ([DateTime]::UtcNow -gt $deadline) { throw 'Self-update installer did not finish.' }
+                Start-Sleep -Milliseconds 500
+            }
+        } else {
+            & node --experimental-strip-types (Join-Path $PSScriptRoot 'upgrade.ts') seed
+            if ($LASTEXITCODE -ne 0) { throw 'Old-version conversation setup failed.' }
+            $process = Start-Process -FilePath $installerPath -ArgumentList "/S /D=$installRoot" -WindowStyle Hidden -PassThru
+            if (-not $process.WaitForExit(180000) -or $process.ExitCode -ne 0) { throw 'Upgrade installer failed.' }
+        }
         $registered = @(Get-PlinyInstall)
         if ($registered.Count -ne 1 -or (Get-InstalledFolder $registered[0]) -ne $actual) { throw 'Upgrade changed the installation identity.' }
         & node --experimental-strip-types (Join-Path $PSScriptRoot 'upgrade.ts') verify
@@ -62,6 +75,7 @@ try {
     $env:PLINY_DESKTOP_EXECUTABLE = $previousExecutable
     $env:PLINY_DESKTOP_E2E_PR_ONLY = $previousPrOnly
     $env:PLINY_DESKTOP_UPGRADE_DATA = $previousUpgradeData
+    $env:PLINY_DESKTOP_UPDATE_TARGET = $previousUpdateTarget
     if ($installed) {
         # Revalidate the exact path before an uninstaller can remove anything.
         $resolved = [IO.Path]::GetFullPath($installRoot)

@@ -5,6 +5,15 @@
 	background: #151819;
 	font-size: 14px;
 }
+.desktop-updates {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 10px;
+}
+.desktop-updates small {
+	color: #a8b4ab;
+}
 * {
 	box-sizing: border-box;
 }
