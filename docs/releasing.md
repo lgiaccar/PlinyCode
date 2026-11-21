@@ -13,6 +13,10 @@ To try a PR without publishing anything, install the build its CI attaches (see
 
 ## What a release contains
 
+The editor and CLI have separate release tracks. The editor uses `release_<version>`
+and owns the repository's latest release / `latest.json`. The CLI uses `cli-v<version>`
+and is always published with `--latest=false`; see [Publishing CLI downloads](#publishing-cli-downloads).
+
 **GitHub:** a release tagged `release_<version>` (e.g. `release_0.1.3`), whose description is the release notes.
 It has two assets:
 
@@ -248,6 +252,51 @@ the branch, so a PR that didn't tick the version carries the same number as the 
 
 The artifact is uploaded even when an e2e test failed, so check the PR's checks before relying on it. Pushes to
 `stage` and `master` attach no build; those are published through the release steps above.
+
+## Publishing CLI downloads
+
+The CLI version is `apps/cli/package.json`'s version. Its archives are
+`PlinyCode-CLI-<version>-windows-x64.zip` and
+`PlinyCode-CLI-<version>-linux-x64.tar.gz`, with a shared `SHA256SUMS` and `INSTALL.md`.
+The archives also contain per-file checksums, licenses, examples and installation
+instructions. CLI releases do not upload `latest.json` or change the editor's latest
+release. CLI users update manually by downloading a new version and updating PATH.
+
+1. Start from current `stage` in a clean release worktree. Update the CLI package
+   version and run `bun install` if it changes. Add user-facing notes at
+   `apps/cli/releases/<version>.md`. Update `docs/cli-install.md` and the root README
+   download links for the version being published; review the public repository
+   information checklist above. The initial CLI version is `0.1.0`.
+2. Open the PR and let `cli-test` finish. It builds on Windows and Ubuntu 22.04,
+   checks source and bundles, creates native ZIP/tar.gz archives, then downloads,
+   verifies and extracts them in fresh jobs with no source checkout or Node/Bun setup.
+   Portable acceptance covers pipeline output, approvals, MCP, cancellation and
+   paths with spaces/Unicode. `Verify release assets` verifies both archive hashes
+   and prepares the combined checksum manifest and installation guide without publishing.
+3. After all checks pass and publication is authorized, tag the exact tested commit:
+
+   ```sh
+   git tag cli-v0.1.0
+   git push origin cli-v0.1.0
+   ```
+
+   Substitute the new version for future releases. Never move or reuse a published tag.
+4. `cli-release` verifies that the tag matches the CLI version and checked-out SHA,
+   then runs the reusable `cli-test` workflow again. Publication requires every
+   source, bundled and downloaded-package check to pass. It verifies both archive
+   hashes, creates a draft with all four assets, and publishes only after uploads
+   finish. A failed upload leaves a draft; inspect it before retrying. Existing
+   releases are never overwritten automatically. A version with a prerelease suffix
+   is published as a GitHub prerelease.
+5. Verify anonymous archive downloads against `SHA256SUMS`, follow the attached
+   installation guide, and verify the repository's latest release is still the
+   editor release. Link the CLI release from the PR. Merge the documentation changes
+   only with merge authorization; until then, the default-branch README refresh is pending.
+
+Local preparation (native host required): `bun -F @plinycode/cli package`,
+`bun apps/cli/scripts/verify-package.ts`, then `bun -F @plinycode/cli archive`.
+Archives and sidecar hashes are written to `apps/cli/dist/release/`. The publication
+workflow does not use local developer artifacts.
 
 ## Pulling a bad release
 

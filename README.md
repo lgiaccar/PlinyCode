@@ -25,6 +25,11 @@ context inspection, delivery evidence and an attention inbox.
 
 ## What it is
 
+**Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
+[PlinyCode CLI 0.1.0](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.0).
+The runtime is included. See [CLI installation and pipeline examples](docs/cli-install.md)
+for checksum verification, authentication, FreeAuto chat and automation.
+
 PlinyCode brings an AI coding agent into VS Code and Cursor. Ask questions about your codebase, prepare a plan,
 implement changes, run commands, and follow pull requests and pipelines from the editor.
 
