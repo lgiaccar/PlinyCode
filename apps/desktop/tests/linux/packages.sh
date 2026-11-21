@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Destructive package install/uninstall test: use a disposable Ubuntu VM/CI runner.
 set -euo pipefail
+trap 'echo "Package acceptance failed at line $LINENO" >&2' ERR
 root=$(cd "$(dirname "$0")/../../../.." && pwd)
 cd "$root"
 [[ $(id -u) != 0 ]] || { echo 'Run as a regular user with sudo.' >&2; exit 1; }

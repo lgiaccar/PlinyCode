@@ -17,8 +17,8 @@
 		"test:browser": "bun build src/browser.ts --target=node --format=cjs --outfile=../../ai_output/browser-fixture.cjs && node --experimental-strip-types tests/browser-e2e.ts",
 		"package": "bun run package:windows",
 		"setup": "node node_modules/electron/install.js",
-		"package:windows": "bun run build && bun scripts/notices.ts && electron-builder --win nsis --x64 --publish never",
-		"package:linux": "bun run build && bun scripts/notices.ts && electron-builder --linux deb AppImage --x64 --publish never"
+		"package:windows": "bun scripts/package.ts win32",
+		"package:linux": "bun scripts/package.ts linux"
 	},
 	"dependencies": {
 		"@plinycode/core": "workspace:*",
@@ -108,7 +108,8 @@
 			"category": "Development",
 			"icon": "../vscode/assets/icons/icon.png",
 			"maintainer": "PlinyCode",
-			"artifactName": "PlinyCode-Desktop-${version}-${arch}.${ext}"
+			"artifactName": "PlinyCode-Desktop-${version}-x64.${ext}",
+			"syncDesktopName": true
 		},
 		"deb": {
 			"depends": [
@@ -134,5 +135,6 @@
 			"appimage": "1.0.3"
 		}
 	},
-	"homepage": "https://github.com/lgiaccar/PlinyCode"
+	"homepage": "https://github.com/lgiaccar/PlinyCode",
+	"desktopName": "plinycode-desktop.desktop"
 }

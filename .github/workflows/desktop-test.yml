@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
   push:
-    branches: [stage, master, "lgiaccar/desktop-*"]
+    branches: [stage, master]
     paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
   workflow_dispatch:
 permissions:

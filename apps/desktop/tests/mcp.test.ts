@@ -7,6 +7,7 @@ import { type ConnectedMcpServer, mcpServerSchema } from "../src/mcp-contracts";
 import { SecretVault } from "../src/vault";
 
 const scratch = resolve(import.meta.dir, "../../../ai_output");
+await mkdir(scratch, { recursive: true });
 function response(request: {
 	id?: number;
 	method: string;
