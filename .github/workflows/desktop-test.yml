@@ -138,4 +138,5 @@ jobs:
           path: |
             ai_output/desktop-e2e-*/**/*.png
             ai_output/desktop-browser-e2e-*/**/*.png
+            ai_output/desktop-upgrade-*/**/*.png
           if-no-files-found: ignore

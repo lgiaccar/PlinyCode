@@ -35,6 +35,7 @@ const env: Record<string, string> = {
 	PLINY_DESKTOP_TEST_PROJECT: folder,
 	PLINY_API_KEY: "upgrade-fixture-key",
 	PLINY_BASE_URL: `http://127.0.0.1:${address.port}/v1`,
+	GIT_CEILING_DIRECTORIES: data,
 };
 delete env.ELECTRON_RUN_AS_NODE;
 const application = await _electron.launch({
@@ -81,11 +82,26 @@ try {
 		await page.getByLabel("Model", { exact: true }).inputValue(),
 		"pliny/auto-free",
 	);
+	await page.screenshot({
+		path: join(data, seed ? "before-upgrade.png" : "after-upgrade.png"),
+	});
 	console.log(
 		seed
 			? "PASS: old installed version saved a conversation"
 			: "PASS: upgraded installed version resumed the old engine conversation",
 	);
+} catch (error) {
+	const page = application.windows()[0];
+	if (page) {
+		console.error(
+			"Upgrade fixture state:",
+			await page.locator('.badge, [role="alert"]').allTextContents(),
+		);
+		await page
+			.screenshot({ path: join(data, "upgrade-failure.png") })
+			.catch(() => {});
+	}
+	throw error;
 } finally {
 	await application.close();
 	server.closeAllConnections();
