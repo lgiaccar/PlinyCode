@@ -322,6 +322,9 @@ For an upgrade test on a clean Windows account, run
 `apps/desktop/tests/installer.ps1 -Installer <new.exe> -PreviousInstaller <old.exe>`.
 It saves a real conversation using a local gateway fixture before replacing the app,
 then verifies the upgraded engine can continue it. It refuses to replace a user's existing install.
+Alternatively dispatch `desktop-test` with `previous-installer-run` set to a successful
+earlier run that still has its Windows installer artifact. This runs the Windows tests
+and the same upgrade check on a clean CI runner; normal PR checks do not depend on old artifacts.
 
 Download `PlinyCode-Desktop-Windows-x64` and `PlinyCode-Desktop-ubuntu-22.04-x64`
 from that successful run. Publish the EXE, DEB and AppImage, generate `SHA256SUMS`

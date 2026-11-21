@@ -6,13 +6,20 @@ on:
     branches: [stage, master]
     paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
   workflow_dispatch:
+    inputs:
+      previous-installer-run:
+        description: "Optional successful desktop-test run ID supplying the previous Windows installer for upgrade acceptance"
+        type: string
+        default: ""
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref_name != 'stage' && github.ref_name != 'master' }}
 jobs:
   ubuntu-desktop:
+    if: ${{ !inputs.previous-installer-run }}
     strategy:
       fail-fast: false
       matrix:
@@ -103,9 +110,21 @@ jobs:
         run: bun -F @plinycode/desktop package
       - name: Test installation, packaged app and uninstallation
         shell: pwsh
+        env:
+          PREVIOUS_INSTALLER_RUN: ${{ inputs.previous-installer-run }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $installer = Get-ChildItem apps/desktop/release/PlinyCode-Desktop-Setup-*-x64.exe | Select-Object -First 1
-          ./apps/desktop/tests/installer.ps1 -Installer $installer.FullName
+          if ($env:PREVIOUS_INSTALLER_RUN) {
+            if ($env:PREVIOUS_INSTALLER_RUN -notmatch '^\d+$') { throw 'Expected a numeric workflow run ID.' }
+            gh run download $env:PREVIOUS_INSTALLER_RUN --repo $env:GITHUB_REPOSITORY --name PlinyCode-Desktop-Windows-x64 --dir ai_output/previous-installer
+            if ($LASTEXITCODE -ne 0) { throw 'Could not download the previous installer.' }
+            $previous = @(Get-ChildItem ai_output/previous-installer -Recurse -Filter 'PlinyCode-Desktop-Setup-*-x64.exe')
+            if ($previous.Count -ne 1) { throw 'Expected exactly one previous installer.' }
+            ./apps/desktop/tests/installer.ps1 -Installer $installer.FullName -PreviousInstaller $previous[0].FullName
+          } else {
+            ./apps/desktop/tests/installer.ps1 -Installer $installer.FullName
+          }
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
