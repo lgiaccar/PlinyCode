@@ -7,13 +7,18 @@ described in the [implementation plan](desktop-plan.md).
 
 ## Windows one-click installer
 
-Open `PlinyCode-Desktop-Setup-0.1.0-x64.exe` from `apps/desktop/release/`.
+Download `PlinyCode-Desktop-Setup-0.1.1-x64.exe` from the
+[Desktop 0.1.1 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.1) and open it.
 It installs for the current user without administrator rights, creates desktop
 and Start menu shortcuts, and launches PlinyCode when installation finishes.
 Electron and Bun are bundled; users do not need to install Node or Bun.
 
-This local preview is unsigned, so Windows may display an unknown-publisher or
-SmartScreen warning. It is not a published or automatically updated release.
+This preview is unsigned, so Windows may display an unknown-publisher or
+SmartScreen warning. Desktop does **not** automatically check for or install updates.
+To upgrade, close Desktop and run the newer installer using the same Windows account.
+It replaces the application while preserving saved conversations, settings and credentials.
+Do not uninstall or delete application data before upgrading. The extension's updater
+does not update Desktop. See the [download and upgrade guide](desktop-install.md).
 On first launch, configure a Pliny API key in Settings (or reuse CLI credentials).
 Git is still required for Git worktrees and PR publishing. Browser automation
 still requires the separate companion setup described below.
@@ -208,9 +213,19 @@ image upload/preview, worktree cleanup and production updating are tracked in th
 [plan](desktop-plan.md). Browser and provider fixtures do not establish compatibility
 with a company's browser policies, Git authentication or Azure Server installation.
 
-No default update feed or publication destination is configured. The one-click
-installer is a development preview without production signing.
+Desktop packages are published on GitHub Releases under separate `desktop-v*` tags.
+There is no updater or update feed. The one-click installer remains a preview without production signing.
 PDF, Word, Excel and dedicated data processing are deferred.
+
+## Improve prompt
+
+Click **Improve prompt** beside Send to rewrite the draft for spelling and clarity
+using a free utility model. It sends only the draft, with no conversation history
+or tools, and does not execute or send your request. **Undo improvement** restores
+the original. Editing, sending or changing chats invalidates pending rewrites so
+late results cannot replace newer text. Drafts over 8,000 characters are left intact;
+failed requests time out after 20 seconds and preserve the draft. The task's model
+selection, including FreeAuto, is unchanged.
 
 ## Validation
 

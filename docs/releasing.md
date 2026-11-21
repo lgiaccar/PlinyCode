@@ -1,5 +1,7 @@
 # Releasing PlinyCode
 
+Desktop uses a separate release track: see [Desktop releases](#desktop-releases).
+
 PlinyCode is not on the VS Code Marketplace or Open VSX. It updates itself from **GitHub Releases**:
 <https://github.com/lgiaccar/PlinyCode/releases>. That needs no login or setup, and works on Windows, macOS, Linux
 and Remote-SSH hosts.
@@ -310,6 +312,28 @@ step pulls a bad pre-release.
 
 Users who already updated can install the previous `.vsix` by hand. Publishing the fix makes it the latest
 release again.
+
+## Desktop releases
+
+Desktop versions live in `apps/desktop/package.json`; do not bump the extension or CLI.
+Publish only after `desktop-test` passes on the exact release commit: Windows installer
+acceptance, browser fixtures, and Ubuntu 22.04/24.04 DEB/AppImage acceptance.
+For an upgrade test on a clean Windows account, run
+`apps/desktop/tests/installer.ps1 -Installer <new.exe> -PreviousInstaller <old.exe>`.
+It saves a real conversation using a local gateway fixture before replacing the app,
+then verifies the upgraded engine can continue it. It refuses to replace a user's existing install.
+
+Download `PlinyCode-Desktop-Windows-x64` and `PlinyCode-Desktop-ubuntu-22.04-x64`
+from that successful run. Publish the EXE, DEB and AppImage, generate `SHA256SUMS`
+over those exact files, and attach `docs/desktop-install.md` as `INSTALL.md`.
+Tag the tested commit as `desktop-v<version>`. Create a draft GitHub release with
+the corresponding `apps/desktop/releases/<version>.md`, `--verify-tag` and
+`--latest=false`; validate its assets before publishing it, keeping `--latest=false`.
+Verify the editor's latest stable release remains unchanged. Follow the public
+repository information review above, including download links and About metadata.
+
+Desktop has no updater or update feed. Releases are manual installs; the extension
+auto-updater must not receive Desktop artifacts or update metadata.
 
 ## Troubleshooting
 

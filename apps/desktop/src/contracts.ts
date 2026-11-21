@@ -188,6 +188,10 @@ export const actionSchema = z.discriminatedUnion("type", [
 		prompt: z.string().trim().min(1).max(200_000),
 		cached: z.boolean().optional(),
 	}),
+	z.object({
+		type: z.literal("improvePrompt"),
+		prompt: z.string().max(200_000),
+	}),
 	z.object({ type: z.literal("cancel"), id: z.string().uuid() }),
 	z.object({
 		type: z.literal("reply"),
@@ -215,6 +219,7 @@ export interface DesktopApi {
 		files?: string[];
 		browser?: BrowserStatus;
 		prPreview?: PrPreview;
+		improvedPrompt?: { text?: string; error?: string };
 	}>;
 	subscribe(listener: (state: State) => void): () => void;
 }

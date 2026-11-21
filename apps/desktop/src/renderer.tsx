@@ -13,6 +13,7 @@ import {
 import { BrowserSettings, PrSettings } from "./integration-settings";
 import { McpSettings } from "./mcp-settings";
 import { PrDialog } from "./pr-dialog";
+import { usePromptDraft } from "./use-prompt-draft";
 
 const labels: Record<keyof Permissions, string> = {
 	read: "Read files",
@@ -79,7 +80,6 @@ function App() {
 	}
 	const [state, setState] = useState<State>(freshState),
 		[selected, select] = useState<string>(),
-		[prompt, setPrompt] = useState(""),
 		[error, setError] = useState(""),
 		[settings, setSettings] = useState<Settings>(),
 		[projectSettings, setProjectSettings] = useState<Project>(),
@@ -88,6 +88,8 @@ function App() {
 		[credential, setCredential] = useState(false),
 		[reply, setReply] = useState(""),
 		[cached, setCached] = useState(false);
+	const draft = usePromptDraft(selected);
+	const { prompt, setPrompt } = draft;
 	const bottom = useRef<HTMLDivElement>(null);
 	const task = state.tasks.find((item) => item.id === selected),
 		project = state.projects.find((item) => item.id === task?.projectId);
@@ -429,6 +431,7 @@ function App() {
 								className="composer"
 								onSubmit={async (event) => {
 									event.preventDefault();
+									draft.invalidate();
 									if (
 										await invoke({ type: "send", id: task.id, prompt, cached })
 									)
@@ -476,6 +479,19 @@ function App() {
 											}}
 										/>
 									</label>
+									{draft.canUndo && (
+										<button type="button" onClick={draft.undo}>
+											Undo improvement
+										</button>
+									)}
+									<button
+										type="button"
+										disabled={!!busy || draft.improving || !prompt.trim()}
+										onClick={draft.improve}
+										title="Improve the draft with a free model without sending it"
+									>
+										{draft.improving ? "Improving…" : "Improve prompt"}
+									</button>
 									{busy ? (
 										<button
 											type="button"
@@ -494,6 +510,7 @@ function App() {
 										</button>
 									)}
 								</div>
+								{draft.error && <div role="alert">{draft.error}</div>}
 							</form>
 							<div className="composer-note">
 								{task.worktree && !task.cwd && (

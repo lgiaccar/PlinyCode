@@ -19,8 +19,11 @@ import { taskDiff } from "./git";
 import { Integrations } from "./integrations";
 import { TaskManager } from "./manager";
 import type { PrPreview } from "./pr-contracts";
+import { type ImprovedPrompt, PromptImprover } from "./prompt-improver";
 import { DesktopStore } from "./store";
 import { SecretVault } from "./vault";
+
+const promptImprover = new PromptImprover();
 
 let window: BrowserWindow | undefined,
 	manager: TaskManager | undefined,
@@ -36,6 +39,7 @@ else {
 		if (exiting || !manager) return;
 		event.preventDefault();
 		exiting = true;
+		promptImprover.close();
 		void Promise.allSettled([integrations?.close(), manager.close()]).finally(
 			() => app.quit(),
 		);
@@ -111,9 +115,16 @@ else {
 				let selectedTask: string | undefined, diff: string | undefined;
 				let models: string[] | undefined, mcpTools: string[] | undefined;
 				let files: string[] | undefined;
+				let improvedPrompt: ImprovedPrompt | undefined;
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
+					case "improvePrompt":
+						improvedPrompt = await promptImprover.improve(
+							action.prompt,
+							await getPlinyApiKey().catch(() => ""),
+						);
+						break;
 					case "browserPair":
 						browser = await integrations.pair(action.extensionId);
 						break;
@@ -328,6 +339,7 @@ else {
 					files,
 					browser,
 					prPreview,
+					improvedPrompt,
 					...(action.type === "snapshot" || action.type === "saveKey"
 						? {
 								credentialAvailable: !!(await getPlinyApiKey().catch(() => "")),

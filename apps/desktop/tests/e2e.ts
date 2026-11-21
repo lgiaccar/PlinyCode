@@ -32,6 +32,8 @@ const secret = "desktop-fixture-secret";
 const requests: Array<Record<string, unknown>> = [];
 let reply: string | { name: string; input: unknown } = "Desktop is ready.";
 let hang = false;
+let improvedReply = "Please fix the failing tests.";
+let waitForRewrite: Promise<void> | undefined;
 let mcpCalls = 0;
 let fixtureToolName = "echo";
 const server = createServer(async (request, output) => {
@@ -102,13 +104,16 @@ const server = createServer(async (request, output) => {
 		return;
 	}
 	requests.push(body);
+	const utility =
+		body.model === "snps-provider/qwen3-next-80b-a3b-instruct-d79b4";
+	if (utility && waitForRewrite) await waitForRewrite;
 	output.writeHead(200, { "content-type": "text/event-stream" });
 	if (hang) {
 		output.write(": wait\n\n");
 		return;
 	}
-	const value = reply;
-	reply = "Done.";
+	const value = utility ? improvedReply : reply;
+	if (!utility) reply = "Done.";
 	const deltas =
 		typeof value === "string"
 			? [...value].map((content) => ({ content }))
@@ -181,6 +186,10 @@ try {
 	);
 	if (!process.env.PLINY_DESKTOP_E2E_PR_ONLY) {
 		await page.getByRole("button", { name: "Choose a project folder" }).click();
+		const conversationId = await page.evaluate(
+			async () =>
+				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks[0].id,
+		);
 		await page
 			.getByRole("textbox", { name: "Message PlinyCode" })
 			.fill("Remember ORBIT and say ready.");
@@ -211,6 +220,87 @@ try {
 			"Engine history must survive reopening",
 		);
 		console.log("PASS: persistent multi-turn engine history");
+		// Rewrite is a separate, tool-free request and never sends the draft.
+		const composer = page.getByRole("textbox", { name: "Message PlinyCode" });
+		const improve = () =>
+			page.getByRole("button", { name: "Improve prompt", exact: true });
+		const waitImproved = () =>
+			page.waitForFunction(
+				() =>
+					!Array.from(document.querySelectorAll("button")).some(
+						(button) => button.textContent === "Improving…",
+					),
+			);
+		assert.equal(await improve().isDisabled(), true);
+		const messagesBefore = await page.locator(".message.user").count();
+		await composer.fill("plese fix failing tests");
+		await improve().click();
+		await waitImproved();
+		assert.equal(await composer.inputValue(), improvedReply);
+		assert.equal(await page.locator(".message.user").count(), messagesBefore);
+		const utilityRequest = requests.at(-1)!;
+		assert.ok(
+			!utilityRequest.tools || (utilityRequest.tools as unknown[]).length === 0,
+		);
+		assert.ok(!JSON.stringify(utilityRequest).includes("ORBIT"));
+		assert.equal(
+			await page.getByLabel("Model", { exact: true }).inputValue(),
+			"pliny/auto-free",
+		);
+		await page.screenshot({ path: join(data, "improve-prompt.png") });
+		await page.getByRole("button", { name: "Undo improvement" }).click();
+		assert.equal(await composer.inputValue(), "plese fix failing tests");
+		improvedReply = "";
+		await improve().click();
+		await page
+			.getByRole("alert")
+			.filter({ hasText: "unsuitable rewrite" })
+			.waitFor();
+		assert.equal(await composer.inputValue(), "plese fix failing tests");
+		await composer.fill("x".repeat(8001));
+		const beforeOversized = requests.length;
+		await improve().click();
+		await page.getByRole("alert").filter({ hasText: "8,000" }).waitFor();
+		assert.equal(requests.length, beforeOversized);
+		for (const changeChat of [false, true]) {
+			await composer.fill("original draft");
+			improvedReply = "A late rewrite.";
+			let release!: () => void;
+			waitForRewrite = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const before = requests.length;
+			await improve().click();
+			const deadline = Date.now() + 25_000;
+			while (requests.length === before) {
+				assert.ok(
+					Date.now() < deadline,
+					"Rewrite request did not reach the fixture",
+				);
+				await new Promise((resolve) => setTimeout(resolve, 20));
+			}
+			if (changeChat) {
+				await page.getByTitle(/New chat in/).click();
+				await page.getByRole("button", { name: /Remember ORBIT/ }).click();
+			} else {
+				await composer.fill("edited draft");
+				await composer.fill("original draft");
+			}
+			release();
+			await waitImproved();
+			assert.equal(
+				await composer.inputValue(),
+				changeChat ? "" : "original draft",
+			);
+			assert.equal(
+				await page.getByRole("button", { name: "Undo improvement" }).count(),
+				0,
+			);
+			waitForRewrite = undefined;
+		}
+		console.log(
+			"PASS: improve prompt, undo, no execution/history, validation and stale-response protection",
+		);
 		// Disabled edit approval asks; denial must leave the file unchanged.
 		const target = join(folder, "result.txt");
 		await writeFile(target, "original");
@@ -428,9 +518,12 @@ try {
 			window.plinycode.invoke({ type: "snapshot" }),
 		);
 		assert.ok(
-			delegated.state.tasks[0].subagents?.some(
-				(agent) => agent.status === "completed" && agent.text.includes("Done."),
-			),
+			delegated.state.tasks
+				.find((task) => task.id === conversationId)
+				?.subagents?.some(
+					(agent) =>
+						agent.status === "completed" && agent.text.includes("Done."),
+				),
 			"Delegated transcript and completion must be persisted",
 		);
 		await page.locator(".subagent-card summary").first().click();
@@ -496,7 +589,10 @@ try {
 			window.plinycode.invoke({ type: "snapshot" }),
 		);
 		assert.ok(!JSON.stringify(withMcp).includes("mcp-fixture-token"));
-		const current = withMcp.state.tasks[0];
+		const current = withMcp.state.tasks.find(
+			(task) => task.id === conversationId,
+		);
+		assert.ok(current);
 		await page.evaluate(
 			(task) =>
 				window.plinycode.invoke({
@@ -530,7 +626,7 @@ try {
 		const snapshot = await page.evaluate(() =>
 			window.plinycode.invoke({ type: "snapshot" }),
 		);
-		const first = snapshot.state.tasks[0].id;
+		const first = conversationId;
 		await page.evaluate(
 			(id) =>
 				window.plinycode.invoke({

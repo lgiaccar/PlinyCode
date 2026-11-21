@@ -338,6 +338,8 @@ pre {
 }
 .composer-controls {
 	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	justify-content: space-between;
 	align-items: center;
 	padding: 8px 12px;
