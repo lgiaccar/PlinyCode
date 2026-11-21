@@ -1,0 +1,1 @@
+{ "extends": ["../../sdk/biome.json"], "root": false }

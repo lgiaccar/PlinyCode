@@ -1,0 +1,10 @@
+{
+	"manifest_version": 3,
+	"name": "PlinyCode Browser Companion",
+	"version": "0.1.0",
+	"description": "Share selected signed-in tabs with local PlinyCode Desktop tasks.",
+	"minimum_chrome_version": "116",
+	"permissions": ["activeTab", "scripting", "tabs"],
+	"background": { "service_worker": "background.js", "type": "module" },
+	"action": { "default_popup": "popup.html" }
+}

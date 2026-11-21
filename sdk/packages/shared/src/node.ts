@@ -16,3 +16,16 @@ export async function readFileStrippingUtf8Bom(
 ): Promise<string> {
 	return stripUtf8Bom(await readFile(path, "utf8"));
 }
+
+export {
+	configureArtifactRedaction,
+	redactArtifactText,
+	serializeArtifact,
+} from "./artifact-redaction";
+export {
+	getPlinyApiKey,
+	PlinyCredentialError,
+	removePlinyApiKey,
+	savePlinyApiKey,
+} from "./pliny-credentials";
+export { redact, StreamRedactor, serialize } from "./redaction";

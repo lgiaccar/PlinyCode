@@ -10,6 +10,9 @@ session lifecycle into a host-ready runtime.
 - provider settings services
 - default runtime tools and MCP integration
 - storage-backed session state helpers
+- optional known-secret redaction for session manifests, transcripts, compaction
+  sidecars, SQLite writes and hook audits, configured by isolated hosts through
+  `configureArtifactRedaction` from `@plinycode/shared/node`
 - host-facing Node helpers through `@plinycode/core`
 
 ## Installation

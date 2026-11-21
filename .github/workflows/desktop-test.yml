@@ -1,0 +1,117 @@
+name: desktop-test
+on:
+  pull_request:
+    paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
+  push:
+    branches: [stage, master]
+    paths: ["apps/desktop/**", "apps/cli/**", "sdk/**", "bun.lock", ".github/workflows/desktop-test.yml", ".github/actions/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ubuntu-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/ai_output/playwright
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-toolchain
+      - name: Provision Ubuntu desktop test environment
+        run: bash apps/desktop/tests/linux/install-deps.sh
+      - name: Allow Chromium namespaces on disposable Ubuntu 24 runner
+        if: matrix.os == 'ubuntu-24.04'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Build engine
+        run: bun run build:sdk
+      - name: Check desktop types and formatting
+        run: |
+          bun -F @plinycode/desktop typecheck
+          bun biome check apps/desktop/
+      - name: Test desktop, Linux credentials and process lifecycle
+        run: bun -F @plinycode/desktop test
+      - name: Build desktop and install test browser
+        run: |
+          bun -F @plinycode/desktop setup
+          bun -F @plinycode/desktop build
+          cd apps/desktop
+          bun x playwright install chromium
+      - name: Electron acceptance tests with isolated keyring
+        run: bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
+      - name: Signed-in browser companion acceptance tests
+        run: bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:browser
+      - name: Build Ubuntu x64 packages
+        run: bun -F @plinycode/desktop package:linux
+      - name: Test deb install, replacement, removal and portable AppImage
+        run: bash apps/desktop/tests/linux/packages.sh
+      - name: Upload Ubuntu packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlinyCode-Desktop-${{ matrix.os }}-x64
+          path: |
+            apps/desktop/release/*-x64.deb
+            apps/desktop/release/*-x64.AppImage
+            ai_output/linux-package-sha256.txt
+      - name: Upload Ubuntu test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-evidence-${{ matrix.os }}
+          path: |
+            ai_output/desktop-e2e-*/**/*.png
+            ai_output/desktop-browser-e2e-*/**/*.png
+            ai_output/linux-package-sha256.txt
+          if-no-files-found: ignore
+  windows-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-toolchain
+      - name: Build engine
+        run: bun run build:sdk
+      - name: Check desktop types
+        run: bun -F @plinycode/desktop typecheck
+      - name: Check desktop formatting and lint
+        run: bun biome check apps/desktop/
+      - name: Test desktop lifecycle, worktrees and MCP
+        run: bun -F @plinycode/desktop test
+      - name: Install desktop runtime
+        run: bun -F @plinycode/desktop setup
+      - name: Build desktop
+        run: bun -F @plinycode/desktop build
+      - name: Electron acceptance tests
+        run: bun -F @plinycode/desktop test:e2e
+      - name: Install test browser
+        working-directory: apps/desktop
+        run: bun x playwright install chromium
+      - name: Browser companion acceptance tests
+        run: bun -F @plinycode/desktop test:browser
+      - name: Build one-click Windows installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: bun -F @plinycode/desktop package
+      - name: Test installation, packaged app and uninstallation
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/release/PlinyCode-Desktop-Setup-*-x64.exe | Select-Object -First 1
+          ./apps/desktop/tests/installer.ps1 -Installer $installer.FullName
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlinyCode-Desktop-Windows-x64
+          path: apps/desktop/release/PlinyCode-Desktop-Setup-*-x64.exe
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-e2e-evidence
+          path: |
+            ai_output/desktop-e2e-*/**/*.png
+            ai_output/desktop-browser-e2e-*/**/*.png
+          if-no-files-found: ignore

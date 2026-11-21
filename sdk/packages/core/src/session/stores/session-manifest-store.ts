@@ -9,6 +9,7 @@ import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type * as LlmsProviders from "@plinycode/llms";
 import type { BasicLogger } from "@plinycode/shared";
+import { serializeArtifact } from "@plinycode/shared/node";
 import { ensureHookLogDir } from "@plinycode/shared/storage";
 import { nowIso, SessionArtifacts } from "../../services/session-artifacts";
 import {
@@ -104,7 +105,7 @@ export class SessionManifestStore {
 		mkdirSync(dirname(manifestPath), { recursive: true });
 		writeFileSync(
 			manifestPath,
-			`${JSON.stringify(SessionManifestSchema.parse(manifest), null, 2)}\n`,
+			`${serializeArtifact(SessionManifestSchema.parse(manifest), 2)}\n`,
 			"utf8",
 		);
 	}
@@ -216,7 +217,7 @@ export class SessionManifestStore {
 		});
 		// Compact: the file is rewritten whole after every model call and grows
 		// with the conversation, and nothing reads it but JSON.parse.
-		const contents = `${JSON.stringify(payload)}\n`;
+		const contents = `${serializeArtifact(payload)}\n`;
 		await this.writeMessagesCoalesced(sessionId, path, contents);
 	}
 
@@ -312,7 +313,7 @@ export class SessionManifestStore {
 	): Promise<void> {
 		const path = this.resolveCompactionPath(sessionId);
 		const payload = SessionCompactionStateSchema.parse(state);
-		await writeFileAtomic(path, `${JSON.stringify(payload, null, 2)}\n`);
+		await writeFileAtomic(path, `${serializeArtifact(payload, 2)}\n`);
 		this.updateCompactionPath(sessionId, path);
 	}
 
@@ -332,7 +333,7 @@ export class SessionManifestStore {
 		const logPath = envPath ?? join(ensureHookLogDir(), "hooks.jsonl");
 		appendFileSync(
 			logPath,
-			`${JSON.stringify({
+			`${serializeArtifact({
 				ts: detectedAt,
 				hookName: "session_shutdown",
 				reason,
