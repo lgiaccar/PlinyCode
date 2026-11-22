@@ -53,6 +53,7 @@ export interface Project {
 	base: string;
 	target: string;
 	remote: string;
+	worktreeSource?: "remote" | "local";
 }
 export interface Message {
 	id: string;
@@ -174,6 +175,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("projectSettings"),
 		id: z.string().uuid(),
+		worktreeSource: z.enum(["remote", "local"]).default("remote"),
 		base: z.string().max(200),
 		target: z.string().max(200),
 		remote: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/),

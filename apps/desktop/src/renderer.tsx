@@ -284,7 +284,9 @@ function App() {
 									</div>
 									<p className="quiet">
 										{task.worktree
-											? "A fresh remote branch is fetched when the first task starts."
+											? project?.worktreeSource === "local"
+												? "A separate worktree starts from a local branch commit. Uncommitted changes stay in the original folder."
+												: "A fresh remote branch is fetched when the first task starts."
 											: "Tasks writing in this folder run one at a time."}
 									</p>
 								</div>
@@ -515,16 +517,18 @@ function App() {
 								{draft.error && <div role="alert">{draft.error}</div>}
 							</form>
 							<div className="composer-note">
-								{task.worktree && !task.cwd && (
-									<label>
-										<input
-											type="checkbox"
-											checked={cached}
-											onChange={(e) => setCached(e.target.checked)}
-										/>{" "}
-										Explicitly use last fetched revision
-									</label>
-								)}
+								{task.worktree &&
+									project?.worktreeSource !== "local" &&
+									!task.cwd && (
+										<label>
+											<input
+												type="checkbox"
+												checked={cached}
+												onChange={(e) => setCached(e.target.checked)}
+											/>{" "}
+											Explicitly use last fetched revision
+										</label>
+									)}
 								<span>Enter to send · Shift+Enter for a new line</span>
 							</div>
 						</div>
@@ -704,54 +708,88 @@ function App() {
 					<section className="modal">
 						<h2>{projectSettings.name}</h2>
 						<p>{projectSettings.path}</p>
-						<PrSettings
-							key={projectSettings.id}
-							project={projectSettings}
-							onState={setState}
-						/>
-						<label>
-							Remote
-							<input
-								value={projectSettings.remote}
-								onChange={(e) =>
-									setProjectSettings({
-										...projectSettings,
-										remote: e.target.value,
-									})
-								}
-							/>
-						</label>
-						<label>
-							Worktree base branch
-							<input
-								placeholder="Remote default branch"
-								value={projectSettings.base}
-								onChange={(e) =>
-									setProjectSettings({
-										...projectSettings,
-										base: e.target.value,
-									})
-								}
-							/>
-						</label>
-						<label>
-							PR target (saved for PR integration)
-							<input
-								placeholder="Task starting branch"
-								value={projectSettings.target}
-								onChange={(e) =>
-									setProjectSettings({
-										...projectSettings,
-										target: e.target.value,
-									})
-								}
-							/>
-						</label>
-						<p className="quiet">
-							New worktrees start from a fresh fetch. Existing tasks stay in
-							their original worktrees. Changes are never applied back
-							automatically.
-						</p>
+						{projectSettings.git ? (
+							<label>
+								Worktree source
+								<select
+									aria-label="Worktree source"
+									value={projectSettings.worktreeSource ?? "remote"}
+									onChange={(event) =>
+										setProjectSettings({
+											...projectSettings,
+											worktreeSource: event.target.value as "remote" | "local",
+											base: "",
+										})
+									}
+								>
+									<option value="remote">Fetched remote branch</option>
+									<option value="local">Local branch</option>
+								</select>
+							</label>
+						) : (
+							<p className="quiet">
+								Git is optional. Tasks work directly in this folder, one at a
+								time.
+							</p>
+						)}
+						{projectSettings.git && (
+							<>
+								<PrSettings
+									key={projectSettings.id}
+									project={projectSettings}
+									onState={setState}
+								/>
+								<label>
+									Remote
+									<input
+										value={projectSettings.remote}
+										onChange={(e) =>
+											setProjectSettings({
+												...projectSettings,
+												remote: e.target.value,
+											})
+										}
+									/>
+								</label>
+								<label>
+									Worktree base branch
+									<input
+										placeholder={
+											projectSettings.worktreeSource === "local"
+												? "Current local branch"
+												: "Remote default branch"
+										}
+										value={projectSettings.base}
+										onChange={(e) =>
+											setProjectSettings({
+												...projectSettings,
+												base: e.target.value,
+											})
+										}
+									/>
+								</label>
+								<label>
+									PR target (saved for PR integration)
+									<input
+										placeholder="Task starting branch"
+										value={projectSettings.target}
+										onChange={(e) =>
+											setProjectSettings({
+												...projectSettings,
+												target: e.target.value,
+											})
+										}
+									/>
+								</label>
+								<p className="quiet">
+									{projectSettings.worktreeSource === "local"
+										? "Local worktrees use committed content without fetching. Uncommitted changes stay in the original folder."
+										: "New worktrees start from a fresh fetch."}{" "}
+									Existing tasks stay in their original folders. Changes are
+									never applied back automatically.
+								</p>
+							</>
+						)}
 						<div className="modal-actions">
 							<button
 								type="button"
@@ -770,6 +808,8 @@ function App() {
 											base: projectSettings.base,
 											target: projectSettings.target,
 											remote: projectSettings.remote,
+											worktreeSource:
+												projectSettings.worktreeSource ?? "remote",
 										})
 									)
 										setProjectSettings(undefined);

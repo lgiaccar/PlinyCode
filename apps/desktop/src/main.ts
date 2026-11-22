@@ -328,6 +328,7 @@ else {
 								"Stop project tasks before changing worktree or PR target settings.",
 							);
 						Object.assign(manager.project(action.id), {
+							worktreeSource: action.worktreeSource,
 							base: action.base.trim(),
 							target: action.target.trim(),
 							remote: action.remote,

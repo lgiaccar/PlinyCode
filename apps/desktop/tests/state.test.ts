@@ -93,6 +93,140 @@ test("IPC validates identifiers and settings; corrupt history is preserved", asy
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+test("a missing worktree remote reports configuration trouble without changing the repository", async () => {
+	const dir = await scratch();
+	const repository = join(dir, "repository");
+	await mkdir(repository);
+	await git(repository, ["init", "-b", "local-project"]);
+	await git(repository, ["config", "user.email", "fixture@example.invalid"]);
+	await git(repository, ["config", "user.name", "Fixture"]);
+	await writeFile(join(repository, "file.txt"), "committed");
+	await git(repository, ["add", "."]);
+	await git(repository, ["commit", "-m", "Initial local project"]);
+	const manager = new TaskManager(
+		new DesktopStore(join(dir, "state.json")),
+		dir,
+		process.execPath,
+		"unused",
+		() => {},
+	);
+	const project = await manager.addProject(repository);
+	expect(project.worktreeSource).toBe("local");
+	project.worktreeSource = "remote";
+	const task = manager.createTask(project.id, true);
+	await expect(
+		prepareWorktree(
+			project,
+			task,
+			join(dir, "data"),
+			false,
+			new AbortController().signal,
+		),
+	).rejects.toThrow('Git remote "origin" is not configured');
+	expect(await git(repository, ["remote"])).toBe("");
+	expect(await git(repository, ["status", "--porcelain"])).toBe("");
+	expect(await git(repository, ["branch", "--format=%(refname:short)"])).toBe(
+		"local-project",
+	);
+}, 30_000);
+
+test("local worktrees use committed local branches without fetching or altering source changes", async () => {
+	const dir = await scratch();
+	const repository = join(dir, "local-repository");
+	await mkdir(repository);
+	await git(repository, ["init", "-b", "local-main"]);
+	await git(repository, ["config", "user.email", "fixture@example.invalid"]);
+	await git(repository, ["config", "user.name", "Fixture"]);
+	await writeFile(join(repository, "file.txt"), "committed");
+	await git(repository, ["add", "."]);
+	await git(repository, ["commit", "-m", "Initial local commit"]);
+	const firstCommit = await git(repository, ["rev-parse", "HEAD"]);
+	await git(repository, ["branch", "chosen-base"]);
+	await writeFile(join(repository, "file.txt"), "second commit");
+	await git(repository, ["commit", "-am", "Second commit"]);
+	const currentCommit = await git(repository, ["rev-parse", "HEAD"]);
+	await writeFile(join(repository, "file.txt"), "staged change");
+	await git(repository, ["add", "file.txt"]);
+	await writeFile(join(repository, "file.txt"), "unstaged change");
+	await writeFile(join(repository, "untracked.txt"), "untracked");
+	const before = await git(repository, ["status", "--porcelain"]);
+	const store = new DesktopStore(join(dir, "state.json"));
+	const manager = new TaskManager(
+		store,
+		dir,
+		process.execPath,
+		"unused",
+		() => {},
+	);
+	const project = await manager.addProject(repository);
+	expect(project.worktreeSource).toBe("local");
+	// A broken remote must not be contacted in explicitly local mode.
+	await git(repository, ["remote", "add", "origin", join(dir, "unavailable")]);
+	const prepare = () =>
+		prepareWorktree(
+			project,
+			manager.createTask(project.id, true),
+			join(dir, "data"),
+			false,
+			new AbortController().signal,
+		);
+	const [first, second] = await Promise.all([prepare(), prepare()]);
+	expect(first.cwd).not.toBe(second.cwd);
+	expect(first.branch).not.toBe(second.branch);
+	expect(first.baseCommit).toBe(currentCommit);
+	expect(first.baseBranch).toBe("local-main");
+	expect(await readFile(join(first.cwd, "file.txt"), "utf8")).toBe(
+		"second commit",
+	);
+	project.base = "chosen-base";
+	const chosen = await prepare();
+	expect(chosen.baseCommit).toBe(firstCommit);
+	expect(chosen.baseBranch).toBe("chosen-base");
+	expect(await git(repository, ["status", "--porcelain"])).toBe(before);
+	expect(await git(repository, ["show", ":file.txt"])).toBe("staged change");
+	expect(await readFile(join(repository, "file.txt"), "utf8")).toBe(
+		"unstaged change",
+	);
+	expect(await git(repository, ["symbolic-ref", "--short", "HEAD"])).toBe(
+		"local-main",
+	);
+	store.save();
+	expect(new DesktopStore(store.file).state.projects[0].worktreeSource).toBe(
+		"local",
+	);
+	project.base = "missing-branch";
+	await expect(prepare()).rejects.toThrow("has no commit");
+	project.base = "";
+	await git(repository, ["checkout", "--detach", "HEAD"]);
+	await expect(prepare()).rejects.toThrow(
+		"Select a local worktree base branch",
+	);
+}, 60_000);
+
+test("local worktrees explain when an initial commit is required", async () => {
+	const dir = await scratch();
+	const repository = join(dir, "empty-repository");
+	await mkdir(repository);
+	await git(repository, ["init", "-b", "main"]);
+	const manager = new TaskManager(
+		new DesktopStore(join(dir, "state.json")),
+		dir,
+		process.execPath,
+		"unused",
+		() => {},
+	);
+	const project = await manager.addProject(repository);
+	await expect(
+		prepareWorktree(
+			project,
+			manager.createTask(project.id, true),
+			join(dir, "data"),
+			false,
+			new AbortController().signal,
+		),
+	).rejects.toThrow("Make an initial commit");
+}, 30_000);
+
 test("worktrees use the freshly fetched remote default, leaving local changes untouched", async () => {
 	const dir = await scratch();
 	try {

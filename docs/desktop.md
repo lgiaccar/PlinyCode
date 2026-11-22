@@ -7,14 +7,14 @@ described in the [implementation plan](desktop-plan.md).
 
 ## Windows one-click installer
 
-Download `PlinyCode-Desktop-Setup-0.1.3-x64.exe` from the
-[Desktop 0.1.3 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.3) and open it.
+Download `PlinyCode-Desktop-Setup-0.1.4-x64.exe` from the
+[Desktop 0.1.4 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.4) and open it.
 It installs for the current user without administrator rights, creates desktop
 and Start menu shortcuts, and launches PlinyCode when installation finishes.
 Electron and Bun are bundled; users do not need to install Node or Bun.
 
 This preview is unsigned, so Windows may display an unknown-publisher or
-SmartScreen warning. Desktop 0.1.3 checks for updates automatically and offers
+SmartScreen warning. Desktop 0.1.4 checks for updates automatically and offers
 **Download** and **Install and restart** in the sidebar. Installation waits until
 running tasks, background commands and PR operations have stopped. Checks can be
 disabled in Settings. Versions 0.1.0 and 0.1.1 need one manual upgrade to receive
@@ -96,9 +96,20 @@ launches can use `bun -F @plinycode/desktop start` after building once.
   Full Automatic selects every category and permits enabled tools automatically.
 - Run independent tasks concurrently. Tasks using an ordinary project folder
   hold that folder for the whole run, including when a write needs approval later.
-- Git projects create task worktrees from a freshly fetched remote branch. The
-  default is discovered from the remote; override it in project settings. A
-  separate checkbox explicitly permits using the last fetched revision.
+- Git is optional. Ordinary folders run directly without initializing a repository,
+  and tasks sharing a folder are serialized.
+- Git projects use isolated task worktrees. In project settings, choose **Worktree
+  source → Local branch** to start from a local commit without a remote or fetch.
+  Leave **Worktree base branch** empty for the current local branch, or name another
+  local branch. Uncommitted source changes are not copied or modified. The selected
+  branch must have at least one commit.
+- Newly added Git projects with no remotes select **Local branch** automatically.
+  Existing projects retain their settings: to recover a missing-`origin` failure,
+  select **Local branch**, save the project, and resend the prompt.
+- Projects using **Fetched remote branch** retain the fresh-fetch behavior. The
+  remote default branch is discovered unless overridden; a separate checkbox
+  explicitly permits using the last fetched revision. Missing remotes produce an
+  actionable configuration error. PR publishing still requires a configured remote.
 - Review tracked changes and list new files; open the task folder externally.
 - Save chat history and engine sessions. Send a new message after reopening to
   continue. A crashed active task is marked interrupted; it never restarts itself.

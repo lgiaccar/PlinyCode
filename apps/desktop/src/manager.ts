@@ -16,7 +16,7 @@ import {
 	type Task,
 	type WorkerEvent,
 } from "./contracts";
-import { isGit, overlaps, prepareWorktree } from "./git";
+import { git, isGit, overlaps, prepareWorktree } from "./git";
 import { type ConnectedMcpServer, mcpSecretValues } from "./mcp-contracts";
 import type { DesktopStore } from "./store";
 
@@ -169,14 +169,19 @@ export class TaskManager {
 				project.path.length === canonical.length,
 		);
 		if (existing) return existing;
+		const gitProject = await isGit(canonical);
+		const remotes = gitProject
+			? (await git(canonical, ["remote"])).split(/\r?\n/).filter(Boolean)
+			: [];
 		const project: Project = {
 			id: randomUUID(),
 			name: basename(canonical),
 			path: canonical,
-			git: await isGit(canonical),
+			git: gitProject,
 			base: "",
 			target: "",
-			remote: "origin",
+			remote: remotes.includes("origin") ? "origin" : (remotes[0] ?? "origin"),
+			worktreeSource: remotes.length ? "remote" : "local",
 		};
 		this.store.state.projects.push(project);
 		this.changed();
