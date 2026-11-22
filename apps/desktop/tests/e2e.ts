@@ -158,7 +158,10 @@ const electron =
 const launch = () =>
 	_electron.launch({
 		executablePath: electron,
-		args: packaged ? [] : [root],
+		args: [
+			...(packaged ? [] : [root]),
+			`--user-data-dir=${join(data, "electron-profile")}`,
+		],
 		env,
 		timeout: 40_000,
 	});
@@ -235,8 +238,41 @@ try {
 		assert.equal(await improve().isDisabled(), true);
 		const messagesBefore = await page.locator(".message.user").count();
 		await composer.fill("plese fix failing tests");
-		await improve().click();
-		await waitImproved();
+		// A Node fetch bypasses Chromium's proxy and used to time out behind
+		// corporate TLS/proxy setups. Require the actual button to use this proxy.
+		let proxiedRewrites = 0;
+		const rewriteProxy = createServer((request, response) => {
+			assert.equal(
+				request.url,
+				`http://127.0.0.1:${address.port}/v1/chat/completions`,
+			);
+			proxiedRewrites++;
+			server.emit("request", request, response);
+		});
+		await new Promise<void>((accept) =>
+			rewriteProxy.listen(0, "127.0.0.1", accept),
+		);
+		try {
+			const proxyAddress = rewriteProxy.address();
+			assert.ok(proxyAddress && typeof proxyAddress !== "string");
+			await application.evaluate(async ({ session }, port) => {
+				await session.defaultSession.setProxy({
+					proxyRules: `http=127.0.0.1:${port}`,
+					proxyBypassRules: "<-loopback>",
+				});
+				await session.defaultSession.closeAllConnections();
+			}, proxyAddress.port);
+			await improve().click();
+			await waitImproved();
+			assert.equal(proxiedRewrites, 1, "Rewrite must use Electron networking");
+		} finally {
+			await application.evaluate(async ({ session }) => {
+				await session.defaultSession.setProxy({ mode: "direct" });
+				await session.defaultSession.closeAllConnections();
+			});
+			rewriteProxy.closeAllConnections();
+			rewriteProxy.close();
+		}
 		assert.equal(await composer.inputValue(), improvedReply);
 		assert.equal(await page.locator(".message.user").count(), messagesBefore);
 		const utilityRequest = requests.at(-1)!;
@@ -300,7 +336,7 @@ try {
 			waitForRewrite = undefined;
 		}
 		console.log(
-			"PASS: improve prompt, undo, no execution/history, validation and stale-response protection",
+			"PASS: improve prompt through system proxy, undo, no execution/history, validation and stale-response protection",
 		);
 		// Disabled edit approval asks; denial must leave the file unchanged.
 		const target = join(folder, "result.txt");

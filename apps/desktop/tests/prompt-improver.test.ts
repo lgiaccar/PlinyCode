@@ -95,7 +95,9 @@ describe("desktop prompt improvement", () => {
 		expect((await improver.improve("fix tests", "key")).error).toContain(
 			"already running",
 		);
-		expect((await first).error).toContain("timed out");
+		const timedOut = (await first).error;
+		expect(timedOut).toContain("timed out");
+		expect(timedOut).not.toContain("cancelled");
 		expect((await improver.improve("fix tests", "key")).error).toContain(
 			"timed out",
 		);
@@ -104,7 +106,9 @@ describe("desktop prompt improvement", () => {
 		const improver = new PromptImprover(() => new Promise(() => {}));
 		const pending = improver.improve("draft", "key");
 		improver.close();
-		expect((await pending).error).toContain("cancelled");
+		const cancelled = (await pending).error;
+		expect(cancelled).toContain("cancelled");
+		expect(cancelled).not.toContain("timed out");
 		const failed = new PromptImprover(async () => {
 			throw new Error("SECRET_ENDPOINT and PRIVATE_DRAFT");
 		});

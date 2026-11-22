@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+	createHandlerAsync,
 	getModelsForProvider,
 	isPlinyRouterModelId,
 	PLINY_FREE_AUTO_MODEL_ID,
@@ -10,6 +11,7 @@ import {
 	BrowserWindow,
 	dialog,
 	ipcMain,
+	net,
 	safeStorage,
 	shell,
 } from "electron";
@@ -25,7 +27,11 @@ import { DesktopStore } from "./store";
 import { createDesktopUpdate } from "./update-runtime";
 import { SecretVault } from "./vault";
 
-const promptImprover = new PromptImprover();
+// Electron's network stack honors OS certificate trust and proxy settings.
+// Node fetch can otherwise retry a TLS failure until the rewrite deadline expires.
+const promptImprover = new PromptImprover((config) =>
+	createHandlerAsync({ ...config, fetch: net.fetch.bind(net) as typeof fetch }),
+);
 let updater: DesktopUpdate | undefined;
 
 let window: BrowserWindow | undefined,
