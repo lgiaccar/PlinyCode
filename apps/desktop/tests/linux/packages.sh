@@ -23,6 +23,8 @@ resources="$(dirname "$installed")/resources"
 test -x "$resources/runtime/bun"
 "$resources/runtime/bun" --version
 test -f "$resources/licenses/THIRD-PARTY-NOTICES.txt"
+test -f "$resources/app-update.yml"
+[[ $(cat "$resources/package-type") == deb ]]
 desktop-file-validate /usr/share/applications/plinycode-desktop.desktop
 PLINY_DESKTOP_EXECUTABLE="$binary" bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
 # Reinstall simulates package replacement; the isolated app state must remain.

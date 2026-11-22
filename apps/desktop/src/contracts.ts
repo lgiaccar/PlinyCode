@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { BrowserAction, BrowserStatus } from "./browser-contracts";
+import type { UpdateStatus } from "./desktop-update";
 import {
 	type ConnectedMcpServer,
 	type McpServer,
@@ -33,6 +34,7 @@ export const defaultPermissions: Permissions = {
 	subagents: false,
 };
 export const settingsSchema = z.object({
+	autoCheckUpdates: z.boolean().default(true),
 	permissions: permissionsSchema,
 	model: z.string().min(1).max(200),
 	subagents: z.object({
@@ -119,6 +121,7 @@ export const freshState = (): State => ({
 	projects: [],
 	tasks: [],
 	settings: {
+		autoCheckUpdates: true,
 		permissions: { ...defaultPermissions },
 		model: "pliny/auto-free",
 		subagents: { maxConcurrent: 3, maxDepth: 1 },
@@ -127,6 +130,10 @@ export const freshState = (): State => ({
 export const active = (task: Task) =>
 	["preparing", "queued", "running", "needs_input"].includes(task.status);
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("updateStatus") }),
+	z.object({ type: z.literal("updateCheck") }),
+	z.object({ type: z.literal("updateDownload") }),
+	z.object({ type: z.literal("updateInstall") }),
 	z.object({
 		type: z.literal("browserPair"),
 		extensionId: z.string().regex(/^[a-p]{32}$/),
@@ -188,6 +195,10 @@ export const actionSchema = z.discriminatedUnion("type", [
 		prompt: z.string().trim().min(1).max(200_000),
 		cached: z.boolean().optional(),
 	}),
+	z.object({
+		type: z.literal("improvePrompt"),
+		prompt: z.string().max(200_000),
+	}),
 	z.object({ type: z.literal("cancel"), id: z.string().uuid() }),
 	z.object({
 		type: z.literal("reply"),
@@ -215,8 +226,11 @@ export interface DesktopApi {
 		files?: string[];
 		browser?: BrowserStatus;
 		prPreview?: PrPreview;
+		improvedPrompt?: { text?: string; error?: string };
+		update?: UpdateStatus;
 	}>;
 	subscribe(listener: (state: State) => void): () => void;
+	subscribeUpdates(listener: (state: UpdateStatus) => void): () => void;
 }
 declare global {
 	interface Window {

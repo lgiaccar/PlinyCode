@@ -25,6 +25,10 @@ context inspection, delivery evidence and an attention inbox.
 
 ## What it is
 
+**Desktop preview:** download the Windows one-click installer or Ubuntu DEB/AppImage from
+[PlinyCode Desktop 0.1.2](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.2).
+See [installation and in-app updates](docs/desktop-install.md).
+
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
 [PlinyCode CLI 0.1.0](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.0).
 The runtime is included. See [CLI installation and pipeline examples](docs/cli-install.md)

@@ -3,6 +3,9 @@ import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 const out = join(root, "dist");
+const version = JSON.parse(
+	await readFile(join(root, "package.json"), "utf8"),
+).version;
 const pin = (
 	await readFile(resolve(root, "../../.tool-versions"), "utf8")
 ).match(/^bun\s+(\S+)/m)?.[1];
@@ -25,7 +28,13 @@ for (const [entry, target, format, name] of [
 		format,
 		naming: name,
 		external: target === "node" ? ["electron"] : [],
-		define: { "process.env.NODE_ENV": '"production"' },
+		define: {
+			"process.env.NODE_ENV": '"production"',
+			__PLINY_DESKTOP_RELEASE_VERSION__: JSON.stringify(version),
+			__PLINY_UPDATE_TEST_BUILD__: String(
+				process.env.PLINY_DESKTOP_UPDATE_TEST_BUILD === "1",
+			),
+		},
 		minify: false,
 	});
 	if (!result.success)

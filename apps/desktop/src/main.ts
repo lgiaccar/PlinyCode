@@ -15,12 +15,18 @@ import {
 } from "electron";
 import type { BrowserStatus } from "./browser-contracts";
 import { actionSchema, active } from "./contracts";
+import type { DesktopUpdate } from "./desktop-update";
 import { taskDiff } from "./git";
 import { Integrations } from "./integrations";
 import { TaskManager } from "./manager";
 import type { PrPreview } from "./pr-contracts";
+import { type ImprovedPrompt, PromptImprover } from "./prompt-improver";
 import { DesktopStore } from "./store";
+import { createDesktopUpdate } from "./update-runtime";
 import { SecretVault } from "./vault";
+
+const promptImprover = new PromptImprover();
+let updater: DesktopUpdate | undefined;
 
 let window: BrowserWindow | undefined,
 	manager: TaskManager | undefined,
@@ -36,6 +42,8 @@ else {
 		if (exiting || !manager) return;
 		event.preventDefault();
 		exiting = true;
+		promptImprover.close();
+		updater?.close();
 		void Promise.allSettled([integrations?.close(), manager.close()]).finally(
 			() => app.quit(),
 		);
@@ -95,6 +103,25 @@ else {
 				},
 			});
 			window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+			updater = createDesktopUpdate(
+				(update) => {
+					if (!window?.isDestroyed())
+						window?.webContents.send("plinycode:update", update);
+				},
+				() =>
+					!!manager?.external.size ||
+					store.state.tasks.some(active) ||
+					(store.state.commands ?? []).some(
+						(command) => command.status === "running",
+					),
+				async () => {
+					promptImprover.close();
+				},
+			);
+			updater.configure(
+				store.state.settings.autoCheckUpdates &&
+					!process.env.PLINY_DESKTOP_TEST_PROJECT,
+			);
 			window.webContents.on("will-navigate", (event) => event.preventDefault());
 			window.webContents.session.setPermissionRequestHandler(
 				(_contents, _permission, reply) => reply(false),
@@ -108,12 +135,35 @@ else {
 				)
 					throw new Error("Untrusted desktop sender.");
 				const action = actionSchema.parse(raw);
+				if (
+					updater?.status.phase === "installing" &&
+					!["snapshot", "updateStatus"].includes(action.type)
+				)
+					throw new Error("Desktop is installing an update.");
 				let selectedTask: string | undefined, diff: string | undefined;
 				let models: string[] | undefined, mcpTools: string[] | undefined;
 				let files: string[] | undefined;
+				let improvedPrompt: ImprovedPrompt | undefined;
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
+					case "updateStatus":
+						break;
+					case "updateCheck":
+						await updater?.check();
+						break;
+					case "updateDownload":
+						await updater?.download();
+						break;
+					case "updateInstall":
+						await updater?.install();
+						break;
+					case "improvePrompt":
+						improvedPrompt = await promptImprover.improve(
+							action.prompt,
+							await getPlinyApiKey().catch(() => ""),
+						);
+						break;
 					case "browserPair":
 						browser = await integrations.pair(action.extensionId);
 						break;
@@ -302,6 +352,10 @@ else {
 						break;
 					case "settings":
 						store.state.settings = action.settings;
+						updater?.configure(
+							action.settings.autoCheckUpdates &&
+								!process.env.PLINY_DESKTOP_TEST_PROJECT,
+						);
 						manager.changed();
 						break;
 					case "saveKey":
@@ -328,6 +382,8 @@ else {
 					files,
 					browser,
 					prPreview,
+					improvedPrompt,
+					update: updater?.status,
 					...(action.type === "snapshot" || action.type === "saveKey"
 						? {
 								credentialAvailable: !!(await getPlinyApiKey().catch(() => "")),

@@ -1,6 +1,6 @@
 {
 	"name": "@plinycode/desktop",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"private": true,
 	"type": "module",
 	"main": "dist/main.cjs",
@@ -24,6 +24,7 @@
 		"@plinycode/core": "workspace:*",
 		"@plinycode/llms": "workspace:*",
 		"@plinycode/shared": "workspace:*",
+		"electron-updater": "6.8.11",
 		"react": "18.3.1",
 		"react-dom": "18.3.1",
 		"react-markdown": "10.1.0",
@@ -98,7 +99,10 @@
 			"runAfterFinish": true,
 			"deleteAppDataOnUninstall": false
 		},
-		"publish": null,
+		"publish": {
+			"provider": "generic",
+			"url": "https://github.com/lgiaccar/PlinyCode/releases/download/desktop-v0.1.2/"
+		},
 		"linux": {
 			"target": [
 				"deb",

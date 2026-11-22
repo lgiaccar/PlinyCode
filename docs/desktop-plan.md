@@ -107,7 +107,7 @@ Implementation is on `lgiaccar/desktop-app`; a PR is now requested, without publ
 - [ ] Validate on a clean Windows machine without development tools.
 - [x] Include dependency licenses and notices in distributable artifacts.
 - [ ] Decide installer/extension distribution and signing arrangements.
-- [ ] Implement versioned update metadata, integrity verification and explicit install.
+- [x] Implement versioned update metadata, integrity verification and explicit install.
 - [x] Verify uninstall removes the test application, shortcuts and registration;
   user-data deletion is disabled in the installer configuration.
 - [ ] Verify upgrades across released versions, preserving history and credentials.
