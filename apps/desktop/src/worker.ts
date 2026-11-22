@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import {
@@ -25,10 +25,12 @@ import {
 	configureArtifactRedaction,
 	redact,
 	StreamRedactor,
+	serializeArtifact,
 } from "@plinycode/shared/node";
 import { z } from "zod";
 import { browserActionSchema } from "./browser-contracts";
 import type { Permissions, RunInput, WorkerEvent } from "./contracts";
+import { restartSeed } from "./history";
 import { guardHostLifetime } from "./host-lifetime";
 import { connectServers } from "./mcp";
 import { mcpSecretValues } from "./mcp-contracts";
@@ -262,7 +264,7 @@ async function run(input: RunInput) {
 				},
 			},
 		});
-		sessionId = task.id;
+		sessionId = task.engineSessionId ?? task.id;
 		core.subscribe((event) => {
 			if (event.type !== "agent_event") return;
 			const item = event.payload.event;
@@ -371,7 +373,20 @@ async function run(input: RunInput) {
 					: undefined,
 			systemPrompt: `${getClineDefaultSystemPrompt({ ide: "PlinyCode Desktop", mode: "act", workspaceRoot: cwd, workspaceName: task.title, platform: process.platform, planModeSwitchTool: false })}\nYou are running a PlinyCode desktop task. Work in the task folder. Follow repository instructions to prepare builds. Ask only when the answer materially affects the result. Never claim an action succeeded without evidence. Only commit, push or create a pull request when the user requests it. Do not apply worktree changes to the original checkout without an explicit request. If this conversation was interrupted, inspect recorded tool results and current state before continuing; never assume an uncertain external operation failed and repeat it blindly.`,
 		};
-		const initialMessages = await core.readMessages(sessionId);
+		let initialMessages = await core.readMessages(sessionId);
+		if (!initialMessages.length && task.engineSessionId)
+			initialMessages = await restartSeed(directory, sessionId);
+		const promptMessage = [...task.messages]
+			.reverse()
+			.find((entry) => entry.role === "user");
+		if (promptMessage) {
+			await mkdir(join(directory, "turns"), { recursive: true });
+			await writeFile(
+				join(directory, "turns", `${promptMessage.id}.json`),
+				serializeArtifact(initialMessages),
+				{ mode: 0o600 },
+			);
+		}
 		await core.start({
 			config,
 			initialMessages,

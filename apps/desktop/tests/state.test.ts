@@ -112,7 +112,15 @@ test("a missing worktree remote reports configuration trouble without changing t
 	);
 	const project = await manager.addProject(repository);
 	expect(project.worktreeSource).toBe("local");
+	delete project.worktreeSource;
+	await manager.migrateProjects();
+	expect(manager.project(project.id).worktreeSource).toBe("local");
+	expect(
+		new DesktopStore(manager.store.file).state.projects[0].worktreeSource,
+	).toBe("local");
 	project.worktreeSource = "remote";
+	await manager.migrateProjects();
+	expect(project.worktreeSource).toBe("remote");
 	const task = manager.createTask(project.id, true);
 	await expect(
 		prepareWorktree(

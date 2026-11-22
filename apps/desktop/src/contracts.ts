@@ -72,6 +72,7 @@ export type TaskStatus =
 	| "cancelled"
 	| "interrupted";
 export interface Task {
+	engineSessionId?: string;
 	pullRequest?: PullRequest;
 	subagents?: Subagent[];
 	id: string;
@@ -131,6 +132,17 @@ export const freshState = (): State => ({
 export const active = (task: Task) =>
 	["preparing", "queued", "running", "needs_input"].includes(task.status);
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({
+		type: z.literal("copyMessage"),
+		id: z.string().uuid(),
+		messageId: z.string().uuid(),
+	}),
+	z.object({
+		type: z.literal("restartFrom"),
+		id: z.string().uuid(),
+		messageId: z.string().uuid(),
+		prompt: z.string().trim().min(1).max(200_000),
+	}),
 	z.object({ type: z.literal("updateStatus") }),
 	z.object({ type: z.literal("updateCheck") }),
 	z.object({ type: z.literal("updateDownload") }),

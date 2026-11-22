@@ -2,7 +2,14 @@
 
 import { strict as assert } from "node:assert";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -233,6 +240,107 @@ try {
 			"Engine history must survive reopening",
 		);
 		console.log("PASS: persistent multi-turn engine history");
+		// Copy uses the native clipboard, including original prompt whitespace.
+		await page
+			.locator(".message.user")
+			.first()
+			.getByRole("button", { name: "Copy", exact: true })
+			.click();
+		await page.getByRole("button", { name: "Copied", exact: true }).waitFor();
+		assert.equal(
+			await application.evaluate(({ clipboard }) => clipboard.readText()),
+			"Remember ORBIT and say ready.",
+		);
+		const pasteTarget = page.getByRole("textbox", {
+			name: "Message PlinyCode",
+		});
+		await pasteTarget.focus();
+		await page.keyboard.press(
+			process.platform === "darwin" ? "Meta+V" : "Control+V",
+		);
+		assert.equal(
+			await pasteTarget.inputValue(),
+			"Remember ORBIT and say ready.",
+		);
+		await pasteTarget.fill("DISCARDED_TURN must not survive restart.");
+		await sendPrompt(page);
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+		);
+		const beforeRestart = await page.evaluate(
+			async () =>
+				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks[0],
+		);
+		const secondPrompt = beforeRestart.messages.filter(
+			(entry) => entry.role === "user",
+		)[1];
+		// Remove this fixture snapshot to exercise migration of pre-feature chats.
+		await unlink(
+			join(
+				data,
+				"state",
+				"tasks",
+				beforeRestart.id,
+				"turns",
+				`${secondPrompt.id}.json`,
+			),
+		);
+		await page
+			.locator(".message.user")
+			.nth(1)
+			.getByRole("button", { name: "Edit and restart" })
+			.click();
+		await page
+			.getByLabel("Edit earlier prompt")
+			.fill("REVISED_PROMPT: repeat the marker.");
+		await page
+			.getByRole("button", { name: "Restart from here", exact: true })
+			.click();
+		await page.waitForFunction(
+			() =>
+				document.querySelectorAll(".message.user").length === 2 &&
+				document.querySelector(".badge")?.textContent === "completed",
+		);
+		assert.ok(JSON.stringify(requests.at(-1)).includes("Remember ORBIT"));
+		assert.ok(JSON.stringify(requests.at(-1)).includes("REVISED_PROMPT"));
+		assert.ok(!JSON.stringify(requests.at(-1)).includes("DISCARDED_TURN"));
+		assert.ok(
+			!JSON.stringify(requests.at(-1)).includes("What marker did I give you?"),
+		);
+		// A second edit uses the new exact pre-turn snapshot.
+		await page
+			.locator(".message.user")
+			.nth(1)
+			.getByRole("button", { name: "Edit and restart" })
+			.click();
+		await page
+			.getByLabel("Edit earlier prompt")
+			.fill("FINAL_REVISION: repeat the marker.");
+		await page
+			.getByRole("button", { name: "Restart from here", exact: true })
+			.click();
+		await page.getByLabel("Edit earlier prompt").waitFor({ state: "detached" });
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+		);
+		assert.ok(!JSON.stringify(requests.at(-1)).includes("REVISED_PROMPT"));
+		assert.ok(JSON.stringify(requests.at(-1)).includes("FINAL_REVISION"));
+		await application.close();
+		application = await launch();
+		page = await application.firstWindow();
+		await page.getByRole("button", { name: /Remember ORBIT/ }).click();
+		await page
+			.getByRole("textbox", { name: "Message PlinyCode" })
+			.fill("Continue after restart.");
+		await sendPrompt(page);
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+		);
+		assert.ok(JSON.stringify(requests.at(-1)).includes("FINAL_REVISION"));
+		assert.ok(!JSON.stringify(requests.at(-1)).includes("DISCARDED_TURN"));
+		console.log(
+			"PASS: native copy/paste, legacy prompt edit, exact restart history and reopen without discarded turns",
+		);
 		// Rewrite is a separate, tool-free request and never sends the draft.
 		const composer = page.getByRole("textbox", { name: "Message PlinyCode" });
 		const improve = () =>
@@ -838,7 +946,24 @@ try {
 		() => document.querySelector(".badge")?.textContent === "failed",
 	);
 	await page.getByText(/Git remote "origin" is not configured/).waitFor();
+	await application.close();
+	const legacyStatePath = join(data, "state", "state.json");
+	const legacyState = JSON.parse(await readFile(legacyStatePath, "utf8"));
+	delete legacyState.projects.find(
+		(project: { name: string }) => project.name === "local-project",
+	).worktreeSource;
+	await writeFile(legacyStatePath, JSON.stringify(legacyState));
+	application = await launch();
+	page = await application.firstWindow();
+	await page
+		.getByRole("button", { name: /Start with a missing remote/ })
+		.click();
 	await localSettings();
+	assert.equal(
+		await page.getByLabel("Worktree source", { exact: true }).inputValue(),
+		"local",
+		"Legacy local-only project must migrate without manual settings changes",
+	);
 	await page
 		.getByLabel("Worktree source", { exact: true })
 		.selectOption("local");

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import Markdown from "react-markdown";
+import { ChatMessage } from "./chat-message";
 import {
 	type Action,
 	active,
@@ -118,9 +118,11 @@ function App() {
 			.catch((error) => setError(String(error)));
 		return window.plinycode.subscribe(setState);
 	}, [invoke]);
+	// Copy returns a fresh state object; only chat content changes should scroll.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: these values intentionally trigger scrolling after a content change
 	useEffect(() => {
-		if (task) bottom.current?.scrollIntoView({ behavior: "smooth" });
-	}, [task]);
+		bottom.current?.scrollIntoView({ behavior: "smooth" });
+	}, [selected, task?.messages.length, task?.messages.at(-1)?.text]);
 	return (
 		<div className="app">
 			<datalist id="model-catalog">
@@ -297,19 +299,20 @@ function App() {
 										◇ {entry.text}
 									</div>
 								) : (
-									<article className={`message ${entry.role}`} key={entry.id}>
-										<div className="speaker">
-											{entry.role === "user" ? "You" : "PlinyCode"}
-										</div>
-										<Markdown
-											components={{
-												a: ({ children }) => <span>{children}</span>,
-												img: ({ alt }) => <span>[Image: {alt}]</span>,
-											}}
-										>
-											{entry.text || (busy ? "Working…" : "")}
-										</Markdown>
-									</article>
+									<ChatMessage
+										key={entry.id}
+										entry={entry}
+										taskId={task.id}
+										busy={
+											!!busy ||
+											(state.commands ?? []).some(
+												(command) =>
+													command.taskId === task.id &&
+													command.status === "running",
+											)
+										}
+										invoke={invoke}
+									/>
 								),
 							)}
 							{task.error && <div className="task-error">{task.error}</div>}

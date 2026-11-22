@@ -273,6 +273,7 @@ h1 {
 	line-height: 1.6;
 }
 .message {
+	user-select: text;
 	margin: 18px 0 28px;
 	line-height: 1.7;
 	overflow-wrap: anywhere;
@@ -282,6 +283,29 @@ h1 {
 	font-size: 12px;
 	font-weight: 600;
 	margin-bottom: 5px;
+}
+.message-heading {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+}
+.message-actions {
+	display: flex;
+	gap: 6px;
+}
+.message-actions button {
+	padding: 3px 8px;
+	font-size: 12px;
+}
+.prompt-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.message-editor textarea {
+	width: 100%;
+	min-height: 150px;
+	resize: vertical;
 }
 .message.user {
 	background: #252b29;
