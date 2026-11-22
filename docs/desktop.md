@@ -7,14 +7,14 @@ described in the [implementation plan](desktop-plan.md).
 
 ## Windows one-click installer
 
-Download `PlinyCode-Desktop-Setup-0.1.2-x64.exe` from the
-[Desktop 0.1.2 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.2) and open it.
+Download `PlinyCode-Desktop-Setup-0.1.3-x64.exe` from the
+[Desktop 0.1.3 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.3) and open it.
 It installs for the current user without administrator rights, creates desktop
 and Start menu shortcuts, and launches PlinyCode when installation finishes.
 Electron and Bun are bundled; users do not need to install Node or Bun.
 
 This preview is unsigned, so Windows may display an unknown-publisher or
-SmartScreen warning. Desktop 0.1.2 checks for updates automatically and offers
+SmartScreen warning. Desktop 0.1.3 checks for updates automatically and offers
 **Download** and **Install and restart** in the sidebar. Installation waits until
 running tasks, background commands and PR operations have stopped. Checks can be
 disabled in Settings. Versions 0.1.0 and 0.1.1 need one manual upgrade to receive
@@ -227,6 +227,11 @@ the original. Editing, sending or changing chats invalidates pending rewrites so
 late results cannot replace newer text. Drafts over 8,000 characters are left intact;
 failed requests time out after 20 seconds and preserve the draft. The task's model
 selection, including FreeAuto, is unchanged.
+
+Starting with 0.1.3, prompt improvement uses Electron's native networking to honor
+the operating system's certificate trust and proxy settings. This fixes the
+20-second timeout that could occur on corporate connections in 0.1.1/0.1.2.
+Certificate verification remains enabled. Timeout and cancellation have separate messages.
 
 ## Validation
 

@@ -59,7 +59,11 @@ export class PromptImprover {
 			};
 			controller.signal.addEventListener("abort", onAbort, { once: true });
 		});
-		const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			controller.abort();
+		}, this.timeoutMs);
 		try {
 			const consume = async () => {
 				handler = await this.create({
@@ -101,9 +105,11 @@ export class PromptImprover {
 		} catch {
 			// Provider errors may contain credentials, endpoints or draft text.
 			return {
-				error: controller.signal.aborted
-					? "Prompt improvement timed out or was cancelled. Your draft was kept."
-					: "Could not improve the prompt. Check your connection and Pliny credentials, then retry.",
+				error: timedOut
+					? "Prompt improvement timed out. Your draft was kept. Please retry."
+					: controller.signal.aborted
+						? "Prompt improvement was cancelled. Your draft was kept."
+						: "Could not improve the prompt. Check your connection and Pliny credentials, then retry.",
 			};
 		} finally {
 			clearTimeout(timer);
