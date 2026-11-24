@@ -135,7 +135,7 @@ The CLI release is independent of the extension's version and auto-updater.
 
 Put skills in `.github/skills/<name>/SKILL.md` and agent definitions in
 `.github/agents/<name>.md`, or reuse the other extension-compatible workspace
-folders described in the [CLI guide](cli.md#skills-custom-agents-and-delegation).
+folders described in the [CLI guide](cli.md).
 Discovery defaults to your current folder, or `--cwd` when supplied.
 
 ```sh
