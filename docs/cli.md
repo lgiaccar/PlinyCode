@@ -82,7 +82,7 @@ that it contains no other sensitive data.
 
 ## Skills, custom agents and delegation
 
-CLI 0.2.0 uses the same Markdown loaders and agent engine as the extension.
+CLI 0.1.1 uses the same Markdown loaders and agent engine as the extension.
 Discovery defaults to the workspace (`--cwd`, or the current folder when omitted).
 It does not import editor settings or scan your global editor configuration.
 
