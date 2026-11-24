@@ -9,8 +9,10 @@ import { getPlinyApiKey, savePlinyApiKey } from "@plinycode/shared/node";
 import {
 	app,
 	BrowserWindow,
+	clipboard,
 	dialog,
 	ipcMain,
+	Menu,
 	net,
 	safeStorage,
 	shell,
@@ -92,6 +94,7 @@ else {
 				getPlinyApiKey,
 				servers,
 			);
+			await manager.migrateProjects();
 			integrations = new Integrations(manager, vault);
 			window = new BrowserWindow({
 				title: "PlinyCode Desktop",
@@ -109,6 +112,18 @@ else {
 				},
 			});
 			window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+			window.webContents.on("context-menu", (_event, params) => {
+				Menu.buildFromTemplate([
+					{ role: "copy", enabled: !!params.selectionText },
+					...(params.isEditable
+						? [
+								{ role: "cut" as const, enabled: !!params.selectionText },
+								{ role: "paste" as const },
+								{ role: "selectAll" as const },
+							]
+						: []),
+				]).popup({ window });
+			});
 			updater = createDesktopUpdate(
 				(update) => {
 					if (!window?.isDestroyed())
@@ -153,6 +168,21 @@ else {
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
+					case "copyMessage": {
+						const entry = manager
+							.task(action.id)
+							.messages.find((item) => item.id === action.messageId);
+						if (!entry) throw new Error("Message not found.");
+						clipboard.writeText(entry.text);
+						break;
+					}
+					case "restartFrom":
+						await manager.restartFrom(
+							action.id,
+							action.messageId,
+							action.prompt,
+						);
+						break;
 					case "updateStatus":
 						break;
 					case "updateCheck":
@@ -328,6 +358,7 @@ else {
 								"Stop project tasks before changing worktree or PR target settings.",
 							);
 						Object.assign(manager.project(action.id), {
+							worktreeSource: action.worktreeSource,
 							base: action.base.trim(),
 							target: action.target.trim(),
 							remote: action.remote,

@@ -2,7 +2,14 @@
 
 import { strict as assert } from "node:assert";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -190,6 +197,11 @@ try {
 	if (!process.env.PLINY_DESKTOP_E2E_PR_ONLY) {
 		await page.getByRole("button", { name: "Choose a project folder" }).click();
 		await page.getByRole("textbox", { name: "Message PlinyCode" }).waitFor();
+		const ordinary = await page.evaluate(
+			async () => (await window.plinycode.invoke({ type: "snapshot" })).state,
+		);
+		assert.equal(ordinary.projects[0].git, false);
+		assert.equal(ordinary.tasks[0].worktree, false);
 		const conversationId = await page.evaluate(
 			async () =>
 				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks[0].id,
@@ -204,6 +216,10 @@ try {
 			{ timeout: 40_000 },
 		);
 		assert.equal(requests[0].model, "snps-provider/kimi-k2.6");
+		assert.ok(!(await readdir(folder)).includes(".git"));
+		console.log(
+			"PASS: ordinary folder runs without Git initialization or worktree preparation",
+		);
 		await page.screenshot({ path: join(data, "conversation.png") });
 		console.log("PASS: Electron → worker → default FreeAuto → streamed answer");
 		// Reopen the app and continue the persisted engine conversation.
@@ -224,6 +240,107 @@ try {
 			"Engine history must survive reopening",
 		);
 		console.log("PASS: persistent multi-turn engine history");
+		// Copy uses the native clipboard, including original prompt whitespace.
+		await page
+			.locator(".message.user")
+			.first()
+			.getByRole("button", { name: "Copy", exact: true })
+			.click();
+		await page.getByRole("button", { name: "Copied", exact: true }).waitFor();
+		assert.equal(
+			await application.evaluate(({ clipboard }) => clipboard.readText()),
+			"Remember ORBIT and say ready.",
+		);
+		const pasteTarget = page.getByRole("textbox", {
+			name: "Message PlinyCode",
+		});
+		await pasteTarget.focus();
+		await page.keyboard.press(
+			process.platform === "darwin" ? "Meta+V" : "Control+V",
+		);
+		assert.equal(
+			await pasteTarget.inputValue(),
+			"Remember ORBIT and say ready.",
+		);
+		await pasteTarget.fill("DISCARDED_TURN must not survive restart.");
+		await sendPrompt(page);
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+		);
+		const beforeRestart = await page.evaluate(
+			async () =>
+				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks[0],
+		);
+		const secondPrompt = beforeRestart.messages.filter(
+			(entry) => entry.role === "user",
+		)[1];
+		// Remove this fixture snapshot to exercise migration of pre-feature chats.
+		await unlink(
+			join(
+				data,
+				"state",
+				"tasks",
+				beforeRestart.id,
+				"turns",
+				`${secondPrompt.id}.json`,
+			),
+		);
+		await page
+			.locator(".message.user")
+			.nth(1)
+			.getByRole("button", { name: "Edit and restart" })
+			.click();
+		await page
+			.getByLabel("Edit earlier prompt")
+			.fill("REVISED_PROMPT: repeat the marker.");
+		await page
+			.getByRole("button", { name: "Restart from here", exact: true })
+			.click();
+		await page.waitForFunction(
+			() =>
+				document.querySelectorAll(".message.user").length === 2 &&
+				document.querySelector(".badge")?.textContent === "completed",
+		);
+		assert.ok(JSON.stringify(requests.at(-1)).includes("Remember ORBIT"));
+		assert.ok(JSON.stringify(requests.at(-1)).includes("REVISED_PROMPT"));
+		assert.ok(!JSON.stringify(requests.at(-1)).includes("DISCARDED_TURN"));
+		assert.ok(
+			!JSON.stringify(requests.at(-1)).includes("What marker did I give you?"),
+		);
+		// A second edit uses the new exact pre-turn snapshot.
+		await page
+			.locator(".message.user")
+			.nth(1)
+			.getByRole("button", { name: "Edit and restart" })
+			.click();
+		await page
+			.getByLabel("Edit earlier prompt")
+			.fill("FINAL_REVISION: repeat the marker.");
+		await page
+			.getByRole("button", { name: "Restart from here", exact: true })
+			.click();
+		await page.getByLabel("Edit earlier prompt").waitFor({ state: "detached" });
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+		);
+		assert.ok(!JSON.stringify(requests.at(-1)).includes("REVISED_PROMPT"));
+		assert.ok(JSON.stringify(requests.at(-1)).includes("FINAL_REVISION"));
+		await application.close();
+		application = await launch();
+		page = await application.firstWindow();
+		await page.getByRole("button", { name: /Remember ORBIT/ }).click();
+		await page
+			.getByRole("textbox", { name: "Message PlinyCode" })
+			.fill("Continue after restart.");
+		await sendPrompt(page);
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+		);
+		assert.ok(JSON.stringify(requests.at(-1)).includes("FINAL_REVISION"));
+		assert.ok(!JSON.stringify(requests.at(-1)).includes("DISCARDED_TURN"));
+		console.log(
+			"PASS: native copy/paste, legacy prompt edit, exact restart history and reopen without discarded turns",
+		);
 		// Rewrite is a separate, tool-free request and never sends the draft.
 		const composer = page.getByRole("textbox", { name: "Message PlinyCode" });
 		const improve = () =>
@@ -779,6 +896,123 @@ try {
 	await mkdir(gitFolder);
 	const runGit = async (cwd: string, args: string[]) =>
 		promisify(execFile)("git", args, { cwd, windowsHide: true, env });
+	// Match a local-only project such as Magik, including recovery of an old
+	// project configured with the default origin even though no remote exists.
+	const localFolder = join(data, "local-project");
+	await mkdir(localFolder);
+	await runGit(localFolder, ["init", "--initial-branch=local-main"]);
+	await runGit(localFolder, ["config", "user.name", "Desktop fixture"]);
+	await runGit(localFolder, [
+		"config",
+		"user.email",
+		"fixture@example.invalid",
+	]);
+	await writeFile(join(localFolder, "local.txt"), "committed local content");
+	await runGit(localFolder, ["add", "."]);
+	await runGit(localFolder, ["commit", "-m", "Initial local commit"]);
+	await writeFile(join(localFolder, "local.txt"), "uncommitted source content");
+	await application.evaluate(({ dialog }, folder) => {
+		delete process.env.PLINY_DESKTOP_TEST_PROJECT;
+		dialog.showOpenDialog = async () => ({
+			canceled: false,
+			filePaths: [folder],
+		});
+	}, localFolder);
+	await page.getByRole("button", { name: /Add project/ }).click();
+	await page
+		.locator("main .eyebrow")
+		.filter({ hasText: "local-project /" })
+		.waitFor();
+	const localSettings = () =>
+		page
+			.locator(".project")
+			.filter({ hasText: "local-project" })
+			.getByTitle("Project settings")
+			.click();
+	await localSettings();
+	assert.equal(
+		await page.getByLabel("Worktree source", { exact: true }).inputValue(),
+		"local",
+	);
+	await page
+		.getByLabel("Worktree source", { exact: true })
+		.selectOption("remote");
+	await page.getByRole("button", { name: "Save project", exact: true }).click();
+	await page
+		.getByRole("textbox", { name: "Message PlinyCode" })
+		.fill("Start with a missing remote.");
+	await sendPrompt(page);
+	await page.waitForFunction(
+		() => document.querySelector(".badge")?.textContent === "failed",
+	);
+	await page.getByText(/Git remote "origin" is not configured/).waitFor();
+	await application.close();
+	const legacyStatePath = join(data, "state", "state.json");
+	const legacyState = JSON.parse(await readFile(legacyStatePath, "utf8"));
+	delete legacyState.projects.find(
+		(project: { name: string }) => project.name === "local-project",
+	).worktreeSource;
+	await writeFile(legacyStatePath, JSON.stringify(legacyState));
+	application = await launch();
+	page = await application.firstWindow();
+	await page
+		.getByRole("button", { name: /Start with a missing remote/ })
+		.click();
+	await localSettings();
+	assert.equal(
+		await page.getByLabel("Worktree source", { exact: true }).inputValue(),
+		"local",
+		"Legacy local-only project must migrate without manual settings changes",
+	);
+	await page
+		.getByLabel("Worktree source", { exact: true })
+		.selectOption("local");
+	await page.getByRole("button", { name: "Save project", exact: true }).click();
+	await page
+		.getByLabel("Worktree source", { exact: true })
+		.waitFor({ state: "hidden" });
+	await page
+		.getByLabel("Explicitly use last fetched revision")
+		.waitFor({ state: "detached" });
+	assert.equal(
+		await page.getByLabel("Explicitly use last fetched revision").count(),
+		0,
+	);
+	await page
+		.getByRole("textbox", { name: "Message PlinyCode" })
+		.fill("Run in an isolated local worktree.");
+	await sendPrompt(page);
+	await page.waitForFunction(
+		() => document.querySelector(".badge")?.textContent === "completed",
+		undefined,
+		{ timeout: 40_000 },
+	);
+	const localState = await page.evaluate(
+		async () => (await window.plinycode.invoke({ type: "snapshot" })).state,
+	);
+	const localProject = localState.projects.find(
+		(project) => project.name === "local-project",
+	);
+	assert.ok(localProject);
+	const localTask = localState.tasks.find(
+		(task) => task.projectId === localProject.id,
+	);
+	assert.ok(localTask?.cwd);
+	assert.notEqual(resolve(localTask.cwd), resolve(localFolder));
+	assert.equal(localTask.baseBranch, "local-main");
+	assert.equal(
+		await readFile(join(localTask.cwd, "local.txt"), "utf8"),
+		"committed local content",
+	);
+	assert.equal(
+		await readFile(join(localFolder, "local.txt"), "utf8"),
+		"uncommitted source content",
+	);
+	assert.equal((await runGit(localFolder, ["remote"])).stdout.trim(), "");
+	await page.screenshot({ path: join(data, "local-worktree.png") });
+	console.log(
+		"PASS: local-only Git worktree, missing-remote recovery, source changes preserved and no remote added",
+	);
 	await runGit(data, ["init", "--bare", "--initial-branch=main", bare]);
 	await runGit(gitFolder, ["init", "--initial-branch=main"]);
 	await runGit(gitFolder, ["config", "user.name", "Desktop fixture"]);
@@ -796,6 +1030,10 @@ try {
 		});
 	}, gitFolder);
 	await page.getByRole("button", { name: /Add project/ }).click();
+	await page
+		.locator("main .eyebrow")
+		.filter({ hasText: "git-project /" })
+		.waitFor();
 	reply = "Worktree ready.";
 	await page
 		.getByRole("textbox", { name: "Message PlinyCode" })

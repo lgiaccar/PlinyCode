@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { realpath, stat } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import {
@@ -16,7 +16,8 @@ import {
 	type Task,
 	type WorkerEvent,
 } from "./contracts";
-import { isGit, overlaps, prepareWorktree } from "./git";
+import { git, isGit, overlaps, prepareWorktree } from "./git";
+import { historyBefore } from "./history";
 import { type ConnectedMcpServer, mcpSecretValues } from "./mcp-contracts";
 import type { DesktopStore } from "./store";
 
@@ -169,18 +170,96 @@ export class TaskManager {
 				project.path.length === canonical.length,
 		);
 		if (existing) return existing;
+		const gitProject = await isGit(canonical);
+		const remotes = gitProject
+			? (await git(canonical, ["remote"])).split(/\r?\n/).filter(Boolean)
+			: [];
 		const project: Project = {
 			id: randomUUID(),
 			name: basename(canonical),
 			path: canonical,
-			git: await isGit(canonical),
+			git: gitProject,
 			base: "",
 			target: "",
-			remote: "origin",
+			remote: remotes.includes("origin") ? "origin" : (remotes[0] ?? "origin"),
+			worktreeSource: remotes.length ? "remote" : "local",
 		};
 		this.store.state.projects.push(project);
 		this.changed();
 		return project;
+	}
+	async migrateProjects() {
+		for (const project of this.store.state.projects) {
+			if (project.worktreeSource !== undefined) continue;
+			try {
+				if (!(await stat(project.path)).isDirectory()) continue;
+				// Probe failures leave the old entry untouched for a later retry.
+				if (project.git) {
+					const remotes = (await git(project.path, ["remote"]))
+						.split(/\r?\n/)
+						.filter(Boolean);
+					project.worktreeSource = remotes.length ? "remote" : "local";
+				} else project.worktreeSource = "local";
+			} catch {
+				/* Unavailable projects must not prevent app startup. */
+			}
+		}
+		this.changed();
+	}
+	async restartFrom(id: string, messageId: string, prompt: string) {
+		const task = this.task(id);
+		if (
+			this.closing ||
+			active(task) ||
+			this.running.has(id) ||
+			this.external.has(id) ||
+			this.store.state.commands?.some(
+				(command) => command.taskId === id && command.status === "running",
+			)
+		)
+			throw new Error(
+				"Stop this task and its background commands before restarting.",
+			);
+		this.external.add(id);
+		try {
+			const directory = join(this.data, "tasks", id);
+			const history = await historyBefore(directory, task, messageId);
+			const secrets = [
+				await this.key().catch(() => ""),
+				...mcpSecretValues(this.mcp()),
+			];
+			const serialize = (value: unknown) =>
+				JSON.stringify(value, (_key, item) =>
+					typeof item === "string" ? redactSecrets(item, secrets) : item,
+				);
+			const revision = randomUUID();
+			await mkdir(join(directory, "restarts"), { recursive: true });
+			await writeFile(
+				join(directory, "restarts", `${revision}.json`),
+				serialize(history),
+				{ mode: 0o600 },
+			);
+			await writeFile(
+				join(directory, "restarts", `${revision}.previous-task.json`),
+				serialize(task),
+				{ mode: 0o600 },
+			);
+			if (this.closing)
+				throw new Error(
+					"PlinyCode is closing. The original conversation was kept.",
+				);
+			task.messages = task.messages.slice(
+				0,
+				task.messages.findIndex((entry) => entry.id === messageId),
+			);
+			task.engineSessionId = revision;
+			task.subagents = [];
+			delete task.input;
+			delete task.error;
+		} finally {
+			this.external.delete(id);
+		}
+		this.send(id, prompt);
 	}
 	createTask(projectId: string, worktree: boolean) {
 		const project = this.project(projectId);

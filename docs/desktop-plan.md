@@ -26,6 +26,10 @@ Implementation is on `lgiaccar/desktop-app`; a PR is now requested, without publ
 - Worktrees start from a fresh fetch of the remote default branch, with detailed
   settings for remote/base and a separate PR target. Default PR target is the
   task's starting branch. Fetch failure offers retry or explicit cached-base use.
+- Local-only Git projects can instead select a committed local branch, without a
+  remote or fetch. New local-only projects select this automatically; existing
+  projects change source explicitly in project settings. Ordinary folders work
+  without Git and serialize tasks in that folder.
 - The agent infers build/dependency setup from repository instructions.
 - Keep work in task branches. Only apply locally on explicit request. A chat
   request or Create PR button triggers commit/push/PR; Full Automatic can carry

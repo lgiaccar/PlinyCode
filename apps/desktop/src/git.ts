@@ -68,50 +68,83 @@ export async function prepareWorktree(
 		.then(async () => {
 			signal.throwIfAborted();
 			let base = project.base;
-			if (!base) {
-				if (cached)
-					base = (
-						await git(
-							root,
-							["symbolic-ref", `refs/remotes/${project.remote}/HEAD`],
-							signal,
-						)
-					).replace(`refs/remotes/${project.remote}/`, "");
-				else {
-					const head = await git(
+			let commit: string;
+			if (project.worktreeSource === "local") {
+				if (!base)
+					base = await git(
 						root,
-						["ls-remote", "--symref", project.remote, "HEAD"],
+						["symbolic-ref", "--quiet", "--short", "HEAD"],
+						signal,
+					).catch(() => "");
+				signal.throwIfAborted();
+				if (!base)
+					throw new Error(
+						"Select a local worktree base branch in project settings, or check out a local branch first.",
+					);
+				await git(root, ["check-ref-format", "--branch", base], signal);
+				try {
+					commit = await git(
+						root,
+						["rev-parse", "--verify", `refs/heads/${base}^{commit}`],
 						signal,
 					);
-					base =
-						/^ref: refs\/heads\/(.+)\s+HEAD$/m.exec(head)?.[1]?.trim() ?? "";
+				} catch {
+					signal.throwIfAborted();
+					throw new Error(
+						`Local branch "${base}" has no commit. Make an initial commit or select an existing local branch in project settings.`,
+					);
 				}
-			}
-			if (!base)
-				throw new Error(
-					"Could not discover the remote default branch. Set a worktree base in project settings.",
-				);
-			await git(root, ["check-ref-format", "--branch", base], signal);
-			if (!cached)
-				await git(
+			} else {
+				const remotes = (await git(root, ["remote"], signal)).split(/\r?\n/);
+				if (!remotes.includes(project.remote))
+					throw new Error(
+						`Git remote "${project.remote}" is not configured for this project. Choose Local branch in project settings to work locally, or configure a remote.`,
+					);
+				if (!base) {
+					if (cached)
+						base = (
+							await git(
+								root,
+								["symbolic-ref", `refs/remotes/${project.remote}/HEAD`],
+								signal,
+							)
+						).replace(`refs/remotes/${project.remote}/`, "");
+					else {
+						const head = await git(
+							root,
+							["ls-remote", "--symref", project.remote, "HEAD"],
+							signal,
+						);
+						base =
+							/^ref: refs\/heads\/(.+)\s+HEAD$/m.exec(head)?.[1]?.trim() ?? "";
+					}
+				}
+				if (!base)
+					throw new Error(
+						"Could not discover the remote default branch. Set a worktree base in project settings.",
+					);
+				await git(root, ["check-ref-format", "--branch", base], signal);
+				if (!cached)
+					await git(
+						root,
+						[
+							"fetch",
+							"--no-tags",
+							project.remote,
+							`+refs/heads/${base}:refs/remotes/${project.remote}/${base}`,
+						],
+						signal,
+					);
+				commit = await git(
 					root,
 					[
-						"fetch",
-						"--no-tags",
-						project.remote,
-						`+refs/heads/${base}:refs/remotes/${project.remote}/${base}`,
+						"rev-parse",
+						"--verify",
+						`refs/remotes/${project.remote}/${base}^{commit}`,
 					],
 					signal,
 				);
-			const commit = await git(
-				root,
-				[
-					"rev-parse",
-					"--verify",
-					`refs/remotes/${project.remote}/${base}^{commit}`,
-				],
-				signal,
-			);
+			}
 			const username =
 				userInfo()
 					.username.toLowerCase()
