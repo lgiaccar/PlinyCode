@@ -97,7 +97,7 @@ jobs:
               working-directory: ${{ runner.temp }}/cli-acceptance
               run: |
                   set -eo pipefail
-                  python update-e2e.py --package "$(echo plinycode-*-x64)" --fixture updater-fixture/plinycode.js 2>&1 | tee update-results.log
+                  python update-e2e.py --package "$(echo plinycode-*-x64)" --fixture updater-fixture/plinycode.js --require-release-archive 2>&1 | tee update-results.log
             - uses: actions/upload-artifact@v4
               if: always()
               with:

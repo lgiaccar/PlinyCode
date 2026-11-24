@@ -20,6 +20,7 @@ import zipfile
 parser = argparse.ArgumentParser()
 parser.add_argument("--package", required=True, type=Path)
 parser.add_argument("--fixture", required=True, type=Path)
+parser.add_argument("--require-release-archive", action="store_true")
 args, rest = parser.parse_known_args()
 PACKAGE = args.package.resolve()
 FIXTURE = args.fixture.resolve()
@@ -59,7 +60,10 @@ class UpdateAcceptance(unittest.TestCase):
     def setUpClass(cls):
         cls.files = {f"{PREFIX}/{p.relative_to(PACKAGE).as_posix()}": p.read_bytes()
                      for p in PACKAGE.rglob("*") if p.is_file()}
-        cls.archive = archive_files(cls.files)
+        release_archive = PACKAGE.parent / NAME
+        if args.require_release_archive and not release_archive.is_file():
+            raise RuntimeError(f"Missing native release archive: {release_archive}")
+        cls.archive = release_archive.read_bytes() if release_archive.is_file() else archive_files(cls.files)
         cls.mode = "good"
         cls.started = threading.Event()
         cls.release_download = threading.Event()
