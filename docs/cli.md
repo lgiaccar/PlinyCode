@@ -80,6 +80,103 @@ transcript of user messages and final answers, with known credentials redacted.
 Transcripts are not resumable sessions. Model-supplied text is not a guarantee
 that it contains no other sensitive data.
 
+## Skills, custom agents and delegation
+
+CLI 0.1.1 uses the same Markdown loaders and agent engine as the extension.
+Discovery defaults to the workspace (`--cwd`, or the current folder when omitted).
+It does not import editor settings or scan your global editor configuration.
+
+Skills are discovered under `.clinerules/skills`, `.cline/skills`, `.agents/skills`,
+`.github/skills`, `.cursor/skills`, `.claude/skills` and `.ai/skills`.
+Custom agents are discovered under `.cline/agents`, `.github/agents`,
+`.cursor/agents`, `.claude/agents` and `.ai/agents`, including one level of
+subfolders. `AGENTS.md` remains workspace guidance, not a custom agent definition.
+
+Inspect discovery without an API key or model request:
+
+```sh
+plinycode skills --cwd ./project
+plinycode agents --cwd ./project --json
+plinycode skills --skills-dir ./shared-skills --json
+plinycode agents --agents-dir ./shared-agents
+```
+
+`--skills-dir` and `--agents-dir` point directly at directories containing skill
+folders/files or agent files. Each flag is repeatable; providing it replaces the
+default search locations for that kind. Relative paths resolve against `--cwd`.
+An explicitly supplied missing folder is an error. Listings show source paths,
+descriptions, disabled skills, skill warnings and agent parsing errors (`--json`
+returns `directories`, `items` and `errors`). Invalid agent files are reported and
+skipped; an unsupported provider/model in a parsed agent prevents execution.
+The engine's collision rules apply: the first agent name wins, while skills use
+the engine's file-priority and duplicate-resolution rules. Inspect the listed
+source paths to see which definition won. Restart the CLI after changing agents.
+
+Create `.github/skills/review/SKILL.md`:
+
+```markdown
+---
+name: review
+description: Review CI failures and cite evidence from logs
+---
+Identify each failure, cite the relevant log lines, and distinguish evidence
+from assumptions. Return a short Markdown report.
+```
+
+Skill folders can include scripts and reference files. Flat `.md`/`.mdc` skills
+are also supported, matching the engine. Loading a skill reads its instructions;
+it does not automatically run scripts, install dependencies or grant permission.
+The agent sees available skill descriptions and can load instructions through
+the `skills` tool. Ask it to use a skill by name. `disabled: true` in skill
+frontmatter disables it. Hooks and executable plugins remain disabled.
+
+Create `.github/agents/reviewer.md`:
+
+```markdown
+---
+name: reviewer
+description: Review test failures without editing files
+tools: [read_files, search_codebase, skills]
+skills: [review]
+---
+Use the review skill. Examine the supplied evidence and report findings.
+```
+
+Agent files use YAML frontmatter plus a Markdown prompt body. `.md`, `.yml` and
+`.yaml` files are supported; omitted names come from the filename (including
+the `.agent.md` convention). Optional `tools` and `skills` restrict the agent's
+tools and skill access. Engine tool-name aliases such as `read_file` and `bash`
+are recognized. Omitting `tools` leaves the engine's available tools enabled.
+Optional `providerId`, `modelId` and `maxIterations` use the engine format; the
+CLI accepts only Pliny models. Model overrides in an agent file are explicit
+selections, but a run started with FreeAuto rejects paid or unknown overrides.
+
+The portable package includes the examples above under `examples/skills` and
+`examples/agents`. From the package directory, try
+`plinycode chat --skills-dir examples/skills --agents-dir examples/agents --agent reviewer`.
+
+```sh
+plinycode chat --cwd ./project --agent reviewer
+plinycode run --cwd ./project --prompt "Delegate the log review to reviewer" --allow-tools --json
+plinycode chat --skills-dir ./shared-skills --agents-dir ./shared-agents
+```
+
+`--agent` chooses a discovered agent as the lead and applies its instructions,
+tool/skill restrictions and model override. Otherwise the normal lead can call
+named `subagent_<name>` tools or `spawn_agent` for a generic subtask. Children
+have separate model contexts, share the workspace, inherit tool approvals and
+return their reports to the lead. The engine defaults generic delegation to
+three concurrent children per parent and one level; children cannot delegate
+again. These are not isolated worktrees or OS sandboxes.
+
+Interactive delegation asks for approval, and child actions follow the same
+approval policy. Concurrent approval questions are presented one at a time.
+Unattended delegation requires `--allow-tools`, which authorizes all enabled
+tools for the run. Cancellation and the turn timeout cover delegated work too.
+Only the lead's answer is streamed/exported as conversation text; child reports
+reach the lead through tool results. Output-schema repair cannot delegate or use
+skills because its tools are disabled.
+
 ## Pipeline invocation
 
 ```sh

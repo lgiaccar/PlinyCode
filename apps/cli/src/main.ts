@@ -21,6 +21,11 @@ async function main() {
 		process.stdout.write(HELP);
 		return;
 	}
+	if (options.command === "skills" || options.command === "agents") {
+		const { listDiscovered } = await import("./discovery");
+		await listDiscovered(options);
+		return;
+	}
 	if (options.command === "auth") {
 		const credentials = await import("./credentials");
 		if (options.authAction === "login")

@@ -140,3 +140,13 @@ The package also exports storage and settings helpers such as:
 - Repo examples: [examples](https://github.com/cline/sdk/tree/main/examples), [apps/examples](https://github.com/cline/sdk/tree/main/apps/examples)
 - Workspace overview: [README.md](https://github.com/cline/cline/blob/main/README.md)
 - API and architecture references: [DOC.md](https://github.com/cline/cline/blob/main/DOC.md), [ARCHITECTURE.md](https://github.com/cline/cline/blob/main/ARCHITECTURE.md)
+
+### Host-resolved custom agents
+
+`CoreSessionConfig.configuredAgents` optionally supplies parsed agent definitions
+from a host-selected source. An empty array disables filesystem agent discovery;
+omitting it keeps the existing workspace/global discovery. Hosts can reuse
+`loadConfiguredAgentConfigs` with explicit search paths and
+`configuredAgentAllowedTools` for the engine's tool aliases and allowlists.
+Configured child agents retain their scoped skill tool instead of inheriting the
+parent's unrestricted skill registration.

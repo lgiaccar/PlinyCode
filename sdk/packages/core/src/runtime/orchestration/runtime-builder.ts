@@ -40,7 +40,10 @@ import {
 } from "../../extensions/tools/command-guard-extension";
 import { createDelegatedAgentConfigProvider } from "../../extensions/tools/team";
 import type { ConfiguredAgentConfig } from "../../extensions/tools/team/configured-agent-config";
-import { loadConfiguredAgentConfigs } from "../../extensions/tools/team/configured-agent-config";
+import {
+	configuredAgentAllowedTools,
+	loadConfiguredAgentConfigs,
+} from "../../extensions/tools/team/configured-agent-config";
 import { createConfiguredAgentTools } from "../../extensions/tools/team/configured-agent-tool";
 import { resolveSubAgentLimits } from "../../extensions/tools/team/sub-agent-limits";
 import { createSubAgentGuidanceExtension } from "../../extensions/tools/team/subagent-guidance";
@@ -92,47 +95,12 @@ function filterAvailableTools(
 	return filterDisabledTools(filterToolsByPolicies(tools, toolPolicies));
 }
 
-const CONFIGURED_AGENT_TOOL_NAME_ALIASES: Record<string, string> = {
-	apply_diff: "editor",
-	attempt_completion: "submit_and_exit",
-	bash: "run_commands",
-	find: "find_files",
-	glob: "find_files",
-	execute_command: "run_commands",
-	list_code_definition_names: "search_codebase",
-	list_files: "run_commands",
-	read_file: "read_files",
-	replace_in_file: "editor",
-	search_files: "search_codebase",
-	use_skill: "skills",
-	write_to_file: "editor",
-};
-
-function resolveConfiguredAgentToolName(toolName: string): string {
-	const normalized = toolName.trim().toLowerCase();
-	return CONFIGURED_AGENT_TOOL_NAME_ALIASES[normalized] ?? normalized;
-}
-
 function filterToolsForConfiguredAgent(
 	tools: AgentTool[],
 	agent: ConfiguredAgentConfig,
 ): AgentTool[] {
-	if (agent.tools === undefined) {
-		return tools;
-	}
-
-	const allowedToolNames = new Set(
-		agent.tools.map(resolveConfiguredAgentToolName),
-	);
-	if (agent.skills !== undefined) {
-		allowedToolNames.add("skills");
-	}
-	// find_files came after agent files were written; an agent allowed to
-	// search file contents is allowed to look files up by name.
-	if (allowedToolNames.has("search_codebase")) {
-		allowedToolNames.add("find_files");
-	}
-	return tools.filter((tool) => allowedToolNames.has(tool.name));
+	const allowed = configuredAgentAllowedTools(agent);
+	return allowed ? tools.filter((tool) => allowed.has(tool.name)) : tools;
 }
 
 function createBuiltinToolsList(
@@ -164,12 +132,12 @@ function createBuiltinToolsList(
 			enableSkills: !!skillsExecutor,
 			...toolRoutingConfig,
 			executors: {
+				...(executorOverrides ?? {}),
 				...(skillsExecutor
 					? {
 							skills: skillsExecutor,
 						}
 					: {}),
-				...(executorOverrides ?? {}),
 			},
 		}),
 		toolPolicies,
@@ -373,9 +341,11 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 		const effectiveToolPolicies = input.toolPolicies ?? config.toolPolicies;
 		const tools: AgentTool[] = [];
 		const configuredAgents = normalized.enableSpawnAgent
-			? loadConfiguredAgentConfigs({
-					workspaceRoot: workspaceConfigRoot,
-				})
+			? config.configuredAgents !== undefined
+				? { configs: config.configuredAgents, errors: [] }
+				: loadConfiguredAgentConfigs({
+						workspaceRoot: workspaceConfigRoot,
+					})
 			: { configs: [], errors: [] };
 		const configuredAgentsNeedSkills = configuredAgents.configs.some(
 			(agent) => agent.skills !== undefined,
@@ -566,7 +536,26 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 				tools.push(
 					...filterAvailableTools(
 						createConfiguredAgentTools({
-							configProvider: delegatedAgentConfigProvider,
+							// Preserve rules but never let the parent skill registration override the child allowlist.
+							configProvider: {
+								...delegatedAgentConfigProvider,
+								getRuntimeConfig: () => ({
+									...delegatedAgentConfigProvider.getRuntimeConfig(),
+									extensions: runtimeExtensions?.map((extension) =>
+										extension === userInstructionPlugin &&
+										userInstructionService
+											? userInstructionService.createExtension({
+													includeRules: rulesEnabled,
+													workspacePath: config.cwd,
+													includeSkills: false,
+													includeWorkflows: false,
+													registerSkillsTool: false,
+													ruleFilter,
+												})
+											: extension,
+									),
+								}),
+							},
 							agents: configuredAgents.configs,
 							createSubAgentTools: (agent) =>
 								normalized.enableTools
@@ -578,7 +567,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 												agent.modelId ?? config.modelId,
 												config.toolRoutingRules,
 												effectiveToolPolicies,
-												agent.skills !== undefined &&
+												(agent.skills !== undefined || rootSkillsEnabled) &&
 													userInstructionService?.createSkillsExecutor
 													? userInstructionService.createSkillsExecutor(
 															agent.skills,

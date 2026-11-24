@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
+import { isPlinySelfHostedModelId } from "@plinycode/llms";
 
 const scratchRoot = resolve(import.meta.dir, "../../../ai_output");
 await mkdir(scratchRoot, { recursive: true });
@@ -21,6 +22,229 @@ const entry =
 	resolve(import.meta.dir, "../src/main.ts");
 const runtime = process.env.PLINYCODE_TEST_RUNTIME ?? process.execPath;
 const model = "snps-provider-vmodels/glm-5.3";
+
+async function extensionWorkspace() {
+	const workspace = await mkdtemp(join(scratch, "extensions-"));
+	const skills = join(workspace, ".github", "skills", "review");
+	const agents = join(workspace, ".github", "agents");
+	await mkdir(skills, { recursive: true });
+	await mkdir(agents, { recursive: true });
+	await writeFile(
+		join(skills, "SKILL.md"),
+		"---\nname: review\ndescription: Review test evidence\n---\nSKILL_EVIDENCE_MARKER. Cite exact failures.",
+	);
+	await writeFile(
+		join(agents, "reviewer.md"),
+		"---\nname: reviewer\ndescription: Review test evidence\ntools: [read_files, skills]\nskills: [review]\n---\nCUSTOM_REVIEWER_MARKER. Review without editing.",
+	);
+	return workspace;
+}
+
+test("skills are advertised and loaded through the engine tool without action permission", async () => {
+	const cwd = await extensionWorkspace();
+	const requests: string[] = [];
+	const result = await run(
+		["--cwd", cwd, "--prompt", "Use review", "--json"],
+		[{ name: "skills", input: { skill: "review" } }, "Reviewed"],
+		undefined,
+		(body) => {
+			requests.push(JSON.stringify(body));
+		},
+	);
+	expect(result.exit).toBe(0);
+	expect(requests[0]).toContain("Review test evidence");
+	expect(requests[1]).toContain("SKILL_EVIDENCE_MARKER");
+}, 30000);
+
+test("custom delegation runs scoped tools and a skill and returns to the lead", async () => {
+	const cwd = await extensionWorkspace();
+	const requests: Array<Record<string, unknown>> = [];
+	const result = await run(
+		["--cwd", cwd, "--prompt", "Delegate review", "--allow-tools", "--json"],
+		[
+			{ name: "subagent_reviewer", input: { prompt: "Review evidence" } },
+			{ name: "skills", input: { skill: "review" } },
+			"CHILD_FINDING",
+			"PARENT_SUMMARY",
+		],
+		undefined,
+		(body) => {
+			requests.push(body);
+		},
+	);
+	expect(result.stderr).not.toContain("execution_failed");
+	expect(result.exit).toBe(0);
+	expect(JSON.parse(result.stdout).result).toBe("PARENT_SUMMARY");
+	expect(JSON.stringify(requests[1])).toContain("CUSTOM_REVIEWER_MARKER");
+	expect(JSON.stringify(requests[2])).toContain("SKILL_EVIDENCE_MARKER");
+	expect(JSON.stringify(requests[3])).toContain("CHILD_FINDING");
+	expect(JSON.stringify(requests[1].tools)).not.toContain('"name":"editor"');
+}, 30000);
+
+test("unattended custom delegation requires explicit permission", async () => {
+	const cwd = await extensionWorkspace();
+	const result = await run(
+		["--cwd", cwd, "--prompt", "Delegate", "--json"],
+		[
+			{ name: "subagent_reviewer", input: { prompt: "Review" } },
+			"Must not run",
+		],
+	);
+	expect(result.exit).toBe(3);
+	expect(result.calls).toBe(1);
+}, 30000);
+
+test("generic delegation inherits FreeAuto, skills and the depth limit", async () => {
+	const cwd = await extensionWorkspace();
+	const requests: Array<Record<string, unknown>> = [];
+	const result = await run(
+		[
+			"--cwd",
+			cwd,
+			"--model",
+			"pliny/auto-free",
+			"--prompt",
+			"Delegate",
+			"--allow-tools",
+			"--json",
+		],
+		[
+			{ name: "spawn_agent", input: { task: "Review" } },
+			{ name: "skills", input: { skill: "review" } },
+			"GENERIC_CHILD",
+			"GENERIC_PARENT",
+		],
+		undefined,
+		(body) => {
+			requests.push(body);
+		},
+	);
+	expect(result.exit).toBe(0);
+	expect(JSON.parse(result.stdout).result).toBe("GENERIC_PARENT");
+	expect(requests).toHaveLength(4);
+	for (const request of requests)
+		expect(isPlinySelfHostedModelId(String(request.model))).toBe(true);
+	expect(JSON.stringify(requests[1].tools)).not.toContain(
+		'"name":"spawn_agent"',
+	);
+	expect(JSON.stringify(requests[2])).toContain("SKILL_EVIDENCE_MARKER");
+}, 30000);
+
+test("custom lead agent uses instructions and rejects unknown names before inference", async () => {
+	const cwd = await extensionWorkspace();
+	let request = "";
+	const result = await run(
+		["--cwd", cwd, "--agent", "reviewer", "--prompt", "Review", "--json"],
+		["Reviewed"],
+		undefined,
+		(body) => {
+			request = JSON.stringify(body);
+		},
+	);
+	expect(result.exit).toBe(0);
+	expect(request).toContain("CUSTOM_REVIEWER_MARKER");
+	const bad = await run(
+		["--cwd", cwd, "--agent", "missing", "--prompt", "Review", "--json"],
+		["Never"],
+	);
+	expect(bad.exit).toBe(2);
+	expect(bad.calls).toBe(0);
+}, 30000);
+
+test("timeout cancels a delegated run", async () => {
+	const result = await run(
+		["--prompt", "Delegate", "--allow-tools", "--timeout", "5", "--json"],
+		[{ name: "spawn_agent", input: { task: "Slow work" } }, { hang: true }],
+	);
+	expect(result.exit).toBe(124);
+	expect(result.calls).toBe(2);
+}, 30000);
+
+test("a configured child's explicit free model overrides the parent router", async () => {
+	const cwd = await extensionWorkspace();
+	await writeFile(
+		join(cwd, ".github", "agents", "reviewer.md"),
+		`---\nname: reviewer\nmodelId: ${model}\ntools: []\n---\nReview evidence.`,
+	);
+	const requests: Array<Record<string, unknown>> = [];
+	const result = await run(
+		[
+			"--cwd",
+			cwd,
+			"--model",
+			"pliny/auto-free",
+			"--prompt",
+			"Delegate",
+			"--allow-tools",
+			"--json",
+		],
+		[
+			{ name: "subagent_reviewer", input: { prompt: "Review" } },
+			"CHILD",
+			"PARENT",
+		],
+		undefined,
+		(body) => {
+			requests.push(body);
+		},
+	);
+	expect(result.exit).toBe(0);
+	expect(requests[1].model).toBe(model);
+	expect(requests[1].tools ?? []).toHaveLength(0);
+}, 30000);
+
+test("configured agent skill allowlists cannot be widened by inherited extensions", async () => {
+	const cwd = await extensionWorkspace();
+	const other = join(cwd, ".github", "skills", "other");
+	await mkdir(other, { recursive: true });
+	await writeFile(
+		join(other, "SKILL.md"),
+		"---\nname: other\ndescription: Other task\n---\nFORBIDDEN_SKILL_BODY",
+	);
+	const requests: string[] = [];
+	const result = await run(
+		["--cwd", cwd, "--prompt", "Delegate", "--allow-tools", "--json"],
+		[
+			{ name: "subagent_reviewer", input: { prompt: "Review" } },
+			{ name: "skills", input: { skill: "other" } },
+			"CHILD",
+			"PARENT",
+		],
+		undefined,
+		(body) => {
+			requests.push(JSON.stringify(body));
+		},
+	);
+	expect(result.exit).toBe(0);
+	expect(requests[2]).not.toContain("FORBIDDEN_SKILL_BODY");
+}, 30000);
+
+test("discovered agents cannot change provider or escape FreeAuto's free pool", async () => {
+	for (const frontmatter of [
+		"providerId: anthropic",
+		"modelId: does-not-exist",
+	]) {
+		const cwd = await extensionWorkspace();
+		await writeFile(
+			join(cwd, ".github", "agents", "bad.md"),
+			`---\nname: bad\n${frontmatter}\n---\nWrong model.`,
+		);
+		const result = await run(
+			[
+				"--cwd",
+				cwd,
+				"--model",
+				"pliny/auto-free",
+				"--prompt",
+				"Review",
+				"--json",
+			],
+			["Never"],
+		);
+		expect(result.exit).toBe(2);
+		expect(result.calls).toBe(0);
+	}
+}, 30000);
 type Turn = string | { name: string; input: unknown } | { hang: true };
 
 function gateway(

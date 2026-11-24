@@ -2,6 +2,7 @@ export {
 	type ConfiguredAgentConfig,
 	type ConfiguredAgentLoadResult,
 	type ConfiguredAgentReadError,
+	configuredAgentAllowedTools,
 	loadConfiguredAgentConfigs,
 	parseConfiguredAgentConfig,
 } from "./configured-agent-config";

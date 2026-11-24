@@ -348,6 +348,7 @@ export {
 	type ConfiguredAgentReadError,
 	type ConfiguredAgentToolConfig,
 	type ConfiguredAgentToolDescriptor,
+	configuredAgentAllowedTools,
 	createConfiguredAgentTools,
 	createDelegatedAgent,
 	createDelegatedAgentConfigProvider,

@@ -109,6 +109,45 @@ describe("DefaultRuntimeBuilder configured agent execution", () => {
 		}
 	});
 
+	it("uses a host-resolved snapshot instead of discovering workspace agents", async () => {
+		const { DefaultRuntimeBuilder } = await import("./runtime-builder");
+		const workspaceRoot = mkdtempSync(join(tmpdir(), "host-agents-"));
+		tempDirs.push(workspaceRoot);
+		mkdirSync(join(workspaceRoot, ".cline", "agents"), { recursive: true });
+		writeFileSync(
+			join(workspaceRoot, ".cline", "agents", "ignored.md"),
+			"---\nname: ignored\n---\nNot selected.",
+		);
+		for (const configuredAgents of [
+			[],
+			[
+				{
+					name: "selected",
+					description: "Host selected",
+					systemPrompt: "Review.",
+				},
+			],
+		]) {
+			const runtime = await new DefaultRuntimeBuilder().build({
+				config: makeBaseConfig({
+					cwd: workspaceRoot,
+					configuredAgents,
+					disableMcpSettingsTools: true,
+				}),
+				configExtensions: [],
+			});
+			try {
+				expect(
+					runtime.tools
+						.filter((tool) => tool.name.startsWith("subagent_"))
+						.map((tool) => tool.name),
+				).toEqual(configuredAgents.length ? ["subagent_selected"] : []);
+			} finally {
+				await runtime.shutdown?.("test complete");
+			}
+		}
+	});
+
 	it("invokes configured agents with host callbacks, scoped tools, skills, overrides, and parent context", async () => {
 		const { DefaultRuntimeBuilder } = await import("./runtime-builder");
 		const tempHome = mkdtempSync(join(tmpdir(), "cline-agent-home-"));

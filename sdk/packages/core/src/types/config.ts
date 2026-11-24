@@ -17,6 +17,7 @@ import type {
 	SessionWorkspaceConfig,
 } from "@plinycode/shared";
 import type { ToolRoutingRule } from "../extensions/tools/model-tool-routing";
+import type { ConfiguredAgentConfig } from "../extensions/tools/team/configured-agent-config";
 import type { SubAgentLimits } from "../extensions/tools/team/sub-agent-limits";
 import type { ProviderConfig } from "./provider-settings";
 
@@ -360,6 +361,8 @@ export interface CoreSessionConfig
 	 * skills are surfaced in tool metadata and invocable by name.
 	 */
 	skills?: string[];
+	/** Host-resolved agents. When supplied, replaces filesystem agent discovery. */
+	configuredAgents?: ConfiguredAgentConfig[];
 	workspaceMetadata?: string;
 }
 

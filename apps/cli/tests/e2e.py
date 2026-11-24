@@ -135,6 +135,28 @@ class PortableAcceptance(unittest.TestCase):
         self.assertNotIn(SECRET, child.stdout + child.stderr)
         return child, requests
 
+    def test_skills_agents_listing_and_delegation(self):
+        skills = self.workspace / ".github" / "skills" / "review"
+        agents = self.workspace / ".github" / "agents"
+        skills.mkdir(parents=True)
+        agents.mkdir(parents=True)
+        (skills / "SKILL.md").write_text("---\nname: review\ndescription: Review evidence\n---\nPORTABLE_SKILL_MARKER", encoding="utf-8")
+        (agents / "reviewer.md").write_text("---\nname: reviewer\ndescription: Review evidence\ntools: [read_files, skills]\nskills: [review]\n---\nPORTABLE_AGENT_MARKER", encoding="utf-8")
+        for command, expected_name in [("skills", "review"), ("agents", "reviewer")]:
+            env = {key: value for key, value in self.env.items() if key != "PLINY_API_KEY"}
+            result = subprocess.run(self.command + [command, "--cwd", str(self.workspace), "--json"], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["items"][0]["name"], expected_name)
+        delegate = {"name": "subagent_reviewer", "input": {"prompt": "Review evidence"}}
+        skill = {"name": "skills", "input": {"skill": "review"}}
+        result, requests = self.invoke(["--prompt", "Delegate", "--allow-tools", "--json"], [delegate, skill, "CHILD_REPORT", "LEAD_REPORT"], model=None)
+        self.assertEqual(json.loads(result.stdout)["result"], "LEAD_REPORT")
+        self.assertIn("PORTABLE_AGENT_MARKER", json.dumps(requests[1]))
+        self.assertIn("PORTABLE_SKILL_MARKER", json.dumps(requests[2]))
+        self.assertIn("CHILD_REPORT", json.dumps(requests[3]))
+        denied, denied_requests = self.invoke(["--prompt", "Delegate", "--json"], [delegate], expected=3)
+        self.assertEqual(len(denied_requests), 1)
+
     def test_default_free_auto_and_explicit_model_override(self):
         child, requests = self.invoke(["--prompt", "Analyse the failing pipeline", "--output-schema", str(self.schema), "--stream"],
                                       [json.dumps(RESULT)], model=None)
