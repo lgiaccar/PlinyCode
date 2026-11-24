@@ -51,7 +51,12 @@ export async function acquireUpdateLock(
 			"Update lock recovery is in progress. Retry after it finishes; if interrupted, inspect .update-recovery before removing it.",
 		);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code && code !== "ENOENT")
+			throw new Error(
+				"Cannot write to this installation. Move the entire CLI folder to a user-writable location.",
+			);
+		if (!code) throw error;
 	}
 	try {
 		await mkdir(directory);
@@ -85,10 +90,19 @@ export async function acquireUpdateLock(
 		await mkdir(recovery);
 		try {
 			// A competing recovery may have replaced the owner since our first read.
-			const owner = JSON.parse(
-				await readFile(join(directory, "owner.json"), "utf8").catch(() => "{}"),
-			);
-			if (Number.isInteger(owner.pid) && owner.pid > 0) {
+			let owner: { pid?: number } = {};
+			try {
+				owner = JSON.parse(
+					await readFile(join(directory, "owner.json"), "utf8"),
+				);
+			} catch {
+				/* Interrupted owner writes are recoverable after the grace period. */
+			}
+			if (
+				typeof owner.pid === "number" &&
+				Number.isInteger(owner.pid) &&
+				owner.pid > 0
+			) {
 				try {
 					process.kill(owner.pid, 0);
 					throw new Error("Another CLI update is running.");

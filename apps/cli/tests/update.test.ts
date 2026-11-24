@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	utimes,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zipSync } from "fflate";
@@ -171,6 +178,15 @@ describe("CLI update safety", () => {
 				.pid,
 		).toBe(process.pid);
 		await unlock();
+	});
+	test("recovers an incomplete owner file only after the startup grace period", async () => {
+		const root = await temporary();
+		const lock = join(root, ".update-lock");
+		await mkdir(lock);
+		await writeFile(join(lock, "owner.json"), "{");
+		await expect(acquireUpdateLock(root)).rejects.toThrow("Another CLI update");
+		await utimes(lock, new Date(0), new Date(0));
+		await (await acquireUpdateLock(root))();
 	});
 	test("reports unwritable installation without changing state", async () => {
 		const root = await temporary();

@@ -64,10 +64,28 @@ class UpdateAcceptance(unittest.TestCase):
         cls.started = threading.Event()
         cls.release_download = threading.Event()
         cls.requests = []
+        cls.model_started = threading.Event()
+        cls.model_release = threading.Event()
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def log_message(self, *_):
                 pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                cls.model_started.set()
+                cls.model_release.wait(30)
+                data = {"id": "fixture", "object": "chat.completion.chunk", "model": "snps-provider-vmodels/glm-5.3",
+                        "choices": [{"index": 0, "delta": {"content": "Original task finished"}, "finish_reason": None}]}
+                done = dict(data, choices=[{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                            usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                try:
+                    self.wfile.write(("data: " + json.dumps(data) + "\n\ndata: " + json.dumps(done) + "\n\ndata: [DONE]\n\n").encode())
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
 
             def do_GET(self):
                 cls.requests.append(self.path)
@@ -141,6 +159,8 @@ class UpdateAcceptance(unittest.TestCase):
     def setUp(self):
         type(self).mode = "good"
         self.started.clear()
+        self.model_started.clear()
+        self.model_release.clear()
         self.release_download.clear()
         self.temp = tempfile.TemporaryDirectory(prefix="PlinyCode update test ")
         self.root = Path(self.temp.name) / "CLI with spaces Ω"
@@ -160,7 +180,10 @@ class UpdateAcceptance(unittest.TestCase):
 
     def command(self, *args):
         launcher = self.root / ("plinycode.cmd" if os.name == "nt" else "plinycode")
-        return ([os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", str(launcher)] if os.name == "nt" else [str(launcher)]) + list(args)
+        if os.name == "nt":
+            # cmd /s requires an outer quoted command when both the executable and an argument have spaces.
+            return '"' + os.environ.get("COMSPEC", "cmd.exe") + '" /d /s /c "' + subprocess.list2cmdline([str(launcher)] + list(args)) + '"'
+        return [str(launcher)] + list(args)
 
     def run_cli(self, *args, ok=True):
         result = subprocess.run(self.command(*args), cwd=self.temp.name, env=self.env,
@@ -221,6 +244,30 @@ class UpdateAcceptance(unittest.TestCase):
             if child.poll() is None:
                 child.kill()
                 child.wait(10)
+
+    def test_running_pipeline_finishes_across_update(self):
+        child = subprocess.Popen(self.command("run", "--prompt", "Wait for the result", "--model",
+                                             "snps-provider-vmodels/glm-5.3", "--json"), cwd=self.temp.name,
+                                 env=dict(self.env, PLINY_API_KEY="updater-fixture-key", PLINY_BASE_URL=BASE + "/api/llm"),
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            if not self.model_started.wait(20):
+                if child.poll() is None:
+                    child.kill()
+                output, errors = child.communicate(timeout=10)
+                self.fail(f"Pipeline did not reach fixture: {output!r} {errors!r}")
+            self.run_cli("update")
+            self.assertIsNone(child.poll(), "Running task was interrupted by update")
+            self.assertEqual(self.run_cli("--version").stdout.strip(), VERSION)
+            self.model_release.set()
+            output, errors = child.communicate(timeout=20)
+            self.assertEqual(child.returncode, 0, (output, errors))
+            self.assertEqual(json.loads(output)["result"], "Original task finished")
+        finally:
+            self.model_release.set()
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=10)
 
     def test_killed_updater_recovers_on_next_attempt(self):
         type(self).mode = "slow"
