@@ -13,7 +13,10 @@ export class CliError extends Error {
 }
 
 export interface Options {
-	command: "run" | "chat" | "models" | "doctor" | "auth";
+	command: "run" | "chat" | "models" | "doctor" | "auth" | "skills" | "agents";
+	skillsDirs: string[];
+	agentsDirs: string[];
+	agent?: string;
 	authAction?: string;
 	model?: string;
 	prompt?: string;
@@ -42,6 +45,9 @@ export function parseOptions(args: string[]): Options {
 			strict: true,
 			options: {
 				model: { type: "string" },
+				"skills-dir": { type: "string", multiple: true },
+				"agents-dir": { type: "string", multiple: true },
+				agent: { type: "string" },
 				prompt: { type: "string" },
 				file: { type: "string", multiple: true },
 				stdin: { type: "boolean" },
@@ -64,7 +70,11 @@ export function parseOptions(args: string[]): Options {
 	}
 	const v = parsed.values;
 	const command = parsed.positionals[0] ?? "chat";
-	if (!["run", "chat", "models", "doctor", "auth"].includes(command)) {
+	if (
+		!["run", "chat", "models", "doctor", "auth", "skills", "agents"].includes(
+			command,
+		)
+	) {
 		throw new CliError(
 			"invalid_arguments",
 			`Unknown command: ${command}. Use --help.`,
@@ -110,6 +120,13 @@ export function parseOptions(args: string[]): Options {
 	};
 	return {
 		command: command as Options["command"],
+		skillsDirs: ((v["skills-dir"] ?? []) as string[]).map((p) =>
+			resolve(cwd, p),
+		),
+		agentsDirs: ((v["agents-dir"] ?? []) as string[]).map((p) =>
+			resolve(cwd, p),
+		),
+		agent: str("agent"),
 		authAction: parsed.positionals[1],
 		model: str("model") ?? PLINY_FREE_AUTO_MODEL_ID,
 		prompt: str("prompt"),
@@ -135,6 +152,8 @@ export const HELP = `PlinyCode CLI
   plinycode chat [--model <id>] [--export transcript.md]
   plinycode run [--model <id>] --prompt <text> [--file <path> ...] [--stdin]
   plinycode models [--json]
+  plinycode skills [--skills-dir <folder> ...] [--json]
+  plinycode agents [--agents-dir <folder> ...] [--json]
   plinycode doctor [--json]
   plinycode auth login [--stdin] | logout
 
@@ -146,6 +165,9 @@ Run options:
   --allow-tools           Approve enabled tools for this trusted-user run
   --mcp-config <file>      Explicit MCP server JSON configuration
   --cwd <directory>       Workspace (all relative file paths resolve here)
+  --skills-dir <folder>   Skill directory; repeatable, replaces workspace discovery
+  --agents-dir <folder>   Agent directory; repeatable, replaces workspace discovery
+  --agent <name>          Use a discovered custom agent as the lead agent
   --behavior <profile>    balanced (default), decisive, or curious
   --timeout <seconds>     Turn timeout, including model and tool calls (default 900)
   --max-iterations <n>    Agent iteration limit (default 40)
@@ -153,6 +175,8 @@ Run options:
 Omitting --model selects FreeAuto (pliny/auto-free), which uses free models only.
 Use --model <id> for a concrete Pliny model. Other router profiles are not supported.
 PLINY_API_KEY overrides securely stored credentials. No YAML job parser or server.
+Skills and agents default to the extension's workspace folders under --cwd.
+Listing skills/agents requires no key. Delegation uses the same tool approvals.
 Chat: /exit ends the session; end a line with \\ to continue on another line.
 Exit codes: 0 success, 1 execution failure, 2 invalid input, 3 needs input,
 4 invalid model output, 124 timeout, 130 cancellation.

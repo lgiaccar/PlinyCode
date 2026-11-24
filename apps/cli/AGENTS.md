@@ -8,8 +8,9 @@ integration, persistent resume, or extension imports.
 - Pipeline JSON stdout is a public contract; send diagnostic logs to stderr.
 - Default unattended execution must not run edits, shell commands or MCP servers.
   MCP discovery can launch programs and therefore needs approval too.
-- Keep engine state isolated from editor/user engine settings. Do not enable
-  automatic hooks/plugins or sub-agents as a side effect of adding a feature.
+- Keep engine state isolated from editor/user engine settings. Skills and agents
+  use workspace discovery or explicit CLI folders. Do not enable automatic hooks
+  or executable plugins. Delegation must inherit permissions and FreeAuto policy.
 - Rebuild the SDK before running CLI checks after changing engine code.
 - Verify with `bun -F @plinycode/cli typecheck`, `test`, `lint`, and `format`.
   `package` includes the pinned Bun runtime; `scripts/verify-package.ts` tests the

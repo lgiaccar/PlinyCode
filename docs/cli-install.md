@@ -6,14 +6,14 @@ key and network access to the Synopsys Pliny gateway to use models.
 
 ## Download
 
-[PlinyCode CLI 0.1.0 downloads](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.0)
+[PlinyCode CLI 0.2.0 downloads](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.2.0)
 are public and do not require GitHub sign-in. Choose your platform:
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [PlinyCode-CLI-0.1.0-windows-x64.zip](https://github.com/lgiaccar/PlinyCode/releases/download/cli-v0.1.0/PlinyCode-CLI-0.1.0-windows-x64.zip) |
-| Linux x64 (Ubuntu 22.04/24.04) | [PlinyCode-CLI-0.1.0-linux-x64.tar.gz](https://github.com/lgiaccar/PlinyCode/releases/download/cli-v0.1.0/PlinyCode-CLI-0.1.0-linux-x64.tar.gz) |
-| Archive checksums | [SHA256SUMS](https://github.com/lgiaccar/PlinyCode/releases/download/cli-v0.1.0/SHA256SUMS) |
+| Windows x64 | [PlinyCode-CLI-0.2.0-windows-x64.zip](https://github.com/lgiaccar/PlinyCode/releases/download/cli-v0.2.0/PlinyCode-CLI-0.2.0-windows-x64.zip) |
+| Linux x64 (Ubuntu 22.04/24.04) | [PlinyCode-CLI-0.2.0-linux-x64.tar.gz](https://github.com/lgiaccar/PlinyCode/releases/download/cli-v0.2.0/PlinyCode-CLI-0.2.0-linux-x64.tar.gz) |
+| Archive checksums | [SHA256SUMS](https://github.com/lgiaccar/PlinyCode/releases/download/cli-v0.2.0/SHA256SUMS) |
 
 Download `SHA256SUMS` beside the archive. Keep the entire extracted folder,
 including `runtime/`. These are portable packages, not installers. macOS and ARM64
@@ -24,13 +24,13 @@ packages are not included. Linux distributions other than Ubuntu are not tested.
 Open PowerShell in the folder containing the downloads. Verify the ZIP:
 
 ```powershell
-$archive = 'PlinyCode-CLI-0.1.0-windows-x64.zip'
+$archive = 'PlinyCode-CLI-0.2.0-windows-x64.zip'
 $line = Get-Content .\SHA256SUMS | Where-Object { $_.EndsWith("  $archive") }
 if (@($line).Count -ne 1) { throw 'Missing or duplicate archive checksum' }
 $expected = ($line -split '\s+')[0]
 if ((Get-FileHash -Algorithm SHA256 $archive).Hash -ne $expected) { throw 'Checksum mismatch' }
-Expand-Archive -LiteralPath $archive -DestinationPath .\PlinyCodeCLI-0.1.0
-cd .\PlinyCodeCLI-0.1.0\plinycode-windows-x64
+Expand-Archive -LiteralPath $archive -DestinationPath .\PlinyCodeCLI-0.2.0
+cd .\PlinyCodeCLI-0.2.0\plinycode-windows-x64
 .\plinycode.cmd doctor
 .\plinycode.cmd auth login
 .\plinycode.cmd chat
@@ -49,11 +49,11 @@ You can also use the full path to `plinycode.cmd` without changing PATH.
 In the folder containing the downloads:
 
 ```bash
-grep '  PlinyCode-CLI-0.1.0-linux-x64.tar.gz$' SHA256SUMS | sha256sum --check
+grep '  PlinyCode-CLI-0.2.0-linux-x64.tar.gz$' SHA256SUMS | sha256sum --check
 # Continue only if verification reports OK.
-mkdir -p "$HOME/.local/opt/plinycode-cli/0.1.0"
-tar -xzf PlinyCode-CLI-0.1.0-linux-x64.tar.gz -C "$HOME/.local/opt/plinycode-cli/0.1.0"
-export PATH="$HOME/.local/opt/plinycode-cli/0.1.0/plinycode-linux-x64:$PATH"
+mkdir -p "$HOME/.local/opt/plinycode-cli/0.2.0"
+tar -xzf PlinyCode-CLI-0.2.0-linux-x64.tar.gz -C "$HOME/.local/opt/plinycode-cli/0.2.0"
+export PATH="$HOME/.local/opt/plinycode-cli/0.2.0/plinycode-linux-x64:$PATH"
 plinycode doctor
 plinycode auth login
 plinycode chat
@@ -99,7 +99,7 @@ an existing test log. Supply your API key as the `PLINY_API_KEY` repository secr
   shell: bash
   run: |
     set -euo pipefail
-    version=0.1.0
+    version=0.2.0
     base="https://github.com/lgiaccar/PlinyCode/releases/download/cli-v${version}"
     archive="PlinyCode-CLI-${version}-linux-x64.tar.gz"
     mkdir -p "$RUNNER_TEMP/plinycode-cli"
@@ -130,3 +130,22 @@ Download and verify the next CLI release into a new directory, then update PATH.
 The CLI does not automatically update. To remove it, remove its directory and PATH
 entry; run `auth logout` first if you also want to remove the stored credential.
 The CLI release is independent of the extension's version and auto-updater.
+
+## Skills and custom agents (0.2.0)
+
+Put skills in `.github/skills/<name>/SKILL.md` and agent definitions in
+`.github/agents/<name>.md`, or reuse the other extension-compatible workspace
+folders described in the [CLI guide](cli.md#skills-custom-agents-and-delegation).
+Discovery defaults to your current folder, or `--cwd` when supplied.
+
+```sh
+plinycode skills
+plinycode agents --json
+plinycode chat --skills-dir ./shared-skills --agents-dir ./shared-agents
+plinycode chat --agent reviewer
+```
+
+Listing needs no API key. Custom directory options replace default discovery
+for their type and can be repeated. Ask the lead to delegate to a named agent;
+unattended delegation requires `--allow-tools`. Skills supply instructions, not
+additional permissions. See the CLI guide for complete file examples.

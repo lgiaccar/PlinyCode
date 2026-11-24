@@ -30,7 +30,7 @@ context inspection, delivery evidence and an attention inbox.
 See [installation and in-app updates](docs/desktop-install.md).
 
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
-[PlinyCode CLI 0.1.0](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.0).
+[PlinyCode CLI 0.2.0](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.2.0).
 The runtime is included. See [CLI installation and pipeline examples](docs/cli-install.md)
 for checksum verification, authentication, FreeAuto chat and automation.
 

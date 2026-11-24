@@ -7,6 +7,7 @@ export class Terminal {
 	private buffered: string[] = [];
 	private pending?: (line: string | undefined) => void;
 	private closed = false;
+	private questions?: Promise<unknown>;
 	constructor(
 		input: Readable = process.stdin,
 		private output: Writable = process.stderr,
@@ -32,6 +33,20 @@ export class Terminal {
 	async ask(
 		prompt: string,
 		consumeBuffered = false,
+	): Promise<string | undefined> {
+		const question = this.questions
+			? this.questions.then(() => this.askNext(prompt, consumeBuffered))
+			: this.askNext(prompt, consumeBuffered);
+		const tail = question.catch(() => {});
+		this.questions = tail;
+		void tail.then(() => {
+			if (this.questions === tail) this.questions = undefined;
+		});
+		return question;
+	}
+	private async askNext(
+		prompt: string,
+		consumeBuffered: boolean,
 	): Promise<string | undefined> {
 		// Typed-ahead chat text must never approve a tool whose prompt was not seen.
 		if (!consumeBuffered) this.buffered = [];
