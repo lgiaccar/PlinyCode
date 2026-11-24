@@ -262,7 +262,9 @@ The CLI version is `apps/cli/package.json`'s version. Its archives are
 `PlinyCode-CLI-<version>-linux-x64.tar.gz`, with a shared `SHA256SUMS` and `INSTALL.md`.
 The archives also contain per-file checksums, licenses, examples and installation
 instructions. CLI releases do not upload `latest.json` or change the editor's latest
-release. CLI users update manually by downloading a new version and updating PATH.
+release. CLI 0.1.2+ updates through `plinycode update`; older versions need one manual
+download. Packages include `cli-package.json`, a stable launcher and per-file checksums.
+Do not change update layout version 1 without planning a compatible launcher migration.
 
 1. Start from current `stage` in a clean release worktree. Update the CLI package
    version and run `bun install` if it changes. Add user-facing notes at
@@ -273,7 +275,11 @@ release. CLI users update manually by downloading a new version and updating PAT
    checks source and bundles, creates native ZIP/tar.gz archives, then downloads,
    verifies and extracts them in fresh jobs with no source checkout or Node/Bun setup.
    Portable acceptance covers pipeline output, approvals, MCP, cancellation and
-   paths with spaces/Unicode. `Verify release assets` verifies both archive hashes
+   paths with spaces/Unicode. Updater acceptance also runs an unpublished 0.0.0 baseline
+   whose loopback feed is fixed at build time: update selection, failed/interrupted
+   downloads, archive/checksum/startup rejection, simultaneous updates, stale-lock
+   recovery, user-file preservation and offline rollback. Never publish the fixture
+   bundle; release package verification rejects its URL and version. `Verify release assets` verifies both archive hashes
    and prepares the combined checksum manifest and installation guide without publishing.
 3. After all checks pass and publication is authorized, tag the exact tested commit:
 

@@ -335,3 +335,17 @@ python apps/cli/tests/e2e.py --package apps/cli/dist/plinycode-linux-x64
 Tests use local mock gateways and MCP fixtures; they do not use a real Pliny key
 or measure live-model judgement quality. A representative real MCP server and a
 live analysis run remain release acceptance checks.
+
+## Self-update and rollback
+
+Portable packages from 0.1.2 include `plinycode --version`, `plinycode update --check`,
+`plinycode update`, `plinycode update --version <stable-version>` and
+`plinycode update --rollback`. Add `--json` to update commands for machine-readable
+results. Updates are explicit, verify checksums and startup before switching versions,
+and preserve the previous version for offline rollback. Running tasks keep their
+current version; future invocations use the selected version through the original launcher.
+
+Users on 0.1.0/0.1.1 need one manual download of 0.1.2. Source-checkout execution can
+check for updates but cannot modify a portable installation. Optional chat-only
+notifications require `PLINYCODE_UPDATE_NOTIFY=1`; pipeline runs never check or update
+automatically. See the [installation guide](cli-install.md) for layout and recovery.

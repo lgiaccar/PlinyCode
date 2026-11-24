@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { version } from "../package.json";
 
 const destination = resolve(
 	import.meta.dir,
@@ -35,6 +36,21 @@ const [output, errors, status] = await Promise.all([
 ]);
 if (status !== 0 || !output.includes("PlinyCode CLI"))
 	throw new Error(`Packaged launcher failed: ${output}\n${errors}`);
+
+const metadata = await Bun.file(join(destination, "cli-package.json")).json();
+if (metadata.version !== version || metadata.updateLayout !== 1)
+	throw new Error("Invalid packaged update metadata.");
+const versionProbe = Bun.spawn([runtime, entry, "--version"], {
+	stdout: "pipe",
+	stderr: "pipe",
+});
+if (
+	(await new Response(versionProbe.stdout).text()).trim() !== version ||
+	(await versionProbe.exited) !== 0
+)
+	throw new Error("Packaged CLI version mismatch.");
+if ((await Bun.file(entry).text()).includes("http://127.0.0.1:47835/releases"))
+	throw new Error("Updater test feed leaked into release bundle.");
 
 // Exercise inference, tools and validation from the bundle, not workspace imports.
 const tests = Bun.spawn(

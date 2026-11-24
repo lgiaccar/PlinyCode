@@ -16,6 +16,16 @@ let removeSignals = () => {};
 let finalOutput: string | undefined;
 
 async function main() {
+	if (args.length === 1 && args[0] === "--version") {
+		const { CLI_VERSION } = await import("./version");
+		process.stdout.write(`${CLI_VERSION}\n`);
+		return;
+	}
+	if (args[0] === "update") {
+		const { runUpdate } = await import("./update");
+		await runUpdate(args.slice(1));
+		return;
+	}
 	const options = parseOptions(args);
 	if (options.help) {
 		process.stdout.write(HELP);
@@ -108,7 +118,12 @@ async function main() {
 	const { getApiKey } = await import("./credentials");
 	const key = await getApiKey();
 	secrets.push(key);
-	if (options.command === "chat") terminal = new Terminal();
+	if (options.command === "chat") {
+		terminal = new Terminal();
+		void import("./update")
+			.then(({ notifyUpdate }) => notifyUpdate())
+			.catch(() => {});
+	}
 	const signalHandler = () => {
 		terminal?.close();
 		runner?.cancel();
