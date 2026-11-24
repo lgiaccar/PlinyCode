@@ -37,6 +37,16 @@ const [output, errors, status] = await Promise.all([
 if (status !== 0 || !output.includes("PlinyCode CLI"))
 	throw new Error(`Packaged launcher failed: ${output}\n${errors}`);
 
+const installationGuide = await Bun.file(
+	join(destination, "INSTALL.md"),
+).text();
+if (
+	!installationGuide.includes("Users on 0.1.0/0.1.1") ||
+	!installationGuide.includes(`cli-v${version}`)
+)
+	throw new Error(
+		"Packaged installation guide lost legacy-upgrade instructions or current release links.",
+	);
 const metadata = await Bun.file(join(destination, "cli-package.json")).json();
 if (metadata.version !== version || metadata.updateLayout !== 1)
 	throw new Error("Invalid packaged update metadata.");

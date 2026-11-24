@@ -62,9 +62,10 @@ await writeFile(
 );
 await writeFile(
 	join(destination, "INSTALL.md"),
-	(await readFile(join(repo, "docs/cli-install.md"), "utf8"))
-		.replaceAll("0.1.0", version)
-		.replaceAll("(cli.md)", "(README.md)"),
+	(await readFile(join(repo, "docs/cli-install.md"), "utf8")).replaceAll(
+		"(cli.md)",
+		"(README.md)",
+	),
 );
 await cp(join(root, "examples"), join(destination, "examples"), {
 	recursive: true,
