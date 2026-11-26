@@ -45,8 +45,8 @@ export function overlaps(a: string, b: string) {
 		right = normalize(b);
 	return (
 		left === right ||
-		left.startsWith(right + sep) ||
-		right.startsWith(left + sep)
+		left.startsWith(right.endsWith(sep) ? right : right + sep) ||
+		right.startsWith(left.endsWith(sep) ? left : left + sep)
 	);
 }
 const preparing = new Map<string, Promise<unknown>>();
@@ -68,6 +68,7 @@ export async function prepareWorktree(
 		.then(async () => {
 			signal.throwIfAborted();
 			let base = project.base;
+			const discoverDefault = !base && !cached;
 			let commit: string;
 			if (project.worktreeSource === "local") {
 				if (!base)
@@ -144,6 +145,16 @@ export async function prepareWorktree(
 					],
 					signal,
 				);
+				if (discoverDefault)
+					await git(
+						root,
+						[
+							"symbolic-ref",
+							`refs/remotes/${project.remote}/HEAD`,
+							`refs/remotes/${project.remote}/${base}`,
+						],
+						signal,
+					);
 			}
 			const username =
 				userInfo()

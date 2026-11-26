@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import { WebSocket } from "ws";
+import type { Task } from "../src/contracts";
 import type { TaskManager } from "../src/manager";
 import type { SecretVault } from "../src/vault";
 
@@ -13,6 +14,36 @@ const { BrowserBridge } = createRequire(import.meta.url)(
 	"../../../ai_output/browser-fixture.cjs",
 ) as typeof import("../src/browser");
 const extensionId = "a".repeat(32);
+test("PR publishing cannot overlap an existing restart or other task operation", async () => {
+	const task = { id: "fixture", status: "completed" } as Task;
+	const manager = {
+		external: new Set([task.id]),
+		running: new Map(),
+		store: { state: { commands: [] } },
+		project: () => {
+			throw new Error(
+				"PR validation must not begin while restart holds the task",
+			);
+		},
+	} as unknown as TaskManager;
+	const integrations = new Integrations(manager, {} as SecretVault);
+	await assert.rejects(
+		integrations.create(task, {
+			title: "Fixture",
+			body: "",
+			target: "main",
+			draft: true,
+			commit: false,
+			retryUncertain: false,
+		}),
+		/Stop this task|pending task/,
+	);
+	assert.equal(
+		manager.external.has(task.id),
+		true,
+		"The other operation must retain its lock",
+	);
+});
 test("concurrent pairing, disconnect and shutdown do not leave orphan bridge listeners", {
 	timeout: 5000,
 }, async () => {

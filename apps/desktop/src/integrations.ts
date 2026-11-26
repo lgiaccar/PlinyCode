@@ -97,6 +97,7 @@ export class Integrations {
 		if (this.closing) return Promise.reject(new Error("PlinyCode is closing."));
 		if (
 			this.operations.has(task.id) ||
+			this.manager.external.has(task.id) ||
 			(!worker && (active(task) || this.manager.running.has(task.id))) ||
 			(task.subagents ?? []).some((agent) => agent.status === "running") ||
 			(this.manager.store.state.commands ?? []).some(

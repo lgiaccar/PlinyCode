@@ -115,6 +115,9 @@ launches can use `bun -F @plinycode/desktop start` after building once.
 - Review tracked changes and list new files; open the task folder externally.
 - Save chat history and engine sessions. Send a new message after reopening to
   continue. A crashed active task is marked interrupted; it never restarts itself.
+- Unsent drafts stay separate when switching chats within the open app. Delayed
+  file selections belong to the chat that opened the picker; sending a prompt
+  clears only the submitted draft revision. Unsent drafts are not saved on exit.
 - Copy any prompt or response with **Copy**, or select text and use the native
   right-click menu or keyboard shortcuts. User prompts preserve their original
   whitespace and Markdown source.
@@ -259,12 +262,16 @@ Certificate verification remains enabled. Timeout and cancellation have separate
 
 ## Validation
 
+See the [Desktop stress-test guide](desktop-testing.md) for reproduced bugs,
+concurrency scenarios and the isolated Windows/Ubuntu test environment.
+
 ```powershell
 bun -F @plinycode/desktop typecheck
 bun -F @plinycode/desktop test
 bun -F @plinycode/desktop build
 bun -F @plinycode/desktop setup
 bun -F @plinycode/desktop test:e2e
+bun -F @plinycode/desktop test:drafts
 cd apps/desktop
 bun x playwright install chromium
 cd ../..
@@ -277,8 +284,8 @@ editing, history reopening, cancellation, folder serialization, background comma
 actual delegation, MCP settings/authentication and an on-disk redaction scan.
 Transport tests cover stdio, HTTP and SSE, including connection timeouts. Process
 tests cover command ownership, folder leases, host-pipe loss, shutdown and
-interrupted-state recovery. Live gateway/provider acceptance and
-clean-machine installer testing remain outstanding.
+interrupted-state recovery. CI tests installers and self-update on clean runners;
+live gateway/provider acceptance and managed-machine installation remain separate.
 Screenshots and test history remain under `ai_output/desktop-e2e-*` for inspection.
 
 `PLINY_DESKTOP_DATA` changes the data directory for isolated development. The E2E

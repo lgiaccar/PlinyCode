@@ -303,7 +303,7 @@ export class TaskManager {
 			const task = this.task(id),
 				project = this.project(task.projectId);
 			if (
-				!task.worktree &&
+				(!task.worktree || !!task.cwd) &&
 				(this.store.state.commands ?? []).some(
 					(command) =>
 						command.status === "running" &&
@@ -315,7 +315,7 @@ export class TaskManager {
 			// An ordinary-folder task may request write approval later. Hold the
 			// folder for its whole run, regardless of its initial checkbox values.
 			if (
-				!task.worktree &&
+				(!task.worktree || !!task.cwd) &&
 				[...this.running.values()].some((run) =>
 					overlaps(run.folder, task.cwd ?? project.path),
 				)
