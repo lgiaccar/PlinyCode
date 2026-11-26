@@ -14,7 +14,7 @@ their configured services; extension updates come from GitHub.
 
 - **Suggested next prompts:** after a completed response, a free model can suggest a useful follow-up in gray in
   the empty prompt box. Press **Tab** to put it in your draft, then **Enter** to send. **Esc** or typing dismisses it.
-  Also available in Desktop 0.1.6. [Next prompt suggestions](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/next-prompt-suggestions.md)
+  Also available in Desktop 0.1.7. [Next prompt suggestions](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/next-prompt-suggestions.md)
 - **VS Code 1.94 compatibility:** supports older managed editors, including Autopilot environments.
 
 See the [0.2.11 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11).

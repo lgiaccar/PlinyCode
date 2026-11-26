@@ -26,7 +26,7 @@ context inspection, delivery evidence and an attention inbox.
 ## What it is
 
 **Desktop preview:** download the Windows one-click installer or Ubuntu DEB/AppImage from
-[PlinyCode Desktop 0.1.6](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.6).
+[PlinyCode Desktop 0.1.7](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.7).
 See [installation and in-app updates](docs/desktop-install.md).
 
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
@@ -46,7 +46,7 @@ Web search, MCP tools and DevOps integrations connect to their configured servic
 
 - **Suggested next prompts:** after a completed response, a free model can suggest a useful follow-up in gray in
   the empty prompt box. Press **Tab** to put it in your draft, then **Enter** to send. **Esc** or typing dismisses it.
-  Also available in Desktop 0.1.6. [Next prompt suggestions](docs/next-prompt-suggestions.md)
+  Also available in Desktop 0.1.7. [Next prompt suggestions](docs/next-prompt-suggestions.md)
 - **VS Code 1.94 compatibility:** supports older managed editors, including Autopilot environments.
 
 See the [0.2.11 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11).
