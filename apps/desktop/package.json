@@ -1,6 +1,6 @@
 {
 	"name": "@plinycode/desktop",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"private": true,
 	"type": "module",
 	"main": "dist/main.cjs",
@@ -102,7 +102,7 @@
 		},
 		"publish": {
 			"provider": "generic",
-			"url": "https://github.com/lgiaccar/PlinyCode/releases/download/desktop-v0.1.5/"
+			"url": "https://github.com/lgiaccar/PlinyCode/releases/download/desktop-v0.1.6/"
 		},
 		"linux": {
 			"target": [
