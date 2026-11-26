@@ -658,7 +658,7 @@ describe("ChatTextArea drag-to-resize handle", () => {
 
 describe("next prompt ghost text", () => {
 	beforeEach(() => {
-		mocks.turnState = { phase: "completed", seq: 1 }
+		mocks.turnState = { phase: "awaiting_followup", seq: 1 }
 		mocks.currentTaskItem = { id: "chat-a" }
 		mocks.clineMessages = [
 			{ ts: 1, type: "say", say: "task", text: "Fix parsing" },

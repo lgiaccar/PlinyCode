@@ -1,4 +1,5 @@
 import { mentionRegexGlobal } from "@shared/context-mentions"
+import { nextPromptCompletion } from "@shared/next-prompt"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
 import { SuggestNextPromptRequest } from "@shared/proto/cline/task"
 import type { Mode } from "@shared/storage/types"
@@ -141,18 +142,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		// The "Side question" checkbox. It applies to one message and clears after it is sent.
 		const [sideQuestionChecked, setSideQuestionChecked] = useState(false)
 		const sideQuestion = sideQuestionChecked && sideQuestionAvailable
-		const completionTs =
-			turnState?.phase === "completed"
-				? clineMessages
-						.slice()
-						.reverse()
-						.find(
-							(message) =>
-								message.type === "say" &&
-								(message.say === "completion_result" || message.say === "plan_completion_result") &&
-								!message.partial,
-						)?.ts
-				: undefined
+		const completionTs = nextPromptCompletion(clineMessages, turnState?.phase)?.ts
 		const taskId = currentTaskItem?.id
 		const suggestionKey = completionTs && taskId ? `${taskId}:${completionTs}` : undefined
 		const requestSuggestion = useCallback(async () => {

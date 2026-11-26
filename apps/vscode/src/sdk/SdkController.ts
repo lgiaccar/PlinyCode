@@ -1,3 +1,4 @@
+import { nextPromptCompletion } from "@shared/next-prompt"
 // Replaces classic src/core/controller/index.ts (see origin/main)
 //
 // The SDK-backed Controller. It provides the same interface as the classic
@@ -2190,15 +2191,9 @@ export class Controller {
 
 	private nextPromptSuggestions = new NextPromptSuggestions()
 	async suggestNextPrompt(taskId: string, completionTs: number): Promise<string> {
-		if (this.task?.taskId !== taskId || this.turnStateTracker.currentPhase !== "completed") return ""
+		if (this.task?.taskId !== taskId) return ""
 		const messages = this.task.messageStateHandler.getClineMessages()
-		const completion = messages
-			.slice()
-			.reverse()
-			.find(
-				(message) =>
-					message.type === "say" && (message.say === "completion_result" || message.say === "plan_completion_result"),
-			)
+		const completion = nextPromptCompletion(messages, this.turnStateTracker.currentPhase)
 		if (!completion || completion.partial || completion.ts !== completionTs) return ""
 		const turns = messages
 			.filter(
