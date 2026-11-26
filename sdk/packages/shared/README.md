@@ -52,3 +52,6 @@ outside transport wiring:
 Chat runtime payload notes:
 - `ChatStartSessionRequest` supports `initialMessages`, optional `toolPolicies`, optional `rules` for default system prompt assembly, and optional `logger` runtime config (`RuntimeLoggerConfig`) so hosts can pass serialized logger settings across transport boundaries.
 - `RuntimeLoggerConfig.bindings` lets hosts attach stable context fields (for example `clientId`, `clientType`, `clientApp`) to all runtime log records.
+
+`NextPromptSuggestions` supplies the desktop and editor hosts with bounded, tool-free follow-up
+suggestion requests, a per-turn cache, cancellation and output validation. Hosts supply their own model transport.

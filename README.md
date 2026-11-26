@@ -26,7 +26,7 @@ context inspection, delivery evidence and an attention inbox.
 ## What it is
 
 **Desktop preview:** download the Windows one-click installer or Ubuntu DEB/AppImage from
-[PlinyCode Desktop 0.1.6](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.6).
+[PlinyCode Desktop 0.1.7](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.7).
 See [installation and in-app updates](docs/desktop-install.md).
 
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
@@ -40,29 +40,16 @@ implement changes, run commands, and follow pull requests and pipelines from the
 Model requests go through the Synopsys Pliny gateway. You need gateway access and a Pliny API key to use it.
 Web search, MCP tools and DevOps integrations connect to their configured services; extension updates come from GitHub.
 
-## What's new in 0.2.10
+## What's new in 0.2.11
 
-[PlinyCode 0.2.10](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.10) is the latest stable release.
+[PlinyCode 0.2.11](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11) is the latest stable extension release.
 
-- **Clearer chat controls:** the compact header keeps the task and workspace visible, with usage and limits under
-  **Details**. **Improve prompt** and **Side question** sit on the right below the prompt box; secondary controls
-  are in **More message options**. [Chat controls](docs/chat-controls.md)
-- **Comfortable or Compact spacing:** choose **Settings > General > Interface density** to adjust spacing across
-  chat, CI Board, settings and inspection panels without changing text size. [Interface density](docs/interface-density.md)
-- **Searchable settings:** find settings by name or description, filter modified values, see their effective source,
-  and edit or reset individual User, Workspace or Folder overrides. [Settings search](docs/settings-search.md)
-- **Captured context inspector:** open **Context** in the task header to search recent captured model requests and
-  inspect source text and estimated token usage. Preview limits are explicit; captures are retained only until
-  the extension restarts. [Context inspector](docs/context-inspector.md)
-- **Delivery evidence:** completed Agent responses show recorded tool results and branch PR/check status, with
-  a follow-up action to verify delivery. Missing evidence stays **Not confirmed**. [Delivery card](docs/delivery-card.md)
-- **Needs-attention inbox:** find approvals, questions, failed runs and completed conversations to review, alongside
-  watched CI issues. Review acknowledgements reset with new activity. [Attention inbox](docs/attention-inbox.md)
-- **CI Board search and filters:** find watched items, filter by status, and see merge blockers and the last
-  successful CI check time. **CI ready** still respects repository protections and reviews. [CI Board](docs/ci-board.md)
-- **Copy monitoring details:** select and copy agent names and monitoring values from the Agents panel.
+- **Suggested next prompts:** after a completed response, a free model can suggest a useful follow-up in gray in
+  the empty prompt box. Press **Tab** to put it in your draft, then **Enter** to send. **Esc** or typing dismisses it.
+  Also available in Desktop 0.1.7. [Next prompt suggestions](docs/next-prompt-suggestions.md)
+- **VS Code 1.94 compatibility:** supports older managed editors, including Autopilot environments.
 
-See the [0.2.10 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.10).
+See the [0.2.11 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11).
 
 ## Features
 

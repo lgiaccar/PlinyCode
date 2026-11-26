@@ -291,3 +291,9 @@ Screenshots and test history remain under `ai_output/desktop-e2e-*` for inspecti
 `PLINY_DESKTOP_DATA` changes the data directory for isolated development. The E2E
 test also uses `PLINY_DESKTOP_TEST_PROJECT` to supply a fixture folder without an
 interactive folder picker. Neither setting is required for ordinary use.
+
+## Suggested next prompts
+
+After a completed turn, an empty composer can show a gray, context-aware follow-up.
+Tab accepts it into the draft without sending; Escape dismisses it. See
+[next prompt suggestions](next-prompt-suggestions.md).

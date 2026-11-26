@@ -133,6 +133,11 @@ export const active = (task: Task) =>
 	["preparing", "queued", "running", "needs_input"].includes(task.status);
 export const actionSchema = z.discriminatedUnion("type", [
 	z.object({
+		type: z.literal("suggestNextPrompt"),
+		id: z.string().uuid(),
+		messageId: z.string().uuid(),
+	}),
+	z.object({
 		type: z.literal("copyMessage"),
 		id: z.string().uuid(),
 		messageId: z.string().uuid(),
@@ -240,6 +245,7 @@ export interface DesktopApi {
 		files?: string[];
 		browser?: BrowserStatus;
 		prPreview?: PrPreview;
+		suggestedPrompt?: string;
 		improvedPrompt?: { text?: string; error?: string };
 		update?: UpdateStatus;
 	}>;

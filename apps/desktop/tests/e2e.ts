@@ -110,16 +110,23 @@ const server = createServer(async (request, output) => {
 		output.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
 		return;
 	}
-	requests.push(body);
+	const suggestionRequest = JSON.stringify(body.messages).includes(
+		"Suggest the single most useful next message",
+	);
+	if (!suggestionRequest) requests.push(body);
 	const utility =
 		body.model === "snps-provider/qwen3-next-80b-a3b-instruct-d79b4";
-	if (utility && waitForRewrite) await waitForRewrite;
+	if (utility && !suggestionRequest && waitForRewrite) await waitForRewrite;
 	output.writeHead(200, { "content-type": "text/event-stream" });
 	if (hang) {
 		output.write(": wait\n\n");
 		return;
 	}
-	const value = utility ? improvedReply : reply;
+	const value = suggestionRequest
+		? "Add tests for the remaining edge cases."
+		: utility
+			? improvedReply
+			: reply;
 	if (!utility) reply = "Done.";
 	const deltas =
 		typeof value === "string"
@@ -340,6 +347,36 @@ try {
 		assert.ok(!JSON.stringify(requests.at(-1)).includes("DISCARDED_TURN"));
 		console.log(
 			"PASS: native copy/paste, legacy prompt edit, exact restart history and reopen without discarded turns",
+		);
+		const suggestionComposer = page.getByRole("textbox", {
+			name: "Message PlinyCode",
+		});
+		await page.waitForFunction(
+			() =>
+				document.querySelector<HTMLTextAreaElement>(
+					'textarea[aria-label="Message PlinyCode"]',
+				)?.placeholder === "Add tests for the remaining edge cases.",
+		);
+		const turnsBeforeSuggestion = await page.locator(".message.user").count();
+		assert.equal(await suggestionComposer.inputValue(), "");
+		await page.screenshot({ path: join(data, "next-prompt-suggestion.png") });
+		await suggestionComposer.press("Tab");
+		assert.equal(
+			await suggestionComposer.inputValue(),
+			"Add tests for the remaining edge cases.",
+		);
+		assert.equal(
+			await page.locator(".message.user").count(),
+			turnsBeforeSuggestion,
+			"Tab must not send",
+		);
+		await suggestionComposer.fill("");
+		assert.equal(
+			await suggestionComposer.getAttribute("placeholder"),
+			"Message PlinyCode…",
+		);
+		console.log(
+			"PASS: completed-turn ghost suggestion, Tab fills without sending, edits dismiss",
 		);
 		// Rewrite is a separate, tool-free request and never sends the draft.
 		const composer = page.getByRole("textbox", { name: "Message PlinyCode" });

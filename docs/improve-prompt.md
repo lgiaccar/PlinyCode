@@ -31,3 +31,9 @@ The model is the router rules' `commit` utility model: `qwen3-next-80b-a3b-instr
 The draft may change while the request is out. When the rewrite arrives, the draft is only replaced if it is still exactly what was sent ([useImprovePrompt.ts](../apps/vscode/webview-ui/src/components/chat/chat-textarea/hooks/useImprovePrompt.ts)); otherwise the user's edits win and the rewrite is dropped.
 
 The webview calls `TaskService.improvePrompt` ([improvePrompt.ts](../apps/vscode/src/core/controller/task/improvePrompt.ts)). It never fails: the reason the prompt could not be improved comes back in its `error` field.
+
+## Suggested next prompts
+
+After a completed turn, an empty composer can show a gray, context-aware follow-up.
+Tab accepts it into the draft without sending; Escape dismisses it. See
+[next prompt suggestions](next-prompt-suggestions.md).

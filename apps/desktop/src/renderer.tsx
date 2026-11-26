@@ -14,6 +14,7 @@ import { BrowserSettings, PrSettings } from "./integration-settings";
 import { McpSettings } from "./mcp-settings";
 import { PrDialog } from "./pr-dialog";
 import { UpdateControls } from "./update-controls";
+import { useNextPrompt } from "./use-next-prompt";
 import { usePromptDraft } from "./use-prompt-draft";
 
 const labels: Record<keyof Permissions, string> = {
@@ -95,6 +96,29 @@ function App() {
 	const task = state.tasks.find((item) => item.id === selected),
 		project = state.projects.find((item) => item.id === task?.projectId);
 	const busy = task && active(task);
+	const completedMessageId =
+		task?.status === "completed"
+			? task.messages
+					.slice()
+					.reverse()
+					.find((message) => message.role === "assistant")?.id
+			: undefined;
+	const suggestionKey =
+		completedMessageId && task ? `${task.id}:${completedMessageId}` : undefined;
+	const requestSuggestion = useCallback(async () => {
+		if (!selected || !completedMessageId) return "";
+		const result = await window.plinycode.invoke({
+			type: "suggestNextPrompt",
+			id: selected,
+			messageId: completedMessageId,
+		});
+		return result.suggestedPrompt ?? "";
+	}, [selected, completedMessageId]);
+	const suggestion = useNextPrompt(
+		suggestionKey,
+		!!prompt || !!busy,
+		requestSuggestion,
+	);
 	const invoke = useCallback(async (action: Action) => {
 		try {
 			setError("");
@@ -450,19 +474,50 @@ function App() {
 									placeholder={
 										busy
 											? "This task is running. You can work in another chat."
-											: "Message PlinyCode…"
+											: suggestion.text || "Message PlinyCode…"
 									}
 									value={prompt}
 									disabled={!!busy}
-									onChange={(e) => setPrompt(e.target.value)}
+									onChange={(e) => {
+										suggestion.dismiss();
+										setPrompt(e.target.value);
+									}}
 									onKeyDown={(e) => {
-										if (e.key === "Enter" && !e.shiftKey) {
+										if (suggestion.text && !e.nativeEvent.isComposing) {
+											if (e.key === "Escape") {
+												suggestion.dismiss();
+												e.preventDefault();
+												return;
+											}
+											if (
+												e.key === "Tab" &&
+												!e.shiftKey &&
+												!e.ctrlKey &&
+												!e.metaKey &&
+												!e.altKey
+											) {
+												e.preventDefault();
+												setPrompt(suggestion.text);
+												suggestion.dismiss();
+												return;
+											}
+										}
+										if (
+											e.key === "Enter" &&
+											!e.shiftKey &&
+											!e.nativeEvent.isComposing
+										) {
 											e.preventDefault();
 											if (!busy && prompt.trim())
 												e.currentTarget.form?.requestSubmit();
 										}
 									}}
 								/>
+								{suggestion.text && (
+									<output className="composer-note">
+										Tab to accept suggestion · Esc to dismiss
+									</output>
+								)}
 								<div className="composer-controls">
 									<button type="button" disabled={!!busy} onClick={attachFiles}>
 										Attach files

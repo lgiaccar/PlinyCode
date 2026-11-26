@@ -1,3 +1,4 @@
+import { nextPromptCompletion } from "@shared/next-prompt"
 // Replaces classic src/core/controller/index.ts (see origin/main)
 //
 // The SDK-backed Controller. It provides the same interface as the classic
@@ -14,7 +15,7 @@ import {
 	resolveDefaultMcpSettingsPath,
 	retainCheckpointRefs,
 } from "@plinycode/core"
-import { type AgentStopControl, formatDisplayUserInput, stripModeNotices } from "@plinycode/shared"
+import { type AgentStopControl, formatDisplayUserInput, NextPromptSuggestions, stripModeNotices } from "@plinycode/shared"
 import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
@@ -1083,6 +1084,7 @@ export class Controller {
 	}
 
 	async dispose(): Promise<void> {
+		this.nextPromptSuggestions.close()
 		this.providerConfigStoreSubscription.dispose()
 		this.isDisposed = true
 		// Tear down the debounced state-post machinery before downstream resources
@@ -2185,6 +2187,31 @@ export class Controller {
 			return
 		}
 		await this.postStateToWebview()
+	}
+
+	private nextPromptSuggestions = new NextPromptSuggestions()
+	async suggestNextPrompt(taskId: string, completionTs: number): Promise<string> {
+		if (this.task?.taskId !== taskId) return ""
+		const messages = this.task.messageStateHandler.getClineMessages()
+		const completion = nextPromptCompletion(messages, this.turnStateTracker.currentPhase)
+		if (!completion || completion.partial || completion.ts !== completionTs) return ""
+		const turns = messages
+			.filter(
+				(message) =>
+					message.type === "say" &&
+					["task", "user_feedback", "text", "completion_result", "plan_completion_result"].includes(
+						message.say ?? "",
+					) &&
+					!message.partial,
+			)
+			.map((message) => ({
+				role: (message.say === "task" || message.say === "user_feedback" ? "user" : "assistant") as "user" | "assistant",
+				text: message.text ?? "",
+			}))
+		const workspace = await this.getWorkspaceRoot()
+		return this.nextPromptSuggestions.suggest(`${taskId}:${completionTs}`, turns, (system, user, signal) =>
+			completeWithUtilityModel(system, user, signal, workspace, "commit"),
+		)
 	}
 
 	/** Rewrites a draft prompt with a small free model (the "Improve prompt" button). */

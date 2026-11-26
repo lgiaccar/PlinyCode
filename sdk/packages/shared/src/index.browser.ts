@@ -253,6 +253,12 @@ export {
 	noopBasicLogger,
 } from "./logging/logger";
 export * from "./mcp";
+export type { PromptTurn } from "./next-prompt";
+export {
+	cleanNextPrompt,
+	NextPromptSuggestions,
+	nextPromptContext,
+} from "./next-prompt";
 export { getErrorCode, getErrorMessage } from "./parse/error";
 export {
 	normalizeJsonLikeStringsForSchema,
