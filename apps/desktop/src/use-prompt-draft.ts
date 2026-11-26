@@ -1,28 +1,31 @@
 import { type SetStateAction, useEffect, useRef, useState } from "react";
+import { DraftBook } from "./drafts";
 
 /** Revision checks also cover edit-away/edit-back, attachments, sending and chat changes. */
 export function usePromptDraft(context: string | undefined) {
-	const [prompt, update] = useState("");
+	const book = useRef(new DraftBook());
+	const [, update] = useState(0);
+	const prompt = book.current.get(context).text;
 	const [improving, setImproving] = useState(false);
 	const [error, setError] = useState("");
 	const [original, setOriginal] = useState<string>();
-	const current = useRef({ text: "", revision: 0 });
+	const epoch = useRef(0);
 	const activeContext = useRef(context);
 	if (activeContext.current !== context) {
 		activeContext.current = context;
-		current.current.revision++;
+		epoch.current++;
 	}
 	function invalidate() {
-		current.current.revision++;
-		setOriginal(undefined);
-		setError("");
+		if (context === activeContext.current) {
+			epoch.current++;
+			setOriginal(undefined);
+			setError("");
+		}
 	}
 	function setPrompt(value: SetStateAction<string>) {
 		invalidate();
-		const text =
-			typeof value === "function" ? value(current.current.text) : value;
-		current.current.text = text;
-		update(text);
+		book.current.set(context, value);
+		update((value) => value + 1);
 	}
 	// biome-ignore lint/correctness/useExhaustiveDependencies: A chat change invalidates undo and feedback even when the draft text is identical.
 	useEffect(() => {
@@ -31,13 +34,13 @@ export function usePromptDraft(context: string | undefined) {
 	}, [context]);
 	useEffect(
 		() => () => {
-			current.current.revision++;
+			epoch.current++;
 		},
 		[],
 	);
 	async function improve() {
-		if (improving || !current.current.text.trim()) return;
-		const before = { ...current.current };
+		if (improving || !book.current.get(context).text.trim()) return;
+		const before = { ...book.current.get(context), epoch: epoch.current };
 		setImproving(true);
 		setError("");
 		try {
@@ -45,7 +48,7 @@ export function usePromptDraft(context: string | undefined) {
 				type: "improvePrompt",
 				prompt: before.text,
 			});
-			if (before.revision !== current.current.revision) return;
+			if (before.epoch !== epoch.current) return;
 			if (result.improvedPrompt?.text !== undefined) {
 				setPrompt(result.improvedPrompt.text);
 				setOriginal(before.text);
@@ -55,7 +58,7 @@ export function usePromptDraft(context: string | undefined) {
 						"Could not improve the prompt. Your draft was kept.",
 				);
 		} catch {
-			if (before.revision === current.current.revision)
+			if (before.epoch === epoch.current)
 				setError("Could not improve the prompt. Your draft was kept.");
 		} finally {
 			setImproving(false);
@@ -68,6 +71,13 @@ export function usePromptDraft(context: string | undefined) {
 		improving,
 		error,
 		invalidate,
+		capture: () => book.current.get(context),
+		clearIfUnchanged: (revision: number) => {
+			if (book.current.clearIfUnchanged(context, revision)) {
+				invalidate();
+				update((value) => value + 1);
+			}
+		},
 		canUndo: original !== undefined,
 		undo: () => {
 			if (original !== undefined) setPrompt(original);

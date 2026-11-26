@@ -55,6 +55,7 @@ jobs:
         run: |
           bash apps/desktop/tests/linux/session.sh bun apps/desktop/tests/linux/credentials.ts
           bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
+          bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:drafts
       - name: Signed-in browser companion acceptance tests
         run: bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:browser
       - name: Build Ubuntu x64 packages
@@ -77,6 +78,7 @@ jobs:
           name: desktop-evidence-${{ matrix.os }}
           path: |
             ai_output/desktop-e2e-*/**/*.png
+            ai_output/desktop-drafts-*/**/*.png
             ai_output/desktop-browser-e2e-*/**/*.png
             ai_output/linux-package-sha256.txt
           if-no-files-found: ignore
@@ -100,6 +102,8 @@ jobs:
         run: bun -F @plinycode/desktop build
       - name: Electron acceptance tests
         run: bun -F @plinycode/desktop test:e2e
+      - name: Electron draft isolation acceptance tests
+        run: bun -F @plinycode/desktop test:drafts
       - name: Install test browser
         working-directory: apps/desktop
         run: bun x playwright install chromium
@@ -150,6 +154,7 @@ jobs:
           name: desktop-e2e-evidence
           path: |
             ai_output/desktop-e2e-*/**/*.png
+            ai_output/desktop-drafts-*/**/*.png
             ai_output/desktop-browser-e2e-*/**/*.png
             ai_output/desktop-upgrade-*/**/*.png
           if-no-files-found: ignore

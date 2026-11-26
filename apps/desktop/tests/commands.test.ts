@@ -16,6 +16,46 @@ async function until(check: () => boolean) {
 		await new Promise((accept) => setTimeout(accept, 30));
 	}
 }
+
+test("stopping a command retains its folder lease until the process actually exits", async () => {
+	const state = freshState();
+	let release!: () => void;
+	const pendingKill = new Promise<void>((accept) => {
+		release = accept;
+	});
+	const commands = new BackgroundCommands(
+		state,
+		process.execPath,
+		resolve(import.meta.dir, "../src/command-worker.ts"),
+		() => {},
+		async (child) => {
+			await pendingKill;
+			await stopTree(child);
+		},
+	);
+	const task = {
+		id: crypto.randomUUID(),
+		cwd: resolve(import.meta.dir),
+	} as Task;
+	const command = commands.start(
+		task,
+		process.platform === "win32"
+			? "Write-Output ready; Start-Sleep -Seconds 90"
+			: "echo ready; sleep 90",
+		[],
+	);
+	try {
+		await until(() => command.output.includes("ready"));
+		const stopping = commands.stop(task.id, command.id);
+		expect(command.status).toBe("running");
+		release();
+		await stopping;
+		expect(command.status).toBe("stopped");
+	} finally {
+		release();
+		await commands.close();
+	}
+}, 25_000);
 test("a lost host pipe stops a command worker and its shell descendant", async () => {
 	const child = spawn(
 		process.execPath,

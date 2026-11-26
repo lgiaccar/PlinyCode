@@ -5,6 +5,7 @@ import { redact } from "@plinycode/shared/node";
 import type { BackgroundCommand, State, Task } from "./contracts";
 
 export class BackgroundCommands {
+	private stopping = new Set<string>();
 	private children = new Map<
 		string,
 		{ child: ChildProcessWithoutNullStreams; closed: Promise<void> }
@@ -73,8 +74,12 @@ export class BackgroundCommands {
 			child.once("close", () => {
 				lines.close();
 				if (record.status === "running")
-					record.status =
-						complete && record.exitCode === 0 ? "completed" : "failed";
+					record.status = this.stopping.has(record.id)
+						? "stopped"
+						: complete && record.exitCode === 0
+							? "completed"
+							: "failed";
+				this.stopping.delete(record.id);
 				this.children.delete(record.id);
 				this.changed();
 				accept();
@@ -91,7 +96,8 @@ export class BackgroundCommands {
 		const record = this.get(taskId, id),
 			running = this.children.get(id);
 		if (running) {
-			record.status = "stopped";
+			// Keep the folder leased until close confirms all owned processes exited.
+			this.stopping.add(id);
 			await this.kill(running.child);
 			await running.closed;
 		}

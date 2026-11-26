@@ -182,7 +182,6 @@ function App() {
 										onClick={() => {
 											select(conversation.id);
 											setReply("");
-											setPrompt("");
 											setCached(false);
 										}}
 									>
@@ -438,11 +437,12 @@ function App() {
 								className="composer"
 								onSubmit={async (event) => {
 									event.preventDefault();
+									const submitted = draft.capture();
 									draft.invalidate();
 									if (
 										await invoke({ type: "send", id: task.id, prompt, cached })
 									)
-										setPrompt("");
+										draft.clearIfUnchanged(submitted.revision);
 								}}
 							>
 								<textarea

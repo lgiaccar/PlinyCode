@@ -442,10 +442,7 @@ try {
 			}
 			release();
 			await waitImproved();
-			assert.equal(
-				await composer.inputValue(),
-				changeChat ? "" : "original draft",
-			);
+			assert.equal(await composer.inputValue(), "original draft");
 			assert.equal(
 				await page.getByRole("button", { name: "Undo improvement" }).count(),
 				0,
