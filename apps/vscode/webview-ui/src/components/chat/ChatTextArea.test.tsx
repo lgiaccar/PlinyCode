@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import ChatTextArea, { getRowHeightPx, rowsFromDrag } from "./ChatTextArea"
 
 const mocks = vi.hoisted(() => ({
+	turnState: undefined as { phase: string; seq: number } | undefined,
+	currentTaskItem: undefined as { id: string } | undefined,
+	suggestNextPrompt: vi.fn(async () => ({ value: "Add regression tests." })),
 	clineMessages: [] as ClineMessage[],
 	supportsImages: true as boolean | undefined,
 	navigateToSettingsModelPicker: vi.fn(),
@@ -16,6 +19,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/context/ExtensionStateContext", () => ({
 	useExtensionState: () => ({
 		mode: "act",
+		turnState: mocks.turnState,
+		currentTaskItem: mocks.currentTaskItem,
 		clineMessages: mocks.clineMessages,
 		apiConfiguration: {},
 		platform: "darwin",
@@ -58,7 +63,7 @@ vi.mock("@/services/grpc-client", () => ({
 		togglePlanActModeProto: vi.fn(async () => ({})),
 		updateSettings: mocks.updateSettings,
 	},
-	TaskServiceClient: { improvePrompt: mocks.improvePrompt },
+	TaskServiceClient: { improvePrompt: mocks.improvePrompt, suggestNextPrompt: mocks.suggestNextPrompt },
 	// ConversationModelPicker -> useProviderConfig() reads the provider config on
 	// mount; without this the call rejects and vitest reports an unhandled error.
 	ModelsServiceClient: {
@@ -648,5 +653,120 @@ describe("ChatTextArea drag-to-resize handle", () => {
 		expect(handle).toHaveAttribute("tabIndex", "0")
 		expect(handle).toHaveAttribute("aria-valuemin", "3")
 		expect(handle).toHaveAttribute("aria-valuemax", "40")
+	})
+})
+
+describe("next prompt ghost text", () => {
+	beforeEach(() => {
+		mocks.turnState = { phase: "completed", seq: 1 }
+		mocks.currentTaskItem = { id: "chat-a" }
+		mocks.clineMessages = [
+			{ ts: 1, type: "say", say: "task", text: "Fix parsing" },
+			{ ts: 2, type: "say", say: "completion_result", text: "Fixed. Tests remain." },
+		]
+		mocks.suggestNextPrompt.mockReset().mockResolvedValue({ value: "Add regression tests." })
+	})
+	afterEach(() => {
+		mocks.turnState = undefined
+		mocks.currentTaskItem = undefined
+		mocks.clineMessages = []
+	})
+	function composer() {
+		const onSend = vi.fn()
+		function Composer() {
+			const [text, setText] = useState("")
+			return (
+				<ChatTextArea
+					activeQuote={null}
+					inputValue={text}
+					onSelectFilesAndImages={vi.fn()}
+					onSend={() => onSend(text)}
+					placeholderText="Type a message"
+					selectedFiles={[]}
+					selectedImages={[]}
+					sendingDisabled={false}
+					setInputValue={setText}
+					setSelectedFiles={vi.fn()}
+					setSelectedImages={vi.fn()}
+					shouldDisableFilesAndImages={false}
+				/>
+			)
+		}
+		const view = render(<Composer />)
+		return {
+			...view,
+			refresh: () => view.rerender(<Composer />),
+			onSend,
+			input: screen.getByTestId("chat-input") as HTMLTextAreaElement,
+		}
+	}
+	it("shows gray placeholder only, accepts Tab into draft, then sends on Enter", async () => {
+		const { input, onSend } = composer()
+		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
+		expect(input.value).toBe("")
+		fireEvent.keyDown(input, { key: "Tab" })
+		expect(input.value).toBe("Add regression tests.")
+		expect(onSend).not.toHaveBeenCalled()
+		fireEvent.keyDown(input, { key: "Enter" })
+		expect(onSend).toHaveBeenCalledWith("Add regression tests.")
+	})
+	it("preserves modified Tab and IME input, and Escape dismisses", async () => {
+		const { input } = composer()
+		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
+		for (const modifier of [
+			{ shiftKey: true },
+			{ ctrlKey: true },
+			{ altKey: true },
+			{ metaKey: true },
+			{ isComposing: true },
+		]) {
+			fireEvent.keyDown(input, { key: "Tab", ...modifier })
+			expect(input.value).toBe("")
+		}
+		fireEvent.keyDown(input, { key: "Escape" })
+		expect(input.placeholder).toBe("Type a message")
+	})
+	it("discards a late suggestion after typing and clearing the draft", async () => {
+		let resolve!: (value: { value: string }) => void
+		mocks.suggestNextPrompt.mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done
+				}),
+		)
+		const { input } = composer()
+		fireEvent.change(input, { target: { value: "My own request" } })
+		fireEvent.change(input, { target: { value: "" } })
+		await act(async () => resolve({ value: "Stale suggestion" }))
+		expect(input.placeholder).toBe("Type a message")
+		expect(input.value).toBe("")
+	})
+	it("discards another chat's late reply and keeps its dismissal on returning", async () => {
+		let resolve!: (value: { value: string }) => void
+		mocks.suggestNextPrompt.mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done
+				}),
+		)
+		const { input, refresh } = composer()
+		mocks.currentTaskItem = { id: "chat-b" }
+		refresh()
+		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
+		await act(async () => resolve({ value: "Wrong chat" }))
+		expect(input.placeholder).toBe("Add regression tests.")
+		mocks.currentTaskItem = { id: "chat-a" }
+		refresh()
+		expect(input.placeholder).toBe("Type a message")
+	})
+	it("does not request a suggestion when an image is attached", () => {
+		renderTextArea([PNG_DATA_URL])
+		expect(mocks.suggestNextPrompt).not.toHaveBeenCalled()
+	})
+	it("does not generate while running or after a failed turn", async () => {
+		mocks.turnState = { phase: "error", seq: 2 }
+		const { input } = composer()
+		expect(input.placeholder).toBe("Type a message")
+		expect(mocks.suggestNextPrompt).not.toHaveBeenCalled()
 	})
 })

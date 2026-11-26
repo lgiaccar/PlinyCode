@@ -23,6 +23,7 @@ import type { DesktopUpdate } from "./desktop-update";
 import { taskDiff } from "./git";
 import { Integrations } from "./integrations";
 import { TaskManager } from "./manager";
+import { DesktopNextPrompt } from "./next-prompt";
 import type { PrPreview } from "./pr-contracts";
 import { type ImprovedPrompt, PromptImprover } from "./prompt-improver";
 import { DesktopStore } from "./store";
@@ -32,6 +33,9 @@ import { SecretVault } from "./vault";
 // Electron's network stack honors OS certificate trust and proxy settings.
 // Node fetch can otherwise retry a TLS failure until the rewrite deadline expires.
 const promptImprover = new PromptImprover((config) =>
+	createHandlerAsync({ ...config, fetch: net.fetch.bind(net) as typeof fetch }),
+);
+const nextPrompt = new DesktopNextPrompt((config) =>
 	createHandlerAsync({ ...config, fetch: net.fetch.bind(net) as typeof fetch }),
 );
 let updater: DesktopUpdate | undefined;
@@ -51,6 +55,7 @@ else {
 		event.preventDefault();
 		exiting = true;
 		promptImprover.close();
+		nextPrompt.close();
 		updater?.close();
 		void Promise.allSettled([integrations?.close(), manager.close()]).finally(
 			() => app.quit(),
@@ -165,6 +170,7 @@ else {
 				let models: string[] | undefined, mcpTools: string[] | undefined;
 				let files: string[] | undefined;
 				let improvedPrompt: ImprovedPrompt | undefined;
+				let suggestedPrompt: string | undefined;
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
@@ -193,6 +199,13 @@ else {
 						break;
 					case "updateInstall":
 						await updater?.install();
+						break;
+					case "suggestNextPrompt":
+						suggestedPrompt = await nextPrompt.suggest(
+							manager.task(action.id),
+							action.messageId,
+							await getPlinyApiKey().catch(() => ""),
+						);
 						break;
 					case "improvePrompt":
 						improvedPrompt = await promptImprover.improve(
@@ -420,6 +433,7 @@ else {
 					browser,
 					prPreview,
 					improvedPrompt,
+					suggestedPrompt,
 					update: updater?.status,
 					...(action.type === "snapshot" || action.type === "saveKey"
 						? {

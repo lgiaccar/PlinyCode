@@ -52,6 +52,8 @@ service TaskService {
   // Rewrites a draft prompt for grammar and clarity with a small free model.
   // Never fails: the reason it could not is returned in `error`.
   rpc improvePrompt(ImprovePromptRequest) returns (ImprovePromptResult);
+  // Tool-free follow-up suggestion for a completed turn. Empty when unavailable.
+  rpc suggestNextPrompt(SuggestNextPromptRequest) returns (String);
   // Sets a conversation's budget in USD (0 = no limit). A negative amount is ignored.
   rpc setTaskSpendingLimit(SetTaskSpendingLimitRequest) returns (Empty);
   rpc setTaskWaitMinutesPerTurn(SetTaskWaitMinutesPerTurnRequest) returns (Empty);
@@ -315,4 +317,10 @@ message UpdateAgentPathRequest {
   Metadata metadata = 1;
   // New agent path; empty means generic agent (no custom agent)
   string agent_path = 2;
+}
+
+message SuggestNextPromptRequest {
+  Metadata metadata = 1;
+  string task_id = 2;
+  double completion_ts = 3;
 }

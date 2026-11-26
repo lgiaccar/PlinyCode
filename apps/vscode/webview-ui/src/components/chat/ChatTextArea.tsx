@@ -1,5 +1,6 @@
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
+import { SuggestNextPromptRequest } from "@shared/proto/cline/task"
 import type { Mode } from "@shared/storage/types"
 import { TriangleAlertIcon } from "lucide-react"
 import type React from "react"
@@ -13,7 +14,7 @@ import { useExtensionState } from "@/context/ExtensionStateContext"
 import { usePlatform } from "@/context/PlatformContext"
 import { useNormalizedApiConfiguration } from "@/hooks/useNormalizedApiConfiguration"
 import { cn } from "@/lib/utils"
-import { StateServiceClient } from "@/services/grpc-client"
+import { StateServiceClient, TaskServiceClient } from "@/services/grpc-client"
 import { shouldShowContextMenu } from "@/utils/context-mentions"
 import { useMetaKeyDetection, useShortcut } from "@/utils/hooks"
 import { shouldShowSlashCommandsMenu, slashCommandRegexGlobal, validateSlashCommand } from "@/utils/slash-commands"
@@ -27,6 +28,7 @@ import { useComposerSkills } from "./chat-textarea/hooks/useComposerSkills"
 import { DEFAULT_CONTEXT_MENU_OPTION, useContextMenu } from "./chat-textarea/hooks/useContextMenu"
 import { useDropHandling } from "./chat-textarea/hooks/useDropHandling"
 import { useImprovePrompt } from "./chat-textarea/hooks/useImprovePrompt"
+import { useNextPrompt } from "./chat-textarea/hooks/useNextPrompt"
 import {
 	getRowHeightPx,
 	MIN_CHAT_INPUT_MAX_ROWS,
@@ -87,6 +89,7 @@ interface ChatTextAreaProps {
 const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 	(
 		{
+			activeQuote,
 			inputValue: fullInputValue,
 			setInputValue: setFullInputValue,
 			sendingDisabled,
@@ -121,6 +124,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			mcpServers,
 			chatInputMaxRows: persistedChatInputMaxRows,
 			clineMessages,
+			currentTaskItem,
+			turnState,
 		} = useExtensionState()
 		const composerSkills = useComposerSkills()
 		const [isTextAreaFocused, setIsTextAreaFocused] = useState(false)
@@ -136,6 +141,35 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		// The "Side question" checkbox. It applies to one message and clears after it is sent.
 		const [sideQuestionChecked, setSideQuestionChecked] = useState(false)
 		const sideQuestion = sideQuestionChecked && sideQuestionAvailable
+		const completionTs =
+			turnState?.phase === "completed"
+				? clineMessages
+						.slice()
+						.reverse()
+						.find(
+							(message) =>
+								message.type === "say" &&
+								(message.say === "completion_result" || message.say === "plan_completion_result") &&
+								!message.partial,
+						)?.ts
+				: undefined
+		const taskId = currentTaskItem?.id
+		const suggestionKey = completionTs && taskId ? `${taskId}:${completionTs}` : undefined
+		const requestSuggestion = useCallback(async () => {
+			if (!taskId || !completionTs) return ""
+			const result = await TaskServiceClient.suggestNextPrompt(SuggestNextPromptRequest.create({ taskId, completionTs }))
+			return result.value
+		}, [taskId, completionTs])
+		const suggestion = useNextPrompt(
+			suggestionKey,
+			!!fullInputValue ||
+				selectedFiles.length > 0 ||
+				selectedImages.length > 0 ||
+				!!activeQuote ||
+				sideQuestion ||
+				sendingDisabled,
+			requestSuggestion,
+		)
 
 		const [, metaKeyChar] = useMetaKeyDetection(platform)
 		const { selectedModelId, selectedModelInfo } = useNormalizedApiConfiguration(mode)
@@ -747,6 +781,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						minRows={Math.min(3, shownMaxRows)}
 						onBlur={handleBlur}
 						onChange={(e) => {
+							suggestion.dismiss()
 							handleInputChange(e)
 							updateHighlights()
 						}}
@@ -775,7 +810,24 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						onHeightChange={(height) => {
 							onHeightChange?.(height)
 						}}
-						onKeyDown={handleKeyDown}
+						onKeyDown={(event) => {
+							if (suggestion.text && !showContextMenu && !showSlashCommandsMenu && !event.nativeEvent.isComposing) {
+								if (event.key === "Escape") {
+									event.preventDefault()
+									suggestion.dismiss()
+									return
+								}
+								if (event.key === "Tab" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+									event.preventDefault()
+									setFullInputValue(suggestion.text)
+									setCursorPosition(suggestion.text.length)
+									setIntendedCursorPosition(suggestion.text.length)
+									suggestion.dismiss()
+									return
+								}
+							}
+							handleKeyDown(event)
+						}}
 						onKeyUp={handleKeyUp}
 						onMouseUp={updateCursorPosition}
 						onPaste={(event) => {
@@ -797,7 +849,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						}}
 						onScroll={() => updateHighlights()}
 						onSelect={updateCursorPosition}
-						placeholder={showUnsupportedFileError || showDimensionError ? "" : placeholderText}
+						placeholder={showUnsupportedFileError || showDimensionError ? "" : suggestion.text || placeholderText}
 						ref={(el) => {
 							if (typeof ref === "function") {
 								ref(el)
@@ -849,7 +901,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					/>
 					{!inputValue && selectedImages.length === 0 && selectedFiles.length === 0 && (
 						<div className="text-xs absolute bottom-5 left-6.5 right-16 text-(--vscode-input-placeholderForeground)/50 whitespace-nowrap overflow-hidden text-ellipsis pointer-events-none z-1">
-							Type @ for context, / for slash commands & workflows, hold shift to drag in files/images
+							{suggestion.text
+								? "Tab to accept suggestion · Esc to dismiss"
+								: "Type @ for context, / for slash commands & workflows, hold shift to drag in files/images"}
 						</div>
 					)}
 					{(selectedImages.length > 0 || selectedFiles.length > 0) && (

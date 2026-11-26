@@ -53,7 +53,7 @@
     },
     "apps/vscode": {
       "name": "plinycode-dev",
-      "version": "0.2.10",
+      "version": "0.2.11",
       "dependencies": {
         "@bufbuild/protobuf": "^2.2.5",
         "@modelcontextprotocol/sdk": "^1.29.0",
