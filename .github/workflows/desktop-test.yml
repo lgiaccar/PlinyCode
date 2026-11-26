@@ -101,9 +101,9 @@ jobs:
       - name: Build desktop
         run: bun -F @plinycode/desktop build
       - name: Electron acceptance tests
-        run: |
-          bun -F @plinycode/desktop test:e2e
-          bun -F @plinycode/desktop test:drafts
+        run: bun -F @plinycode/desktop test:e2e
+      - name: Electron draft isolation acceptance tests
+        run: bun -F @plinycode/desktop test:drafts
       - name: Install test browser
         working-directory: apps/desktop
         run: bun x playwright install chromium
