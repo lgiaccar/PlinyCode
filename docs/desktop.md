@@ -7,14 +7,14 @@ described in the [implementation plan](desktop-plan.md).
 
 ## Windows one-click installer
 
-Download `PlinyCode-Desktop-Setup-0.1.8-x64.exe` from the
-[Desktop 0.1.8 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.8) and open it.
+Download `PlinyCode-Desktop-Setup-0.1.9-x64.exe` from the
+[Desktop 0.1.9 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.9) and open it.
 It installs for the current user without administrator rights, creates desktop
 and Start menu shortcuts, and launches PlinyCode when installation finishes.
 Electron and Bun are bundled; users do not need to install Node or Bun.
 
 This preview is unsigned, so Windows may display an unknown-publisher or
-SmartScreen warning. Desktop 0.1.8 checks for updates automatically and offers
+SmartScreen warning. Desktop 0.1.9 checks for updates automatically and offers
 **Download** and **Install and restart** in the sidebar. Installation waits until
 running tasks, background commands and PR operations have stopped. Checks can be
 disabled in Settings. Versions 0.1.0 and 0.1.1 need one manual upgrade to receive
@@ -84,9 +84,33 @@ The desktop command downloads the pinned Electron runtime if necessary, builds
 the app and launches it. Bun is copied into the build for agent workers. Later
 launches can use `bun -F @plinycode/desktop start` after building once.
 
+## Multi-folder projects
+
+**Add project** lets you select several folders together. To extend an existing
+project, open **Project settings**, choose **Add folders…**, optionally give the
+project a name, then **Save project** and start a new chat. A chat can read, search,
+edit and run commands across all of its folders. The first folder remains the
+default command directory; the agent receives the complete folder list and uses
+absolute paths for the other folders. It is instructed to read and respect each
+folder's repository instructions before working there.
+
+Multi-folder chats edit the selected folders directly. Tasks with any overlapping
+folder wait for each other, including while background commands remain active.
+The chat header lists folders for opening in the file manager, and **Review diff**
+shows each folder's Git changes separately. Worktrees and the built-in **Create PR**
+control remain available for single-folder Git projects.
+
+Folder changes apply to new chats. Existing chats retain their original folders,
+including after restart. Removing an additional folder from a project does not
+delete files or remove it from old chats. The primary folder stays first; create a
+new project to use a different primary folder. Stop project tasks and background
+commands before saving project settings. An unavailable folder causes the chat to
+fail before starting the agent, rather than silently running with a partial project.
+Existing single-folder projects and saved chats remain compatible.
+
 ## What works in this preview
 
-- Add a project folder and create multiple conversations.
+- Add a project with one or more folders and create multiple conversations.
 - Send requests to FreeAuto or choose a concrete Pliny model from the catalog.
 - Attach file references with the native file picker. The agent reads selected
   paths using its normal file/image tools and the task's permissions; this does
