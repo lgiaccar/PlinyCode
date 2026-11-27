@@ -235,8 +235,32 @@ h1 {
 }
 .conversation {
 	flex: 1;
+	min-height: 0;
 	overflow: auto;
 	padding: 25px max(30px, calc((100% - 800px) / 2));
+}
+.jump-latest {
+	align-self: center;
+	margin: 4px;
+}
+.pending-messages {
+	max-height: 150px;
+	overflow: auto;
+}
+.pending-message {
+	padding: 8px;
+	border-bottom: 1px solid #46504b;
+	font-size: 12px;
+}
+.pending-message pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 70px;
+	overflow: auto;
+}
+.message a {
+	color: #b9d8a4;
+	text-decoration: underline;
 }
 .welcome {
 	padding: 45px 0;
@@ -698,4 +722,28 @@ select {
 	.app:has(.browser-pane) .sidebar {
 		width: 190px;
 	}
+}
+
+.project-folders {
+	list-style: none;
+	padding: 0;
+}
+.project-folders li {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 10px 0;
+}
+.project-folders li span {
+	flex: 1;
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.project-folders small {
+	display: block;
+	opacity: 0.65;
+	margin-top: 4px;
+}
+.header-actions select {
+	max-width: 240px;
 }

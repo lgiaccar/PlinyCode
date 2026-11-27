@@ -6,6 +6,10 @@ export class DraftBook {
 		string | undefined,
 		{ text: string; revision: number }
 	>();
+	hydrate(saved: Record<string, { text: string; revision: number }>) {
+		for (const [id, draft] of Object.entries(saved))
+			if (!this.drafts.has(id)) this.drafts.set(id, draft);
+	}
 	get(context: string | undefined) {
 		return this.drafts.get(context) ?? { text: "", revision: 0 };
 	}

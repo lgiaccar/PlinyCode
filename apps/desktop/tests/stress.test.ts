@@ -39,6 +39,7 @@ test("prepared worktrees respect existing folder leases in either start order", 
 	manager.running.set(held.id, {
 		controller: new AbortController(),
 		folder: directory,
+		folders: [directory],
 	});
 	try {
 		manager.send(worktree.id, "Do not write into a leased worktree");

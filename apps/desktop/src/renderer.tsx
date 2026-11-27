@@ -14,7 +14,14 @@ import {
 import { BrowserSettings, PrSettings } from "./integration-settings";
 import { McpSettings } from "./mcp-settings";
 import { PrDialog } from "./pr-dialog";
+import {
+	projectFolders,
+	supportsWorktree,
+	taskFolders,
+} from "./project-folders";
+import { ProjectFoldersEditor } from "./project-folders-editor";
 import { UpdateControls } from "./update-controls";
+import { useChatScroll } from "./use-chat-scroll";
 import { useNextPrompt } from "./use-next-prompt";
 import { usePromptDraft } from "./use-prompt-draft";
 
@@ -94,7 +101,9 @@ function App() {
 		[cached, setCached] = useState(false);
 	const draft = usePromptDraft(selected);
 	const { prompt, setPrompt } = draft;
-	const bottom = useRef<HTMLDivElement>(null);
+	const scroll = useChatScroll(selected);
+	const submitting = useRef(false);
+	const [sending, setSending] = useState(false);
 	const task = state.tasks.find((item) => item.id === selected),
 		project = state.projects.find((item) => item.id === task?.projectId);
 	const busy = task && active(task);
@@ -144,11 +153,20 @@ function App() {
 			.catch((error) => setError(String(error)));
 		return window.plinycode.subscribe(setState);
 	}, [invoke]);
-	// Copy returns a fresh state object; only chat content changes should scroll.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: these values intentionally trigger scrolling after a content change
-	useEffect(() => {
-		bottom.current?.scrollIntoView({ behavior: "smooth" });
-	}, [selected, task?.messages.length, task?.messages.at(-1)?.text]);
+	async function submit(delivery: "queue" | "steer" = "steer") {
+		if (!task || !prompt.trim() || !draft.ready || submitting.current) return;
+		submitting.current = true;
+		setSending(true);
+		const submitted = draft.capture();
+		draft.invalidate();
+		try {
+			if (await invoke({ type: "send", id: task.id, prompt, cached, delivery }))
+				draft.clearIfUnchanged(submitted.revision);
+		} finally {
+			submitting.current = false;
+			setSending(false);
+		}
+	}
 	return (
 		<div className="app">
 			<datalist id="model-catalog">
@@ -176,7 +194,11 @@ function App() {
 					{state.projects.map((item) => (
 						<section key={item.id} className="project">
 							<div className="project-title">
-								<span title={item.path}>▱ {item.name}</span>
+								<span title={projectFolders(item).join("\n")}>
+									▱ {item.name}
+									{projectFolders(item).length > 1 &&
+										` (${projectFolders(item).length} folders)`}
+								</span>
 								<button
 									type="button"
 									title="Project settings"
@@ -191,7 +213,7 @@ function App() {
 										invoke({
 											type: "createTask",
 											projectId: item.id,
-											worktree: item.git,
+											worktree: supportsWorktree(item),
 										})
 									}
 								>
@@ -260,20 +282,49 @@ function App() {
 							<div>
 								<div className="eyebrow">
 									{project?.name} /{" "}
-									{task.worktree ? "ISOLATED WORKTREE" : "PROJECT FOLDER"}
+									{task.worktree
+										? "ISOLATED WORKTREE"
+										: (task.folders?.length ?? 1) > 1
+											? `${task.folders?.length} PROJECT FOLDERS`
+											: "PROJECT FOLDER"}
 								</div>
 								<h1>{task.title}</h1>
+								{!task.worktree && (task.folders?.length ?? 0) > 1 && (
+									<small>Edits apply directly to these project folders.</small>
+								)}
 							</div>
 							<div className="header-actions">
 								<span className={`badge ${task.status}`}>
 									{task.status.replaceAll("_", " ")}
 								</span>
-								<button
-									type="button"
-									onClick={() => invoke({ type: "openFolder", id: task.id })}
-								>
-									Open folder ↗
-								</button>
+								{project && taskFolders(task, project).length > 1 ? (
+									<select
+										aria-label="Open project folder"
+										value=""
+										onChange={(event) => {
+											if (event.target.value)
+												void invoke({
+													type: "openFolder",
+													id: task.id,
+													folder: event.target.value,
+												});
+										}}
+									>
+										<option value="">Open folder...</option>
+										{taskFolders(task, project).map((folder) => (
+											<option key={folder} value={folder}>
+												{folder}
+											</option>
+										))}
+									</select>
+								) : (
+									<button
+										type="button"
+										onClick={() => invoke({ type: "openFolder", id: task.id })}
+									>
+										Open folder ↗
+									</button>
+								)}
 								<button
 									type="button"
 									onClick={() => invoke({ type: "diff", id: task.id })}
@@ -297,140 +348,154 @@ function App() {
 								<span title={task.cwd}>{task.cwd}</span>
 							</div>
 						)}
-						<div className="conversation">
-							{task.messages.length === 0 && (
-								<div className="welcome">
-									<span className="spark">✳</span>
-									<h2>What are we building?</h2>
-									<p>
-										Ask PlinyCode to explore this project, implement a change,
-										<br />
-										or investigate a failing test.
-									</p>
-									<div className="suggestions">
-										{[
-											"Explain the project structure",
-											"Find and fix a failing test",
-											"Review recent changes",
-										].map((text) => (
-											<button
-												type="button"
-												key={text}
-												onClick={() => setPrompt(text)}
-											>
-												{text} ↗
-											</button>
-										))}
+						<div
+							className="conversation"
+							ref={scroll.container}
+							onScroll={scroll.onScroll}
+						>
+							<div ref={scroll.content}>
+								{task.messages.length === 0 && (
+									<div className="welcome">
+										<span className="spark">✳</span>
+										<h2>What are we building?</h2>
+										<p>
+											Ask PlinyCode to explore this project, implement a change,
+											<br />
+											or investigate a failing test.
+										</p>
+										<div className="suggestions">
+											{[
+												"Explain the project structure",
+												"Find and fix a failing test",
+												"Review recent changes",
+											].map((text) => (
+												<button
+													type="button"
+													key={text}
+													onClick={() => setPrompt(text)}
+												>
+													{text} ↗
+												</button>
+											))}
+										</div>
+										<p className="quiet">
+											{task.worktree
+												? project?.worktreeSource === "local"
+													? "A separate worktree starts from a local branch commit. Uncommitted changes stay in the original folder."
+													: "A fresh remote branch is fetched when the first task starts."
+												: "Tasks writing in this folder run one at a time."}
+										</p>
 									</div>
-									<p className="quiet">
-										{task.worktree
-											? project?.worktreeSource === "local"
-												? "A separate worktree starts from a local branch commit. Uncommitted changes stay in the original folder."
-												: "A fresh remote branch is fetched when the first task starts."
-											: "Tasks writing in this folder run one at a time."}
-									</p>
-								</div>
-							)}
-							{task.messages.map((entry) =>
-								entry.role === "activity" ? (
-									<div className="activity" key={entry.id}>
-										◇ {entry.text}
-									</div>
-								) : (
-									<ChatMessage
-										key={entry.id}
-										entry={entry}
-										taskId={task.id}
-										busy={
-											!!busy ||
-											(state.commands ?? []).some(
-												(command) =>
-													command.taskId === task.id &&
-													command.status === "running",
-											)
-										}
-										invoke={invoke}
-									/>
-								),
-							)}
-							{task.error && <div className="task-error">{task.error}</div>}
-							{task.input && (
-								<div className="input-card">
-									<strong>
-										{task.input.kind === "approval"
-											? "Permission requested"
-											: "PlinyCode has a question"}
-									</strong>
-									<pre>{task.input.text}</pre>
-									{task.input.kind === "approval" ? (
-										<div>
-											<button
-												type="button"
-												onClick={() =>
-													invoke({
-														type: "reply",
-														id: task.id,
-														inputId: task.input!.id,
-														value: "yes",
-													})
-												}
-											>
-												Allow once
-											</button>
-											<button
-												type="button"
-												onClick={() =>
-													invoke({
-														type: "reply",
-														id: task.id,
-														inputId: task.input!.id,
-														value: "no",
-													})
-												}
-											>
-												Deny
-											</button>
+								)}
+								{task.messages.map((entry) =>
+									entry.role === "activity" ? (
+										<div className="activity" key={entry.id}>
+											◇ {entry.text}
 										</div>
 									) : (
-										<form
-											onSubmit={(e) => {
-												e.preventDefault();
-												void invoke({
-													type: "reply",
-													id: task.id,
-													inputId: task.input!.id,
-													value: reply,
-												});
-												setReply("");
-											}}
-										>
-											<input
-												aria-label="Answer"
-												value={reply}
-												onChange={(e) => setReply(e.target.value)}
-											/>
-											<button type="submit">Reply</button>
-										</form>
-									)}
-								</div>
-							)}
-							{(task.subagents ?? []).map((agent) => (
-								<details className="subagent-card" key={agent.id}>
-									<summary>
-										Sub-agent · {agent.status} · {agent.id}
-									</summary>
-									{agent.tool && <p>Latest tool: {agent.tool}</p>}
-									<pre>{agent.text}</pre>
-									{agent.inputTokens !== undefined && (
-										<small>
-											Tokens: {agent.inputTokens} input /{" "}
-											{agent.outputTokens ?? 0} output
-										</small>
-									)}
-								</details>
-							))}
-							<div ref={bottom} />
+										<ChatMessage
+											key={entry.id}
+											entry={entry}
+											taskId={task.id}
+											busy={
+												!!busy ||
+												(state.commands ?? []).some(
+													(command) =>
+														command.taskId === task.id &&
+														command.status === "running",
+												)
+											}
+											invoke={invoke}
+										/>
+									),
+								)}
+								{task.error && <div className="task-error">{task.error}</div>}
+								{task.input && (
+									<div className="input-card">
+										<strong>
+											{task.input.kind === "approval"
+												? "Permission requested"
+												: "PlinyCode has a question"}
+										</strong>
+										<pre>{task.input.text}</pre>
+										{task.input.kind === "approval" ? (
+											<div>
+												<button
+													type="button"
+													onClick={() =>
+														invoke({
+															type: "reply",
+															id: task.id,
+															inputId: task.input!.id,
+															value: "yes",
+														})
+													}
+												>
+													Allow once
+												</button>
+												<button
+													type="button"
+													onClick={() =>
+														invoke({
+															type: "reply",
+															id: task.id,
+															inputId: task.input!.id,
+															value: "no",
+														})
+													}
+												>
+													Deny
+												</button>
+											</div>
+										) : (
+											<form
+												onSubmit={(e) => {
+													e.preventDefault();
+													void invoke({
+														type: "reply",
+														id: task.id,
+														inputId: task.input!.id,
+														value: reply,
+													});
+													setReply("");
+												}}
+											>
+												<input
+													aria-label="Answer"
+													value={reply}
+													onChange={(e) => setReply(e.target.value)}
+												/>
+												<button type="submit">Reply</button>
+											</form>
+										)}
+									</div>
+								)}
+								{(task.subagents ?? []).map((agent) => (
+									<details className="subagent-card" key={agent.id}>
+										<summary>
+											Sub-agent · {agent.status} · {agent.id}
+										</summary>
+										{agent.tool && <p>Latest tool: {agent.tool}</p>}
+										<pre>{agent.text}</pre>
+										{agent.inputTokens !== undefined && (
+											<small>
+												Tokens: {agent.inputTokens} input /{" "}
+												{agent.outputTokens ?? 0} output
+											</small>
+										)}
+									</details>
+								))}
+							</div>
 						</div>
+						{scroll.away && (
+							<button
+								className="jump-latest"
+								type="button"
+								onClick={scroll.jump}
+							>
+								Jump to latest
+							</button>
+						)}
 						<div className="command-panel">
 							{(state.commands ?? [])
 								.filter((command) => command.taskId === task.id)
@@ -460,6 +525,59 @@ function App() {
 								))}
 						</div>
 						<div className="composer-area">
+							<div className="pending-messages">
+								{(task.pendingMessages ?? []).map((entry) => (
+									<div className="pending-message" key={entry.id}>
+										<strong>
+											{entry.status === "held"
+												? "Not resent — review before sending"
+												: entry.status === "sending"
+													? "Waiting for agent boundary"
+													: entry.delivery === "steer"
+														? "Steering queued"
+														: "Follow-up queued"}
+										</strong>
+										<pre>{entry.text}</pre>
+										{entry.status !== "sending" && (
+											<>
+												<button
+													type="button"
+													disabled={!!prompt || !draft.ready}
+													onClick={async () => {
+														if (prompt) return;
+														if (
+															await invoke({
+																type: "removePending",
+																id: task.id,
+																messageId: entry.id,
+															})
+														)
+															setPrompt((current) =>
+																current
+																	? `${current}\n\n${entry.text}`
+																	: entry.text,
+															);
+													}}
+												>
+													Move to draft
+												</button>
+												<button
+													type="button"
+													onClick={() =>
+														invoke({
+															type: "removePending",
+															id: task.id,
+															messageId: entry.id,
+														})
+													}
+												>
+													Remove
+												</button>
+											</>
+										)}
+									</div>
+								))}
+							</div>
 							<PermissionsEditor
 								value={task.permissions}
 								disabled={!!busy}
@@ -474,25 +592,21 @@ function App() {
 							/>
 							<form
 								className="composer"
-								onSubmit={async (event) => {
+								onSubmit={(event) => {
 									event.preventDefault();
-									const submitted = draft.capture();
-									draft.invalidate();
-									if (
-										await invoke({ type: "send", id: task.id, prompt, cached })
-									)
-										draft.clearIfUnchanged(submitted.revision);
+									void submit();
 								}}
 							>
 								<textarea
 									aria-label="Message PlinyCode"
+									maxLength={200_000}
 									placeholder={
 										busy
-											? "This task is running. You can work in another chat."
+											? "Correct this task or queue a follow-up…"
 											: suggestion.text || "Message PlinyCode…"
 									}
 									value={prompt}
-									disabled={!!busy}
+									disabled={!draft.ready}
 									onChange={(e) => {
 										suggestion.dismiss();
 										setPrompt(e.target.value);
@@ -523,7 +637,7 @@ function App() {
 											!e.nativeEvent.isComposing
 										) {
 											e.preventDefault();
-											if (!busy && prompt.trim())
+											if (draft.ready && !sending && prompt.trim())
 												e.currentTarget.form?.requestSubmit();
 										}
 									}}
@@ -534,7 +648,11 @@ function App() {
 									</output>
 								)}
 								<div className="composer-controls">
-									<button type="button" disabled={!!busy} onClick={attachFiles}>
+									<button
+										type="button"
+										disabled={!draft.ready}
+										onClick={attachFiles}
+									>
 										Attach files
 									</button>
 									<label>
@@ -563,29 +681,37 @@ function App() {
 									)}
 									<button
 										type="button"
-										disabled={!!busy || draft.improving || !prompt.trim()}
+										disabled={!draft.ready || draft.improving || !prompt.trim()}
 										onClick={draft.improve}
 										title="Improve the draft with a free model without sending it"
 									>
 										{draft.improving ? "Improving…" : "Improve prompt"}
 									</button>
-									{busy ? (
-										<button
-											type="button"
-											className="stop"
-											onClick={() => invoke({ type: "cancel", id: task.id })}
-										>
-											■ Stop
-										</button>
-									) : (
-										<button
-											type="submit"
-											className="send"
-											disabled={!prompt.trim()}
-										>
-											Send ↑
-										</button>
+									{busy && (
+										<>
+											<button
+												type="button"
+												disabled={!draft.ready || sending || !prompt.trim()}
+												onClick={() => void submit("queue")}
+											>
+												Queue follow-up
+											</button>
+											<button
+												type="button"
+												className="stop"
+												onClick={() => invoke({ type: "cancel", id: task.id })}
+											>
+												Stop
+											</button>
+										</>
 									)}
+									<button
+										type="submit"
+										className="send"
+										disabled={!draft.ready || sending || !prompt.trim()}
+									>
+										{busy ? "Steer task" : "Send ↑"}
+									</button>
 								</div>
 								{draft.error && <div role="alert">{draft.error}</div>}
 							</form>
@@ -602,7 +728,12 @@ function App() {
 											Explicitly use last fetched revision
 										</label>
 									)}
-								<span>Enter to send · Shift+Enter for a new line</span>
+								<span>
+									{busy
+										? "Enter to steer at the next safe boundary"
+										: "Enter to send"}{" "}
+									· Shift+Enter for a new line
+								</span>
 							</div>
 						</div>
 					</>
@@ -789,8 +920,11 @@ function App() {
 				<div className="modal-backdrop">
 					<section className="modal">
 						<h2>{projectSettings.name}</h2>
-						<p>{projectSettings.path}</p>
-						{projectSettings.git ? (
+						<ProjectFoldersEditor
+							value={projectSettings}
+							onChange={setProjectSettings}
+						/>
+						{supportsWorktree(projectSettings) ? (
 							<label>
 								Worktree source
 								<select
@@ -810,11 +944,10 @@ function App() {
 							</label>
 						) : (
 							<p className="quiet">
-								Git is optional. Tasks work directly in this folder, one at a
-								time.
+								Tasks work directly in the selected folders. Git is optional.
 							</p>
 						)}
-						{projectSettings.git && (
+						{supportsWorktree(projectSettings) && (
 							<>
 								<PrSettings
 									key={projectSettings.id}
@@ -887,6 +1020,8 @@ function App() {
 										await invoke({
 											type: "projectSettings",
 											id: projectSettings.id,
+											name: projectSettings.name,
+											folders: projectFolders(projectSettings),
 											base: projectSettings.base,
 											target: projectSettings.target,
 											remote: projectSettings.remote,

@@ -19,6 +19,11 @@ import {
 import { git, isGit, overlaps, prepareWorktree } from "./git";
 import { historyBefore } from "./history";
 import { type ConnectedMcpServer, mcpSecretValues } from "./mcp-contracts";
+import {
+	projectFolders,
+	supportsWorktree,
+	taskFolders,
+} from "./project-folders";
 import type { DesktopStore } from "./store";
 
 export function stopTree(child: ChildProcessWithoutNullStreams): Promise<void> {
@@ -53,9 +58,11 @@ const message = (role: Message["role"], text: string): Message => ({
 	at: Date.now(),
 });
 type Running = {
+	ready?: boolean;
 	controller: AbortController;
 	child?: ChildProcessWithoutNullStreams;
 	folder: string;
+	folders: string[];
 	settled?: Promise<void>;
 };
 export class TaskManager {
@@ -160,15 +167,40 @@ export class TaskManager {
 		if (!project) throw new Error("Project not found.");
 		return project;
 	}
-	async addProject(path: string) {
-		const canonical = await realpath(path);
-		if (!(await stat(canonical)).isDirectory())
-			throw new Error("Select a project folder.");
-		const existing = this.store.state.projects.find(
-			(project) =>
-				overlaps(project.path, canonical) &&
-				project.path.length === canonical.length,
+	private async canonicalFolders(paths: string[]) {
+		if (!paths.length || paths.length > 32)
+			throw new Error("Select between 1 and 32 project folders.");
+		const folders: string[] = [];
+		for (const path of paths) {
+			const canonical = await realpath(path);
+			if (!(await stat(canonical)).isDirectory())
+				throw new Error("Select a project folder.");
+			if (
+				!folders.some(
+					(folder) =>
+						overlaps(folder, canonical) && folder.length === canonical.length,
+				)
+			)
+				folders.push(canonical);
+		}
+		return folders;
+	}
+	async addProject(path: string | string[]) {
+		const folders = await this.canonicalFolders(
+			typeof path === "string" ? [path] : path,
 		);
+		const canonical = folders[0];
+		const existing = this.store.state.projects.find((project) => {
+			const roots = projectFolders(project);
+			return (
+				roots.length === folders.length &&
+				roots.every(
+					(root, index) =>
+						overlaps(root, folders[index]) &&
+						root.length === folders[index].length,
+				)
+			);
+		});
 		if (existing) return existing;
 		const gitProject = await isGit(canonical);
 		const remotes = gitProject
@@ -178,6 +210,7 @@ export class TaskManager {
 			id: randomUUID(),
 			name: basename(canonical),
 			path: canonical,
+			folders,
 			git: gitProject,
 			base: "",
 			target: "",
@@ -187,6 +220,49 @@ export class TaskManager {
 		this.store.state.projects.push(project);
 		this.changed();
 		return project;
+	}
+	async updateProject(
+		id: string,
+		settings: Pick<Project, "base" | "target" | "remote" | "worktreeSource"> & {
+			name?: string;
+			folders?: string[];
+		},
+	) {
+		const project = this.project(id);
+		const folders = settings.folders
+			? await this.canonicalFolders(settings.folders)
+			: projectFolders(project);
+		if (
+			!overlaps(folders[0], project.path) ||
+			folders[0].length !== project.path.length
+		)
+			throw new Error(
+				"Keep the original folder first. Create a new project to change its primary folder.",
+			);
+		if (
+			this.store.state.tasks.some(
+				(task) =>
+					task.projectId === id &&
+					(active(task) ||
+						this.running.has(task.id) ||
+						this.external.has(task.id) ||
+						this.store.state.commands?.some(
+							(command) =>
+								command.taskId === task.id && command.status === "running",
+						)),
+			)
+		)
+			throw new Error(
+				"Stop project tasks and background commands before changing project settings.",
+			);
+		Object.assign(project, {
+			...settings,
+			name: settings.name ?? project.name,
+			folders,
+			base: settings.base.trim(),
+			target: settings.target.trim(),
+		});
+		this.changed();
 	}
 	async migrateProjects() {
 		for (const project of this.store.state.projects) {
@@ -273,15 +349,43 @@ export class TaskManager {
 			messages: [],
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
-			worktree: project.git && worktree,
+			worktree: supportsWorktree(project) && worktree,
+			folders: [...projectFolders(project)],
 		};
 		this.store.state.tasks.unshift(task);
 		this.changed();
 		return task;
 	}
-	send(id: string, prompt: string, cached = false) {
+	send(
+		id: string,
+		prompt: string,
+		cached = false,
+		delivery?: "queue" | "steer",
+	) {
 		if (this.closing) throw new Error("PlinyCode is closing.");
 		const task = this.task(id);
+		if (this.external.has(id))
+			throw new Error("Wait for this task's operation to finish.");
+		if ((active(task) || this.running.has(id)) && delivery) {
+			if (this.running.get(id)?.controller.signal.aborted)
+				throw new Error(
+					"This task is stopping. Keep your draft and retry after it stops.",
+				);
+			task.pendingMessages ??= [];
+			if (task.pendingMessages.length >= 20)
+				throw new Error(
+					"There are already 20 pending messages. Wait or remove one first.",
+				);
+			task.pendingMessages.push({
+				id: randomUUID(),
+				text: prompt,
+				delivery,
+				status: "queued",
+			});
+			this.changed();
+			this.deliverSteering(task);
+			return;
+		}
 		if (active(task) || this.running.has(id) || this.external.has(id))
 			throw new Error(
 				"Wait for this task to stop before sending another message.",
@@ -297,39 +401,91 @@ export class TaskManager {
 		this.changed();
 		this.drain();
 	}
+	removePending(id: string, messageId: string) {
+		const task = this.task(id);
+		const entry = task.pendingMessages?.find((item) => item.id === messageId);
+		if (!entry || entry.status === "sending")
+			throw new Error(
+				"This message may already be reaching the agent. Stop the task before changing it.",
+			);
+		task.pendingMessages = task.pendingMessages?.filter(
+			(item) => item.id !== messageId,
+		);
+		this.changed();
+	}
+	private deliverSteering(task: Task) {
+		const run = this.running.get(task.id);
+		if (
+			!run?.ready ||
+			!run.child ||
+			run.controller.signal.aborted ||
+			this.closing
+		)
+			return;
+		if (task.pendingMessages?.some((item) => item.status === "sending")) return;
+		const entry = task.pendingMessages?.find(
+			(item) => item.delivery === "steer" && item.status === "queued",
+		);
+		if (!entry) return;
+		entry.status = "sending";
+		this.changed();
+		run.child.stdin.write(
+			JSON.stringify({ type: "steer", id: entry.id, prompt: entry.text }) +
+				"\n",
+		);
+	}
+	private holdPending(task: Task) {
+		for (const entry of task.pendingMessages ?? []) entry.status = "held";
+	}
 	private drain() {
 		if (this.closing) return;
 		for (const [id, request] of this.queue) {
 			const task = this.task(id),
 				project = this.project(task.projectId);
+			const folders = taskFolders(task, project);
+			const intersects = (other: string[]) =>
+				folders.some((folder) => other.some((root) => overlaps(root, folder)));
 			if (
 				(!task.worktree || !!task.cwd) &&
-				(this.store.state.commands ?? []).some(
-					(command) =>
-						command.status === "running" &&
-						command.taskId !== id &&
-						overlaps(command.cwd, task.cwd ?? project.path),
-				)
-			)
-				continue;
-			// An ordinary-folder task may request write approval later. Hold the
-			// folder for its whole run, regardless of its initial checkbox values.
-			if (
-				(!task.worktree || !!task.cwd) &&
-				[...this.running.values()].some((run) =>
-					overlaps(run.folder, task.cwd ?? project.path),
-				)
+				((this.store.state.commands ?? []).some((command) => {
+					if (command.status !== "running" || command.taskId === id)
+						return false;
+					const owner = this.store.state.tasks.find(
+						(item) => item.id === command.taskId,
+					);
+					return intersects(
+						owner
+							? taskFolders(owner, this.project(owner.projectId))
+							: [command.cwd],
+					);
+				}) ||
+					[...this.running.values()].some((run) => intersects(run.folders)))
 			)
 				continue;
 			this.queue.delete(id);
 			const run: Running = {
 				controller: new AbortController(),
 				folder: task.cwd ?? project.path,
+				folders,
 			};
 			this.running.set(id, run);
 			task.status = "preparing";
 			run.settled = this.execute(task, request, run).finally(() => {
 				this.running.delete(id);
+				if (task.status === "completed" && !this.closing) {
+					const next = task.pendingMessages?.find(
+						(item) => item.status === "queued",
+					);
+					if (next) {
+						task.pendingMessages = task.pendingMessages?.filter(
+							(item) => item.id !== next.id,
+						);
+						this.send(id, next.text);
+					}
+				} else this.holdPending(task);
+				// A lost worker acknowledgement is never automatically retried.
+				for (const entry of task.pendingMessages ?? [])
+					if (entry.status === "sending") entry.status = "held";
 				this.changed();
 				this.drain();
 			});
@@ -362,6 +518,15 @@ export class TaskManager {
 				else task.cwd = await realpath(project.path);
 			}
 			run.folder = task.cwd ?? project.path;
+			run.folders = taskFolders(task, project);
+			for (const folder of run.folders) {
+				const canonical = await realpath(folder);
+				if (canonical !== folder || !(await stat(canonical)).isDirectory())
+					throw new Error(
+						`Project folder changed or is unavailable: ${folder}`,
+					);
+			}
+			if (!task.worktree) task.folders = [...run.folders];
 			run.controller.signal.throwIfAborted();
 			if (!(await stat(run.folder)).isDirectory())
 				throw new Error("The task's working folder no longer exists.");
@@ -378,7 +543,8 @@ export class TaskManager {
 			let stderr = "",
 				done = false;
 			let completedStatus: "completed" | "failed" = "failed";
-			const response = message("assistant", "");
+			let response = message("assistant", "");
+			let steered = false;
 			task.messages.push(response);
 			child.stderr.on("data", (chunk) => {
 				stderr = (stderr + chunk.toString()).slice(-4000);
@@ -390,6 +556,36 @@ export class TaskManager {
 					event = JSON.parse(line);
 				} catch {
 					return;
+				}
+				if (event.type === "ready") {
+					run.ready = true;
+					this.deliverSteering(task);
+				}
+				if (event.type === "steering") {
+					const entry = task.pendingMessages?.find(
+						(item) => item.id === event.id,
+					);
+					if (entry && event.status === "received") {
+						steered = true;
+						task.pendingMessages = task.pendingMessages?.filter(
+							(item) => item.id !== entry.id,
+						);
+						task.messages.push({
+							...message("user", redact(entry.text)),
+							id: entry.id,
+						});
+						task.messages.push(
+							message("activity", "Steering received by the agent."),
+						);
+						response = message("assistant", "");
+						task.messages.push(response);
+						this.changed();
+						this.deliverSteering(task);
+					} else if (entry) {
+						entry.status = "queued";
+						run.ready = false;
+						this.changed();
+					}
 				}
 				if (event.type === "command") {
 					void (async () => {
@@ -476,7 +672,8 @@ export class TaskManager {
 				}
 				if (event.type === "done") {
 					done = true;
-					if (event.text) response.text = redact(event.text);
+					run.ready = false;
+					if (event.text && !steered) response.text = redact(event.text);
 					completedStatus = event.status;
 					task.error = event.error ? redact(event.error) : undefined;
 					delete task.input;
@@ -545,6 +742,7 @@ export class TaskManager {
 		const task = this.task(id),
 			run = this.running.get(id);
 		this.queue.delete(id);
+		this.holdPending(task);
 		run?.controller.abort();
 		await this.commands.stopTask(id);
 		if (run) {

@@ -26,8 +26,8 @@ context inspection, delivery evidence and an attention inbox.
 ## What it is
 
 **Desktop preview:** download the Windows one-click installer or Ubuntu DEB/AppImage from
-[PlinyCode Desktop 0.1.7](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.7).
-See [installation and in-app updates](docs/desktop-install.md).
+[PlinyCode Desktop 0.1.9](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.9).
+Group several folders into one project and work across them in a single chat. Add folders in Project settings and start a new chat; multi-folder chats edit the selected folders directly. See the [multi-folder project guide](docs/desktop.md#multi-folder-projects). See [installation and in-app updates](docs/desktop-install.md).
 
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
 [PlinyCode CLI 0.1.1](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.1).

@@ -48,6 +48,8 @@ export const settingsSchema = z.object({
 });
 export type Settings = z.infer<typeof settingsSchema>;
 export interface Project {
+	/** Ordered workspace roots; legacy projects use path as their only root. */
+	folders?: string[];
 	prRepository?: PrRepository;
 	hasPrToken?: boolean;
 	id: string;
@@ -75,7 +77,16 @@ export type TaskStatus =
 	| "failed"
 	| "cancelled"
 	| "interrupted";
+export interface PendingMessage {
+	id: string;
+	text: string;
+	delivery: "queue" | "steer";
+	status: "queued" | "sending" | "held";
+}
 export interface Task {
+	/** Snapshot at creation: changing a project never retargets an existing chat. */
+	folders?: string[];
+	pendingMessages?: PendingMessage[];
 	engineSessionId?: string;
 	pullRequest?: PullRequest;
 	subagents?: Subagent[];
@@ -136,6 +147,19 @@ export const freshState = (): State => ({
 export const active = (task: Task) =>
 	["preparing", "queued", "running", "needs_input"].includes(task.status);
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("openLink"), url: z.string().max(8192) }),
+	z.object({ type: z.literal("loadDrafts") }),
+	z.object({
+		type: z.literal("saveDraft"),
+		id: z.string().uuid(),
+		text: z.string().max(200_000),
+		revision: z.number().int().nonnegative(),
+	}),
+	z.object({
+		type: z.literal("removePending"),
+		id: z.string().uuid(),
+		messageId: z.string().uuid(),
+	}),
 	z.object({
 		type: z.literal("embeddedBrowser"),
 		command: embeddedBrowserCommandSchema,
@@ -197,9 +221,12 @@ export const actionSchema = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("removeMcp"), id: z.string().uuid() }),
 	z.object({ type: z.literal("testMcp"), id: z.string().uuid() }),
 	z.object({ type: z.literal("addProject") }),
+	z.object({ type: z.literal("pickProjectFolders") }),
 	z.object({
 		type: z.literal("projectSettings"),
 		id: z.string().uuid(),
+		name: z.string().trim().min(1).max(200).optional(),
+		folders: z.array(z.string().min(1).max(8192)).min(1).max(32).optional(),
 		worktreeSource: z.enum(["remote", "local"]).default("remote"),
 		base: z.string().max(200),
 		target: z.string().max(200),
@@ -221,6 +248,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 		id: z.string().uuid(),
 		prompt: z.string().trim().min(1).max(200_000),
 		cached: z.boolean().optional(),
+		delivery: z.enum(["queue", "steer"]).optional(),
 	}),
 	z.object({
 		type: z.literal("improvePrompt"),
@@ -238,13 +266,25 @@ export const actionSchema = z.discriminatedUnion("type", [
 		type: z.literal("saveKey"),
 		key: z.string().trim().min(1).max(10_000),
 	}),
-	z.object({ type: z.literal("openFolder"), id: z.string().uuid() }),
+	z.object({
+		type: z.literal("openFolder"),
+		id: z.string().uuid(),
+		folder: z.string().optional(),
+	}),
 	z.object({ type: z.literal("diff"), id: z.string().uuid() }),
 ]);
-export type Action = z.infer<typeof actionSchema>;
+export type Action = Exclude<
+	z.infer<typeof actionSchema>,
+	{ type: "saveDraft" }
+>;
 export interface DesktopApi {
+	saveDraft(
+		id: string,
+		draft: { text: string; revision: number },
+	): Promise<void>;
 	invoke(action: Action): Promise<{
 		state: State;
+		drafts?: Record<string, { text: string; revision: number }>;
 		selectedTask?: string;
 		diff?: string;
 		credentialAvailable?: boolean;
@@ -276,6 +316,8 @@ export interface RunInput {
 	mcpServers?: ConnectedMcpServer[];
 }
 export type WorkerEvent =
+	| { type: "ready" }
+	| { type: "steering"; id: string; status: "received" | "deferred" }
 	| {
 			type: "host";
 			requestId: string;

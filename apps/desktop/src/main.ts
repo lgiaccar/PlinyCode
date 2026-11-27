@@ -20,13 +20,16 @@ import {
 import type { BrowserStatus } from "./browser-contracts";
 import { actionSchema, active } from "./contracts";
 import type { DesktopUpdate } from "./desktop-update";
+import { DraftStore } from "./draft-store";
 import { EmbeddedBrowser } from "./embedded-browser";
 import type { EmbeddedBrowserState } from "./embedded-browser-contracts";
 import { taskDiff } from "./git";
 import { Integrations } from "./integrations";
+import { webLink } from "./links";
 import { TaskManager } from "./manager";
 import { DesktopNextPrompt } from "./next-prompt";
 import type { PrPreview } from "./pr-contracts";
+import { supportsWorktree, taskFolders } from "./project-folders";
 import { type ImprovedPrompt, PromptImprover } from "./prompt-improver";
 import { DesktopStore } from "./store";
 import { createDesktopUpdate } from "./update-runtime";
@@ -46,6 +49,7 @@ let window: BrowserWindow | undefined,
 	manager: TaskManager | undefined,
 	integrations: Integrations | undefined,
 	exiting = false;
+let flushDrafts = async () => {};
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", () => {
@@ -59,9 +63,9 @@ else {
 		promptImprover.close();
 		nextPrompt.close();
 		updater?.close();
-		void Promise.allSettled([integrations?.close(), manager.close()]).finally(
-			() => app.quit(),
-		);
+		void flushDrafts()
+			.then(() => Promise.allSettled([integrations?.close(), manager!.close()]))
+			.finally(() => app.quit());
 	});
 	app.on("window-all-closed", () => app.quit());
 	void app
@@ -71,6 +75,7 @@ else {
 				process.env.PLINY_DESKTOP_DATA ??
 				join(app.getPath("appData"), "PlinyCode", "desktop");
 			const store = new DesktopStore(join(directory, "state.json"));
+			const drafts = new DraftStore(join(directory, "drafts.json"));
 			const vault = new SecretVault(
 				join(directory, "mcp-secrets.json"),
 				safeStorage,
@@ -117,6 +122,38 @@ else {
 					nodeIntegration: false,
 					sandbox: true,
 				},
+			});
+			flushDrafts = () =>
+				new Promise<void>((resolve) => {
+					if (
+						!window ||
+						window.isDestroyed() ||
+						window.webContents.isDestroyed()
+					) {
+						resolve();
+						return;
+					}
+					const finish = () => {
+						clearTimeout(timeout);
+						ipcMain.removeListener("plinycode:draftsFlushed", received);
+						resolve();
+					};
+					const received = (event: Electron.IpcMainEvent) => {
+						if (
+							event.sender === window?.webContents &&
+							event.senderFrame === window.webContents.mainFrame
+						)
+							finish();
+					};
+					const timeout = setTimeout(finish, 3000);
+					ipcMain.on("plinycode:draftsFlushed", received);
+					window.webContents.send("plinycode:flushDrafts");
+				});
+			window.on("close", (event) => {
+				if (!exiting) {
+					event.preventDefault();
+					app.quit();
+				}
 			});
 			window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 			integrations.embeddedBrowser = new EmbeddedBrowser(window, (state) => {
@@ -185,6 +222,25 @@ else {
 						embeddedBrowser = await integrations.embeddedBrowser?.command(
 							action.command,
 						);
+						break;
+					case "openLink": {
+						const url = webLink(action.url);
+						if (!url)
+							throw new Error("Only HTTP and HTTPS links can be opened.");
+						await shell.openExternal(url);
+						break;
+					}
+					case "loadDrafts":
+						return { state: store.state, drafts: drafts.drafts };
+					case "saveDraft":
+						manager.task(action.id);
+						drafts.save(action.id, {
+							text: action.text,
+							revision: action.revision,
+						});
+						return;
+					case "removePending":
+						manager.removePending(action.id, action.messageId);
 						break;
 					case "copyMessage": {
 						const entry = manager
@@ -351,17 +407,24 @@ else {
 					}
 					case "snapshot":
 						break;
+					case "pickProjectFolders":
 					case "addProject": {
-						const folder =
-							process.env.PLINY_DESKTOP_TEST_PROJECT ??
-							(
-								await dialog.showOpenDialog(window, {
-									properties: ["openDirectory"],
-								})
-							).filePaths[0];
-						if (folder) {
-							const project = await manager.addProject(folder);
-							selectedTask = manager.createTask(project.id, project.git).id;
+						const folders =
+							action.type === "addProject" &&
+							process.env.PLINY_DESKTOP_TEST_PROJECT
+								? [process.env.PLINY_DESKTOP_TEST_PROJECT]
+								: (
+										await dialog.showOpenDialog(window, {
+											properties: ["openDirectory", "multiSelections"],
+										})
+									).filePaths;
+						if (action.type === "pickProjectFolders") files = folders;
+						else if (folders.length) {
+							const project = await manager.addProject(folders);
+							selectedTask = manager.createTask(
+								project.id,
+								supportsWorktree(project),
+							).id;
 						}
 						break;
 					}
@@ -372,23 +435,14 @@ else {
 						).id;
 						break;
 					case "projectSettings":
-						if (
-							store.state.tasks.some(
-								(task) =>
-									task.projectId === action.id &&
-									(active(task) || manager?.external.has(task.id)),
-							)
-						)
-							throw new Error(
-								"Stop project tasks before changing worktree or PR target settings.",
-							);
-						Object.assign(manager.project(action.id), {
+						await manager.updateProject(action.id, {
+							name: action.name,
+							folders: action.folders,
 							worktreeSource: action.worktreeSource,
-							base: action.base.trim(),
-							target: action.target.trim(),
+							base: action.base,
+							target: action.target,
 							remote: action.remote,
 						});
-						manager.changed();
 						break;
 					case "configureTask": {
 						const task = manager.task(action.id);
@@ -404,7 +458,12 @@ else {
 						break;
 					}
 					case "send":
-						manager.send(action.id, action.prompt, action.cached);
+						manager.send(
+							action.id,
+							action.prompt,
+							action.cached,
+							action.delivery,
+						);
 						break;
 					case "cancel":
 						await manager.cancel(action.id);
@@ -425,9 +484,11 @@ else {
 						break;
 					case "openFolder": {
 						const task = manager.task(action.id);
-						const error = await shell.openPath(
-							task.cwd ?? manager.project(task.projectId).path,
-						);
+						const folders = taskFolders(task, manager.project(task.projectId));
+						const folder = action.folder ?? folders[0];
+						if (!folders.includes(folder))
+							throw new Error("Folder does not belong to this chat.");
+						const error = await shell.openPath(folder);
 						if (error) throw new Error(error);
 						break;
 					}
