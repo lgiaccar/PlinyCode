@@ -803,6 +803,14 @@ try {
 		await page
 			.getByLabel("MCP endpoint", { exact: true })
 			.fill(`http://127.0.0.1:${address.port}/mcp`);
+		const mcpTimeout = page.getByRole("spinbutton", {
+			name: "Timeout (seconds)",
+			exact: true,
+		});
+		await mcpTimeout.fill("120");
+		await mcpTimeout.press("ArrowUp");
+		assert.equal(await mcpTimeout.inputValue(), "121");
+		await mcpTimeout.fill("1000");
 		await page.getByLabel("MCP encrypted values", { exact: true }).fill(
 			JSON.stringify({
 				headers: { Authorization: "Bearer mcp-fixture-token" },
@@ -810,6 +818,13 @@ try {
 		);
 		await page
 			.getByRole("button", { name: "Save MCP server", exact: true })
+			.click();
+		await page
+			.getByRole("button", { name: "Edit fixture", exact: true })
+			.click();
+		assert.equal(await mcpTimeout.inputValue(), "1000");
+		await page
+			.getByRole("button", { name: "Cancel edit", exact: true })
 			.click();
 		await page
 			.getByRole("button", { name: "Test fixture", exact: true })
@@ -981,6 +996,7 @@ try {
 			(server) => server.name === "fixture",
 		);
 		assert.ok(savedServer && !savedServer.enabled && savedServer.hasSecrets);
+		assert.equal(savedServer.timeout, 1000);
 		fixtureToolName = "mcp-fixture-token";
 		const probe = await page.evaluate(
 			(id) => window.plinycode.invoke({ type: "testMcp", id }),
