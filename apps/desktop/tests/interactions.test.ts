@@ -167,6 +167,7 @@ test("cancellation and reopening hold pending messages without replay", async ()
 	manager.running.set(task.id, {
 		controller: new AbortController(),
 		folder: directory,
+		folders: [directory],
 	});
 	task.status = "running";
 	manager.send(task.id, "keep this", false, "queue");

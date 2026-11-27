@@ -35,6 +35,7 @@ import { guardHostLifetime } from "./host-lifetime";
 import { connectServers } from "./mcp";
 import { mcpSecretValues } from "./mcp-contracts";
 import { prCreateSchema } from "./pr-contracts";
+import { workspacePrompt } from "./project-folders";
 
 export function policies(p: Permissions): Record<string, ToolPolicy> {
 	return {
@@ -390,7 +391,7 @@ async function run(input: RunInput) {
 								},
 							})(context)
 					: undefined,
-			systemPrompt: `${getClineDefaultSystemPrompt({ ide: "PlinyCode Desktop", mode: "act", workspaceRoot: cwd, workspaceName: task.title, platform: process.platform, planModeSwitchTool: false })}\nYou are running a PlinyCode desktop task. Work in the task folder. Follow repository instructions to prepare builds. Ask only when the answer materially affects the result. Never claim an action succeeded without evidence. Only commit, push or create a pull request when the user requests it. Do not apply worktree changes to the original checkout without an explicit request. If this conversation was interrupted, inspect recorded tool results and current state before continuing; never assume an uncertain external operation failed and repeat it blindly.`,
+			systemPrompt: `${getClineDefaultSystemPrompt({ ide: "PlinyCode Desktop", mode: "act", workspaceRoot: cwd, workspaceName: task.title, platform: process.platform, planModeSwitchTool: false })}\nYou are running a PlinyCode desktop task. ${workspacePrompt(task)} Follow repository instructions to prepare builds. Ask only when the answer materially affects the result. Never claim an action succeeded without evidence. Only commit, push or create a pull request when the user requests it. Do not apply worktree changes to the original checkout without an explicit request. If this conversation was interrupted, inspect recorded tool results and current state before continuing; never assume an uncertain external operation failed and repeat it blindly.`,
 		};
 		let initialMessages = await core.readMessages(sessionId);
 		if (!initialMessages.length && task.engineSessionId)

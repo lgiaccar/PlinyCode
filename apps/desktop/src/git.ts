@@ -188,7 +188,22 @@ export async function prepareWorktree(
 	}
 }
 
-export async function taskDiff(task: Task) {
+export async function taskDiff(task: Task): Promise<string> {
+	if (!task.worktree && task.folders && task.folders.length > 1) {
+		const sections: string[] = [];
+		for (const folder of task.folders) {
+			try {
+				sections.push(
+					`Folder: ${folder}\n${await taskDiff({ ...task, folders: undefined, cwd: folder })}`,
+				);
+			} catch (error) {
+				sections.push(
+					`Folder: ${folder}\nUnable to review: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
+		return sections.join("\n\n");
+	}
 	if (!task.cwd) return "No working folder has been prepared.";
 	if (!(await isGit(task.cwd))) return "Diff review requires a Git repository.";
 	const diff = await git(task.cwd, [

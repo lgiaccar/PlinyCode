@@ -13,6 +13,12 @@ import {
 import { BrowserSettings, PrSettings } from "./integration-settings";
 import { McpSettings } from "./mcp-settings";
 import { PrDialog } from "./pr-dialog";
+import {
+	projectFolders,
+	supportsWorktree,
+	taskFolders,
+} from "./project-folders";
+import { ProjectFoldersEditor } from "./project-folders-editor";
 import { UpdateControls } from "./update-controls";
 import { useChatScroll } from "./use-chat-scroll";
 import { useNextPrompt } from "./use-next-prompt";
@@ -186,7 +192,11 @@ function App() {
 					{state.projects.map((item) => (
 						<section key={item.id} className="project">
 							<div className="project-title">
-								<span title={item.path}>▱ {item.name}</span>
+								<span title={projectFolders(item).join("\n")}>
+									▱ {item.name}
+									{projectFolders(item).length > 1 &&
+										` (${projectFolders(item).length} folders)`}
+								</span>
 								<button
 									type="button"
 									title="Project settings"
@@ -201,7 +211,7 @@ function App() {
 										invoke({
 											type: "createTask",
 											projectId: item.id,
-											worktree: item.git,
+											worktree: supportsWorktree(item),
 										})
 									}
 								>
@@ -257,20 +267,49 @@ function App() {
 							<div>
 								<div className="eyebrow">
 									{project?.name} /{" "}
-									{task.worktree ? "ISOLATED WORKTREE" : "PROJECT FOLDER"}
+									{task.worktree
+										? "ISOLATED WORKTREE"
+										: (task.folders?.length ?? 1) > 1
+											? `${task.folders?.length} PROJECT FOLDERS`
+											: "PROJECT FOLDER"}
 								</div>
 								<h1>{task.title}</h1>
+								{!task.worktree && (task.folders?.length ?? 0) > 1 && (
+									<small>Edits apply directly to these project folders.</small>
+								)}
 							</div>
 							<div className="header-actions">
 								<span className={`badge ${task.status}`}>
 									{task.status.replaceAll("_", " ")}
 								</span>
-								<button
-									type="button"
-									onClick={() => invoke({ type: "openFolder", id: task.id })}
-								>
-									Open folder ↗
-								</button>
+								{project && taskFolders(task, project).length > 1 ? (
+									<select
+										aria-label="Open project folder"
+										value=""
+										onChange={(event) => {
+											if (event.target.value)
+												void invoke({
+													type: "openFolder",
+													id: task.id,
+													folder: event.target.value,
+												});
+										}}
+									>
+										<option value="">Open folder...</option>
+										{taskFolders(task, project).map((folder) => (
+											<option key={folder} value={folder}>
+												{folder}
+											</option>
+										))}
+									</select>
+								) : (
+									<button
+										type="button"
+										onClick={() => invoke({ type: "openFolder", id: task.id })}
+									>
+										Open folder ↗
+									</button>
+								)}
 								<button
 									type="button"
 									onClick={() => invoke({ type: "diff", id: task.id })}
@@ -857,8 +896,11 @@ function App() {
 				<div className="modal-backdrop">
 					<section className="modal">
 						<h2>{projectSettings.name}</h2>
-						<p>{projectSettings.path}</p>
-						{projectSettings.git ? (
+						<ProjectFoldersEditor
+							value={projectSettings}
+							onChange={setProjectSettings}
+						/>
+						{supportsWorktree(projectSettings) ? (
 							<label>
 								Worktree source
 								<select
@@ -878,11 +920,10 @@ function App() {
 							</label>
 						) : (
 							<p className="quiet">
-								Git is optional. Tasks work directly in this folder, one at a
-								time.
+								Tasks work directly in the selected folders. Git is optional.
 							</p>
 						)}
-						{projectSettings.git && (
+						{supportsWorktree(projectSettings) && (
 							<>
 								<PrSettings
 									key={projectSettings.id}
@@ -955,6 +996,8 @@ function App() {
 										await invoke({
 											type: "projectSettings",
 											id: projectSettings.id,
+											name: projectSettings.name,
+											folders: projectFolders(projectSettings),
 											base: projectSettings.base,
 											target: projectSettings.target,
 											remote: projectSettings.remote,
