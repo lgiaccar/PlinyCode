@@ -74,6 +74,10 @@ try {
 	let page = await application.firstWindow();
 	page.on("pageerror", (error) => console.error(error));
 	await page.getByRole("button", { name: /Add project/ }).click();
+	await page.getByRole("button", { name: "Add folders…" }).click();
+	await page
+		.getByRole("button", { name: "Create project", exact: true })
+		.click();
 	let composer = page.getByRole("textbox", { name: "Message PlinyCode" });
 	await composer.fill("Start the original task");
 	await page.getByRole("button", { name: /^Send/ }).click();

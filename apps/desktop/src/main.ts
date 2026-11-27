@@ -411,15 +411,13 @@ else {
 						break;
 					case "pickProjectFolders":
 					case "addProject": {
-						const folders =
-							action.type === "addProject" &&
-							process.env.PLINY_DESKTOP_TEST_PROJECT
-								? [process.env.PLINY_DESKTOP_TEST_PROJECT]
-								: (
-										await dialog.showOpenDialog(window, {
-											properties: ["openDirectory", "multiSelections"],
-										})
-									).filePaths;
+						const folders = process.env.PLINY_DESKTOP_TEST_PROJECT
+							? [process.env.PLINY_DESKTOP_TEST_PROJECT]
+							: (
+									await dialog.showOpenDialog(window, {
+										properties: ["openDirectory", "multiSelections"],
+									})
+								).filePaths;
 						if (action.type === "pickProjectFolders") files = folders;
 						else if (folders.length) {
 							const project = await manager.addProject(folders);
@@ -430,14 +428,42 @@ else {
 						}
 						break;
 					}
+					case "createProject": {
+						const project = await manager.addProject(
+							action.folders,
+							action.name,
+						);
+						selectedTask = manager.createTask(
+							project.id,
+							supportsWorktree(project),
+						).id;
+						break;
+					}
+					case "deleteProject": {
+						const sources = store.state.tasks
+							.filter((task) => task.projectId === action.id)
+							.flatMap((task) =>
+								task.sourceProject ? [task.sourceProject.id] : [],
+							);
+						const ids = manager.deleteProject(action.id, action.deleteChats);
+						if (action.deleteChats) {
+							drafts.remove(ids);
+							vault.write(`pr:${action.id}`);
+							for (const id of new Set(sources)) vault.write(`pr:${id}`);
+						}
+						break;
+					}
+					case "restoreProject":
+						manager.restoreProject(action.id);
+						break;
 					case "createTask":
 						selectedTask = manager.createTask(
 							action.projectId,
 							action.worktree,
 						).id;
 						break;
-					case "projectSettings":
-						await manager.updateProject(action.id, {
+					case "projectSettings": {
+						const source = await manager.updateProject(action.id, {
 							name: action.name,
 							folders: action.folders,
 							worktreeSource: action.worktreeSource,
@@ -445,7 +471,19 @@ else {
 							target: action.target,
 							remote: action.remote,
 						});
+						if (source) {
+							const credentials = vault.read(`pr:${action.id}`);
+							if (
+								credentials.env.TOKEN &&
+								store.state.tasks.some(
+									(task) => task.sourceProject?.id === source.id,
+								)
+							)
+								vault.write(`pr:${source.id}`, credentials);
+							vault.write(`pr:${action.id}`);
+						}
 						break;
+					}
 					case "configureTask": {
 						const task = manager.task(action.id);
 						if (active(task))

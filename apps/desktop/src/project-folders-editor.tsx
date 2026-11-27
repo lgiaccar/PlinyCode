@@ -1,17 +1,18 @@
 import { useState } from "react";
 import type { Project } from "./contracts";
-import { projectFolders } from "./project-folders";
 
 export function ProjectFoldersEditor({
 	value,
 	onChange,
+	onPickingChange,
 }: {
 	value: Project;
 	onChange: (project: Project) => void;
+	onPickingChange: (picking: boolean) => void;
 }) {
 	const [error, setError] = useState("");
 	const [picking, setPicking] = useState(false);
-	const folders = projectFolders(value);
+	const folders = value.folders ?? [value.path];
 	return (
 		<>
 			<label>
@@ -23,6 +24,7 @@ export function ProjectFoldersEditor({
 				/>
 			</label>
 			<h3>Project folders</h3>
+			{!folders.length && <p>Add at least one folder to this project.</p>}
 			<ul className="project-folders">
 				{folders.map((folder, index) => (
 					<li key={folder}>
@@ -32,22 +34,18 @@ export function ProjectFoldersEditor({
 								<small>Primary folder · default command directory</small>
 							)}
 						</span>
-						{index > 0 && (
-							<button
-								type="button"
-								aria-label={`Remove ${folder}`}
-								onClick={() =>
-									onChange({
-										...value,
-										folders: folders.filter(
-											(_, position) => position !== index,
-										),
-									})
-								}
-							>
-								Remove
-							</button>
-						)}
+						<button
+							type="button"
+							aria-label={`Remove ${folder}`}
+							onClick={() =>
+								onChange({
+									...value,
+									folders: folders.filter((_, position) => position !== index),
+								})
+							}
+						>
+							Remove
+						</button>
 					</li>
 				))}
 			</ul>
@@ -56,6 +54,7 @@ export function ProjectFoldersEditor({
 				disabled={picking || folders.length >= 32}
 				onClick={async () => {
 					setPicking(true);
+					onPickingChange(true);
 					setError("");
 					try {
 						const result = await window.plinycode.invoke({
@@ -64,12 +63,17 @@ export function ProjectFoldersEditor({
 						if (result.files?.length)
 							onChange({
 								...value,
+								name:
+									value.name ||
+									result.files[0].split(/[\\/]/).filter(Boolean).at(-1) ||
+									"New project",
 								folders: [...new Set([...folders, ...result.files])],
 							});
 					} catch (failure) {
 						setError(String(failure));
 					} finally {
 						setPicking(false);
+						onPickingChange(false);
 					}
 				}}
 			>

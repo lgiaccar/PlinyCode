@@ -22,9 +22,9 @@ See the [0.2.12 release notes](https://github.com/lgiaccar/PlinyCode/releases/ta
 
 ## Desktop preview
 
-Desktop 0.1.11 fixes MCP timeout settings: save values above 120 seconds, up to one hour, for long operations such as meshing.
+Desktop 0.1.12 adds named project creation with one or more folders, folder editing, and project deletion. Chats are preserved under Archived chats by default, with an explicit option to delete them.
 
-[PlinyCode Desktop 0.1.11](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.11) supports projects with multiple folders, with one chat working across them. Multi-folder chats edit the selected folders directly; single-folder Git projects retain isolated worktrees. [Desktop installation](https://github.com/lgiaccar/PlinyCode/blob/desktop-v0.1.11/docs/desktop-install.md)
+[PlinyCode Desktop 0.1.12](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.12) supports projects with multiple folders, with one chat working across them. Multi-folder chats edit the selected folders directly; single-folder Git projects retain isolated worktrees. [Desktop installation](https://github.com/lgiaccar/PlinyCode/blob/desktop-v0.1.12/docs/desktop-install.md)
 
 ## Features
 

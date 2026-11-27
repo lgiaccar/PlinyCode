@@ -53,9 +53,20 @@ const application = await _electron.launch({
 });
 try {
 	const page = await application.firstWindow();
-	if (seed)
+	if (seed) {
 		await page.getByRole("button", { name: "Choose a project folder" }).click();
-	else {
+		// Upgrade fixtures also support older packages with immediate folder creation.
+		await page
+			.getByRole("dialog")
+			.or(page.getByRole("textbox", { name: "Message PlinyCode" }))
+			.waitFor();
+		if (await page.getByRole("dialog").isVisible()) {
+			await page.getByRole("button", { name: "Add folders…" }).click();
+			await page
+				.getByRole("button", { name: "Create project", exact: true })
+				.click();
+		}
+	} else {
 		await page
 			.getByRole("button", { name: /Remember UPGRADE_SENTINEL/ })
 			.click();

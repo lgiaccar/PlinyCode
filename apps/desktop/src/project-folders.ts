@@ -5,9 +5,12 @@ export function projectFolders(project: Project): string[] {
 }
 
 export function taskFolders(task: Task, project: Project): string[] {
-	if (task.worktree) return [task.cwd ?? project.path];
+	if (task.worktree)
+		return [task.cwd ?? task.sourceProject?.path ?? project.path];
 	// Old chats keep their original single folder, even after project changes.
-	return task.folders?.length ? task.folders : [task.cwd ?? project.path];
+	return task.folders?.length
+		? task.folders
+		: [task.cwd ?? task.sourceProject?.path ?? project.path];
 }
 
 export function supportsWorktree(project: Project) {

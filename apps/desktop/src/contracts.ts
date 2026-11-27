@@ -49,6 +49,8 @@ export const settingsSchema = z.object({
 });
 export type Settings = z.infer<typeof settingsSchema>;
 export interface Project {
+	/** Removed from active projects; retained to keep saved chats usable. */
+	archived?: boolean;
 	/** Ordered workspace roots; legacy projects use path as their only root. */
 	folders?: string[];
 	prRepository?: PrRepository;
@@ -85,6 +87,8 @@ export interface PendingMessage {
 	status: "queued" | "sending" | "held";
 }
 export interface Task {
+	/** Original repository settings when a project changes its primary folder. */
+	sourceProject?: Project;
 	/** Snapshot at creation: changing a project never retargets an existing chat. */
 	folders?: string[];
 	pendingMessages?: PendingMessage[];
@@ -223,6 +227,17 @@ export const actionSchema = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("removeMcp"), id: z.string().uuid() }),
 	z.object({ type: z.literal("testMcp"), id: z.string().uuid() }),
 	z.object({ type: z.literal("addProject") }),
+	z.object({
+		type: z.literal("createProject"),
+		name: z.string().trim().min(1).max(200),
+		folders: z.array(z.string().min(1).max(8192)).min(1).max(32),
+	}),
+	z.object({
+		type: z.literal("deleteProject"),
+		id: z.string().uuid(),
+		deleteChats: z.boolean().default(false),
+	}),
+	z.object({ type: z.literal("restoreProject"), id: z.string().uuid() }),
 	z.object({ type: z.literal("pickProjectFolders") }),
 	z.object({
 		type: z.literal("projectSettings"),

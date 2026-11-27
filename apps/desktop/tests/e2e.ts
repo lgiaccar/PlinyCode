@@ -210,6 +210,10 @@ try {
 	);
 	if (!process.env.PLINY_DESKTOP_E2E_PR_ONLY) {
 		await page.getByRole("button", { name: "Choose a project folder" }).click();
+		await page.getByRole("button", { name: "Add folders…" }).click();
+		await page
+			.getByRole("button", { name: "Create project", exact: true })
+			.click();
 		await page.getByRole("textbox", { name: "Message PlinyCode" }).waitFor();
 		const ordinary = await page.evaluate(
 			async () => (await window.plinycode.invoke({ type: "snapshot" })).state,
@@ -1013,6 +1017,7 @@ try {
 		const secondaryFile = join(secondary, "cross-folder.txt");
 		await writeFile(secondaryFile, "SECONDARY_FOLDER_MARKER\n");
 		await application.evaluate(({ dialog }, folder) => {
+			delete process.env.PLINY_DESKTOP_TEST_PROJECT;
 			dialog.showOpenDialog = async () => ({
 				canceled: false,
 				filePaths: [folder],
@@ -1148,6 +1153,10 @@ try {
 		});
 	}, localFolder);
 	await page.getByRole("button", { name: /Add project/ }).click();
+	await page.getByRole("button", { name: "Add folders…" }).click();
+	await page
+		.getByRole("button", { name: "Create project", exact: true })
+		.click();
 	await page
 		.locator("main .eyebrow")
 		.filter({ hasText: "local-project /" })
@@ -1259,6 +1268,10 @@ try {
 		});
 	}, gitFolder);
 	await page.getByRole("button", { name: /Add project/ }).click();
+	await page.getByRole("button", { name: "Add folders…" }).click();
+	await page
+		.getByRole("button", { name: "Create project", exact: true })
+		.click();
 	await page
 		.locator("main .eyebrow")
 		.filter({ hasText: "git-project /" })

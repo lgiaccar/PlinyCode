@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rename,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { actionSchema } from "../src/contracts";
 import { git, taskDiff } from "../src/git";
 import { TaskManager } from "../src/manager";
 import {
@@ -84,9 +92,20 @@ test("project folder selection persists, deduplicates, and never retargets old c
 			)?.folders,
 		).toEqual(folders.slice(0, 2));
 		expect(project.name).toBe("Whole project");
-		await expect(
-			manager.updateProject(project.id, { ...project, folders: [folders[1]] }),
-		).rejects.toThrow("original folder first");
+		await manager.updateProject(project.id, {
+			...project,
+			folders: [folders[1]],
+		});
+		expect(project.path).toBe(folders[1]);
+		expect(taskFolders(old, project)).toEqual([folders[0]]);
+		expect(manager.taskProject(old).path).toBe(folders[0]);
+		manager.send(old.id, "check original directory");
+		await until(() => old.status === "completed");
+		expect(old.cwd).toBe(folders[0]);
+		const newTask = manager.createTask(project.id, false);
+		manager.send(newTask.id, "check new directory");
+		await until(() => newTask.status === "completed");
+		expect(newTask.cwd).toBe(folders[1]);
 		await expect(manager.addProject([])).rejects.toThrow("Select between");
 		await expect(
 			manager.updateProject(project.id, {
@@ -94,11 +113,11 @@ test("project folder selection persists, deduplicates, and never retargets old c
 				folders: [folders[0], join(folders[0], "missing")],
 			}),
 		).rejects.toThrow();
-		expect(projectFolders(project)).toEqual([folders[0]]);
+		expect(projectFolders(project)).toEqual([folders[1]]);
 	} finally {
 		await manager.close();
 	}
-});
+}, 30_000);
 
 test("shared secondary roots serialize tasks while unrelated folders run concurrently", async () => {
 	const { manager, folders } = await fixture();
@@ -150,6 +169,9 @@ test("background commands retain every folder lease and allow their own follow-u
 			[],
 		);
 		await until(() => command.output.includes("ready"));
+		expect(() => manager.deleteProject(project.id, true)).toThrow(
+			"background commands",
+		);
 		await expect(
 			manager.updateProject(project.id, { ...project, folders: [folders[0]] }),
 		).rejects.toThrow("background commands");
@@ -212,3 +234,127 @@ test("diff review includes changes from each Git root", async () => {
 		await manager.close();
 	}
 }, 30_000);
+
+test("named projects archive chats by default and explicitly delete only owned history", async () => {
+	const { manager, store, folders, data } = await fixture();
+	try {
+		const project = await manager.addProject(
+			folders.slice(0, 2),
+			"  My workspace  ",
+		);
+		expect(project.name).toBe("My workspace");
+		const task = manager.createTask(project.id, false);
+		task.messages.push({
+			id: "saved",
+			role: "user",
+			text: "keep this chat",
+			at: 1,
+		});
+		const history = join(data, "tasks", task.id);
+		await mkdir(history, { recursive: true });
+		await writeFile(join(history, "history.json"), "saved history");
+		await writeFile(join(folders[0], "source.txt"), "never delete");
+		expect(manager.deleteProject(project.id)).toEqual([]);
+		expect(project.archived).toBe(true);
+		expect(manager.task(task.id).messages[0].text).toBe("keep this chat");
+		expect(() => manager.createTask(project.id, false)).toThrow("Restore");
+		const reloaded = new DesktopStore(store.file);
+		expect(reloaded.state.projects[0].archived).toBe(true);
+		expect(reloaded.state.tasks[0].id).toBe(task.id);
+		manager.restoreProject(project.id);
+		expect(project.archived).toBeUndefined();
+		manager.external.add(task.id);
+		expect(() => manager.deleteProject(project.id, true)).toThrow(
+			"Stop project tasks",
+		);
+		manager.external.delete(task.id);
+		manager.send(task.id, "hold");
+		expect(() => manager.deleteProject(project.id)).toThrow(
+			"Stop project tasks",
+		);
+		await manager.cancel(task.id);
+		const deadline = Date.now() + 10_000;
+		while (manager.running.has(task.id) && Date.now() < deadline)
+			await Bun.sleep(30);
+		expect(manager.deleteProject(project.id, true)).toEqual([task.id]);
+		expect(store.state.projects).toHaveLength(0);
+		expect(store.state.tasks).toHaveLength(0);
+		await expect(stat(history)).rejects.toThrow();
+		expect(await readFile(join(folders[0], "source.txt"), "utf8")).toBe(
+			"never delete",
+		);
+		const deleted = new DesktopStore(store.file);
+		expect(deleted.state.projects).toHaveLength(0);
+		expect(deleted.state.tasks).toHaveLength(0);
+	} finally {
+		await manager.close();
+	}
+});
+
+test("changing primary folders preserves pending worktrees and deleting chats keeps worktree files", async () => {
+	const { manager, store, folders } = await fixture();
+	try {
+		await git(folders[0], ["init", "-b", "original"]);
+		await git(folders[0], ["config", "user.name", "Project fixture"]);
+		await git(folders[0], ["config", "user.email", "fixture@example.invalid"]);
+		await writeFile(join(folders[0], "original.txt"), "original repository");
+		await git(folders[0], ["add", "."]);
+		await git(folders[0], ["commit", "-m", "Initial"]);
+		await git(folders[1], ["init", "-b", "replacement"]);
+		await git(folders[1], ["remote", "add", "replacement", folders[0]]);
+		const project = await manager.addProject(folders[0], "Git project");
+		const old = manager.createTask(project.id, true);
+		expect(old.worktree).toBe(true);
+		await manager.updateProject(project.id, {
+			...project,
+			folders: [folders[1]],
+		});
+		expect(project.git).toBe(true);
+		expect(project.remote).toBe("replacement");
+		expect(project.worktreeSource).toBe("remote");
+		expect(taskFolders(old, project)).toEqual([folders[0]]);
+		manager.send(old.id, "prepare original repository");
+		await until(() => old.status === "completed" || old.status === "failed");
+		expect(old.error).toBeUndefined();
+		expect(old.status).toBe("completed");
+		expect(await readFile(join(old.cwd ?? "", "original.txt"), "utf8")).toBe(
+			"original repository",
+		);
+		expect(
+			new DesktopStore(store.file).state.tasks[0].sourceProject?.path,
+		).toBe(folders[0]);
+		manager.deleteProject(project.id, true);
+		expect(await readFile(join(old.cwd ?? "", "original.txt"), "utf8")).toBe(
+			"original repository",
+		);
+	} finally {
+		await manager.close();
+	}
+}, 30_000);
+
+test("project IPC requires a name and folders, and preserves chats by default", () => {
+	expect(
+		actionSchema.safeParse({
+			type: "createProject",
+			name: " ",
+			folders: ["folder"],
+		}).success,
+	).toBe(false);
+	expect(
+		actionSchema.safeParse({
+			type: "createProject",
+			name: "Project",
+			folders: [],
+		}).success,
+	).toBe(false);
+	expect(
+		actionSchema.parse({
+			type: "deleteProject",
+			id: "1be27874-2d3a-4861-a7df-1d1a5cd387e0",
+		}),
+	).toEqual({
+		type: "deleteProject",
+		id: "1be27874-2d3a-4861-a7df-1d1a5cd387e0",
+		deleteChats: false,
+	});
+});

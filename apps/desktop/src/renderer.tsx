@@ -12,15 +12,15 @@ import {
 	type Settings,
 	type State,
 } from "./contracts";
-import { BrowserSettings, PrSettings } from "./integration-settings";
+import { BrowserSettings } from "./integration-settings";
 import { McpSettings } from "./mcp-settings";
 import { PrDialog } from "./pr-dialog";
+import { ProjectDialog } from "./project-dialog";
 import {
 	projectFolders,
 	supportsWorktree,
 	taskFolders,
 } from "./project-folders";
-import { ProjectFoldersEditor } from "./project-folders-editor";
 import { UpdateControls } from "./update-controls";
 import { useChatScroll } from "./use-chat-scroll";
 import { useNextPrompt } from "./use-next-prompt";
@@ -94,7 +94,7 @@ function App() {
 		[selected, select] = useState<string>(),
 		[error, setError] = useState(""),
 		[settings, setSettings] = useState<Settings>(),
-		[projectSettings, setProjectSettings] = useState<Project>(),
+		[projectSettings, setProjectSettings] = useState<Project | "new">(),
 		[diff, setDiff] = useState<string>(),
 		[apiKey, setApiKey] = useState(""),
 		[credential, setCredential] = useState(false),
@@ -194,61 +194,77 @@ function App() {
 				<button
 					type="button"
 					className="add-project"
-					onClick={() => invoke({ type: "addProject" })}
+					onClick={() => setProjectSettings("new")}
 				>
 					＋ Add project
 				</button>
 				<div className="project-list">
-					{state.projects.map((item) => (
-						<section key={item.id} className="project">
-							<div className="project-title">
-								<span title={projectFolders(item).join("\n")}>
-									▱ {item.name}
-									{projectFolders(item).length > 1 &&
-										` (${projectFolders(item).length} folders)`}
-								</span>
-								<button
-									type="button"
-									title="Project settings"
-									onClick={() => setProjectSettings({ ...item })}
-								>
-									⚙
-								</button>
-								<button
-									type="button"
-									title={`New chat in ${item.name}`}
-									onClick={() =>
-										invoke({
-											type: "createTask",
-											projectId: item.id,
-											worktree: supportsWorktree(item),
-										})
-									}
-								>
-									＋
-								</button>
-							</div>
-							{state.tasks
-								.filter((conversation) => conversation.projectId === item.id)
-								.map((conversation) => (
-									<button
-										type="button"
-										key={conversation.id}
-										className={`chat-link ${selected === conversation.id ? "selected" : ""}`}
-										onClick={() => {
-											select(conversation.id);
-											setReply("");
-											setCached(false);
-										}}
-									>
-										<span
-											className={`status-dot ${(state.commands ?? []).some((command) => command.taskId === conversation.id && command.status === "running") ? "running" : conversation.status}`}
-										/>
-										<span>{conversation.title}</span>
-										{conversation.status === "needs_input" && <b>!</b>}
-									</button>
+					{[false, true].map((archived) => (
+						<div
+							key={String(archived)}
+							className={archived ? "archived-projects" : "active-projects"}
+						>
+							{archived && state.projects.some((item) => item.archived) && (
+								<h3>Archived chats</h3>
+							)}
+							{state.projects
+								.filter((item) => !!item.archived === archived)
+								.map((item) => (
+									<section key={item.id} className="project">
+										<div className="project-title">
+											<span title={projectFolders(item).join("\n")}>
+												▱ {item.name}
+												{projectFolders(item).length > 1 &&
+													` (${projectFolders(item).length} folders)`}
+											</span>
+											<button
+												type="button"
+												title="Project settings"
+												onClick={() => setProjectSettings({ ...item })}
+											>
+												⚙
+											</button>
+											{!item.archived && (
+												<button
+													type="button"
+													title={`New chat in ${item.name}`}
+													onClick={() =>
+														invoke({
+															type: "createTask",
+															projectId: item.id,
+															worktree: supportsWorktree(item),
+														})
+													}
+												>
+													＋
+												</button>
+											)}
+										</div>
+										{state.tasks
+											.filter(
+												(conversation) => conversation.projectId === item.id,
+											)
+											.map((conversation) => (
+												<button
+													type="button"
+													key={conversation.id}
+													className={`chat-link ${selected === conversation.id ? "selected" : ""}`}
+													onClick={() => {
+														select(conversation.id);
+														setReply("");
+														setCached(false);
+													}}
+												>
+													<span
+														className={`status-dot ${(state.commands ?? []).some((command) => command.taskId === conversation.id && command.status === "running") ? "running" : conversation.status}`}
+													/>
+													<span>{conversation.title}</span>
+													{conversation.status === "needs_input" && <b>!</b>}
+												</button>
+											))}
+									</section>
 								))}
-						</section>
+						</div>
 					))}
 				</div>
 				<footer>
@@ -800,7 +816,7 @@ function App() {
 						<button
 							type="button"
 							className="send"
-							onClick={() => invoke({ type: "addProject" })}
+							onClick={() => setProjectSettings("new")}
 						>
 							Choose a project folder
 						</button>
@@ -968,126 +984,22 @@ function App() {
 				/>
 			)}
 			{projectSettings && (
-				<div className="modal-backdrop">
-					<section className="modal">
-						<h2>{projectSettings.name}</h2>
-						<ProjectFoldersEditor
-							value={projectSettings}
-							onChange={setProjectSettings}
-						/>
-						{supportsWorktree(projectSettings) ? (
-							<label>
-								Worktree source
-								<select
-									aria-label="Worktree source"
-									value={projectSettings.worktreeSource ?? "remote"}
-									onChange={(event) =>
-										setProjectSettings({
-											...projectSettings,
-											worktreeSource: event.target.value as "remote" | "local",
-											base: "",
-										})
-									}
-								>
-									<option value="remote">Fetched remote branch</option>
-									<option value="local">Local branch</option>
-								</select>
-							</label>
-						) : (
-							<p className="quiet">
-								Tasks work directly in the selected folders. Git is optional.
-							</p>
-						)}
-						{supportsWorktree(projectSettings) && (
-							<>
-								<PrSettings
-									key={projectSettings.id}
-									project={projectSettings}
-									onState={setState}
-								/>
-								<label>
-									Remote
-									<input
-										value={projectSettings.remote}
-										onChange={(e) =>
-											setProjectSettings({
-												...projectSettings,
-												remote: e.target.value,
-											})
-										}
-									/>
-								</label>
-								<label>
-									Worktree base branch
-									<input
-										placeholder={
-											projectSettings.worktreeSource === "local"
-												? "Current local branch"
-												: "Remote default branch"
-										}
-										value={projectSettings.base}
-										onChange={(e) =>
-											setProjectSettings({
-												...projectSettings,
-												base: e.target.value,
-											})
-										}
-									/>
-								</label>
-								<label>
-									PR target (saved for PR integration)
-									<input
-										placeholder="Task starting branch"
-										value={projectSettings.target}
-										onChange={(e) =>
-											setProjectSettings({
-												...projectSettings,
-												target: e.target.value,
-											})
-										}
-									/>
-								</label>
-								<p className="quiet">
-									{projectSettings.worktreeSource === "local"
-										? "Local worktrees use committed content without fetching. Uncommitted changes stay in the original folder."
-										: "New worktrees start from a fresh fetch."}{" "}
-									Existing tasks stay in their original folders. Changes are
-									never applied back automatically.
-								</p>
-							</>
-						)}
-						<div className="modal-actions">
-							<button
-								type="button"
-								onClick={() => setProjectSettings(undefined)}
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								className="send"
-								onClick={async () => {
-									if (
-										await invoke({
-											type: "projectSettings",
-											id: projectSettings.id,
-											name: projectSettings.name,
-											folders: projectFolders(projectSettings),
-											base: projectSettings.base,
-											target: projectSettings.target,
-											remote: projectSettings.remote,
-											worktreeSource:
-												projectSettings.worktreeSource ?? "remote",
-										})
-									)
-										setProjectSettings(undefined);
-								}}
-							>
-								Save project
-							</button>
-						</div>
-					</section>
-				</div>
+				<ProjectDialog
+					key={projectSettings === "new" ? "new" : projectSettings.id}
+					project={projectSettings === "new" ? undefined : projectSettings}
+					onState={setState}
+					onResult={(result) => {
+						setState(result.state);
+						select(
+							(previous) =>
+								result.selectedTask ??
+								(result.state.tasks.some((task) => task.id === previous)
+									? previous
+									: undefined),
+						);
+					}}
+					close={() => setProjectSettings(undefined)}
+				/>
 			)}
 			{diff !== undefined && (
 				<div className="modal-backdrop">

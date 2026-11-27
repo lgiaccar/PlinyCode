@@ -86,9 +86,11 @@ launches can use `bun -F @plinycode/desktop start` after building once.
 
 ## Multi-folder projects
 
-**Add project** lets you select several folders together. To extend an existing
-project, open **Project settings**, choose **Add folders…**, optionally give the
-project a name, then **Save project** and start a new chat. A chat can read, search,
+**Add project** opens a dialog where you name your project and use **Add folders…**
+to select one or more folders. Choose **Create project** to save it and open its
+first chat; **Cancel** leaves your project list unchanged. To edit a project,
+open **Project settings**, rename it or add/remove folders, then **Save project**
+and start a new chat. A chat can read, search,
 edit and run commands across all of its folders. The first folder remains the
 default command directory; the agent receives the complete folder list and uses
 absolute paths for the other folders. It is instructed to read and respect each
@@ -101,12 +103,21 @@ shows each folder's Git changes separately. Worktrees and the built-in **Create 
 control remain available for single-folder Git projects.
 
 Folder changes apply to new chats. Existing chats retain their original folders,
-including after restart. Removing an additional folder from a project does not
-delete files or remove it from old chats. The primary folder stays first; create a
-new project to use a different primary folder. Stop project tasks and background
+including after restart. Removing any folder does not delete files or remove it
+from old chats. Keep at least one folder. When the first folder changes, new chats
+use that folder as their default directory and repository settings are detected
+again; existing chats retain their original repository settings. Stop project tasks and background
 commands before saving project settings. An unavailable folder causes the chat to
 fail before starting the agent, rather than silently running with a partial project.
 Existing single-folder projects and saved chats remain compatible.
+
+**Project settings → Delete project…** asks what to do with saved chats. By default,
+**Delete project, keep chats** removes the project from the active list and keeps
+its chats and drafts under **Archived chats**, where you can continue a chat or
+restore the project. Select **Also delete saved chats** to permanently remove its
+chats, drafts and stored chat history instead. Both choices leave project folders,
+files and Git worktrees untouched. Active tasks, PR publishing and background
+commands must finish or stop before a project can be deleted.
 
 ## What works in this preview
 

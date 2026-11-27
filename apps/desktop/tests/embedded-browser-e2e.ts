@@ -60,12 +60,12 @@ const server = createServer(async (request, response) => {
 		: { content: suggestion ? "[]" : "Done." };
 	response.writeHead(200, { "content-type": "text/event-stream" });
 	response.end(
-		[delta, {}]
+		`${[delta, {}]
 			.map(
 				(part) =>
 					`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", model: body.model, choices: [{ index: 0, delta: part, finish_reason: Object.keys(part).length ? null : action ? "tool_calls" : "stop" }] })}\n\n`,
 			)
-			.join("") + "data: [DONE]\n\n",
+			.join("")}data: [DONE]\n\n`,
 	);
 });
 await new Promise<void>((accept) => server.listen(0, "127.0.0.1", accept));
@@ -102,6 +102,10 @@ try {
 	const page = await application.firstWindow();
 	if (!process.env.PLINY_DESKTOP_EMBEDDED_LIFECYCLE_ONLY) {
 		await page.getByRole("button", { name: "Choose a project folder" }).click();
+		await page.getByRole("button", { name: "Add folders…" }).click();
+		await page
+			.getByRole("button", { name: "Create project", exact: true })
+			.click();
 		await page.getByLabel("Full Automatic", { exact: true }).click();
 		await page.waitForFunction(
 			() =>
