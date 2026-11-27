@@ -43,6 +43,12 @@ let improvedReply = "Please fix the failing tests.";
 let waitForRewrite: Promise<void> | undefined;
 let mcpCalls = 0;
 let fixtureToolName = "echo";
+let suggestionReply = JSON.stringify([
+	"Add tests for the remaining edge cases.",
+	"Review the changed files.",
+	"Check malformed input.",
+]);
+let suggestionRequests = 0;
 const server = createServer(async (request, output) => {
 	if (request.url?.startsWith("/collection/")) {
 		assert.equal(
@@ -111,9 +117,10 @@ const server = createServer(async (request, output) => {
 		return;
 	}
 	const suggestionRequest = JSON.stringify(body.messages).includes(
-		"Suggest the single most useful next message",
+		"Suggest up to three distinct useful next messages",
 	);
 	if (!suggestionRequest) requests.push(body);
+	else suggestionRequests++;
 	const utility =
 		body.model === "snps-provider/qwen3-next-80b-a3b-instruct-d79b4";
 	if (utility && !suggestionRequest && waitForRewrite) await waitForRewrite;
@@ -123,7 +130,7 @@ const server = createServer(async (request, output) => {
 		return;
 	}
 	const value = suggestionRequest
-		? "Add tests for the remaining edge cases."
+		? suggestionReply
 		: utility
 			? improvedReply
 			: reply;
@@ -360,6 +367,18 @@ try {
 		const turnsBeforeSuggestion = await page.locator(".message.user").count();
 		assert.equal(await suggestionComposer.inputValue(), "");
 		await page.screenshot({ path: join(data, "next-prompt-suggestion.png") });
+		const requestsBeforeCycling = suggestionRequests;
+		await suggestionComposer.press("ArrowLeft");
+		assert.equal(
+			await suggestionComposer.getAttribute("placeholder"),
+			"Check malformed input.",
+		);
+		await suggestionComposer.press("ArrowRight");
+		assert.equal(
+			await suggestionComposer.getAttribute("placeholder"),
+			"Add tests for the remaining edge cases.",
+		);
+		assert.equal(suggestionRequests, requestsBeforeCycling);
 		await suggestionComposer.press("Tab");
 		assert.equal(
 			await suggestionComposer.inputValue(),
@@ -389,7 +408,50 @@ try {
 						(button) => button.textContent === "Improving…",
 					),
 			);
-		assert.equal(await improve().isDisabled(), true);
+		assert.equal(
+			await page
+				.getByRole("button", { name: "Suggest prompt", exact: true })
+				.isEnabled(),
+			true,
+		);
+		for (const [response, feedback] of [
+			["[]", "No useful follow-up found."],
+			["invalid", "Couldn’t generate—retry."],
+		]) {
+			suggestionReply = response;
+			await page
+				.getByRole("button", { name: "Suggest prompt", exact: true })
+				.click();
+			await page.getByText(feedback, { exact: true }).waitFor();
+		}
+		suggestionReply = JSON.stringify([
+			"Review the changed files.",
+			"Check malformed input.",
+		]);
+		await page
+			.getByRole("button", { name: "Suggest prompt", exact: true })
+			.click();
+		await page.waitForFunction(
+			() =>
+				document.querySelector<HTMLTextAreaElement>(
+					'textarea[aria-label="Message PlinyCode"]',
+				)?.placeholder === "Review the changed files.",
+		);
+		await page
+			.getByRole("button", { name: "Generate alternatives", exact: true })
+			.click();
+		await page
+			.getByRole("button", { name: "Generate alternatives", exact: true })
+			.waitFor();
+		await suggestionComposer.press("ArrowRight");
+		assert.equal(
+			await suggestionComposer.getAttribute("placeholder"),
+			"Check malformed input.",
+		);
+		await suggestionComposer.press("Escape");
+		console.log(
+			"PASS: local choice cycling, forced regeneration, empty/error feedback and retry",
+		);
 		const messagesBefore = await page.locator(".message.user").count();
 		await composer.fill("plese fix failing tests");
 		// A Node fetch bypasses Chromium's proxy and used to time out behind

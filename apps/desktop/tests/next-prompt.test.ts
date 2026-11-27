@@ -10,7 +10,7 @@ test("only completed matching turns can request a tool-free suggestion", async (
 			({
 				createMessage: async function* (...args: unknown[]) {
 					requests.push(args);
-					yield { type: "text", text: "Add regression tests." };
+					yield { type: "text", text: '["Add regression tests."]' };
 				},
 			}) as ApiHandler,
 	);
@@ -29,14 +29,22 @@ test("only completed matching turns can request a tool-free suggestion", async (
 		"cancelled",
 		"needs_input",
 	] as const)
-		expect(await service.suggest({ ...task, status }, "answer", "key")).toBe(
-			"",
+		expect(await service.suggest({ ...task, status }, "answer", "key")).toEqual(
+			{ status: "error", prompts: [] },
 		);
-	expect(await service.suggest(task, "old", "key")).toBe("");
+	expect(await service.suggest(task, "old", "key")).toEqual({
+		status: "error",
+		prompts: [],
+	});
 	expect(requests).toHaveLength(0);
-	expect(await service.suggest(task, "answer", "key")).toBe(
-		"Add regression tests.",
-	);
+	expect(await service.suggest(task, "answer", "key")).toEqual({
+		status: "ready",
+		prompts: ["Add regression tests."],
+	});
+	await service.suggest(task, "answer", "key");
+	expect(requests).toHaveLength(1);
+	await service.suggest(task, "answer", "key", true);
+	expect(requests).toHaveLength(2);
 	expect(requests[0]).toHaveLength(2);
 	expect(JSON.stringify(requests)).not.toContain("tool output excluded");
 	expect(JSON.stringify(requests)).toContain("Fix parsing");

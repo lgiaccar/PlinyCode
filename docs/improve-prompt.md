@@ -35,5 +35,7 @@ The webview calls `TaskService.improvePrompt` ([improvePrompt.ts](../apps/vscode
 ## Suggested next prompts
 
 After a completed turn, an empty composer can show a gray, context-aware follow-up.
-Tab accepts it into the draft without sending; Escape dismisses it. See
+Use Left/Right to browse choices and Tab to accept without sending; Escape dismisses them.
+The wand becomes **Suggest prompt** or **Generate alternatives** while the composer is empty,
+so you can request fresh suggestions or retry a failure. With a draft it remains **Improve prompt**. See
 [next prompt suggestions](next-prompt-suggestions.md).

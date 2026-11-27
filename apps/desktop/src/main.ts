@@ -5,6 +5,7 @@ import {
 	isPlinyRouterModelId,
 	PLINY_FREE_AUTO_MODEL_ID,
 } from "@plinycode/llms";
+import type { NextPromptResult } from "@plinycode/shared";
 import { getPlinyApiKey, savePlinyApiKey } from "@plinycode/shared/node";
 import {
 	app,
@@ -214,7 +215,7 @@ else {
 				let files: string[] | undefined;
 				let embeddedBrowser: EmbeddedBrowserState | undefined;
 				let improvedPrompt: ImprovedPrompt | undefined;
-				let suggestedPrompt: string | undefined;
+				let suggestedPrompt: NextPromptResult | undefined;
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
@@ -273,6 +274,7 @@ else {
 							manager.task(action.id),
 							action.messageId,
 							await getPlinyApiKey().catch(() => ""),
+							action.force,
 						);
 						break;
 					case "improvePrompt":

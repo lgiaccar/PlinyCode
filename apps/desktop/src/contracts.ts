@@ -1,3 +1,4 @@
+import type { NextPromptResult } from "@plinycode/shared";
 import { z } from "zod";
 import type { BrowserAction, BrowserStatus } from "./browser-contracts";
 import type { UpdateStatus } from "./desktop-update";
@@ -166,6 +167,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 	}),
 	z.object({
 		type: z.literal("suggestNextPrompt"),
+		force: z.boolean().optional(),
 		id: z.string().uuid(),
 		messageId: z.string().uuid(),
 	}),
@@ -294,7 +296,7 @@ export interface DesktopApi {
 		browser?: BrowserStatus;
 		embeddedBrowser?: EmbeddedBrowserState;
 		prPreview?: PrPreview;
-		suggestedPrompt?: string;
+		suggestedPrompt?: NextPromptResult;
 		improvedPrompt?: { text?: string; error?: string };
 		update?: UpdateStatus;
 	}>;

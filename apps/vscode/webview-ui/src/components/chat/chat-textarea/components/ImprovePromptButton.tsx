@@ -5,22 +5,34 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 interface ImprovePromptButtonProps {
 	disabled: boolean
 	pending: boolean
+	label?: string
+	generating?: boolean
 	onClick: () => void
 }
 
-/** The wand under the prompt box: rewrites the draft for grammar and clarity with a small free model. */
-export function ImprovePromptButton({ disabled, pending, onClick }: ImprovePromptButtonProps) {
+/** The prompt wand improves a draft or generates follow-up choices for an empty composer. */
+export function ImprovePromptButton({
+	disabled,
+	pending,
+	onClick,
+	label = "Improve prompt",
+	generating = false,
+}: ImprovePromptButtonProps) {
 	return (
 		<Tooltip>
 			<TooltipContent className="text-xs px-2 max-w-64" side="top">
 				{pending
-					? "Improving the prompt..."
-					: "Improve prompt: fix grammar and make it clearer, with a small free model. You can undo it."}
+					? generating
+						? "Generating…"
+						: "Improving the prompt..."
+					: generating
+						? `${label}: generate fresh suggestions from the conversation.`
+						: "Improve prompt: fix grammar and make it clearer, with a small free model. You can undo it."}
 			</TooltipContent>
 			<TooltipTrigger asChild>
 				<VSCodeButton
 					appearance="icon"
-					aria-label="Improve prompt"
+					aria-label={pending && generating ? "Generating…" : label}
 					className="p-0 m-0 mr-1 flex items-center"
 					data-testid="improve-prompt-button"
 					disabled={disabled || pending}

@@ -290,9 +290,9 @@ export {
 	noopBasicLogger,
 } from "./logging/logger";
 export * from "./mcp";
-export type { PromptTurn } from "./next-prompt";
+export type { NextPromptResult, PromptTurn } from "./next-prompt";
 export {
-	cleanNextPrompt,
+	cleanNextPrompts,
 	NextPromptSuggestions,
 	nextPromptContext,
 } from "./next-prompt";
