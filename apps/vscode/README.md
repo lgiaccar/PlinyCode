@@ -19,6 +19,10 @@ their configured services; extension updates come from GitHub.
 
 See the [0.2.11 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11).
 
+## Desktop preview
+
+[PlinyCode Desktop 0.1.9](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.9) supports projects with multiple folders, with one chat working across them. Multi-folder chats edit the selected folders directly; single-folder Git projects retain isolated worktrees. [Desktop installation](https://github.com/lgiaccar/PlinyCode/blob/desktop-v0.1.9/docs/desktop-install.md)
+
 ## Features
 
 - **Plan, Agent and Ask:** plan an approach, implement it, or ask questions without editing project files.

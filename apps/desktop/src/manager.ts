@@ -19,6 +19,11 @@ import {
 import { git, isGit, overlaps, prepareWorktree } from "./git";
 import { historyBefore } from "./history";
 import { type ConnectedMcpServer, mcpSecretValues } from "./mcp-contracts";
+import {
+	projectFolders,
+	supportsWorktree,
+	taskFolders,
+} from "./project-folders";
 import type { DesktopStore } from "./store";
 
 export function stopTree(child: ChildProcessWithoutNullStreams): Promise<void> {
@@ -57,6 +62,7 @@ type Running = {
 	controller: AbortController;
 	child?: ChildProcessWithoutNullStreams;
 	folder: string;
+	folders: string[];
 	settled?: Promise<void>;
 };
 export class TaskManager {
@@ -161,15 +167,40 @@ export class TaskManager {
 		if (!project) throw new Error("Project not found.");
 		return project;
 	}
-	async addProject(path: string) {
-		const canonical = await realpath(path);
-		if (!(await stat(canonical)).isDirectory())
-			throw new Error("Select a project folder.");
-		const existing = this.store.state.projects.find(
-			(project) =>
-				overlaps(project.path, canonical) &&
-				project.path.length === canonical.length,
+	private async canonicalFolders(paths: string[]) {
+		if (!paths.length || paths.length > 32)
+			throw new Error("Select between 1 and 32 project folders.");
+		const folders: string[] = [];
+		for (const path of paths) {
+			const canonical = await realpath(path);
+			if (!(await stat(canonical)).isDirectory())
+				throw new Error("Select a project folder.");
+			if (
+				!folders.some(
+					(folder) =>
+						overlaps(folder, canonical) && folder.length === canonical.length,
+				)
+			)
+				folders.push(canonical);
+		}
+		return folders;
+	}
+	async addProject(path: string | string[]) {
+		const folders = await this.canonicalFolders(
+			typeof path === "string" ? [path] : path,
 		);
+		const canonical = folders[0];
+		const existing = this.store.state.projects.find((project) => {
+			const roots = projectFolders(project);
+			return (
+				roots.length === folders.length &&
+				roots.every(
+					(root, index) =>
+						overlaps(root, folders[index]) &&
+						root.length === folders[index].length,
+				)
+			);
+		});
 		if (existing) return existing;
 		const gitProject = await isGit(canonical);
 		const remotes = gitProject
@@ -179,6 +210,7 @@ export class TaskManager {
 			id: randomUUID(),
 			name: basename(canonical),
 			path: canonical,
+			folders,
 			git: gitProject,
 			base: "",
 			target: "",
@@ -188,6 +220,49 @@ export class TaskManager {
 		this.store.state.projects.push(project);
 		this.changed();
 		return project;
+	}
+	async updateProject(
+		id: string,
+		settings: Pick<Project, "base" | "target" | "remote" | "worktreeSource"> & {
+			name?: string;
+			folders?: string[];
+		},
+	) {
+		const project = this.project(id);
+		const folders = settings.folders
+			? await this.canonicalFolders(settings.folders)
+			: projectFolders(project);
+		if (
+			!overlaps(folders[0], project.path) ||
+			folders[0].length !== project.path.length
+		)
+			throw new Error(
+				"Keep the original folder first. Create a new project to change its primary folder.",
+			);
+		if (
+			this.store.state.tasks.some(
+				(task) =>
+					task.projectId === id &&
+					(active(task) ||
+						this.running.has(task.id) ||
+						this.external.has(task.id) ||
+						this.store.state.commands?.some(
+							(command) =>
+								command.taskId === task.id && command.status === "running",
+						)),
+			)
+		)
+			throw new Error(
+				"Stop project tasks and background commands before changing project settings.",
+			);
+		Object.assign(project, {
+			...settings,
+			name: settings.name ?? project.name,
+			folders,
+			base: settings.base.trim(),
+			target: settings.target.trim(),
+		});
+		this.changed();
 	}
 	async migrateProjects() {
 		for (const project of this.store.state.projects) {
@@ -274,7 +349,8 @@ export class TaskManager {
 			messages: [],
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
-			worktree: project.git && worktree,
+			worktree: supportsWorktree(project) && worktree,
+			folders: [...projectFolders(project)],
 		};
 		this.store.state.tasks.unshift(task);
 		this.changed();
@@ -366,29 +442,31 @@ export class TaskManager {
 		for (const [id, request] of this.queue) {
 			const task = this.task(id),
 				project = this.project(task.projectId);
+			const folders = taskFolders(task, project);
+			const intersects = (other: string[]) =>
+				folders.some((folder) => other.some((root) => overlaps(root, folder)));
 			if (
 				(!task.worktree || !!task.cwd) &&
-				(this.store.state.commands ?? []).some(
-					(command) =>
-						command.status === "running" &&
-						command.taskId !== id &&
-						overlaps(command.cwd, task.cwd ?? project.path),
-				)
-			)
-				continue;
-			// An ordinary-folder task may request write approval later. Hold the
-			// folder for its whole run, regardless of its initial checkbox values.
-			if (
-				(!task.worktree || !!task.cwd) &&
-				[...this.running.values()].some((run) =>
-					overlaps(run.folder, task.cwd ?? project.path),
-				)
+				((this.store.state.commands ?? []).some((command) => {
+					if (command.status !== "running" || command.taskId === id)
+						return false;
+					const owner = this.store.state.tasks.find(
+						(item) => item.id === command.taskId,
+					);
+					return intersects(
+						owner
+							? taskFolders(owner, this.project(owner.projectId))
+							: [command.cwd],
+					);
+				}) ||
+					[...this.running.values()].some((run) => intersects(run.folders)))
 			)
 				continue;
 			this.queue.delete(id);
 			const run: Running = {
 				controller: new AbortController(),
 				folder: task.cwd ?? project.path,
+				folders,
 			};
 			this.running.set(id, run);
 			task.status = "preparing";
@@ -440,6 +518,15 @@ export class TaskManager {
 				else task.cwd = await realpath(project.path);
 			}
 			run.folder = task.cwd ?? project.path;
+			run.folders = taskFolders(task, project);
+			for (const folder of run.folders) {
+				const canonical = await realpath(folder);
+				if (canonical !== folder || !(await stat(canonical)).isDirectory())
+					throw new Error(
+						`Project folder changed or is unavailable: ${folder}`,
+					);
+			}
+			if (!task.worktree) task.folders = [...run.folders];
 			run.controller.signal.throwIfAborted();
 			if (!(await stat(run.folder)).isDirectory())
 				throw new Error("The task's working folder no longer exists.");

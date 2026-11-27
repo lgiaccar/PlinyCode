@@ -44,6 +44,8 @@ export const settingsSchema = z.object({
 });
 export type Settings = z.infer<typeof settingsSchema>;
 export interface Project {
+	/** Ordered workspace roots; legacy projects use path as their only root. */
+	folders?: string[];
 	prRepository?: PrRepository;
 	hasPrToken?: boolean;
 	id: string;
@@ -78,6 +80,8 @@ export interface PendingMessage {
 	status: "queued" | "sending" | "held";
 }
 export interface Task {
+	/** Snapshot at creation: changing a project never retargets an existing chat. */
+	folders?: string[];
 	pendingMessages?: PendingMessage[];
 	engineSessionId?: string;
 	pullRequest?: PullRequest;
@@ -209,9 +213,12 @@ export const actionSchema = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("removeMcp"), id: z.string().uuid() }),
 	z.object({ type: z.literal("testMcp"), id: z.string().uuid() }),
 	z.object({ type: z.literal("addProject") }),
+	z.object({ type: z.literal("pickProjectFolders") }),
 	z.object({
 		type: z.literal("projectSettings"),
 		id: z.string().uuid(),
+		name: z.string().trim().min(1).max(200).optional(),
+		folders: z.array(z.string().min(1).max(8192)).min(1).max(32).optional(),
 		worktreeSource: z.enum(["remote", "local"]).default("remote"),
 		base: z.string().max(200),
 		target: z.string().max(200),
@@ -251,7 +258,11 @@ export const actionSchema = z.discriminatedUnion("type", [
 		type: z.literal("saveKey"),
 		key: z.string().trim().min(1).max(10_000),
 	}),
-	z.object({ type: z.literal("openFolder"), id: z.string().uuid() }),
+	z.object({
+		type: z.literal("openFolder"),
+		id: z.string().uuid(),
+		folder: z.string().optional(),
+	}),
 	z.object({ type: z.literal("diff"), id: z.string().uuid() }),
 ]);
 export type Action = Exclude<

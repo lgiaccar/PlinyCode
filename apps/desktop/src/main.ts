@@ -27,6 +27,7 @@ import { webLink } from "./links";
 import { TaskManager } from "./manager";
 import { DesktopNextPrompt } from "./next-prompt";
 import type { PrPreview } from "./pr-contracts";
+import { supportsWorktree, taskFolders } from "./project-folders";
 import { type ImprovedPrompt, PromptImprover } from "./prompt-improver";
 import { DesktopStore } from "./store";
 import { createDesktopUpdate } from "./update-runtime";
@@ -394,17 +395,24 @@ else {
 					}
 					case "snapshot":
 						break;
+					case "pickProjectFolders":
 					case "addProject": {
-						const folder =
-							process.env.PLINY_DESKTOP_TEST_PROJECT ??
-							(
-								await dialog.showOpenDialog(window, {
-									properties: ["openDirectory"],
-								})
-							).filePaths[0];
-						if (folder) {
-							const project = await manager.addProject(folder);
-							selectedTask = manager.createTask(project.id, project.git).id;
+						const folders =
+							action.type === "addProject" &&
+							process.env.PLINY_DESKTOP_TEST_PROJECT
+								? [process.env.PLINY_DESKTOP_TEST_PROJECT]
+								: (
+										await dialog.showOpenDialog(window, {
+											properties: ["openDirectory", "multiSelections"],
+										})
+									).filePaths;
+						if (action.type === "pickProjectFolders") files = folders;
+						else if (folders.length) {
+							const project = await manager.addProject(folders);
+							selectedTask = manager.createTask(
+								project.id,
+								supportsWorktree(project),
+							).id;
 						}
 						break;
 					}
@@ -415,23 +423,14 @@ else {
 						).id;
 						break;
 					case "projectSettings":
-						if (
-							store.state.tasks.some(
-								(task) =>
-									task.projectId === action.id &&
-									(active(task) || manager?.external.has(task.id)),
-							)
-						)
-							throw new Error(
-								"Stop project tasks before changing worktree or PR target settings.",
-							);
-						Object.assign(manager.project(action.id), {
+						await manager.updateProject(action.id, {
+							name: action.name,
+							folders: action.folders,
 							worktreeSource: action.worktreeSource,
-							base: action.base.trim(),
-							target: action.target.trim(),
+							base: action.base,
+							target: action.target,
 							remote: action.remote,
 						});
-						manager.changed();
 						break;
 					case "configureTask": {
 						const task = manager.task(action.id);
@@ -473,9 +472,11 @@ else {
 						break;
 					case "openFolder": {
 						const task = manager.task(action.id);
-						const error = await shell.openPath(
-							task.cwd ?? manager.project(task.projectId).path,
-						);
+						const folders = taskFolders(task, manager.project(task.projectId));
+						const folder = action.folder ?? folders[0];
+						if (!folders.includes(folder))
+							throw new Error("Folder does not belong to this chat.");
+						const error = await shell.openPath(folder);
 						if (error) throw new Error(error);
 						break;
 					}

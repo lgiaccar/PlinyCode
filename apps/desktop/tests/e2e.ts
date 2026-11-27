@@ -923,6 +923,117 @@ try {
 			"PASS: restart restores delegated history and command state without replay, and decrypts MCP credentials for an explicit test",
 		);
 		console.log(`Desktop E2E evidence: ${data}`);
+		// One project, one chat, real engine tools in a second folder.
+		const secondary = join(data, "secondary-project");
+		await mkdir(secondary);
+		const secondaryFile = join(secondary, "cross-folder.txt");
+		await writeFile(secondaryFile, "SECONDARY_FOLDER_MARKER\n");
+		await application.evaluate(({ dialog }, folder) => {
+			dialog.showOpenDialog = async () => ({
+				canceled: false,
+				filePaths: [folder],
+			});
+		}, secondary);
+		await page.getByTitle("Project settings", { exact: true }).first().click();
+		await page
+			.getByRole("button", { name: "Add folders…", exact: true })
+			.click();
+		await page
+			.getByRole("button", { name: `Remove ${secondary}`, exact: true })
+			.waitFor();
+		await page
+			.getByRole("textbox", { name: "Project name", exact: true })
+			.fill("Shared workspace");
+		await page.screenshot({ path: join(data, "multi-folder-settings.png") });
+		await page
+			.getByRole("button", { name: "Save project", exact: true })
+			.click();
+		await page
+			.getByTitle("New chat in Shared workspace", { exact: true })
+			.click();
+		await page.getByRole("combobox", { name: "Open project folder" }).waitFor();
+		const shared = await page.evaluate(
+			async () =>
+				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks[0],
+		);
+		assert.deepEqual(shared.folders, [folder, secondary]);
+		assert.equal(shared.worktree, false);
+		await page.getByLabel("Full Automatic", { exact: true }).click();
+		await page.waitForFunction(
+			() =>
+				document.querySelector<HTMLInputElement>(".full-auto input")?.checked,
+		);
+		reply = { name: "read_files", input: { files: [{ path: secondaryFile }] } };
+		await page
+			.getByRole("textbox", { name: "Message PlinyCode" })
+			.fill("Read the second project folder");
+		await sendPrompt(page);
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+			undefined,
+			{ timeout: 40_000 },
+		);
+		assert.ok(
+			JSON.stringify(requests.at(-1)).includes("SECONDARY_FOLDER_MARKER"),
+			"The real engine must read the second root",
+		);
+		assert.ok(
+			JSON.stringify(requests.at(-1)).includes(
+				"This chat works across all of these project folders",
+			),
+		);
+		reply = {
+			name: "editor",
+			input: {
+				path: secondaryFile,
+				old_text: "SECONDARY_FOLDER_MARKER",
+				new_text: "EDITED_SECONDARY_FOLDER",
+			},
+		};
+		await page
+			.getByRole("textbox", { name: "Message PlinyCode" })
+			.fill("Edit the second project folder");
+		await sendPrompt(page);
+		await page.waitForFunction(
+			() => document.querySelector(".badge")?.textContent === "completed",
+			undefined,
+			{ timeout: 40_000 },
+		);
+		assert.equal(
+			await readFile(secondaryFile, "utf8"),
+			"EDITED_SECONDARY_FOLDER\n",
+		);
+		await page.screenshot({ path: join(data, "multi-folder-chat.png") });
+		// Removing a root affects only new chats, and never deletes files.
+		await page.getByTitle("Project settings", { exact: true }).first().click();
+		await page
+			.getByRole("button", { name: `Remove ${secondary}`, exact: true })
+			.click();
+		await page
+			.getByRole("button", { name: "Save project", exact: true })
+			.click();
+		await application.close();
+		application = await launch();
+		page = await application.firstWindow();
+		await page
+			.getByRole("button", { name: /Read the second project folder/ })
+			.click();
+		await page.getByRole("combobox", { name: "Open project folder" }).waitFor();
+		const reopenedShared = await page.evaluate(
+			async (id) =>
+				(await window.plinycode.invoke({ type: "snapshot" })).state.tasks.find(
+					(task) => task.id === id,
+				),
+			shared.id,
+		);
+		assert.deepEqual(reopenedShared?.folders, [folder, secondary]);
+		assert.equal(
+			await readFile(secondaryFile, "utf8"),
+			"EDITED_SECONDARY_FOLDER\n",
+		);
+		console.log(
+			"PASS: multi-folder settings, real engine read/edit in second root, and persisted chat roots after project changes",
+		);
 	}
 	// Real worktree and PR controls; provider requests remain local fixture GETs.
 	const gitFolder = join(data, "git-project"),
