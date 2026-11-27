@@ -713,9 +713,14 @@ function App() {
 											suggestion.pending ||
 											(!prompt.trim() && !suggestion.canGenerate)
 										}
-										onClick={() => {
+										onClick={(event) => {
 											if (prompt.trim()) void draft.improve();
-											else void suggestion.generate();
+											else {
+												event.currentTarget.form
+													?.querySelector("textarea")
+													?.focus();
+												void suggestion.generate();
+											}
 										}}
 										title={
 											prompt.trim()

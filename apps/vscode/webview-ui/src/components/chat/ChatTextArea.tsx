@@ -1022,7 +1022,10 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							}
 							onClick={() => {
 								if (fullInputValue.trim()) void promptImprover.improve()
-								else void suggestion.generate()
+								else {
+									textAreaRef.current?.focus()
+									void suggestion.generate()
+								}
 							}}
 							pending={promptImprover.pending || suggestion.pending}
 						/>

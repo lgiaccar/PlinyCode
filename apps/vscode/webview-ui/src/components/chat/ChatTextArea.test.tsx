@@ -794,6 +794,7 @@ describe("next prompt ghost text", () => {
 		mocks.suggestNextPrompt.mockResolvedValueOnce({ status: "ready", prompts: ["Review the diff."] })
 		fireEvent.click(screen.getByTestId("improve-prompt-button"))
 		await waitFor(() => expect(input.placeholder).toBe("Review the diff."))
+		expect(input).toHaveFocus()
 		expect(mocks.suggestNextPrompt).toHaveBeenLastCalledWith(
 			expect.objectContaining({ force: true, taskId: "chat-a", completionTs: 2 }),
 		)

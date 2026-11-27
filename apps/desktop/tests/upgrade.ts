@@ -14,11 +14,18 @@ const folder = join(data, "project");
 await mkdir(folder, { recursive: true });
 let requestBody = "";
 const server = createServer(async (request, response) => {
-	requestBody = "";
-	for await (const chunk of request) requestBody += String(chunk);
-	const body = JSON.parse(requestBody);
+	let input = "";
+	for await (const chunk of request) input += String(chunk);
+	const body = JSON.parse(input);
+	const suggestion = JSON.stringify(body.messages).includes(
+		"coding assistant after this completed turn",
+	);
+	if (!suggestion) requestBody = input;
 	response.writeHead(200, { "content-type": "text/event-stream" });
-	for (const delta of [{ content: "Saved upgrade marker." }, {}])
+	for (const delta of [
+		{ content: suggestion ? "[]" : "Saved upgrade marker." },
+		{},
+	])
 		response.write(
 			`data: ${JSON.stringify({ id: "upgrade", object: "chat.completion.chunk", model: body.model, choices: [{ index: 0, delta, finish_reason: "content" in delta ? null : "stop" }] })}\n\n`,
 		);
@@ -52,9 +59,7 @@ try {
 		await page
 			.getByRole("button", { name: /Remember UPGRADE_SENTINEL/ })
 			.click();
-		await page
-			.getByRole("button", { name: "Improve prompt", exact: true })
-			.waitFor();
+		await page.getByRole("textbox", { name: "Message PlinyCode" }).waitFor();
 	}
 	const before = await page.locator(".message.user").count();
 	await page

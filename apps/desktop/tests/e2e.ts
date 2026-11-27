@@ -443,7 +443,13 @@ try {
 		await page
 			.getByRole("button", { name: "Generate alternatives", exact: true })
 			.waitFor();
-		await suggestionComposer.press("ArrowRight");
+		assert.equal(
+			await suggestionComposer.evaluate(
+				(element) => document.activeElement === element,
+			),
+			true,
+		);
+		await page.keyboard.press("ArrowRight");
 		assert.equal(
 			await suggestionComposer.getAttribute("placeholder"),
 			"Check malformed input.",
