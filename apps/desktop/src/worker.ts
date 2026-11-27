@@ -70,6 +70,8 @@ const send = (event: WorkerEvent) =>
 let core: ClineCore | undefined,
 	sessionId = "",
 	cancelled = false;
+let acceptSteering = false;
+const steering = new Map<string, string>();
 const pending = new Map<string, (value: string) => void>();
 const commandRequests = new Map<
 	string,
@@ -199,6 +201,7 @@ async function run(input: RunInput) {
 		error: "Worker did not finish.",
 	};
 	let store: SqliteSessionStore | undefined;
+	let finishReason: string | undefined;
 	try {
 		const cwd = task.cwd;
 		if (!cwd) throw new Error("The task has no working folder.");
@@ -266,6 +269,20 @@ async function run(input: RunInput) {
 		});
 		sessionId = task.engineSessionId ?? task.id;
 		core.subscribe((event) => {
+			if (
+				event.type === "pending_prompt_submitted" &&
+				event.payload.sessionId === sessionId
+			) {
+				const match = [...steering].find(
+					([, text]) => text === event.payload.prompt,
+				);
+				if (match) {
+					const tail = stream.flush();
+					if (tail) send({ type: "text", text: tail });
+					steering.delete(match[0]);
+					send({ type: "steering", id: match[0], status: "received" });
+				}
+			}
 			if (event.type !== "agent_event") return;
 			const item = event.payload.event;
 			if ("parentAgentId" in item && item.parentAgentId) {
@@ -321,6 +338,8 @@ async function run(input: RunInput) {
 					});
 				return;
 			}
+			if (item.type === "done") finishReason = item.reason;
+			if (item.type === "error") finishReason = "error";
 			if (
 				item.type === "content_start" &&
 				item.contentType === "text" &&
@@ -403,16 +422,34 @@ async function run(input: RunInput) {
 			localRuntime: { configExtensions: ["rules"] },
 		});
 		if (cancelled) throw new Error("Cancelled.");
-		const response = await core.send({ sessionId, prompt: input.prompt });
+		const turn = core.send({ sessionId, prompt: input.prompt });
+		acceptSteering = true;
+		send({ type: "ready" });
+		const response = await turn;
+		// A steer can cross the finishing boundary and become an engine follow-up.
+		// Keep the worker alive until that turn and its transcript persistence finish.
+		while (!cancelled) {
+			await new Promise((resolve) => setTimeout(resolve, 25));
+			const snapshot = await core.get(sessionId);
+			const pending = await core.pendingPrompts.list({ sessionId });
+			if (snapshot?.status === "failed") {
+				finishReason = "error";
+				break;
+			}
+			if (snapshot?.status !== "running" && pending.length === 0) break;
+			if (finishReason && finishReason !== "completed") break;
+		}
+		acceptSteering = false;
 		if (!response) throw new Error("The engine returned no result.");
+		finishReason ??= response.finishReason;
 		result = {
 			type: "done",
 			text: clean(response.text),
-			status: response.finishReason === "completed" ? "completed" : "failed",
+			status: finishReason === "completed" ? "completed" : "failed",
 			error:
-				response.finishReason === "completed"
+				finishReason === "completed"
 					? undefined
-					: `Agent ended with ${response.finishReason}`,
+					: `Agent ended with ${finishReason}`,
 		};
 	} catch (error) {
 		result = {
@@ -422,6 +459,7 @@ async function run(input: RunInput) {
 			error: clean(String(error instanceof Error ? error.message : error)),
 		};
 	} finally {
+		acceptSteering = false;
 		await core?.dispose().catch(() => {});
 		await mcp?.close().catch(() => {});
 		await store?.close();
@@ -439,6 +477,19 @@ if (import.meta.main) {
 		if (command.type === "run" && !started) {
 			started = true;
 			void run(command.input);
+		}
+		if (command.type === "steer") {
+			if (!acceptSteering || cancelled || !core) {
+				send({ type: "steering", id: command.id, status: "deferred" });
+			} else {
+				steering.set(command.id, command.prompt);
+				void core
+					.send({ sessionId, prompt: command.prompt, delivery: "steer" })
+					.catch(() => {
+						steering.delete(command.id);
+						send({ type: "steering", id: command.id, status: "deferred" });
+					});
+			}
 		}
 		if (command.type === "reply") {
 			pending.get(command.id)?.(command.value);

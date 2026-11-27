@@ -26,6 +26,7 @@ export class DesktopStore {
 		} else this.state = freshState();
 		this.state.settings.autoCheckUpdates ??= true;
 		for (const task of this.state.tasks) {
+			for (const entry of task.pendingMessages ?? []) entry.status = "held";
 			if (task.pullRequest?.status === "creating")
 				task.pullRequest = {
 					...task.pullRequest,

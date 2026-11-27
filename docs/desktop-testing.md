@@ -51,6 +51,14 @@ project migration, dirty-source preservation, approvals and Full Automatic,
 credential redaction, background descendants, browser pairing/tab ownership,
 MCP transports, GitHub/Azure PR fixtures, update hashes and saved-history upgrades.
 
+`test:drafts` also runs `interactions-e2e.ts` against a controlled streaming gateway.
+It verifies that steering reaches the next model request exactly once, queued
+follow-ups wait for completion, cancellation/reopening do not replay pending work,
+drafts survive full app restart, streaming preserves reading positions, and web
+links reach the OS handler while unsafe protocols are rejected in both processes.
+The unit suite covers persisted draft revisions, URL validation and worker queue
+ordering. Test artifacts remain under `ai_output/desktop-interactions-*`.
+
 These are deterministic local-service acceptance tests. They do not certify a
 live Pliny gateway, corporate proxy, production GitHub/Azure permissions, or a
 managed Chrome/Edge policy. Keep those environment-specific checks separate.

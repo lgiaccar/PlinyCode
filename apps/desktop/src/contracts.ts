@@ -71,7 +71,14 @@ export type TaskStatus =
 	| "failed"
 	| "cancelled"
 	| "interrupted";
+export interface PendingMessage {
+	id: string;
+	text: string;
+	delivery: "queue" | "steer";
+	status: "queued" | "sending" | "held";
+}
 export interface Task {
+	pendingMessages?: PendingMessage[];
 	engineSessionId?: string;
 	pullRequest?: PullRequest;
 	subagents?: Subagent[];
@@ -132,6 +139,19 @@ export const freshState = (): State => ({
 export const active = (task: Task) =>
 	["preparing", "queued", "running", "needs_input"].includes(task.status);
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("openLink"), url: z.string().max(8192) }),
+	z.object({ type: z.literal("loadDrafts") }),
+	z.object({
+		type: z.literal("saveDraft"),
+		id: z.string().uuid(),
+		text: z.string().max(200_000),
+		revision: z.number().int().nonnegative(),
+	}),
+	z.object({
+		type: z.literal("removePending"),
+		id: z.string().uuid(),
+		messageId: z.string().uuid(),
+	}),
 	z.object({
 		type: z.literal("suggestNextPrompt"),
 		id: z.string().uuid(),
@@ -213,6 +233,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 		id: z.string().uuid(),
 		prompt: z.string().trim().min(1).max(200_000),
 		cached: z.boolean().optional(),
+		delivery: z.enum(["queue", "steer"]).optional(),
 	}),
 	z.object({
 		type: z.literal("improvePrompt"),
@@ -233,10 +254,18 @@ export const actionSchema = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("openFolder"), id: z.string().uuid() }),
 	z.object({ type: z.literal("diff"), id: z.string().uuid() }),
 ]);
-export type Action = z.infer<typeof actionSchema>;
+export type Action = Exclude<
+	z.infer<typeof actionSchema>,
+	{ type: "saveDraft" }
+>;
 export interface DesktopApi {
+	saveDraft(
+		id: string,
+		draft: { text: string; revision: number },
+	): Promise<void>;
 	invoke(action: Action): Promise<{
 		state: State;
+		drafts?: Record<string, { text: string; revision: number }>;
 		selectedTask?: string;
 		diff?: string;
 		credentialAvailable?: boolean;
@@ -266,6 +295,8 @@ export interface RunInput {
 	mcpServers?: ConnectedMcpServer[];
 }
 export type WorkerEvent =
+	| { type: "ready" }
+	| { type: "steering"; id: string; status: "received" | "deferred" }
 	| {
 			type: "host";
 			requestId: string;

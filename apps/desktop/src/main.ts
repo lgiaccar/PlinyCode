@@ -20,8 +20,10 @@ import {
 import type { BrowserStatus } from "./browser-contracts";
 import { actionSchema, active } from "./contracts";
 import type { DesktopUpdate } from "./desktop-update";
+import { DraftStore } from "./draft-store";
 import { taskDiff } from "./git";
 import { Integrations } from "./integrations";
+import { webLink } from "./links";
 import { TaskManager } from "./manager";
 import { DesktopNextPrompt } from "./next-prompt";
 import type { PrPreview } from "./pr-contracts";
@@ -44,6 +46,7 @@ let window: BrowserWindow | undefined,
 	manager: TaskManager | undefined,
 	integrations: Integrations | undefined,
 	exiting = false;
+let flushDrafts = async () => {};
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", () => {
@@ -57,9 +60,9 @@ else {
 		promptImprover.close();
 		nextPrompt.close();
 		updater?.close();
-		void Promise.allSettled([integrations?.close(), manager.close()]).finally(
-			() => app.quit(),
-		);
+		void flushDrafts()
+			.then(() => Promise.allSettled([integrations?.close(), manager!.close()]))
+			.finally(() => app.quit());
 	});
 	app.on("window-all-closed", () => app.quit());
 	void app
@@ -69,6 +72,7 @@ else {
 				process.env.PLINY_DESKTOP_DATA ??
 				join(app.getPath("appData"), "PlinyCode", "desktop");
 			const store = new DesktopStore(join(directory, "state.json"));
+			const drafts = new DraftStore(join(directory, "drafts.json"));
 			const vault = new SecretVault(
 				join(directory, "mcp-secrets.json"),
 				safeStorage,
@@ -115,6 +119,38 @@ else {
 					nodeIntegration: false,
 					sandbox: true,
 				},
+			});
+			flushDrafts = () =>
+				new Promise<void>((resolve) => {
+					if (
+						!window ||
+						window.isDestroyed() ||
+						window.webContents.isDestroyed()
+					) {
+						resolve();
+						return;
+					}
+					const finish = () => {
+						clearTimeout(timeout);
+						ipcMain.removeListener("plinycode:draftsFlushed", received);
+						resolve();
+					};
+					const received = (event: Electron.IpcMainEvent) => {
+						if (
+							event.sender === window?.webContents &&
+							event.senderFrame === window.webContents.mainFrame
+						)
+							finish();
+					};
+					const timeout = setTimeout(finish, 3000);
+					ipcMain.on("plinycode:draftsFlushed", received);
+					window.webContents.send("plinycode:flushDrafts");
+				});
+			window.on("close", (event) => {
+				if (!exiting) {
+					event.preventDefault();
+					app.quit();
+				}
 			});
 			window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 			window.webContents.on("context-menu", (_event, params) => {
@@ -174,6 +210,25 @@ else {
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
+					case "openLink": {
+						const url = webLink(action.url);
+						if (!url)
+							throw new Error("Only HTTP and HTTPS links can be opened.");
+						await shell.openExternal(url);
+						break;
+					}
+					case "loadDrafts":
+						return { state: store.state, drafts: drafts.drafts };
+					case "saveDraft":
+						manager.task(action.id);
+						drafts.save(action.id, {
+							text: action.text,
+							revision: action.revision,
+						});
+						return;
+					case "removePending":
+						manager.removePending(action.id, action.messageId);
+						break;
 					case "copyMessage": {
 						const entry = manager
 							.task(action.id)
@@ -392,7 +447,12 @@ else {
 						break;
 					}
 					case "send":
-						manager.send(action.id, action.prompt, action.cached);
+						manager.send(
+							action.id,
+							action.prompt,
+							action.cached,
+							action.delivery,
+						);
 						break;
 					case "cancel":
 						await manager.cancel(action.id);
