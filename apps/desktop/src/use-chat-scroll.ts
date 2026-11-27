@@ -6,7 +6,14 @@ export function useChatScroll(id: string | undefined) {
 	const content = useRef<HTMLDivElement>(null);
 	const positions = useRef(new Map<string, { top: number; follow: boolean }>());
 	const following = useRef(true);
+	const layout = useRef({ height: 0, viewport: 0 });
 	const [away, setAway] = useState(false);
+	function followLayout() {
+		const node = container.current;
+		if (!node) return;
+		if (following.current) node.scrollTop = node.scrollHeight;
+		layout.current = { height: node.scrollHeight, viewport: node.clientHeight };
+	}
 	function jump() {
 		const node = container.current;
 		if (!node) return;
@@ -18,6 +25,16 @@ export function useChatScroll(id: string | undefined) {
 	function onScroll() {
 		const node = container.current;
 		if (!node) return;
+		// Chromium can emit an anchoring/clamping scroll before ResizeObserver.
+		// A changed layout is not evidence that the reader scrolled away.
+		if (
+			following.current &&
+			(layout.current.height !== node.scrollHeight ||
+				layout.current.viewport !== node.clientHeight)
+		) {
+			followLayout();
+			return;
+		}
 		following.current =
 			node.scrollHeight - node.scrollTop - node.clientHeight < 48;
 		setAway(!following.current);
@@ -27,6 +44,8 @@ export function useChatScroll(id: string | undefined) {
 				follow: following.current,
 			});
 	}
+	// Follow React content changes before the browser dispatches layout scrolls.
+	useLayoutEffect(followLayout);
 	useLayoutEffect(() => {
 		const node = container.current;
 		const body = content.current;
@@ -34,9 +53,14 @@ export function useChatScroll(id: string | undefined) {
 		const saved = positions.current.get(id);
 		following.current = saved?.follow ?? true;
 		node.scrollTop = following.current ? node.scrollHeight : (saved?.top ?? 0);
+		layout.current = { height: node.scrollHeight, viewport: node.clientHeight };
 		setAway(!following.current);
 		const observer = new ResizeObserver(() => {
 			if (following.current) node.scrollTop = node.scrollHeight;
+			layout.current = {
+				height: node.scrollHeight,
+				viewport: node.clientHeight,
+			};
 		});
 		observer.observe(body);
 		observer.observe(node);

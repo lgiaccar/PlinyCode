@@ -92,6 +92,22 @@ try {
 		const el = document.querySelector(".conversation")!;
 		return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
 	});
+	// Reproduce a layout-induced scroll before ResizeObserver has a chance to run,
+	// as happens with Chromium scroll anchoring when streamed content grows.
+	const layoutDistances = await page.locator(".conversation").evaluate((el) => {
+		const extra = document.createElement("div");
+		extra.style.height = "600px";
+		el.firstElementChild!.append(extra);
+		el.dispatchEvent(new Event("scroll"));
+		const grown = el.scrollHeight - el.scrollTop - el.clientHeight;
+		extra.remove();
+		el.dispatchEvent(new Event("scroll"));
+		return [grown, el.scrollHeight - el.scrollTop - el.clientHeight];
+	});
+	assert.ok(
+		layoutDistances.every((distance) => distance < 48),
+		"Layout scrolls must preserve follow mode before resize observers run",
+	);
 	await page.locator(".conversation").evaluate((el) => {
 		el.scrollTop = 160;
 	});
