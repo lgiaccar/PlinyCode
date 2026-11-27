@@ -21,8 +21,9 @@ disabled in Settings. Versions 0.1.0 and 0.1.1 need one manual upgrade to receiv
 the updater. The [download and upgrade guide](desktop-install.md) explains the
 Windows, DEB and AppImage flows and how saved data is preserved.
 On first launch, configure a Pliny API key in Settings (or reuse CLI credentials).
-Git is still required for Git worktrees and PR publishing. Browser automation
-still requires the separate companion setup described below.
+Git is still required for Git worktrees and PR publishing. Current source builds
+include the right-side browser described below. The published installer above
+predates that feature; existing Chrome/Edge sessions use the companion setup.
 
 Uninstall through Windows **Installed apps**. Conversation history and credentials
 are preserved. To rebuild the installer from the prepared source tree:
@@ -141,12 +142,44 @@ launches can use `bun -F @plinycode/desktop start` after building once.
   Settings. Connection tests can launch the configured program. Task connections
   ask first unless the task's MCP permission is enabled. MCP tools inherit that
   permission, including when called by sub-agents.
+- Open **Browser** in the sidebar for an embedded browser beside the chat. Agents
+  can navigate, read, click and fill in this browser without companion setup.
 - Pair the Chrome/Edge companion with an existing signed-in browser and share
   selected tabs. Agents can list shared tabs, inspect page text and controls,
   click, fill and navigate within a shared origin. Web access controls approvals.
 - Configure GitHub, Azure DevOps cloud or Azure DevOps Server PR credentials per
   project. Review a task's branch/target/changes, optionally commit its changes,
   push and create a draft or ready PR. Refresh status and open the resulting PR.
+
+### Right-side browser
+
+Choose **Browser** in the sidebar or ask the agent to open an HTTP/HTTPS URL.
+The pane has an address bar, back/forward, reload/stop and a width slider. Closing
+the pane hides it without discarding the page; app settings and review dialogs
+temporarily hide the native page so it cannot cover their controls.
+
+The agent's `browser` tool uses `tabId: 0` (also the default) for the embedded
+browser. `navigate` opens `url`; `read` and its `snapshot` alias return page text
+and numbered controls; `click` uses `ref`; `fill` uses `ref` and `text`. Read again
+after navigation or a page change. Each read replaces the previous references.
+`tabs` also lists shared companion tabs; their nonzero IDs keep routing to the
+external browser. `release` releases the task's tabs. **Web access** controls tool
+approval, including for the embedded browser; Full Automatic approves it.
+
+Only one task at a time owns the embedded browser, until release or turn end.
+Choose **Take control** before interacting manually, then **Allow agent** when
+finished. Address-bar navigation, back/forward and reload also take manual control.
+Takeover interrupts an outstanding agent operation; it does not undo a submitted
+form or other action already performed. The agent must inspect uncertain results
+before retrying.
+
+The embedded browser uses its own in-memory session, separate from Desktop and
+Chrome/Edge. Sign-ins last until app exit. Password entry and file selection are
+manual; automatic password/file filling, downloads, pop-up windows, privileged URL
+schemes and website permission requests are not supported. Reading and interaction
+currently cover the main document, not iframe or shadow-DOM controls. Use the
+companion for existing signed-in Chrome/Edge tabs. Corporate SSO/proxy compatibility
+still requires managed-device acceptance.
 
 Settings and history are stored in `%APPDATA%/PlinyCode/desktop`. Engine state is
 separate for each task. Worktrees are retained under this folder until explicitly

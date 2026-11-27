@@ -621,3 +621,81 @@ select {
 .pr-dialog .modal-actions {
 	flex-wrap: wrap;
 }
+.browser-toggle {
+	margin-top: 10px;
+}
+.browser-pane {
+	flex-shrink: 0;
+	max-width: 55vw;
+	min-width: 300px;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid #3b4142;
+	background: #191e20;
+}
+.browser-heading,
+.browser-navigation,
+.browser-controls {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px;
+}
+.browser-heading strong {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.browser-navigation input {
+	flex: 1;
+	min-width: 0;
+}
+.browser-navigation button {
+	padding: 7px;
+}
+.browser-controls {
+	flex-wrap: wrap;
+	font-size: 12px;
+	border-bottom: 1px solid #3b4142;
+}
+.browser-controls output {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.browser-controls label {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+.browser-controls input {
+	width: 70px;
+	padding: 0;
+}
+.browser-viewport {
+	flex: 1;
+	min-height: 0;
+}
+.browser-viewport p {
+	padding: 20px;
+	color: #a8b4ab;
+}
+.browser-error {
+	padding: 8px;
+	color: #f0afa3;
+	overflow-wrap: anywhere;
+}
+.app:has(.browser-pane) header {
+	flex-wrap: wrap;
+	padding: 16px;
+}
+.app:has(.browser-pane) .header-actions {
+	flex-wrap: wrap;
+}
+@media (max-width: 1200px) {
+	.app:has(.browser-pane) .sidebar {
+		width: 190px;
+	}
+}
