@@ -56,6 +56,7 @@ jobs:
           bash apps/desktop/tests/linux/session.sh bun apps/desktop/tests/linux/credentials.ts
           bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:e2e
           bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:drafts
+          bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:embedded-browser
       - name: Signed-in browser companion acceptance tests
         run: bash apps/desktop/tests/linux/session.sh bun -F @plinycode/desktop test:browser
       - name: Build Ubuntu x64 packages
@@ -81,6 +82,7 @@ jobs:
             ai_output/desktop-drafts-*/**/*.png
             ai_output/desktop-interactions-e2e-*/**/*.png
             ai_output/desktop-browser-e2e-*/**/*.png
+            ai_output/desktop-embedded-browser-*/**/*.png
             ai_output/linux-package-sha256.txt
           if-no-files-found: ignore
   windows-desktop:
@@ -105,6 +107,8 @@ jobs:
         run: bun -F @plinycode/desktop test:e2e
       - name: Electron draft isolation acceptance tests
         run: bun -F @plinycode/desktop test:drafts
+      - name: Embedded browser and agent acceptance tests
+        run: bun -F @plinycode/desktop test:embedded-browser
       - name: Install test browser
         working-directory: apps/desktop
         run: bun x playwright install chromium
@@ -158,5 +162,6 @@ jobs:
             ai_output/desktop-drafts-*/**/*.png
             ai_output/desktop-interactions-e2e-*/**/*.png
             ai_output/desktop-browser-e2e-*/**/*.png
+            ai_output/desktop-embedded-browser-*/**/*.png
             ai_output/desktop-upgrade-*/**/*.png
           if-no-files-found: ignore

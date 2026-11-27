@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserPane, useBrowserPane } from "./browser-pane";
 import { ChatMessage } from "./chat-message";
 import {
 	type Action,
@@ -73,6 +74,7 @@ function PermissionsEditor({
 	);
 }
 function App() {
+	const browser = useBrowserPane();
 	const [prTaskId, setPrTaskId] = useState<string>();
 	const [models, setModels] = useState<string[]>([]);
 	async function attachFiles() {
@@ -258,6 +260,19 @@ function App() {
 						Settings
 					</button>
 				</footer>
+				<button
+					type="button"
+					className="browser-toggle"
+					aria-pressed={!!browser.state?.visible}
+					onClick={() =>
+						browser.command({
+							operation: "show",
+							visible: !browser.state?.visible,
+						})
+					}
+				>
+					Browser
+				</button>
 				<UpdateControls />
 			</aside>
 			<main>
@@ -749,6 +764,15 @@ function App() {
 					</div>
 				)}
 			</main>
+			<BrowserPane
+				browser={browser}
+				covered={
+					!!(settings || projectSettings || diff !== undefined || prTaskId)
+				}
+				owner={
+					state.tasks.find((item) => item.id === browser.state?.owner)?.title
+				}
+			/>
 			{settings && (
 				<div className="modal-backdrop">
 					<section className="modal">

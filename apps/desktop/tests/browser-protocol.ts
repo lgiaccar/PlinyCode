@@ -14,6 +14,49 @@ const { BrowserBridge } = createRequire(import.meta.url)(
 	"../../../ai_output/browser-fixture.cjs",
 ) as typeof import("../src/browser");
 const extensionId = "a".repeat(32);
+test("embedded routing preserves external tabs and releases both browser backends", async () => {
+	const manager = {} as TaskManager;
+	const integrations = new Integrations(manager, {} as SecretVault);
+	const calls: string[] = [];
+	integrations.embeddedBrowser = {
+		request: async (_task: string, input: { operation: string }) => {
+			calls.push(`embedded:${input.operation}`);
+			return [{ id: 0 }];
+		},
+		release: () => calls.push("embedded:release"),
+	} as unknown as NonNullable<typeof integrations.embeddedBrowser>;
+	integrations.browser = {
+		status: () => ({ connected: true }),
+		request: async (_task: string, input: { operation: string }) => {
+			calls.push(`companion:${input.operation}`);
+			return [{ id: 12 }];
+		},
+		release: () => calls.push("companion:release"),
+	} as unknown as NonNullable<typeof integrations.browser>;
+	const call = (input: import("../src/browser-contracts").BrowserAction) =>
+		manager.hostRequest!(
+			{ id: "task" } as Task,
+			{ type: "host", requestId: "fixture", operation: "browser", input },
+			new AbortController().signal,
+		);
+	assert.deepEqual(await call({ operation: "tabs" }), [{ id: 0 }, { id: 12 }]);
+	await call({ operation: "read" });
+	await call({ operation: "click", tabId: 0, ref: 1 });
+	await call({ operation: "fill", tabId: 12, ref: 2, text: "test" });
+	await call({ operation: "release" });
+	manager.releaseBrowser!("task");
+	assert.deepEqual(calls, [
+		"embedded:tabs",
+		"companion:tabs",
+		"embedded:read",
+		"embedded:click",
+		"companion:fill",
+		"companion:release",
+		"embedded:release",
+		"companion:release",
+		"embedded:release",
+	]);
+});
 test("PR publishing cannot overlap an existing restart or other task operation", async () => {
 	const task = { id: "fixture", status: "completed" } as Task;
 	const manager = {

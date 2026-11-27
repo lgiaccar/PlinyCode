@@ -21,6 +21,8 @@ import type { BrowserStatus } from "./browser-contracts";
 import { actionSchema, active } from "./contracts";
 import type { DesktopUpdate } from "./desktop-update";
 import { DraftStore } from "./draft-store";
+import { EmbeddedBrowser } from "./embedded-browser";
+import type { EmbeddedBrowserState } from "./embedded-browser-contracts";
 import { taskDiff } from "./git";
 import { Integrations } from "./integrations";
 import { webLink } from "./links";
@@ -154,6 +156,10 @@ else {
 				}
 			});
 			window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+			integrations.embeddedBrowser = new EmbeddedBrowser(window, (state) => {
+				if (window && !window.isDestroyed())
+					window.webContents.send("plinycode:browser", state);
+			});
 			window.webContents.on("context-menu", (_event, params) => {
 				Menu.buildFromTemplate([
 					{ role: "copy", enabled: !!params.selectionText },
@@ -206,11 +212,17 @@ else {
 				let selectedTask: string | undefined, diff: string | undefined;
 				let models: string[] | undefined, mcpTools: string[] | undefined;
 				let files: string[] | undefined;
+				let embeddedBrowser: EmbeddedBrowserState | undefined;
 				let improvedPrompt: ImprovedPrompt | undefined;
 				let suggestedPrompt: string | undefined;
 				let browser: BrowserStatus | undefined,
 					prPreview: PrPreview | undefined;
 				switch (action.type) {
+					case "embeddedBrowser":
+						embeddedBrowser = await integrations.embeddedBrowser?.command(
+							action.command,
+						);
+						break;
 					case "openLink": {
 						const url = webLink(action.url);
 						if (!url)
@@ -492,6 +504,7 @@ else {
 					mcpTools,
 					files,
 					browser,
+					embeddedBrowser,
 					prPreview,
 					improvedPrompt,
 					suggestedPrompt,

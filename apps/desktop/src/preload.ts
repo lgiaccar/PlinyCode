@@ -8,6 +8,14 @@ ipcRenderer.on("plinycode:flushDrafts", () => {
 	);
 });
 const api: DesktopApi = {
+	subscribeBrowser: (listener) => {
+		const receive = (
+			_event: unknown,
+			state: import("./embedded-browser-contracts").EmbeddedBrowserState,
+		) => listener(state);
+		ipcRenderer.on("plinycode:browser", receive);
+		return () => ipcRenderer.removeListener("plinycode:browser", receive);
+	},
 	subscribeUpdates: (listener) => {
 		const receive = (
 			_event: unknown,

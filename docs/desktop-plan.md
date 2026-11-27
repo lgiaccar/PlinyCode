@@ -73,6 +73,9 @@ Implementation is on `lgiaccar/desktop-app`; a PR is now requested, without publ
 
 ### 3. Browser and MCP
 
+- [x] Embedded right-side Electron browser with navigation controls, page reading,
+  click/fill tools, task ownership, manual takeover and isolated session storage.
+- [ ] Embedded-browser corporate SSO/proxy and managed-device acceptance.
 - [ ] Validate companion extension installation on intended managed Windows devices.
 - [x] Chrome/Edge companion, selected-tab discovery and signed-in DOM interaction.
   Uses an ephemeral authenticated loopback WebSocket instead of native messaging;

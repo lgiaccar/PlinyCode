@@ -1,5 +1,6 @@
 import { BrowserBridge } from "./browser";
 import { active, type Task, type WorkerEvent } from "./contracts";
+import type { EmbeddedBrowser } from "./embedded-browser";
 import type { TaskManager } from "./manager";
 import { type PrCreate, prCreateSchema } from "./pr-contracts";
 import {
@@ -11,6 +12,7 @@ import type { SecretVault } from "./vault";
 
 export class Integrations {
 	browser?: BrowserBridge;
+	embeddedBrowser?: EmbeddedBrowser;
 	private operations = new Map<
 		string,
 		{ controller: AbortController; result: Promise<unknown> }
@@ -21,7 +23,10 @@ export class Integrations {
 		private manager: TaskManager,
 		private vault: SecretVault,
 	) {
-		manager.releaseBrowser = (id) => this.browser?.release(id);
+		manager.releaseBrowser = (id) => {
+			this.browser?.release(id);
+			this.embeddedBrowser?.release(id);
+		};
 		manager.hostRequest = (task, event, signal) =>
 			this.host(task, event, signal);
 	}
@@ -140,10 +145,36 @@ export class Integrations {
 		signal.throwIfAborted();
 		if (this.closing) throw new Error("PlinyCode is closing.");
 		switch (event.operation) {
-			case "browser":
+			case "browser": {
+				const input = event.input;
+				if (input.operation === "release") {
+					this.browser?.release(task.id);
+					this.embeddedBrowser?.release(task.id);
+					return "Released this task's browser tabs.";
+				}
+				if (this.embeddedBrowser) {
+					if (input.operation === "tabs") {
+						const embedded = (await this.embeddedBrowser.request(
+							task.id,
+							input,
+							signal,
+						)) as unknown[];
+						const shared = this.browser?.status().connected
+							? ((await this.browser.request(
+									task.id,
+									input,
+									signal,
+								)) as unknown[])
+							: [];
+						return [...embedded, ...shared];
+					}
+					if (input.tabId === undefined || input.tabId === 0)
+						return this.embeddedBrowser.request(task.id, input, signal);
+				}
 				if (!this.browser)
 					throw new Error("Pair the browser companion in Settings first.");
 				return this.browser.request(task.id, event.input, signal);
+			}
 			case "prPreview":
 				return this.preview(task);
 			case "prRefresh":
@@ -154,6 +185,7 @@ export class Integrations {
 	}
 	async close() {
 		this.closing = true;
+		this.embeddedBrowser?.close();
 		await this.pairing;
 		for (const operation of this.operations.values())
 			operation.controller.abort();

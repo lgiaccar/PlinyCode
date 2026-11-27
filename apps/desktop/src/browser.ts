@@ -119,6 +119,7 @@ export class BrowserBridge {
 		signal?: AbortSignal,
 	): Promise<unknown> {
 		const action = browserActionSchema.parse(input);
+		if (action.operation === "read") action.operation = "snapshot";
 		signal?.throwIfAborted();
 		if (action.operation === "release") {
 			this.release(task);

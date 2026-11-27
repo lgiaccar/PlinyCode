@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { BrowserAction, BrowserStatus } from "./browser-contracts";
 import type { UpdateStatus } from "./desktop-update";
 import {
+	type EmbeddedBrowserState,
+	embeddedBrowserCommandSchema,
+} from "./embedded-browser-contracts";
+import {
 	type ConnectedMcpServer,
 	type McpServer,
 	mcpSecretsSchema,
@@ -157,6 +161,10 @@ export const actionSchema = z.discriminatedUnion("type", [
 		messageId: z.string().uuid(),
 	}),
 	z.object({
+		type: z.literal("embeddedBrowser"),
+		command: embeddedBrowserCommandSchema,
+	}),
+	z.object({
 		type: z.literal("suggestNextPrompt"),
 		id: z.string().uuid(),
 		messageId: z.string().uuid(),
@@ -284,6 +292,7 @@ export interface DesktopApi {
 		mcpTools?: string[];
 		files?: string[];
 		browser?: BrowserStatus;
+		embeddedBrowser?: EmbeddedBrowserState;
 		prPreview?: PrPreview;
 		suggestedPrompt?: string;
 		improvedPrompt?: { text?: string; error?: string };
@@ -291,6 +300,7 @@ export interface DesktopApi {
 	}>;
 	subscribe(listener: (state: State) => void): () => void;
 	subscribeUpdates(listener: (state: UpdateStatus) => void): () => void;
+	subscribeBrowser(listener: (state: EmbeddedBrowserState) => void): () => void;
 }
 declare global {
 	interface Window {

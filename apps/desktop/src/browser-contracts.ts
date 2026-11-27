@@ -4,6 +4,7 @@ export const browserActionSchema = z.object({
 	operation: z.enum([
 		"tabs",
 		"snapshot",
+		"read",
 		"click",
 		"fill",
 		"navigate",
