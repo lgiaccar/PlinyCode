@@ -23,6 +23,8 @@ if (Bun.version !== pin)
 	throw new Error(`Package with pinned Bun ${pin}, not ${Bun.version}.`);
 if (process.arch !== "x64" || !["win32", "linux"].includes(process.platform))
 	throw new Error("Package on Windows x64 or Linux x64.");
+if (process.env.PLINYCODE_UPDATER_FIXTURE)
+	throw new Error("Fixture builds cannot be packaged for release.");
 await import("./build");
 if (process.exitCode) throw new Error("Build failed.");
 const platform = process.platform === "win32" ? "windows" : "linux";
@@ -38,6 +40,20 @@ await copyFile(
 	join(root, "dist/plinycode.js"),
 	join(destination, "plinycode.js"),
 );
+await copyFile(
+	join(root, "dist/launcher.js"),
+	join(destination, "launcher.js"),
+);
+await writeFile(
+	join(destination, "cli-package.json"),
+	`${JSON.stringify({
+		product: "plinycode-cli",
+		version,
+		platform,
+		arch: "x64",
+		updateLayout: 1,
+	})}\n`,
+);
 await writeFile(
 	join(destination, "README.md"),
 	(await readFile(join(repo, "docs/cli.md"), "utf8"))
@@ -46,9 +62,10 @@ await writeFile(
 );
 await writeFile(
 	join(destination, "INSTALL.md"),
-	(await readFile(join(repo, "docs/cli-install.md"), "utf8"))
-		.replaceAll("0.1.0", version)
-		.replaceAll("(cli.md)", "(README.md)"),
+	(await readFile(join(repo, "docs/cli-install.md"), "utf8")).replaceAll(
+		"(cli.md)",
+		"(README.md)",
+	),
 );
 await cp(join(root, "examples"), join(destination, "examples"), {
 	recursive: true,
@@ -99,8 +116,8 @@ const launcher = platform === "windows" ? "plinycode.cmd" : "plinycode";
 await writeFile(
 	join(destination, launcher),
 	platform === "windows"
-		? '@echo off\r\n"%~dp0runtime\\bun.exe" --use-system-ca "%~dp0plinycode.js" %*\r\nexit /b %errorlevel%\r\n'
-		: '#!/bin/sh\ncli_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec "$cli_dir/runtime/bun" --use-system-ca "$cli_dir/plinycode.js" "$@"\n',
+		? '@echo off\r\n"%~dp0runtime\\bun.exe" --use-system-ca "%~dp0launcher.js" %*\r\nexit /b %errorlevel%\r\n'
+		: '#!/bin/sh\ncli_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec "$cli_dir/runtime/bun" --use-system-ca "$cli_dir/launcher.js" "$@"\n',
 );
 await chmod(runtime, 0o755);
 await chmod(join(destination, launcher), 0o755);
@@ -108,23 +125,20 @@ if (platform === "windows") {
 	// Git Bash resolves the extensionless shell launcher; PowerShell uses .cmd.
 	await writeFile(
 		join(destination, "plinycode"),
-		'#!/bin/sh\ncli_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec "$cli_dir/runtime/bun.exe" --use-system-ca "$cli_dir/plinycode.js" "$@"\n',
+		'#!/bin/sh\ncli_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec "$cli_dir/runtime/bun.exe" --use-system-ca "$cli_dir/launcher.js" "$@"\n',
 	);
 	await chmod(join(destination, "plinycode"), 0o755);
 }
-const files = [
-	"plinycode.js",
-	launcher,
-	`runtime/${platform === "windows" ? "bun.exe" : "bun"}`,
-	"README.md",
-	"INSTALL.md",
-	"LICENSE",
-	"BUN-LICENSE.txt",
-	"THIRD-PARTY-NOTICES.txt",
-	"examples/analyse.py",
-	"examples/judgement.schema.json",
-];
-if (platform === "windows") files.push("plinycode");
+// Include every shipped file, including examples and updater metadata.
+const files: string[] = [];
+async function listFiles(dir: string, prefix = ""): Promise<void> {
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+		if (entry.isDirectory()) await listFiles(join(dir, entry.name), path);
+		else if (path !== "SHA256SUMS") files.push(path);
+	}
+}
+await listFiles(destination);
 const hashes = await Promise.all(
 	files.map(
 		async (file) =>

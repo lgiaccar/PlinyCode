@@ -154,6 +154,8 @@ export const HELP = `PlinyCode CLI
   plinycode models [--json]
   plinycode skills [--skills-dir <folder> ...] [--json]
   plinycode agents [--agents-dir <folder> ...] [--json]
+  plinycode update [--check | --rollback | --version <version>] [--json]
+  plinycode --version
   plinycode doctor [--json]
   plinycode auth login [--stdin] | logout
 

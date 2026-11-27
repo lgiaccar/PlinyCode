@@ -42,12 +42,10 @@ if (!process.argv[3]) throw new Error("An artifact directory is required.");
 const directory = resolve(process.argv[3]);
 const installation = (
 	await readFile(join(repoRoot, "docs/cli-install.md"), "utf8")
-)
-	.replaceAll("0.1.0", version)
-	.replaceAll(
-		"(cli.md)",
-		`(https://github.com/lgiaccar/PlinyCode/blob/cli-v${version}/docs/cli.md)`,
-	);
+).replaceAll(
+	"(cli.md)",
+	`(https://github.com/lgiaccar/PlinyCode/blob/cli-v${version}/docs/cli.md)`,
+);
 const files = await prepareRelease(directory, version, installation);
 if (mode === "--publish") {
 	const repo = process.env.GITHUB_REPOSITORY;

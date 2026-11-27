@@ -30,7 +30,7 @@ context inspection, delivery evidence and an attention inbox.
 Group several folders into one project and work across them in a single chat. Add folders in Project settings and start a new chat; multi-folder chats edit the selected folders directly. See the [multi-folder project guide](docs/desktop.md#multi-folder-projects). See [installation and in-app updates](docs/desktop-install.md).
 
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from
-[PlinyCode CLI 0.1.1](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.1).
+[PlinyCode CLI 0.1.2](https://github.com/lgiaccar/PlinyCode/releases/tag/cli-v0.1.2).
 The runtime is included. See [CLI installation and pipeline examples](docs/cli-install.md)
 for checksum verification, authentication, FreeAuto chat and automation.
 
