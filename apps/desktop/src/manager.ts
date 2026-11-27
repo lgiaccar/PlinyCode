@@ -1,7 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import {
 	getPlinyApiKey,
@@ -167,6 +168,78 @@ export class TaskManager {
 		if (!project) throw new Error("Project not found.");
 		return project;
 	}
+	taskProject(task: Task) {
+		return task.sourceProject ?? this.project(task.projectId);
+	}
+	private assertProjectIdle(id: string) {
+		if (
+			this.store.state.tasks.some(
+				(task) =>
+					task.projectId === id &&
+					(active(task) ||
+						this.running.has(task.id) ||
+						this.external.has(task.id) ||
+						this.store.state.commands?.some(
+							(command) =>
+								command.taskId === task.id && command.status === "running",
+						)),
+			)
+		)
+			throw new Error(
+				"Stop project tasks and background commands before changing or deleting the project.",
+			);
+	}
+	deleteProject(id: string, deleteChats = false) {
+		const project = this.project(id);
+		this.assertProjectIdle(id);
+		if (!deleteChats) {
+			project.archived = true;
+			this.changed();
+			return [];
+		}
+		const tasks = this.store.state.tasks.filter(
+			(task) => task.projectId === id,
+		);
+		const taskRoot = resolve(this.data, "tasks");
+		const paths = tasks.map((task) => {
+			const path = resolve(taskRoot, task.id);
+			if (!/^[0-9a-f-]{36}$/i.test(task.id) || dirname(path) !== taskRoot)
+				throw new Error("Invalid saved chat directory.");
+			// Never erase a user-selected workspace, including a manually selected internal folder.
+			if (
+				this.store.state.projects.some((item) =>
+					projectFolders(item).some((folder) => overlaps(path, folder)),
+				) ||
+				this.store.state.tasks.some((owner) =>
+					taskFolders(owner, this.taskProject(owner)).some((folder) =>
+						overlaps(path, folder),
+					),
+				)
+			)
+				throw new Error(
+					"A saved chat directory overlaps a project folder. Its files were preserved.",
+				);
+			return path;
+		});
+		for (const path of paths) rmSync(path, { recursive: true, force: true });
+		const ids = new Set(tasks.map((task) => task.id));
+		for (const id of ids) this.releaseBrowser?.(id);
+		this.store.state.tasks = this.store.state.tasks.filter(
+			(task) => !ids.has(task.id),
+		);
+		this.store.state.commands = this.store.state.commands?.filter(
+			(command) => !ids.has(command.taskId),
+		);
+		this.store.state.projects = this.store.state.projects.filter(
+			(item) => item.id !== id,
+		);
+		this.changed();
+		return [...ids];
+	}
+	restoreProject(id: string) {
+		delete this.project(id).archived;
+		this.changed();
+	}
 	private async canonicalFolders(paths: string[]) {
 		if (!paths.length || paths.length > 32)
 			throw new Error("Select between 1 and 32 project folders.");
@@ -185,7 +258,9 @@ export class TaskManager {
 		}
 		return folders;
 	}
-	async addProject(path: string | string[]) {
+	async addProject(path: string | string[], name?: string) {
+		if (name !== undefined && (!name.trim() || name.trim().length > 200))
+			throw new Error("Enter a project name (1–200 characters).");
 		const folders = await this.canonicalFolders(
 			typeof path === "string" ? [path] : path,
 		);
@@ -201,14 +276,14 @@ export class TaskManager {
 				)
 			);
 		});
-		if (existing) return existing;
+		if (existing && !existing.archived && name === undefined) return existing;
 		const gitProject = await isGit(canonical);
 		const remotes = gitProject
 			? (await git(canonical, ["remote"])).split(/\r?\n/).filter(Boolean)
 			: [];
 		const project: Project = {
 			id: randomUUID(),
-			name: basename(canonical),
+			name: name?.trim() ?? basename(canonical),
 			path: canonical,
 			folders,
 			git: gitProject,
@@ -232,29 +307,29 @@ export class TaskManager {
 		const folders = settings.folders
 			? await this.canonicalFolders(settings.folders)
 			: projectFolders(project);
-		if (
+		const primaryChanged =
 			!overlaps(folders[0], project.path) ||
-			folders[0].length !== project.path.length
-		)
-			throw new Error(
-				"Keep the original folder first. Create a new project to change its primary folder.",
-			);
-		if (
-			this.store.state.tasks.some(
-				(task) =>
-					task.projectId === id &&
-					(active(task) ||
-						this.running.has(task.id) ||
-						this.external.has(task.id) ||
-						this.store.state.commands?.some(
-							(command) =>
-								command.taskId === task.id && command.status === "running",
-						)),
-			)
-		)
-			throw new Error(
-				"Stop project tasks and background commands before changing project settings.",
-			);
+			folders[0].length !== project.path.length;
+		const gitProject = primaryChanged ? await isGit(folders[0]) : project.git;
+		const remotes =
+			primaryChanged && gitProject
+				? (await git(folders[0], ["remote"])).split(/\r?\n/).filter(Boolean)
+				: [];
+		// Recheck after asynchronous filesystem/Git probes before mutating any saved state.
+		this.assertProjectIdle(id);
+		if (!this.store.state.projects.includes(project))
+			throw new Error("Project not found.");
+		if (project.archived)
+			throw new Error("Restore this project before editing it.");
+		const sourceProject = primaryChanged
+			? { ...structuredClone(project), id: randomUUID() }
+			: undefined;
+		for (const task of this.store.state.tasks.filter(
+			(task) => task.projectId === id,
+		)) {
+			task.folders ??= [...taskFolders(task, project)];
+			if (sourceProject) task.sourceProject ??= sourceProject;
+		}
 		Object.assign(project, {
 			...settings,
 			name: settings.name ?? project.name,
@@ -262,7 +337,22 @@ export class TaskManager {
 			base: settings.base.trim(),
 			target: settings.target.trim(),
 		});
+		if (primaryChanged) {
+			Object.assign(project, {
+				path: folders[0],
+				git: gitProject,
+				base: "",
+				target: "",
+				remote: remotes.includes("origin")
+					? "origin"
+					: (remotes[0] ?? "origin"),
+				worktreeSource: remotes.length ? "remote" : "local",
+			});
+			delete project.prRepository;
+			delete project.hasPrToken;
+		}
 		this.changed();
+		return sourceProject;
 	}
 	async migrateProjects() {
 		for (const project of this.store.state.projects) {
@@ -339,6 +429,8 @@ export class TaskManager {
 	}
 	createTask(projectId: string, worktree: boolean) {
 		const project = this.project(projectId);
+		if (project.archived)
+			throw new Error("Restore this project before starting a new chat.");
 		const task: Task = {
 			id: randomUUID(),
 			projectId,
@@ -441,7 +533,7 @@ export class TaskManager {
 		if (this.closing) return;
 		for (const [id, request] of this.queue) {
 			const task = this.task(id),
-				project = this.project(task.projectId);
+				project = this.taskProject(task);
 			const folders = taskFolders(task, project);
 			const intersects = (other: string[]) =>
 				folders.some((folder) => other.some((root) => overlaps(root, folder)));
@@ -502,7 +594,7 @@ export class TaskManager {
 			const mcpServers = this.mcp().filter((server) => server.enabled);
 			const secrets = [apiKey, ...mcpSecretValues(mcpServers)];
 			run.controller.signal.throwIfAborted();
-			const project = this.project(task.projectId);
+			const project = this.taskProject(task);
 			if (!task.cwd) {
 				if (task.worktree)
 					Object.assign(
@@ -515,7 +607,7 @@ export class TaskManager {
 							run.controller.signal,
 						),
 					);
-				else task.cwd = await realpath(project.path);
+				else task.cwd = await realpath(taskFolders(task, project)[0]);
 			}
 			run.folder = task.cwd ?? project.path;
 			run.folders = taskFolders(task, project);

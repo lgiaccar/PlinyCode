@@ -52,7 +52,7 @@ export class Integrations {
 		return operation;
 	}
 	provider(task: Task) {
-		const project = this.manager.project(task.projectId);
+		const project = this.manager.taskProject(task);
 		if (!project.prRepository)
 			throw new Error("Configure the PR provider in project settings first.");
 		return new PullRequestProvider(
@@ -63,7 +63,7 @@ export class Integrations {
 	async preview(task: Task) {
 		const preview = await previewPullRequest(
 			task,
-			this.manager.project(task.projectId),
+			this.manager.taskProject(task),
 		);
 		// Never send a credential embedded in a Git remote back to the renderer/model.
 		if (/^[a-z]+:\/\/[^/]*@/i.test(preview.remote)) {
@@ -121,7 +121,7 @@ export class Integrations {
 			.then(() =>
 				publishPullRequest(
 					task,
-					this.manager.project(task.projectId),
+					this.manager.taskProject(task),
 					prCreateSchema.parse(input),
 					this.provider(task),
 					() => this.manager.changed(),

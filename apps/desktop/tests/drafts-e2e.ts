@@ -33,6 +33,10 @@ const application = await _electron.launch({
 try {
 	const page = await application.firstWindow();
 	await page.getByRole("button", { name: /Add project/ }).click();
+	await page.getByRole("button", { name: "Add folders…" }).click();
+	await page
+		.getByRole("button", { name: "Create project", exact: true })
+		.click();
 	const composer = page.getByRole("textbox", { name: "Message PlinyCode" });
 	await composer.fill("Draft A\nKeep my details.");
 	await page.getByTitle("New chat in project").click();
