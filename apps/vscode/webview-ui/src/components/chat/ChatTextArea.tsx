@@ -1,3 +1,4 @@
+import type { NextPromptResult } from "@plinycode/shared"
 import { mentionRegexGlobal } from "@shared/context-mentions"
 import { nextPromptCompletion } from "@shared/next-prompt"
 import { PlanActMode, TogglePlanActModeRequest } from "@shared/proto/cline/state"
@@ -145,14 +146,22 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const completionTs = nextPromptCompletion(clineMessages, turnState?.phase)?.ts
 		const taskId = currentTaskItem?.id
 		const suggestionKey = completionTs && taskId ? `${taskId}:${completionTs}` : undefined
-		const requestSuggestion = useCallback(async () => {
-			if (!taskId || !completionTs) return ""
-			const result = await TaskServiceClient.suggestNextPrompt(SuggestNextPromptRequest.create({ taskId, completionTs }))
-			return result.value
-		}, [taskId, completionTs])
+		const requestSuggestion = useCallback(
+			async (force: boolean): Promise<NextPromptResult> => {
+				if (!taskId || !completionTs) return { status: "error", prompts: [] }
+				const result = await TaskServiceClient.suggestNextPrompt(
+					SuggestNextPromptRequest.create({ taskId, completionTs, force }),
+				)
+				return {
+					prompts: result.prompts,
+					status: result.status === "ready" || result.status === "empty" ? result.status : "error",
+				}
+			},
+			[taskId, completionTs],
+		)
 		const suggestion = useNextPrompt(
 			suggestionKey,
-			!!fullInputValue ||
+			!!fullInputValue.trim() ||
 				selectedFiles.length > 0 ||
 				selectedImages.length > 0 ||
 				!!activeQuote ||
@@ -801,13 +810,37 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							onHeightChange?.(height)
 						}}
 						onKeyDown={(event) => {
-							if (suggestion.text && !showContextMenu && !showSlashCommandsMenu && !event.nativeEvent.isComposing) {
+							if (
+								(suggestion.text || suggestion.feedback) &&
+								!showContextMenu &&
+								!showSlashCommandsMenu &&
+								!event.nativeEvent.isComposing
+							) {
 								if (event.key === "Escape") {
 									event.preventDefault()
 									suggestion.dismiss()
 									return
 								}
-								if (event.key === "Tab" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+								if (
+									suggestion.text &&
+									(event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+									!event.shiftKey &&
+									!event.ctrlKey &&
+									!event.metaKey &&
+									!event.altKey
+								) {
+									event.preventDefault()
+									suggestion.cycle(event.key === "ArrowRight" ? 1 : -1)
+									return
+								}
+								if (
+									suggestion.text &&
+									event.key === "Tab" &&
+									!event.shiftKey &&
+									!event.ctrlKey &&
+									!event.metaKey &&
+									!event.altKey
+								) {
 									event.preventDefault()
 									setFullInputValue(suggestion.text)
 									setCursorPosition(suggestion.text.length)
@@ -892,8 +925,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					{!inputValue && selectedImages.length === 0 && selectedFiles.length === 0 && (
 						<div className="text-xs absolute bottom-5 left-6.5 right-16 text-(--vscode-input-placeholderForeground)/50 whitespace-nowrap overflow-hidden text-ellipsis pointer-events-none z-1">
 							{suggestion.text
-								? "Tab to accept suggestion · Esc to dismiss"
-								: "Type @ for context, / for slash commands & workflows, hold shift to drag in files/images"}
+								? `← ${suggestion.index + 1}/${suggestion.count} → · Tab to accept · Esc to dismiss`
+								: suggestion.feedback ||
+									"Type @ for context, / for slash commands & workflows, hold shift to drag in files/images"}
 						</div>
 					)}
 					{(selectedImages.length > 0 || selectedFiles.length > 0) && (
@@ -977,9 +1011,23 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					</div>
 					<div className="ml-auto flex shrink-0 items-center" data-testid="composer-right-actions">
 						<ImprovePromptButton
-							disabled={!inputValue.trim()}
-							onClick={() => void promptImprover.improve()}
-							pending={promptImprover.pending}
+							disabled={!fullInputValue.trim() && !suggestion.canGenerate}
+							generating={!fullInputValue.trim()}
+							label={
+								fullInputValue.trim()
+									? "Improve prompt"
+									: suggestion.text
+										? "Generate alternatives"
+										: "Suggest prompt"
+							}
+							onClick={() => {
+								if (fullInputValue.trim()) void promptImprover.improve()
+								else {
+									textAreaRef.current?.focus()
+									void suggestion.generate()
+								}
+							}}
+							pending={promptImprover.pending || suggestion.pending}
 						/>
 						<SideQuestionToggle
 							available={sideQuestionAvailable}

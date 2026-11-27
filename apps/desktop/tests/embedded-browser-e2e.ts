@@ -41,7 +41,7 @@ const server = createServer(async (request, response) => {
 	for await (const chunk of request) input += chunk;
 	const body = JSON.parse(input);
 	const suggestion = JSON.stringify(body.messages).includes(
-		"Suggest the single most useful next message",
+		"Suggest up to three distinct useful next messages",
 	);
 	if (!suggestion) lastRequest = body;
 	const action = suggestion ? undefined : next;
@@ -57,7 +57,7 @@ const server = createServer(async (request, response) => {
 					},
 				],
 			}
-		: { content: "Done." };
+		: { content: suggestion ? "[]" : "Done." };
 	response.writeHead(200, { "content-type": "text/event-stream" });
 	response.end(
 		[delta, {}]

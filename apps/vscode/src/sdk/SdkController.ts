@@ -15,7 +15,13 @@ import {
 	resolveDefaultMcpSettingsPath,
 	retainCheckpointRefs,
 } from "@plinycode/core"
-import { type AgentStopControl, formatDisplayUserInput, NextPromptSuggestions, stripModeNotices } from "@plinycode/shared"
+import {
+	type AgentStopControl,
+	formatDisplayUserInput,
+	type NextPromptResult,
+	NextPromptSuggestions,
+	stripModeNotices,
+} from "@plinycode/shared"
 import { resolveClineDataDir } from "@plinycode/shared/storage"
 import type { ChatContent } from "@shared/ChatContent"
 import type { ClineMessage, ExtensionState } from "@shared/ExtensionMessage"
@@ -2190,11 +2196,11 @@ export class Controller {
 	}
 
 	private nextPromptSuggestions = new NextPromptSuggestions()
-	async suggestNextPrompt(taskId: string, completionTs: number): Promise<string> {
-		if (this.task?.taskId !== taskId) return ""
+	async suggestNextPrompt(taskId: string, completionTs: number, force = false): Promise<NextPromptResult> {
+		if (this.task?.taskId !== taskId) return { status: "error", prompts: [] }
 		const messages = this.task.messageStateHandler.getClineMessages()
 		const completion = nextPromptCompletion(messages, this.turnStateTracker.currentPhase)
-		if (!completion || completion.partial || completion.ts !== completionTs) return ""
+		if (!completion || completion.partial || completion.ts !== completionTs) return { status: "error", prompts: [] }
 		const turns = messages
 			.filter(
 				(message) =>
@@ -2209,8 +2215,11 @@ export class Controller {
 				text: message.text ?? "",
 			}))
 		const workspace = await this.getWorkspaceRoot()
-		return this.nextPromptSuggestions.suggest(`${taskId}:${completionTs}`, turns, (system, user, signal) =>
-			completeWithUtilityModel(system, user, signal, workspace, "commit"),
+		return this.nextPromptSuggestions.suggest(
+			`${taskId}:${completionTs}`,
+			turns,
+			(system, user, signal) => completeWithUtilityModel(system, user, signal, workspace, "commit"),
+			{ force },
 		)
 	}
 

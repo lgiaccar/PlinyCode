@@ -8,20 +8,21 @@ pipelines from your editor. File edits and commands follow your approval setting
 Model requests go through the Synopsys Pliny gateway. Web search, MCP tools and DevOps integrations connect to
 their configured services; extension updates come from GitHub.
 
-## What's new in 0.2.11
+## What's new in 0.2.12
 
-[PlinyCode 0.2.11](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11) is the latest stable extension release.
+[PlinyCode 0.2.12](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.12) is the latest stable extension release.
 
-- **Suggested next prompts:** after a completed response, a free model can suggest a useful follow-up in gray in
-  the empty prompt box. Press **Tab** to put it in your draft, then **Enter** to send. **Esc** or typing dismisses it.
-  Also available in Desktop 0.1.7. [Next prompt suggestions](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/next-prompt-suggestions.md)
+- **Prompt alternatives:** browse up to three gray follow-up suggestions with **Left/Right**, then **Tab** to
+  accept. The wand offers **Suggest prompt** for an empty composer, **Generate alternatives** for visible
+  suggestions, and **Improve prompt** for a draft. Retry a missing suggestion with one click; generation and
+  failure feedback make its status clear. Also in Desktop 0.1.10. [Next prompt suggestions](https://github.com/lgiaccar/PlinyCode/blob/stage/docs/next-prompt-suggestions.md)
 - **VS Code 1.94 compatibility:** supports older managed editors, including Autopilot environments.
 
-See the [0.2.11 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.11).
+See the [0.2.12 release notes](https://github.com/lgiaccar/PlinyCode/releases/tag/release_0.2.12).
 
 ## Desktop preview
 
-[PlinyCode Desktop 0.1.9](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.9) supports projects with multiple folders, with one chat working across them. Multi-folder chats edit the selected folders directly; single-folder Git projects retain isolated worktrees. [Desktop installation](https://github.com/lgiaccar/PlinyCode/blob/desktop-v0.1.9/docs/desktop-install.md)
+[PlinyCode Desktop 0.1.10](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.10) supports projects with multiple folders, with one chat working across them. Multi-folder chats edit the selected folders directly; single-folder Git projects retain isolated worktrees. [Desktop installation](https://github.com/lgiaccar/PlinyCode/blob/desktop-v0.1.10/docs/desktop-install.md)
 
 ## Features
 

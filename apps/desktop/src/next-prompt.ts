@@ -1,5 +1,8 @@
 import { type ApiHandler, createHandlerAsync } from "@plinycode/llms";
-import { NextPromptSuggestions } from "@plinycode/shared";
+import {
+	type NextPromptResult,
+	NextPromptSuggestions,
+} from "@plinycode/shared";
 import type { Task } from "./contracts";
 import { IMPROVE_MODEL } from "./prompt-improver";
 export class DesktopNextPrompt {
@@ -12,7 +15,8 @@ export class DesktopNextPrompt {
 		task: Task,
 		messageId: string,
 		apiKey: string,
-	): Promise<string> {
+		force = false,
+	): Promise<NextPromptResult> {
 		const last = task.messages
 			.slice()
 			.reverse()
@@ -23,7 +27,7 @@ export class DesktopNextPrompt {
 			last.id !== messageId ||
 			!apiKey
 		)
-			return "";
+			return { status: "error", prompts: [] };
 		const turns = task.messages
 			.filter(
 				(message) => message.role === "user" || message.role === "assistant",
@@ -46,7 +50,7 @@ export class DesktopNextPrompt {
 						apiKey,
 						abortSignal: signal,
 						timeoutMs: 12_000,
-						maxOutputTokens: 128,
+						maxOutputTokens: 512,
 						thinking: false,
 					});
 					if (signal.aborted) return "";
@@ -58,7 +62,7 @@ export class DesktopNextPrompt {
 						if (signal.aborted) return "";
 						if (chunk.type === "text") text += chunk.text;
 						if (
-							text.length > 400 ||
+							text.length > 2000 ||
 							(chunk.type === "done" &&
 								(!chunk.success || chunk.incompleteReason))
 						)
@@ -70,6 +74,7 @@ export class DesktopNextPrompt {
 					handler?.abort?.();
 				}
 			},
+			{ force },
 		);
 	}
 }

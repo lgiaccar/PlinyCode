@@ -31,10 +31,10 @@ const server = createServer(async (request, output) => {
 	output.write(": ready\n\n");
 	if (
 		JSON.stringify(body.messages).includes(
-			"Suggest the single most useful next message",
+			"Suggest up to three distinct useful next messages",
 		)
 	) {
-		chunk(output, "Review the changes.");
+		chunk(output, JSON.stringify(["Review the changes."]));
 		chunk(output, "", true);
 	} else requests.push({ body, output });
 });

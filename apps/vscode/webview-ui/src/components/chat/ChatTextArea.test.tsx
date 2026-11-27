@@ -7,7 +7,7 @@ import ChatTextArea, { getRowHeightPx, rowsFromDrag } from "./ChatTextArea"
 const mocks = vi.hoisted(() => ({
 	turnState: undefined as { phase: string; seq: number } | undefined,
 	currentTaskItem: undefined as { id: string } | undefined,
-	suggestNextPrompt: vi.fn(async () => ({ value: "Add regression tests." })),
+	suggestNextPrompt: vi.fn(async () => ({ status: "ready", prompts: ["Add regression tests."] })),
 	clineMessages: [] as ClineMessage[],
 	supportsImages: true as boolean | undefined,
 	navigateToSettingsModelPicker: vi.fn(),
@@ -664,7 +664,7 @@ describe("next prompt ghost text", () => {
 			{ ts: 1, type: "say", say: "task", text: "Fix parsing" },
 			{ ts: 2, type: "say", say: "completion_result", text: "Fixed. Tests remain." },
 		]
-		mocks.suggestNextPrompt.mockReset().mockResolvedValue({ value: "Add regression tests." })
+		mocks.suggestNextPrompt.mockReset().mockResolvedValue({ status: "ready", prompts: ["Add regression tests."] })
 	})
 	afterEach(() => {
 		mocks.turnState = undefined
@@ -727,7 +727,7 @@ describe("next prompt ghost text", () => {
 		expect(input.placeholder).toBe("Type a message")
 	})
 	it("discards a late suggestion after typing and clearing the draft", async () => {
-		let resolve!: (value: { value: string }) => void
+		let resolve!: (value: { status: string; prompts: string[] }) => void
 		mocks.suggestNextPrompt.mockImplementationOnce(
 			() =>
 				new Promise((done) => {
@@ -737,12 +737,12 @@ describe("next prompt ghost text", () => {
 		const { input } = composer()
 		fireEvent.change(input, { target: { value: "My own request" } })
 		fireEvent.change(input, { target: { value: "" } })
-		await act(async () => resolve({ value: "Stale suggestion" }))
+		await act(async () => resolve({ status: "ready", prompts: ["Stale suggestion"] }))
 		expect(input.placeholder).toBe("Type a message")
 		expect(input.value).toBe("")
 	})
 	it("discards another chat's late reply and keeps its dismissal on returning", async () => {
-		let resolve!: (value: { value: string }) => void
+		let resolve!: (value: { status: string; prompts: string[] }) => void
 		mocks.suggestNextPrompt.mockImplementationOnce(
 			() =>
 				new Promise((done) => {
@@ -753,12 +753,82 @@ describe("next prompt ghost text", () => {
 		mocks.currentTaskItem = { id: "chat-b" }
 		refresh()
 		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
-		await act(async () => resolve({ value: "Wrong chat" }))
+		await act(async () => resolve({ status: "ready", prompts: ["Wrong chat"] }))
 		expect(input.placeholder).toBe("Add regression tests.")
 		mocks.currentTaskItem = { id: "chat-a" }
 		refresh()
 		expect(input.placeholder).toBe("Type a message")
 	})
+	it("cycles choices locally, wraps, and accepts the selected prompt", async () => {
+		mocks.suggestNextPrompt.mockResolvedValue({ status: "ready", prompts: ["First", "Second", "Third"] })
+		const { input, onSend } = composer()
+		await waitFor(() => expect(input.placeholder).toBe("First"))
+		for (const modifiers of [
+			{ shiftKey: true },
+			{ ctrlKey: true },
+			{ altKey: true },
+			{ metaKey: true },
+			{ isComposing: true },
+		]) {
+			expect(fireEvent.keyDown(input, { key: "ArrowRight", ...modifiers })).toBe(true)
+			expect(input.placeholder).toBe("First")
+		}
+		fireEvent.keyDown(input, { key: "ArrowLeft" })
+		expect(input.placeholder).toBe("Third")
+		fireEvent.keyDown(input, { key: "ArrowRight" })
+		expect(input.placeholder).toBe("First")
+		fireEvent.keyDown(input, { key: "ArrowRight" })
+		expect(input.placeholder).toBe("Second")
+		expect(mocks.suggestNextPrompt).toHaveBeenCalledTimes(1)
+		fireEvent.keyDown(input, { key: "Tab" })
+		expect(input.value).toBe("Second")
+		expect(onSend).not.toHaveBeenCalled()
+		expect(screen.getByTestId("improve-prompt-button")).not.toHaveAttribute("disabled")
+		expect(fireEvent.keyDown(input, { key: "ArrowRight" })).toBe(true)
+	})
+	it("manually regenerates after dismissal and bypasses the cached completion", async () => {
+		const { input } = composer()
+		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
+		expect(screen.getByTestId("improve-prompt-button")).not.toHaveAttribute("disabled")
+		fireEvent.keyDown(input, { key: "Escape" })
+		mocks.suggestNextPrompt.mockResolvedValueOnce({ status: "ready", prompts: ["Review the diff."] })
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		await waitFor(() => expect(input.placeholder).toBe("Review the diff."))
+		expect(input).toHaveFocus()
+		expect(mocks.suggestNextPrompt).toHaveBeenLastCalledWith(
+			expect.objectContaining({ force: true, taskId: "chat-a", completionTs: 2 }),
+		)
+	})
+	it.each(["empty", "error"])("shows %s feedback and permits manual retry", async (status) => {
+		mocks.suggestNextPrompt.mockResolvedValueOnce({ status, prompts: [] })
+		const { input } = composer()
+		await waitFor(() =>
+			expect(screen.getByText(status === "empty" ? /No useful follow-up/ : /retry/).textContent).toContain(
+				status === "empty" ? "No useful follow-up" : "retry",
+			),
+		)
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
+		expect(mocks.suggestNextPrompt).toHaveBeenCalledTimes(2)
+	})
+	it("disables duplicate requests and Escape invalidates pending generation", async () => {
+		let resolve!: (value: { status: string; prompts: string[] }) => void
+		mocks.suggestNextPrompt.mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done
+				}),
+		)
+		const { input } = composer()
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		expect(mocks.suggestNextPrompt).toHaveBeenCalledTimes(1)
+		fireEvent.keyDown(input, { key: "Escape" })
+		await act(async () => resolve({ status: "ready", prompts: ["Late"] }))
+		expect(input.placeholder).toBe("Type a message")
+		fireEvent.click(screen.getByTestId("improve-prompt-button"))
+		await waitFor(() => expect(input.placeholder).toBe("Add regression tests."))
+	})
+
 	it("does not request a suggestion when an image is attached", () => {
 		renderTextArea([PNG_DATA_URL])
 		expect(mocks.suggestNextPrompt).not.toHaveBeenCalled()

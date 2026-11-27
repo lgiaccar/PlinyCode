@@ -7,23 +7,22 @@ described in the [implementation plan](desktop-plan.md).
 
 ## Windows one-click installer
 
-Download `PlinyCode-Desktop-Setup-0.1.9-x64.exe` from the
-[Desktop 0.1.9 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.9) and open it.
+Download `PlinyCode-Desktop-Setup-0.1.10-x64.exe` from the
+[Desktop 0.1.10 release](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.10) and open it.
 It installs for the current user without administrator rights, creates desktop
 and Start menu shortcuts, and launches PlinyCode when installation finishes.
 Electron and Bun are bundled; users do not need to install Node or Bun.
 
 This preview is unsigned, so Windows may display an unknown-publisher or
-SmartScreen warning. Desktop 0.1.9 checks for updates automatically and offers
+SmartScreen warning. Desktop 0.1.10 checks for updates automatically and offers
 **Download** and **Install and restart** in the sidebar. Installation waits until
 running tasks, background commands and PR operations have stopped. Checks can be
 disabled in Settings. Versions 0.1.0 and 0.1.1 need one manual upgrade to receive
 the updater. The [download and upgrade guide](desktop-install.md) explains the
 Windows, DEB and AppImage flows and how saved data is preserved.
 On first launch, configure a Pliny API key in Settings (or reuse CLI credentials).
-Git is still required for Git worktrees and PR publishing. Current source builds
-include the right-side browser described below. The published installer above
-predates that feature; existing Chrome/Edge sessions use the companion setup.
+Git is still required for Git worktrees and PR publishing. Desktop 0.1.10 includes
+the right-side browser described below; existing Chrome/Edge sessions use the companion setup.
 
 Uninstall through Windows **Installed apps**. Conversation history and credentials
 are preserved. To rebuild the installer from the prepared source tree:
@@ -46,15 +45,15 @@ bundled worker runtime matches the host:
 bun -F @plinycode/desktop package:linux
 ```
 
-Install the Debian package with `sudo apt install ./PlinyCode-Desktop-0.1.0-x64.deb`;
+Install the Debian package with `sudo apt install ./PlinyCode-Desktop-0.1.10-x64.deb`;
 launch **PlinyCode Desktop** from the applications menu or run `plinycode-desktop`.
 Remove it with `sudo apt remove plinycode-desktop`. History remains under
 `~/.config/PlinyCode/desktop` (or your XDG configuration directory).
 
-For a portable installation, make `PlinyCode-Desktop-0.1.0-x64.AppImage` executable
+For a portable installation, make `PlinyCode-Desktop-0.1.10-x64.AppImage` executable
 and run it. The pinned AppImage runtime supports extraction on hosts where FUSE
 mounting is unavailable; use
-`APPIMAGE_EXTRACT_AND_RUN=1 ./PlinyCode-Desktop-0.1.0-x64.AppImage`.
+`APPIMAGE_EXTRACT_AND_RUN=1 ./PlinyCode-Desktop-0.1.10-x64.AppImage`.
 Ubuntu 24.04 AppArmor policy may require an administrator to allow user namespaces
 for the AppImage; prefer the installed Debian package. Do not disable the Chromium
 sandbox as a workaround.

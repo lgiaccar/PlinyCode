@@ -1,3 +1,4 @@
+import type { NextPromptResult } from "@plinycode/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserPane, useBrowserPane } from "./browser-pane";
@@ -115,19 +116,26 @@ function App() {
 					.find((message) => message.role === "assistant")?.id
 			: undefined;
 	const suggestionKey =
-		completedMessageId && task ? `${task.id}:${completedMessageId}` : undefined;
-	const requestSuggestion = useCallback(async () => {
-		if (!selected || !completedMessageId) return "";
-		const result = await window.plinycode.invoke({
-			type: "suggestNextPrompt",
-			id: selected,
-			messageId: completedMessageId,
-		});
-		return result.suggestedPrompt ?? "";
-	}, [selected, completedMessageId]);
+		draft.ready && completedMessageId && task
+			? `${task.id}:${completedMessageId}`
+			: undefined;
+	const requestSuggestion = useCallback(
+		async (force: boolean): Promise<NextPromptResult> => {
+			if (!selected || !completedMessageId)
+				return { status: "error", prompts: [] };
+			const result = await window.plinycode.invoke({
+				type: "suggestNextPrompt",
+				force,
+				id: selected,
+				messageId: completedMessageId,
+			});
+			return result.suggestedPrompt ?? { status: "error", prompts: [] };
+		},
+		[selected, completedMessageId],
+	);
 	const suggestion = useNextPrompt(
 		suggestionKey,
-		!!prompt || !!busy,
+		!!prompt.trim() || !!busy,
 		requestSuggestion,
 	);
 	const invoke = useCallback(async (action: Action) => {
@@ -612,13 +620,29 @@ function App() {
 										setPrompt(e.target.value);
 									}}
 									onKeyDown={(e) => {
-										if (suggestion.text && !e.nativeEvent.isComposing) {
+										if (
+											(suggestion.text || suggestion.feedback) &&
+											!e.nativeEvent.isComposing
+										) {
 											if (e.key === "Escape") {
 												suggestion.dismiss();
 												e.preventDefault();
 												return;
 											}
 											if (
+												suggestion.text &&
+												(e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+												!e.shiftKey &&
+												!e.ctrlKey &&
+												!e.metaKey &&
+												!e.altKey
+											) {
+												e.preventDefault();
+												suggestion.cycle(e.key === "ArrowRight" ? 1 : -1);
+												return;
+											}
+											if (
+												suggestion.text &&
 												e.key === "Tab" &&
 												!e.shiftKey &&
 												!e.ctrlKey &&
@@ -642,9 +666,11 @@ function App() {
 										}
 									}}
 								/>
-								{suggestion.text && (
+								{(suggestion.text || suggestion.feedback) && (
 									<output className="composer-note">
-										Tab to accept suggestion · Esc to dismiss
+										{suggestion.text
+											? `← ${suggestion.index + 1}/${suggestion.count} → · Tab to accept · Esc to dismiss`
+											: suggestion.feedback}
 									</output>
 								)}
 								<div className="composer-controls">
@@ -681,11 +707,36 @@ function App() {
 									)}
 									<button
 										type="button"
-										disabled={!draft.ready || draft.improving || !prompt.trim()}
-										onClick={draft.improve}
-										title="Improve the draft with a free model without sending it"
+										disabled={
+											!draft.ready ||
+											draft.improving ||
+											suggestion.pending ||
+											(!prompt.trim() && !suggestion.canGenerate)
+										}
+										onClick={(event) => {
+											if (prompt.trim()) void draft.improve();
+											else {
+												event.currentTarget.form
+													?.querySelector("textarea")
+													?.focus();
+												void suggestion.generate();
+											}
+										}}
+										title={
+											prompt.trim()
+												? "Improve the draft with a free model without sending it"
+												: "Generate fresh next-prompt suggestions from this conversation"
+										}
 									>
-										{draft.improving ? "Improving…" : "Improve prompt"}
+										{draft.improving
+											? "Improving…"
+											: suggestion.pending
+												? "Generating…"
+												: prompt.trim()
+													? "Improve prompt"
+													: suggestion.text
+														? "Generate alternatives"
+														: "Suggest prompt"}
 									</button>
 									{busy && (
 										<>
