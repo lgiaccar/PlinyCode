@@ -128,7 +128,22 @@ try {
 	);
 	await composer.fill("Use the corrected requirement instead");
 	await page.getByRole("button", { name: "Steer task", exact: true }).click();
-	await page.getByText("Waiting for agent boundary", { exact: true }).waitFor();
+	// A fast engine can consume the steer before React paints its pending badge.
+	// Wait for durable acceptance; the gateway assertions below prove delivery.
+	await page.waitForFunction(async () => {
+		const { state } = await window.plinycode.invoke({ type: "snapshot" });
+		return state.tasks.some(
+			(task) =>
+				task.pendingMessages?.some(
+					(entry) => entry.text === "Use the corrected requirement instead",
+				) ||
+				task.messages.some(
+					(entry) =>
+						entry.role === "user" &&
+						entry.text === "Use the corrected requirement instead",
+				),
+		);
+	});
 	await composer.fill("Then run a separate follow-up");
 	await page
 		.getByRole("button", { name: "Queue follow-up", exact: true })
@@ -298,6 +313,24 @@ try {
 	console.log(
 		"PASS: cancellation and restart preserve pending text without replaying it",
 	);
+} catch (error) {
+	const page = await application.firstWindow().catch(() => undefined);
+	await page?.screenshot({ path: join(data, "failure.png") }).catch(() => {});
+	console.error(
+		"Interaction failure state:",
+		await page
+			?.evaluate(async () => {
+				const { state } = await window.plinycode.invoke({ type: "snapshot" });
+				return state.tasks.map((task) => ({
+					title: task.title,
+					status: task.status,
+					error: task.error,
+					pending: task.pendingMessages,
+				}));
+			})
+			.catch(() => undefined),
+	);
+	throw error;
 } finally {
 	await application.close();
 	server.closeAllConnections();
