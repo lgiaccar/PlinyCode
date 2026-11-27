@@ -1,3 +1,7 @@
+import {
+	MAX_MCP_TIMEOUT_SECONDS,
+	MIN_MCP_TIMEOUT_SECONDS,
+} from "@plinycode/shared";
 import { useState } from "react";
 import type { State } from "./contracts";
 import type { McpServer } from "./mcp-contracts";
@@ -173,14 +177,18 @@ export function McpSettings({
 						Timeout (seconds)
 						<input
 							type="number"
-							min="1"
-							max="120"
+							min={MIN_MCP_TIMEOUT_SECONDS}
+							max={MAX_MCP_TIMEOUT_SECONDS}
 							value={draft.timeout}
 							onChange={(e) =>
 								setDraft({ ...draft, timeout: Number(e.target.value) })
 							}
 						/>
 					</label>
+					<p>
+						Use {MIN_MCP_TIMEOUT_SECONDS}–{MAX_MCP_TIMEOUT_SECONDS} seconds. For
+						example, 1000 allows 16 minutes 40 seconds for a request.
+					</p>
 					<label>
 						Encrypted environment and headers (JSON)
 						<textarea

@@ -180,6 +180,9 @@ Existing single-folder projects and saved chats remain compatible.
   Settings. Connection tests can launch the configured program. Task connections
   ask first unless the task's MCP permission is enabled. MCP tools inherit that
   permission, including when called by sub-agents.
+  **Timeout (seconds)** accepts 1–3600 seconds per request; use a larger value
+  for long meshing operations (for example, 1000 seconds is 16 minutes 40 seconds).
+  Saved changes apply to the next run.
 - Open **Browser** in the sidebar for an embedded browser beside the chat. Agents
   can navigate, read, click and fill in this browser without companion setup.
 - Pair the Chrome/Edge companion with an existing signed-in browser and share

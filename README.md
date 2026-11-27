@@ -26,7 +26,8 @@ context inspection, delivery evidence and an attention inbox.
 ## What it is
 
 **Desktop preview:** download the Windows one-click installer or Ubuntu DEB/AppImage from
-[PlinyCode Desktop 0.1.10](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.10).
+[PlinyCode Desktop 0.1.11](https://github.com/lgiaccar/PlinyCode/releases/tag/desktop-v0.1.11).
+Desktop 0.1.11 fixes MCP timeout settings: save values above 120 seconds, up to one hour, for long operations such as meshing.
 Group several folders into one project and work across them in a single chat. Add folders in Project settings and start a new chat; multi-folder chats edit the selected folders directly. See the [multi-folder project guide](docs/desktop.md#multi-folder-projects). See [installation and in-app updates](docs/desktop-install.md).
 
 **Standalone CLI:** download the Windows x64 ZIP or Linux x64 tarball from

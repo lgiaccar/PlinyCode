@@ -1,3 +1,7 @@
+import {
+	MAX_MCP_TIMEOUT_SECONDS,
+	MIN_MCP_TIMEOUT_SECONDS,
+} from "@plinycode/shared";
 import { z } from "zod";
 
 export const mcpServerSchema = z
@@ -10,7 +14,11 @@ export const mcpServerSchema = z
 		args: z.array(z.string().max(4000)).max(100),
 		cwd: z.string().max(4000),
 		url: z.string().max(4000),
-		timeout: z.number().int().min(1).max(120),
+		timeout: z
+			.number()
+			.int()
+			.min(MIN_MCP_TIMEOUT_SECONDS)
+			.max(MAX_MCP_TIMEOUT_SECONDS),
 		hasSecrets: z.boolean().default(false),
 	})
 	.superRefine((server, ctx) => {
