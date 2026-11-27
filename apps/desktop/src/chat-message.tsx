@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Markdown from "react-markdown";
 import type { Action, Message } from "./contracts";
+import { webLink } from "./links";
 
 export function ChatMessage({
 	entry,
@@ -100,7 +101,21 @@ export function ChatMessage({
 			) : (
 				<Markdown
 					components={{
-						a: ({ children }) => <span>{children}</span>,
+						a: ({ href, children }) =>
+							webLink(href ?? "") ? (
+								<a
+									href={href}
+									title={href}
+									onClick={(event) => {
+										event.preventDefault();
+										void invoke({ type: "openLink", url: href ?? "" });
+									}}
+								>
+									{children}
+								</a>
+							) : (
+								<span>{children}</span>
+							),
 						img: ({ alt }) => <span>[Image: {alt}]</span>,
 					}}
 				>

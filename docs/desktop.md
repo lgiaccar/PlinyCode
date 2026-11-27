@@ -115,9 +115,24 @@ launches can use `bun -F @plinycode/desktop start` after building once.
 - Review tracked changes and list new files; open the task folder externally.
 - Save chat history and engine sessions. Send a new message after reopening to
   continue. A crashed active task is marked interrupted; it never restarts itself.
-- Unsent drafts stay separate when switching chats within the open app. Delayed
+- Unsent drafts stay separate when switching chats and survive app restarts. Delayed
   file selections belong to the chat that opened the picker; sending a prompt
-  clears only the submitted draft revision. Unsent drafts are not saved on exit.
+  clears only the submitted draft revision. Drafts are saved separately from model
+  history, and closing the app waits for in-flight draft saves.
+- While a task runs, keep typing and choose **Steer task** (or Enter) to deliver a
+  correction at the next engine boundary, or **Queue follow-up** for a separate
+  turn after successful completion. Pending messages show whether they are queued
+  or waiting for the agent; received steering appears in the conversation. Up to
+  20 messages can wait per task. Steering does not undo an action already underway
+  or answer a pending permission request. Stop, failure and reopening hold pending
+  messages for review instead of automatically replaying them. Use **Move to draft**
+  or **Remove** to manage messages that are not currently being delivered.
+- Streaming follows the latest reply while you are at the bottom. Scrolling up
+  keeps your reading position; **Jump to latest** resumes following. Reading
+  positions are remembered per chat while the app is open.
+- HTTP and HTTPS links in replies open in the system browser. Desktop validates
+  the URL again in its main process and rejects embedded credentials and other
+  protocols. Local file links remain plain text.
 - Copy any prompt or response with **Copy**, or select text and use the native
   right-click menu or keyboard shortcuts. User prompts preserve their original
   whitespace and Markdown source.

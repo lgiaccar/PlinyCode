@@ -14,7 +14,7 @@
 		"test": "bun test tests && bun run test:protocol",
 		"test:protocol": "bun build src/browser.ts --target=node --format=cjs --outfile=../../ai_output/browser-fixture.cjs && bun build src/integrations.ts --target=node --format=cjs --outfile=../../ai_output/integrations-fixture.cjs && node --experimental-strip-types --test tests/browser-protocol.ts",
 		"test:e2e": "node --experimental-strip-types tests/e2e.ts",
-		"test:drafts": "node --experimental-strip-types tests/drafts-e2e.ts",
+		"test:drafts": "node --experimental-strip-types tests/drafts-e2e.ts && node --experimental-strip-types tests/interactions-e2e.ts",
 		"test:browser": "bun build src/browser.ts --target=node --format=cjs --outfile=../../ai_output/browser-fixture.cjs && node --experimental-strip-types tests/browser-e2e.ts",
 		"package": "bun run package:windows",
 		"setup": "node node_modules/electron/install.js",

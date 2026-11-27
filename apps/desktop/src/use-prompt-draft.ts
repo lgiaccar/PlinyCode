@@ -8,6 +8,29 @@ export function usePromptDraft(context: string | undefined) {
 	const prompt = book.current.get(context).text;
 	const [improving, setImproving] = useState(false);
 	const [error, setError] = useState("");
+	const [ready, setReady] = useState(false);
+	useEffect(() => {
+		void window.plinycode
+			.invoke({ type: "loadDrafts" })
+			.then((result) => {
+				book.current.hydrate(result.drafts ?? {});
+				setReady(true);
+			})
+			.catch(() =>
+				setError("Could not load saved drafts. Reopen Desktop to retry."),
+			);
+	}, []);
+	function persist() {
+		if (!context) return;
+		const saved = { ...book.current.get(context) };
+		void window.plinycode
+			.saveDraft(context, saved)
+			.catch(() =>
+				setError(
+					"Could not save your draft. Keep Desktop open and copy it before closing.",
+				),
+			);
+	}
 	const [original, setOriginal] = useState<string>();
 	const epoch = useRef(0);
 	const activeContext = useRef(context);
@@ -25,6 +48,7 @@ export function usePromptDraft(context: string | undefined) {
 	function setPrompt(value: SetStateAction<string>) {
 		invalidate();
 		book.current.set(context, value);
+		persist();
 		update((value) => value + 1);
 	}
 	// biome-ignore lint/correctness/useExhaustiveDependencies: A chat change invalidates undo and feedback even when the draft text is identical.
@@ -65,6 +89,7 @@ export function usePromptDraft(context: string | undefined) {
 		}
 	}
 	return {
+		ready,
 		prompt,
 		setPrompt,
 		improve,
@@ -74,6 +99,7 @@ export function usePromptDraft(context: string | undefined) {
 		capture: () => book.current.get(context),
 		clearIfUnchanged: (revision: number) => {
 			if (book.current.clearIfUnchanged(context, revision)) {
+				persist();
 				invalidate();
 				update((value) => value + 1);
 			}
