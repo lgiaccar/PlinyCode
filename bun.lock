@@ -30,7 +30,7 @@
     },
     "apps/desktop": {
       "name": "@plinycode/desktop",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "dependencies": {
         "@plinycode/core": "workspace:*",
         "@plinycode/llms": "workspace:*",
